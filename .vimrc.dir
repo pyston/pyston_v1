@@ -1,0 +1,1 @@
+set wildignore+=*.expected_cache,*.pyc,*.out,*.bc,*.d,*.o
