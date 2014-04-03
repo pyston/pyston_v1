@@ -27,10 +27,6 @@ namespace pyston {
 
 class AST_expr;
 
-typedef std::unordered_map<std::string, CompilerVariable*> SymbolTable;
-typedef std::map<std::string, CompilerVariable*> SortedSymbolTable;
-typedef std::unordered_map<std::string, ConcreteCompilerVariable*> ConcreteSymbolTable;
-
 class IREmitter;
 class MyInserter : public llvm::IRBuilderDefaultInserter<true> {
     private:
