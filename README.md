@@ -169,9 +169,11 @@ Currently, the Pyston's GC is a non-copying, non-generational, stop-the-world GC
 
 ### Aspiration: Extension modules
 
-CPython-style C extension modules are difficult to support efficiently in alternative Python implementations, especially non-refcounted ones.  One of the most prominant overheads is the conversion between a refcounted C API and a GC-managed runtime that has to implement it.
+CPython-style C extension modules can be difficult in a system that doesn't use refcounting, since a GC-managed runtime is forced to provide a refcounted API.  PyPy handles this by using a compatibility layer to create refcounted objects; our hope is to do the reverse, and instead of making the runtime refcount-aware, to make the extension module GC-aware.
 
-My hope is that by applying a conservative GC to the extension modules, the refcounting code can be eliminated and the conservative GC will be able to find the roots.  Whether or not this works, and is performant, remains to be seen.
+To do this without requiring modifications to extension modules, the plan would be to apply the existing conservative GC to the extension module's stack and memory.  In theory this should be possible to do, but requires some technical trickiness to track allocations done by the extension module.  It may not even be more performant -- if the extension module uses large binary buffers, the GC will be forced to scan the buffer for pointers, whereas obeying the refcount contract would add only a size-independent overhead.  If this turns out to be the case, it might be possible to do some static analysis of the extension modules, and see where GC-managed pointers can escape to.
+
+As the section heading says, though, this is all just a thought right now.  Whether or not this works, and is performant, still remains to be seen.
 
 ### Aspiration: Thread-level Parallelism
 
