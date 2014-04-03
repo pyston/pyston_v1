@@ -519,6 +519,7 @@ class IRGenerator {
         }
 
         enum BinExpType {
+            AugAssign,
             BinOp,
             Compare,
         };
@@ -536,7 +537,7 @@ class IRGenerator {
                     v = emitter.getBuilder()->CreateCall2(g.funcs.div_i64_i64, converted_left->getValue(), converted_right->getValue());
                 } else if (type == AST_TYPE::Pow) {
                     v = emitter.getBuilder()->CreateCall2(g.funcs.pow_i64_i64, converted_left->getValue(), converted_right->getValue());
-                } else if (exp_type == BinOp) {
+                } else if (exp_type == BinOp || exp_type == AugAssign) {
                     llvm::Instruction::BinaryOps binopcode;
                     switch (type) {
                         case AST_TYPE::Add:
@@ -626,7 +627,7 @@ class IRGenerator {
                     v = emitter.getBuilder()->CreateCall2(g.funcs.div_float_float, converted_left->getValue(), converted_right->getValue());
                 } else if (type == AST_TYPE::Pow) {
                     v = emitter.getBuilder()->CreateCall2(g.funcs.pow_float_float, converted_left->getValue(), converted_right->getValue());
-                } else if (exp_type == BinOp) {
+                } else if (exp_type == BinOp || exp_type == AugAssign) {
                     llvm::Instruction::BinaryOps binopcode;
                     switch (type) {
                         case AST_TYPE::Add:
@@ -707,6 +708,9 @@ class IRGenerator {
             if (exp_type == BinOp) {
                 rt_func = g.funcs.binop;
                 rt_func_addr = (void*)binop;
+            } else if (exp_type == AugAssign) {
+                rt_func = g.funcs.augassign;
+                rt_func_addr = (void*)augassign;
             } else {
                 rt_func = g.funcs.compare;
                 rt_func_addr = (void*)compare;
@@ -1485,6 +1489,29 @@ class IRGenerator {
             val->decvref(emitter);
         }
 
+        void doAugAssign(AST_AugAssign *node) {
+            CompilerVariable *target = evalExpr(node->target);
+            _setFake(_nodeFakeName(0, node), target); // 'fakes' are for handling deopt entries
+
+            CompilerVariable *val = evalExpr(node->value);
+            _setFake(_nodeFakeName(1, node), val);
+
+            if (state == PARTIAL) {
+                _clearFake(_nodeFakeName(0, node));
+                _clearFake(_nodeFakeName(1, node));
+                return;
+            }
+            target = _getFake(_nodeFakeName(0, node));
+            val = _getFake(_nodeFakeName(1, node));
+
+            CompilerVariable *rtn = this->_evalBinExp(target, val, node->op_type, AugAssign);
+            target->decvref(emitter);
+            val->decvref(emitter);
+
+            _doSet(node->target, rtn);
+            rtn->decvref(emitter);
+        }
+
         void doClassDef(AST_ClassDef *node) {
             if (state == PARTIAL)
                 return;
@@ -1621,7 +1648,7 @@ class IRGenerator {
 
             endBlock(DEAD);
 
-            assert(rtn->getVrefs() == 1);
+            ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
             emitter.getBuilder()->CreateRet(rtn->getValue());
         }
 
@@ -1819,6 +1846,9 @@ class IRGenerator {
             switch (node->type) {
                 case AST_TYPE::Assign:
                     doAssign(static_cast<AST_Assign*>(node));
+                    break;
+                case AST_TYPE::AugAssign:
+                    doAugAssign(static_cast<AST_AugAssign*>(node));
                     break;
                 case AST_TYPE::ClassDef:
                     doClassDef(static_cast<AST_ClassDef*>(node));

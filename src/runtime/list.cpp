@@ -230,6 +230,43 @@ Box* listMul(BoxedList* self, Box* rhs) {
     return rtn;
 }
 
+Box* listIAdd(BoxedList* self, Box* _rhs) {
+    if (_rhs->cls != list_cls) {
+        fprintf(stderr, "TypeError: can only concatenate list (not \"%s\") to list\n", getTypeName(_rhs)->c_str());
+        raiseExc();
+    }
+
+    BoxedList* rhs = static_cast<BoxedList*>(_rhs);
+
+    int s1 = self->size;
+    int s2 = rhs->size;
+    self->ensure(s1 + s2);
+
+    memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
+    self->size = s1 + s2;
+    return self;
+}
+
+Box* listAdd(BoxedList* self, Box* _rhs) {
+    if (_rhs->cls != list_cls) {
+        fprintf(stderr, "TypeError: can only concatenate list (not \"%s\") to list\n", getTypeName(_rhs)->c_str());
+        raiseExc();
+    }
+
+    BoxedList* rhs = static_cast<BoxedList*>(_rhs);
+
+    BoxedList* rtn = new BoxedList();
+
+    int s1 = self->size;
+    int s2 = rhs->size;
+    rtn->ensure(s1 + s2);
+
+    memcpy(rtn->elts->elts, self->elts->elts, sizeof(self->elts->elts[0]) * s1);
+    memcpy(rtn->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
+    rtn->size = s1 + s2;
+    return rtn;
+}
+
 BoxedClass *list_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor *v, void* p) {
     boxGCHandler(v, p);
@@ -288,6 +325,9 @@ void setupList() {
     list_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)listSetitem, NULL, 3, false)));
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NULL, 3, false)));
     list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NULL, 2, false)));
+
+    list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, NULL, 2, false)));
+    list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, NULL, 2, false)));
 
     CLFunction *new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
     addRTFunction(new_, (void*)listNew2, NULL, 2, false);

@@ -208,9 +208,9 @@ OPTIONAL_SRCS := codegen/profiling/oprofile.cpp codegen/profiling/pprof.cpp
 TOOL_SRCS := $(wildcard $(TOOLS_DIR)/*.cpp)
 NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS)
 
-# .DEFAULT_GOAL := pyston_dbg
-_ :
-	$(MAKE) pyston_dbg || (clear; $(MAKE) pyston_dbg -j1 ERROR_LIMIT=1)
+.DEFAULT_GOAL := pyston_dbg
+# _ :
+	# $(MAKE) pyston_dbg || (clear; $(MAKE) pyston_dbg -j1 ERROR_LIMIT=1)
 
 .PHONY: all _all
 all: llvm

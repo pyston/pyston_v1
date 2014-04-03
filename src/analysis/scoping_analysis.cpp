@@ -163,6 +163,7 @@ class NameCollectorVisitor : public ASTVisitor {
 
         virtual bool visit_arguments(AST_arguments *node) { return false; }
         virtual bool visit_assign(AST_Assign *node) { return false; }
+        virtual bool visit_augassign(AST_AugAssign *node) { return false; }
         virtual bool visit_attribute(AST_Attribute *node) { return false; }
         virtual bool visit_binop(AST_BinOp *node) { return false; }
         virtual bool visit_boolop(AST_BoolOp *node) { return false; }

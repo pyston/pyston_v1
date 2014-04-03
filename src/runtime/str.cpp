@@ -30,9 +30,15 @@
 
 namespace pyston {
 
-extern "C" BoxedString* strAdd(BoxedString* lhs, BoxedString* rhs) {
+extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
-    assert(rhs->cls == str_cls);
+
+    if (_rhs->cls != str_cls) {
+        fprintf(stderr, "TypeError: cannot concatenate 'str' and '%s' objects", getTypeName(_rhs)->c_str());
+        raiseExc();
+    }
+
+    BoxedString* rhs = static_cast<BoxedString*>(_rhs);
     return new BoxedString(lhs->s + rhs->s);
 }
 

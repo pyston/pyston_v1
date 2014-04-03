@@ -21,7 +21,7 @@ struct GlobalFuncs {
     llvm::Value *printf, *my_assert, *malloc, *free;
 
     llvm::Value *boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction, *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice, *createClass;
-    llvm::Value *getattr, *setattr, *print, *nonzero, *binop, *compare, *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import;
+    llvm::Value *getattr, *setattr, *print, *nonzero, *binop, *compare, *augassign, *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import;
     llvm::Value *checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError, *assertNameDefined;
     llvm::Value *printFloat, *listAppendInternal;
     llvm::Value *dump;

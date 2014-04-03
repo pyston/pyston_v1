@@ -204,6 +204,11 @@ class DefinednessVisitor : public ASTVisitor {
             return true;
         }
 
+        virtual bool visit_augassign(AST_AugAssign *node) {
+            _doSet(node->target);
+            return true;
+        }
+
         virtual bool visit_arguments(AST_arguments *node) {
             if (node->kwarg) _doSet(node->kwarg);
             if (node->vararg.size()) _doSet(node->vararg);

@@ -179,6 +179,17 @@ AST_Assign* read_assign(BufferedReader *reader) {
     return rtn;
 }
 
+AST_AugAssign* read_augassign(BufferedReader *reader) {
+    AST_AugAssign *rtn = new AST_AugAssign();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    rtn->op_type = (AST_TYPE::AST_TYPE)reader->readByte();
+    rtn->target = readASTExpr(reader);
+    rtn->value = readASTExpr(reader);
+    return rtn;
+}
+
 AST_Attribute* read_attribute(BufferedReader *reader) {
     AST_Attribute *rtn = new AST_Attribute();
 
@@ -622,6 +633,8 @@ AST_stmt* readASTStmt(BufferedReader *reader) {
     switch (type) {
         case AST_TYPE::Assign:
             return read_assign(reader);
+        case AST_TYPE::AugAssign:
+            return read_augassign(reader);
         case AST_TYPE::Break:
             return read_break(reader);
         case AST_TYPE::ClassDef:

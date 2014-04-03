@@ -128,6 +128,17 @@ struct CallRewriteArgs {
     }
 };
 
+struct BinopRewriteArgs {
+    Rewriter *rewriter;
+    RewriterVar lhs, rhs;
+    bool out_success;
+    RewriterVar out_rtn;
+
+    BinopRewriteArgs(Rewriter *rewriter, const RewriterVar &lhs,
+            const RewriterVar &rhs) : rewriter(rewriter), lhs(lhs), rhs(rhs), out_success(false) {
+    }
+};
+
 struct CompareRewriteArgs {
     Rewriter *rewriter;
     RewriterVar lhs, rhs;
@@ -1506,95 +1517,181 @@ extern "C" Box* runtimeCall(Box *obj, int64_t nargs, Box* arg1, Box* arg2, Box* 
     return rtn;
 }
 
-extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
-    static StatCounter slowpath_binop("slowpath_binop");
-    slowpath_binop.log();
-    static StatCounter nopatch_binop("nopatch_binop");
-
-    std::string op_name = getOpName(op_type);
-
-    //int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
-    //Stats::log(id);
-
+extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs *rewrite_args) {
     // TODO handle the case of the rhs being a subclass of the lhs
     // this could get really annoying because you can dynamically make one type a subclass
     // of the other!
 
-    { // anonymous scope to make sure all variables get cleaned up before we error
+    if (rewrite_args) {
+        //rewriter->trap();
 
-        std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
-        bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
-        if (can_patchpoint)
-            rewriter.reset(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, 1, "binop"));
+        RewriterVar r_lhs = rewrite_args->rewriter->getArg(0);
+        RewriterVar r_rhs = rewrite_args->rewriter->getArg(1);
+        // TODO probably don't need to guard on the lhs_cls since it
+        // will get checked no matter what, but the check that should be
+        // removed is probably the later one.
+        // ie we should have some way of specifying what we know about the values
+        // of objects and their attributes, and the attributes' attributes.
+        r_lhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)lhs->cls);
+        r_rhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
+    }
 
-        if (rewriter.get()) {
-            //rewriter->trap();
+    std::string iop_name = getInplaceOpName(op_type);
+    Box* irtn = NULL;
+    if (inplace) {
+        if (rewrite_args) {
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
+            srewrite_args.arg1 = rewrite_args->rhs;
+            irtn = callattrInternal1(lhs, &iop_name, CLASS_ONLY, &srewrite_args, 1, rhs);
 
-            RewriterVar r_lhs = rewriter->getArg(0);
-            RewriterVar r_rhs = rewriter->getArg(1);
-            // TODO probably don't need to guard on the lhs_cls since it
-            // will get checked no matter what, but the check that should be
-            // removed is probably the later one.
-            // ie we should have some way of specifying what we know about the values
-            // of objects and their attributes, and the attributes' attributes.
-            r_lhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)lhs->cls);
-            r_rhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
-        }
-
-        Box* lrtn;
-        if (rewriter.get()) {
-            CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0));
-            rewrite_args.arg1 = rewriter->getArg(1);
-            lrtn = callattrInternal1(lhs, &op_name, CLASS_ONLY, &rewrite_args, 1, rhs);
-
-            if (!rewrite_args.out_success)
-                rewriter.reset(NULL);
-            else if (lrtn)
-                rewrite_args.out_rtn.move(-1);
+            if (!srewrite_args.out_success)
+                rewrite_args = NULL;
+            else if (irtn)
+                rewrite_args->out_rtn = srewrite_args.out_rtn.move(-1);
         } else {
-            lrtn = callattrInternal1(lhs, &op_name, CLASS_ONLY, NULL, 1, rhs);
+            irtn = callattrInternal1(lhs, &iop_name, CLASS_ONLY, NULL, 1, rhs);
         }
 
-
-        if (lrtn) {
-            if (lrtn != NotImplemented) {
-                if (rewriter.get() && can_patchpoint) {
-                    rewriter->commit();
+        if (irtn) {
+            if (irtn != NotImplemented) {
+                if (rewrite_args) {
+                    rewrite_args->out_success = true;
                 }
-                //
-                //printf("lfunc returned NotImplemented\n");
-                return lrtn;
+                return irtn;
             }
-        } else {
-            //printf("lfunc doesnt exist\n");
-        }
-
-        // TODO patch these cases
-
-        std::string rop_name = getReverseOpName(op_type);
-        Box* rattr_func = getattr_internal(rhs->cls, rop_name.c_str(), false, false, NULL, NULL);
-        if (rattr_func) {
-            Box* rtn = runtimeCall2(rattr_func, 2, rhs, lhs);
-            if (rtn != NotImplemented) {
-                return rtn;
-            }
-        } else {
-            //printf("rfunc doesn't exist\n");
-        }
-
-        fprintf(stderr, "TypeError: unsupported operand type(s) for %s: '%s' and '%s'\n", getOpSymbol(op_type).c_str(), getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
-        if (VERBOSITY()) {
-            if (lrtn)
-                fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(), op_name.c_str());
-            else
-                fprintf(stderr, "%s does not have %s\n", getTypeName(lhs)->c_str(), op_name.c_str());
-            if (rattr_func)
-                fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(rhs)->c_str(), rop_name.c_str());
-            else
-                fprintf(stderr, "%s does not have %s\n", getTypeName(rhs)->c_str(), rop_name.c_str());
         }
     }
+
+
+
+    std::string op_name = getOpName(op_type);
+    Box* lrtn;
+    if (rewrite_args) {
+        CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
+        srewrite_args.arg1 = rewrite_args->rhs;
+        lrtn = callattrInternal1(lhs, &op_name, CLASS_ONLY, &srewrite_args, 1, rhs);
+
+        if (!srewrite_args.out_success)
+            rewrite_args = NULL;
+        else if (lrtn)
+            rewrite_args->out_rtn = srewrite_args.out_rtn.move(-1);
+    } else {
+        lrtn = callattrInternal1(lhs, &op_name, CLASS_ONLY, NULL, 1, rhs);
+    }
+
+
+    if (lrtn) {
+        if (lrtn != NotImplemented) {
+            if (rewrite_args) {
+                rewrite_args->out_success = true;
+            }
+            return lrtn;
+        }
+    }
+
+    // TODO patch these cases
+
+    std::string rop_name = getReverseOpName(op_type);
+    Box* rattr_func = getattr_internal(rhs->cls, rop_name.c_str(), false, false, NULL, NULL);
+    if (rattr_func) {
+        Box* rtn = runtimeCall2(rattr_func, 2, rhs, lhs);
+        if (rtn != NotImplemented) {
+            return rtn;
+        }
+    } else {
+        //printf("rfunc doesn't exist\n");
+    }
+
+    if (inplace) {
+        fprintf(stderr, "TypeError: unsupported operand type(s) for %s: '%s' and '%s'\n", getInplaceOpSymbol(op_type).c_str(), getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
+    } else {
+        fprintf(stderr, "TypeError: unsupported operand type(s) for %s: '%s' and '%s'\n", getOpSymbol(op_type).c_str(), getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
+    }
+    if (VERBOSITY()) {
+        if (inplace) {
+            if (irtn)
+                fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(), iop_name.c_str());
+            else
+                fprintf(stderr, "%s does not have %s\n", getTypeName(lhs)->c_str(), iop_name.c_str());
+        }
+
+        if (lrtn)
+            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(), op_name.c_str());
+        else
+            fprintf(stderr, "%s does not have %s\n", getTypeName(lhs)->c_str(), op_name.c_str());
+        if (rattr_func)
+            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(rhs)->c_str(), rop_name.c_str());
+        else
+            fprintf(stderr, "%s does not have %s\n", getTypeName(rhs)->c_str(), rop_name.c_str());
+    }
     raiseExc();
+}
+
+extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
+    static StatCounter slowpath_binop("slowpath_binop");
+    slowpath_binop.log();
+    //static StatCounter nopatch_binop("nopatch_binop");
+
+    //int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
+    //Stats::log(id);
+
+    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
+    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+    if (can_patchpoint)
+        rewriter.reset(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, 1, "binop"));
+
+    Box* rtn;
+    if (rewriter.get()) {
+        //rewriter->trap();
+        BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1));
+        rtn = binopInternal(lhs, rhs, op_type, false, &rewrite_args);
+        assert(rtn);
+        if (!rewrite_args.out_success)
+            rewriter.reset(NULL);
+        else
+            rewrite_args.out_rtn.move(-1);
+    } else {
+        rtn = binopInternal(lhs, rhs, op_type, false, NULL);
+    }
+
+    if (rewriter.get()) {
+        rewriter->commit();
+    }
+
+    return rtn;
+}
+
+extern "C" Box* augassign(Box* lhs, Box* rhs, int op_type) {
+    static StatCounter slowpath_binop("slowpath_binop");
+    slowpath_binop.log();
+    //static StatCounter nopatch_binop("nopatch_binop");
+
+    //int id = Stats::getStatId("slowpath_binop_" + *getTypeName(lhs) + op_name + *getTypeName(rhs));
+    //Stats::log(id);
+
+    std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
+    bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+    if (can_patchpoint)
+        rewriter.reset(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, 1, "binop"));
+
+    Box* rtn;
+    if (rewriter.get()) {
+        //rewriter->trap();
+        BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1));
+        rtn = binopInternal(lhs, rhs, op_type, true, &rewrite_args);
+        if (!rewrite_args.out_success)
+            rewriter.reset(NULL);
+        else
+            rewrite_args.out_rtn.move(-1);
+    } else {
+        rtn = binopInternal(lhs, rhs, op_type, true, NULL);
+    }
+
+    if (rewriter.get()) {
+        rewriter->commit();
+    }
+
+    return rtn;
 }
 
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrite_args) {

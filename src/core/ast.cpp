@@ -81,6 +81,10 @@ std::string getOpSymbol(int op_type) {
     }
 }
 
+std::string getInplaceOpSymbol(int op_type) {
+    return getOpSymbol(op_type) + '=';
+}
+
 std::string getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
     assert(op_type != AST_TYPE::IsNot);
@@ -139,6 +143,11 @@ std::string getOpName(int op_type) {
     }
 }
 
+std::string getInplaceOpName(int op_type) {
+    std::string normal_name = getOpName(op_type);
+    return "__i" + normal_name.substr(2);
+}
+
 std::string getReverseOpName(int op_type) {
     if (op_type == AST_TYPE::Lt)
         return getOpName(AST_TYPE::GtE);
@@ -194,6 +203,18 @@ void AST_Assign::accept(ASTVisitor *v) {
 
 void AST_Assign::accept_stmt(StmtVisitor *v) {
     v->visit_assign(this);
+}
+
+void AST_AugAssign::accept(ASTVisitor *v) {
+    bool skip = v->visit_augassign(this);
+    if (skip) return;
+
+    value->accept(v);
+    target->accept(v);
+}
+
+void AST_AugAssign::accept_stmt(StmtVisitor *v) {
+    v->visit_augassign(this);
 }
 
 void AST_Attribute::accept(ASTVisitor *v) {
@@ -616,16 +637,8 @@ bool PrintVisitor::visit_assign(AST_Assign *node) {
     return true;
 }
 
-bool PrintVisitor::visit_attribute(AST_Attribute *node) {
-    node->value->accept(this);
-    putchar('.');
-    printf("%s", node->attr.c_str());
-    return true;
-}
-
-bool PrintVisitor::visit_binop(AST_BinOp *node) {
-    node->left->accept(this);
-    switch (node->op_type) {
+static void printOp(AST_TYPE::AST_TYPE op_type) {
+    switch (op_type) {
         case AST_TYPE::Add:
             putchar('+');
             break;
@@ -660,9 +673,29 @@ bool PrintVisitor::visit_binop(AST_BinOp *node) {
             putchar('-');
             break;
         default:
-            printf("<%d>", node->op_type);
+            printf("<%d>", op_type);
             break;
     }
+}
+
+bool PrintVisitor::visit_augassign(AST_AugAssign *node) {
+    node->target->accept(this);
+    printOp(node->op_type);
+    putchar('=');
+    node->value->accept(this);
+    return true;
+}
+
+bool PrintVisitor::visit_attribute(AST_Attribute *node) {
+    node->value->accept(this);
+    putchar('.');
+    printf("%s", node->attr.c_str());
+    return true;
+}
+
+bool PrintVisitor::visit_binop(AST_BinOp *node) {
+    node->left->accept(this);
+    printOp(node->op_type);
     node->right->accept(this);
     return true;
 }
@@ -1071,6 +1104,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_alias(AST_alias *node) { output->push_back(node); return false; }
         virtual bool visit_arguments(AST_arguments *node) { output->push_back(node); return false; }
         virtual bool visit_assign(AST_Assign *node) { output->push_back(node); return false; }
+        virtual bool visit_augassign(AST_AugAssign *node) { output->push_back(node); return false; }
         virtual bool visit_attribute(AST_Attribute *node) { output->push_back(node); return false; }
         virtual bool visit_binop(AST_BinOp *node) { output->push_back(node); return false; }
         virtual bool visit_boolop(AST_BoolOp *node) { output->push_back(node); return false; }

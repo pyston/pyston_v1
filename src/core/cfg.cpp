@@ -202,6 +202,7 @@ class CFGVisitor : public ASTVisitor {
         }
 
         virtual bool visit_assign(AST_Assign* node) { push_back(node); return true; }
+        virtual bool visit_augassign(AST_AugAssign* node) { push_back(node); return true; }
         virtual bool visit_classdef(AST_ClassDef* node) { push_back(node); return true; }
         virtual bool visit_expr(AST_Expr* node) { push_back(node); return true; }
         virtual bool visit_functiondef(AST_FunctionDef* node) { push_back(node); return true; }

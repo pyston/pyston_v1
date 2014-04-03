@@ -346,6 +346,22 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             }
         }
 
+        virtual void visit_augassign(AST_AugAssign* node) {
+            CompilerType *t = getType(node->target);
+            CompilerType *v = getType(node->value);
+
+            // TODO this isn't the right behavior
+            std::string name = getOpName(node->op_type);
+            name = "__i" + name.substr(2);
+            CompilerType *attr_type = t->getattrType(name);
+
+            std::vector<CompilerType*> arg_types;
+            arg_types.push_back(v);
+            CompilerType *rtn = attr_type->callType(arg_types);
+
+            _doSet(node->target, rtn);
+        }
+
         virtual void visit_branch(AST_Branch* node) {
             if (EXPAND_UNNEEDED) {
                 getType(node->test);

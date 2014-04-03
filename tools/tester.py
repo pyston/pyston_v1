@@ -246,6 +246,8 @@ if __name__ == "__main__":
             raise Exception((t, v))
 
     TEST_DIR = patterns[0]
+    assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
+
     patterns = patterns[1:]
 
     TOSKIP = ["%s/%s.py" % (TEST_DIR, i) for i in (
