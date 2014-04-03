@@ -105,6 +105,7 @@ def square(n):
     r = 0
     for i in xrange(n):
         r += n
+    return r
 ```
 Will get translated to something similar to:
 ```C
