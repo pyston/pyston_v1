@@ -23,7 +23,7 @@ And see that hopefully all of the tests will pass.
 
 ### Running Pyston
 
-Pyston builds in a few different configurations; right now there is "pyston_dbg", which is the debug configuration and contains assertions and debug symbols, and "pyston", the release configuration which has no assertions or debug symbols, and has full optimizations.  You can build them by saying `make pyston_dbg` or `make pyston`, respectively.  If you are interested in seeing how fast Pyston can go, you should try the release configuration, but there is a good chance that it will crash, in which case you can run the debug configuration to see what is happening.
+Pyston builds in a few different configurations; right now there is `pyston_dbg`, which is the debug configuration and contains assertions and debug symbols, and "pyston", the release configuration which has no assertions or debug symbols, and has full optimizations.  You can build them by saying `make pyston_dbg` or `make pyston`, respectively.  If you are interested in seeing how fast Pyston can go, you should try the release configuration, but there is a good chance that it will crash, in which case you can run the debug configuration to see what is happening.
 
 > There are a number of other configurations useful for development: "pyston_debug" contains full LLVM debug information, but can be over 100MB.  "pyston_prof" contains gprof-style profiling instrumentation; gprof can't profile JIT'd code, reducing it's usefulness in this case, but the configuration has stuck around since it gets compiled with gcc, and can expose issues with the normal clang-based build.
 
@@ -80,6 +80,7 @@ Initial Release.
 ### Compilation tiers
 
 Pyston currently features four compilation tiers.  In increasing order of speed, but also compilation time:
+
 1. An LLVM-IR interpreter.  LLVM IR is not designed for interpretation, and isn't very well suited for the task -- it is too low level, and the interpreter spends too much time dispatching for each instruction.  The interpreter is currently used for the first three times that a function is called, or the first ten iterations of a loop, before switching to the next level.
 2. Baseline LLVM compilation.  Runs no LLVM optimizations, and no type speculation, and simply hands off the generated code to the LLVM code generator.  This tier does type recording for the final tier.
 3. Improved LLVM compilation.  Behaves very similarly to baseline LLVM compilation, so this tier will probably be removed in the near future.
