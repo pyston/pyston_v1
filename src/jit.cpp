@@ -174,6 +174,7 @@ int main(int argc, char** argv) {
     }
     while (repl) {
         printf(">> ");
+        fflush(stdout);
 
         char* line = NULL;
         size_t size;
@@ -229,7 +230,5 @@ int main(int argc, char** argv) {
     if (VERBOSITY() >= 1 || stats)
         Stats::dump();
 
-    // I don't know why this is required...
-    fflush(stdout);
     return rtncode;
 }

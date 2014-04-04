@@ -3,3 +3,24 @@ $ echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
 gdb does this automatically, but disabling it outside of gdb can be nice to correlate runs with other runs or debugging.
 
 for better tracebacks, make sure that NoFramePointerElim is set to true in entry.cpp
+
+
+Profiling Pyston internally has gone through a number of iterations; the current approach is to use the "perf" tool.
+This can be used by doing "make perf_test_name", which will automatically run the test under perf, with the
+corresponding flags to dump the necessary output, and the collect and process it at the end.
+There's a tool called annotate.py in the tools/ directory that can combine the results of perf and data dumped from the
+run, to get instruction-level profiles; this is supported directly in perf for non-JIT'd functions, but I couldn't
+figure out another way to get it working for JIT'd ones.
+Note: this tool will show the *final* assembly code that was output, ie with all the patchpoints filled in with whatever
+code they had at the exit of the program.
+
+
+I tried gperftools; this uses a statistical sampler and might make sense for longer running programs or tests, but
+doesn't generate enough data for short-lived behavior such as JIT startup.
+
+I tried oprofile; the current behavior in the Makefile uses the deprecated "opcontrol" which has some issues with losing
+some data samples.  There's another "operf" rule, but operf doesn't seem to support the OProfile JIT hooks and misses
+the JIT'd code.
+
+There's a gprof-based profile, but that doesn't support any JIT'd code.  It can be quite handy for profiling the Pyston
+codegen + LLVM cost.

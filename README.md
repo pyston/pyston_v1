@@ -10,6 +10,29 @@ Pyston currently targets Python 2.7, and only runs on x86_64 platforms, and has 
 
 Benchmarks are not currently that meaningful since the supported set of benchmarks is too small to be representative; with that caveat, Pyston seems to have better performance than CPython but lags behind PyPy.
 
+### Roadmap
+
+Pyston is still an early-stage project so it is hard to project with much certainty, but here's what we're planning at the moment:
+
+##### Current focus: more language features
+- Exceptions
+- Class inheritance, metaclasses
+- Default arguments, keywords, \*args, **kwargs
+- Closures
+- Generators
+- Integer promotion
+
+##### After that
+- More optimization work
+ - Custom LLVM code generator that can very quickly produce bad machine code?
+ - Making class-level slots for double-underscore functions (like \_\_str__) so runtime code can be as fast as Python code.
+ - Change deopt strategy?
+- Extension module support
+
+##### Some time later:
+- Threading (hopefully without a GIL)
+- Adding support for Python 3, for non-x86_64 platforms
+
 ### Getting started
 
 To get a full development environment for Pyston, you need pretty recent versions of various tools, since self-modifying code tends to be less well supported.  The docs/INSTALLING file contains information about what the tools are, how to get them, and how to install them; currently it can take up to an hour to get them all built on a quad-core machine.
