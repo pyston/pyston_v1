@@ -19,6 +19,8 @@
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 
 #include "core/util.h"
 
@@ -168,6 +170,9 @@ class RegistryEventListener : public llvm::JITEventListener {
                 g.func_addr_registry.registerFunction(name.data(), (void*)addr, size, NULL);
             }
         }
+};
+
+GlobalState::GlobalState() : context(llvm::getGlobalContext()) {
 };
 
 llvm::JITEventListener* makeRegistryListener() {

@@ -20,7 +20,10 @@
 #include "llvm/DIBuilder.h"
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Scalar.h"
 
@@ -33,6 +36,7 @@
 
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
+#include "codegen/gcbuilder.h"
 #include "codegen/irgen.h"
 #include "codegen/patchpoints.h"
 #include "codegen/osrentry.h"

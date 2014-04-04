@@ -16,7 +16,8 @@
 #define PYSTON_CODEGEN_IRGEN_H
 
 #include "llvm/IR/Function.h"
-#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IRBuilder.h"
 
 #include "core/types.h"
 
@@ -26,8 +27,9 @@
 namespace pyston {
 
 class AST_expr;
-
+class GCBuilder;
 class IREmitter;
+
 class MyInserter : public llvm::IRBuilderDefaultInserter<true> {
     private:
         IREmitter *emitter;

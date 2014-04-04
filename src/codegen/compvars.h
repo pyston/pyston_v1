@@ -18,8 +18,6 @@
 #include <vector>
 #include <stdint.h>
 
-#include "llvm/Support/raw_ostream.h"
-
 #include "core/types.h"
 
 #include "codegen/codegen.h"
@@ -27,6 +25,7 @@
 namespace pyston {
 
 class CompilerType;
+class IREmitter;
 
 extern ConcreteCompilerType *INT, *BOXED_INT, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST, *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE;
 extern CompilerType* UNDEF;
@@ -136,12 +135,8 @@ template <>
 class ValuedCompilerType<llvm::Value*> : public _ValuedCompilerType<llvm::Value*> {
     public:
         virtual llvm::Type* llvmType() = 0;
-        virtual std::string debugName() {
-            std::string rtn;
-            llvm::raw_string_ostream os(rtn);
-            llvmType()->print(os);
-            return rtn;
-        }
+        virtual std::string debugName();
+
         virtual bool isFitBy(BoxedClass*) {
             printf("isFitBy not defined for %s\n", debugName().c_str());
             abort();
@@ -303,10 +298,10 @@ class ValuedCompilerVariable : public CompilerVariable {
         }
 };
 
-template <>
-inline ConcreteCompilerVariable::ValuedCompilerVariable(ConcreteCompilerType *type, llvm::Value* value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {
-    assert(value->getType() == type->llvmType());
-}
+//template <>
+//inline ConcreteCompilerVariable::ValuedCompilerVariable(ConcreteCompilerType *type, llvm::Value* value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {
+    //assert(value->getType() == type->llvmType());
+//}
 
 CompilerVariable* makeInt(int64_t);
 CompilerVariable* makeFloat(double);

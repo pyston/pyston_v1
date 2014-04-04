@@ -17,14 +17,19 @@
 
 #include <unordered_map>
 
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
+//#include "llvm/IR/IRBuilder.h"
 
 #include "core/types.h"
 
-#include "codegen/gcbuilder.h"
 #include "codegen/runtime_hooks.h"
+
+namespace llvm {
+class ExecutionEngine;
+class JITEventListener;
+class LLVMContext;
+class Module;
+class TargetMachine;
+}
 
 namespace pyston {
 
@@ -74,8 +79,7 @@ struct GlobalState {
 
     GlobalFuncs funcs;
 
-    GlobalState() : context(llvm::getGlobalContext()) {
-    };
+    GlobalState();
 };
 
 extern GlobalState g;

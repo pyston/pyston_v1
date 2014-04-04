@@ -16,11 +16,13 @@
 #include <sstream>
 
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "core/options.h"
 #include "core/types.h"
 
 #include "codegen/compvars.h"
+#include "codegen/gcbuilder.h"
 #include "codegen/patchpoints.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/util.h"
@@ -31,6 +33,13 @@
 #include "runtime/types.h"
 
 namespace pyston {
+
+std::string ValuedCompilerType<llvm::Value*>::debugName() {
+    std::string rtn;
+    llvm::raw_string_ostream os(rtn);
+    llvmType()->print(os);
+    return rtn;
+}
 
 struct RawInstanceMethod {
     CompilerVariable *obj, *func;

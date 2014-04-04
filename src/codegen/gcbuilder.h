@@ -15,7 +15,9 @@
 #ifndef PYSTON_CODEGEN_GCBUILDER_H
 #define PYSTON_CODEGEN_GCBUILDER_H
 
-#include "llvm/IR/Value.h"
+namespace llvm {
+class Value;
+}
 
 namespace pyston {
 

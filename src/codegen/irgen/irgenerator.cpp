@@ -13,17 +13,12 @@
 // limitations under the License.
 
 
-#include "llvm/DIBuilder.h"
-#include "llvm/PassManager.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/Verifier.h"
+#include "llvm/IR/Module.h"
 
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/util.h"
 
-#include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/osrentry.h"
 #include "codegen/patchpoints.h"
