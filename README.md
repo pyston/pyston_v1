@@ -6,7 +6,7 @@ Pyston is a new, under-development Python implementation built using LLVM and mo
 
 Pyston "works", though doesn't support very much of the Python language, and currently is not very useful for end-users.
 
-Pyston currently targets Python 2.7, and only runs on x86_64 platforms, and has only been tested on Ubuntu.
+Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is planned for the future, but this is the initial target due to the fact that Dropbox is on this setup internally.
 
 Benchmarks are not currently that meaningful since the supported set of benchmarks is too small to be representative; with that caveat, Pyston seems to have better performance than CPython but lags behind PyPy.
 
