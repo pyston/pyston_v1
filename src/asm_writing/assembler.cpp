@@ -112,13 +112,14 @@ void Assembler::emitByte(uint8_t b) {
     ++addr;
 }
 
-void Assembler::emitInt(uint64_t n, int bytes) {
+void Assembler::emitInt(int64_t n, int bytes) {
     assert(bytes > 0 && bytes <= 8);
+    assert((-1L << (8 * bytes - 1)) <= n && n <= ((1L << (8 * bytes - 1)) - 1));
     for (int i = 0; i < bytes; i++) {
         emitByte(n & 0xff);
         n >>= 8;
     }
-    assert(n == 0);
+    ASSERT(n == 0 || n == -1, "%ld", n);
 }
 
 void Assembler::emitRex(uint8_t rex) {

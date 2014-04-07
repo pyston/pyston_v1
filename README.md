@@ -56,7 +56,7 @@ Pyston builds in a few different configurations; right now there is "pyston_dbg"
 
 You can get a simple REPL by simply typing `./pyston`; it is not very robust right now, and only supports single-line statements, but can give you an interactive view into how Pyston works.  To get more functionality, you can do `./pyston -i [your_source_file.py]`, which will go into the REPL after executing the given file, letting you access all the variables you had defined.
 
-To run the tests, run `make test`.  Currently not all the tests pass, which will hopefully be fixed soon.
+To run the tests, run `make test`.
 
 #### Command-line options:
 <dl>

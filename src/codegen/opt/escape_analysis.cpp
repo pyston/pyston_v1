@@ -64,6 +64,10 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
         ChainInfo *chain = new ChainInfo(alloc);
         chains.push_back(chain);
 
+        if (VERBOSITY("opt") >= 2) {
+            errs() << "Found chain " << chain << " starting at " << *alloc;
+        }
+
         // Calculating derived pointers, and finding escape points
         {
             // Instructions in the queue to be visited:
@@ -176,7 +180,22 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
     return false;
 }
 
+void EscapeAnalysis::ChainInfo::dump() {
+    errs() << "Chain starting at " << *allocation << ":\n";
+    for (auto escape_point : escape_points) {
+        errs() << "Escapes at: " << *escape_point << '\n';
+    }
+    for (auto ptr : derived) {
+        errs() << "Derived: " << *ptr << '\n';
+    }
+}
+
 EscapeAnalysis::EscapeResult EscapeAnalysis::escapes(const Value* ptr, const Instruction *at_instruction) {
+    // FIXME the escape analysis either needs to get rerun as appropriate, or not store any
+    // data between queries.
+    // Disabled for now.
+    return Escaped;
+
     assert(ptr);
     assert(at_instruction);
 

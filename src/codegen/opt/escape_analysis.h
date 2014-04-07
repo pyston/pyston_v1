@@ -42,6 +42,8 @@ class EscapeAnalysis : public llvm::FunctionPass {
             std::unordered_map<const llvm::BasicBlock*, BBEscape> bb_escapes;
 
             ChainInfo(llvm::Value* alloc) : allocation(alloc) {}
+
+            void dump();
         };
         std::vector<ChainInfo*> chains;
         std::unordered_map<const llvm::Value*, ChainInfo*> chain_by_pointer;
