@@ -340,13 +340,13 @@ static ConcreteCompilerVariable* _call(IREmitter &emitter, llvm::Value* func, vo
 
             // Don't use the IRBuilder since we want to specifically put this in the entry block so it only gets called once.
             // TODO we could take this further and use the same alloca for all function calls?
-            llvm::Instruction* insertion_point = emitter.currentFunction()->func->getEntryBlock().getTerminator();
+            llvm::Instruction* insertion_point = &(emitter.currentFunction()->func->getEntryBlock().back());
             arg_array = new llvm::AllocaInst(g.llvm_value_type_ptr, n_varargs, "arg_scratch", insertion_point);
         }
 
         for (int i = 3; i < args.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, i - 3);
-            emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
+            emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr, true);
         }
         llvm_args.push_back(arg_array);
     }

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <dlfcn.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "core/types.h"
