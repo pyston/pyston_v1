@@ -33,6 +33,10 @@ Pyston is still an early-stage project so it is hard to project with much certai
 - Threading (hopefully without a GIL)
 - Adding support for Python 3, for non-x86_64 platforms
 
+### Contributing
+
+To contribute to Pyston, you need to to sign the [Dropbox Contribute License Agreement](https://opensource.dropbox.com/cla/), if you haven't already.
+
 ### Getting started
 
 To get a full development environment for Pyston, you need pretty recent versions of various tools, since self-modifying code tends to be less well supported.  The docs/INSTALLING file contains information about what the tools are, how to get them, and how to install them; currently it can take up to an hour to get them all built on a quad-core machine.
@@ -51,6 +55,8 @@ Pyston builds in a few different configurations; right now there is "pyston_dbg"
 > There are a number of other configurations useful for development: "pyston_debug" contains full LLVM debug information, but can be over 100MB.  "pyston_prof" contains gprof-style profiling instrumentation; gprof can't profile JIT'd code, reducing it's usefulness in this case, but the configuration has stuck around since it gets compiled with gcc, and can expose issues with the normal clang-based build.
 
 You can get a simple REPL by simply typing `./pyston`; it is not very robust right now, and only supports single-line statements, but can give you an interactive view into how Pyston works.  To get more functionality, you can do `./pyston -i [your_source_file.py]`, which will go into the REPL after executing the given file, letting you access all the variables you had defined.
+
+To run the tests, run `make test`.  Currently not all the tests pass, which will hopefully be fixed soon.
 
 #### Command-line options:
 <dl>
