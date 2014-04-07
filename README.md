@@ -130,7 +130,7 @@ def square(n):
         r += n
     return r
 ```
-Will get translated to something similar to:
+will get translated to something similar to:
 ```C
 static _backedge_trip_count = 0;
 int square(int n) {
