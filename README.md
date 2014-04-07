@@ -35,7 +35,7 @@ Pyston is still an early-stage project so it is hard to project with much certai
 
 ### Contributing
 
-To contribute to Pyston, you need to to sign the [Dropbox Contribute License Agreement](https://opensource.dropbox.com/cla/), if you haven't already.
+To contribute to Pyston, you need to to sign the [Dropbox Contributor License Agreement](https://opensource.dropbox.com/cla/), if you haven't already.
 
 ### Getting started
 
