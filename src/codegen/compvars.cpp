@@ -331,18 +331,9 @@ static ConcreteCompilerVariable* _call(IREmitter &emitter, llvm::Value* func, vo
     if (args.size() >= 4) {
         llvm::Value *arg_array;
 
-        if (emitter.getTarget() == IREmitter::INTERPRETER) {
-            llvm::Value *n_bytes = getConstantInt((args.size() - 3) * sizeof(Box*), g.i64);
-            mallocsave = emitter.getBuilder()->CreateCall(g.funcs.malloc, n_bytes);
-            arg_array = emitter.getBuilder()->CreateBitCast(mallocsave, g.llvm_value_type_ptr->getPointerTo());
-        } else {
-            llvm::Value *n_varargs = getConstantInt(args.size() - 3, g.i64);
-
-            // Don't use the IRBuilder since we want to specifically put this in the entry block so it only gets called once.
-            // TODO we could take this further and use the same alloca for all function calls?
-            llvm::Instruction* insertion_point = emitter.currentFunction()->func->getEntryBlock().getTerminator();
-            arg_array = new llvm::AllocaInst(g.llvm_value_type_ptr, n_varargs, "arg_scratch", insertion_point);
-        }
+        llvm::Value *n_bytes = getConstantInt((args.size() - 3) * sizeof(Box*), g.i64);
+        mallocsave = emitter.getBuilder()->CreateCall(g.funcs.malloc, n_bytes);
+        arg_array = emitter.getBuilder()->CreateBitCast(mallocsave, g.llvm_value_type_ptr->getPointerTo());
 
         for (int i = 3; i < args.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, i - 3);
