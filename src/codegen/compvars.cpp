@@ -346,7 +346,7 @@ static ConcreteCompilerVariable* _call(IREmitter &emitter, llvm::Value* func, vo
 
         for (int i = 3; i < args.size(); i++) {
             llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, i - 3);
-            emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
+            emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr, true);
         }
         llvm_args.push_back(arg_array);
     }
