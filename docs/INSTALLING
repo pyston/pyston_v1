@@ -18,9 +18,8 @@ make -j4
 make check
 make install
 
-ccache, distcc:
+ccache:
 sudo apt-get install ccache
-sudo apt-get install distcc distcc-pump
 
 curses, zlib:
 sudo apt-get install libncurses5-dev zlib1g-dev
@@ -52,6 +51,9 @@ VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind
 sudo apt-get install libc6-dbg
 
 OPTIONAL DEPENDENCIES:
+
+distcc:
+sudo apt-get install distcc distcc-pump
 
 gtest:
 cd ~/pyston_deps
