@@ -18,6 +18,9 @@ make -j4
 make check
 make install
 
+ccache:
+sudo apt-get install ccache
+
 curses, zlib:
 sudo apt-get install libncurses5-dev zlib1g-dev
 
@@ -49,8 +52,7 @@ sudo apt-get install libc6-dbg
 
 OPTIONAL DEPENDENCIES:
 
-ccache, distcc:
-sudo apt-get install ccache
+distcc:
 sudo apt-get install distcc distcc-pump
 
 gtest:
