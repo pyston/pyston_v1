@@ -118,7 +118,7 @@ def convert(n, f):
         else:
             raise Exception(type(n.n))
 
-    # print n, sorted(n.__dict__.items())
+    # print >>sys.stderr, n, sorted(n.__dict__.items())
     for k, v in sorted(n.__dict__.items()):
         if k.startswith('_'):
             continue

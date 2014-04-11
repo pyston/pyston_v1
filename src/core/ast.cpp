@@ -383,6 +383,19 @@ void AST_If::accept_stmt(StmtVisitor *v) {
     v->visit_if(this);
 }
 
+void AST_IfExp::accept(ASTVisitor *v) {
+    bool skip = v->visit_ifexp(this);
+    if (skip) return;
+
+    this->test->accept(v);
+    this->body->accept(v);
+    this->orelse->accept(v);
+}
+
+void* AST_IfExp::accept_expr(ExprVisitor *v) {
+    return v->visit_ifexp(this);
+}
+
 void AST_Import::accept(ASTVisitor *v) {
     bool skip = v->visit_import(this);
     if (skip) return;
@@ -591,6 +604,7 @@ void AST_ClsAttribute::accept(ASTVisitor *v) {
 void* AST_ClsAttribute::accept_expr(ExprVisitor *v) {
     return v->visit_clsattribute(this);
 }
+
 
 
 
@@ -878,6 +892,15 @@ bool PrintVisitor::visit_if(AST_If *node) {
         if (!elif)
             indent -= 4;
     }
+    return true;
+}
+
+bool PrintVisitor::visit_ifexp(AST_IfExp *node) {
+    node->body->accept(this);
+    printf(" if ");
+    node->test->accept(this);
+    printf(" else ");
+    node->orelse->accept(this);
     return true;
 }
 

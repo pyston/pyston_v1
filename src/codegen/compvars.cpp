@@ -310,6 +310,7 @@ static ConcreteCompilerVariable* _call(IREmitter &emitter, llvm::Value* func, vo
     std::vector<BoxedClass*> guaranteed_classes;
     std::vector<ConcreteCompilerVariable*> converted_args;
     for (int i = 0; i < args.size(); i++) {
+        assert(args[i]);
         converted_args.push_back(args[i]->makeConverted(emitter, args[i]->getBoxType()));
         guaranteed_classes.push_back(converted_args.back()->guaranteedClass());
     }
@@ -544,6 +545,14 @@ class AbstractFunctionType : public CompilerType {
             return new AbstractFunctionType(sigs);
         }
 };
+
+CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*> &arg_types) {
+    std::vector<AbstractFunctionType::Sig*> sigs;
+    AbstractFunctionType::Sig *sig = new AbstractFunctionType::Sig();
+    sig->rtn_type = rtn_type;
+    sig->arg_types = arg_types;
+    return AbstractFunctionType::get(sigs);
+}
 
 class IntType : public ConcreteCompilerType {
     public:

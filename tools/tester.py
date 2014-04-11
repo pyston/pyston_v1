@@ -275,10 +275,6 @@ if __name__ == "__main__":
         nostat(["nondirectly_callable_ics"]) # WIP
         skip(["finalization_cycles", "resurrection", "nonself_resurrection"]) # WIP
 
-        if '-O' in EXTRA_JIT_ARGS:
-            # Have guard issues:
-            skip(["dict", "tuple_iteration"])
-
     if datetime.datetime.now() < datetime.datetime(2014,4,28):
         skip(["class_noctor", "non_function_ctors"]) # object.__new__
         skip(["setattr_patching_under"]) # requires __del__

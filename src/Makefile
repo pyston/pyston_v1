@@ -133,6 +133,9 @@ COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurs
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
+# For now, link in libstdc++ statically, since the system libstdc++ is likely to be too old:
+COMMON_LDFLAGS += -static-libstdc++
+
 LDFLAGS := $(LLVM_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_DEBUG := $(LLVM_DEBUG_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_PROFILE = $(LLVM_PROFILE_LDFLAGS) -pg $(COMMON_LDFLAGS)
@@ -238,6 +241,10 @@ run_gcunittests: unittests/gc
 run_unittests:: run_gcunittests
 dbg_unittests:: dbg_gcunittests
 
+define checksha
+	test "$$($1 | sha1sum)" = "$2  -"
+endef
+
 .PHONY: test test_debug test_prof test_release
 test_debug: pyston_dbg ext
 	python ../tools/tester.py -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
@@ -251,7 +258,7 @@ test_prof: pyston_prof ext
 	python ../tools/tester.py -P -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
-test: ext
+test: ext pyston_dbg
 	$(MAKE) pyston_dbg
 	# $(MAKE) run_unittests
 	$(MAKE) test_debug
@@ -259,13 +266,12 @@ test: ext
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
 	# $(MAKE) test_prof
 	$(MAKE) pyston_prof
-	./pyston_prof -q $(TESTS_DIR)/raytrace_small.py | sha1sum
+	$(call checksha,./pyston_prof -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
 	echo "All tests passed"
 
-define checksha
-	test "$$($1 | sha1sum)" = "$2  -"
-endef
 check:
 	$(MAKE) pyston_dbg
 	$(call checksha,./pyston_dbg -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)

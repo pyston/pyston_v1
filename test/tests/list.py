@@ -26,3 +26,5 @@ for i in xrange(-5, 4):
     l3 = range(5)
     l3[:i] = [7, 8]
     print l3
+
+print [1, 2, 3, 4, 5]

@@ -350,6 +350,17 @@ class AST_If : public AST_stmt {
         AST_If() : AST_stmt(AST_TYPE::If) {}
 };
 
+class AST_IfExp : public AST_expr {
+    public:
+        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::IfExp;
+        AST_expr *body, *test, *orelse;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void* accept_expr(ExprVisitor *v);
+
+        AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
+};
+
 class AST_Import : public AST_stmt {
     public:
         std::vector<AST_alias*> names;
@@ -580,7 +591,6 @@ class AST_ClsAttribute : public AST_expr {
         AST_ClsAttribute() : AST_expr(AST_TYPE::ClsAttribute) {}
 };
 
-
 class ASTVisitor {
     protected:
     public:
@@ -605,6 +615,7 @@ class ASTVisitor {
         virtual bool visit_functiondef(AST_FunctionDef *node) { assert(0); abort(); }
         virtual bool visit_global(AST_Global *node) { assert(0); abort(); }
         virtual bool visit_if(AST_If *node) { assert(0); abort(); }
+        virtual bool visit_ifexp(AST_IfExp *node) { assert(0); abort(); }
         virtual bool visit_import(AST_Import *node) { assert(0); abort(); }
         virtual bool visit_index(AST_Index *node) { assert(0); abort(); }
         virtual bool visit_keyword(AST_keyword *node) { assert(0); abort(); }
@@ -651,6 +662,7 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
         virtual bool visit_global(AST_Global *node) { return false; }
         virtual bool visit_if(AST_If *node) { return false; }
+        virtual bool visit_ifexp(AST_IfExp *node) { return false; }
         virtual bool visit_import(AST_Import *node) { return false; }
         virtual bool visit_index(AST_Index *node) { return false; }
         virtual bool visit_keyword(AST_keyword *node) { return false; }
@@ -685,6 +697,7 @@ class ExprVisitor {
         virtual void* visit_clsattribute(AST_ClsAttribute *node) { assert(0); abort(); }
         virtual void* visit_compare(AST_Compare *node) { assert(0); abort(); }
         virtual void* visit_dict(AST_Dict *node) { assert(0); abort(); }
+        virtual void* visit_ifexp(AST_IfExp *node) { assert(0); abort(); }
         virtual void* visit_index(AST_Index *node) { assert(0); abort(); }
         virtual void* visit_list(AST_List *node) { assert(0); abort(); }
         virtual void* visit_name(AST_Name *node) { assert(0); abort(); }
@@ -750,6 +763,7 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_functiondef(AST_FunctionDef *node);
         virtual bool visit_global(AST_Global *node);
         virtual bool visit_if(AST_If *node);
+        virtual bool visit_ifexp(AST_IfExp *node);
         virtual bool visit_import(AST_Import *node);
         virtual bool visit_index(AST_Index *node);
         virtual bool visit_keyword(AST_keyword *node);

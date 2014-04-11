@@ -212,10 +212,10 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalAttribute(AST_Attribute *node) {
+            assert(state != PARTIAL);
             assert(node->ctx_type == AST_TYPE::Load);
+
             CompilerVariable *value = evalExpr(node->value);
-            if (state == PARTIAL)
-                return NULL;
 
             CompilerVariable *rtn = value->getattr(emitter, node->attr);
             value->decvref(emitter);
@@ -223,9 +223,9 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalClsAttribute(AST_ClsAttribute *node) {
+            assert(state != PARTIAL);
+
             CompilerVariable *value = evalExpr(node->value);
-            if (state == PARTIAL)
-                return NULL;
 
             //ASSERT((node->attr == "__iter__" || node->attr == "__hasnext__" || node->attr == "next" || node->attr == "__enter__" || node->attr == "__exit__") && (value->getType() == UNDEF || value->getType() == value->getBoxType()) && "inefficient for anything else, should change", "%s", node->attr.c_str());
 
@@ -257,6 +257,8 @@ class IRGeneratorImpl : public IRGenerator {
             Compare,
         };
         CompilerVariable* _evalBinExp(CompilerVariable *left, CompilerVariable *right, AST_TYPE::AST_TYPE type, BinExpType exp_type) {
+            assert(state != PARTIAL);
+
             assert(left);
             assert(right);
 
@@ -471,18 +473,10 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalBinOp(AST_BinOp *node) {
-            CompilerVariable *left = evalExpr(node->left);
-            _setFake(_nodeFakeName(0, node), left); // 'fakes' are for handling deopt entries
-            CompilerVariable *right = evalExpr(node->right);
-            _setFake(_nodeFakeName(1, node), right);
+            assert(state != PARTIAL);
 
-            if (state == PARTIAL) {
-                _clearFake(_nodeFakeName(0, node));
-                _clearFake(_nodeFakeName(1, node));
-                return NULL;
-            }
-            left = _getFake(_nodeFakeName(0, node));
-            right = _getFake(_nodeFakeName(1, node));
+            CompilerVariable *left = evalExpr(node->left);
+            CompilerVariable *right = evalExpr(node->right);
 
             assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
@@ -492,86 +486,13 @@ class IRGeneratorImpl : public IRGenerator {
             return rtn;
         }
 
-        CompilerVariable* evalBoolOp(AST_BoolOp *node) {
+        CompilerVariable* evalCompare(AST_Compare *node) {
             assert(state != PARTIAL);
 
-            assert(node->op_type == AST_TYPE::And || node->op_type == AST_TYPE::Or);
-            bool is_and = node->op_type == AST_TYPE::And;
-            int nvals = node->values.size();
-            assert(nvals >= 2);
-
-            std::vector<llvm::BasicBlock*> starting_blocks;
-            for (int i = 0; i < nvals - 1; i++) {
-                starting_blocks.push_back(llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction()));
-            }
-            llvm::BasicBlock *exit_block = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-            std::vector<llvm::BasicBlock*> ending_blocks;
-
-            std::vector<llvm::Value*> converted_vals;
-            ConcreteCompilerVariable *prev = NULL;
-
-            for (int i = 0; i < nvals; i++) {
-                if (i > 0) {
-                    assert(prev);
-                    prev->decvref(emitter);
-                }
-
-                CompilerVariable *v = evalExpr(node->values[i]);
-                ConcreteCompilerVariable *converted = prev = v->makeConverted(emitter, v->getBoxType());
-                v->decvref(emitter);
-                converted_vals.push_back(converted->getValue());
-
-                ending_blocks.push_back(curblock);
-
-                if (i == nvals - 1) {
-                    emitter.getBuilder()->CreateBr(exit_block);
-                    emitter.getBuilder()->SetInsertPoint(exit_block);
-                    curblock = exit_block;
-                } else {
-                    ConcreteCompilerVariable *nz = converted->nonzero(emitter);
-                    //ConcreteCompilerVariable *nz = v->nonzero(emitter);
-                    assert(nz->getType() == BOOL);
-                    llvm::Value* nz_v = nz->getValue();
-
-                    if (is_and)
-                        emitter.getBuilder()->CreateCondBr(nz_v, starting_blocks[i], exit_block);
-                    else
-                        emitter.getBuilder()->CreateCondBr(nz_v, exit_block, starting_blocks[i]);
-
-                    // Shouldn't generate any code, so should be safe to put after branch instruction;
-                    // if that assumption fails, will fail loudly.
-                    nz->decvref(emitter);
-                    emitter.getBuilder()->SetInsertPoint(starting_blocks[i]);
-                    curblock = starting_blocks[i];
-                }
-            }
-
-            // TODO prev (from the last block) doesn't get freed!
-
-            llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, nvals);
-            for (int i = 0; i < nvals; i++) {
-                phi->addIncoming(converted_vals[i], ending_blocks[i]);
-            }
-
-            //cf->func->dump();
-            return new ConcreteCompilerVariable(UNKNOWN, phi, true);
-        }
-
-        CompilerVariable* evalCompare(AST_Compare *node) {
             RELEASE_ASSERT(node->ops.size() == 1, "");
 
             CompilerVariable *left = evalExpr(node->left);
-            _setFake(_nodeFakeName(0, node), left); // 'fakes' are for handling deopt entries
             CompilerVariable *right = evalExpr(node->comparators[0]);
-            _setFake(_nodeFakeName(1, node), right);
-
-            if (state == PARTIAL) {
-                _clearFake(_nodeFakeName(0, node));
-                _clearFake(_nodeFakeName(1, node));
-                return NULL;
-            }
-            left = _getFake(_nodeFakeName(0, node));
-            right = _getFake(_nodeFakeName(1, node));
 
             assert(left);
             assert(right);
@@ -583,6 +504,8 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalCall(AST_Call *node) {
+            assert(state != PARTIAL);
+
             bool is_callattr;
             bool callattr_clsonly = false;
             std::string *attr = NULL;
@@ -604,24 +527,10 @@ class IRGeneratorImpl : public IRGenerator {
                 func = evalExpr(node->func);
             }
 
-            _setFake(_nodeFakeName(-1, node), func);
-
             std::vector<CompilerVariable*> args;
             for (int i = 0; i < node->args.size(); i++) {
                 CompilerVariable *a = evalExpr(node->args[i]);
-                _setFake(_nodeFakeName(i, node), a);
-            }
-            if (state == PARTIAL) {
-                _clearFake(_nodeFakeName(-1, node));
-                for (int i = 0; i < node->args.size(); i++) {
-                    _clearFake(_nodeFakeName(i, node));
-                }
-                return NULL;
-            }
-
-            func = _getFake(_nodeFakeName(-1, node));
-            for (int i = 0; i < node->args.size(); i++) {
-                args.push_back(_getFake(_nodeFakeName(i, node)));
+                args.push_back(a);
             }
 
             //if (VERBOSITY("irgen") >= 1)
@@ -655,6 +564,8 @@ class IRGeneratorImpl : public IRGenerator {
                 for (int i = 0; i < node->keys.size(); i++) {
                     CompilerVariable *key = evalExpr(node->keys[i]);
                     CompilerVariable *value = evalExpr(node->values[i]);
+                    assert(key);
+                    assert(value);
 
                     std::vector<CompilerVariable*> args;
                     args.push_back(key);
@@ -679,25 +590,18 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalIndex(AST_Index *node) {
+            assert(state != PARTIAL);
+
             return evalExpr(node->value);
         }
 
         CompilerVariable* evalList(AST_List *node) {
-            for (int i = 0; i < node->elts.size(); i++) {
-                CompilerVariable *value = evalExpr(node->elts[i]);
-                _setFake(_nodeFakeName(i, node), value);
-            }
-
-            if (state == PARTIAL) {
-                for (int i = 0; i < node->elts.size(); i++) {
-                    _clearFake(_nodeFakeName(i, node));
-                }
-                return NULL;
-            }
+            assert(state != PARTIAL);
 
             std::vector<CompilerVariable*> elts;
             for (int i = 0; i < node->elts.size(); i++) {
-                elts.push_back(_getFake(_nodeFakeName(i, node)));
+                CompilerVariable *value = evalExpr(node->elts[i]);
+                elts.push_back(value);
             }
 
             llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createList);
@@ -717,21 +621,13 @@ class IRGeneratorImpl : public IRGenerator {
             return rtn;
         }
 
-        //CompilerVariable* evalListComp(AST_ListComp *node) {
-            //assert(node->generators.size() == 1 && "unsupported");
-            //assert(state != PARTIAL && "unsupported");
-//
-            //assert(0);
-        //}
-
         CompilerVariable* getNone() {
             ConcreteCompilerVariable *v = new ConcreteCompilerVariable(typeFromClass(none_cls), embedConstantPtr(None, g.llvm_value_type_ptr), false);
             return v;
         }
 
         CompilerVariable* evalName(AST_Name *node) {
-            if (state == PARTIAL)
-                return NULL;
+            assert(state != PARTIAL);
 
             if (irstate->getScopeInfo()->refersToGlobal(node->id)) {
                 if (1) {
@@ -784,8 +680,8 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalNum(AST_Num *node) {
-            if (state == PARTIAL)
-                return NULL;
+            assert(state != PARTIAL);
+
             if (node->num_type == AST_Num::INT)
                 return makeInt(node->n_int);
             else if (node->num_type == AST_Num::FLOAT)
@@ -795,8 +691,7 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalSlice(AST_Slice *node) {
-            if (state == PARTIAL)
-                return NULL;
+            assert(state != PARTIAL);
 
             CompilerVariable *start, *stop, *step;
             start = node->lower ? evalExpr(node->lower) : getNone();
@@ -824,24 +719,16 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalStr(AST_Str *node) {
-            if (state == PARTIAL)
-                return NULL;
+            assert(state != PARTIAL);
+
             return makeStr(&node->s);
         }
 
         CompilerVariable* evalSubscript(AST_Subscript *node) {
-            CompilerVariable *value = evalExpr(node->value);
-            _setFake(_nodeFakeName(0, node), value); // 'fakes' are for handling deopt entries
-            CompilerVariable *slice = evalExpr(node->slice);
-            _setFake(_nodeFakeName(1, node), slice);
+            assert(state != PARTIAL);
 
-            if (state == PARTIAL) {
-                _clearFake(_nodeFakeName(0, node));
-                _clearFake(_nodeFakeName(1, node));
-                return NULL;
-            }
-            value = _getFake(_nodeFakeName(0, node));
-            slice = _getFake(_nodeFakeName(1, node));
+            CompilerVariable *value = evalExpr(node->value);
+            CompilerVariable *slice = evalExpr(node->slice);
 
             CompilerVariable *rtn = value->getitem(emitter, slice);
             value->decvref(emitter);
@@ -850,21 +737,12 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         CompilerVariable* evalTuple(AST_Tuple *node) {
-            for (int i = 0; i < node->elts.size(); i++) {
-                CompilerVariable *value = evalExpr(node->elts[i]);
-                _setFake(_nodeFakeName(i, node), value);
-            }
-
-            if (state == PARTIAL) {
-                for (int i = 0; i < node->elts.size(); i++) {
-                    _clearFake(_nodeFakeName(i, node));
-                }
-                return NULL;
-            }
+            assert(state != PARTIAL);
 
             std::vector<CompilerVariable*> elts;
             for (int i = 0; i < node->elts.size(); i++) {
-                elts.push_back(_getFake(_nodeFakeName(i, node)));
+                CompilerVariable *value = evalExpr(node->elts[i]);
+                elts.push_back(value);
             }
 
             // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
@@ -902,6 +780,8 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         ConcreteCompilerVariable* unboxVar(ConcreteCompilerType *t, llvm::Value *v, bool grabbed) {
+            assert(state != PARTIAL);
+
             if (t == BOXED_INT) {
                 llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v);
                 ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(INT, unboxed, true);
@@ -918,93 +798,90 @@ class IRGeneratorImpl : public IRGenerator {
         CompilerVariable* evalExpr(AST_expr *node) {
             emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
 
-            CompilerVariable *rtn;
-            switch (node->type) {
-                case AST_TYPE::Attribute:
-                    rtn = evalAttribute(static_cast<AST_Attribute*>(node));
-                    break;
-                case AST_TYPE::BinOp:
-                    rtn = evalBinOp(static_cast<AST_BinOp*>(node));
-                    break;
-                case AST_TYPE::BoolOp:
-                    rtn = evalBoolOp(static_cast<AST_BoolOp*>(node));
-                    break;
-                case AST_TYPE::Call:
-                    rtn = evalCall(static_cast<AST_Call*>(node));
-                    break;
-                case AST_TYPE::Compare:
-                    rtn = evalCompare(static_cast<AST_Compare*>(node));
-                    break;
-                case AST_TYPE::Dict:
-                    rtn = evalDict(static_cast<AST_Dict*>(node));
-                    break;
-                case AST_TYPE::Index:
-                    rtn = evalIndex(static_cast<AST_Index*>(node));
-                    break;
-                case AST_TYPE::List:
-                    rtn = evalList(static_cast<AST_List*>(node));
-                    break;
-                //case AST_TYPE::ListComp:
-                    //rtn = evalListComp(static_cast<AST_ListComp*>(node));
-                    //break;
-                case AST_TYPE::Name:
-                    rtn = evalName(static_cast<AST_Name*>(node));
-                    break;
-                case AST_TYPE::Num:
-                    rtn = evalNum(static_cast<AST_Num*>(node));
-                    break;
-                case AST_TYPE::Slice:
-                    rtn = evalSlice(static_cast<AST_Slice*>(node));
-                    break;
-                case AST_TYPE::Str:
-                    rtn = evalStr(static_cast<AST_Str*>(node));
-                    break;
-                case AST_TYPE::Subscript:
-                    rtn = evalSubscript(static_cast<AST_Subscript*>(node));
-                    break;
-                case AST_TYPE::Tuple:
-                    rtn = evalTuple(static_cast<AST_Tuple*>(node));
-                    break;
-                case AST_TYPE::UnaryOp:
-                    rtn = evalUnaryOp(static_cast<AST_UnaryOp*>(node));
-                    break;
-                case AST_TYPE::ClsAttribute:
-                    rtn = evalClsAttribute(static_cast<AST_ClsAttribute*>(node));
-                    break;
-                default:
-                    printf("Unhandled expr type: %d (irgen.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
-                    exit(1);
-            }
-
-            if (rtn == NULL) {
-                assert(state == PARTIAL);
-            }
-
-            // Out-guarding:
-            BoxedClass *speculated_class = types->speculatedExprClass(node);
-            if (speculated_class != NULL && state != PARTIAL) {
-                assert(rtn);
-
-                ConcreteCompilerType *speculated_type = typeFromClass(speculated_class);
-                if (VERBOSITY("irgen") >= 1) {
-                    printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(), speculated_type->debugName().c_str());
-                    PrintVisitor printer;
-                    node->accept(&printer);
-                    printf("\n");
+            CompilerVariable *rtn = NULL;
+            if (state != PARTIAL) {
+                switch (node->type) {
+                    case AST_TYPE::Attribute:
+                        rtn = evalAttribute(static_cast<AST_Attribute*>(node));
+                        break;
+                    case AST_TYPE::BinOp:
+                        rtn = evalBinOp(static_cast<AST_BinOp*>(node));
+                        break;
+                    case AST_TYPE::Call:
+                        rtn = evalCall(static_cast<AST_Call*>(node));
+                        break;
+                    case AST_TYPE::Compare:
+                        rtn = evalCompare(static_cast<AST_Compare*>(node));
+                        break;
+                    case AST_TYPE::Dict:
+                        rtn = evalDict(static_cast<AST_Dict*>(node));
+                        break;
+                    case AST_TYPE::Index:
+                        rtn = evalIndex(static_cast<AST_Index*>(node));
+                        break;
+                    case AST_TYPE::List:
+                        rtn = evalList(static_cast<AST_List*>(node));
+                        break;
+                    //case AST_TYPE::ListComp:
+                        //rtn = evalListComp(static_cast<AST_ListComp*>(node));
+                        //break;
+                    case AST_TYPE::Name:
+                        rtn = evalName(static_cast<AST_Name*>(node));
+                        break;
+                    case AST_TYPE::Num:
+                        rtn = evalNum(static_cast<AST_Num*>(node));
+                        break;
+                    case AST_TYPE::Slice:
+                        rtn = evalSlice(static_cast<AST_Slice*>(node));
+                        break;
+                    case AST_TYPE::Str:
+                        rtn = evalStr(static_cast<AST_Str*>(node));
+                        break;
+                    case AST_TYPE::Subscript:
+                        rtn = evalSubscript(static_cast<AST_Subscript*>(node));
+                        break;
+                    case AST_TYPE::Tuple:
+                        rtn = evalTuple(static_cast<AST_Tuple*>(node));
+                        break;
+                    case AST_TYPE::UnaryOp:
+                        rtn = evalUnaryOp(static_cast<AST_UnaryOp*>(node));
+                        break;
+                    case AST_TYPE::ClsAttribute:
+                        rtn = evalClsAttribute(static_cast<AST_ClsAttribute*>(node));
+                        break;
+                    default:
+                        printf("Unhandled expr type: %d (irgen.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
+                        exit(1);
                 }
 
-                // That's not really a speculation.... could potentially handle this here, but
-                // I think it's better to just not generate bad speculations:
-                assert(!rtn->canConvertTo(speculated_type));
+                assert(rtn);
 
-                ConcreteCompilerVariable *old_rtn = rtn->makeConverted(emitter, UNKNOWN);
-                rtn->decvref(emitter);
+                // Out-guarding:
+                BoxedClass *speculated_class = types->speculatedExprClass(node);
+                if (speculated_class != NULL) {
+                    assert(rtn);
 
-                llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
-                assert(guard_check->getType() == g.i1);
-                createExprTypeGuard(guard_check, node, old_rtn);
+                    ConcreteCompilerType *speculated_type = typeFromClass(speculated_class);
+                    if (VERBOSITY("irgen") >= 1) {
+                        printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(), speculated_type->debugName().c_str());
+                        PrintVisitor printer;
+                        node->accept(&printer);
+                        printf("\n");
+                    }
 
-                rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
+                    // That's not really a speculation.... could potentially handle this here, but
+                    // I think it's better to just not generate bad speculations:
+                    assert(!rtn->canConvertTo(speculated_type));
+
+                    ConcreteCompilerVariable *old_rtn = rtn->makeConverted(emitter, UNKNOWN);
+                    rtn->decvref(emitter);
+
+                    llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
+                    assert(guard_check->getType() == g.i1);
+                    createExprTypeGuard(guard_check, node, old_rtn);
+
+                    rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
+                }
             }
 
             // In-guarding:
@@ -1098,6 +975,8 @@ class IRGeneratorImpl : public IRGenerator {
                 }
             }
 
+            assert(rtn || state == PARTIAL);
+
             return rtn;
         }
 
@@ -1105,11 +984,6 @@ class IRGeneratorImpl : public IRGenerator {
             char buf[40];
             snprintf(buf, 40, "!%s_%s", prefix, token);
             return std::string(buf);
-        }
-        static std::string _nodeFakeName(int idx, AST* node) {
-            char buf[40];
-            snprintf(buf, 40, "%p(%d)_%d", (void*)node, node->type, idx);
-            return _getFakeName("node", buf);
         }
         void _setFake(std::string name, CompilerVariable* val) {
             assert(name[0] == '!');
@@ -1190,6 +1064,7 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val) {
+            assert(state != PARTIAL);
             int ntargets = target->elts.size();
             ConcreteCompilerVariable *len = val->len(emitter);
             emitter.getBuilder()->CreateCall2(g.funcs.checkUnpackingLength,
@@ -1203,6 +1078,7 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         void _doSet(AST* target, CompilerVariable* val) {
+            assert(state != PARTIAL);
             switch (target->type) {
                 case AST_TYPE::Attribute:
                     _doSetattr(static_cast<AST_Attribute*>(target), val);
@@ -1226,6 +1102,7 @@ class IRGeneratorImpl : public IRGenerator {
             CompilerVariable *val = evalExpr(node->value);
             if (state == PARTIAL)
                 return;
+
             for (int i = 0; i < node->targets.size(); i++) {
                 _doSet(node->targets[i], val);
             }
@@ -1234,18 +1111,9 @@ class IRGeneratorImpl : public IRGenerator {
 
         void doAugAssign(AST_AugAssign *node) {
             CompilerVariable *target = evalExpr(node->target);
-            _setFake(_nodeFakeName(0, node), target); // 'fakes' are for handling deopt entries
-
             CompilerVariable *val = evalExpr(node->value);
-            _setFake(_nodeFakeName(1, node), val);
-
-            if (state == PARTIAL) {
-                _clearFake(_nodeFakeName(0, node));
-                _clearFake(_nodeFakeName(1, node));
+            if (state == PARTIAL)
                 return;
-            }
-            target = _getFake(_nodeFakeName(0, node));
-            val = _getFake(_nodeFakeName(1, node));
 
             CompilerVariable *rtn = this->_evalBinExp(target, val, node->op_type, AugAssign);
             target->decvref(emitter);
@@ -1320,11 +1188,10 @@ class IRGeneratorImpl : public IRGenerator {
             func->decvref(emitter);
         }
 
-        void doIf(AST_If *node) {
-            assert(0);
-        }
-
         void doImport(AST_Import *node) {
+            if (state == PARTIAL)
+                return;
+
             for (int i = 0; i < node->names.size(); i++) {
                 AST_alias *alias = node->names[i];
 
@@ -1339,26 +1206,27 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         void doPrint(AST_Print *node) {
+            if (state == PARTIAL)
+                return;
+
             assert(node->dest == NULL);
             for (int i = 0; i < node->values.size(); i++) {
                 if (i > 0) {
                     emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));
                 }
                 CompilerVariable* var = evalExpr(node->values[i]);
-                if (state != PARTIAL) {
-                    var->print(emitter);
-                    var->decvref(emitter);
-                }
+                var->print(emitter);
+                var->decvref(emitter);
             }
-            if (state != PARTIAL) {
-                if (node->nl)
-                    emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr("\n"));
-                else
-                    emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));
-            }
+
+            if (node->nl)
+                emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr("\n"));
+            else
+                emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));
         }
 
         void doReturn(AST_Return *node) {
+
             CompilerVariable *val;
             if (node->value == NULL) {
                 if (irstate->getReturnType() == VOID) {
@@ -1370,8 +1238,8 @@ class IRGeneratorImpl : public IRGenerator {
                 val = new ConcreteCompilerVariable(NONE, embedConstantPtr(None, g.llvm_value_type_ptr), false);
             } else {
                 val = evalExpr(node->value);
-                assert(state != PARTIAL);
             }
+            assert(state != PARTIAL);
             assert(val);
 
             // If we ask the return variable to become UNKNOWN (the typical return type),
@@ -1401,6 +1269,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             CompilerVariable *val = evalExpr(node->test);
             assert(state != PARTIAL);
+            assert(val);
 
             ConcreteCompilerVariable* nonzero = val->nonzero(emitter);
             assert(nonzero->getType() == BOOL);
@@ -1419,11 +1288,15 @@ class IRGeneratorImpl : public IRGenerator {
 
         void doExpr(AST_Expr *node) {
             CompilerVariable *var = evalExpr(node->value);
-            if (state != PARTIAL)
-                var->decvref(emitter);
+            if (state == PARTIAL)
+                return;
+
+            var->decvref(emitter);
         }
 
         void doOSRExit(llvm::BasicBlock *normal_target, AST_Jump* osr_key) {
+            assert(state != PARTIAL);
+
             llvm::BasicBlock *starting_block = curblock;
             llvm::BasicBlock *onramp = llvm::BasicBlock::Create(g.context, "onramp", irstate->getLLVMFunction());
 
@@ -1573,6 +1446,8 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
         void doJump(AST_Jump *node) {
+            assert(state != PARTIAL);
+
             endBlock(FINISHED);
 
             llvm::BasicBlock *target = entry_blocks[node->target->idx];
@@ -1602,9 +1477,9 @@ class IRGeneratorImpl : public IRGenerator {
                 case AST_TYPE::FunctionDef:
                     doFunction(static_cast<AST_FunctionDef*>(node));
                     break;
-                case AST_TYPE::If:
-                    doIf(static_cast<AST_If*>(node));
-                    break;
+                //case AST_TYPE::If:
+                    //doIf(static_cast<AST_If*>(node));
+                    //break;
                 case AST_TYPE::Import:
                     doImport(static_cast<AST_Import*>(node));
                     break;
@@ -1647,7 +1522,7 @@ class IRGeneratorImpl : public IRGenerator {
             ScopeInfo *scope_info = irstate->getScopeInfo();
 
             for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
-                ASSERT(it->first[0] != '!' || startswith(it->first, "!is_defined"), "left a fake variable in the real symbol table? '%s'", it->first.c_str());
+                //ASSERT(it->first[0] != '!' || startswith(it->first, "!is_defined"), "left a fake variable in the real symbol table? '%s'", it->first.c_str());
 
                 if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
                     //printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", it->first.c_str(), myblock->idx, it->second->isGrabbed(), it->second->getVrefs());
@@ -1712,7 +1587,7 @@ class IRGeneratorImpl : public IRGenerator {
             ConcreteSymbolTable *phi_st = new ConcreteSymbolTable();
             for (SymbolTable::iterator it = st->begin(); it != st->end(); it++) {
                 if (it->first[0] == '!') {
-                    ASSERT(startswith(it->first, _getFakeName("is_defined", "")), "left a fake variable in the real symbol table? '%s'", it->first.c_str());
+                    //ASSERT(startswith(it->first, _getFakeName("is_defined", "")), "left a fake variable in the real symbol table? '%s'", it->first.c_str());
                 } else {
                     ASSERT(source->liveness->isLiveAtEnd(it->first, myblock), "%s", it->first.c_str());
                 }

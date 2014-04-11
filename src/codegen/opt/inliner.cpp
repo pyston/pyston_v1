@@ -59,11 +59,6 @@ class MyMaterializer : public llvm::ValueMaterializer {
                 //llvm::errs() << " is gv\n";
                 assert(gv->getLinkage() != llvm::GlobalVariable::PrivateLinkage);
                 r = new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType());
-            } else if (llvm::LoadInst *load = llvm::dyn_cast<llvm::LoadInst>(v)) {
-                //llvm::errs() << " is LoadInst\n";
-                //load->getPointerOperand()->dump();
-                llvm::GlobalVariable *gv = llvm::dyn_cast<llvm::GlobalVariable>(load->getPointerOperand());
-                r = v;
             } else if (llvm::GlobalAlias *alias = llvm::dyn_cast<llvm::GlobalAlias>(v)) {
                 llvm::Value* addressee = llvm::cast<llvm::Constant>(materializeValueFor(alias->getAliasedGlobal()));
                 assert(addressee);

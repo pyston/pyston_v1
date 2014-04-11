@@ -380,6 +380,17 @@ AST_If* read_if(BufferedReader *reader) {
     return rtn;
 }
 
+AST_IfExp* read_ifexp(BufferedReader *reader) {
+    AST_IfExp *rtn = new AST_IfExp();
+
+    rtn->body = readASTExpr(reader);
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    rtn->orelse = readASTExpr(reader);
+    rtn->test = readASTExpr(reader);
+    return rtn;
+}
+
 AST_Import* read_import(BufferedReader *reader) {
     AST_Import *rtn = new AST_Import();
 
@@ -595,6 +606,8 @@ AST_expr* readASTExpr(BufferedReader *reader) {
             return read_compare(reader);
         case AST_TYPE::Dict:
             return read_dict(reader);
+        case AST_TYPE::IfExp:
+            return read_ifexp(reader);
         case AST_TYPE::Index:
             return read_index(reader);
         case AST_TYPE::List:

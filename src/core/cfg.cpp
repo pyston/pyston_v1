@@ -153,7 +153,7 @@ class CFGVisitor : public ASTVisitor {
             return call;
         }
 
-        AST_expr* makeName(const std::string &id, AST_TYPE::AST_TYPE ctx_type, int lineno=-1, int col_offset=-1) {
+        AST_Name* makeName(const std::string &id, AST_TYPE::AST_TYPE ctx_type, int lineno=-1, int col_offset=-1) {
             AST_Name *name = new AST_Name();
             name->id = id;
             name->col_offset = col_offset;
@@ -185,6 +185,316 @@ class CFGVisitor : public ASTVisitor {
             return stmt;
         }
 
+
+
+        std::string nodeName(AST_expr* node) {
+            char buf[40];
+            snprintf(buf, 40, "!%p", node);
+            return std::string(buf);
+        }
+
+        AST_expr* remapAttribute(AST_Attribute* node) {
+            AST_Attribute *rtn = new AST_Attribute();
+
+            rtn->ctx_type = node->ctx_type;
+            rtn->attr = node->attr;
+            rtn->value = remapExpr(node->value);
+            return rtn;
+        }
+
+        AST_expr* remapBinOp(AST_BinOp* node) {
+            AST_BinOp *rtn = new AST_BinOp();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->op_type = node->op_type;
+            rtn->left = remapExpr(node->left);
+            rtn->right = remapExpr(node->right);
+            return rtn;
+        }
+
+        AST_expr* remapBoolOp(AST_BoolOp* node) {
+            std::string name = nodeName(node);
+
+            CFGBlock *starting_block = curblock;
+            CFGBlock *exit_block = cfg->addDeferredBlock();
+
+            for (int i = 0; i < node->values.size() - 1; i++) {
+                AST_expr* val = remapExpr(node->values[i]);
+                push_back(makeAssign(name, val));
+
+                AST_Branch *br = new AST_Branch();
+                br->test = val;
+                push_back(br);
+
+                CFGBlock *was_block = curblock;
+                CFGBlock *next_block = cfg->addBlock();
+                CFGBlock *crit_break_block = cfg->addBlock();
+                was_block->connectTo(next_block);
+                was_block->connectTo(crit_break_block);
+
+                if (node->op_type == AST_TYPE::Or) {
+                    br->iftrue = crit_break_block;
+                    br->iffalse = next_block;
+                } else {
+                    br->iffalse = crit_break_block;
+                    br->iftrue = next_block;
+                }
+
+                curblock = crit_break_block;
+                AST_Jump* j = new AST_Jump();
+                j->target = exit_block;
+                push_back(j);
+                crit_break_block->connectTo(exit_block);
+
+                curblock = next_block;
+            }
+
+            AST_expr* final_val = remapExpr(node->values[node->values.size()-1]);
+            push_back(makeAssign(name, final_val));
+
+            AST_Jump* j = new AST_Jump();
+            push_back(j);
+            j->target = exit_block;
+            curblock->connectTo(exit_block);
+
+            cfg->placeBlock(exit_block);
+            curblock = exit_block;
+
+            return makeName(name, AST_TYPE::Load);
+        }
+
+        AST_expr* remapCall(AST_Call* node) {
+            AST_Call *rtn = new AST_Call();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+
+            if (node->func->type == AST_TYPE::Attribute) {
+                // TODO this is a cludge to make sure that "callattrs" stick together.
+                // Probably better to create an AST_Callattr type, and solidify the
+                // idea that a callattr is a single expression.
+                rtn->func = remapAttribute(static_cast<AST_Attribute*>(node->func));
+            } else {
+                rtn->func = remapExpr(node->func);
+            }
+
+            for (auto e : node->args) {
+                rtn->args.push_back(remapExpr(e));
+            }
+            for (auto e : node->keywords) {
+                AST_keyword *kw = new AST_keyword();
+                kw->value = remapExpr(e->value);
+                kw->arg = e->arg;
+                rtn->keywords.push_back(kw);
+            }
+            rtn->starargs = remapExpr(node->starargs);
+            rtn->kwargs = remapExpr(node->kwargs);
+
+            return rtn;
+        }
+
+        AST_expr* remapCompare(AST_Compare* node) {
+            AST_Compare *rtn = new AST_Compare();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+
+            rtn->ops = node->ops;
+
+            rtn->left = remapExpr(node->left);
+            for (auto elt : node->comparators) {
+                rtn->comparators.push_back(remapExpr(elt));
+            }
+
+            return rtn;
+        }
+
+        AST_expr* remapDict(AST_Dict* node) {
+            AST_Dict *rtn = new AST_Dict();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+
+            for (auto k : node->keys) {
+                rtn->keys.push_back(remapExpr(k));
+            }
+            for (auto v : node->values) {
+                rtn->values.push_back(remapExpr(v));
+            }
+
+            return rtn;
+        };
+
+        AST_expr* remapIfExp(AST_IfExp* node) {
+            std::string rtn_name = nodeName(node);
+
+            AST_expr* test = remapExpr(node->test);
+
+            CFGBlock *starting_block = curblock;
+            AST_Branch *br = new AST_Branch();
+            br->col_offset = node->col_offset;
+            br->lineno = node->lineno;
+            br->test = node->test;
+            push_back(br);
+
+            CFGBlock* iftrue = cfg->addBlock();
+            iftrue->info = "iftrue";
+            br->iftrue = iftrue;
+            starting_block->connectTo(iftrue);
+            curblock = iftrue;
+            push_back(makeAssign(rtn_name, remapExpr(node->body)));
+            AST_Jump* jtrue = new AST_Jump();
+            push_back(jtrue);
+            CFGBlock* endtrue = curblock;
+
+            CFGBlock* iffalse = cfg->addBlock();
+            iffalse->info = "iffalse";
+            br->iffalse = iffalse;
+            starting_block->connectTo(iffalse);
+            curblock = iffalse;
+            push_back(makeAssign(rtn_name, remapExpr(node->orelse)));
+            AST_Jump* jfalse = new AST_Jump();
+            push_back(jfalse);
+            CFGBlock* endfalse = curblock;
+
+            CFGBlock* exit_block = cfg->addBlock();
+            jtrue->target = exit_block;
+            endtrue->connectTo(exit_block);
+            jfalse->target = exit_block;
+            endfalse->connectTo(exit_block);
+            curblock = exit_block;
+
+            return makeName(rtn_name, AST_TYPE::Load);
+        }
+
+        AST_expr* remapIndex(AST_Index* node) {
+            AST_Index *rtn = new AST_Index();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->value = remapExpr(node->value);
+            return rtn;
+        }
+
+        AST_expr* remapList(AST_List* node) {
+            assert(node->ctx_type == AST_TYPE::Load);
+
+            AST_List *rtn = new AST_List();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->ctx_type == node->ctx_type;
+
+            for (auto elt : node->elts) {
+                rtn->elts.push_back(remapExpr(elt));
+            }
+            return rtn;
+        }
+
+        AST_expr* remapSlice(AST_Slice* node) {
+            AST_Slice *rtn = new AST_Slice();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+
+            rtn->lower = remapExpr(node->lower);
+            rtn->upper = remapExpr(node->upper);
+            rtn->step = remapExpr(node->step);
+
+            return rtn;
+        }
+
+        AST_expr* remapTuple(AST_Tuple* node) {
+            assert(node->ctx_type == AST_TYPE::Load);
+
+            AST_Tuple *rtn = new AST_Tuple();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->ctx_type == node->ctx_type;
+
+            for (auto elt : node->elts) {
+                rtn->elts.push_back(remapExpr(elt));
+            }
+            return rtn;
+        }
+
+        AST_expr* remapSubscript(AST_Subscript* node) {
+            AST_Subscript *rtn = new AST_Subscript();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->ctx_type = node->ctx_type;
+            rtn->value = remapExpr(node->value);
+            rtn->slice = remapExpr(node->slice);
+            return rtn;
+        }
+
+        AST_expr* remapUnaryOp(AST_UnaryOp* node) {
+            AST_UnaryOp *rtn = new AST_UnaryOp();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->op_type = node->op_type;
+            rtn->operand = remapExpr(node->operand);
+            return rtn;
+        }
+
+        AST_expr* remapExpr(AST_expr* node, bool wrap_with_assign=true) {
+            if (node == NULL)
+                return NULL;
+
+            AST_expr* rtn;
+            switch (node->type) {
+                case AST_TYPE::Attribute:
+                    rtn = remapAttribute(static_cast<AST_Attribute*>(node));
+                    break;
+                case AST_TYPE::BinOp:
+                    rtn = remapBinOp(static_cast<AST_BinOp*>(node));
+                    break;
+                case AST_TYPE::BoolOp:
+                    rtn = remapBoolOp(static_cast<AST_BoolOp*>(node));
+                    break;
+                case AST_TYPE::Call:
+                    rtn = remapCall(static_cast<AST_Call*>(node));
+                    break;
+                case AST_TYPE::Compare:
+                    rtn = remapCompare(static_cast<AST_Compare*>(node));
+                    break;
+                case AST_TYPE::Dict:
+                    rtn = remapDict(static_cast<AST_Dict*>(node));
+                    break;
+                case AST_TYPE::IfExp:
+                    rtn = remapIfExp(static_cast<AST_IfExp*>(node));
+                    break;
+                case AST_TYPE::Index:
+                    rtn = remapIndex(static_cast<AST_Index*>(node));
+                    break;
+                case AST_TYPE::List:
+                    rtn = remapList(static_cast<AST_List*>(node));
+                    break;
+                case AST_TYPE::Name:
+                    return node;
+                case AST_TYPE::Num:
+                    return node;
+                case AST_TYPE::Slice:
+                    rtn = remapSlice(static_cast<AST_Slice*>(node));
+                    break;
+                case AST_TYPE::Str:
+                    return node;
+                case AST_TYPE::Subscript:
+                    rtn = remapSubscript(static_cast<AST_Subscript*>(node));
+                    break;
+                case AST_TYPE::Tuple:
+                    rtn = remapTuple(static_cast<AST_Tuple*>(node));
+                    break;
+                case AST_TYPE::UnaryOp:
+                    rtn = remapUnaryOp(static_cast<AST_UnaryOp*>(node));
+                    break;
+                default:
+                    RELEASE_ASSERT(0, "%d", node->type);
+            }
+
+            if (wrap_with_assign && rtn->type != AST_TYPE::Name) {
+                std::string name = nodeName(node);
+                push_back(makeAssign(name, rtn));
+                return makeName(name, AST_TYPE::Load);
+            } else {
+                return rtn;
+            }
+        }
+
     public:
         CFGVisitor(AST_TYPE::AST_TYPE root_type, CFG* cfg) : root_type(root_type), cfg(cfg) {
             curblock = cfg->addBlock();
@@ -201,15 +511,76 @@ class CFGVisitor : public ASTVisitor {
                 curblock->push_back(node);
         }
 
-        virtual bool visit_assign(AST_Assign* node) { push_back(node); return true; }
-        virtual bool visit_augassign(AST_AugAssign* node) { push_back(node); return true; }
         virtual bool visit_classdef(AST_ClassDef* node) { push_back(node); return true; }
-        virtual bool visit_expr(AST_Expr* node) { push_back(node); return true; }
         virtual bool visit_functiondef(AST_FunctionDef* node) { push_back(node); return true; }
         virtual bool visit_global(AST_Global* node) { push_back(node); return true; }
         virtual bool visit_import(AST_Import* node) { push_back(node); return true; }
         virtual bool visit_pass(AST_Pass* node) { push_back(node); return true; }
-        virtual bool visit_print(AST_Print* node) { push_back(node); return true; }
+
+        virtual bool visit_assign(AST_Assign* node) {
+            AST_Assign* remapped = new AST_Assign();
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            remapped->value = remapExpr(node->value);
+            // TODO bad that it's reusing the AST nodes?
+            remapped->targets = node->targets;
+            push_back(remapped);
+            return true;
+        }
+
+        virtual bool visit_augassign(AST_AugAssign* node) {
+            AST_AugAssign* remapped = new AST_AugAssign();
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            remapped->value = remapExpr(node->value);
+            // TODO bad that it's reusing the AST nodes?
+            remapped->target = node->target;
+            remapped->op_type = node->op_type;
+            push_back(remapped);
+            return true;
+        }
+
+        virtual bool visit_expr(AST_Expr* node) {
+            AST_Expr* remapped = new AST_Expr();
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            remapped->value = remapExpr(node->value, false);
+            push_back(remapped);
+            return true;
+        }
+
+        virtual bool visit_print(AST_Print* node) {
+            AST_expr *dest = remapExpr(node->dest);
+
+            int i = 0;
+            for (auto v : node->values) {
+                AST_Print* remapped = new AST_Print();
+                // TODO not good to reuse 'dest' like this
+                remapped->dest = dest;
+
+                if (i < node->values.size() - 1)
+                    remapped->nl = false;
+                else
+                    remapped->nl = node->nl;
+
+                remapped->values.push_back(remapExpr(v));
+                push_back(remapped);
+
+                i++;
+            }
+
+            if (node->values.size() == 0) {
+                assert(node->nl);
+
+                AST_Print* final = new AST_Print();
+                // TODO not good to reuse 'dest' like this
+                final->dest = dest;
+                final->nl = node->nl;
+                push_back(final);
+            }
+
+            return true;
+        }
 
         virtual bool visit_return(AST_Return* node) {
             if (root_type != AST_TYPE::FunctionDef) {
@@ -217,7 +588,7 @@ class CFGVisitor : public ASTVisitor {
                 exit(1);
             }
 
-            AST_expr *value = node->value;
+            AST_expr *value = remapExpr(node->value);
             if (value == NULL)
                 value = makeName("None", AST_TYPE::Load);
             doReturn(value);
@@ -230,7 +601,7 @@ class CFGVisitor : public ASTVisitor {
             AST_Branch *br = new AST_Branch();
             br->col_offset = node->col_offset;
             br->lineno = node->lineno;
-            br->test = node->test;
+            br->test = remapExpr(node->test);
             push_back(br);
 
             CFGBlock *starting_block = curblock;
@@ -328,7 +699,7 @@ class CFGVisitor : public ASTVisitor {
             curblock->connectTo(test_block);
 
             curblock = test_block;
-            AST_Branch *br = makeBranch(node->test);
+            AST_Branch *br = makeBranch(remapExpr(node->test));
             push_back(br);
 
             // We need a reference to this block early on so we can break to it,
@@ -381,7 +752,8 @@ class CFGVisitor : public ASTVisitor {
             // is it really worth it?  It got so bad because all the edges became
             // critical edges and needed to be broken, otherwise it's not too different.
 
-            AST_expr *iter_attr = makeLoadAttribute(node->iter, "__iter__", true);
+            AST_expr *remapped_iter = remapExpr(node->iter);
+            AST_expr *iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
             AST_expr *iter_call = makeCall(iter_attr);
 
             char itername_buf[80];
@@ -510,7 +882,7 @@ class CFGVisitor : public ASTVisitor {
             char exitname_buf[80];
             snprintf(exitname_buf, 80, "#exit_%p", node);
 
-            push_back(makeAssign(ctxmgrname_buf, node->context_expr));
+            push_back(makeAssign(ctxmgrname_buf, remapExpr(node->context_expr)));
 
             AST_expr *enter = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load), "__enter__", true);
             AST_expr *exit = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load), "__exit__", true);
