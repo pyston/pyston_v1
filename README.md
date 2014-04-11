@@ -39,9 +39,9 @@ To contribute to Pyston, you need to to sign the [Dropbox Contributor License Ag
 
 ### Getting started
 
-To get a full development environment for Pyston, you need pretty recent versions of various tools, since self-modifying code tends to be less well supported.  The docs/INSTALLING file contains information about what the tools are, how to get them, and how to install them; currently it can take up to an hour to get them all built on a quad-core machine.
+To get a full development environment for Pyston, you need pretty recent versions of various tools, since self-modifying code tends to be less well supported.  The docs/INSTALLING.md file contains information about what the tools are, how to get them, and how to install them; currently it can take up to an hour to get them all built on a quad-core machine.
 
-To simply build and run Pyston, a smaller set of dependencies is required; see docs/INSTALLING, but skip the "OPTIONAL DEPENDENCIES" section. Once all the dependencies are installed, you should be able to do
+To simply build and run Pyston, a smaller set of dependencies is required; see docs/INSTALLING.md, but skip the "OPTIONAL DEPENDENCIES" section. Once all the dependencies are installed, you should be able to do
 ```
 $ make check -j4
 ```
