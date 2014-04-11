@@ -258,7 +258,7 @@ test_prof: pyston_prof ext
 	python ../tools/tester.py -P -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
-test: ext pyston_dbg
+check test: ext pyston_dbg
 	$(MAKE) pyston_dbg
 	# $(MAKE) run_unittests
 	$(MAKE) test_debug
@@ -272,7 +272,7 @@ test: ext pyston_dbg
 
 	echo "All tests passed"
 
-check:
+quick_check:
 	$(MAKE) pyston_dbg
 	$(call checksha,./pyston_dbg -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_dbg -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)

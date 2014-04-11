@@ -20,6 +20,8 @@ make install
 
 ccache:
 sudo apt-get install ccache
+# Note: ccache is useful enough that it's enabled by default, but if you'd rather
+# not install it, you can add "ENABLE_CCACHE:=0" to your Makefile.local
 
 curses, zlib:
 sudo apt-get install libncurses5-dev zlib1g-dev
@@ -34,10 +36,17 @@ make llvm_configure
 make llvm -j4
 
 libunwind:
-download from http://download.savannah.gnu.org/releases/libunwind
+cd ~/pyston_deps
+wget http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz
+tar xvf libunwind-1.1.tar.gz
+cd libunwind-1.1
+./configure
+make -j4
+sudo make install
+# TODO would be nice to install this locally like the rest of the dependencies
 
 valgrind:
-not sure exactly what version is required, but 3.7.0 doesn't seem quite good enough (can't handle 'tzcnt' instruction)
+# not sure exactly what version is required, but 3.7.0 doesn't seem quite good enough (can't handle 'tzcnt' instruction)
 cd ~/pyston_deps
 wget http://valgrind.org/downloads/valgrind-3.9.0.tar.bz2
 tar xvf valgrind-3.9.0.tar.bz2
@@ -46,9 +55,9 @@ cd valgrind-3.9.0
 ./configure --prefix=$HOME/pyston_deps/valgrind-3.9.0-install
 make -j4
 make install
+sudo apt-get install libc6-dbg
 # Add this line to Makefile.local:
 VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind $(HOME)/pyston_deps/valgrind-3.9.0-install/bin/valgrind
-sudo apt-get install libc6-dbg
 
 OPTIONAL DEPENDENCIES:
 

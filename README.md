@@ -43,7 +43,7 @@ To get a full development environment for Pyston, you need pretty recent version
 
 To simply build and run Pyston, a smaller set of dependencies is required; see docs/INSTALLING, but skip the "OPTIONAL DEPENDENCIES" section. Once all the dependencies are installed, you should be able to do
 ```
-$ make test -j4
+$ make check -j4
 ```
 
 And see that hopefully all of the tests will pass.
