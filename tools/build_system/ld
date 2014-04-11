@@ -9,8 +9,8 @@ if which gold > /dev/null ; then
     LD=gold
     # FLAGS="--incremental --incremental-patch=10"
     # RETRY=y
-elif [ -f $HOME/llvm/binutils-build/gold/ld-new ]; then
-    LD=$HOME/llvm/binutils-build/gold/ld-new
+elif [ -f $HOME/pyston_deps/binutils-build/gold/ld-new ]; then
+    LD=$HOME/pyston_deps/binutils-build/gold/ld-new
     # FLAGS="--incremental --incremental-patch=10"
     # RETRY=y
 else

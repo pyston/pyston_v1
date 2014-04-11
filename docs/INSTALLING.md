@@ -27,7 +27,7 @@ make install
 
 ### ccache
 
-ccache is a build tool that can help speed up redundant compilations.  It's not strictly necessary; you can disable it by adding `ENABLE_CCACHE := 0` to your Makefile.local.  It's enabled by default, so to use it you can run 
+ccache is a build tool that can help speed up redundant compilations.  It's not strictly necessary; you can disable it by adding `USE_CCACHE := 0` to your Makefile.local.  It's enabled by default, so to use it you can run
 ```
 sudo apt-get install ccache
 ```
@@ -39,7 +39,7 @@ sudo apt-get install libncurses5-dev zlib1g-dev
 
 ### LLVM + clang
 
-LLVM and clang depend on a pretty modern compiler; the steps below assume yo uinstalled GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the following setup that I haven't tested.
+LLVM and clang depend on a pretty modern compiler; the steps below assume you uinstalled GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in src/Makefile) that I haven't tested.
 
 ```
 cd ~/pyston_deps
@@ -51,7 +51,7 @@ make llvm_configure
 make llvm -j4
 ```
 
-There seem to be some lingering build issues with LLVM that I haven't identified; if the last step fails with errors along the lines of "rm: could not find file foo.tmp", it is quite likely that simply running it again will have it continue successfully.  You may have to do this multiple times, unfortunately.
+There seem to be some lingering issues with the LLVM build that haven't been identified yet; if the last step fails with errors along the lines of "rm: could not find file foo.tmp", it is quite likely that simply running it again will cause it to continue successfully.  You may have to do this multiple times, unfortunately.
 
 ### libunwind
 
@@ -69,7 +69,7 @@ TODO would be nice to install this locally like the rest of the dependencies
 
 ### valgrind
 
-valgrind is close to being an optional dependency, but since Pyston contains a custom memory allocator, it has some basic (and mostly-broken) valgrind hooks to let it know what memory is safe to access or not.  TODO it'd be nice to be able to turn that off by default.
+valgrind is close to being an optional dependency, but since Pyston contains a custom memory allocator, it has some basic (and mostly-broken) valgrind hooks to let it know what memory is safe to access or not.  TODO it'd be nice to be able to turn that off with a Makefile flag since it's not useful for most people.
 
 You may be able to install valgrind from your system package manager (`apt-get install valgrind`), but it is likely to be an old enough version that it doesn't support some newer instructions and may crash when running.  The safest thing to do is to do a full installation from source:
 
@@ -97,7 +97,12 @@ VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind
 sudo apt-get install distcc distcc-pump
 ```
 
+You can then use distcc by doing `make USE_DISTCC=1`
+
 ### gtest
+
+For running the unittests, though all the unittests are currently disabled:
+
 ```
 cd ~/pyston_deps
 wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
@@ -108,7 +113,7 @@ make -j4
 ```
 
 ### gdb
-A new version of gdb can be highly useful since debugging a JIT tends to stress GDB:
+A new version of gdb is highly recommended since debugging a JIT tends to stress GDB:
 
 ```
 cd ~/pyston_deps
@@ -132,7 +137,7 @@ standard ./configure, make, make install
 
 ### gold
 
-gold is highly recommended as a faster linker.  Pyston contains build-system support for automatically using gold if available.  gold may already be installed on your system; you can check by typing `which gold`.
+gold is highly recommended as a faster linker.  Pyston contains build-system support for automatically using gold if available.  gold may already be installed on your system; you can check by typing `which gold`.  If it's not installed already:
 
 ```
 cd ~/pyston_deps

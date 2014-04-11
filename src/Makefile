@@ -133,7 +133,18 @@ COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurs
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
-# For now, link in libstdc++ statically, since the system libstdc++ is likely to be too old:
+
+# The system libstdc++ will likely be too old for Pyston, but we made a brand new one
+# as part of our GCC installation.  There are a couple ways to use that one instead:
+# 1) Install the built libstdc++ (~/pyston_deps/gcc-4.8.2-install/lib64/libstdc++.so.6.0.18) and update the global shared library (/usr/local/x86_64-linux-gnu/libstdc++.so.6) to point to it
+# 2) Set LD_LIBRARY_PATH=~/pyston_deps/gcc-4.8.2-install/lib64
+# 3) Link it in statically.
+#
+# For now, go with option #3 since it is the only one that requires no extra work for people who want to run Pyston.
+#
+# (I was surprised by this issue: the linker sees the shared library that we built
+# as part of GCC and decides to dynamically link to that, even though at load time we'll
+# end up linking to the system libstdc++ instead.)
 COMMON_LDFLAGS += -static-libstdc++
 
 LDFLAGS := $(LLVM_LDFLAGS) $(COMMON_LDFLAGS)
