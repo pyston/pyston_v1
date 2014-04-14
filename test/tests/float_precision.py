@@ -8,8 +8,8 @@ def smallest():
 for i in xrange(1000):
     print smallest()
 
-def test():
-    BIG = 2.0 ** 53
+def test(x):
+    BIG = (2.0 ** 52) * x
     t = BIG ** 1.0
     x = 1.0
 
@@ -19,8 +19,8 @@ def test():
         n = n - 1
     return t - BIG
 
-for i in xrange(1000):
-    print test()
+for i in xrange(200):
+    print test(1.0 + i / 100.0)
 
 def divtest(x):
     return (1.0 / x) * x - 1
