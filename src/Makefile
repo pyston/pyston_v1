@@ -121,6 +121,12 @@ COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 # Or everything:
 # COMMON_CXXFLAGS += -Weverything
 
+# libunwind's include files warn on -Wextern-c-compat, so turn that off;
+# ideally would just turn it off for header files in libunwind, maybe by
+# having an internal libunwind.h that pushed/popped the diagnostic state,
+# but it doesn't seem like that important a warning so just turn it off.
+COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-1.1-install/include -Wno-extern-c-compat
+
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
@@ -133,6 +139,8 @@ COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurs
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
+
+COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-install/lib
 
 # The system libstdc++ will likely be too old for Pyston, but we made a brand new one
 # as part of our GCC installation.  There are a couple ways to use that one instead:

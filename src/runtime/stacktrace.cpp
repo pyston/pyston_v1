@@ -13,17 +13,7 @@
 // limitations under the License.
 
 #define UNW_LOCAL_ONLY
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wextern-c-compat"
-#endif
-
 #include <libunwind.h>
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
 
 #include "core/options.h"

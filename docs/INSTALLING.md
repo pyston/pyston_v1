@@ -59,10 +59,12 @@ There seem to be some lingering issues with the LLVM build that haven't been ide
 cd ~/pyston_deps
 wget http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz
 tar xvf libunwind-1.1.tar.gz
+mkdir libunwind-1.1-install
 cd libunwind-1.1
-./configure
+# disable shared libraries because we'll be installing this in a place that the loader can't find it.
+./configure --prefix=$HOME/pyston_deps/libunwind-1.1-install --enable-shared=0
 make -j4
-sudo make install
+make install
 ```
 
 TODO would be nice to install this locally like the rest of the dependencies
