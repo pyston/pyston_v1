@@ -57,6 +57,8 @@ def get_expected_output(fn):
     code = p.wait()
 
     r = code, out, err.strip().split('\n')[-1]
+    assert code >= 0, "CPython exited with an unexpected exit code: %d" % (code,)
+
     cPickle.dump(r, open(cache_fn, 'w'))
     return r
 
