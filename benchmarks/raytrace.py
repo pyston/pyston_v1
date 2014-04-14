@@ -226,7 +226,7 @@ class Scene(object):
                 canvas.plot(x,y,colour[0], colour[1], colour[2])
 
         print 'Complete.'
-        canvas.save()
+        # canvas.save()
 
     def rayColour(self, ray):
         if self.recursionDepth > 3:
@@ -350,8 +350,8 @@ def _main():
     # c = Canvas(4,2,'test_raytrace_tiny')
     # c = Canvas(80,60,'test_raytrace_small')
     # c = Canvas(160,120,'test_raytrace')
-    # c = Canvas(320,240,'test_raytrace')
-    c = Canvas(640,480,'test_raytrace_big')
+    c = Canvas(320,240,'test_raytrace')
+    # c = Canvas(640,480,'test_raytrace_big')
     s = Scene()
     s.addLight(Point(30, 30, 10))
     s.addLight(Point(-10, 100, 30))
