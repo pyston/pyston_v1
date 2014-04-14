@@ -10,6 +10,7 @@ LLVM_REVISION := $(shell cat $(LLVM_REVISION_FILE))
 USE_CLANG  := 1
 USE_CCACHE := 1
 USE_DISTCC := 0
+USE_GOLD   := 0
 
 VALGRIND := valgrind
 GDB := gdb
@@ -209,6 +210,11 @@ endif
 ifeq ($(USE_CCACHE),1)
 	LLVM_BUILD_VARS += CXX='ccache $(GPP)'
 endif
+ifeq ($(USE_GOLD), 1)
+	LLVM_CONFIG_ARGS += --with-binutils-include=$(DEPS_DIR)/binutils/include
+endif
+LLVM_CONFIG_ARGS += --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+
 CXX := $(CXX_ENV) $(CXX)
 CXX_PROFILE := $(CXX_ENV) $(CXX_PROFILE)
 CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
@@ -371,7 +377,7 @@ llvm_configure:
 $(LLVM_CONFIGURATION): $(LLVM_SRC)/configure
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
-	CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+	CXX=$(GPP) $(LLVM_SRC)/configure $(LLVM_CONFIG_ARGS)
 	# CXX=ccache\ g++ ./configure --enable-targets=host
 	# CXX='env CCACHE_PREFIX=distcc ccache g++' ./configure --enable-targets=host
 

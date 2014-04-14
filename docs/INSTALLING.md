@@ -51,6 +51,7 @@ make llvm_configure
 make llvm -j4
 ```
 
+If you prepare to use gold linker instead, you could add `USE_GOLD := 1` to your Makefile.local, then execute `make llvm_configure` to take effect.
 There seem to be some lingering issues with the LLVM build that haven't been identified yet; if the last step fails with errors along the lines of "rm: could not find file foo.tmp", it is quite likely that simply running it again will cause it to continue successfully.  You may have to do this multiple times, unfortunately.
 
 ### libunwind
