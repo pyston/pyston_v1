@@ -36,7 +36,7 @@ class CompilerType {
         virtual ConcreteCompilerType* getConcreteType() = 0;
         virtual ConcreteCompilerType* getBoxType() = 0;
         virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
-        virtual CompilerType* getattrType(const std::string &attr) = 0;
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) = 0;
         virtual CompilerType* callType(std::vector<CompilerType*> &arg_types) = 0;
         virtual BoxedClass* guaranteedClass() = 0;
 };
@@ -80,15 +80,15 @@ class _ValuedCompilerType : public CompilerType {
             printf("nonzero not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerVariable* getattr(IREmitter &emitter, VAR* value, const std::string &attr) {
+        virtual CompilerVariable* getattr(IREmitter &emitter, VAR* value, const std::string *attr, bool cls_only) {
             printf("getattr not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual void setattr(IREmitter &emitter, VAR* value, const std::string &attr, CompilerVariable *v) {
+        virtual void setattr(IREmitter &emitter, VAR* value, const std::string *attr, CompilerVariable *v) {
             printf("setattr not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerVariable* callattr(IREmitter &emitter, VAR* value, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, VAR* value, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
             printf("callattr not defined for %s\n", debugName().c_str());
             abort();
         }
@@ -112,7 +112,7 @@ class _ValuedCompilerType : public CompilerType {
             printf("makeClassCheck not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             printf("getattrType not defined for %s\n", debugName().c_str());
             abort();
         }
@@ -205,9 +205,9 @@ class CompilerVariable {
         virtual BoxedClass* guaranteedClass() = 0;
 
         virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter) = 0;
-        virtual CompilerVariable* getattr(IREmitter &emitter, const std::string& attr) = 0;
-        virtual void setattr(IREmitter &emitter, const std::string& attr, CompilerVariable* v) = 0;
-        virtual CompilerVariable* callattr(IREmitter &emitter, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*>& args) = 0;
+        virtual CompilerVariable* getattr(IREmitter &emitter, const std::string *attr, bool cls_only) = 0;
+        virtual void setattr(IREmitter &emitter, const std::string *attr, CompilerVariable* v) = 0;
+        virtual CompilerVariable* callattr(IREmitter &emitter, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) = 0;
         virtual CompilerVariable* call(IREmitter &emitter, const std::vector<CompilerVariable*>& args) = 0;
         virtual void print(IREmitter &emitter) = 0;
         virtual ConcreteCompilerVariable* len(IREmitter &emitter) = 0;
@@ -268,13 +268,13 @@ class ValuedCompilerVariable : public CompilerVariable {
         virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter) {
             return type->nonzero(emitter, this);
         }
-        virtual CompilerVariable* getattr(IREmitter &emitter, const std::string& attr) {
-            return type->getattr(emitter, this, attr);
+        virtual CompilerVariable* getattr(IREmitter &emitter, const std::string *attr, bool cls_only) {
+            return type->getattr(emitter, this, attr, cls_only);
         }
-        virtual void setattr(IREmitter &emitter, const std::string& attr, CompilerVariable *v) {
+        virtual void setattr(IREmitter &emitter, const std::string *attr, CompilerVariable *v) {
             type->setattr(emitter, this, attr, v);
         }
-        virtual CompilerVariable* callattr(IREmitter &emitter, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
             return type->callattr(emitter, this, attr, clsonly, args);
         }
         virtual CompilerVariable* call(IREmitter &emitter, const std::vector<CompilerVariable*>& args) {

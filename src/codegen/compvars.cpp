@@ -183,13 +183,13 @@ class UnknownType : public ConcreteCompilerType {
             emitter.getBuilder()->CreateCall(g.funcs.print, var->getValue());
         }
 
-        virtual CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr);
+        virtual CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool cls_only);
         virtual CompilerVariable* call(IREmitter &emitter, ConcreteCompilerVariable *var, const std::vector<CompilerVariable*> &args);
-        virtual CompilerVariable* callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*> &args);
+        virtual CompilerVariable* callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*> &args);
         virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter, ConcreteCompilerVariable *var);
 
-        void setattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr, CompilerVariable *v) {
-            llvm::Constant* ptr = getStringConstantPtr(attr + '\0');
+        void setattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, CompilerVariable *v) {
+            llvm::Constant* ptr = getStringConstantPtr(*attr + '\0');
             ConcreteCompilerVariable *converted = v->makeConverted(emitter, UNKNOWN);
             //g.funcs.setattr->dump();
             //var->getValue()->dump(); llvm::errs() << '\n';
@@ -221,7 +221,7 @@ class UnknownType : public ConcreteCompilerType {
             return rtn;
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             return UNKNOWN;
         }
         virtual CompilerType* callType(std::vector<CompilerType*> &arg_types) {
@@ -285,10 +285,20 @@ class UnknownType : public ConcreteCompilerType {
 
 ConcreteCompilerType *UNKNOWN = new UnknownType();
 
-CompilerVariable* UnknownType::getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr) {
-    llvm::Constant* ptr = getStringConstantPtr(attr + '\0');
+CompilerVariable* UnknownType::getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool cls_only) {
+    llvm::Constant* ptr = getStringConstantPtr(*attr + '\0');
 
     llvm::Value* rtn_val = NULL;
+
+    llvm::Value* llvm_func;
+    void* raw_func;
+    if (cls_only) {
+        llvm_func = g.funcs.getclsattr;
+        raw_func = (void*)pyston::getclsattr;
+    } else {
+        llvm_func = g.funcs.getattr;
+        raw_func = (void*)pyston::getattr;
+    }
 
     bool do_patchpoint = ENABLE_ICGETATTRS && emitter.getTarget() != IREmitter::INTERPRETER;
     if (do_patchpoint) {
@@ -298,10 +308,10 @@ CompilerVariable* UnknownType::getattr(IREmitter &emitter, ConcreteCompilerVaria
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createPatchpoint(pp, (void*)pyston::getattr, llvm_args);
+        llvm::Value* uncasted = emitter.createPatchpoint(pp, raw_func, llvm_args);
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.getBuilder()->CreateCall2(g.funcs.getattr, var->getValue(), ptr);
+        rtn_val = emitter.getBuilder()->CreateCall2(llvm_func, var->getValue(), ptr);
     }
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
 }
@@ -413,7 +423,7 @@ CompilerVariable* UnknownType::call(IREmitter &emitter, ConcreteCompilerVariable
     return _call(emitter, func, (void*)runtimeCall, other_args, args, UNKNOWN);
 }
 
-CompilerVariable* UnknownType::callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*> &args) {
+CompilerVariable* UnknownType::callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*> &args) {
     llvm::Value* func;
     if (args.size() == 0)
         func = g.funcs.callattr0;
@@ -428,7 +438,7 @@ CompilerVariable* UnknownType::callattr(IREmitter &emitter, ConcreteCompilerVari
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
-    other_args.push_back(embedConstantPtr(&attr, g.llvm_str_type_ptr));
+    other_args.push_back(embedConstantPtr(attr, g.llvm_str_type_ptr));
     other_args.push_back(getConstantInt(clsonly, g.i1));
 
     llvm::Value *nargs = llvm::ConstantInt::get(g.i64, args.size(), false);
@@ -488,7 +498,7 @@ class AbstractFunctionType : public CompilerType {
             return other_type == UNKNOWN;
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             return UNDEF;
         }
 
@@ -578,7 +588,7 @@ class IntType : public ConcreteCompilerType {
             emitter.getBuilder()->CreateCall2(g.funcs.printf, int_fmt, var->getValue());
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             static std::vector<AbstractFunctionType::Sig*> sigs;
             if (sigs.size() == 0) {
                 AbstractFunctionType::Sig *int_sig = new AbstractFunctionType::Sig();
@@ -592,29 +602,29 @@ class IntType : public ConcreteCompilerType {
                 sigs.push_back(unknown_sig);
             }
 
-            if (attr == "__add__" || attr == "__sub__" || attr == "__mod__" || attr == "__mul__" || attr == "__lshift__" || attr == "__rshift__" || attr == "__div__" || attr == "__pow__" || attr == "__floordiv__" || attr == "__and__" || attr == "__or__" || attr == "__xor__") {
+            if (*attr == "__add__" || *attr == "__sub__" || *attr == "__mod__" || *attr == "__mul__" || *attr == "__lshift__" || *attr == "__rshift__" || *attr == "__div__" || *attr == "__pow__" || *attr == "__floordiv__" || *attr == "__and__" || *attr == "__or__" || *attr == "__xor__") {
                 return AbstractFunctionType::get(sigs);
             }
 
-            return BOXED_INT->getattrType(attr);
+            return BOXED_INT->getattrType(attr, cls_only);
         }
 
-        virtual CompilerVariable* callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
             CompilerVariable* rtn = converted->callattr(emitter, attr, clsonly, args);
             converted->decvref(emitter);
             return rtn;
         }
 
-        virtual CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr) {
+        virtual CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool cls_only) {
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
-            CompilerVariable* rtn = converted->getattr(emitter, attr);
+            CompilerVariable* rtn = converted->getattr(emitter, attr, cls_only);
             converted->decvref(emitter);
             return rtn;
         }
 
-        virtual void setattr(IREmitter &emitter, VAR* var, const std::string &attr, CompilerVariable *v) {
-            llvm::CallInst *call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr("int\0"), getStringConstantPtr(attr + '\0'));
+        virtual void setattr(IREmitter &emitter, VAR* var, const std::string *attr, CompilerVariable *v) {
+            llvm::CallInst *call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
             call->setDoesNotReturn();
         }
 
@@ -682,7 +692,7 @@ class FloatType : public ConcreteCompilerType {
             emitter.getBuilder()->CreateCall(g.funcs.printFloat, var->getValue());
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             static std::vector<AbstractFunctionType::Sig*> sigs;
             if (sigs.size() == 0) {
                 AbstractFunctionType::Sig *float_sig = new AbstractFunctionType::Sig();
@@ -701,22 +711,22 @@ class FloatType : public ConcreteCompilerType {
                 sigs.push_back(unknown_sig);
             }
 
-            if (attr == "__add__" || attr == "__sub__" || attr == "__mul__" || attr == "__div__" || attr == "__pow__" || attr == "__floordiv__" || attr == "__mod__" || attr == "__pow__") {
+            if (*attr == "__add__" || *attr == "__sub__" || *attr == "__mul__" || *attr == "__div__" || *attr == "__pow__" || *attr == "__floordiv__" || *attr == "__mod__" || *attr == "__pow__") {
                 return AbstractFunctionType::get(sigs);
             }
 
-            return BOXED_FLOAT->getattrType(attr);
+            return BOXED_FLOAT->getattrType(attr, cls_only);
         }
 
-        virtual CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr) {
+        virtual CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool cls_only) {
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
-            CompilerVariable* rtn = converted->getattr(emitter, attr);
+            CompilerVariable* rtn = converted->getattr(emitter, attr, cls_only);
             converted->decvref(emitter);
             return rtn;
         }
 
-        virtual void setattr(IREmitter &emitter, VAR* var, const std::string &attr, CompilerVariable *v) {
-            llvm::CallInst* call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr("float\0"), getStringConstantPtr(attr + '\0'));
+        virtual void setattr(IREmitter &emitter, VAR* var, const std::string *attr, CompilerVariable *v) {
+            llvm::CallInst* call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
             call->setDoesNotReturn();
         }
 
@@ -826,13 +836,13 @@ class NormalObjectType : public ConcreteCompilerType {
             return c == cls;
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             if (cls->is_constant && !cls->hasattrs) {
-                Box* rtattr = cls->peekattr(attr);
+                Box* rtattr = cls->peekattr(*attr);
                 if (rtattr == NULL)
                     return UNDEF;
 
-                RELEASE_ASSERT(rtattr, "%s.%s", debugName().c_str(), attr.c_str());
+                RELEASE_ASSERT(rtattr, "%s.%s", debugName().c_str(), attr->c_str());
                 if (rtattr->cls == function_cls) {
                     return AbstractFunctionType::fromRT(static_cast<BoxedFunction*>(rtattr), true);
                     //return typeFromClass(instancemethod_cls);
@@ -847,17 +857,17 @@ class NormalObjectType : public ConcreteCompilerType {
             return UNKNOWN;
         }
 
-        CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr) {
-            //printf("%s.getattr %s\n", debugName().c_str(), attr.c_str());
+        CompilerVariable* getattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool cls_only) {
+            //printf("%s.getattr %s\n", debugName().c_str(), attr->c_str());
             if (cls->is_constant && !cls->hasattrs) {
-                Box* rtattr = cls->peekattr(attr);
+                Box* rtattr = cls->peekattr(*attr);
                 if (rtattr == NULL) {
-                    llvm::CallInst *call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr(*getNameOfClass(cls) + "\0"), getStringConstantPtr(attr + '\0'));
+                    llvm::CallInst *call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr(*getNameOfClass(cls) + "\0"), getStringConstantPtr(*attr + '\0'));
                     call->setDoesNotReturn();
                     return undefVariable();
                 }
 
-                ASSERT(rtattr, "%s.%s", debugName().c_str(), attr.c_str());
+                ASSERT(rtattr, "%s.%s", debugName().c_str(), attr->c_str());
                 if (rtattr->cls == function_cls) {
                     CompilerVariable* clattr = new ConcreteCompilerVariable(typeFromClass(function_cls), embedConstantPtr(rtattr, g.llvm_value_type_ptr), false);
                     return InstanceMethodType::makeIM(var, clattr);
@@ -865,10 +875,10 @@ class NormalObjectType : public ConcreteCompilerType {
             }
 
             // TODO could specialize more since we know the class already
-            return UNKNOWN->getattr(emitter, var, attr);
+            return UNKNOWN->getattr(emitter, var, attr, cls_only);
         }
 
-        void setattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr, CompilerVariable *v) {
+        void setattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, CompilerVariable *v) {
             return UNKNOWN->setattr(emitter, var, attr, v);
         }
 
@@ -906,11 +916,11 @@ class NormalObjectType : public ConcreteCompilerType {
             return rtn;
         }
 
-        virtual CompilerVariable* callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, ConcreteCompilerVariable *var, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
             if (cls->is_constant && !cls->hasattrs) {
-                Box* rtattr = cls->peekattr(attr);
+                Box* rtattr = cls->peekattr(*attr);
                 if (rtattr == NULL) {
-                    llvm::CallInst *call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr(debugName() + '\0'), getStringConstantPtr(attr + '\0'));
+                    llvm::CallInst *call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr, getStringConstantPtr(debugName() + '\0'), getStringConstantPtr(*attr + '\0'));
                     call->setDoesNotReturn();
                     return undefVariable();
                 }
@@ -1042,14 +1052,14 @@ class StrConstantType : public ValuedCompilerType<std::string*> {
             return (other == STR || other == UNKNOWN);
         }
 
-        virtual CompilerVariable *getattr(IREmitter &emitter, VAR *var, const std::string &attr) {
+        virtual CompilerVariable *getattr(IREmitter &emitter, VAR *var, const std::string *attr, bool cls_only) {
             ConcreteCompilerVariable *converted = var->makeConverted(emitter, STR);
-            CompilerVariable *rtn = converted->getattr(emitter, attr);
+            CompilerVariable *rtn = converted->getattr(emitter, attr, cls_only);
             converted->decvref(emitter);
             return rtn;
         }
 
-        virtual CompilerVariable* callattr(IREmitter &emitter, VAR *var, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*> &args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, VAR *var, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*> &args) {
             ConcreteCompilerVariable *converted = var->makeConverted(emitter, STR);
             CompilerVariable *rtn = converted->callattr(emitter, attr, clsonly, args);
             converted->decvref(emitter);
@@ -1263,8 +1273,8 @@ class TupleType : public ValuedCompilerType<const std::vector<CompilerVariable*>
             return new ConcreteCompilerVariable(INT, getConstantInt(var->getValue()->size(), g.i64), true);
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
-            return BOXED_TUPLE->getattrType(attr);
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
+            return BOXED_TUPLE->getattrType(attr, cls_only);
         }
 };
 
@@ -1316,11 +1326,11 @@ class UndefType : public ConcreteCompilerType {
             llvm::Value *v = llvm::UndefValue::get(other_type->llvmType());
             return new ConcreteCompilerVariable(other_type, v, true);
         }
-        virtual CompilerVariable* getattr(IREmitter &emitter, VAR* var, const std::string &attr) {
+        virtual CompilerVariable* getattr(IREmitter &emitter, VAR* var, const std::string *attr, bool cls_only) {
             return undefVariable();
         }
 
-        virtual CompilerVariable* callattr(IREmitter &emitter, VAR *var, const std::string &attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, VAR *var, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
             return undefVariable();
         }
 
@@ -1340,7 +1350,7 @@ class UndefType : public ConcreteCompilerType {
             return this;
         }
 
-        virtual CompilerType* getattrType(const std::string &attr) {
+        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
             return UNDEF;
         }
 

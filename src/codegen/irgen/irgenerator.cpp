@@ -217,7 +217,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             CompilerVariable *value = evalExpr(node->value);
 
-            CompilerVariable *rtn = value->getattr(emitter, node->attr);
+            CompilerVariable *rtn = value->getattr(emitter, &node->attr, false);
             value->decvref(emitter);
             return rtn;
         }
@@ -226,29 +226,9 @@ class IRGeneratorImpl : public IRGenerator {
             assert(state != PARTIAL);
 
             CompilerVariable *value = evalExpr(node->value);
-
-            //ASSERT((node->attr == "__iter__" || node->attr == "__hasnext__" || node->attr == "next" || node->attr == "__enter__" || node->attr == "__exit__") && (value->getType() == UNDEF || value->getType() == value->getBoxType()) && "inefficient for anything else, should change", "%s", node->attr.c_str());
-
-            ConcreteCompilerVariable *converted = value->makeConverted(emitter, value->getBoxType());
+            CompilerVariable *rtn = value->getattr(emitter, &node->attr, true);
             value->decvref(emitter);
-
-            bool do_patchpoint = ENABLE_ICGETATTRS && emitter.getTarget() != IREmitter::INTERPRETER;
-            llvm::Value *rtn;
-            if (do_patchpoint) {
-                PatchpointSetupInfo *pp = patchpoints::createGetattrPatchpoint(emitter.currentFunction());
-
-                std::vector<llvm::Value*> llvm_args;
-                llvm_args.push_back(converted->getValue());
-                llvm_args.push_back(getStringConstantPtr(node->attr + '\0'));
-
-                llvm::Value* uncasted = emitter.createPatchpoint(pp, (void*)pyston::getclsattr, llvm_args);
-                rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-            } else {
-                rtn = emitter.getBuilder()->CreateCall2(g.funcs.getclsattr,
-                        converted->getValue(), getStringConstantPtr(node->attr + '\0'));
-            }
-            converted->decvref(emitter);
-            return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+            return rtn;
         }
 
         enum BinExpType {
@@ -538,7 +518,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             CompilerVariable *rtn;
             if (is_callattr) {
-                rtn = func->callattr(emitter, *attr, callattr_clsonly, args);
+                rtn = func->callattr(emitter, attr, callattr_clsonly, args);
             } else {
                 rtn = func->call(emitter, args);
             }
@@ -560,7 +540,8 @@ class IRGeneratorImpl : public IRGenerator {
             llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
             ConcreteCompilerVariable *rtn = new ConcreteCompilerVariable(DICT, v, true);
             if (node->keys.size()) {
-                CompilerVariable *setitem = rtn->getattr(emitter, "__setitem__");
+                static const std::string setitem_str("__setitem__");
+                CompilerVariable *setitem = rtn->getattr(emitter, &setitem_str, true);
                 for (int i = 0; i < node->keys.size(); i++) {
                     CompilerVariable *key = evalExpr(node->keys[i]);
                     CompilerVariable *value = evalExpr(node->values[i]);
@@ -654,7 +635,7 @@ class IRGeneratorImpl : public IRGenerator {
                     // Method 2 [testing-only]: (ab)uses existing getattr patchpoints and just calls module.getattr()
                     // This option exists for performance testing because method 1 does not currently use patchpoints.
                     ConcreteCompilerVariable *mod = new ConcreteCompilerVariable(MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-                    CompilerVariable *attr = mod->getattr(emitter, node->id);
+                    CompilerVariable *attr = mod->getattr(emitter, &node->id, false);
                     mod->decvref(emitter);
                     return attr;
                 }
@@ -822,9 +803,6 @@ class IRGeneratorImpl : public IRGenerator {
                     case AST_TYPE::List:
                         rtn = evalList(static_cast<AST_List*>(node));
                         break;
-                    //case AST_TYPE::ListComp:
-                        //rtn = evalListComp(static_cast<AST_ListComp*>(node));
-                        //break;
                     case AST_TYPE::Name:
                         rtn = evalName(static_cast<AST_Name*>(node));
                         break;
@@ -1012,7 +990,7 @@ class IRGeneratorImpl : public IRGenerator {
             if (irstate->getScopeInfo()->refersToGlobal(name)) {
                 // TODO do something special here so that it knows to only emit a monomorphic inline cache?
                 ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-                module->setattr(emitter, name, val);
+                module->setattr(emitter, &name, val);
                 module->decvref(emitter);
             } else {
                 CompilerVariable* &prev = symbol_table[name];
@@ -1027,7 +1005,7 @@ class IRGeneratorImpl : public IRGenerator {
         void _doSetattr(AST_Attribute* target, CompilerVariable* val) {
             assert(state != PARTIAL);
             CompilerVariable *t = evalExpr(target->value);
-            t->setattr(emitter, target->attr, val);
+            t->setattr(emitter, &target->attr, val);
             t->decvref(emitter);
         }
 
@@ -1148,7 +1126,7 @@ class IRGeneratorImpl : public IRGenerator {
                     AST_FunctionDef *fdef = static_cast<AST_FunctionDef*>(node->body[i]);
                     CLFunction *cl = this->_wrapFunction(fdef);
                     CompilerVariable *func = makeFunction(emitter, cl);
-                    cls->setattr(emitter, fdef->name, func);
+                    cls->setattr(emitter, &fdef->name, func);
                     func->decvref(emitter);
                 } else {
                     RELEASE_ASSERT(node->body[i]->type == AST_TYPE::Pass, "%d", type);
@@ -1369,7 +1347,7 @@ class IRGeneratorImpl : public IRGenerator {
             for (SortedSymbolTable::iterator it = sorted_symbol_table.begin(), end = sorted_symbol_table.end(); it != end; ++it, ++i) {
                 // I don't think this can fail, but if it can we should filter out dead symbols before
                 // passing them on:
-                assert(irstate->getSourceInfo()->liveness->isLiveAtEnd(it->first, myblock));
+                ASSERT(irstate->getSourceInfo()->liveness->isLiveAtEnd(it->first, myblock), "%d %s", myblock->idx, it->first.c_str());
 
                 // This line can never get hit right now since we unnecessarily force every variable to be concrete
                 // for a loop, since we generate all potential phis:

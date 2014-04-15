@@ -287,6 +287,17 @@ void* AST_Compare::accept_expr(ExprVisitor *v) {
     return v->visit_compare(this);
 }
 
+void AST_comprehension::accept(ASTVisitor *v) {
+    bool skip = v->visit_comprehension(this);
+    if (skip) return;
+
+    target->accept(v);
+    iter->accept(v);
+    for (auto if_ : ifs) {
+        if_->accept(v);
+    }
+}
+
 void AST_ClassDef::accept(ASTVisitor *v) {
     bool skip = v->visit_classdef(this);
     if (skip) return;
@@ -434,6 +445,21 @@ void AST_List::accept(ASTVisitor *v) {
 
 void* AST_List::accept_expr(ExprVisitor *v) {
     return v->visit_list(this);
+}
+
+void AST_ListComp::accept(ASTVisitor *v) {
+    bool skip = v->visit_listcomp(this);
+    if (skip) return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    elt->accept(v);
+}
+
+void* AST_ListComp::accept_expr(ExprVisitor *v) {
+    return v->visit_listcomp(this);
 }
 
 void AST_Module::accept(ASTVisitor *v) {
@@ -781,6 +807,20 @@ bool PrintVisitor::visit_compare(AST_Compare *node) {
     return true;
 }
 
+bool PrintVisitor::visit_comprehension(AST_comprehension *node) {
+    printf("for ");
+    node->target->accept(this);
+    printf(" in ");
+    node->iter->accept(this);
+
+    for (AST_expr *i : node->ifs) {
+        printf(" if ");
+        i->accept(this);
+    }
+
+    return true;
+}
+
 bool PrintVisitor::visit_classdef(AST_ClassDef *node) {
     for (int i = 0, n = node->decorator_list.size(); i < n; i++) {
         printf("@");
@@ -923,6 +963,17 @@ bool PrintVisitor::visit_list(AST_List *node) {
         if (i > 0)
             printf(", ");
         node->elts[i]->accept(this);
+    }
+    printf("]");
+    return true;
+}
+
+bool PrintVisitor::visit_listcomp(AST_ListComp *node) {
+    printf("[");
+    node->elt->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
     }
     printf("]");
     return true;
@@ -1135,6 +1186,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_call(AST_Call *node) { output->push_back(node); return false; }
         virtual bool visit_classdef(AST_ClassDef *node) { output->push_back(node); return !expand_scopes; }
         virtual bool visit_compare(AST_Compare *node) { output->push_back(node); return false; }
+        virtual bool visit_comprehension(AST_comprehension *node) { output->push_back(node); return false; }
         virtual bool visit_continue(AST_Continue *node) { output->push_back(node); return false; }
         virtual bool visit_dict(AST_Dict *node) { output->push_back(node); return false; }
         virtual bool visit_expr(AST_Expr *node) { output->push_back(node); return false; }
@@ -1145,6 +1197,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_index(AST_Index *node) { output->push_back(node); return false; }
         virtual bool visit_keyword(AST_keyword *node) { output->push_back(node); return false; }
         virtual bool visit_list(AST_List *node) { output->push_back(node); return false; }
+        virtual bool visit_listcomp(AST_ListComp *node) { output->push_back(node); return false; }
         virtual bool visit_module(AST_Module *node) { output->push_back(node); return !expand_scopes; }
         virtual bool visit_name(AST_Name *node) { output->push_back(node); return false; }
         virtual bool visit_num(AST_Num *node) { output->push_back(node); return false; }
@@ -1171,6 +1224,14 @@ std::vector<AST*>* flatten(std::vector<AST_stmt*> &roots, bool expand_scopes) {
     for (int i = 0; i < roots.size(); i++) {
         roots[i]->accept(&visitor);
     }
+    return rtn;
+}
+
+std::vector<AST*>* flatten(AST_expr* root, bool expand_scopes) {
+    std::vector<AST*> *rtn = new std::vector<AST*>();
+    FlattenVisitor visitor(rtn, expand_scopes);
+
+    root->accept(&visitor);
     return rtn;
 }
 

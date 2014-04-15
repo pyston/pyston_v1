@@ -159,7 +159,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
         virtual void* visit_attribute(AST_Attribute *node) {
             CompilerType *t = getType(node->value);
             assert(node->ctx_type == AST_TYPE::Load);
-            CompilerType *rtn = t->getattrType(node->attr);
+            CompilerType *rtn = t->getattrType(&node->attr, false);
 
             //if (speculation != TypeAnalysis::NONE && (node->attr == "x" || node->attr == "y" || node->attr == "z")) {
                 //rtn = processSpeculation(float_cls, node, rtn);
@@ -175,7 +175,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
         virtual void* visit_clsattribute(AST_ClsAttribute *node) {
             CompilerType *t = getType(node->value);
-            CompilerType *rtn = t->getattrType(node->attr);
+            CompilerType *rtn = t->getattrType(&node->attr, true);
             if (VERBOSITY() >= 2 && rtn == UNDEF) {
                 printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno, node->col_offset);
                 print_ast(node);
@@ -190,7 +190,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
             // TODO this isn't the exact behavior
             std::string name = getOpName(node->op_type);
-            CompilerType *attr_type = left->getattrType(name);
+            CompilerType *attr_type = left->getattrType(&name, true);
 
             std::vector<CompilerType*> arg_types;
             arg_types.push_back(right);
@@ -253,13 +253,21 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
                 return BOOL;
             }
             std::string name = getOpName(node->ops[0]);
-            CompilerType *attr_type = left->getattrType(name);
+            CompilerType *attr_type = left->getattrType(&name, true);
             std::vector<CompilerType*> arg_types;
             arg_types.push_back(right);
             return attr_type->callType(arg_types);
         }
 
         virtual void* visit_dict(AST_Dict *node) {
+            // Get all the sub-types, even though they're not necessary to
+            // determine the expression type, so that things like speculations
+            // can be processed.
+            for (auto k : node->keys)
+                getType(k);
+            for (auto v : node->values)
+                getType(v);
+
             return DICT;
         }
 
@@ -268,6 +276,13 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
         }
 
         virtual void* visit_list(AST_List *node) {
+            // Get all the sub-types, even though they're not necessary to
+            // determine the expression type, so that things like speculations
+            // can be processed.
+            for (auto elt : node->elts) {
+                getType(elt);
+            }
+
             return LIST;
         }
 
@@ -312,7 +327,8 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
         virtual void* visit_subscript(AST_Subscript *node) {
             CompilerType *val = getType(node->value);
             CompilerType *slice = getType(node->slice);
-            CompilerType *getitem_type = val->getattrType("__getitem__");
+            static std::string name("__getitem__");
+            CompilerType *getitem_type = val->getattrType(&name, true);
             std::vector<CompilerType*> args;
             args.push_back(slice);
             return getitem_type->callType(args);
@@ -331,7 +347,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
             // TODO this isn't the exact behavior
             std::string name = getOpName(node->op_type);
-            CompilerType *attr_type = operand->getattrType(name);
+            CompilerType *attr_type = operand->getattrType(&name, true);
             std::vector<CompilerType*> arg_types;
             return attr_type->callType(arg_types);
         }
@@ -353,7 +369,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             // TODO this isn't the right behavior
             std::string name = getOpName(node->op_type);
             name = "__i" + name.substr(2);
-            CompilerType *attr_type = t->getattrType(name);
+            CompilerType *attr_type = t->getattrType(&name, true);
 
             std::vector<CompilerType*> arg_types;
             arg_types.push_back(v);

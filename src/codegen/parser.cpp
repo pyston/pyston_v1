@@ -127,12 +127,15 @@ static void readExprVector(std::vector<AST_expr*> &vec, BufferedReader *reader) 
     }
 }
 
-static void readMiscVector(std::vector<AST*> &vec, BufferedReader *reader) {
+template <class T>
+static void readMiscVector(std::vector<T*> &vec, BufferedReader *reader) {
     int num_elts = reader->readShort();
     if (VERBOSITY("parsing") >= 2)
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
-        vec.push_back(readASTMisc(reader));
+        AST* read = readASTMisc(reader);
+        assert(read->type == T::TYPE);
+        vec.push_back(static_cast<T*>(read));
     }
 }
 
@@ -240,12 +243,7 @@ AST_Call* read_call(BufferedReader *reader) {
     rtn->col_offset = readColOffset(reader);
     rtn->func = readASTExpr(reader);
 
-    std::vector<AST*> keyword_vec;
-    readMiscVector(keyword_vec, reader);
-    for (int i = 0; i < keyword_vec.size(); i++) {
-        assert(keyword_vec[i]->type == AST_TYPE::keyword);
-        rtn->keywords.push_back(static_cast<AST_keyword*>(keyword_vec[i]));
-    }
+    readMiscVector(rtn->keywords, reader);
 
     rtn->kwargs = readASTExpr(reader);
     rtn->lineno = reader->readULL();
@@ -267,26 +265,18 @@ AST_expr* read_compare(BufferedReader *reader) {
         rtn->ops.push_back((AST_TYPE::AST_TYPE)reader->readByte());
     }
 
-    /*{
-        assert(rtn->ops.size() == 1);
-        AST_Attribute *func = new AST_Attribute();
-        func->type = AST_TYPE::Attribute;
-        func->attr = getOpName(rtn->ops[0]);
-        func->col_offset = rtn->col_offset;
-        func->ctx_type = AST_TYPE::Load;
-        func->lineno = rtn->lineno;
-        func->value = rtn->left;
+    return rtn;
+}
 
-        AST_Call *call = new AST_Call();
-        call->type = AST_TYPE::Call;
-        call->args.push_back(rtn->comparators[0]);
-        call->col_offset = rtn->col_offset;
-        call->func = func;
-        call->kwargs = NULL;
-        call->lineno = rtn->lineno;
-        call->starargs = NULL;
-        return call;
-    }*/
+AST_comprehension* read_comprehension(BufferedReader *reader) {
+    AST_comprehension *rtn = new AST_comprehension();
+
+    readExprVector(rtn->ifs, reader);
+    rtn->iter = readASTExpr(reader);
+    rtn->target = readASTExpr(reader);
+
+    rtn->col_offset = -1;
+    rtn->lineno = -1;
 
     return rtn;
 }
@@ -432,6 +422,16 @@ AST_List* read_list(BufferedReader *reader) {
     rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
     readExprVector(rtn->elts, reader);
+    rtn->lineno = reader->readULL();
+    return rtn;
+}
+
+AST_ListComp* read_listcomp(BufferedReader *reader) {
+    AST_ListComp *rtn = new AST_ListComp();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->elt = readASTExpr(reader);
+    readMiscVector(rtn->generators, reader);
     rtn->lineno = reader->readULL();
     return rtn;
 }
@@ -612,6 +612,8 @@ AST_expr* readASTExpr(BufferedReader *reader) {
             return read_index(reader);
         case AST_TYPE::List:
             return read_list(reader);
+        case AST_TYPE::ListComp:
+            return read_listcomp(reader);
         case AST_TYPE::Name:
             return read_name(reader);
         case AST_TYPE::Num:
@@ -698,6 +700,8 @@ AST* readASTMisc(BufferedReader *reader) {
             return read_alias(reader);
         case AST_TYPE::arguments:
             return read_arguments(reader);
+        case AST_TYPE::comprehension:
+            return read_comprehension(reader);
         case AST_TYPE::keyword:
             return read_keyword(reader);
         case AST_TYPE::Module:

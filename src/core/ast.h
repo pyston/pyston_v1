@@ -249,6 +249,8 @@ class AST_Call : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Call() : AST_expr(AST_TYPE::Call) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Call;
 };
 
 class AST_Compare : public AST_expr {
@@ -261,6 +263,19 @@ class AST_Compare : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Compare() : AST_expr(AST_TYPE::Compare) {}
+};
+
+class AST_comprehension : public AST {
+    public:
+        AST_expr* target;
+        AST_expr* iter;
+        std::vector<AST_expr*> ifs;
+
+        virtual void accept(ASTVisitor *v);
+
+        AST_comprehension() : AST(AST_TYPE::comprehension) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::comprehension;
 };
 
 class AST_ClassDef : public AST_stmt {
@@ -391,6 +406,8 @@ class AST_keyword : public AST {
         virtual void accept(ASTVisitor *v);
 
         AST_keyword() : AST(AST_TYPE::keyword) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::keyword;
 };
 
 class AST_List : public AST_expr {
@@ -404,6 +421,19 @@ class AST_List : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_List() : AST_expr(AST_TYPE::List) {}
+};
+
+class AST_ListComp : public AST_expr {
+    public:
+        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::ListComp;
+
+        std::vector<AST_comprehension*> generators;
+        AST_expr* elt;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void* accept_expr(ExprVisitor *v);
+
+        AST_ListComp() : AST_expr(AST_TYPE::ListComp) {}
 };
 
 class AST_Module : public AST {
@@ -607,6 +637,7 @@ class ASTVisitor {
         virtual bool visit_call(AST_Call *node) { assert(0); abort(); }
         virtual bool visit_clsattribute(AST_ClsAttribute *node) { assert(0); abort(); }
         virtual bool visit_compare(AST_Compare *node) { assert(0); abort(); }
+        virtual bool visit_comprehension(AST_comprehension *node) { assert(0); abort(); }
         virtual bool visit_classdef(AST_ClassDef *node) { assert(0); abort(); }
         virtual bool visit_continue(AST_Continue *node) { assert(0); abort(); }
         virtual bool visit_dict(AST_Dict *node) { assert(0); abort(); }
@@ -620,6 +651,7 @@ class ASTVisitor {
         virtual bool visit_index(AST_Index *node) { assert(0); abort(); }
         virtual bool visit_keyword(AST_keyword *node) { assert(0); abort(); }
         virtual bool visit_list(AST_List *node) { assert(0); abort(); }
+        virtual bool visit_listcomp(AST_ListComp *node) { assert(0); abort(); }
         virtual bool visit_module(AST_Module *node) { assert(0); abort(); }
         virtual bool visit_name(AST_Name *node) { assert(0); abort(); }
         virtual bool visit_num(AST_Num *node) { assert(0); abort(); }
@@ -654,6 +686,7 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_call(AST_Call *node) { return false; }
         virtual bool visit_clsattribute(AST_ClsAttribute *node) { return false; }
         virtual bool visit_compare(AST_Compare *node) { return false; }
+        virtual bool visit_comprehension(AST_comprehension *node) { return false; }
         virtual bool visit_classdef(AST_ClassDef *node) { return false; }
         virtual bool visit_continue(AST_Continue *node) { return false; }
         virtual bool visit_dict(AST_Dict *node) { return false; }
@@ -667,6 +700,7 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_index(AST_Index *node) { return false; }
         virtual bool visit_keyword(AST_keyword *node) { return false; }
         virtual bool visit_list(AST_List *node) { return false; }
+        virtual bool visit_listcomp(AST_ListComp *node) { return false; }
         virtual bool visit_module(AST_Module *node) { return false; }
         virtual bool visit_name(AST_Name *node) { return false; }
         virtual bool visit_num(AST_Num *node) { return false; }
@@ -700,6 +734,7 @@ class ExprVisitor {
         virtual void* visit_ifexp(AST_IfExp *node) { assert(0); abort(); }
         virtual void* visit_index(AST_Index *node) { assert(0); abort(); }
         virtual void* visit_list(AST_List *node) { assert(0); abort(); }
+        virtual void* visit_listcomp(AST_ListComp *node) { assert(0); abort(); }
         virtual void* visit_name(AST_Name *node) { assert(0); abort(); }
         virtual void* visit_num(AST_Num *node) { assert(0); abort(); }
         virtual void* visit_slice(AST_Slice *node) { assert(0); abort(); }
@@ -754,6 +789,7 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_break(AST_Break *node);
         virtual bool visit_call(AST_Call *node);
         virtual bool visit_compare(AST_Compare *node);
+        virtual bool visit_comprehension(AST_comprehension *node);
         virtual bool visit_classdef(AST_ClassDef *node);
         virtual bool visit_clsattribute(AST_ClsAttribute *node);
         virtual bool visit_continue(AST_Continue *node);
@@ -768,6 +804,7 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_index(AST_Index *node);
         virtual bool visit_keyword(AST_keyword *node);
         virtual bool visit_list(AST_List *node);
+        virtual bool visit_listcomp(AST_ListComp *node);
         virtual bool visit_module(AST_Module *node);
         virtual bool visit_name(AST_Name *node);
         virtual bool visit_num(AST_Num *node);
@@ -790,9 +827,10 @@ class PrintVisitor : public ASTVisitor {
 // This is useful for analyses that care more about the constituent nodes than the
 // exact tree structure; ex, finding all "global" directives.
 std::vector<AST*>* flatten(std::vector<AST_stmt*> &roots, bool expand_scopes);
+std::vector<AST*>* flatten(AST_expr *root, bool expand_scopes);
 // Similar to the flatten() function, but filters for a specific type of ast nodes:
-template <class T>
-std::vector<T*>* findNodes(std::vector<AST_stmt*> &roots, bool expand_scopes) {
+template <class T, class R>
+std::vector<T*>* findNodes(const R &roots, bool expand_scopes) {
     std::vector<T*> *rtn = new std::vector<T*>();
     std::vector<AST*> *flattened = flatten(roots, expand_scopes);
     for (int i = 0; i < flattened->size(); i++) {

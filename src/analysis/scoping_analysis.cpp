@@ -170,6 +170,7 @@ class NameCollectorVisitor : public ASTVisitor {
         virtual bool visit_break(AST_Break *node) { return false; }
         virtual bool visit_call(AST_Call *node) { return false; }
         virtual bool visit_compare(AST_Compare *node) { return false; }
+        virtual bool visit_comprehension(AST_comprehension *node) { return false; }
         //virtual bool visit_classdef(AST_ClassDef *node) { return false; }
         virtual bool visit_continue(AST_Continue *node) { return false; }
         virtual bool visit_dict(AST_Dict *node) { return false; }
@@ -181,6 +182,7 @@ class NameCollectorVisitor : public ASTVisitor {
         virtual bool visit_index(AST_Index *node) { return false; }
         //virtual bool visit_keyword(AST_keyword *node) { return false; }
         virtual bool visit_list(AST_List *node) { return false; }
+        virtual bool visit_listcomp(AST_ListComp *node) { return false; }
         //virtual bool visit_module(AST_Module *node) { return false; }
         //virtual bool visit_name(AST_Name *node) { return false; }
         virtual bool visit_num(AST_Num *node) { return false; }
