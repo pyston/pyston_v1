@@ -27,7 +27,7 @@ make install
 
 ### ccache
 
-ccache is a build tool that can help speed up redundant compilations.  It's not strictly necessary; you can disable it by adding `USE_CCACHE := 0` to your Makefile.local.  It's enabled by default, so to use it you can run
+ccache is a build tool that can help speed up redundant compilations.  It's not strictly necessary but it's useful enough to be enabled by default; you can disable it by adding `USE_CCACHE := 0` to your Makefile.local.  To get it, run:
 ```
 sudo apt-get install ccache
 ```
