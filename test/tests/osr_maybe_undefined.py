@@ -1,3 +1,5 @@
+# expected: fail
+
 # Regression test to make sure we can do an OSR if one of the live variables
 # is potentially-undefined.
 

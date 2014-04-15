@@ -68,15 +68,20 @@ def run_test(fn, check_stats, run_memcheck):
 
     statchecks = []
     jit_args = ["-csr"] + EXTRA_JIT_ARGS
+    expected = "success"
     for l in open(fn):
         if not l.startswith("#"):
-            break;
+            break
         if l.startswith("# statcheck:"):
             l = l[len("# statcheck:"):].strip()
             statchecks.append(l)
-        if l.startswith("# run_args:"):
+        elif l.startswith("# run_args:"):
             l = l[len("# run_args:"):].split()
             jit_args += l
+        elif l.startswith("# expected:"):
+            expected = l[len("# run_args:"):].strip()
+
+    assert expected in ("success", "fail"), expected
 
     run_args = ["./%s" % IMAGE] + jit_args + ["-q", fn]
     start = time.time()
@@ -111,27 +116,47 @@ def run_test(fn, check_stats, run_memcheck):
         else:
             msg = "Exited with code %d (expected code %d)" % (code, expected_code)
 
+        if expected == "fail":
+            r += "    Expected failure (got code %d, should be %d)" % (code, expected_code)
+            return r
+        else:
+            if KEEP_GOING:
+                r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
+                failed.append(fn)
+                return r
+            else:
+                raise Exception("%s\n%s\n%s" % (msg, err, full_err))
+    elif out != expected_out:
+        if expected == "fail":
+            r += "    Expected failure (bad output)"
+            return r
+        else:
+            if KEEP_GOING:
+                r += "    \033[31mFAILED\033[0m (bad output)"
+                failed.append(fn)
+                return r
+            exp_fd, exp_fn = tempfile.mkstemp()
+            out_fd, out_fn = tempfile.mkstemp()
+            os.fdopen(exp_fd, 'w').write(expected_out)
+            os.fdopen(out_fd, 'w').write(out)
+            p = subprocess.Popen(["diff", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
+            diff = p.stdout.read()
+            assert p.wait() in (0, 1)
+            raise Exception("Failed on %s:\n%s" % (fn, diff))
+    elif err != expected_err:
         if KEEP_GOING:
-            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
+            r += "    \033[31mFAILED\033[0m (bad stderr)"
             failed.append(fn)
             return r
         else:
-            raise Exception("%s\n%s\n%s" % (msg, err, full_err))
-    elif out != expected_out:
+            raise Exception((err, expected_err))
+    elif expected == "fail":
         if KEEP_GOING:
-            r += "    \033[31mFAILED\033[0m (bad output)"
+            r += "    \033[31mFAILED\033[0m (unexpected success)"
             failed.append(fn)
             return r
-        exp_fd, exp_fn = tempfile.mkstemp()
-        out_fd, out_fn = tempfile.mkstemp()
-        os.fdopen(exp_fd, 'w').write(expected_out)
-        os.fdopen(out_fd, 'w').write(out)
-        p = subprocess.Popen(["diff", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
-        diff = p.stdout.read()
-        assert p.wait() in (0, 1)
-        raise Exception("Failed on %s:\n%s" % (fn, diff))
-    elif err != expected_err:
-        raise Exception((err, expected_err))
+        raise Exception("Unexpected success on %s" % fn)
+
     r += "    Correct output (%5.1fms)" % (elapsed * 1000,)
 
     if check_stats:
@@ -270,8 +295,8 @@ if __name__ == "__main__":
     nostat = functools.partial(_addto, IGNORE_STATS)
 
     if '-O' in EXTRA_JIT_ARGS:
-        # OSR test, doesn't make sense with -O
-        skip(["30"])
+        # OSR tests, doesn't make sense with -O
+        skip(["30", "listcomp_osr"])
 
     if datetime.datetime.now() < datetime.datetime(2014,4,28):
         nostat(["nondirectly_callable_ics"]) # WIP
