@@ -39,3 +39,4 @@ find_problem.status
 *.expected_cache
 
 *.so
+*.pch

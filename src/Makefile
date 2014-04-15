@@ -480,6 +480,18 @@ $(TOOLS_DIR)/publicize_release: $(TOOLS_DIR)/publicize.release.o $(LLVM_RELEASE_
 PASS_SRCS := codegen/opt/aa.cpp
 PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 
+%.h.pch: CXXFLAGS := $(CXXFLAGS)
+%.release.h.pch: CXXFLAGS := $(CXXFLAGS_RELEASE)
+%.release.h.pch %.h.pch: %.h $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling $@
+	$(VERB) $(CLANG_EXE) $(CXXFLAGS) -MMD -MP -MF $<.d -x c++-header $< -o $@
+
+CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
+$(CODEGEN_SRCS:.cpp=.o): CXXFLAGS += -include codegen/irgen.h
+$(CODEGEN_SRCS:.cpp=.o): codegen/irgen.h.pch
+$(CODEGEN_SRCS:.cpp=.release.o): CXXFLAGS_RELEASE += -include codegen/irgen.release.h
+$(CODEGEN_SRCS:.cpp=.release.o): codegen/irgen.release.h.pch
+
 # For NONSTDLIB sources, just compile like normal:
 # TODO could use the same target but with target-specific variables?
 $(NONSTDLIB_SRCS:.cpp=.o): %.o: %.cpp $(BUILD_SYSTEM_DEPS)
@@ -589,7 +601,7 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 
 .PHONY: clean
 clean:
-	@ find . $(TOOLS_DIR) ../test \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' \) -print -delete
+	@ find . $(TOOLS_DIR) ../test \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data
