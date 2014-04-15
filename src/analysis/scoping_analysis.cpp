@@ -179,6 +179,7 @@ class NameCollectorVisitor : public ASTVisitor {
         //virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
         //virtual bool visit_global(AST_Global *node) { return false; }
         virtual bool visit_if(AST_If *node) { return false; }
+        virtual bool visit_ifexp(AST_IfExp *node) { return false; }
         virtual bool visit_index(AST_Index *node) { return false; }
         //virtual bool visit_keyword(AST_keyword *node) { return false; }
         virtual bool visit_list(AST_List *node) { return false; }

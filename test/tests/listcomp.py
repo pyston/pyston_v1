@@ -58,5 +58,5 @@ def f():
 f()
 
 def control_flow_in_listcomp():
-    print [(i if i else -1) for i in xrange(10) if (i % 2 == 0 or i % 3 != 0)]
+    print [(i if i else -1) for i in (xrange(10) if True else []) if (i % 2 == 0 or i % 3 != 0)]
 control_flow_in_listcomp()

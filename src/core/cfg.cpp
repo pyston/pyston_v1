@@ -526,7 +526,7 @@ class CFGVisitor : public ASTVisitor {
             // you'd get with a nested for loop:
             for (int i = exit_blocks.size() - 1; i >= 0; i--) {
                 cfg->placeBlock(exit_blocks[i]);
-                printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
+                //printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
             }
 
             return makeName(rtn_name, AST_TYPE::Load);
@@ -1178,6 +1178,8 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     AST_Return *return_stmt = new AST_Return();
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
+
+    //rtn->print();
 
     ////
     // Check some properties expected by later stages:
