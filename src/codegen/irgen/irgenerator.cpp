@@ -1004,6 +1004,11 @@ class IRGeneratorImpl : public IRGenerator {
                 }
                 prev = val;
                 val->incvref();
+
+                // Clear out the is_defined name since it is now definitely defined:
+                assert(!startswith(name, "!is_defined"));
+                std::string defined_name = _getFakeName("is_defined", name.c_str());
+                _getFake(defined_name, true);
             }
         }
 

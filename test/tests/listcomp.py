@@ -1,5 +1,3 @@
-# expected: fail
-
 print [(i, j) for i in range(4) for j in range(4)]
 
 def f():
@@ -20,7 +18,7 @@ f(1, 1)
 # TODO: test on ifs
 
 def f():
-    print [(i, j) for (i, j) in {1:2, 3:4, 5:6, 7:8}.items()]
+    print [(i, j) for (i, j) in sorted({1:2, 3:4, 5:6, 7:8}.items())]
 f()
 
 # The expr should not get evaluated if the if-condition fails:

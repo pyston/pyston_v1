@@ -1,5 +1,3 @@
-# expected: fail
-
 i = "global"
 def f(n):
     i = "hello"
