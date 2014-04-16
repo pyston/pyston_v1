@@ -586,6 +586,15 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                 generator->giveLocalSymbol(*it, var);
 
                 (*phis)[*it] = std::make_pair(type, phi);
+
+                if (source->phis->isPotentiallyUndefinedAfter(*it, block->predecessors[0])) {
+                    std::string is_defined_name = "!is_defined_" + *it;
+                    llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(g.i1, block->predecessors.size(), is_defined_name);
+                    ConcreteCompilerVariable *var = new ConcreteCompilerVariable(BOOL, phi, true);
+                    generator->giveLocalSymbol(is_defined_name, var);
+
+                    (*phis)[is_defined_name] = std::make_pair(BOOL, phi);
+                }
             }
         } else {
             assert(pred);
