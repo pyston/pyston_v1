@@ -16,6 +16,7 @@
 #define PYSTON_ANALYSIS_FUNCTIONANALYSIS_H
 
 #include <unordered_set>
+#include <unordered_map>
 
 namespace pyston {
 

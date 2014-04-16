@@ -19,6 +19,7 @@
 
 namespace pyston {
 
+class AST;
 class AST_Module;
 
 class ScopeInfo {

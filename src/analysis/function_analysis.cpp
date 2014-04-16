@@ -74,7 +74,20 @@ class LivenessBBVisitor : public NoopASTVisitor {
         }
 
         bool visit_augassign(AST_AugAssign* node) {
-            assert(0 && "need to set it as a load");
+            AST* target = node->target;
+            switch(target->type) {
+                case AST_TYPE::Name: {
+                    AST_Name* n = static_cast<AST_Name*>(target);
+                    _doLoad(n->id);
+                    _doStore(n->id);
+                    break;
+                }
+                default:
+                    RELEASE_ASSERT(0, "%d", target->type);
+            }
+
+            node->value->accept(this);
+            return true;
         }
 };
 

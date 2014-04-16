@@ -40,3 +40,15 @@ def f4():
     print lists
     print l
 f4()
+
+def f5():
+    # Not very sensical, but this works:
+    [x for x in xrange(5)][0] += x
+    print x
+f5()
+
+def f6():
+    # This should error: the lhs is evaluated first
+    x += [x for x in xrange(5)][0]
+    print x
+f6()

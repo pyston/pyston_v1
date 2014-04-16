@@ -251,15 +251,23 @@ tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -I$(GTEST_DIR)/include
 NON_ENTRY_OBJS := $(filter-out jit.o,$(OBJS))
-$(UNITTEST_DIR)/gc: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/gc.o
-	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/gc.o $(LDFLAGS) -o $@
-dbg_gcunittests: $(UNITTEST_DIR)/gc
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time gdb $(GDB_CMDS) --args ./$(UNITTEST_DIR)/gc --gtest_break_on_failure $(ARGS)'
-run_gcunittests: $(UNITTEST_DIR)/gc
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/gc $(ARGS)'
-run_unittests:: run_gcunittests
-dbg_unittests:: dbg_gcunittests
+
+define add_unittest
+$(eval \
+$(UNITTEST_DIR)/$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/$1.o
+	$(ECHO) Linking $$@
+	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
+dbg_$1_unittests: $(UNITTEST_DIR)/$1
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time gdb $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
+run_$1_unittests: $(UNITTEST_DIR)/$1
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/$1 $(ARGS)'
+run_unittests:: run_$1_unittests
+)
+endef
+
+$(call add_unittest,gc)
+$(call add_unittest,analysis)
+
 
 define checksha
 	test "$$($1 | sha1sum)" = "$2  -"
