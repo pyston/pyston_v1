@@ -143,12 +143,15 @@ gold is highly recommended as a faster linker.  Pyston contains build-system sup
 
 ```
 cd ~/pyston_deps
-git clone --depth 1 git://sourceware.org/git/binutils-gdb.git binutils
-mkdir binutils-build
-cd binutils-build
-../binutils/configure --enable-gold --enable-plugins --disable-werror
-make all-gold
+wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
+tar xvf binutils-2.24.tar.gz
+mkdir binutils-2.24-build
+cd binutils-2.24-build
+../binutils-2.24/configure --enable-gold --enable-plugins --disable-werror
+make all-gold -j4
 ```
+
+If that last step fails due to complaints about YYSTYPE, try upgrading or installing bison (`sudo apt-get install bison`), removing the binutils-2.24-build directory, and configure + make again.
 
 ### perf
 The `perf` tool is the best way we've found to profile JIT'd code; you can find more details in docs/PROFILING.

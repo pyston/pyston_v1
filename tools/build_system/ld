@@ -5,12 +5,16 @@ set -eu
 FLAGS=
 RETRY=
 
-if which gold > /dev/null ; then
-    LD=gold
+if [ -f $HOME/pyston_deps/binutils-build/gold/ld-new ]; then
+    LD=$HOME/pyston_deps/binutils-build/gold/ld-new
     # FLAGS="--incremental --incremental-patch=10"
     # RETRY=y
-elif [ -f $HOME/pyston_deps/binutils-build/gold/ld-new ]; then
-    LD=$HOME/pyston_deps/binutils-build/gold/ld-new
+elif [ -f $HOME/pyston_deps/binutils-2.24-build/gold/ld-new ]; then
+    LD=$HOME/pyston_deps/binutils-2.24-build/gold/ld-new
+    # FLAGS="--incremental --incremental-patch=10"
+    # RETRY=y
+elif which gold > /dev/null ; then
+    LD=gold
     # FLAGS="--incremental --incremental-patch=10"
     # RETRY=y
 else
