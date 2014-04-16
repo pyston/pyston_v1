@@ -133,6 +133,7 @@ class DefinednessBBAnalyzer : public BBAnalyzer<DefinednessAnalysis::DefinitionL
             return DefinednessAnalysis::PotentiallyDefined;
         }
 };
+
 class DefinednessVisitor : public ASTVisitor {
     private:
         typedef DefinednessBBAnalyzer::Map Map;
@@ -218,6 +219,7 @@ class DefinednessVisitor : public ASTVisitor {
             return true;
         }
 };
+
 void DefinednessBBAnalyzer::processBB(Map &starting, CFGBlock *block) const {
     DefinednessVisitor visitor(starting);
     for (int i = 0; i < block->body.size(); i++) {
@@ -225,6 +227,13 @@ void DefinednessBBAnalyzer::processBB(Map &starting, CFGBlock *block) const {
     }
     if (block->idx == 0 && arguments) {
         arguments->accept(&visitor);
+    }
+
+    if (VERBOSITY("analysis") >= 2) {
+        printf("At end of block %d:\n", block->idx);
+        for (auto p : starting) {
+            printf("%s: %d\n", p.first.c_str(), p.second);
+        }
     }
 }
 
@@ -291,10 +300,12 @@ const PhiAnalysis::RequiredSet& PhiAnalysis::getAllDefinedAt(CFGBlock *block) {
 }
 
 bool PhiAnalysis::isRequired(const std::string &name, CFGBlock* block) {
+    assert(!startswith(name, "!"));
     return required_phis[block].count(name) != 0;
 }
 
 bool PhiAnalysis::isRequiredAfter(const std::string &name, CFGBlock* block) {
+    assert(!startswith(name, "!"));
     // If there are multiple successors, then none of them are allowed
     // to require any phi nodes
     if (block->successors.size() != 1)
@@ -305,6 +316,7 @@ bool PhiAnalysis::isRequiredAfter(const std::string &name, CFGBlock* block) {
 }
 
 bool PhiAnalysis::isPotentiallyUndefinedAfter(const std::string &name, CFGBlock* block) {
+    assert(!startswith(name, "!"));
     assert(block->successors.size() > 0);
     DefinednessAnalysis::DefinitionLevel dlevel = definedness.isDefinedAt(name, block->successors[0]);
     ASSERT(dlevel != DefinednessAnalysis::Undefined, "%s %d", name.c_str(), block->idx);

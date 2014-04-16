@@ -200,13 +200,13 @@ class CFGVisitor : public ASTVisitor {
 
         std::string nodeName(AST_expr* node) {
             char buf[40];
-            snprintf(buf, 40, "!%p", node);
+            snprintf(buf, 40, "#%p", node);
             return std::string(buf);
         }
 
         std::string nodeName(AST_expr* node, const std::string &suffix, int idx) {
             char buf[50];
-            snprintf(buf, 50, "!%p_%s_%d", node, suffix.c_str(), idx);
+            snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
             return std::string(buf);
         }
 

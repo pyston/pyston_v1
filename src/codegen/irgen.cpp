@@ -342,7 +342,11 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                 assert(from_arg->getType() == it->second->llvmType());
             }
 
-            ConcreteCompilerType *phi_type = types->getTypeAtBlockStart(it->first, target_block);
+            ConcreteCompilerType *phi_type;
+            if (startswith(it->first, "!is_defined"))
+                phi_type = BOOL;
+            else
+                phi_type = types->getTypeAtBlockStart(it->first, target_block);
             //ConcreteCompilerType *analyzed_type = types->getTypeAtBlockStart(it->first, block);
             //ConcreteCompilerType *phi_type = (*phis)[it->first].first;
 
@@ -401,6 +405,11 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         }
 
         if (guard_val) {
+            // Create the guard with both branches leading to the success_bb,
+            // and let the deopt path change the failure case to point to the
+            // as-yet-unknown deopt block.
+            // TODO Not the best approach since if we fail to do that patching,
+            // the guard will just silently be ignored.
             llvm::BranchInst *br = entry_emitter->getBuilder()->CreateCondBr(guard_val, osr_unbox_block, osr_unbox_block);
             out_guards.registerGuardForBlockEntry(target_block, br, *initial_syms);
         } else {
@@ -541,7 +550,12 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             assert(phis);
 
             for (OSREntryDescriptor::ArgMap::const_iterator it = entry_descriptor->args.begin(), end = entry_descriptor->args.end(); it != end; ++it) {
-                ConcreteCompilerType *analyzed_type = types->getTypeAtBlockStart(it->first, block);
+                ConcreteCompilerType *analyzed_type;
+                if (startswith(it->first, "!is_defined"))
+                    analyzed_type = BOOL;
+                else
+                    analyzed_type = types->getTypeAtBlockStart(it->first, block);
+
                 //printf("For %s, given %s, analyzed for %s\n", it->first.c_str(), it->second->debugName().c_str(), analyzed_type->debugName().c_str());
 
                 llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(), block->predecessors.size()+1, it->first);
@@ -580,7 +594,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             if (block->predecessors.size() == 1)  {
                 // If this block has only one predecessor, it by definition doesn't need any phi nodes.
                 // Assert that the phi_st is empty, and just create the symbol table from the non-phi st:
-                assert(phi_ending_symbol_tables[pred->idx]->size() == 0);
+                ASSERT(phi_ending_symbol_tables[pred->idx]->size() == 0, "%d %d", block->idx, pred->idx);
                 assert(ending_symbol_tables.count(pred->idx));
                 generator->copySymbolsFrom(ending_symbol_tables[pred->idx]);
             } else {
@@ -621,7 +635,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     // We don't know the exact ssa values to back-propagate to the phi nodes until we've generated
     // the relevant IR, so after we have done all of it, go back through and populate the phi nodes.
     // Also, do some checking to make sure that the phi analysis stuff worked out, and that all blocks
-    // agreed on what symbols + types they should be propagiting for the phis.
+    // agreed on what symbols + types they should be propagating for the phis.
     for (int i = 0; i < source->cfg->blocks.size(); i++) {
         PHITable *phis = created_phis[i];
         if (phis == NULL)
@@ -632,6 +646,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         CFGBlock *b = source->cfg->blocks[i];
 
         const std::vector<GuardList::BlockEntryGuard*> &block_guards = in_guards.getGuardsForBlock(b);
+        //printf("Found %ld guards for block %p, for %p\n", block_guards.size(), b, &in_guards);
 
         for (int j = 0; j < b->predecessors.size(); j++) {
             CFGBlock *b2 = b->predecessors[j];
@@ -900,18 +915,24 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
         GuardList deopt_guards;
         //typedef std::unordered_map<CFGBlock*, std::unordered_map<AST_expr*, GuardList::ExprTypeGuard*> > Worklist;
         //Worklist guard_worklist;
+
+        guards.getBlocksWithGuards(deopt_full_blocks);
         for (GuardList::expr_type_guard_iterator it = guards.after_begin(), end = guards.after_end(); it != end; ++it) {
             deopt_partial_blocks.insert(it->second->cfg_block);
         }
 
         computeBlockSetClosure(deopt_full_blocks, deopt_partial_blocks);
 
+        assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
+
         TypeAnalysis *deopt_types = doTypeAnalysis(source->cfg, arg_names, sig->arg_types, TypeAnalysis::NONE, source->scoping->getScopeInfoForNode(source->ast));
         emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, arg_names, NULL, deopt_full_blocks, deopt_partial_blocks);
         assert(deopt_guards.isEmpty());
+        deopt_guards.assertGotPatched();
 
         delete deopt_types;
     }
+    guards.assertGotPatched();
 
     for (GuardList::expr_type_guard_iterator it = guards.after_begin(), end = guards.after_end(); it != end; ++it) {
         delete it->second;

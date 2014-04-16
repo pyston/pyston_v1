@@ -203,6 +203,11 @@ class IRGeneratorImpl : public IRGenerator {
             llvm::BasicBlock* success_bb = llvm::BasicBlock::Create(g.context, "check_succeeded", irstate->getLLVMFunction());
             success_bb->moveAfter(curblock);
 
+            // Create the guard with both branches leading to the success_bb,
+            // and let the deopt path change the failure case to point to the
+            // as-yet-unknown deopt block.
+            // TODO Not the best approach since if we fail to do that patching,
+            // the guard will just silently be ignored.
             llvm::BranchInst* guard = emitter.getBuilder()->CreateCondBr(check_val, success_bb, success_bb, branch_weights);
 
             curblock = success_bb;
@@ -1347,7 +1352,7 @@ class IRGeneratorImpl : public IRGenerator {
             for (SortedSymbolTable::iterator it = sorted_symbol_table.begin(), end = sorted_symbol_table.end(); it != end; ++it, ++i) {
                 // I don't think this can fail, but if it can we should filter out dead symbols before
                 // passing them on:
-                ASSERT(irstate->getSourceInfo()->liveness->isLiveAtEnd(it->first, myblock), "%d %s", myblock->idx, it->first.c_str());
+                ASSERT(startswith(it->first, "!is_defined") ||  irstate->getSourceInfo()->liveness->isLiveAtEnd(it->first, myblock), "%d %s", myblock->idx, it->first.c_str());
 
                 // This line can never get hit right now since we unnecessarily force every variable to be concrete
                 // for a loop, since we generate all potential phis:
@@ -1500,6 +1505,11 @@ class IRGeneratorImpl : public IRGenerator {
             ScopeInfo *scope_info = irstate->getScopeInfo();
 
             for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
+                if (startswith(it->first, "!is_defined")) {
+                    ++it;
+                    continue;
+                }
+
                 //ASSERT(it->first[0] != '!' || startswith(it->first, "!is_defined"), "left a fake variable in the real symbol table? '%s'", it->first.c_str());
 
                 if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
@@ -1514,7 +1524,7 @@ class IRGeneratorImpl : public IRGenerator {
                     ConcreteCompilerVariable *v = it->second->makeConverted(emitter, phi_type);
                     it->second->decvref(emitter);
                     symbol_table[it->first] = v->split(emitter);
-                    it++;
+                    ++it;
                 } else {
 #ifndef NDEBUG
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want here,
@@ -1523,7 +1533,7 @@ class IRGeneratorImpl : public IRGenerator {
                     ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s", it->first.c_str(), ending_type->debugName().c_str(), it->second->getType()->debugName().c_str());
 #endif
 
-                    it++;
+                    ++it;
                 }
             }
 
@@ -1533,18 +1543,29 @@ class IRGeneratorImpl : public IRGenerator {
                 assert(!scope_info->refersToGlobal(*it));
                 CompilerVariable* &cur = symbol_table[*it];
 
+                std::string defined_name = _getFakeName("is_defined", it->c_str());
+
                 if (cur != NULL) {
+                    //printf("defined on this path; ");
+
+                    ConcreteCompilerVariable *is_defined = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+
                     if (source->phis->isPotentiallyUndefinedAfter(*it, myblock)) {
-                        //printf("is potentially undefined\n");
-                        _setFake(_getFakeName("is_defined", it->c_str()), new ConcreteCompilerVariable(BOOL, getConstantInt(1, g.i1), true));
+                        //printf("is potentially undefined later, so marking it defined\n");
+                        if (is_defined) {
+                            _setFake(defined_name, is_defined);
+                        } else {
+                            _setFake(defined_name, new ConcreteCompilerVariable(BOOL, getConstantInt(1, g.i1), true));
+                        }
                     } else {
-                        //printf("is definitely defined\n");
+                        //printf("is defined in all later paths, so not marking\n");
+                        assert(!is_defined);
                     }
                 } else {
                     //printf("no st entry, setting undefined\n");
                     ConcreteCompilerType *phi_type = types->getTypeAtBlockEnd(*it, myblock);
                     cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()), true);
-                    _setFake(_getFakeName("is_defined", it->c_str()), new ConcreteCompilerVariable(BOOL, getConstantInt(0, g.i1), true));
+                    _setFake(defined_name, new ConcreteCompilerVariable(BOOL, getConstantInt(0, g.i1), true));
                 }
             }
 
@@ -1581,6 +1602,15 @@ class IRGeneratorImpl : public IRGenerator {
             }
 
             assert(myblock->successors.size() == 1); // other cases should have been handled
+
+            // In theory this case shouldn't be necessary:
+            if (myblock->successors[0]->predecessors.size() == 1) {
+                // If the next block has a single predecessor, don't have to
+                // emit any phis.
+                // Should probably not emit no-op jumps like this though.
+                return EndingState(st, phi_st, curblock);
+            }
+
             for (SymbolTable::iterator it = st->begin(); it != st->end();) {
                 if (startswith(it->first, "!is_defined") || source->phis->isRequiredAfter(it->first, myblock)) {
                     assert(it->second->isGrabbed());

@@ -7,10 +7,13 @@ def f(x):
     if x % 2:
         y = x
 
+    xrange(0)
+
     for i in xrange(1000000):
-        pass
+        xrange(0)
 
     print y
+    xrange(0)
 
 f(11)
 f(10)

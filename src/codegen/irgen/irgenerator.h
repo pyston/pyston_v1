@@ -124,6 +124,27 @@ class GuardList {
         expr_type_guard_iterator after_end() {
             return expr_type_guards.end();
         }
+
+        void getBlocksWithGuards(std::unordered_set<CFGBlock*> &add_to) {
+            for (auto p : block_begin_guards) {
+                add_to.insert(p.first);
+            }
+        }
+
+        void assertGotPatched() {
+#ifndef NDEBUG
+            for (auto p : block_begin_guards) {
+                for (auto g : p.second) {
+                    assert(g->branch->getSuccessor(0) != g->branch->getSuccessor(1));
+                }
+            }
+
+            for (auto p : expr_type_guards) {
+                assert(p.second->branch->getSuccessor(0) != p.second->branch->getSuccessor(1));
+            }
+#endif
+        }
+
         ExprTypeGuard* getNodeTypeGuard(AST_expr* node) const {
             expr_type_guard_const_iterator it = expr_type_guards.find(node);
             if (it == expr_type_guards.end())
@@ -132,7 +153,7 @@ class GuardList {
         }
 
         bool isEmpty() const {
-            return expr_type_guards.size() == 0;
+            return expr_type_guards.size() == 0 && block_begin_guards.size() == 0;
         }
 
         void addExprTypeGuard(CFGBlock *cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val, const SymbolTable &st) {
@@ -142,6 +163,7 @@ class GuardList {
         }
 
         void registerGuardForBlockEntry(CFGBlock *cfg_block, llvm::BranchInst* branch, const SymbolTable &st) {
+            //printf("Adding guard for block %p, in %p\n", cfg_block, this);
             std::vector<BlockEntryGuard*> &v = block_begin_guards[cfg_block];
             v.push_back(new BlockEntryGuard(cfg_block, branch, st));
         }

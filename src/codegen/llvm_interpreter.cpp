@@ -174,6 +174,11 @@ Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
             RELEASE_ASSERT(0, "");
         }
         case llvm::Value::UndefValueVal:
+            // It's ok to evaluate an undef as long as we're being careful
+            // to not use it later.
+            // Typically this happens if we need to propagate the 'value' of an
+            // maybe-defined Python variable; we won't actually read from it if
+            // it's undef, since it should be guarded by an !is_defined variable.
             return (int64_t)-1337;
         default:
             v->dump();
