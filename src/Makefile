@@ -228,7 +228,11 @@ OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o)
 
 OPTIONAL_SRCS := codegen/profiling/oprofile.cpp codegen/profiling/pprof.cpp
 TOOL_SRCS := $(wildcard $(TOOLS_DIR)/*.cpp)
-NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS)
+
+UNITTEST_DIR := ../test/unittests
+UNITTEST_SRCS := $(wildcard $(UNITTEST_DIR)/*.cpp)
+
+NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 
 .DEFAULT_GOAL := pyston_dbg
 # _ :
@@ -245,18 +249,15 @@ tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
 	$(ECHO) Computing tags...
 	$(VERB) ctags $^
 
-UNITTEST_SRCS := $(wildcard unittests/*.cpp)
-GC_OBJS := $(patsubst %.cpp,%.o,$(wildcard gc/*.cpp))
-$(UNITTEST_SRCS:.cpp=.o): %.o: %.cpp $(BUILD_SYSTEM_DEPS)
-	$(ECHO) Compiling $@
-	$(VERB) $(CXX) $(CXXFLAGS) -I$(GTEST_DIR)/include -MMD -MP -MF $(patsubst %.o,%.d,$@) $< -c -o $@
-unittests/gc: $(GTEST_DIR)/src/gtest-all.o $(UNITTEST_SRCS:.cpp=.o) $(BUILD_SYSTEM_DEPS) $(GC_OBJS)
+$(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -I$(GTEST_DIR)/include
+NON_ENTRY_OBJS := $(filter-out jit.o,$(OBJS))
+$(UNITTEST_DIR)/gc: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/gc.o
 	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_SRCS:.cpp=.o) $(GC_OBJS) $(LDFLAGS) -o $@
-dbg_gcunittests: unittests/gc
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time gdb $(GDB_CMDS) --args ./unittests/gc --gtest_break_on_failure $(ARGS)'
-run_gcunittests: unittests/gc
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./unittests/gc $(ARGS)'
+	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/gc.o $(LDFLAGS) -o $@
+dbg_gcunittests: $(UNITTEST_DIR)/gc
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time gdb $(GDB_CMDS) --args ./$(UNITTEST_DIR)/gc --gtest_break_on_failure $(ARGS)'
+run_gcunittests: $(UNITTEST_DIR)/gc
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/gc $(ARGS)'
 run_unittests:: run_gcunittests
 dbg_unittests:: dbg_gcunittests
 
@@ -288,6 +289,8 @@ check test: ext pyston_dbg
 	$(call checksha,./pyston_prof -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+
+	$(MAKE) run_unittests
 
 	echo "All tests passed"
 
@@ -597,7 +600,7 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
 
--include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d)
+-include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d)
 
 .PHONY: clean
 clean:

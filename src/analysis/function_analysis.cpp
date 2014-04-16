@@ -72,6 +72,10 @@ class LivenessBBVisitor : public NoopASTVisitor {
             }
             return true;
         }
+
+        bool visit_augassign(AST_AugAssign* node) {
+            assert(0 && "need to set it as a load");
+        }
 };
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string &name, CFGBlock *block) {
@@ -99,9 +103,14 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string &name, CFGBlock *block) {
         for (int i = 0; i < thisblock->body.size(); i++) {
             thisblock->body[i]->accept(&visitor);
         }
-        if (visitor.loads().count(name))
+
+        if (visitor.loads().count(name)) {
+            assert(!visitor.stores().count(name));
             return true;
+        }
+
         if (!visitor.stores().count(name)) {
+            assert(!visitor.loads().count(name));
             for (int i = 0; i < thisblock->successors.size(); i++) {
                 q.push_back(thisblock->successors[i]);
             }

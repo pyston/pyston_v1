@@ -1,5 +1,3 @@
-# expected: fail
-
 # Try to trick the JIT into OSR'ing into an optimized version with a speculation
 # that has already failed.
 # In the f() function, y will have type int, but when we OSR from the while loop,

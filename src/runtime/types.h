@@ -197,7 +197,7 @@ class StlCompatAllocator {
 
         pointer allocate(size_t n) {
             size_t to_allocate = n * sizeof(value_type);
-            assert(to_allocate < (1<<16));
+            //assert(to_allocate < (1<<16));
 
             ConservativeWrapper* rtn = new (to_allocate) ConservativeWrapper(to_allocate);
             return (pointer)&rtn->data[0];

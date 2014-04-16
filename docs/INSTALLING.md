@@ -110,7 +110,7 @@ cd ~/pyston_deps
 wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
 unzip gtest-1.7.0.zip
 cd gtest-1.7.0
-./configure
+./configure CXXFLAGS=-fno-omit-frame-pointer
 make -j4
 ```
 
