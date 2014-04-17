@@ -32,7 +32,38 @@ def make_random(x):
         return Simple()
 
     if rand() < 0.3:
-        return Union([make_random(0.5 * x - 1), make_random(0.5 * x - 1)])
+        return Union([make_random(0.5 * (x - 1)), make_random(0.5 * (x - 1))])
     return Poly1(make_random(x - 1))
 
-print make_random(100000).score()
+# Create a 10k-ary tree, and score it 1k times
+r = make_random(10000)
+for i in xrange(1000):
+    r.score()
+
+# Other test configurations that can be run:
+
+# Test 1: one 100k-ary tree:
+# make_random(100000).score()
+
+# Test 2: 1k 1k-ary trees:
+# for i in xrange(1000):
+    # make_random(1000).score()
+
+# Test 3: one 1k-ary tree, 1k times:
+# r = make_random(1000)
+# for i in xrange(1000):
+    # r.score()
+
+# Test 4: 10k 100-ary trees:
+# for i in xrange(10000):
+    # make_random(100).score()
+
+# Test 5: one 100-ary tree, 10k times::
+# r = make_random(100)
+# for i in xrange(10000):
+    # r.score()
+
+# Test 6: 100k 10-ary trees:
+# for i in xrange(100000):
+    # make_random(10).score()
+
