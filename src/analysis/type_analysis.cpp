@@ -371,9 +371,18 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             name = "__i" + name.substr(2);
             CompilerType *attr_type = t->getattrType(&name, true);
 
+            ASSERT(attr_type != UNDEF, "need to implement the actual semantics here");
+
             std::vector<CompilerType*> arg_types;
             arg_types.push_back(v);
             CompilerType *rtn = attr_type->callType(arg_types);
+
+            if (VERBOSITY() >= 2) printf("%s aug= %s -> %s\n", t->debugName().c_str(), v->debugName().c_str(), rtn->debugName().c_str());
+
+            if (t == INT && v == INT)
+                assert(rtn == INT);
+            if (t == FLOAT && v == FLOAT)
+                assert(rtn == FLOAT);
 
             _doSet(node->target, rtn);
         }

@@ -606,6 +606,10 @@ class IntType : public ConcreteCompilerType {
                 return AbstractFunctionType::get(sigs);
             }
 
+            if (*attr == "__iadd__" || *attr == "__isub__" || *attr == "__imod__" || *attr == "__imul__" || *attr == "__ilshift__" || *attr == "__irshift__" || *attr == "__idiv__" || *attr == "__ipow__" || *attr == "__ifloordiv__" || *attr == "__iand__" || *attr == "__ior__" || *attr == "__ixor__") {
+                return AbstractFunctionType::get(sigs);
+            }
+
             return BOXED_INT->getattrType(attr, cls_only);
         }
 
@@ -712,6 +716,10 @@ class FloatType : public ConcreteCompilerType {
             }
 
             if (*attr == "__add__" || *attr == "__sub__" || *attr == "__mul__" || *attr == "__div__" || *attr == "__pow__" || *attr == "__floordiv__" || *attr == "__mod__" || *attr == "__pow__") {
+                return AbstractFunctionType::get(sigs);
+            }
+
+            if (*attr == "__iadd__" || *attr == "__isub__" || *attr == "__imul__" || *attr == "__idiv__" || *attr == "__ipow__" || *attr == "__ifloordiv__" || *attr == "__imod__" || *attr == "__ipow__") {
                 return AbstractFunctionType::get(sigs);
             }
 
