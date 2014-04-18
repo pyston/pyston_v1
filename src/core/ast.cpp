@@ -76,7 +76,7 @@ std::string getOpSymbol(int op_type) {
         case AST_TYPE::USub:
             return "-";
         default:
-            fprintf(stderr, "Unknown op type (ast.cpp:" STRINGIFY(__LINE__) "): %d\n", op_type);
+            fprintf(stderr, "Unknown op type (" __FILE__ ":" STRINGIFY(__LINE__) "): %d\n", op_type);
             abort();
     }
 }
@@ -138,7 +138,7 @@ std::string getOpName(int op_type) {
         case AST_TYPE::USub:
             return "__neg__";
         default:
-            fprintf(stderr, "Unknown op type (ast.cpp:" STRINGIFY(__LINE__) "): %d\n", op_type);
+            fprintf(stderr, "Unknown op type (" __FILE__ ":" STRINGIFY(__LINE__) "): %d\n", op_type);
             abort();
     }
 }
@@ -158,9 +158,9 @@ std::string getReverseOpName(int op_type) {
     if (op_type == AST_TYPE::GtE)
         return getOpName(AST_TYPE::Lt);
     if (op_type == AST_TYPE::NotEq)
-        return getOpName(AST_TYPE::NotEq);
-    if (op_type == AST_TYPE::Eq)
         return getOpName(AST_TYPE::Eq);
+    if (op_type == AST_TYPE::Eq)
+        return getOpName(AST_TYPE::NotEq);
 
     std::string normal_name = getOpName(op_type);
     return "__r" + normal_name.substr(2);
