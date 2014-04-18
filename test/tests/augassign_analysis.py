@@ -48,7 +48,70 @@ def f5():
 f5()
 
 def f6():
+    x = -100
+    x += [x for x in [50, 51, 52]][0]
+    print x
+    # Prints "-50"
+f6()
+
+def f7():
+    global c
+    class C(object):
+        pass
+    c = C()
+    c.x = 0
+
+    def inner1():
+        global c
+        print "inner1"
+        c.x = 25
+        return c
+
+    def inner2():
+        global c
+        print "inner2"
+        c.x = 50
+        return 1
+
+    inner1().x += inner2()
+    print c.x # prints "26"
+f7()
+
+def f8():
+    global l
+    l = [0]
+
+    def inner1():
+        global l
+        print "inner1"
+        l[0] = 25
+        return l
+
+    def inner2():
+        global l
+        print "inner2"
+        l[0] = 50
+        return 1
+
+    inner1()[0] += inner2()
+    print l[0] # prints "26"
+f8()
+
+x = 9
+def f9():
+    global x
+
+    def inner():
+        global x
+        x = 5
+        return 1
+
+    x += inner()
+    print x
+f9()
+
+def f10():
     # This should error: the lhs is evaluated first
     x += [x for x in xrange(5)][0]
     print x
-f6()
+f10()

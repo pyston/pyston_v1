@@ -1081,6 +1081,15 @@ class StrConstantType : public ValuedCompilerType<std::string*> {
             return rtn;
         }
 
+        virtual CompilerVariable* dup(VAR *var, DupCache &cache) {
+            CompilerVariable* &rtn = cache[var];
+
+            if (rtn == NULL) {
+                rtn = new VAR(this, var->getValue(), var->isGrabbed());
+            }
+            return rtn;
+        }
+
 };
 ValuedCompilerType<std::string*> *STR_CONSTANT = new StrConstantType();
 

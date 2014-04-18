@@ -198,7 +198,7 @@ class CFGVisitor : public ASTVisitor {
 
 
 
-        std::string nodeName(AST_expr* node) {
+        std::string nodeName(AST* node) {
             char buf[40];
             snprintf(buf, 40, "#%p", node);
             return std::string(buf);
@@ -670,7 +670,7 @@ class CFGVisitor : public ASTVisitor {
             AST_Assign* remapped = new AST_Assign();
             remapped->lineno = node->lineno;
             remapped->col_offset = node->col_offset;
-            remapped->value = remapExpr(node->value);
+            remapped->value = remapExpr(node->value, false);
             // TODO bad that it's reusing the AST nodes?
             remapped->targets = node->targets;
             push_back(remapped);
@@ -678,14 +678,79 @@ class CFGVisitor : public ASTVisitor {
         }
 
         virtual bool visit_augassign(AST_AugAssign* node) {
-            AST_AugAssign* remapped = new AST_AugAssign();
-            remapped->lineno = node->lineno;
-            remapped->col_offset = node->col_offset;
-            remapped->value = remapExpr(node->value);
+            // augassign is pretty tricky; "x" += "y" mostly textually maps to
+            // "x" = "x" =+ "y" (using "=+" to represent an augbinop)
+            // except that "x" only gets evaluated once.  So it's something like
+            // "target", val = eval("x")
+            // "target" = val =+ "y"
+            // where "target" is handled specially, because it can't just be a name;
+            // it has to be a name-only version of the target type (ex subscript, attribute).
+            // So for "f().x += g()", it has to translate to
+            // "c = f(); y = c.x; z = g(); c.x = y =+ z"
+            //
+            // Even if the target is a simple name, it can be complicated, because the
+            // value can change the name.  For "x += f()", have to translate to
+            // "y = x; z = f(); x = y =+ z"
+
+            AST_expr* remapped_target;
+            AST_expr* remapped_lhs;
+
             // TODO bad that it's reusing the AST nodes?
-            remapped->target = node->target;
-            remapped->op_type = node->op_type;
-            push_back(remapped);
+            switch (node->target->type) {
+                case AST_TYPE::Name: {
+                    AST_Name* n = static_cast<AST_Name*>(node->target);
+                    assert(n->ctx_type == AST_TYPE::Store);
+                    push_back(makeAssign(nodeName(node), makeName(n->id, AST_TYPE::Load)));
+                    remapped_target = n;
+                    remapped_lhs = makeName(nodeName(node), AST_TYPE::Load);
+                    break;
+                }
+                case AST_TYPE::Subscript: {
+                    AST_Subscript *s = static_cast<AST_Subscript*>(node->target);
+                    assert(s->ctx_type == AST_TYPE::Store);
+
+                    AST_Subscript *s_target = new AST_Subscript();
+                    s_target->value = remapExpr(s->value);
+                    s_target->slice = remapExpr(s->slice);
+                    s_target->ctx_type = AST_TYPE::Store;
+                    remapped_target = s_target;
+
+                    AST_Subscript *s_lhs = new AST_Subscript();
+                    s_lhs->value = s_target->value;
+                    s_lhs->slice = s_target->slice;
+                    s_lhs->ctx_type = AST_TYPE::Load;
+                    remapped_lhs = remapExpr(s_lhs);
+
+                    break;
+                }
+                case AST_TYPE::Attribute: {
+                    AST_Attribute *a = static_cast<AST_Attribute*>(node->target);
+                    assert(a->ctx_type == AST_TYPE::Store);
+
+                    AST_Attribute *a_target = new AST_Attribute();
+                    a_target->value = remapExpr(a->value);
+                    a_target->attr = a->attr;
+                    a_target->ctx_type = AST_TYPE::Store;
+                    remapped_target = a_target;
+
+                    AST_Attribute *a_lhs = new AST_Attribute();
+                    a_lhs->value = a_target->value;
+                    a_lhs->attr = a->attr;
+                    a_lhs->ctx_type = AST_TYPE::Load;
+                    remapped_lhs = remapExpr(a_lhs);
+
+                    break;
+                }
+                default:
+                    RELEASE_ASSERT(0, "%d", node->target->type);
+            }
+
+            AST_AugBinOp* binop = new AST_AugBinOp();
+            binop->op_type = node->op_type;
+            binop->left = remapped_lhs;
+            binop->right = remapExpr(node->value);
+            AST_stmt* assign = makeAssign(remapped_target, binop);
+            push_back(assign);
             return true;
         }
 

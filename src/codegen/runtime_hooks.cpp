@@ -151,7 +151,7 @@ void initGlobalFuncs(GlobalState &g) {
     GET(getGlobal);
     GET(binop);
     GET(compare);
-    GET(augassign);
+    GET(augbinop);
     GET(nonzero);
     GET(print);
     GET(unboxedLen);

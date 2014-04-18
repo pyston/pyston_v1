@@ -140,7 +140,7 @@ PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction *parent_cf) {
 }
 
 PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 4, 160, parent_cf, Binexp);
+    return PatchpointSetupInfo::initialize(true, 4, 196, parent_cf, Binexp);
 }
 
 PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction *parent_cf) {

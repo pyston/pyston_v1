@@ -62,7 +62,7 @@ void force() {
     FORCE(nonzero);
     FORCE(binop);
     FORCE(compare);
-    FORCE(augassign);
+    FORCE(augbinop);
     FORCE(unboxedLen);
     FORCE(getitem);
     FORCE(getclsattr);

@@ -1661,7 +1661,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     return rtn;
 }
 
-extern "C" Box* augassign(Box* lhs, Box* rhs, int op_type) {
+extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     static StatCounter slowpath_binop("slowpath_binop");
     slowpath_binop.log();
     //static StatCounter nopatch_binop("nopatch_binop");

@@ -158,7 +158,6 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
         virtual void* visit_attribute(AST_Attribute *node) {
             CompilerType *t = getType(node->value);
-            assert(node->ctx_type == AST_TYPE::Load);
             CompilerType *rtn = t->getattrType(&node->attr, false);
 
             //if (speculation != TypeAnalysis::NONE && (node->attr == "x" || node->attr == "y" || node->attr == "z")) {
@@ -184,6 +183,31 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             return rtn;
         }
 
+        virtual void* visit_augbinop(AST_AugBinOp *node) {
+            CompilerType *left = getType(node->left);
+            CompilerType *right = getType(node->right);
+
+            // TODO this isn't the exact behavior
+            std::string name = getOpName(node->op_type);
+            name = "__i" + name.substr(2);
+            CompilerType *attr_type = left->getattrType(&name, true);
+
+            if (attr_type == UNDEF)
+                attr_type = UNKNOWN;
+
+            std::vector<CompilerType*> arg_types;
+            arg_types.push_back(right);
+            CompilerType *rtn = attr_type->callType(arg_types);
+
+            if (left == right && (left == INT || left == FLOAT)) {
+                ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into", "%s %s %s -> %s", left->debugName().c_str(), name.c_str(), right->debugName().c_str(), rtn->debugName().c_str());
+            }
+
+            ASSERT(rtn != UNDEF, "need to implement the actual semantics here for %s.%s", left->debugName().c_str(), name.c_str());
+
+            return rtn;
+        }
+
         virtual void* visit_binop(AST_BinOp *node) {
             CompilerType *left = getType(node->left);
             CompilerType *right = getType(node->right);
@@ -192,13 +216,18 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             std::string name = getOpName(node->op_type);
             CompilerType *attr_type = left->getattrType(&name, true);
 
+            if (attr_type == UNDEF)
+                attr_type = UNKNOWN;
+
             std::vector<CompilerType*> arg_types;
             arg_types.push_back(right);
             CompilerType *rtn = attr_type->callType(arg_types);
 
             if (left == right && (left == INT || left == FLOAT)) {
-                ASSERT((rtn == left || rtn == UNDEF) && "not strictly required but probably something worth looking into", "%s %s", name.c_str(), rtn->debugName().c_str());
+                ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into", "%s %s %s -> %s", left->debugName().c_str(), name.c_str(), right->debugName().c_str(), rtn->debugName().c_str());
             }
+
+            ASSERT(rtn != UNDEF, "need to implement the actual semantics here for %s.%s", left->debugName().c_str(), name.c_str());
 
             return rtn;
         }
@@ -254,6 +283,10 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             }
             std::string name = getOpName(node->ops[0]);
             CompilerType *attr_type = left->getattrType(&name, true);
+
+            if (attr_type == UNDEF)
+                attr_type = UNKNOWN;
+
             std::vector<CompilerType*> arg_types;
             arg_types.push_back(right);
             return attr_type->callType(arg_types);
@@ -297,10 +330,10 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
             CompilerType* &t = sym_table[node->id];
             if (t == NULL) {
-                if (VERBOSITY() >= 2) {
-                    printf("%s is undefined!\n", node->id.c_str());
-                    raise(SIGTRAP);
-                }
+                //if (VERBOSITY() >= 2) {
+                    //printf("%s is undefined!\n", node->id.c_str());
+                    //raise(SIGTRAP);
+                //}
                 t = UNDEF;
             }
             return t;
@@ -360,31 +393,6 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             for (int i = 0; i < node->targets.size(); i++) {
                 _doSet(node->targets[i], t);
             }
-        }
-
-        virtual void visit_augassign(AST_AugAssign* node) {
-            CompilerType *t = getType(node->target);
-            CompilerType *v = getType(node->value);
-
-            // TODO this isn't the right behavior
-            std::string name = getOpName(node->op_type);
-            name = "__i" + name.substr(2);
-            CompilerType *attr_type = t->getattrType(&name, true);
-
-            ASSERT(attr_type != UNDEF, "need to implement the actual semantics here");
-
-            std::vector<CompilerType*> arg_types;
-            arg_types.push_back(v);
-            CompilerType *rtn = attr_type->callType(arg_types);
-
-            if (VERBOSITY() >= 2) printf("%s aug= %s -> %s\n", t->debugName().c_str(), v->debugName().c_str(), rtn->debugName().c_str());
-
-            if (t == INT && v == INT)
-                assert(rtn == INT);
-            if (t == FLOAT && v == FLOAT)
-                assert(rtn == FLOAT);
-
-            _doSet(node->target, rtn);
         }
 
         virtual void visit_branch(AST_Branch* node) {
@@ -483,8 +491,13 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 return true;
             }
 
-            if (lhs == UNDEF || rhs == UNDEF)
+            if (lhs == UNDEF)
                 return false;
+
+            if (rhs == UNDEF) {
+                rhs = lhs;
+                return true;
+            }
 
             if (lhs == rhs)
                 return false;

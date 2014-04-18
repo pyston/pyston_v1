@@ -72,23 +72,6 @@ class LivenessBBVisitor : public NoopASTVisitor {
             }
             return true;
         }
-
-        bool visit_augassign(AST_AugAssign* node) {
-            AST* target = node->target;
-            switch(target->type) {
-                case AST_TYPE::Name: {
-                    AST_Name* n = static_cast<AST_Name*>(target);
-                    _doLoad(n->id);
-                    _doStore(n->id);
-                    break;
-                }
-                default:
-                    RELEASE_ASSERT(0, "%d", target->type);
-            }
-
-            node->value->accept(this);
-            return true;
-        }
 };
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string &name, CFGBlock *block) {
@@ -224,11 +207,6 @@ class DefinednessVisitor : public ASTVisitor {
             for (int i = 0; i < node->targets.size(); i++) {
                 _doSet(node->targets[i]);
             }
-            return true;
-        }
-
-        virtual bool visit_augassign(AST_AugAssign *node) {
-            _doSet(node->target);
             return true;
         }
 

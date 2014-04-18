@@ -217,6 +217,18 @@ void AST_AugAssign::accept_stmt(StmtVisitor *v) {
     v->visit_augassign(this);
 }
 
+void AST_AugBinOp::accept(ASTVisitor *v) {
+    bool skip = v->visit_augbinop(this);
+    if (skip) return;
+
+    left->accept(v);
+    right->accept(v);
+}
+
+void* AST_AugBinOp::accept_expr(ExprVisitor *v) {
+    return v->visit_augbinop(this);
+}
+
 void AST_Attribute::accept(ASTVisitor *v) {
     bool skip = v->visit_attribute(this);
     if (skip) return;
@@ -726,6 +738,14 @@ bool PrintVisitor::visit_augassign(AST_AugAssign *node) {
     return true;
 }
 
+bool PrintVisitor::visit_augbinop(AST_AugBinOp *node) {
+    node->left->accept(this);
+    printf("=");
+    printOp(node->op_type);
+    node->right->accept(this);
+    return true;
+}
+
 bool PrintVisitor::visit_attribute(AST_Attribute *node) {
     node->value->accept(this);
     putchar('.');
@@ -996,6 +1016,7 @@ bool PrintVisitor::visit_module(AST_Module *node) {
 
 bool PrintVisitor::visit_name(AST_Name *node) {
     printf("%s", node->id.c_str());
+    //printf("%s(%d)", node->id.c_str(), node->ctx_type);
     return false;
 }
 
@@ -1179,6 +1200,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_arguments(AST_arguments *node) { output->push_back(node); return false; }
         virtual bool visit_assign(AST_Assign *node) { output->push_back(node); return false; }
         virtual bool visit_augassign(AST_AugAssign *node) { output->push_back(node); return false; }
+        virtual bool visit_augbinop(AST_AugBinOp *node) { output->push_back(node); return false; }
         virtual bool visit_attribute(AST_Attribute *node) { output->push_back(node); return false; }
         virtual bool visit_binop(AST_BinOp *node) { output->push_back(node); return false; }
         virtual bool visit_boolop(AST_BoolOp *node) { output->push_back(node); return false; }
