@@ -157,7 +157,6 @@ std::string getReverseOpName(int op_type) {
         return getOpName(AST_TYPE::LtE);
     if (op_type == AST_TYPE::GtE)
         return getOpName(AST_TYPE::Lt);
-    // TODO Check that this is really correct.
     if (op_type == AST_TYPE::NotEq)
         return getOpName(AST_TYPE::NotEq);
     if (op_type == AST_TYPE::Eq)
