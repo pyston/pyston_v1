@@ -71,14 +71,18 @@ TODO would be nice to install this locally like the rest of the dependencies
 
 ### valgrind
 
-valgrind is close to being an optional dependency, but since Pyston contains a custom memory allocator, it has some basic (and mostly-broken) valgrind hooks to let it know what memory is safe to access or not.  TODO it'd be nice to be able to turn that off with a Makefile flag since it's not useful for most people.
-
-You may be able to install valgrind from your system package manager (`apt-get install valgrind`), but it is likely to be an old enough version that it doesn't support some newer instructions and may crash when running.  The safest thing to do is to do a full installation from source:
+Pyston currently has a build-time dependency on valgrind headers, for adding hooks to its custom memory allocator.  (TODO add a flag to enable this since it's normally not used.)  To satisfy this, do:
 
 ```
 cd ~/pyston_deps
 wget http://valgrind.org/downloads/valgrind-3.9.0.tar.bz2
 tar xvf valgrind-3.9.0.tar.bz2
+```
+
+If you'd like to run valgrind, we recommend building this 3.9.0 release, since some older versions (such as what are in the Ubuntu 12.04 apt repositories) aren't new enough.  To finish installing, assuming you ran the above steps:
+
+```
+cd ~/pyston_deps
 mkdir valgrind-3.9.0-install
 cd valgrind-3.9.0
 ./configure --prefix=$HOME/pyston_deps/valgrind-3.9.0-install
