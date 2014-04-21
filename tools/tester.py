@@ -1,8 +1,18 @@
-#!/usr/bin/env python
+# Copyright (c) 2014 Dropbox, Inc.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#    http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-#
-# This file is distributed under the MIT License; see LICENSE for details.
-#
+#!/usr/bin/env python
 
 import cPickle
 import datetime
@@ -224,11 +234,6 @@ def verify_include(_, dir, files):
     for bn in files:
         fn = os.path.join(dir, bn)
 
-        if bn.endswith(".h") or bn.endswith(".cpp"):
-            s = open(fn).read(1024)
-            assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
-            assert "Apache License, Version 2.0" in s, fn
-
         if not bn.endswith(".h"):
             continue
 
@@ -242,12 +247,23 @@ def verify_include(_, dir, files):
         gotten_guard = l.split()[1]
         assert gotten_guard == expected_guard, (fn, gotten_guard, expected_guard)
 
+def verify_license(_, dir, files):
+    for bn in files:
+        fn = os.path.join(dir, bn)
+
+        if bn.endswith(".h") or bn.endswith(".cpp"):
+            s = open(fn).read(1024)
+            assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
+            assert "Apache License, Version 2.0" in s, fn
+
 def fileSize(fn):
     return os.stat(fn).st_size
     # return len(list(open(fn)))
 
 if __name__ == "__main__":
     os.path.walk('.', verify_include, None)
+    os.path.walk('.', verify_license, None)
+    os.path.walk('../tools', verify_license, None)
 
     run_memcheck = False
     start = 1
