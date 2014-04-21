@@ -1214,6 +1214,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_expr(AST_Expr *node) { output->push_back(node); return false; }
         virtual bool visit_for(AST_For *node) { output->push_back(node); return !expand_scopes; }
         virtual bool visit_functiondef(AST_FunctionDef *node) { output->push_back(node); return !expand_scopes; }
+        virtual bool visit_global(AST_Global *node) { output->push_back(node); return false; }
         virtual bool visit_if(AST_If *node) { output->push_back(node); return false; }
         virtual bool visit_import(AST_Import *node) { output->push_back(node); return false; }
         virtual bool visit_index(AST_Index *node) { output->push_back(node); return false; }
@@ -1239,22 +1240,18 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_clsattribute(AST_ClsAttribute *node) { output->push_back(node); return false; }
 };
 
-std::vector<AST*>* flatten(std::vector<AST_stmt*> &roots, bool expand_scopes) {
-    std::vector<AST*> *rtn = new std::vector<AST*>();
-    FlattenVisitor visitor(rtn, expand_scopes);
+void flatten(const std::vector<AST_stmt*> &roots, std::vector<AST*> &output, bool expand_scopes) {
+    FlattenVisitor visitor(&output, expand_scopes);
 
     for (int i = 0; i < roots.size(); i++) {
         roots[i]->accept(&visitor);
     }
-    return rtn;
 }
 
-std::vector<AST*>* flatten(AST_expr* root, bool expand_scopes) {
-    std::vector<AST*> *rtn = new std::vector<AST*>();
-    FlattenVisitor visitor(rtn, expand_scopes);
+void flatten(AST_expr* root, std::vector<AST*> &output, bool expand_scopes) {
+    FlattenVisitor visitor(&output, expand_scopes);
 
     root->accept(&visitor);
-    return rtn;
 }
 
 }

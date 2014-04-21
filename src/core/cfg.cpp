@@ -977,16 +977,6 @@ class CFGVisitor : public ASTVisitor {
 
             AST_expr *hasnext_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "__hasnext__", true);
             AST_expr *next_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "next", true);
-//#define SAVE_ATTRS
-#ifdef SAVE_ATTRS
-            char hasnextname_buf[80];
-            snprintf(hasnextname_buf, 80, "#hasnext_%p", node);
-            AST_stmt *hasnext_assign = makeAssign(hasnextname_buf, hasnext_attr);
-            push_back(hasnext_assign);
-            char nextname_buf[80];
-            snprintf(nextname_buf, 80, "#next_%p", node);
-            push_back(makeAssign(nextname_buf, next_attr));
-#endif
 
             CFGBlock *test_block = cfg->addBlock();
             AST_Jump* jump_to_test = makeJump();
@@ -995,11 +985,7 @@ class CFGVisitor : public ASTVisitor {
             curblock->connectTo(test_block);
             curblock = test_block;
 
-#ifdef SAVE_ATTRS
-            AST_expr *test_call = makeCall(makeName(hasnextname_buf, AST_TYPE::Load));
-#else
             AST_expr *test_call = makeCall(hasnext_attr);
-#endif
             AST_Branch *test_br = makeBranch(test_call);
             push_back(test_br);
 
@@ -1031,11 +1017,7 @@ class CFGVisitor : public ASTVisitor {
             pushLoop(test_block, end_block);
 
             curblock = loop_block;
-#ifdef SAVE_ATTRS
-            push_back(makeAssign(node->target, makeCall(makeName(nextname_buf, AST_TYPE::Load))));
-#else
             push_back(makeAssign(node->target, makeCall(next_attr)));
-#endif
 
             for (int i = 0; i < node->body.size(); i++) {
                 node->body[i]->accept(this);
@@ -1043,11 +1025,7 @@ class CFGVisitor : public ASTVisitor {
             popLoop();
 
             if (curblock) {
-#ifdef SAVE_ATTRS
-                AST_expr *end_call = makeCall(makeName(hasnextname_buf, AST_TYPE::Load));
-#else
                 AST_expr *end_call = makeCall(hasnext_attr);
-#endif
                 AST_Branch *end_br = makeBranch(end_call);
                 push_back(end_br);
 
@@ -1246,6 +1224,7 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
 
     //rtn->print();
 
+#ifndef NDEBUG
     ////
     // Check some properties expected by later stages:
 
@@ -1288,6 +1267,32 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         // this can be worked around but it's easiest just to ensure this here.
         assert(rtn->blocks[i]->predecessors[0]->idx < i);
     }
+
+    /*
+    // I keep on going back and forth about whether or not it's ok to reuse AST nodes.
+    // On the one hand, it's nice to say that an AST* pointer uniquely identifies a spot
+    // in the computation, but then again the sharing can actually be nice because
+    // it indicates that there are certain similarities between the points, and things such
+    // as type recorders will end up being shared.
+    std::vector<AST*> all_ast_nodes;
+    for (CFGBlock* block : rtn->blocks) {
+        flatten(block->body, all_ast_nodes, false);
+    }
+
+    std::unordered_set<AST*> seen_ast_nodes;
+    for (AST* n : all_ast_nodes) {
+        if (seen_ast_nodes.count(n)) {
+            rtn->print();
+
+            printf("This node appears multiple times in the tree:\n");
+            print_ast(n);
+            printf("\n");
+            assert(0);
+        }
+        seen_ast_nodes.insert(n);
+    }
+    */
+#endif
 
     return rtn;
 }

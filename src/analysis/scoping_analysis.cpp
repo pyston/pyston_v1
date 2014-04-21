@@ -335,16 +335,16 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
 #ifndef NDEBUG
-    std::vector<AST*>* flattened = flatten(parent_module->body, false);
+    std::vector<AST*> flattened;
+    flatten(parent_module->body, flattened, false);
     bool found = 0;
-    for (int i = 0; i < flattened->size(); i++) {
-        if ((*flattened)[i] == node) {
+    for (AST* n : flattened) {
+        if (n == node) {
             found = true;
             break;
         }
     }
     assert(found);
-    delete flattened;
 #endif
 
     NameUsageMap usages;

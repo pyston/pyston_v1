@@ -188,16 +188,8 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
     private:
-#ifndef NDEBUG
-        std::unordered_set<AST*> gotten_op_infos;
-#endif
         OpInfo getOpInfoForNode(AST* ast) {
             assert(ast);
-
-#ifndef NDEBUG
-            assert(gotten_op_infos.count(ast) == 0);
-            gotten_op_infos.insert(ast);
-#endif
 
             EffortLevel::EffortLevel effort = irstate->getEffortLevel();
             bool record_types = (effort != EffortLevel::INTERPRETED && effort != EffortLevel::MAXIMAL);

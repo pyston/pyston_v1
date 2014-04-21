@@ -842,20 +842,17 @@ class PrintVisitor : public ASTVisitor {
 // Given an AST node, return a vector of the node plus all its descendents.
 // This is useful for analyses that care more about the constituent nodes than the
 // exact tree structure; ex, finding all "global" directives.
-std::vector<AST*>* flatten(std::vector<AST_stmt*> &roots, bool expand_scopes);
-std::vector<AST*>* flatten(AST_expr *root, bool expand_scopes);
+void flatten(const std::vector<AST_stmt*> &roots, std::vector<AST*> &output, bool expand_scopes);
+void flatten(AST_expr *root, std::vector<AST*> &output, bool expand_scopes);
 // Similar to the flatten() function, but filters for a specific type of ast nodes:
 template <class T, class R>
-std::vector<T*>* findNodes(const R &roots, bool expand_scopes) {
-    std::vector<T*> *rtn = new std::vector<T*>();
-    std::vector<AST*> *flattened = flatten(roots, expand_scopes);
-    for (int i = 0; i < flattened->size(); i++) {
-        AST* n = (*flattened)[i];
+void findNodes(const R &roots, std::vector<T*> &output, bool expand_scopes) {
+    std::vector<AST*> flattened;
+    flatten(roots, flattened, expand_scopes);
+    for (AST* n : flattened) {
         if (n->type == T::TYPE)
-            rtn->push_back(reinterpret_cast<T*>(n));
+            output.push_back(reinterpret_cast<T*>(n));
     }
-    delete flattened;
-    return rtn;
 }
 
 };
