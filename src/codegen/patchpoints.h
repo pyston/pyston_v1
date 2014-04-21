@@ -22,6 +22,8 @@
 
 namespace pyston {
 
+class TypeRecorder;
+
 namespace patchpoints {
 
 enum PatchpointType {
@@ -42,8 +44,8 @@ class CompiledFunction;
 
 class PatchpointSetupInfo {
     private:
-        PatchpointSetupInfo(int64_t pp_id, patchpoints::PatchpointType type, int num_slots, int slot_size, CompiledFunction* parent_cf, bool has_return_value) :
-            pp_id(pp_id), type(type), num_slots(num_slots), slot_size(slot_size), has_return_value(has_return_value), parent_cf(parent_cf) {
+        PatchpointSetupInfo(int64_t pp_id, patchpoints::PatchpointType type, int num_slots, int slot_size, CompiledFunction* parent_cf, bool has_return_value, TypeRecorder *type_recorder) :
+            pp_id(pp_id), type(type), num_slots(num_slots), slot_size(slot_size), has_return_value(has_return_value), parent_cf(parent_cf), type_recorder(type_recorder) {
         }
 
         const int64_t pp_id;
@@ -53,7 +55,7 @@ class PatchpointSetupInfo {
         const int num_slots, slot_size;
         const bool has_return_value;
         CompiledFunction * const parent_cf;
-        void* metadata;
+        TypeRecorder *const type_recorder;
 
         int totalSize() const;
         int64_t getPatchpointId() const;
@@ -70,7 +72,7 @@ class PatchpointSetupInfo {
             return llvm::CallingConv::C;
         }
 
-        static PatchpointSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, CompiledFunction* parent_cf, patchpoints::PatchpointType type);
+        static PatchpointSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, CompiledFunction* parent_cf, patchpoints::PatchpointType type, TypeRecorder *type_recorder);
 };
 
 struct StackMap;
@@ -79,15 +81,15 @@ namespace patchpoints {
 
 void processStackmap(StackMap* stackmap);
 
-PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction* parent_cf, bool has_return_value, int size);
-PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, int num_args);
-PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf);
-PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction* parent_cf);
-PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf);
-PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction* parent_cf);
-PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf);
-PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction* parent_cf);
-PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction* parent_cf);
+PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder, bool has_return_value, int size);
+PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder, int num_args);
+PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
 
 }
 

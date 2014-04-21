@@ -18,17 +18,13 @@
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/MemoryBuiltins.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/PostDominators.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/InstIterator.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include "llvm/Analysis/Passes.h"
-#include "llvm/Analysis/MemoryBuiltins.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "core/common.h"
@@ -50,7 +46,7 @@ EscapeAnalysis::~EscapeAnalysis() {
 
 void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage &info) const {
     info.setPreservesCFG();
-    info.addRequiredTransitive<DataLayout>();
+    info.addRequiredTransitive<DataLayoutPass>();
 }
 
 bool EscapeAnalysis::runOnFunction(Function &F) {
@@ -141,7 +137,7 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
 
 
 
-                    use_it->dump();
+                    (*use_it)->dump();
                     RELEASE_ASSERT(0, "");
                 }
             }

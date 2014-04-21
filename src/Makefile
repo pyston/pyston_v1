@@ -130,6 +130,7 @@ COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-1.1-install/include -Wno-extern-c-com
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
+EXTRA_CXXFLAGS ?=
 CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
 CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
 CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
@@ -265,6 +266,13 @@ run_unittests:: run_$1_unittests
 )
 endef
 
+override GDB_CMDS ?=
+override GDB_CMDS := --ex "set confirm off" --ex run --ex "bt 20" $(GDB_CMDS)
+BR ?=
+ARGS ?=
+ifneq ($(BR),)
+	override GDB_CMDS := --ex "break $(BR)" $(GDB_CMDS)
+endif
 $(call add_unittest,gc)
 $(call add_unittest,analysis)
 
@@ -330,6 +338,7 @@ Makefile.local:
 # - should rebuild the pyston targets *if and only if* one of their dependencies actually changes in the rebuild
 # -- make should report them as "up to date"
 
+LLVM_CONFIGURATION := $(LLVM_BUILD)/Makefile.config
 # First, specify when we need to rebuild the different targets:
 $(LLVM_BUILD)/built_quick: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(MAKE) llvm_quick
@@ -373,13 +382,12 @@ NONFIRST_LLVM_BUILDS := $(filter-out $(FIRST_LLVM_BUILD),$(LLVM_BUILDS))
 llvm: llvm_configs $(LLVM_BUILDS:%=llvm_%)
 llvm_configs: $(LLVM_BUILDS:%=llvm/%/tools/llvm-config)
 # Use the configure-created Makefile as evidence that llvm has been configured:
-LLVM_CONFIGURATION := $(LLVM_BUILD)/Makefile.config
 .PHONY: llvm_configure
 llvm_configure:
 	rm -f $(LLVM_BUILD)/Makefile.config
 	$(MAKE) $(LLVM_CONFIGURATION)
 
-$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure
+$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure | $(LLVM_SRC)/_patched
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
 	CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
@@ -430,8 +438,12 @@ llvm_install: llvm_release
 	sudo $(MAKE) -C $(LLVM_SRC)/tools ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install
 
 # Clear OPTIONAL_DIRS and OPTIONAL_PARALLEL_DIRS to make sure that clang doesn't get built+tested
-llvm_test: llvm_quick
+llvm_test: llvm_test_quick
+	$(MAKE) llvm_test_release
+llvm_test_quick: llvm_test_quick
 	$(MAKE) -C $(LLVM_BUILD) OPTIONAL_DIRS= OPTIONAL_PARALLEL_DIRS= ENABLE_OPTIMIZED=1 check
+llvm_test_release: llvm_release
+	$(MAKE) -C $(LLVM_BUILD) OPTIONAL_DIRS= OPTIONAL_PARALLEL_DIRS= ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 check
 llvm_test_all: llvm_release
 	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 check-all
 
@@ -646,10 +658,6 @@ run_release_%: %.py pyston $(RUN_DEPS)
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./pyston $(ARGS) $<'
 $(call make_search,run_release_%)
 
-override GDB_CMDS := --ex "set confirm off" --ex run --ex "bt 20" $(GDB_CMDS)
-ifneq ($(BR),)
-	override GDB_CMDS := --ex "break $(BR)" $(GDB_CMDS)
-endif
 dbg_release_%: %.py pyston $(RUN_DEPS)
 	$(GDB) $(GDB_CMDS) --args ./pyston $(ARGS) $<
 $(call make_search,dbg_release_%)

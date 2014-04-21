@@ -8,6 +8,7 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
@@ -15,7 +16,6 @@
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/InstIterator.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -138,8 +138,7 @@ int main(int argc, char **argv) {
 
     SMDiagnostic Err;
 
-    OwningPtr<Module> M;
-    M.reset(ParseIRFile(InputFilename, Err, Context));
+    std::unique_ptr<Module> M(ParseIRFile(InputFilename, Err, Context));
 
     if (M.get() == 0) {
         Err.print(argv[0], errs());

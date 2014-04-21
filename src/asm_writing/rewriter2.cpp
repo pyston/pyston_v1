@@ -88,6 +88,9 @@ bool Location::isClobberedByCall() const {
     if (type == Scratch)
         return false;
 
+    if (type == Constant)
+        return false;
+
     RELEASE_ASSERT(0, "%d", type);
 }
 
@@ -104,6 +107,11 @@ void Location::dump() const {
 
     if (type == Scratch) {
         printf("scratch(%d)\n", stack_offset);
+        return;
+    }
+
+    if (type == Constant) {
+        printf("imm(%d)\n", constant_val);
         return;
     }
 
@@ -205,6 +213,12 @@ RewriterVarUsage2& RewriterVarUsage2::operator=(RewriterVarUsage2 &&usage) {
     usage.done_using = true;
 
     return *this;
+}
+
+void RewriterVar2::dump() {
+    printf("RewriterVar2 at %p: %d uses.  %ld locations:\n", this, num_uses, locations.size());
+    for (Location l : locations)
+        l.dump();
 }
 
 assembler::Immediate RewriterVar2::tryGetAsImmediate(bool *is_immediate) {
@@ -436,22 +450,54 @@ RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, st
     for (int i = 0; i < args.size(); i++) {
         Location l(Location::forArg(i));
         RewriterVar2 *var = args[i].var;
+
+        //printf("%d ", i);
+        //var->dump();
         if (!var->isInLocation(l)) {
             assembler::Register r = l.asRegister();
 
-            assembler::Register r2 = allocReg(l);
-            assert(r == r2);
-            assert(vars_by_location.count(l) == 0);
+            {
+                // this forces the register allocator to spill this register:
+                assembler::Register r2 = allocReg(l);
+                assert(r == r2);
+                assert(vars_by_location.count(l) == 0);
+            }
 
+            // FIXME: get rid of tryGetAsImmediate
+            // instead do that work here; ex this could be a stack location
             bool is_immediate;
             assembler::Immediate imm = var->tryGetAsImmediate(&is_immediate);
 
-            assert(is_immediate);
-            assembler->mov(imm, r);
-            addLocationToVar(var, l);
+            if (is_immediate) {
+                assembler->mov(imm, r);
+                addLocationToVar(var, l);
+            } else {
+                assembler::Register r2 = var->getInReg(l);
+                assert(var->locations.count(r2));
+                assert(r2 == r);
+            }
         }
 
         assert(var->isInLocation(Location::forArg(i)));
+    }
+
+#ifndef NDEBUG
+    for (int i = 0; i < args.size(); i++) {
+        RewriterVar2 *var = args[i].var;
+        if (!var->isInLocation(Location::forArg(i))) {
+            var->dump();
+        }
+        assert(var->isInLocation(Location::forArg(i)));
+    }
+#endif
+
+    // This is kind of hacky: we release the use of these right now,
+    // and then expect that everything else will not clobber any of the arguments.
+    // Naively moving this below the reg spilling will always spill the arguments;
+    // but sometimes you need to do that if the argument lives past the call.
+    // Hacky, but the right way to do it requires a bit of reworking so that it can
+    // spill but keep its current use.
+    for (int i = 0; i < args.size(); i++) {
         args[i].setDoneUsing();
     }
 
@@ -490,10 +536,12 @@ RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, st
     for (auto p : vars_by_location) {
         Location l = p.first;
         //l.dump();
+        if (l.isClobberedByCall()) {
+            p.second->dump();
+        }
         assert(!l.isClobberedByCall());
     }
 #endif
-
 
     assembler->mov(assembler::Immediate(func_addr), r);
     assembler->callq(r);
@@ -663,6 +711,8 @@ void Rewriter2::addLocationToVar(RewriterVar2 *var, Location l) {
     assert(!var->isInLocation(l));
     assert(vars_by_location.count(l) == 0);
 
+    ASSERT(l.type == Location::Register || l.type == Location::XMMRegister || l.type == Location::Scratch, "%d", l.type);
+
     var->locations.insert(l);
     vars_by_location[l] = var;
 }
@@ -681,6 +731,10 @@ RewriterVarUsage2 Rewriter2::createNewVar(Location dest) {
 
     var = new RewriterVar2(this, dest);
     return var;
+}
+
+TypeRecorder* Rewriter2::getTypeRecorder() {
+    return rewrite->getTypeRecorder();
 }
 
 Rewriter2::Rewriter2(ICSlotRewrite* rewrite, int num_args, const std::vector<int> &live_outs) :

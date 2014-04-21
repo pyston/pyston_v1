@@ -346,9 +346,13 @@ Box* floatNeg(BoxedFloat *self) {
     return boxFloat(-self->d);
 }
 
-Box* floatNonzero(BoxedFloat *self) {
+bool floatNonzeroUnboxed(BoxedFloat *self) {
     assert(self->cls == float_cls);
-    return boxBool(self->d != 0.0);
+    return self->d != 0.0;
+}
+
+Box* floatNonzero(BoxedFloat *self) {
+    return boxBool(floatNonzeroUnboxed(self));
 }
 
 std::string floatFmt(double x, int precision, char code) {
@@ -509,7 +513,10 @@ void setupFloat() {
     float_cls->giveAttr("__new__", new BoxedFunction(__new__));
 
     float_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)floatNeg, NULL, 1, false)));
-    float_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)floatNonzero, NULL, 1, false)));
+    CLFunction *nonzero = boxRTFunction((void*)floatNonzeroUnboxed, BOOL, 1, false);
+    addRTFunction(nonzero, (void*)floatNonzero, UNKNOWN, 1, false);
+    float_cls->giveAttr("__nonzero__", new BoxedFunction(nonzero));
+    //float_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)floatNonzero, NULL, 1, false)));
     float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, NULL, 1, false)));
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, NULL, 1, false)));
     float_cls->freeze();

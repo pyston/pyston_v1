@@ -16,8 +16,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "llvm/DebugInfo.h"
 #include "llvm/DebugInfo/DIContext.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
 

@@ -129,6 +129,10 @@ int ICSlotRewrite::getScratchBytes() {
     return ic->stack_info.scratch_bytes;
 }
 
+TypeRecorder* ICSlotRewrite::getTypeRecorder() {
+    return ic->type_recorder;
+}
+
 assembler::GenericRegister ICSlotRewrite::returnRegister() {
     return ic->return_register;
 }
@@ -153,7 +157,10 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(uint64_t decision_path, const char* debu
         }
     }
 
-    for (int i = 0; i < getNumSlots(); i++) {
+    int num_slots = getNumSlots();
+    for (int _i = 0; _i < num_slots; _i++) {
+        int i = (_i + next_slot_to_try) % num_slots;
+
         SlotInfo &sinfo = slots[i];
         if (sinfo.is_patched && sinfo.decision_path != decision_path) {
             continue;
@@ -162,6 +169,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(uint64_t decision_path, const char* debu
         if (VERBOSITY()) {
             printf("committing %s icentry to in-use slot %d at %p\n", debug_name, i, start_addr);
         }
+        next_slot_to_try++;
 
         sinfo.is_patched = true;
         sinfo.decision_path = decision_path;
@@ -173,7 +181,7 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(uint64_t decision_path, const char* debu
 
 
 
-ICInfo::ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int> &live_outs, assembler::GenericRegister return_register) : stack_info(stack_info), num_slots(num_slots), slot_size(slot_size), calling_conv(calling_conv), live_outs(live_outs.begin(), live_outs.end()), return_register(return_register), start_addr(start_addr), continue_addr(continue_addr) {
+ICInfo::ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int> &live_outs, assembler::GenericRegister return_register, TypeRecorder *type_recorder) : next_slot_to_try(0), stack_info(stack_info), num_slots(num_slots), slot_size(slot_size), calling_conv(calling_conv), live_outs(live_outs.begin(), live_outs.end()), return_register(return_register), type_recorder(type_recorder), start_addr(start_addr), continue_addr(continue_addr) {
     for (int i = 0; i < num_slots; i++) {
         slots.push_back(SlotInfo(this, i));
     }
@@ -234,7 +242,7 @@ void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo* pp, St
         writer->jmp(JumpDestination::fromStart(pp->slot_size * (pp->num_slots - i)));
     }
 
-    ics_by_return_addr[rtn_addr] = new ICInfo(start_addr, end_addr, stack_info, pp->num_slots, pp->slot_size, pp->getCallingConvention(), live_outs, return_register);
+    ics_by_return_addr[rtn_addr] = new ICInfo(start_addr, end_addr, stack_info, pp->num_slots, pp->slot_size, pp->getCallingConvention(), live_outs, return_register, pp->type_recorder);
 }
 
 ICInfo* getICInfo(void* rtn_addr) {

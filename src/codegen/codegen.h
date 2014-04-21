@@ -87,6 +87,7 @@ extern GlobalState g;
 // in runtime_hooks.cpp:
 void initGlobalFuncs(GlobalState &g);
 
+
 }
 
 #endif

@@ -24,6 +24,8 @@
 
 namespace pyston {
 
+class OpInfo;
+
 class CompilerType;
 class IREmitter;
 
@@ -52,11 +54,11 @@ class _ValuedCompilerType : public CompilerType {
             printf("dup not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual ConcreteCompilerType* getConcreteType() {
+        ConcreteCompilerType* getConcreteType() override {
             printf("getConcreteType not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual ConcreteCompilerType* getBoxType() {
+        ConcreteCompilerType* getBoxType() override {
             printf("getBoxType not defined for %s\n", debugName().c_str());
             abort();
         }
@@ -68,7 +70,7 @@ class _ValuedCompilerType : public CompilerType {
             printf("grab not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual bool canConvertTo(ConcreteCompilerType* other_type) {
+        bool canConvertTo(ConcreteCompilerType* other_type) override {
             printf("canConvertTo not defined for %s\n", debugName().c_str());
             abort();
         }
@@ -76,23 +78,23 @@ class _ValuedCompilerType : public CompilerType {
             printf("makeConverted not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter, VAR* value) {
+        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter, const OpInfo& info, VAR* value) {
             printf("nonzero not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerVariable* getattr(IREmitter &emitter, VAR* value, const std::string *attr, bool cls_only) {
+        virtual CompilerVariable* getattr(IREmitter &emitter, const OpInfo& info, VAR* value, const std::string *attr, bool cls_only) {
             printf("getattr not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual void setattr(IREmitter &emitter, VAR* value, const std::string *attr, CompilerVariable *v) {
+        virtual void setattr(IREmitter &emitter, const OpInfo& info, VAR* value, const std::string *attr, CompilerVariable *v) {
             printf("setattr not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerVariable* callattr(IREmitter &emitter, VAR* value, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* callattr(IREmitter &emitter, const OpInfo& info, VAR* value, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
             printf("callattr not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerVariable* call(IREmitter &emitter, VAR* value, const std::vector<CompilerVariable*>& args) {
+        virtual CompilerVariable* call(IREmitter &emitter, const OpInfo& info, VAR* value, const std::vector<CompilerVariable*>& args) {
             printf("call not defined for %s\n", debugName().c_str());
             abort();
         }
@@ -100,11 +102,11 @@ class _ValuedCompilerType : public CompilerType {
             printf("print not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual ConcreteCompilerVariable* len(IREmitter &emitter, VAR* value) {
+        virtual ConcreteCompilerVariable* len(IREmitter &emitter, const OpInfo& info, VAR* value) {
             printf("len not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerVariable* getitem(IREmitter &emitter, VAR* value, CompilerVariable *v) {
+        virtual CompilerVariable* getitem(IREmitter &emitter, const OpInfo& info, VAR* value, CompilerVariable *v) {
             printf("getitem not defined for %s\n", debugName().c_str());
             abort();
         }
@@ -112,15 +114,15 @@ class _ValuedCompilerType : public CompilerType {
             printf("makeClassCheck not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) {
+        CompilerType* getattrType(const std::string *attr, bool cls_only) override {
             printf("getattrType not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual CompilerType* callType(std::vector<CompilerType*> &arg_types) {
+        CompilerType* callType(std::vector<CompilerType*> &arg_types) override {
             printf("callType not defined for %s\n", debugName().c_str());
             abort();
         }
-        virtual BoxedClass* guaranteedClass() {
+        BoxedClass* guaranteedClass() override {
             ASSERT((CompilerType*)getConcreteType() != this, "%s", debugName().c_str());
             return getConcreteType()->guaranteedClass();
         }
@@ -169,14 +171,19 @@ class CompilerVariable {
             vrefs++;
         }
         void decvrefNodrop() {
-            ASSERT(vrefs, "%s", getType()->debugName().c_str());
+            assert(vrefs > 0 && vrefs < (1<<20));
+            // It'd be nice to print out the type of the variable, but this is all happening
+            // after the object got deleted so it's pretty precarious, and the getType()
+            // debugging call will probably segfault:
+            //ASSERT(vrefs, "%s", getType()->debugName().c_str());
             vrefs--;
             if (vrefs == 0) {
                 delete this;
             }
         }
         void decvref(IREmitter &emitter) {
-            ASSERT(vrefs, "%s", getType()->debugName().c_str());
+            assert(vrefs > 0 && vrefs < (1<<20));
+            //ASSERT(vrefs, "%s", getType()->debugName().c_str());
             vrefs--;
             if (vrefs == 0) {
                 if (grabbed)
@@ -204,14 +211,14 @@ class CompilerVariable {
         virtual llvm::Value* makeClassCheck(IREmitter &emitter, BoxedClass* cls) = 0;
         virtual BoxedClass* guaranteedClass() = 0;
 
-        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter) = 0;
-        virtual CompilerVariable* getattr(IREmitter &emitter, const std::string *attr, bool cls_only) = 0;
-        virtual void setattr(IREmitter &emitter, const std::string *attr, CompilerVariable* v) = 0;
-        virtual CompilerVariable* callattr(IREmitter &emitter, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) = 0;
-        virtual CompilerVariable* call(IREmitter &emitter, const std::vector<CompilerVariable*>& args) = 0;
+        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter, const OpInfo& info) = 0;
+        virtual CompilerVariable* getattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool cls_only) = 0;
+        virtual void setattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, CompilerVariable* v) = 0;
+        virtual CompilerVariable* callattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) = 0;
+        virtual CompilerVariable* call(IREmitter &emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args) = 0;
         virtual void print(IREmitter &emitter) = 0;
-        virtual ConcreteCompilerVariable* len(IREmitter &emitter) = 0;
-        virtual CompilerVariable* getitem(IREmitter &emitter, CompilerVariable*) = 0;
+        virtual ConcreteCompilerVariable* len(IREmitter &emitter, const OpInfo& info) = 0;
+        virtual CompilerVariable* getitem(IREmitter &emitter, const OpInfo& info, CompilerVariable*) = 0;
 };
 
 template <class V>
@@ -234,14 +241,14 @@ class ValuedCompilerVariable : public CompilerVariable {
         virtual T* getType() { return type; }
         virtual V getValue() { return value; }
 
-        virtual ConcreteCompilerType* getConcreteType() {
+        ConcreteCompilerType* getConcreteType() override {
             return type->getConcreteType();
         }
-        virtual ConcreteCompilerType* getBoxType() {
+        ConcreteCompilerType* getBoxType() override {
             return type->getBoxType();
         }
 
-        virtual ValuedCompilerVariable<V>* split(IREmitter &emitter) {
+        ValuedCompilerVariable<V>* split(IREmitter &emitter) override {
             ValuedCompilerVariable<V>* rtn;
             if (getVrefs() == 1) {
                 rtn = this;
@@ -252,48 +259,50 @@ class ValuedCompilerVariable : public CompilerVariable {
             rtn->ensureGrabbed(emitter);
             return rtn;
         }
-        virtual CompilerVariable* dup(DupCache &cache) {
-            return type->dup(this, cache);
-            //return new ValuedCompilerVariable<V>(type, value, isGrabbed());
+        CompilerVariable* dup(DupCache &cache) override {
+            CompilerVariable *rtn = type->dup(this, cache);
+
+            ASSERT(rtn->getVrefs() == getVrefs(), "%d %s", rtn->getVrefs(), type->debugName().c_str());
+            return rtn;
         }
 
-        virtual bool canConvertTo(ConcreteCompilerType *other_type) {
+        bool canConvertTo(ConcreteCompilerType *other_type) override {
             return type->canConvertTo(other_type);
         }
-        virtual ConcreteCompilerVariable* makeConverted(IREmitter &emitter, ConcreteCompilerType *other_type) {
+        ConcreteCompilerVariable* makeConverted(IREmitter &emitter, ConcreteCompilerType *other_type) override {
             ConcreteCompilerVariable* rtn = type->makeConverted(emitter, this, other_type);
             ASSERT(rtn->getType() == other_type, "%s", type->debugName().c_str());
             return rtn;
         }
-        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter) {
-            return type->nonzero(emitter, this);
+        ConcreteCompilerVariable* nonzero(IREmitter &emitter, const OpInfo& info) override {
+            return type->nonzero(emitter, info, this);
         }
-        virtual CompilerVariable* getattr(IREmitter &emitter, const std::string *attr, bool cls_only) {
-            return type->getattr(emitter, this, attr, cls_only);
+        virtual CompilerVariable* getattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool cls_only) {
+            return type->getattr(emitter, info, this, attr, cls_only);
         }
-        virtual void setattr(IREmitter &emitter, const std::string *attr, CompilerVariable *v) {
-            type->setattr(emitter, this, attr, v);
+        virtual void setattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, CompilerVariable *v) {
+            type->setattr(emitter, info, this, attr, v);
         }
-        virtual CompilerVariable* callattr(IREmitter &emitter, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
-            return type->callattr(emitter, this, attr, clsonly, args);
+        virtual CompilerVariable* callattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
+            return type->callattr(emitter, info, this, attr, clsonly, args);
         }
-        virtual CompilerVariable* call(IREmitter &emitter, const std::vector<CompilerVariable*>& args) {
-            return type->call(emitter, this, args);
+        CompilerVariable* call(IREmitter &emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args) override {
+            return type->call(emitter, info, this, args);
         }
-        virtual void print(IREmitter &emitter) {
+        void print(IREmitter &emitter) override {
             type->print(emitter, this);
         }
-        virtual ConcreteCompilerVariable* len(IREmitter &emitter) {
-            return type->len(emitter, this);
+        ConcreteCompilerVariable* len(IREmitter &emitter, const OpInfo& info) override {
+            return type->len(emitter, info, this);
         }
-        virtual CompilerVariable* getitem(IREmitter &emitter, CompilerVariable *slice) {
-            return type->getitem(emitter, this, slice);
+        CompilerVariable* getitem(IREmitter &emitter, const OpInfo& info, CompilerVariable *slice) override {
+            return type->getitem(emitter, info, this, slice);
         }
-        virtual llvm::Value* makeClassCheck(IREmitter &emitter, BoxedClass* cls) {
+        llvm::Value* makeClassCheck(IREmitter &emitter, BoxedClass* cls) override {
             return type->makeClassCheck(emitter, this, cls);
         }
 
-        virtual BoxedClass* guaranteedClass() {
+        BoxedClass* guaranteedClass() override {
             return type->guaranteedClass();
         }
 };

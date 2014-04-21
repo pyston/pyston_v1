@@ -22,6 +22,7 @@
 #include "codegen/compvars.h"
 #include "codegen/osrentry.h"
 #include "codegen/patchpoints.h"
+#include "codegen/type_recording.h"
 
 #include "codegen/irgen.h"
 #include "codegen/irgen/irgenerator.h"
@@ -100,12 +101,6 @@ class IREmitterImpl : public IREmitter {
             builder->setEmitter(this);
         }
 
-        Target getTarget() override {
-            if (irstate->getEffortLevel() == EffortLevel::INTERPRETED)
-                return INTERPRETER;
-            return COMPILATION;
-        }
-
         IRBuilder* getBuilder() override {
             return builder;
         }
@@ -123,6 +118,8 @@ class IREmitterImpl : public IREmitter {
         }
 
         llvm::Value* createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*> &args) override {
+            assert(irstate->getEffortLevel() != EffortLevel::INTERPRETED);
+
             std::vector<llvm::Value*> pp_args;
             pp_args.push_back(getConstantInt(pp->getPatchpointId(), g.i64));
             pp_args.push_back(getConstantInt(pp->totalSize(), g.i32));
@@ -191,6 +188,34 @@ class IRGeneratorImpl : public IRGenerator {
         }
 
     private:
+#ifndef NDEBUG
+        std::unordered_set<AST*> gotten_op_infos;
+#endif
+        OpInfo getOpInfoForNode(AST* ast) {
+            assert(ast);
+
+#ifndef NDEBUG
+            assert(gotten_op_infos.count(ast) == 0);
+            gotten_op_infos.insert(ast);
+#endif
+
+            EffortLevel::EffortLevel effort = irstate->getEffortLevel();
+            bool record_types = (effort != EffortLevel::INTERPRETED && effort != EffortLevel::MAXIMAL);
+
+            TypeRecorder *type_recorder;
+            if (record_types) {
+                type_recorder = getTypeRecorderForNode(ast);
+            } else {
+                type_recorder = NULL;
+            }
+
+            return OpInfo(irstate->getEffortLevel(), type_recorder);
+        }
+
+        OpInfo getEmptyOpInfo() {
+            return OpInfo(irstate->getEffortLevel(), NULL);
+        }
+
         void createExprTypeGuard(llvm::Value *check_val, AST_expr* node, CompilerVariable* node_value) {
             assert(check_val->getType() == g.i1);
 
@@ -221,7 +246,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             CompilerVariable *value = evalExpr(node->value);
 
-            CompilerVariable *rtn = value->getattr(emitter, &node->attr, false);
+            CompilerVariable *rtn = value->getattr(emitter, getOpInfoForNode(node), &node->attr, false);
             value->decvref(emitter);
             return rtn;
         }
@@ -230,7 +255,7 @@ class IRGeneratorImpl : public IRGenerator {
             assert(state != PARTIAL);
 
             CompilerVariable *value = evalExpr(node->value);
-            CompilerVariable *rtn = value->getattr(emitter, &node->attr, true);
+            CompilerVariable *rtn = value->getattr(emitter, getOpInfoForNode(node), &node->attr, true);
             value->decvref(emitter);
             return rtn;
         }
@@ -240,7 +265,7 @@ class IRGeneratorImpl : public IRGenerator {
             BinOp,
             Compare,
         };
-        CompilerVariable* _evalBinExp(CompilerVariable *left, CompilerVariable *right, AST_TYPE::AST_TYPE type, BinExpType exp_type) {
+        CompilerVariable* _evalBinExp(AST* node, CompilerVariable *left, CompilerVariable *right, AST_TYPE::AST_TYPE type, BinExpType exp_type) {
             assert(state != PARTIAL);
 
             assert(left);
@@ -420,7 +445,7 @@ class IRGeneratorImpl : public IRGenerator {
             ConcreteCompilerVariable *boxed_right = right->makeConverted(emitter, right->getBoxType());
 
             llvm::Value* rtn;
-            bool do_patchpoint = ENABLE_ICBINEXPS && emitter.getTarget() != IREmitter::INTERPRETER;
+            bool do_patchpoint = ENABLE_ICBINEXPS && (irstate ->getEffortLevel() != EffortLevel::INTERPRETED);
 
             llvm::Value *rt_func;
             void* rt_func_addr;
@@ -436,7 +461,7 @@ class IRGeneratorImpl : public IRGenerator {
             }
 
             if (do_patchpoint) {
-                PatchpointSetupInfo *pp = patchpoints::createBinexpPatchpoint(emitter.currentFunction());
+                PatchpointSetupInfo *pp = patchpoints::createBinexpPatchpoint(emitter.currentFunction(), getOpInfoForNode(node).getTypeRecorder());
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(boxed_left->getValue());
@@ -464,7 +489,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
-            CompilerVariable *rtn = this->_evalBinExp(left, right, node->op_type, BinOp);
+            CompilerVariable *rtn = this->_evalBinExp(node, left, right, node->op_type, BinOp);
             left->decvref(emitter);
             right->decvref(emitter);
             return rtn;
@@ -478,7 +503,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
-            CompilerVariable *rtn = this->_evalBinExp(left, right, node->op_type, AugBinOp);
+            CompilerVariable *rtn = this->_evalBinExp(node, left, right, node->op_type, AugBinOp);
             left->decvref(emitter);
             right->decvref(emitter);
             return rtn;
@@ -495,7 +520,7 @@ class IRGeneratorImpl : public IRGenerator {
             assert(left);
             assert(right);
 
-            CompilerVariable *rtn = _evalBinExp(left, right, node->ops[0], Compare);
+            CompilerVariable *rtn = _evalBinExp(node, left, right, node->ops[0], Compare);
             left->decvref(emitter);
             right->decvref(emitter);
             return rtn;
@@ -536,9 +561,9 @@ class IRGeneratorImpl : public IRGenerator {
 
             CompilerVariable *rtn;
             if (is_callattr) {
-                rtn = func->callattr(emitter, attr, callattr_clsonly, args);
+                rtn = func->callattr(emitter, getOpInfoForNode(node), attr, callattr_clsonly, args);
             } else {
-                rtn = func->call(emitter, args);
+                rtn = func->call(emitter, getOpInfoForNode(node), args);
             }
 
             func->decvref(emitter);
@@ -559,7 +584,7 @@ class IRGeneratorImpl : public IRGenerator {
             ConcreteCompilerVariable *rtn = new ConcreteCompilerVariable(DICT, v, true);
             if (node->keys.size()) {
                 static const std::string setitem_str("__setitem__");
-                CompilerVariable *setitem = rtn->getattr(emitter, &setitem_str, true);
+                CompilerVariable *setitem = rtn->getattr(emitter, getEmptyOpInfo(), &setitem_str, true);
                 for (int i = 0; i < node->keys.size(); i++) {
                     CompilerVariable *key = evalExpr(node->keys[i]);
                     CompilerVariable *value = evalExpr(node->values[i]);
@@ -570,7 +595,7 @@ class IRGeneratorImpl : public IRGenerator {
                     args.push_back(key);
                     args.push_back(value);
                     // TODO could use the internal _listAppend function to avoid incref/decref'ing None
-                    CompilerVariable *rtn = setitem->call(emitter, args);
+                    CompilerVariable *rtn = setitem->call(emitter, getEmptyOpInfo(), args);
                     rtn->decvref(emitter);
 
                     key->decvref(emitter);
@@ -632,10 +657,10 @@ class IRGeneratorImpl : public IRGenerator {
                 if (1) {
                     // Method 1: calls into the runtime getGlobal(), which handles things like falling back to builtins
                     // or raising the correct error message.
-                    bool do_patchpoint = ENABLE_ICGETGLOBALS && emitter.getTarget() != IREmitter::INTERPRETER;
+                    bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate ->getEffortLevel() != EffortLevel::INTERPRETED);
                     bool from_global = irstate->getSourceInfo()->ast->type == AST_TYPE::Module;
                     if (do_patchpoint) {
-                        PatchpointSetupInfo *pp = patchpoints::createGetGlobalPatchpoint(emitter.currentFunction());
+                        PatchpointSetupInfo *pp = patchpoints::createGetGlobalPatchpoint(emitter.currentFunction(), getOpInfoForNode(node).getTypeRecorder());
 
                         std::vector<llvm::Value*> llvm_args;
                         llvm_args.push_back(embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
@@ -653,7 +678,7 @@ class IRGeneratorImpl : public IRGenerator {
                     // Method 2 [testing-only]: (ab)uses existing getattr patchpoints and just calls module.getattr()
                     // This option exists for performance testing because method 1 does not currently use patchpoints.
                     ConcreteCompilerVariable *mod = new ConcreteCompilerVariable(MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-                    CompilerVariable *attr = mod->getattr(emitter, &node->id, false);
+                    CompilerVariable *attr = mod->getattr(emitter, getOpInfoForNode(node), &node->id, false);
                     mod->decvref(emitter);
                     return attr;
                 }
@@ -729,7 +754,7 @@ class IRGeneratorImpl : public IRGenerator {
             CompilerVariable *value = evalExpr(node->value);
             CompilerVariable *slice = evalExpr(node->slice);
 
-            CompilerVariable *rtn = value->getitem(emitter, slice);
+            CompilerVariable *rtn = value->getitem(emitter, getOpInfoForNode(node), slice);
             value->decvref(emitter);
             slice->decvref(emitter);
             return rtn;
@@ -758,7 +783,7 @@ class IRGeneratorImpl : public IRGenerator {
             CompilerVariable* operand = evalExpr(node->operand);
 
             if (node->op_type == AST_TYPE::Not) {
-                ConcreteCompilerVariable *rtn = operand->nonzero(emitter);
+                ConcreteCompilerVariable *rtn = operand->nonzero(emitter, getOpInfoForNode(node));
                 operand->decvref(emitter);
 
                 llvm::Value* v = rtn->getValue();
@@ -892,6 +917,7 @@ class IRGeneratorImpl : public IRGenerator {
                     node->accept(&printer);
                     printf("; is_partial=%d\n", state == PARTIAL);
                 }
+
                 if (state == PARTIAL) {
                     guard->branch->setSuccessor(1, curblock);
                     symbol_table = SymbolTable(guard->st);
@@ -1011,7 +1037,7 @@ class IRGeneratorImpl : public IRGenerator {
             if (irstate->getScopeInfo()->refersToGlobal(name)) {
                 // TODO do something special here so that it knows to only emit a monomorphic inline cache?
                 ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-                module->setattr(emitter, &name, val);
+                module->setattr(emitter, getEmptyOpInfo(), &name, val);
                 module->decvref(emitter);
             } else {
                 CompilerVariable* &prev = symbol_table[name];
@@ -1031,7 +1057,7 @@ class IRGeneratorImpl : public IRGenerator {
         void _doSetattr(AST_Attribute* target, CompilerVariable* val) {
             assert(state != PARTIAL);
             CompilerVariable *t = evalExpr(target->value);
-            t->setattr(emitter, &target->attr, val);
+            t->setattr(emitter, getEmptyOpInfo(), &target->attr, val);
             t->decvref(emitter);
         }
 
@@ -1047,9 +1073,9 @@ class IRGeneratorImpl : public IRGenerator {
 
             ConcreteCompilerVariable *converted_val = val->makeConverted(emitter, val->getBoxType());
 
-            bool do_patchpoint = ENABLE_ICSETITEMS && emitter.getTarget() != IREmitter::INTERPRETER;
+            bool do_patchpoint = ENABLE_ICSETITEMS && (irstate ->getEffortLevel() != EffortLevel::INTERPRETED);
             if (do_patchpoint) {
-                PatchpointSetupInfo *pp = patchpoints::createSetitemPatchpoint(emitter.currentFunction());
+                PatchpointSetupInfo *pp = patchpoints::createSetitemPatchpoint(emitter.currentFunction(), getEmptyOpInfo().getTypeRecorder());
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());
@@ -1070,12 +1096,13 @@ class IRGeneratorImpl : public IRGenerator {
         void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val) {
             assert(state != PARTIAL);
             int ntargets = target->elts.size();
-            ConcreteCompilerVariable *len = val->len(emitter);
+            // TODO do type recording here?
+            ConcreteCompilerVariable *len = val->len(emitter, getEmptyOpInfo());
             emitter.getBuilder()->CreateCall2(g.funcs.checkUnpackingLength,
                     getConstantInt(ntargets, g.i64), len->getValue());
 
             for (int i = 0; i < ntargets; i++) {
-                CompilerVariable *unpacked = val->getitem(emitter, makeInt(i));
+                CompilerVariable *unpacked = val->getitem(emitter, getEmptyOpInfo(), makeInt(i));
                 _doSet(target->elts[i], unpacked);
                 unpacked->decvref(emitter);
             }
@@ -1138,7 +1165,7 @@ class IRGeneratorImpl : public IRGenerator {
                     AST_FunctionDef *fdef = static_cast<AST_FunctionDef*>(node->body[i]);
                     CLFunction *cl = this->_wrapFunction(fdef);
                     CompilerVariable *func = makeFunction(emitter, cl);
-                    cls->setattr(emitter, &fdef->name, func);
+                    cls->setattr(emitter, getEmptyOpInfo(), &fdef->name, func);
                     func->decvref(emitter);
                 } else {
                     RELEASE_ASSERT(node->body[i]->type == AST_TYPE::Pass, "%d", type);
@@ -1261,7 +1288,7 @@ class IRGeneratorImpl : public IRGenerator {
             assert(state != PARTIAL);
             assert(val);
 
-            ConcreteCompilerVariable* nonzero = val->nonzero(emitter);
+            ConcreteCompilerVariable* nonzero = val->nonzero(emitter, getOpInfoForNode(node));
             assert(nonzero->getType() == BOOL);
             val->decvref(emitter);
 

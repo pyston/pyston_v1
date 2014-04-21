@@ -492,7 +492,7 @@ index 2b7bb18..b827cbb 100644
 +; Header
  ; CHECK-NEXT:   .long 0
  ; Num Functions
- ; CHECK-NEXT:   .long 14
+ ; CHECK-NEXT:   .long 15
 -; CHECK-NEXT:   .long _constantargs
 -; CHECK-NEXT:   .long 8
 -; CHECK-NEXT:   .long _osrinline
@@ -521,11 +521,13 @@ index 2b7bb18..b827cbb 100644
 -; CHECK-NEXT:   .long 56
 -; CHECK-NEXT:   .long _longid
 -; CHECK-NEXT:   .long 8
+-; CHECK-NEXT:   .long _clobberScratch
+-; CHECK-NEXT:   .long 56
  ; Num LargeConstants
 -; CHECK-NEXT:   .long   3
 +; CHECK-NEXT:   .long 3
 +; Num Callsites
-+; CHECK-NEXT:   .long 18
++; CHECK-NEXT:   .long 19
 +
 +; Functions and stack size
 +; CHECK-NEXT:   .quad _constantargs
@@ -556,13 +558,15 @@ index 2b7bb18..b827cbb 100644
 +; CHECK-NEXT:   .quad 56
 +; CHECK-NEXT:   .quad _longid
 +; CHECK-NEXT:   .quad 8
++; CHECK-NEXT:   .quad _clobberScratch
++; CHECK-NEXT:   .quad 56
 +
 +; Large Constants
  ; CHECK-NEXT:   .quad   2147483648
  ; CHECK-NEXT:   .quad   4294967295
  ; CHECK-NEXT:   .quad   4294967296
 -; Num Callsites
--; CHECK-NEXT:   .long   18
+-; CHECK-NEXT:   .long   19
  
 +; Callsites
  ; Constant arguments

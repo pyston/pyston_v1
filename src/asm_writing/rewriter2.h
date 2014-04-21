@@ -21,6 +21,8 @@
 
 namespace pyston {
 
+class TypeRecorder;
+
 class ICInfo;
 class ICSlotInfo;
 class ICSlotRewrite;
@@ -41,26 +43,35 @@ struct Location {
 
             AnyReg, // special type for use when specifying a location as a destination
             None,   // special type that represents the lack of a location, ex where a "ret void" gets returned
+            Uninitialized, // special type for an uninitialized (and invalid) location
         };
 
     public:
-        const LocationType type;
+        LocationType type;
 
         union {
             // only valid if type==Register; uses X86 numbering, not dwarf numbering.
             // also valid if type==XMMRegister
-            const int32_t regnum;
+            int32_t regnum;
             // only valid if type==Stack; this is the offset from bottom of the original frame.
             // ie argument #6 will have a stack_offset of 0, #7 will have a stack offset of 8, etc
-            const int32_t stack_offset;
+            int32_t stack_offset;
             // only valid if type == Scratch; offset from the beginning of the scratch area
-            const int32_t scratch_offset;
+            int32_t scratch_offset;
 
             // only valid if type==Constant
-            const int32_t constant_val;
+            int32_t constant_val;
 
-            const int32_t _data;
+            int32_t _data;
         };
+
+        constexpr Location() : type(Uninitialized), _data(-1) {}
+        constexpr Location(const Location &r) : type(r.type), _data(r._data) {}
+        Location operator=(const Location &r) {
+            type = r.type;
+            _data = r._data;
+            return *this;
+        }
 
         constexpr Location(LocationType type, int32_t data) : type(type), _data(data) {
         }
@@ -190,6 +201,8 @@ class RewriterVar2 {
         // If this is an immediate, try getting it as one
         assembler::Immediate tryGetAsImmediate(bool *is_immediate);
 
+        void dump();
+
     public:
         void incUse();
         void decUse();
@@ -252,6 +265,8 @@ class Rewriter2 : public ICSlotRewrite::CommitHook {
 
         bool isDoneGuarding() { return done_guarding; }
         void setDoneGuarding();
+
+        TypeRecorder* getTypeRecorder();
 
         void trap();
         RewriterVarUsage2 loadConst(int64_t val, Location loc=Location::any());

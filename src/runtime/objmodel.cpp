@@ -24,10 +24,13 @@
 #include "core/stats.h"
 #include "core/types.h"
 
+#include "codegen/type_recording.h"
+
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
 #include "asm_writing/rewriter2.h"
 
+#include "runtime/float.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/importing.h"
 #include "runtime/objmodel.h"
@@ -734,11 +737,24 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
         Box* val;
         if (rewriter.get()) {
             //rewriter->trap();
-            GetattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), false);
+            Location dest;
+            TypeRecorder* recorder = rewriter->getTypeRecorder();
+            if (recorder)
+                dest = Location::forArg(1);
+            else
+                dest = rewriter->getReturnDestination();
+            GetattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), dest, false);
             val = getattr_internal(obj, attr, 1, true, NULL, &rewrite_args);
 
             if (rewrite_args.out_success && val) {
-                rewriter->commitReturning(std::move(rewrite_args.out_rtn));
+                if (recorder) {
+                    RewriterVarUsage2 record_rtn = rewriter->call(false, (void*)recordType, rewriter->loadConst((intptr_t)recorder, Location::forArg(0)), std::move(rewrite_args.out_rtn));
+                    rewriter->commitReturning(std::move(record_rtn));
+
+                    recordType(recorder, val);
+                } else {
+                    rewriter->commitReturning(std::move(rewrite_args.out_rtn));
+                }
             } else {
                 rewrite_args.obj.setDoneUsing();
             }
@@ -854,9 +870,18 @@ extern "C" bool nonzero(Box* obj) {
         BoxedInt *int_obj = static_cast<BoxedInt*>(obj);
         return int_obj->n != 0;
     } else if (obj->cls == float_cls) {
+        if (rewriter.get()) {
+            rewriter->call((void*)floatNonzeroUnboxed);
+            rewriter->commit();
+        }
         return static_cast<BoxedFloat*>(obj)->d != 0;
     }
 
+    // FIXME we have internal functions calling this method;
+    // instead, we should break this out into an external and internal function.
+    // slowpath_* counters are supposed to count external calls; putting it down
+    // here gets a better representation of that.
+    // TODO move internal callers to nonzeroInternal, and log *all* calls to nonzero
     slowpath_nonzero.log();
 
     //int id = Stats::getStatId("slowpath_nonzero_" + *getTypeName(obj));
@@ -1636,6 +1661,10 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     //Stats::log(id);
 
     std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
+    // Currently can't patchpoint user-defined binops since we can't assume that just because
+    // resolving it one way right now (ex, using the value from lhs.__add__) means that later
+    // we'll resolve it the same way, even for the same argument types.
+    // TODO implement full resolving semantics inside the rewrite?
     bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
     if (can_patchpoint)
         rewriter.reset(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, 1, "binop"));
@@ -1670,6 +1699,10 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     //Stats::log(id);
 
     std::unique_ptr<Rewriter> rewriter((Rewriter*)NULL);
+    // Currently can't patchpoint user-defined binops since we can't assume that just because
+    // resolving it one way right now (ex, using the value from lhs.__add__) means that later
+    // we'll resolve it the same way, even for the same argument types.
+    // TODO implement full resolving semantics inside the rewrite?
     bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
     if (can_patchpoint)
         rewriter.reset(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, 1, "binop"));

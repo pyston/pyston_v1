@@ -48,15 +48,10 @@ class PatchpointSetupInfo;
 
 class IREmitter {
     public:
-        enum Target {
-            INTERPRETER,
-            COMPILATION,
-        };
         typedef llvm::IRBuilder<true, llvm::ConstantFolder, MyInserter> IRBuilder;
 
         virtual ~IREmitter() {}
 
-        virtual Target getTarget() = 0;
         virtual IRBuilder* getBuilder() = 0;
         virtual GCBuilder* getGC() = 0;
         virtual CompiledFunction* currentFunction() = 0;
@@ -66,6 +61,19 @@ class IREmitter {
 };
 
 CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *entry_descriptor, EffortLevel::EffortLevel effort, FunctionSignature *sig, const std::vector<AST_expr*> &arg_names, std::string nameprefix);
+
+class TypeRecorder;
+class OpInfo {
+    private:
+        const EffortLevel::EffortLevel effort;
+        TypeRecorder* const type_recorder;
+    public:
+        OpInfo(EffortLevel::EffortLevel effort, TypeRecorder* type_recorder) : effort(effort), type_recorder(type_recorder) {
+        }
+
+        bool isInterpreted() const { return effort == EffortLevel::INTERPRETED; }
+        TypeRecorder* getTypeRecorder() const { return type_recorder; }
+};
 
 }
 

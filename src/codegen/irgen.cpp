@@ -17,9 +17,9 @@
 #include <iostream>
 #include <sstream>
 
-#include "llvm/DIBuilder.h"
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/FileSystem.h"
@@ -86,7 +86,8 @@ static void optimizeIR(llvm::Function *f, EffortLevel::EffortLevel effort) {
 
     llvm::FunctionPassManager fpm(g.cur_module);
 
-    fpm.add(new llvm::DataLayout(*g.tm->getDataLayout()));
+    // TODO: using this as a pass is a legacy cludge that shouldn't be necessary any more; can it be updated?
+    fpm.add(new llvm::DataLayoutPass(*g.tm->getDataLayout()));
 
     if (ENABLE_INLINING && effort >= EffortLevel::MAXIMAL) fpm.add(makeFPInliner(275));
     fpm.add(llvm::createCFGSimplificationPass());

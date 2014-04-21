@@ -21,6 +21,8 @@
 #include "core/ast.h"
 #include "core/cfg.h"
 
+#include "codegen/type_recording.h"
+
 #include "analysis/scoping_analysis.h"
 #include "analysis/type_analysis.h"
 
@@ -97,7 +99,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             assert(old_type);
             assert(speculation != TypeAnalysis::NONE);
 
-            if (speculated_cls != NULL) {
+            if (speculated_cls != NULL && speculated_cls->is_constant) {
                 ConcreteCompilerType* speculated_type = unboxedType(typeFromClass(speculated_cls));
                 if (VERBOSITY() >= 2) {
                     printf("in propagator, speculating that %s would actually be %s, at:\n", old_type->debugName().c_str(), speculated_type->debugName().c_str());
@@ -163,6 +165,11 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             //if (speculation != TypeAnalysis::NONE && (node->attr == "x" || node->attr == "y" || node->attr == "z")) {
                 //rtn = processSpeculation(float_cls, node, rtn);
             //}
+
+            if (speculation != TypeAnalysis::NONE) {
+                BoxedClass *speculated_class = predictClassFor(node);
+                rtn = processSpeculation(speculated_class, node, rtn);
+            }
 
             if (VERBOSITY() >= 2 && rtn == UNDEF) {
                 printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno, node->col_offset);

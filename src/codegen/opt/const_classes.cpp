@@ -21,9 +21,8 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Pass.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/GetElementPtrTypeIterator.h"
-#include "llvm/Support/InstIterator.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 

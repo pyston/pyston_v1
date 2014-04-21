@@ -24,6 +24,8 @@
 
 namespace pyston {
 
+class TypeRecorder;
+
 class ICInfo;
 class ICInvalidator;
 
@@ -63,6 +65,8 @@ class ICSlotRewrite {
         int getScratchRbpOffset();
         int getScratchBytes();
 
+        TypeRecorder* getTypeRecorder();
+
         assembler::GenericRegister returnRegister();
 
         void addDependenceOn(ICInvalidator&);
@@ -81,6 +85,11 @@ class ICInfo {
             SlotInfo(ICInfo* ic, int idx) : is_patched(false), decision_path(0), entry(ic, idx) {}
         };
         std::vector<SlotInfo> slots;
+        // For now, just use a round-robin eviction policy.
+        // This is probably a bunch worse than LRU, but it's also
+        // probably a bunch better than the "always evict slot #0" policy
+        // that it's replacing.
+        int next_slot_to_try;
 
         const StackInfo stack_info;
         const int num_slots;
@@ -88,6 +97,7 @@ class ICInfo {
         const llvm::CallingConv::ID calling_conv;
         const std::vector<int> live_outs;
         const assembler::GenericRegister return_register;
+        TypeRecorder * const type_recorder;
 
         // for ICSlotRewrite:
         ICSlotInfo *pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
@@ -95,7 +105,7 @@ class ICInfo {
         void* getSlowpathStart();
 
     public:
-        ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int> &live_outs, assembler::GenericRegister return_register);
+        ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int> &live_outs, assembler::GenericRegister return_register, TypeRecorder *type_recorder);
         void *const start_addr, *const continue_addr;
 
         int getSlotSize() { return slot_size; }

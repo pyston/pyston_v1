@@ -468,6 +468,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 int arg_start;
                 if (ci->getCalledFunction() && (ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.void" || ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
                     //ci->dump();
+                    assert(0 && "shouldn't be generating patchpoints for interpretation!");
                     f = (void*)fetch(ci->getArgOperand(2), dl, symbols).n;
                     arg_start = 4;
                 } else {
@@ -625,7 +626,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
 
 
             it->dump();
-            RELEASE_ASSERT(0, "");
+            RELEASE_ASSERT(1, "");
         }
     }
 

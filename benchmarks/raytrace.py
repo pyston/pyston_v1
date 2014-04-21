@@ -359,9 +359,6 @@ def _main():
 
     obj = Sphere(Point(1,3,-10), 2)
     surf = SimpleSurface((1.0,1.0,0.0))
-    surf.specularCoefficient = 0.5
-    surf.lambertCoefficient = 0.5
-    surf.ambientCoefficient = 0.0
     s.addObject(obj.normalAt, obj.intersectionTime, surf.colourAt)
     for y in range(6):
         obj = Sphere(Point(-3 - y * 0.4, 2.3, -5), 0.4)

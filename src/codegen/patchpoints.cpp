@@ -41,11 +41,11 @@ int64_t PatchpointSetupInfo::getPatchpointId() const {
 
 static std::unordered_map<int64_t, PatchpointSetupInfo*> new_patchpoints_by_id;
 
-PatchpointSetupInfo* PatchpointSetupInfo::initialize(bool has_return_value, int num_slots, int slot_size, CompiledFunction *parent_cf, patchpoints::PatchpointType type) {
+PatchpointSetupInfo* PatchpointSetupInfo::initialize(bool has_return_value, int num_slots, int slot_size, CompiledFunction *parent_cf, patchpoints::PatchpointType type, TypeRecorder* type_recorder) {
     static int64_t next_id = 100;
     int64_t id = next_id++;
 
-    PatchpointSetupInfo* rtn = new PatchpointSetupInfo(id, type, num_slots, slot_size, parent_cf, has_return_value);
+    PatchpointSetupInfo* rtn = new PatchpointSetupInfo(id, type, num_slots, slot_size, parent_cf, has_return_value, type_recorder);
     new_patchpoints_by_id[id] = rtn;
     return rtn;
 }
@@ -111,40 +111,40 @@ void processStackmap(StackMap* stackmap) {
     new_patchpoints_by_id.clear();
 }
 
-PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction *parent_cf, bool has_return_value, int size) {
-    return PatchpointSetupInfo::initialize(has_return_value, 1, size, parent_cf, Generic);
+PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder, bool has_return_value, int size) {
+    return PatchpointSetupInfo::initialize(has_return_value, 1, size, parent_cf, Generic, type_recorder);
 }
 
-PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, Getattr);
+PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, Getattr, type_recorder);
 }
 
-PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, Getitem);
+PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, Getitem, type_recorder);
 }
 
-PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 1, 144, parent_cf, Setitem);
+PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(true, 1, 144, parent_cf, Setitem, type_recorder);
 }
 
-PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(false, 2, 128, parent_cf, Setattr);
+PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(false, 2, 128, parent_cf, Setattr, type_recorder);
 }
 
-PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction *parent_cf, int num_args) {
-    return PatchpointSetupInfo::initialize(true, 3, 256 + 36 * num_args, parent_cf, Callsite);
+PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder, int num_args) {
+    return PatchpointSetupInfo::initialize(true, 3, 256 + 36 * num_args, parent_cf, Callsite, type_recorder);
 }
 
-PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 1, 80, parent_cf, GetGlobal);
+PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(true, 1, 80, parent_cf, GetGlobal, type_recorder);
 }
 
-PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 4, 196, parent_cf, Binexp);
+PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(true, 4, 196, parent_cf, Binexp, type_recorder);
 }
 
-PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction *parent_cf) {
-    return PatchpointSetupInfo::initialize(true, 1, 64, parent_cf, Nonzero);
+PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(true, 2, 64, parent_cf, Nonzero, type_recorder);
 }
 
 } // namespace patchpoints

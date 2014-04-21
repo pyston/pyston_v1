@@ -18,7 +18,6 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/raw_ostream.h"
 
 #ifndef STANDALONE

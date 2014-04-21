@@ -15,8 +15,15 @@
 #ifndef PYSTON_RUNTIME_FLOAT_H
 #define PYSTON_RUNTIME_FLOAT_H
 
+namespace pyston {
+
 extern "C" double mod_float_float(double lhs, double rhs);
 extern "C" double div_float_float(double lhs, double rhs);
 extern "C" double pow_float_float(double lhs, double rhs);
+
+class BoxedFloat;
+bool floatNonzeroUnboxed(BoxedFloat *self);
+
+}
 
 #endif

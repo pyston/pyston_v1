@@ -78,7 +78,12 @@ if __name__ == "__main__":
         if patch_fn.startswith('.'):
             continue
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
-        subprocess.check_call(["git", "am", patch_fn], cwd=repo)
+        code = subprocess.call(["git", "am", patch_fn], cwd=repo)
+
+        if code != 0:
+            print "Running 'git am --abort'..."
+            subprocess.check_call(["git", "am", "--abort"], cwd=repo)
+            sys.exit(1)
 
     if diffs:
         subprocess.check_call(["git", "stash", "pop", "-q"], cwd=repo)

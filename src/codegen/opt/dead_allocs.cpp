@@ -18,17 +18,13 @@
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/MemoryBuiltins.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/PostDominators.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/InstIterator.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include "llvm/Analysis/Passes.h"
-#include "llvm/Analysis/MemoryBuiltins.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "core/common.h"
@@ -186,7 +182,7 @@ class DeadAllocsPass : public FunctionPass {
 
             AliasAnalysis* aa = &getAnalysis<AliasAnalysis>();
             assert(aa);
-            DataLayout* dl = &getAnalysis<DataLayout>();
+            const DataLayout* dl = &getAnalysis<DataLayoutPass>().getDataLayout();
             assert(dl);
 
             Type *elt_type = cast<PointerType>(ptr->getType())->getElementType();
@@ -391,7 +387,7 @@ class DeadAllocsPass : public FunctionPass {
         virtual void getAnalysisUsage(AnalysisUsage &info) const {
             info.setPreservesCFG();
             info.addRequiredTransitive<AliasAnalysis>();
-            info.addRequiredTransitive<DataLayout>();
+            info.addRequiredTransitive<DataLayoutPass>();
         }
 
         virtual bool runOnFunction(Function &F) {
