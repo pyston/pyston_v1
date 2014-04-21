@@ -1,5 +1,3 @@
-# expected: fail
-
 class Union(object):
     def __init__(self, subs):
         self.subs = subs

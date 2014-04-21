@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cmath>
 #include <sstream>
 
 #include "core/common.h"
@@ -273,11 +274,15 @@ extern "C" Box* intMul(BoxedInt* lhs, Box *rhs) {
 
 extern "C" Box* intPow(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
-    if (rhs->cls != int_cls) {
+    if (rhs->cls == int_cls) {
+        BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+        return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
+    } else if (rhs->cls == float_cls) {
+        BoxedFloat *rhs_float = static_cast<BoxedFloat*>(rhs);
+        return boxFloat(pow(lhs->n, rhs_float->d));
+    } else {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
 }
 
 extern "C" Box* intRShift(BoxedInt* lhs, Box *rhs) {
