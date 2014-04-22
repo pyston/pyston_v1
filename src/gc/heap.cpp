@@ -19,7 +19,9 @@
 #include <stdint.h>
 #include <sys/mman.h>
 
+#ifndef NVALGRIND
 #include "valgrind.h"
+#endif
 
 #include "gc/gc_alloc.h"
 
@@ -121,8 +123,9 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     rtn->prev = prev;
     rtn->next = NULL;
 
-#ifdef VALGRIND
-    VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
+#ifndef NVALGRIND
+    // Not sure if this mempool stuff is better than the malloc-like interface:
+    //VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
 #endif
 
     // Don't think I need to do this:
@@ -217,8 +220,8 @@ void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
         assert(offset % rounded_size == 0);
 #endif
 
-#ifdef VALGRIND
-        VALGRIND_MEMPOOL_ALLOC(cur, rtn, rounded_size);
+#ifndef NVALGRIND
+        //VALGRIND_MEMPOOL_ALLOC(cur, rtn, rounded_size);
 #endif
 
         return rtn;
@@ -239,8 +242,8 @@ void _freeFrom(void* ptr, Block* b) {
     assert((b->isfree[bitmap_idx] & mask) == 0);
     b->isfree[bitmap_idx] ^= mask;
 
-#ifdef VALGRIND
-    VALGRIND_MEMPOOL_FREE(b, ptr);
+#ifndef NVALGRIND
+    //VALGRIND_MEMPOOL_FREE(b, ptr);
 #endif
 }
 
@@ -290,7 +293,13 @@ void* Heap::realloc(void* ptr, size_t bytes) {
 
     void* rtn = alloc(bytes);
 
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
     memcpy(rtn, ptr, std::min(bytes, size));
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#else
+    memcpy(rtn, ptr, std::min(bytes, size));
+#endif
 
     _freeFrom(ptr, b);
     return rtn;

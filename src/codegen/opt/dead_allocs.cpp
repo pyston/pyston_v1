@@ -71,6 +71,12 @@ class DeadAllocsPass : public FunctionPass {
                     continue;
                 }
 
+                if (PtrToIntInst *pti = dyn_cast<PtrToIntInst>(user)) {
+                    if (canBeRead(pti, chain))
+                        return true;
+                    continue;
+                }
+
                 if (PHINode *phi = dyn_cast<PHINode>(user)) {
                     if (canBeRead(phi, chain))
                         return true;

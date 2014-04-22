@@ -11,7 +11,8 @@ USE_CLANG  := 1
 USE_CCACHE := 1
 USE_DISTCC := 0
 
-VALGRIND := valgrind
+ENABLE_VALGRIND := 0
+
 GDB := gdb
 GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
 GTEST_DIR := $(DEPS_DIR)/gtest-1.7.0
@@ -113,9 +114,17 @@ CLANG_EXE := $(LLVM_BIN)/clang++
 
 COMMON_CXXFLAGS := -g -Werror -Wreturn-type -Woverloaded-virtual -Wall -Wno-sign-compare -Wno-unused -I. -I../include -fno-omit-frame-pointer
 COMMON_CXXFLAGS += -std=c++11
-COMMON_CXXFLAGS += -I$(DEPS_DIR)/valgrind-3.9.0/include
 COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
+
+ifeq ($(ENABLE_VALGRIND),0)
+	COMMON_CXXFLAGS += -DNVALGRIND
+	VALGRIND := false
+else
+	COMMON_CXXFLAGS += -I$(DEPS_DIR)/valgrind-3.9.0/include
+	VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind $(HOME)/pyston_deps/valgrind-3.9.0-install/bin/valgrind
+endif
+
 # Extra flags to enable soon:
 # COMMON_CXXFLAGS += -Wold-style-cast -Wconversion -Wsign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int -Wmissing-include-dirs -Wswitch-enum -Wunused-variable -Wunused -Wstrict-overflow=5 -Wfloat-equal -Wtraditional-conversion -Wundef -Wunsafe-loop-optimizations -Wpointer-arith -Wtype-limits -Wwrite-strings -Wclobbered -Wconversion -Wempty-body -Wlogical-op -Waggregate-return -Wstrict-prototypes -Wold-style-declaration -Wold-style-definition -Wmissing-parameter-type -Wmissing-field-initializers -Wredundant-decls -Wnested-externs -Winline -Wint-to-pointer-cast -Wpointer-to-int-cast -Wlong-long -Wvla
 # Not sure about these:
@@ -134,8 +143,8 @@ COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFA
 
 EXTRA_CXXFLAGS ?=
 CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
-CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
-CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
+CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
+CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
 
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -L$(DEPS_DIR)/gcc-4.8.2-install/lib64
@@ -678,13 +687,16 @@ $(call make_search,dbg_%)
 debug_%: %.py pyston_debug $(RUN_DEPS)
 	$(GDB) $(GDB_CMDS) --args ./pyston_debug $(ARGS) $<
 $(call make_search,debug_%)
+
+ifneq ($(ENABLE_VALGRIND),0)
 memcheck_%: %.py pyston_dbg $(RUN_DEPS)
-	$(VALGRIND) --tool=memcheck --leak-check=no ./pyston_dbg $(ARGS) $<
+	$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston_dbg $(ARGS) $<
 $(call make_search,memcheck_%)
 memcheck_gdb_%: %.py pyston_dbg $(RUN_DEPS)
 	set +e; $(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston_dbg $(ARGS) $< & export PID=$$! ; \
 	$(GDB) --ex "set confirm off" --ex "target remote | $(DEPS_DIR)/valgrind-3.9.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston_dbg; kill -9 $$PID
 $(call make_search,memcheck_%)
+# "kill valgrind":
 kv:
 	ps aux | awk '/[v]algrind/ {print $$2}' | xargs kill -9; true
 memcheck_release_%: %.py pyston $(RUN_DEPS)
@@ -696,6 +708,7 @@ $(call make_search,memcheck_debug_%)
 memleaks_%: %.py pyston_dbg $(RUN_DEPS)
 	$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston_dbg $(ARGS) $<
 $(call make_search,memleaks_%)
+endif
 
 # gprof-based profiling:
 .PHONY: prof_% profile_%

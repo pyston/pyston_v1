@@ -1,8 +1,14 @@
-Pyston currently only supports installing from source; the following instructions have only been tested on Ubuntu, but should ideally work on a Mac as well.
+Pyston currently only supports installing from source; the following instructions have only been tested on Ubuntu, and currently has some non-trivial build issues on Mac (hopefully will be addressed soon once we get access to a Mac VM).
 
-Pyston expects to find all of its dependencies in ~/pyston_deps:
+Pyston's build system expects to find all of its dependencies in `~/pyston_deps`:
 ```
 mkdir ~/pyston_deps
+```
+
+The instructions in this file assume that pyston is checked out to `~/pyston`, though it can be checked out anywhere as long as the rest of these instructions are appropriately modified.
+
+```
+git clone https://github.com/dropbox/pyston.git ~/pyston
 ```
 
 ### Compiler for clang
@@ -61,38 +67,11 @@ wget http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz
 tar xvf libunwind-1.1.tar.gz
 mkdir libunwind-1.1-install
 cd libunwind-1.1
-# disable shared libraries because we'll be installing this in a place that the loader can't find it.
+# disable shared libraries because we'll be installing this in a place that the loader can't find it:
 ./configure --prefix=$HOME/pyston_deps/libunwind-1.1-install --enable-shared=0
 patch -p1 <~/pyston/libunwind_patches/0001-Change-the-RBP-validation-heuristic-to-allow-size-0-.patch
 make -j4
 make install
-```
-
-### valgrind
-
-Pyston currently has a build-time dependency on valgrind headers, for adding hooks to its custom memory allocator.  (TODO add a flag to enable this since it's normally not used.)  To satisfy this, do:
-
-```
-cd ~/pyston_deps
-wget http://valgrind.org/downloads/valgrind-3.9.0.tar.bz2
-tar xvf valgrind-3.9.0.tar.bz2
-```
-
-If you'd like to run valgrind, we recommend building this 3.9.0 release, since some older versions (such as what are in the Ubuntu 12.04 apt repositories) aren't new enough.  To finish installing, assuming you ran the above steps:
-
-```
-cd ~/pyston_deps
-mkdir valgrind-3.9.0-install
-cd valgrind-3.9.0
-./configure --prefix=$HOME/pyston_deps/valgrind-3.9.0-install
-make -j4
-make install
-sudo apt-get install libc6-dbg
-```
-
-Then, add this line to your Makefile.local:
-```
-VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind $(HOME)/pyston_deps/valgrind-3.9.0-install/bin/valgrind
 ```
 
 ### zsh
@@ -102,6 +81,28 @@ apt-get install zsh
 ```
 
 # Optional dependencies
+
+There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:
+
+### valgrind
+
+Since Pyston uses a custom memory allocator, it makes use of the valgrind client hooks to help valgrind understand it.  This means that you'll need a copy of the valgrind includes around; I also suggest that if you want to use valgrind, you use a recent version since there are some instructions that LLVM emits that somewhat-recent versions of valgrind don't understand.
+
+To install:
+
+```
+cd ~/pyston_deps
+wget http://valgrind.org/downloads/valgrind-3.9.0.tar.bz2
+tar xvf valgrind-3.9.0.tar.bz2
+mkdir valgrind-3.9.0-install
+cd valgrind-3.9.0
+./configure --prefix=$HOME/pyston_deps/valgrind-3.9.0-install
+make -j4
+make install
+sudo apt-get install libc6-dbg
+cd ~/pyston/src
+echo "ENABLE_VALGRIND := 1" >> Makefile.local
+```
 
 ### Debug build of libunwind
 
@@ -129,7 +130,7 @@ You can then use distcc by doing `make USE_DISTCC=1`
 
 ### gtest
 
-For running the unittests, though all the unittests are currently disabled:
+For running the unittests:
 
 ```
 cd ~/pyston_deps
@@ -150,11 +151,8 @@ tar xvf gdb-7.6.2.tar.gz
 cd gdb-7.6.2
 ./configure
 make -j4
-```
-
-Then add this to your Makefile.local:
-```
-GDB := $(HOME)/pyston_deps/gdb-7.6.2/gdb/gdb
+cd ~/pyston/src
+echo "GDB := \$(HOME)/pyston_deps/gdb-7.6.2/gdb/gdb" >> Makefile.local
 ```
 
 ### gperftools (-lprofiler)
@@ -165,7 +163,7 @@ standard ./configure, make, make install
 
 ### gold
 
-gold is highly recommended as a faster linker.  Pyston contains build-system support for automatically using gold if available.  gold may already be installed on your system; you can check by typing `which gold`.  If it's not installed already:
+gold is highly recommended as a faster linker, and Pyston contains build-system support for automatically using gold if available.  gold may already be installed on your system; you can check by typing `which gold`.  If it's not installed already:
 
 ```
 cd ~/pyston_deps

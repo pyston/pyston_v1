@@ -15,6 +15,7 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
+#include <cstring>
 #include <setjmp.h>
 #include <cstdio>
 #include <cstdlib>
@@ -29,6 +30,10 @@
 #include "gc/collector.h"
 #include "gc/heap.h"
 #include "gc/root_finder.h"
+
+#ifndef NVALGRIND
+#include "valgrind.h"
+#endif
 
 #ifndef LIBUNWIND_PYSTON_PATCH_VERSION
 #error "Please use a patched version of libunwind; see docs/INSTALLING.md"
@@ -63,14 +68,18 @@ void collectStackRoots(TraceStack *stack) {
     // collectStackRoots itself is allowed to save the callee-save registers
     // on its own stack.
     jmp_buf registers __attribute__((aligned(sizeof(void*))));
-#ifdef VALGRIND
-    memset(&registers, 0, sizeof(registers));
-    memset(&cursor, 0, sizeof(cursor));
-    memset(&uc, 0, sizeof(uc));
-    memset(&ip, 0, sizeof(ip));
-    memset(&sp, 0, sizeof(sp));
-    memset(&bp, 0, sizeof(bp));
+
+#ifndef NVALGRIND
+    if (RUNNING_ON_VALGRIND) {
+        memset(&registers, 0, sizeof(registers));
+        memset(&cursor, 0, sizeof(cursor));
+        memset(&uc, 0, sizeof(uc));
+        memset(&ip, 0, sizeof(ip));
+        memset(&sp, 0, sizeof(sp));
+        memset(&bp, 0, sizeof(bp));
+    }
 #endif
+
     setjmp(registers);
 
     assert(sizeof(registers) % 8 == 0);

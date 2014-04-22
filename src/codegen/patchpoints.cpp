@@ -115,7 +115,7 @@ PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction *parent_cf, TypeRe
 }
 
 PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, Getattr, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 1, 144, parent_cf, Getattr, type_recorder);
 }
 
 PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction *parent_cf, TypeRecorder* type_recorder) {

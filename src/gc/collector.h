@@ -25,7 +25,11 @@ namespace gc {
 #define MARK_BIT 0x1
 
 inline GCObjectHeader* headerFromObject(void* obj) {
+#ifndef NVALGRIND
+    return static_cast<GCObjectHeader*>((void*)((char*)obj + 0));
+#else
     return static_cast<GCObjectHeader*>(obj);
+#endif
 }
 
 inline void setMark(GCObjectHeader *header) {

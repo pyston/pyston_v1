@@ -25,6 +25,10 @@
 #include "gc/heap.h"
 #include "gc/root_finder.h"
 
+#ifndef NVALGRIND
+#include "valgrind.h"
+#endif
+
 namespace pyston {
 namespace gc {
 
@@ -85,6 +89,12 @@ extern "C" kindid_t registerKind(const AllocationKind *kind) {
 }
 
 static void markPhase() {
+#ifndef NVALGRIND
+    // Have valgrind close its eyes while we do the conservative stack and data scanning,
+    // since we'll be looking at potentially-uninitialized values:
+    VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
+
     TraceStack stack(roots);
     collectStackRoots(&stack);
 
@@ -123,6 +133,10 @@ static void markPhase() {
         gcf(&visitor, p);
 
     }
+
+#ifndef NVALGRIND
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#endif
 }
 
 static void sweepPhase() {
