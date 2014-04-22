@@ -215,9 +215,9 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*> > computeBlockTraversalOrder(
         rtn.push_back(std::make_pair(start, (CFGBlock*)NULL));
     }
 
-    for (BlockSet::const_iterator it = partial_blocks.begin(), end = partial_blocks.end(); it != end; ++it) {
-        in_queue.insert(*it);
-        rtn.push_back(std::make_pair(*it, (CFGBlock*)NULL));
+    for (CFGBlock* b : partial_blocks) {
+        in_queue.insert(b);
+        rtn.push_back(std::make_pair(b, (CFGBlock*)NULL));
     }
 
     // It's important for debugging purposes that the order is deterministic, but the iteration
@@ -250,8 +250,7 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*> > computeBlockTraversalOrder(
             break;
 
         CFGBlock *best = NULL;
-        for (BlockSet::const_iterator it = full_blocks.begin(), end = full_blocks.end(); it != end; ++it) {
-            CFGBlock *b = *it;
+        for (CFGBlock* b : full_blocks) {
             if (in_queue.count(b))
                 continue;
 
@@ -326,50 +325,51 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         }
 
         // Handle loading symbols from the passed osr arguments:
-        int i = 0;
-        for (OSREntryDescriptor::ArgMap::const_iterator it = entry_descriptor->args.begin(), end = entry_descriptor->args.end(); it != end; ++it, ++i) {
+        int arg_num = -1;
+        for (auto p : entry_descriptor->args) {
             llvm::Value* from_arg;
-            if (i < 3) {
-                from_arg = func_args[i];
+            arg_num++;
+            if (arg_num < 3) {
+                from_arg = func_args[arg_num];
             } else {
                 ASSERT(func_args.size() == 4, "%ld", func_args.size());
-                llvm::Value* ptr = entry_emitter->getBuilder()->CreateConstGEP1_32(func_args[3], i-3);
-                if (it->second == INT) {
+                llvm::Value* ptr = entry_emitter->getBuilder()->CreateConstGEP1_32(func_args[3], arg_num-3);
+                if (p.second == INT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i64->getPointerTo());
-                } else if (it->second == FLOAT) {
+                } else if (p.second == FLOAT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
                 }
                 from_arg = entry_emitter->getBuilder()->CreateLoad(ptr);
-                assert(from_arg->getType() == it->second->llvmType());
+                assert(from_arg->getType() == p.second->llvmType());
             }
 
             ConcreteCompilerType *phi_type;
-            if (startswith(it->first, "!is_defined"))
+            if (startswith(p.first, "!is_defined"))
                 phi_type = BOOL;
             else
-                phi_type = types->getTypeAtBlockStart(it->first, target_block);
-            //ConcreteCompilerType *analyzed_type = types->getTypeAtBlockStart(it->first, block);
-            //ConcreteCompilerType *phi_type = (*phis)[it->first].first;
+                phi_type = types->getTypeAtBlockStart(p.first, target_block);
+            //ConcreteCompilerType *analyzed_type = types->getTypeAtBlockStart(p.first, block);
+            //ConcreteCompilerType *phi_type = (*phis)[p.first].first;
 
-            ConcreteCompilerVariable *var = new ConcreteCompilerVariable(it->second, from_arg, true);
-            (*initial_syms)[it->first] = var;
+            ConcreteCompilerVariable *var = new ConcreteCompilerVariable(p.second, from_arg, true);
+            (*initial_syms)[p.first] = var;
 
             // It's possible to OSR into a version of the function with a higher speculation level;
             // this means that the types of the OSR variables are potentially higher (more unspecialized)
             // than what the optimized code expects.
             // So, we have to re-check the speculations and potentially deopt.
             llvm::Value *v = NULL;
-            if (it->second == phi_type) {
+            if (p.second == phi_type) {
                 // good to go
                 v = from_arg;
-            } else if (it->second->canConvertTo(phi_type)) {
+            } else if (p.second->canConvertTo(phi_type)) {
                 // not sure if/when this happens, but if there's a type mismatch but one we know
                 // can be handled (such as casting from a subclass to a superclass), handle it:
                 ConcreteCompilerVariable *converted = var->makeConverted(*unbox_emitter, phi_type);
                 v = converted->getValue();
                 delete converted;
             } else {
-                ASSERT(it->second == UNKNOWN, "%s", it->second->debugName().c_str());
+                ASSERT(p.second == UNKNOWN, "%s", p.second->debugName().c_str());
                 BoxedClass *speculated_class = NULL;
                 if (phi_type == INT) {
                     speculated_class = int_cls;
@@ -380,7 +380,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                 }
                 ASSERT(speculated_class, "%s", phi_type->debugName().c_str());
 
-                llvm::Value* type_check = ConcreteCompilerVariable(it->second, from_arg, true).makeClassCheck(*entry_emitter, speculated_class);
+                llvm::Value* type_check = ConcreteCompilerVariable(p.second, from_arg, true).makeClassCheck(*entry_emitter, speculated_class);
                 if (guard_val) {
                     guard_val = entry_emitter->getBuilder()->CreateAnd(guard_val, type_check);
                 } else {
@@ -400,9 +400,9 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                 }
             }
 
-            if (VERBOSITY("irgen")) v->setName("prev_" + it->first);
+            if (VERBOSITY("irgen")) v->setName("prev_" + p.first);
 
-            (*osr_syms)[it->first] = new ConcreteCompilerVariable(phi_type, v, true);
+            (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v, true);
         }
 
         if (guard_val) {
@@ -418,8 +418,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         }
         unbox_emitter->getBuilder()->CreateBr(llvm_entry_blocks[entry_descriptor->backedge->target->idx]);
 
-        for (SymbolTable::iterator it = initial_syms->begin(), end = initial_syms->end(); it != end; ++it) {
-            delete it->second;
+        for (auto p : *initial_syms) {
+            delete p.second;
         }
         delete initial_syms;
     }
@@ -550,19 +550,19 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             assert(osr_entry_block);
             assert(phis);
 
-            for (OSREntryDescriptor::ArgMap::const_iterator it = entry_descriptor->args.begin(), end = entry_descriptor->args.end(); it != end; ++it) {
+            for (auto p : entry_descriptor->args) {
                 ConcreteCompilerType *analyzed_type;
-                if (startswith(it->first, "!is_defined"))
+                if (startswith(p.first, "!is_defined"))
                     analyzed_type = BOOL;
                 else
-                    analyzed_type = types->getTypeAtBlockStart(it->first, block);
+                    analyzed_type = types->getTypeAtBlockStart(p.first, block);
 
-                //printf("For %s, given %s, analyzed for %s\n", it->first.c_str(), it->second->debugName().c_str(), analyzed_type->debugName().c_str());
+                //printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(), analyzed_type->debugName().c_str());
 
-                llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(), block->predecessors.size()+1, it->first);
+                llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(), block->predecessors.size()+1, p.first);
                 ConcreteCompilerVariable *var = new ConcreteCompilerVariable(analyzed_type, phi, true);
-                generator->giveLocalSymbol(it->first, var);
-                (*phis)[it->first] = std::make_pair(analyzed_type, phi);
+                generator->giveLocalSymbol(p.first, var);
+                (*phis)[p.first] = std::make_pair(analyzed_type, phi);
             }
         } else if (pred == NULL) {
             assert(traversal_order.size() < source->cfg->blocks.size());
@@ -575,21 +575,21 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             }
 
             const PhiAnalysis::RequiredSet &names = source->phis->getAllDefinedAt(block);
-            for (PhiAnalysis::RequiredSet::const_iterator it = names.begin(), end = names.end(); it != end; ++it) {
+            for (auto s : names) {
                 // TODO the list from getAllDefinedAt should come filtered:
-                if (!source->liveness->isLiveAtEnd(*it, block->predecessors[0]))
+                if (!source->liveness->isLiveAtEnd(s, block->predecessors[0]))
                     continue;
 
-                //printf("adding guessed phi for %s\n", it->c_str());
-                ConcreteCompilerType *type = types->getTypeAtBlockStart(*it, block);
-                llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), *it);
+                //printf("adding guessed phi for %s\n", s.c_str());
+                ConcreteCompilerType *type = types->getTypeAtBlockStart(s, block);
+                llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s);
                 ConcreteCompilerVariable *var = new ConcreteCompilerVariable(type, phi, true);
-                generator->giveLocalSymbol(*it, var);
+                generator->giveLocalSymbol(s, var);
 
-                (*phis)[*it] = std::make_pair(type, phi);
+                (*phis)[s] = std::make_pair(type, phi);
 
-                if (source->phis->isPotentiallyUndefinedAfter(*it, block->predecessors[0])) {
-                    std::string is_defined_name = "!is_defined_" + *it;
+                if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
+                    std::string is_defined_name = "!is_defined_" + s;
                     llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(g.i1, block->predecessors.size(), is_defined_name);
                     ConcreteCompilerVariable *var = new ConcreteCompilerVariable(BOOL, phi, true);
                     generator->giveLocalSymbol(is_defined_name, var);
@@ -753,8 +753,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     }
 
     if (entry_descriptor) {
-        for (ConcreteSymbolTable::iterator it = osr_syms->begin(), end = osr_syms->end(); it != end; ++it) {
-            delete it->second;
+        for (auto p : *osr_syms) {
+            delete p.second;
         }
         delete osr_syms;
     }
@@ -763,13 +763,13 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
 static void computeBlockSetClosure(BlockSet &full_blocks, BlockSet &partial_blocks) {
     if (VERBOSITY("irgen") >= 1) {
         printf("Initial full:");
-        for (BlockSet::iterator it = full_blocks.begin(), end = full_blocks.end(); it != end; ++it) {
-            printf(" %d", (*it)->idx);
+        for (CFGBlock *b : full_blocks) {
+            printf(" %d", b->idx);
         }
         printf("\n");
         printf("Initial partial:");
-        for (BlockSet::iterator it = partial_blocks.begin(), end = partial_blocks.end(); it != end; ++it) {
-            printf(" %d", (*it)->idx);
+        for (CFGBlock *b : partial_blocks) {
+            printf(" %d", b->idx);
         }
         printf("\n");
     }
@@ -796,13 +796,13 @@ static void computeBlockSetClosure(BlockSet &full_blocks, BlockSet &partial_bloc
 
     if (VERBOSITY("irgen") >= 1) {
         printf("Ending full:");
-        for (BlockSet::iterator it = full_blocks.begin(), end = full_blocks.end(); it != end; ++it) {
-            printf(" %d", (*it)->idx);
+        for (CFGBlock *b : full_blocks) {
+            printf(" %d", b->idx);
         }
         printf("\n");
         printf("Ending partial:");
-        for (BlockSet::iterator it = partial_blocks.begin(), end = partial_blocks.end(); it != end; ++it) {
-            printf(" %d", (*it)->idx);
+        for (CFGBlock *b : partial_blocks) {
+            printf(" %d", b->idx);
         }
         printf("\n");
     }
@@ -876,11 +876,12 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
             llvm_arg_types.push_back(sig->arg_types[i]->llvmType());
         }
     } else {
-        int i = 0;
-        for (OSREntryDescriptor::ArgMap::const_iterator it = entry_descriptor->args.begin(), end = entry_descriptor->args.end(); it != end; ++it, ++i) {
-            //printf("Loading %s: %s\n", it->first.c_str(), it->second->debugName().c_str());
-            if (i < 3)
-                llvm_arg_types.push_back(it->second->llvmType());
+        int arg_num = -1;
+        for (auto p : entry_descriptor->args) {
+            arg_num++;
+            //printf("Loading %s: %s\n", p.first.c_str(), p.second->debugName().c_str());
+            if (arg_num < 3)
+                llvm_arg_types.push_back(p.second->llvmType());
             else {
                 llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
                 break;
@@ -927,8 +928,8 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
         //Worklist guard_worklist;
 
         guards.getBlocksWithGuards(deopt_full_blocks);
-        for (GuardList::expr_type_guard_iterator it = guards.after_begin(), end = guards.after_end(); it != end; ++it) {
-            deopt_partial_blocks.insert(it->second->cfg_block);
+        for (auto p : guards.exprGuards()) {
+            deopt_partial_blocks.insert(p.second->cfg_block);
         }
 
         computeBlockSetClosure(deopt_full_blocks, deopt_partial_blocks);
@@ -944,8 +945,8 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
     }
     guards.assertGotPatched();
 
-    for (GuardList::expr_type_guard_iterator it = guards.after_begin(), end = guards.after_end(); it != end; ++it) {
-        delete it->second;
+    for (auto p : guards.exprGuards()) {
+        delete p.second;
     }
 
     delete types;

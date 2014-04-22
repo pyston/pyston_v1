@@ -45,8 +45,8 @@ void Stats::dump() {
     printf("Stats:\n");
 
     std::vector<std::pair<std::string, int> > pairs;
-    for (std::unordered_map<int, std::string>::iterator it = names->begin(), end = names->end(); it != end; ++it) {
-        pairs.push_back(make_pair(it->second, it->first));
+    for (auto p : *names) {
+        pairs.push_back(make_pair(p.second, p.first));
     }
 
     std::sort(pairs.begin(), pairs.end());

@@ -104,9 +104,8 @@ void processStackmap(StackMap* stackmap) {
         registerCompiledPatchpoint(start_addr, pp, StackInfo({stack_size, has_scratch, pp->numScratchBytes(), scratch_rbp_offset}), std::move(live_outs));
     }
 
-    for (std::unordered_map<int64_t, PatchpointSetupInfo*>::iterator it =
-            new_patchpoints_by_id.begin(), end = new_patchpoints_by_id.end(); it != end; ++it) {
-        delete it->second;
+    for (const std::pair<int64_t, PatchpointSetupInfo*> &p : new_patchpoints_by_id) {
+        delete p.second;
     }
     new_patchpoints_by_id.clear();
 }

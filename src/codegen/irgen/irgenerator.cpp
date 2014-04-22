@@ -78,16 +78,17 @@ GuardList::ExprTypeGuard::ExprTypeGuard(CFGBlock *cfg_block, llvm::BranchInst* b
         cfg_block(cfg_block), branch(branch), ast_node(ast_node) {
     DupCache cache;
     this->val = val->dup(cache);
-    for (SymbolTable::const_iterator it = st.begin(), end = st.end(); it != end; ++it) {
-        this->st[it->first] = it->second->dup(cache);
+
+    for (auto p : st) {
+        this->st[p.first] = p.second->dup(cache);
     }
 }
 
 GuardList::BlockEntryGuard::BlockEntryGuard(CFGBlock *cfg_block, llvm::BranchInst* branch, const SymbolTable &symbol_table) :
         cfg_block(cfg_block), branch(branch) {
     DupCache cache;
-    for (SymbolTable::const_iterator it = symbol_table.begin(), end = symbol_table.end(); it != end; ++it) {
-        this->symbol_table[it->first] = it->second->dup(cache);
+    for (auto p : symbol_table) {
+        this->symbol_table[p.first] = p.second->dup(cache);
     }
 }
 
@@ -925,34 +926,34 @@ class IRGeneratorImpl : public IRGenerator {
                     llvm::BasicBlock *ramp_block = llvm::BasicBlock::Create(g.context, "deopt_ramp", irstate->getLLVMFunction());
                     llvm::BasicBlock *join_block = llvm::BasicBlock::Create(g.context, "deopt_join", irstate->getLLVMFunction());
                     SymbolTable joined_st;
-                    for (SymbolTable::iterator it = guard->st.begin(), end = guard->st.end(); it != end; ++it) {
-                        //if (VERBOSITY("irgen") >= 1) printf("merging %s\n", it->first.c_str());
-                        CompilerVariable *curval = symbol_table[it->first];
+                    for (auto p : guard->st) {
+                        //if (VERBOSITY("irgen") >= 1) printf("merging %s\n", p.first.c_str());
+                        CompilerVariable *curval = symbol_table[p.first];
                         // I'm not sure this is necessary or even correct:
-                        //ASSERT(curval->getVrefs() == it->second->getVrefs(), "%s %d %d", it->first.c_str(), curval->getVrefs(), it->second->getVrefs());
+                        //ASSERT(curval->getVrefs() == p.second->getVrefs(), "%s %d %d", p.first.c_str(), curval->getVrefs(), p.second->getVrefs());
 
                         ConcreteCompilerType *merged_type = curval->getConcreteType();
 
                         emitter.getBuilder()->SetInsertPoint(ramp_block);
-                        ConcreteCompilerVariable* converted1 = it->second->makeConverted(emitter, merged_type);
-                        it->second->decvref(emitter); // for makeconverted
-                        //guard->st[it->first] = converted;
-                        //it->second->decvref(emitter); // for the replaced version
+                        ConcreteCompilerVariable* converted1 = p.second->makeConverted(emitter, merged_type);
+                        p.second->decvref(emitter); // for makeconverted
+                        //guard->st[p.first] = converted;
+                        //p.second->decvref(emitter); // for the replaced version
 
                         emitter.getBuilder()->SetInsertPoint(curblock);
                         ConcreteCompilerVariable* converted2 = curval->makeConverted(emitter, merged_type);
                         curval->decvref(emitter); // for makeconverted
-                        //symbol_table[it->first] = converted;
+                        //symbol_table[p.first] = converted;
                         //curval->decvref(emitter); // for the replaced version
 
                         if (converted1->getValue() == converted2->getValue()) {
-                            joined_st[it->first] = new ConcreteCompilerVariable(merged_type, converted1->getValue(), true);
+                            joined_st[p.first] = new ConcreteCompilerVariable(merged_type, converted1->getValue(), true);
                         } else {
                             emitter.getBuilder()->SetInsertPoint(join_block);
-                            llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(merged_type->llvmType(), 2, it->first);
+                            llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(merged_type->llvmType(), 2, p.first);
                             phi->addIncoming(converted1->getValue(), ramp_block);
                             phi->addIncoming(converted2->getValue(), curblock);
-                            joined_st[it->first] = new ConcreteCompilerVariable(merged_type, phi, true);
+                            joined_st[p.first] = new ConcreteCompilerVariable(merged_type, phi, true);
                         }
 
                         // TODO free dead Variable objects!
@@ -1374,17 +1375,18 @@ class IRGeneratorImpl : public IRGenerator {
                 }
             }
 
-            int i = 0;
-            for (SortedSymbolTable::iterator it = sorted_symbol_table.begin(), end = sorted_symbol_table.end(); it != end; ++it, ++i) {
+            int arg_num = -1;
+            for (auto p : sorted_symbol_table) {
+                arg_num++;
                 // I don't think this can fail, but if it can we should filter out dead symbols before
                 // passing them on:
-                ASSERT(startswith(it->first, "!is_defined") ||  irstate->getSourceInfo()->liveness->isLiveAtEnd(it->first, myblock), "%d %s", myblock->idx, it->first.c_str());
+                ASSERT(startswith(p.first, "!is_defined") ||  irstate->getSourceInfo()->liveness->isLiveAtEnd(p.first, myblock), "%d %s", myblock->idx, p.first.c_str());
 
                 // This line can never get hit right now since we unnecessarily force every variable to be concrete
                 // for a loop, since we generate all potential phis:
-                ASSERT(it->second->getType() == it->second->getConcreteType(), "trying to pass through %s\n", it->second->getType()->debugName().c_str());
+                ASSERT(p.second->getType() == p.second->getConcreteType(), "trying to pass through %s\n", p.second->getType()->debugName().c_str());
 
-                ConcreteCompilerVariable* var = it->second->makeConverted(emitter, it->second->getConcreteType());
+                ConcreteCompilerVariable* var = p.second->makeConverted(emitter, p.second->getConcreteType());
                 converted_args.push_back(var);
 
                 assert(var->getType() != BOXED_INT && "should probably unbox it, but why is it boxed in the first place?");
@@ -1392,16 +1394,16 @@ class IRGeneratorImpl : public IRGenerator {
 
                 // This line can never get hit right now for the same reason that the variables must already be concrete,
                 // because we're over-generating phis.
-                ASSERT(var->isGrabbed(), "%s", it->first.c_str());
+                ASSERT(var->isGrabbed(), "%s", p.first.c_str());
                 //var->ensureGrabbed(emitter);
 
                 llvm::Value* val = var->getValue();
 
-                if (i < 3) {
+                if (arg_num < 3) {
                     llvm_args.push_back(val);
                     llvm_arg_types.push_back(val->getType());
                 } else {
-                    llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, i-3);
+                    llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, arg_num-3);
 
                     if (var->getType() == INT) {
                         val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
@@ -1415,7 +1417,7 @@ class IRGeneratorImpl : public IRGenerator {
                     emitter.getBuilder()->CreateStore(val, ptr);
                 }
 
-                ConcreteCompilerType* &t = exit->entry->args[it->first];
+                ConcreteCompilerType* &t = exit->entry->args[p.first];
                 if (t == NULL)
                     t = var->getType();
                 else

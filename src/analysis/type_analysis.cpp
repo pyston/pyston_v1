@@ -566,9 +566,9 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 if (VERBOSITY("types") >= 2) {
                     printf("before:\n");
                     TypeMap &starting = starting_types[block_id];
-                    for (TypeMap::iterator it = starting.begin(), end = starting.end(); it != end; ++it) {
-                        ASSERT(it->second, "%s", it->first.c_str());
-                        printf("%s: %s\n", it->first.c_str(), it->second->debugName().c_str());
+                    for (auto p : starting) {
+                        ASSERT(p.second, "%s", p.first.c_str());
+                        printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
                 }
 
@@ -577,14 +577,14 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 if (VERBOSITY("types") >= 2) {
                     printf("before (after):\n");
                     TypeMap &starting = starting_types[block_id];
-                    for (TypeMap::iterator it = starting.begin(), end = starting.end(); it != end; ++it) {
-                        ASSERT(it->second, "%s", it->first.c_str());
-                        printf("%s: %s\n", it->first.c_str(), it->second->debugName().c_str());
+                    for (auto p : starting) {
+                        ASSERT(p.second, "%s", p.first.c_str());
+                        printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
                     printf("after:\n");
-                    for (TypeMap::iterator it = ending.begin(), end = ending.end(); it != end; ++it) {
-                        ASSERT(it->second, "%s", it->first.c_str());
-                        printf("%s: %s\n", it->first.c_str(), it->second->debugName().c_str());
+                    for (auto p : ending) {
+                        ASSERT(p.second, "%s", p.first.c_str());
+                        printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
                 }
 
@@ -604,9 +604,9 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                     CFGBlock *b = cfg->blocks[i];
 
                     TypeMap &starting = starting_types[i];
-                    for (TypeMap::iterator it = starting.begin(), end = starting.end(); it != end; ++it) {
-                        ASSERT(it->second, "%s", it->first.c_str());
-                        printf("%s: %s\n", it->first.c_str(), it->second->debugName().c_str());
+                    for (auto p : starting) {
+                        ASSERT(p.second, "%s", p.first.c_str());
+                        printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
                 }
             }

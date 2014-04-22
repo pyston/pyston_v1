@@ -66,18 +66,18 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
             }
 
             Map &next = states[next_block];
-            for (typename Map::iterator it = ending.begin(), end = ending.end(); it != end; ++it) {
-                if (next.count(it->first) == 0) {
+            for (auto p : ending) {
+                if (next.count(p.first) == 0) {
                     changed = true;
                     if (initial) {
-                        next[it->first] = it->second;
+                        next[p.first] = p.second;
                     } else {
-                        next[it->first] = analyzer.mergeBlank(it->second);
+                        next[p.first] = analyzer.mergeBlank(p.second);
                     }
                 } else {
-                    T &next_elt = next[it->first];
+                    T &next_elt = next[p.first];
 
-                    T new_elt = analyzer.merge(it->second, next_elt);
+                    T new_elt = analyzer.merge(p.second, next_elt);
                     if (next_elt != new_elt) {
                         next_elt = new_elt;
                         changed = true;
@@ -85,13 +85,13 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
                 }
             }
 
-            for (typename Map::iterator it = next.begin(), end = ending.end(); it != end; ++it) {
-                if (ending.count(it->first))
+            for (auto p : ending) {
+                if (ending.count(p.first))
                     continue;
 
-                T next_elt = analyzer.mergeBlank(it->second);
-                if (next_elt != it->second) {
-                    next[it->first] = next_elt;
+                T next_elt = analyzer.mergeBlank(p.second);
+                if (next_elt != p.second) {
+                    next[p.first] = next_elt;
                     changed = true;
                 }
             }

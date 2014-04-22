@@ -256,16 +256,18 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
     interpreter_roots[frame_ptr] = &symbols;
     UnregisterHelper helper(frame_ptr);
 
-    int i = 0;
-    for (llvm::Function::arg_iterator AI = f->arg_begin(), end = f->arg_end(); AI != end; AI++, i++) {
-        if (i == 0) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*AI)), Val(arg1)));
-        else if (i == 1) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*AI)), Val(arg2)));
-        else if (i == 2) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*AI)), Val(arg3)));
+    int arg_num = -1;
+    for (llvm::Argument& arg : f->args()) {
+        arg_num++;
+
+        if (arg_num == 0) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg1)));
+        else if (arg_num == 1) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg2)));
+        else if (arg_num == 2) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg3)));
         else {
-            assert(i == 3);
+            assert(arg_num == 3);
             assert(f->getArgumentList().size() == 4);
             assert(f->getArgumentList().back().getType() == g.llvm_value_type_ptr->getPointerTo());
-            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*AI)), Val((int64_t)args)));
+            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val((int64_t)args)));
             //printf("loading %%4 with %p\n", (void*)args);
             break;
         }
@@ -276,16 +278,18 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
 
 
     while (true) {
-        for (llvm::BasicBlock::iterator it = curblock->begin(), end = curblock->end(); it != end; ++it) {
+        for (llvm::Instruction &_inst : *curblock) {
+            llvm::Instruction *inst = &_inst;
+
             if (VERBOSITY("interpreter") >= 2) {
                 printf("executing in %s: ", f->getName().data());
                 fflush(stdout);
-                it->dump();
+                inst->dump();
                 //f->dump();
             }
 
-#define SET(v) set(symbols, it, (v))
-            if (llvm::LoadInst *li = llvm::dyn_cast<llvm::LoadInst>(it)) {
+#define SET(v) set(symbols, inst, (v))
+            if (llvm::LoadInst *li = llvm::dyn_cast<llvm::LoadInst>(inst)) {
                 llvm::Value *ptr = li->getOperand(0);
                 Val v = fetch(ptr, dl, symbols);
                 //printf("loading from %p\n", v.o);
@@ -302,7 +306,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     li->dump();
                     RELEASE_ASSERT(0, "");
                 }
-            } else if (llvm::StoreInst *si = llvm::dyn_cast<llvm::StoreInst>(it)) {
+            } else if (llvm::StoreInst *si = llvm::dyn_cast<llvm::StoreInst>(inst)) {
                 llvm::Value *val = si->getOperand(0);
                 llvm::Value *ptr = si->getOperand(1);
                 Val v = fetch(val, dl, symbols);
@@ -320,7 +324,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     si->dump();
                     RELEASE_ASSERT(0, "");
                 }
-            } else if (llvm::CmpInst *ci = llvm::dyn_cast<llvm::CmpInst>(it)) {
+            } else if (llvm::CmpInst *ci = llvm::dyn_cast<llvm::CmpInst>(inst)) {
                 assert(ci->getType() == g.i1);
 
                 Val a0 = fetch(ci->getOperand(0), dl, symbols);
@@ -368,7 +372,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                         RELEASE_ASSERT(0, "");
                 }
                 continue;
-            } else if (llvm::BinaryOperator *bo = llvm::dyn_cast<llvm::BinaryOperator>(it)) {
+            } else if (llvm::BinaryOperator *bo = llvm::dyn_cast<llvm::BinaryOperator>(inst)) {
                 if (bo->getOperand(0)->getType() == g.i64 || bo->getOperand(0)->getType() == g.i1) {
                     //assert(bo->getOperand(0)->getType() == g.i64);
                     //assert(bo->getOperand(1)->getType() == g.i64);
@@ -432,7 +436,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     bo->dump();
                     RELEASE_ASSERT(0, "");
                 }
-            } else if (llvm::GetElementPtrInst *gep = llvm::dyn_cast<llvm::GetElementPtrInst>(it)) {
+            } else if (llvm::GetElementPtrInst *gep = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
                 int64_t base = fetch(gep->getPointerOperand(), dl, symbols).n;
 
                 llvm::User::value_op_iterator begin = gep->value_op_begin();
@@ -444,26 +448,26 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 //printf("offset for inst: %ld (base is %lx)\n", offset, base);
                 SET(base + offset);
                 continue;
-            } else if (llvm::AllocaInst *al = llvm::dyn_cast<llvm::AllocaInst>(it)) {
+            } else if (llvm::AllocaInst *al = llvm::dyn_cast<llvm::AllocaInst>(inst)) {
                 int size = fetch(al->getArraySize(), dl, symbols).n * width(al->getAllocatedType(), dl);
                 void* ptr = alloca(size);
                 //void* ptr = malloc(size);
                 //printf("alloca()'d at %p\n", ptr);
                 SET((int64_t)ptr);
                 continue;
-            } else if (llvm::SIToFPInst *si = llvm::dyn_cast<llvm::SIToFPInst>(it)) {
+            } else if (llvm::SIToFPInst *si = llvm::dyn_cast<llvm::SIToFPInst>(inst)) {
                 assert(width(si->getOperand(0), dl) == 8);
                 SET((double)fetch(si->getOperand(0), dl, symbols).n);
                 continue;
-            } else if (llvm::BitCastInst *bc = llvm::dyn_cast<llvm::BitCastInst>(it)) {
+            } else if (llvm::BitCastInst *bc = llvm::dyn_cast<llvm::BitCastInst>(inst)) {
                 assert(width(bc->getOperand(0), dl) == 8);
                 SET(fetch(bc->getOperand(0), dl, symbols));
                 continue;
-            } else if (llvm::IntToPtrInst *bc = llvm::dyn_cast<llvm::IntToPtrInst>(it)) {
+            } else if (llvm::IntToPtrInst *bc = llvm::dyn_cast<llvm::IntToPtrInst>(inst)) {
                 assert(width(bc->getOperand(0), dl) == 8);
                 SET(fetch(bc->getOperand(0), dl, symbols));
                 continue;
-            } else if (llvm::CallInst *ci = llvm::dyn_cast<llvm::CallInst>(it)) {
+            } else if (llvm::CallInst *ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
                 void* f;
                 int arg_start;
                 if (ci->getCalledFunction() && (ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.void" || ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
@@ -568,7 +572,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                         r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n, args[6].n, args[7].n);
                         break;
                     default:
-                        it->dump();
+                        inst->dump();
                         RELEASE_ASSERT(0, "%d", mask);
                         break;
                 }
@@ -580,7 +584,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 _t.restart("to interpret", 10000000);
 #endif
                 continue;
-            } else if (llvm::SelectInst *si = llvm::dyn_cast<llvm::SelectInst>(it)) {
+            } else if (llvm::SelectInst *si = llvm::dyn_cast<llvm::SelectInst>(inst)) {
                 Val test = fetch(si->getCondition(), dl, symbols);
                 Val vt = fetch(si->getTrueValue(), dl, symbols);
                 Val vf = fetch(si->getFalseValue(), dl, symbols);
@@ -589,11 +593,11 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 else
                     SET(vf);
                 continue;
-            } else if (llvm::PHINode *phi = llvm::dyn_cast<llvm::PHINode>(it)) {
+            } else if (llvm::PHINode *phi = llvm::dyn_cast<llvm::PHINode>(inst)) {
                 assert(prevblock);
                 SET(fetch(phi->getIncomingValueForBlock(prevblock), dl, symbols));
                 continue;
-            } else if (llvm::BranchInst *br = llvm::dyn_cast<llvm::BranchInst>(it)) {
+            } else if (llvm::BranchInst *br = llvm::dyn_cast<llvm::BranchInst>(inst)) {
                 prevblock = curblock;
                 if (br->isConditional()) {
                     Val t = fetch(br->getCondition(), dl, symbols);
@@ -609,7 +613,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     //printf("jumped to %s\n", curblock->getName().data());
                 //}
                 break;
-            } else if (llvm::ReturnInst *ret = llvm::dyn_cast<llvm::ReturnInst>(it)) {
+            } else if (llvm::ReturnInst *ret = llvm::dyn_cast<llvm::ReturnInst>(inst)) {
                 llvm::Value* r = ret->getReturnValue();
 
 #ifdef TIME_INTERPRETS
@@ -625,7 +629,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
             }
 
 
-            it->dump();
+            inst->dump();
             RELEASE_ASSERT(1, "");
         }
     }

@@ -17,6 +17,8 @@
 
 #include <map>
 
+#include "llvm/ADT/iterator_range.h"
+
 #include "core/types.h"
 
 namespace llvm {
@@ -114,15 +116,14 @@ class GuardList {
     private:
         std::unordered_map<AST_expr*, ExprTypeGuard*> expr_type_guards;
         std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> > block_begin_guards;
+        //typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::iterator expr_type_guard_iterator;
+        //typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::const_iterator expr_type_guard_const_iterator;
+        typedef decltype(expr_type_guards)::iterator expr_type_guard_iterator;
+        typedef decltype(expr_type_guards)::const_iterator expr_type_guard_const_iterator;
 
     public:
-        typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::iterator expr_type_guard_iterator;
-        typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::const_iterator expr_type_guard_const_iterator;
-        expr_type_guard_iterator after_begin() {
-            return expr_type_guards.begin();
-        }
-        expr_type_guard_iterator after_end() {
-            return expr_type_guards.end();
+        llvm::iterator_range<expr_type_guard_iterator> exprGuards() {
+            return llvm::iterator_range<expr_type_guard_iterator>(expr_type_guards.begin(), expr_type_guards.end());
         }
 
         void getBlocksWithGuards(std::unordered_set<CFGBlock*> &add_to) {

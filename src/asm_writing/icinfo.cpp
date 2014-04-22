@@ -42,9 +42,8 @@ void ICInvalidator::addDependent(ICSlotInfo* entry_info) {
 
 void ICInvalidator::invalidateAll() {
     cur_version++;
-    for (std::unordered_set<ICSlotInfo*>::iterator it = dependents.begin(), end = dependents.end();
-            it != end; ++it) {
-        (*it)->clear();
+    for (ICSlotInfo* slot : dependents) {
+        slot->clear();
     }
     dependents.clear();
 }

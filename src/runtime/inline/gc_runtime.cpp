@@ -92,8 +92,8 @@ void gc_teardown() {
 #ifdef DEBUG_GC
         AliveSet *alive = getAlive();
         assert(nallocs == alive->size());
-        for (AliveSet::iterator it = alive->begin(), end = alive->end(); it != end; ++it) {
-            printf("%p\n", *it);
+        for (void* p : alive) {
+            printf("%p\n", p);
         }
 #endif
         // This will scan through the heap and alert us about things that

@@ -175,18 +175,19 @@ class MyInliningPass : public llvm::FunctionPass {
 
                     // Keep this section as a release_assert since the code-to-be-inlined, as well as the inlining
                     // decisions, can be different in release mode:
-                    int op_idx = 0;
-                    for (llvm::Function::arg_iterator it = f->arg_begin(), end = f->arg_end(); it != end; ++it, ++op_idx) {
+                    int op_idx = -1;
+                    for (llvm::Argument& arg : f->args()) {
+                        ++op_idx;
                         llvm::Type* op_type =call->getOperand(op_idx)->getType();
-                        if (it->getType() != op_type) {
+                        if (arg.getType() != op_type) {
                             llvm::errs() << f->getName() << " has arg " << op_idx << " mismatched!\n";
                             llvm::errs() << "Given ";
                             op_type->dump();
                             llvm::errs() << " but underlying function expected ";
-                            it->getType()->dump();
+                            arg.getType()->dump();
                             llvm::errs() << '\n';
                         }
-                        RELEASE_ASSERT(it->getType() == call->getOperand(op_idx)->getType(), "");
+                        RELEASE_ASSERT(arg.getType() == call->getOperand(op_idx)->getType(), "");
                     }
 
                     assert(!f->isDeclaration());

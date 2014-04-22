@@ -144,6 +144,7 @@ class DeadAllocsPass : public FunctionPass {
 
             if (GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(derived)) {
                 std::vector<Value*> indices;
+                // No range version of this for now:
                 for (GetElementPtrInst::op_iterator it = gep->idx_begin(), end = gep->idx_end(); it != end; ++it) {
                     indices.push_back(it->get());
                 }
@@ -291,6 +292,7 @@ class DeadAllocsPass : public FunctionPass {
         // Extract a Value corresponding to the value of this pointer, potentially traversing the CFG.
         // Starts looking a the end of this BB and working backwards.
         Value* getLoadValFrom(Value* ptr, BasicBlock* bb, std::unordered_map<BasicBlock*, Value*> &seen, ChainInfo &chain) {
+            // No range version of this for now:
             for (auto it = bb->rbegin(), end = bb->rend(); it != end; ++it) {
                 Value* v = extractLoadValue(ptr, &*it, chain);
                 if (v == NULL)
@@ -318,6 +320,7 @@ class DeadAllocsPass : public FunctionPass {
             if (VERBOSITY() >= 2) errs() << "Added phi " << *phi << " in " << bb->getName() << '\n';
 
             int num_predecessors = 0;
+            // No range version of this for now:
             for (auto prev_bb = pred_begin(bb), end = pred_end(bb); prev_bb != end; ++prev_bb) {
                 num_predecessors++;
 

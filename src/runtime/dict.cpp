@@ -27,15 +27,15 @@ Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     chars.push_back('{');
     bool first = true;
-    for (BoxedDict::PyDict::iterator it = self->d.begin(), end = self->d.end(); it != end; ++it) {
+    for (auto p : self->d) {
         if (!first) {
             chars.push_back(',');
             chars.push_back(' ');
         }
         first = false;
 
-        BoxedString *k = repr(it->first);
-        BoxedString *v = repr(it->second);
+        BoxedString *k = repr(p.first);
+        BoxedString *v = repr(p.second);
         chars.insert(chars.end(), k->s.begin(), k->s.end());
         chars.push_back(':');
         chars.push_back(' ');
@@ -48,10 +48,10 @@ Box* dictRepr(BoxedDict* self) {
 Box* dictItems(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
 
-    for (BoxedDict::PyDict::const_iterator it = self->d.begin(), end = self->d.end(); it != end; ++it) {
+    for (auto p : self->d) {
         std::vector<Box*> elts;
-        elts.push_back(it->first);
-        elts.push_back(it->second);
+        elts.push_back(p.first);
+        elts.push_back(p.second);
         BoxedTuple *t = new BoxedTuple(elts);
         listAppendInternal(rtn, t);
     }
@@ -61,16 +61,16 @@ Box* dictItems(BoxedDict* self) {
 
 Box* dictValues(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
-    for (BoxedDict::PyDict::const_iterator it = self->d.begin(), end = self->d.end(); it != end; ++it) {
-        listAppendInternal(rtn, it->second);
+    for (auto p : self->d) {
+        listAppendInternal(rtn, p.second);
     }
     return rtn;
 }
 
 Box* dictKeys(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
-    for (BoxedDict::PyDict::const_iterator it = self->d.begin(), end = self->d.end(); it != end; ++it) {
-        listAppendInternal(rtn, it->first);
+    for (auto p : self->d) {
+        listAppendInternal(rtn, p.first);
     }
     return rtn;
 }

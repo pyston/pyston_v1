@@ -47,17 +47,16 @@ void FunctionAddressRegistry::dumpPerfMap() {
     char buf[80];
     snprintf(buf, 80, "/tmp/perf-%d.map", getpid());
     FILE *f = fopen(buf, "w");
-    for (FuncMap::iterator it = functions.begin(), end = functions.end();
-            it != end; ++it) {
-        const FuncInfo& info = it->second;
-        fprintf(f, "%lx %x %s\n", (uintptr_t)it->first, info.length, info.name.c_str());
+    for (auto p : functions) {
+        const FuncInfo& info = p.second;
+        fprintf(f, "%lx %x %s\n", (uintptr_t)p.first, info.length, info.name.c_str());
 
         if (info.length > 0) {
-            fprintf(index_f, "%lx %s\n", (uintptr_t)it->first, info.name.c_str());
+            fprintf(index_f, "%lx %s\n", (uintptr_t)p.first, info.name.c_str());
 
             FILE *data_f = fopen((out_path + "/" + info.name).c_str(), "wb");
 
-            int written = fwrite((void*)it->first, 1, info.length, data_f);
+            int written = fwrite((void*)p.first, 1, info.length, data_f);
             assert(written == info.length);
             fclose(data_f);
         }
