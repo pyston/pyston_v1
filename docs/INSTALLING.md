@@ -39,7 +39,7 @@ sudo apt-get install libncurses5-dev zlib1g-dev
 
 ### LLVM + clang
 
-LLVM and clang depend on a pretty modern compiler; the steps below assume you uinstalled GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in src/Makefile) that I haven't tested.
+LLVM and clang depend on a pretty modern compiler; the steps below assume you installed GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in src/Makefile) that I haven't tested.
 
 ```
 cd ~/pyston_deps
@@ -68,8 +68,6 @@ make -j4
 make install
 ```
 
-TODO would be nice to install this locally like the rest of the dependencies
-
 ### valgrind
 
 Pyston currently has a build-time dependency on valgrind headers, for adding hooks to its custom memory allocator.  (TODO add a flag to enable this since it's normally not used.)  To satisfy this, do:
@@ -95,6 +93,12 @@ sudo apt-get install libc6-dbg
 Then, add this line to your Makefile.local:
 ```
 VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind $(HOME)/pyston_deps/valgrind-3.9.0-install/bin/valgrind
+```
+
+### zsh
+`zsh` is needed when running pyston tests.
+```
+apt-get install zsh
 ```
 
 # Optional dependencies
