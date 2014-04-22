@@ -1,0 +1,25 @@
+From 8f7bde85e4f9ce497e18b23a8c4fb3f9e0f2fb12 Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kevmod@gmail.com>
+Date: Mon, 21 Apr 2014 19:37:04 -0700
+Subject: [PATCH] Change the RBP-validation heuristic to allow size-0 call frames
+
+---
+ src/x86_64/Gstep.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/x86_64/Gstep.c b/src/x86_64/Gstep.c
+index 9fa0967..809d60b 100644
+--- a/src/x86_64/Gstep.c
++++ b/src/x86_64/Gstep.c
+@@ -173,7 +173,7 @@ unw_step (unw_cursor_t *cursor)
+ 		 anything about new RBP (rbp1) since it may not be a frame
+ 		 pointer in the frame above.  Just check we get the value. */
+               if (ret < 0
+-		  || rbp <= c->dwarf.cfa
++		  || rbp < c->dwarf.cfa
+ 		  || (rbp - c->dwarf.cfa) > 0x4000)
+ 	        {
+                   rip_loc = DWARF_NULL_LOC;
+-- 
+1.7.4.1
+

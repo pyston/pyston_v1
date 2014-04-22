@@ -63,6 +63,7 @@ mkdir libunwind-1.1-install
 cd libunwind-1.1
 # disable shared libraries because we'll be installing this in a place that the loader can't find it.
 ./configure --prefix=$HOME/pyston_deps/libunwind-1.1-install --enable-shared=0
+patch -p1 <~/pyston/libunwind_patches/0001-Change-the-RBP-validation-heuristic-to-allow-size-0-.patch
 make -j4
 make install
 ```
