@@ -39,7 +39,7 @@ sudo apt-get install libncurses5-dev zlib1g-dev
 
 ### LLVM + clang
 
-LLVM and clang depend on a pretty modern compiler; the steps below assume you uinstalled GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in src/Makefile) that I haven't tested.
+LLVM and clang depend on a pretty modern compiler; the steps below assume you installed GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in src/Makefile) that I haven't tested.
 
 ```
 cd ~/pyston_deps
