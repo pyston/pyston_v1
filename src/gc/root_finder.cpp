@@ -79,7 +79,9 @@ void collectStackRoots(TraceStack *stack) {
     int code;
     while (true) {
         int code = unw_step(&cursor);
-        assert(code > 0 && "something broke unwinding!");
+        // Negative codes are errors, zero means that there isn't a new frame.
+        ASSERT(code >= 0 && "something broke unwinding!", "%d '%s'", code, unw_strerror(code));
+        assert(code != 0 && "didn't get to the top of the stack!");
 
         unw_get_reg(&cursor, UNW_REG_IP, &ip);
         unw_get_reg(&cursor, UNW_REG_SP, &sp);
