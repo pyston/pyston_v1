@@ -98,6 +98,23 @@ VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind
 
 # Optional dependencies
 
+### Debug build of libunwind
+
+Assuming you've already built the normal version above:
+
+```
+cd ~/pyston_deps
+cp -rv libunwind-1.1 libunwind-1.1-debug
+mkdir ../libunwind-1.1-debug-install
+cd libunwind-1.1-debug
+./configure --prefix=$HOME/pyston_deps/libunwind-1.1-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
+make -j4
+make install
+echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/src/Makefile.local
+```
+
+This will link pyston_dbg and pyston_debug against the debug version of libunwind (the release pyston build will still link against the release libunwind); to enable debug output, set the UNW_DEBUG_LEVEL environment variable, ex to 13.
+
 ### distcc
 ```
 sudo apt-get install distcc distcc-pump

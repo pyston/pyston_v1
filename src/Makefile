@@ -16,6 +16,8 @@ GDB := gdb
 GCC_DIR := $(DEPS_DIR)/gcc-4.8.2-install
 GTEST_DIR := $(DEPS_DIR)/gtest-1.7.0
 
+USE_DEBUG_LIBUNWIND := 0
+
 PYTHON_MAJOR_VERSION := 2
 PYTHON_MINOR_VERSION := 7
 PYTHON_MICRO_VERSION := 3
@@ -141,8 +143,6 @@ COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurs
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
 
-COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-
 # The system libstdc++ will likely be too old for Pyston, but we made a brand new one
 # as part of our GCC installation.  There are a couple ways to use that one instead:
 # 1) Install the built libstdc++ (~/pyston_deps/gcc-4.8.2-install/lib64/libstdc++.so.6.0.18) and update the global shared library (/usr/local/x86_64-linux-gnu/libstdc++.so.6) to point to it
@@ -163,6 +163,17 @@ LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 # Can't add this, because there are functions in the compiler that look unused but are hooked back from the runtime:
 # LDFLAGS_RELEASE += -Wl,--gc-sections
+
+ifneq ($(USE_DEBUG_LIBUNWIND),0)
+	LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-debug-install/lib
+	LDFLAGS_DEBUG += -L$(DEPS_DIR)/libunwind-1.1-debug-install/lib
+else
+	LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-install/lib
+	LDFLAGS_DEBUG += -L$(DEPS_DIR)/libunwind-1.1-install/lib
+endif
+LDFLAGS_RELEASE += -L$(DEPS_DIR)/libunwind-1.1-install/lib
+LDFLAGS_PROFILE += -L$(DEPS_DIR)/libunwind-1.1-install/lib
+
 
 BUILD_SYSTEM_DEPS := Makefile Makefile.local $(wildcard build_system/*)
 CLANG_DEPS := $(CLANG_EXE) $(abspath $(dir $(CLANG_EXE))/../../built_release)
