@@ -30,6 +30,12 @@
 #include "gc/heap.h"
 #include "gc/root_finder.h"
 
+#ifndef LIBUNWIND_PYSTON_PATCH_VERSION
+#error "Please use a patched version of libunwind; see docs/INSTALLING.md"
+#elif LIBUNWIND_PYSTON_PATCH_VERSION != 0x01
+#error "Please repatch your version of libunwind; see docs/INSTALLING.md"
+#endif
+
 extern "C" void __libc_start_main();
 
 namespace pyston {

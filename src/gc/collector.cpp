@@ -16,9 +16,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
-
 #include "core/common.h"
 #include "core/types.h"
 
