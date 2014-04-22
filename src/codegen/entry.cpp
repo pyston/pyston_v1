@@ -231,6 +231,11 @@ void initCodegen() {
         "fake_name",
         "--enable-stackmap-liveness",
         "--enable-patchpoint-liveness",
+
+        // Enabling and debugging fast-isel:
+        //"--fast-isel",
+        //"--fast-isel-verbose",
+        ////"--fast-isel-abort",
 #ifndef NDEBUG
         //"--debug-only=debug-ir",
         //"--debug-only=regalloc",

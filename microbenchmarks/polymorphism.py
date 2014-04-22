@@ -1,3 +1,8 @@
+# This microbenchmark is inspired by the ICBD type checker, which has a "scoring" phase at
+# the end of the analysis.
+# I'm not sure how representative this file is of the type checker, or even if
+# this is really a polymorphism test or maybe just a tree test, or some cross of the two.
+
 class Union(object):
     def __init__(self, subs):
         self.subs = subs
