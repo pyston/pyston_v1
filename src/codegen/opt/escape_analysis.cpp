@@ -34,6 +34,9 @@
 #include "codegen/opt/escape_analysis.h"
 #include "codegen/opt/util.h"
 
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
+
 using namespace llvm;
 
 namespace pyston {
@@ -82,33 +85,33 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
 
                 checked.insert(next);
 
-                for (Value::use_iterator use_it = next->use_begin(), use_end = next->use_end(); use_it != use_end; ++use_it) {
-                    if (GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(*use_it)) {
+                for (User* user : next->users()) {
+                    if (GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(user)) {
                         queue.push_back(gep);
                         chain->derived.insert(gep);
                         chain_by_pointer[gep] = chain;
                         continue;
                     }
 
-                    if (CastInst *bc = dyn_cast<CastInst>(*use_it)) {
+                    if (CastInst *bc = dyn_cast<CastInst>(user)) {
                         queue.push_back(bc);
                         chain->derived.insert(bc);
                         chain_by_pointer[bc] = chain;
                         continue;
                     }
 
-                    if (PHINode *phi = dyn_cast<PHINode>(*use_it)) {
+                    if (PHINode *phi = dyn_cast<PHINode>(user)) {
                         queue.push_back(phi);
                         chain->derived.insert(phi);
                         chain_by_pointer[phi] = chain;
                         continue;
                     }
 
-                    if (isa<LoadInst>(*use_it)) {
+                    if (isa<LoadInst>(user)) {
                         continue;
                     }
 
-                    if (ReturnInst *ret = dyn_cast<ReturnInst>(*use_it)) {
+                    if (ReturnInst *ret = dyn_cast<ReturnInst>(user)) {
                         if (VERBOSITY() >= 2) errs() << "Not dead; used here: " << *ret << '\n';
                         chain->escape_points.insert(ret);
                         continue;
@@ -119,7 +122,7 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
 
 
 
-                    if (StoreInst *si = dyn_cast<StoreInst>(*use_it)) {
+                    if (StoreInst *si = dyn_cast<StoreInst>(user)) {
                         if (si->getPointerOperand() == next) {
                         } else {
                             assert(si->getValueOperand() == next);
@@ -129,7 +132,7 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
                         continue;
                     }
 
-                    if (CallInst *si = dyn_cast<CallInst>(*use_it)) {
+                    if (CallInst *si = dyn_cast<CallInst>(user)) {
                         if (VERBOSITY() >= 2) errs() << "Escapes here: " << *si << '\n';
                         chain->escape_points.insert(si);
                         continue;
@@ -137,7 +140,7 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
 
 
 
-                    (*use_it)->dump();
+                    user->dump();
                     RELEASE_ASSERT(0, "");
                 }
             }

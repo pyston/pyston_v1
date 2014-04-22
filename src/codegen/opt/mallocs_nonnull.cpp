@@ -107,9 +107,9 @@ public:
             bool changed = false;
             do {
                 changed = false;
-                for (Value::use_iterator use_it = processing->use_begin(), use_end = processing->use_end(); use_it != use_end; ++use_it) {
-                    //errs() << "looking at: " << **use_it << '\n';
-                    changed = visit(cast<Instruction>(*use_it));
+                for (User* user : processing->users()) {
+                    //errs() << "looking at: " << *user << '\n';
+                    changed = visit(cast<Instruction>(user));
                     if (changed)
                         break;
                 }

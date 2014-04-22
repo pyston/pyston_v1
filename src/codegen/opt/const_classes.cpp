@@ -121,8 +121,8 @@ class ConstClassesPass : public FunctionPass {
             }
 
             std::vector<Instruction*> to_remove;
-            for (Value::use_iterator use_it = li->use_begin(), use_end = li->use_end(); use_it != use_end; ++use_it) {
-                if (CallInst *call = dyn_cast<CallInst>(*use_it)) {
+            for (User* user : li->users()) {
+                if (CallInst *call = dyn_cast<CallInst>(user)) {
                     if (call->getCalledFunction()->getName() == "_maybeDecrefCls") {
                         errs() << "Found decrefcls call: " << *call << '\n';
                         if (!isUserDefined(cls)) {
@@ -134,9 +134,9 @@ class ConstClassesPass : public FunctionPass {
                     continue;
                 }
 
-                GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(*use_it);
+                GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(user);
                 if (!gep) {
-                    //errs() << "Not a gep: " << **use_it << '\n';
+                    //errs() << "Not a gep: " << *user << '\n';
                     continue;
                 }
 
@@ -147,10 +147,10 @@ class ConstClassesPass : public FunctionPass {
 
                 errs() << "Found a gep at offset " << offset << ": " << *gep << '\n';
 
-                for (Value::use_iterator gep_use_it = gep->use_begin(), gep_use_end = gep->use_end(); gep_use_it != gep_use_end; ++gep_use_it) {
-                    LoadInst *gep_load = dyn_cast<LoadInst>(*gep_use_it);
+                for (User* gep_user : gep->users()) {
+                    LoadInst *gep_load = dyn_cast<LoadInst>(gep_user);
                     if (!gep_load) {
-                        //errs() << "Not a load: " << **gep_use_it << '\n';
+                        //errs() << "Not a load: " << *gep_user << '\n';
                         continue;
                     }
 

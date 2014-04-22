@@ -58,20 +58,20 @@ class DeadAllocsPass : public FunctionPass {
                 return false;
             chain.seen.insert(v);
 
-            for (Value::use_iterator use_it = v->use_begin(), use_end = v->use_end(); use_it != use_end; ++use_it) {
-                if (GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(*use_it)) {
+            for (User* user : v->users()) {
+                if (GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(user)) {
                     if (canBeRead(gep, chain))
                         return true;
                     continue;
                 }
 
-                if (BitCastInst *bc = dyn_cast<BitCastInst>(*use_it)) {
+                if (BitCastInst *bc = dyn_cast<BitCastInst>(user)) {
                     if (canBeRead(bc, chain))
                         return true;
                     continue;
                 }
 
-                if (PHINode *phi = dyn_cast<PHINode>(*use_it)) {
+                if (PHINode *phi = dyn_cast<PHINode>(user)) {
                     if (canBeRead(phi, chain))
                         return true;
                     continue;
@@ -79,9 +79,9 @@ class DeadAllocsPass : public FunctionPass {
 
 
                 // Can't call canBeRead after this point:
-                chain.seen.insert(cast<Instruction>(*use_it));
+                chain.seen.insert(cast<Instruction>(user));
 
-                if (StoreInst *si = dyn_cast<StoreInst>(*use_it)) {
+                if (StoreInst *si = dyn_cast<StoreInst>(user)) {
                     if (si->getPointerOperand() == v) {
                         chain.deletions.push_back(si);
                         continue;
@@ -91,29 +91,29 @@ class DeadAllocsPass : public FunctionPass {
                     }
                 }
 
-                if (MemSetInst *msi = dyn_cast<MemSetInst>(*use_it)) {
+                if (MemSetInst *msi = dyn_cast<MemSetInst>(user)) {
                     assert(v == msi->getArgOperand(0));
                     chain.deletions.push_back(msi);
                     continue;
                 }
 
-                if (CallInst *si = dyn_cast<CallInst>(*use_it)) {
+                if (CallInst *si = dyn_cast<CallInst>(user)) {
                     if (VERBOSITY() >= 2) errs() << "Not dead; used here: " << *si << '\n';
                     return true;
                 }
 
-                if (ReturnInst *ret = dyn_cast<ReturnInst>(*use_it)) {
+                if (ReturnInst *ret = dyn_cast<ReturnInst>(user)) {
                     if (VERBOSITY() >= 2) errs() << "Not dead; used here: " << *ret << '\n';
                     return true;
                 }
 
-                if (LoadInst *li = dyn_cast<LoadInst>(*use_it)) {
+                if (LoadInst *li = dyn_cast<LoadInst>(user)) {
                     assert(li->getPointerOperand() == v);
                     chain.loads.push_back(li);
                     continue;
                 }
 
-                errs() << **use_it << '\n';
+                errs() << *user << '\n';
                 RELEASE_ASSERT(0, "");
             }
 
