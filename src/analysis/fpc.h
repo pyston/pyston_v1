@@ -43,8 +43,8 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
 
     std::vector<CFGBlock*> q;
 
-    states.insert(make_pair(cfg->blocks[0], Map()));
-    q.push_back(cfg->blocks[0]);
+    states.insert(make_pair(cfg->getStartingBlock(), Map()));
+    q.push_back(cfg->getStartingBlock());
 
     while (q.size()) {
         CFGBlock *block = q.back();

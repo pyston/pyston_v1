@@ -51,6 +51,7 @@ class CFGBlock {
         }
 
         void connectTo(CFGBlock *successor, bool allow_backedge=false);
+        void unconnectFrom(CFGBlock *successor);
 
         void push_back(AST_stmt* node) {
             body.push_back(node);
@@ -60,11 +61,19 @@ class CFGBlock {
 // Control Flow Graph
 class CFG {
     private:
+        int next_idx;
     public:
         std::vector<CFGBlock*> blocks;
 
+        CFG() : next_idx(0) {}
+
+        CFGBlock* getStartingBlock() {
+            return blocks[0];
+        }
+
         CFGBlock* addBlock() {
-            int idx = blocks.size();
+            int idx = next_idx;
+            next_idx++;
             CFGBlock* block = new CFGBlock(this, idx);
             blocks.push_back(block);
 
@@ -78,7 +87,8 @@ class CFG {
 
         void placeBlock(CFGBlock *block) {
             assert(block->idx == -1);
-            block->idx = blocks.size();
+            block->idx = next_idx;
+            next_idx++;
             blocks.push_back(block);
         }
 

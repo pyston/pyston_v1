@@ -163,7 +163,7 @@ class IRGeneratorImpl : public IRGenerator {
 
         IREmitterImpl emitter;
         SymbolTable symbol_table;
-        std::vector<llvm::BasicBlock*> &entry_blocks;
+        std::unordered_map<CFGBlock*, llvm::BasicBlock*> &entry_blocks;
         llvm::BasicBlock *curblock;
         CFGBlock *myblock;
         TypeAnalysis *types;
@@ -178,8 +178,8 @@ class IRGeneratorImpl : public IRGenerator {
         } state;
 
     public:
-        IRGeneratorImpl(IRGenState *irstate, std::vector<llvm::BasicBlock*> &entry_blocks, CFGBlock *myblock, TypeAnalysis *types, GuardList &out_guards, const GuardList &in_guards, bool is_partial) : irstate(irstate), emitter(irstate), entry_blocks(entry_blocks), myblock(myblock), types(types), out_guards(out_guards), in_guards(in_guards), state(is_partial ? PARTIAL : RUNNING) {
-            llvm::BasicBlock* entry_block = entry_blocks[myblock->idx];
+        IRGeneratorImpl(IRGenState *irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*> &entry_blocks, CFGBlock *myblock, TypeAnalysis *types, GuardList &out_guards, const GuardList &in_guards, bool is_partial) : irstate(irstate), emitter(irstate), entry_blocks(entry_blocks), myblock(myblock), types(types), out_guards(out_guards), in_guards(in_guards), state(is_partial ? PARTIAL : RUNNING) {
+            llvm::BasicBlock* entry_block = entry_blocks[myblock];
             emitter.getBuilder()->SetInsertPoint(entry_block);
             curblock = entry_block;
         }
@@ -1286,8 +1286,8 @@ class IRGeneratorImpl : public IRGenerator {
             val->decvref(emitter);
 
             llvm::Value *llvm_nonzero = nonzero->getValue();
-            llvm::BasicBlock *iftrue = entry_blocks[node->iftrue->idx];
-            llvm::BasicBlock *iffalse = entry_blocks[node->iffalse->idx];
+            llvm::BasicBlock *iftrue = entry_blocks[node->iftrue];
+            llvm::BasicBlock *iffalse = entry_blocks[node->iffalse];
 
             nonzero->decvref(emitter);
 
@@ -1461,7 +1461,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             endBlock(FINISHED);
 
-            llvm::BasicBlock *target = entry_blocks[node->target->idx];
+            llvm::BasicBlock *target = entry_blocks[node->target];
 
             if (ENABLE_OSR && node->target->idx < myblock->idx && irstate->getEffortLevel() < EffortLevel::MAXIMAL) {
                 assert(node->target->predecessors.size() > 1);
@@ -1714,7 +1714,7 @@ class IRGeneratorImpl : public IRGenerator {
 
 };
 
-IRGenerator *createIRGenerator(IRGenState *irstate, std::vector<llvm::BasicBlock*> &entry_blocks, CFGBlock *myblock, TypeAnalysis *types, GuardList &out_guards, const GuardList &in_guards, bool is_partial) {
+IRGenerator *createIRGenerator(IRGenState *irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*> &entry_blocks, CFGBlock *myblock, TypeAnalysis *types, GuardList &out_guards, const GuardList &in_guards, bool is_partial) {
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types, out_guards, in_guards, is_partial);
 }
 

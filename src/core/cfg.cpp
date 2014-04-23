@@ -29,8 +29,18 @@ void CFGBlock::connectTo(CFGBlock *successor, bool allow_backedge) {
         assert(this->idx >= 0);
         ASSERT(successor->idx == -1 || successor->idx > this->idx, "edge from %d to %d", this->idx, successor->idx);
     }
+    //assert(successors.count(successor) == 0);
+    //assert(successor->predecessors.count(this) == 0);
+
     successors.push_back(successor);
     successor->predecessors.push_back(this);
+}
+
+void CFGBlock::unconnectFrom(CFGBlock *successor) {
+    //assert(successors.count(successor));
+    //assert(successor->predecessors.count(this));
+    successors.erase(std::remove(successors.begin(), successors.end(), successor), successors.end());
+    successor->predecessors.erase(std::remove(successor->predecessors.begin(), successor->predecessors.end(), this), successor->predecessors.end());
 }
 
 class CFGVisitor : public ASTVisitor {
@@ -664,7 +674,7 @@ class CFGVisitor : public ASTVisitor {
         virtual bool visit_functiondef(AST_FunctionDef* node) { push_back(node); return true; }
         virtual bool visit_global(AST_Global* node) { push_back(node); return true; }
         virtual bool visit_import(AST_Import* node) { push_back(node); return true; }
-        virtual bool visit_pass(AST_Pass* node) { push_back(node); return true; }
+        virtual bool visit_pass(AST_Pass* node) { return true; }
 
         virtual bool visit_assign(AST_Assign* node) {
             AST_Assign* remapped = new AST_Assign();
@@ -1184,8 +1194,8 @@ void CFG::print() {
     printf("%ld blocks\n", blocks.size());
     PrintVisitor *pv = new PrintVisitor(4);
     for (int i = 0; i < blocks.size(); i++) {
-        printf("Block %d", i);
         CFGBlock *b = blocks[i];
+        printf("Block %d", b->idx);
         if (b->info)
             printf(" '%s'", b->info);
 
@@ -1228,9 +1238,7 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     ////
     // Check some properties expected by later stages:
 
-    // Block 0 is hard-coded to be the entry block, and shouldn't have any
-    // predecessors:
-    assert(rtn->blocks[0]->predecessors.size() == 0);
+    assert(rtn->getStartingBlock()->predecessors.size() == 0);
 
     // We need to generate the CFG in a way that doesn't have any critical edges,
     // since the ir generation requires that.
@@ -1267,6 +1275,40 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         // this can be worked around but it's easiest just to ensure this here.
         assert(rtn->blocks[i]->predecessors[0]->idx < i);
     }
+
+    // Prune unnecessary blocks from the CFG.
+    // Not strictly necessary, but makes the output easier to look at,
+    // and can make the analyses more efficient.
+    // The extra blocks would get merged by LLVM passes, so I'm not sure
+    // how much overall improvement there is.
+    for (CFGBlock* b : rtn->blocks) {
+        while (b->successors.size() == 1) {
+            CFGBlock *b2 = b->successors[0];
+            if (b2->predecessors.size() != 1)
+                break;
+
+            if (VERBOSITY()) {
+                //rtn->print();
+                printf("Joining blocks %d and %d\n", b->idx, b2->idx);
+            }
+
+            assert(b->body[b->body.size()-1]->type == AST_TYPE::Jump);
+
+            b->body.pop_back();
+            b->body.insert(b->body.end(), b2->body.begin(), b2->body.end());
+            b->unconnectFrom(b2);
+
+            for (CFGBlock *b3 : b2->successors) {
+                b->connectTo(b3, true);
+                b2->unconnectFrom(b3);
+            }
+
+            rtn->blocks.erase(std::remove(rtn->blocks.begin(), rtn->blocks.end(), b2), rtn->blocks.end());
+            delete b2;
+        }
+    }
+
+    assert(rtn->getStartingBlock()->idx == 0);
 
     /*
     // I keep on going back and forth about whether or not it's ok to reuse AST nodes.

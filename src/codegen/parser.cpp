@@ -63,7 +63,7 @@ class BufferedReader {
 
         uint8_t readByte() {
             ensure(1);
-            assert(end > start);
+            assert(end > start && "premature eof");
             if (VERBOSITY("parsing") >= 2)
                 printf("readByte, now %d %d\n", start+1, end);
             return buf[start++];

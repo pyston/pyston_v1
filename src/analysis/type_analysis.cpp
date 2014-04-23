@@ -73,7 +73,7 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
 }
 
 typedef std::unordered_map<std::string, CompilerType*> TypeMap;
-typedef std::unordered_map<int, TypeMap> AllTypeMap;
+typedef std::unordered_map<CFGBlock*, TypeMap> AllTypeMap;
 typedef std::unordered_map<AST_expr*, CompilerType*> ExprTypeMap;
 typedef std::unordered_map<AST_expr*, BoxedClass*> TypeSpeculations;
 class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
@@ -479,7 +479,7 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
             return getTypeAtBlockStart(name, block->successors[0]);
         }
         virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string &name, CFGBlock* block) {
-            CompilerType *base = starting_types[block->idx][name];
+            CompilerType *base = starting_types[block][name];
             ASSERT(base != NULL, "%s %d", name.c_str(), block->idx);
 
             ConcreteCompilerType *rtn = base->getConcreteType();
@@ -538,7 +538,7 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
             assert(arg_names.size() == arg_types.size());
 
             {
-                TypeMap &initial_types = starting_types[0];
+                TypeMap &initial_types = starting_types[cfg->getStartingBlock()];
                 for (int i = 0; i < arg_names.size(); i++) {
                     AST_expr* arg = arg_names[i];
                     assert(arg->type == AST_TYPE::Name);
@@ -547,36 +547,34 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 }
             }
 
-            std::unordered_set<int> in_queue;
-            std::deque<int> queue;
-            queue.push_back(0);
+            std::unordered_set<CFGBlock*> in_queue;
+            std::deque<CFGBlock*> queue;
+            queue.push_back(cfg->getStartingBlock());
 
             while (queue.size()) {
-                int block_id = queue.front();
+                CFGBlock *block = queue.front();
                 queue.pop_front();
-                in_queue.erase(block_id);
-
-                CFGBlock *block = cfg->blocks[block_id];
+                in_queue.erase(block);
 
                 TypeMap ending;
 
                 if (VERBOSITY("types")) {
-                    printf("processing types for block %d\n", block_id);
+                    printf("processing types for block %d\n", block->idx);
                 }
                 if (VERBOSITY("types") >= 2) {
                     printf("before:\n");
-                    TypeMap &starting = starting_types[block_id];
+                    TypeMap &starting = starting_types[block];
                     for (auto p : starting) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
                 }
 
-                BasicBlockTypePropagator::propagate(block, starting_types[block_id], ending, expr_types, type_speculations, speculation, scope_info);
+                BasicBlockTypePropagator::propagate(block, starting_types[block], ending, expr_types, type_speculations, speculation, scope_info);
 
                 if (VERBOSITY("types") >= 2) {
                     printf("before (after):\n");
-                    TypeMap &starting = starting_types[block_id];
+                    TypeMap &starting = starting_types[block];
                     for (auto p : starting) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
@@ -589,21 +587,20 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 }
 
                 for (int i = 0; i < block->successors.size(); i++) {
-                    int next_id = block->successors[i]->idx;
-                    bool first = (starting_types.count(next_id) == 0);
-                    bool changed = merge(ending, starting_types[next_id]);
-                    if ((first || changed) && in_queue.insert(next_id).second) {
-                        queue.push_back(next_id);
+                    CFGBlock *next_block = block->successors[i];
+                    bool first = (starting_types.count(next_block) == 0);
+                    bool changed = merge(ending, starting_types[next_block]);
+                    if ((first || changed) && in_queue.insert(next_block).second) {
+                        queue.push_back(next_block);
                     }
                 }
             }
 
             if (VERBOSITY("types") >= 2) {
-                for (int i = 0; i < cfg->blocks.size(); i++) {
-                    printf("Types at beginning of block %d:\n", i);
-                    CFGBlock *b = cfg->blocks[i];
+                for (CFGBlock *b : cfg->blocks) {
+                    printf("Types at beginning of block %d:\n", b->idx);
 
-                    TypeMap &starting = starting_types[i];
+                    TypeMap &starting = starting_types[b];
                     for (auto p : starting) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());

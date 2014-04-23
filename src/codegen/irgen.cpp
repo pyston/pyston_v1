@@ -280,20 +280,19 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     llvm::MDNode* func_info = irstate->getFuncDbgInfo();
 
     if (entry_descriptor != NULL)
-        assert(full_blocks.count(source->cfg->blocks[0]) == 0);
+        assert(full_blocks.count(source->cfg->getStartingBlock()) == 0);
 
     // We need the entry blocks pre-allocated so that we can jump forward to them.
-    std::vector<llvm::BasicBlock*> llvm_entry_blocks;
-    for (int i = 0; i < source->cfg->blocks.size(); i++) {
-        CFGBlock *block = source->cfg->blocks[i];
+    std::unordered_map<CFGBlock*, llvm::BasicBlock*> llvm_entry_blocks;
+    for (CFGBlock* block : source->cfg->blocks) {
         if (partial_blocks.count(block) == 0 && full_blocks.count(block) == 0) {
-            llvm_entry_blocks.push_back(NULL);
+            llvm_entry_blocks[block] = NULL;
             continue;
         }
 
         char buf[40];
-        snprintf(buf, 40, "%s_block%d", bb_type, i);
-        llvm_entry_blocks.push_back(llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction()));
+        snprintf(buf, 40, "%s_block%d", bb_type, block->idx);
+        llvm_entry_blocks[block] = llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction());
     }
 
     llvm::BasicBlock *osr_entry_block = NULL; // the function entry block, where we add the type guards
@@ -416,7 +415,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         } else {
             entry_emitter->getBuilder()->CreateBr(osr_unbox_block);
         }
-        unbox_emitter->getBuilder()->CreateBr(llvm_entry_blocks[entry_descriptor->backedge->target->idx]);
+        unbox_emitter->getBuilder()->CreateBr(llvm_entry_blocks[entry_descriptor->backedge->target]);
 
         for (auto p : *initial_syms) {
             delete p.second;
@@ -428,21 +427,21 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     // so that we can construct phi nodes later.
     // Originally I preallocated these blocks as well, but we can construct the phi's
     // after the fact, so we can just record the exit blocks as we go along.
-    std::unordered_map<int, llvm::BasicBlock*> llvm_exit_blocks;
+    std::unordered_map<CFGBlock*, llvm::BasicBlock*> llvm_exit_blocks;
 
     ////
     // Main ir generation: go through each basic block in the CFG and emit the code
 
-    std::unordered_map<int, SymbolTable*> ending_symbol_tables;
-    std::unordered_map<int, ConcreteSymbolTable*> phi_ending_symbol_tables;
+    std::unordered_map<CFGBlock*, SymbolTable*> ending_symbol_tables;
+    std::unordered_map<CFGBlock*, ConcreteSymbolTable*> phi_ending_symbol_tables;
     typedef std::unordered_map<std::string, std::pair<ConcreteCompilerType*, llvm::PHINode*> > PHITable;
-    std::unordered_map<int, PHITable*> created_phis;
+    std::unordered_map<CFGBlock*, PHITable*> created_phis;
 
     CFGBlock* initial_block = NULL;
     if (entry_descriptor) {
         initial_block = entry_descriptor->backedge->target;
-    } else if (full_blocks.count(source->cfg->blocks[0])) {
-        initial_block = source->cfg->blocks[0];
+    } else if (full_blocks.count(source->cfg->getStartingBlock())) {
+        initial_block = source->cfg->getStartingBlock();
     }
 
     // The rest of this code assumes that for each non-entry block that gets evaluated,
@@ -458,11 +457,6 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     for (int _i = 0; _i < traversal_order.size(); _i++) {
         CFGBlock *block = traversal_order[_i].first;
         CFGBlock *pred = traversal_order[_i].second;
-    //for (int _i = 0; _i < source->cfg->blocks.size(); _i++) {
-        //CFGBlock *block = source->cfg->blocks[_i];
-        //CFGBlock *pred = NULL;
-        //if (block->predecessors.size())
-            //CFGBlock *pred = block->predecessors[0];
 
         if (VERBOSITY("irgen") >= 1) printf("processing %s block %d\n", bb_type, block->idx);
 
@@ -472,27 +466,27 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             is_partial = true;
         } else if (!full_blocks.count(block)) {
             if (VERBOSITY("irgen") >= 1) printf("Skipping this block\n");
-            //created_phis[block->idx] = NULL;
-            //ending_symbol_tables[block->idx] = NULL;
-            //phi_ending_symbol_tables[block->idx] = NULL;
-            //llvm_exit_blocks[block->idx] = NULL;
+            //created_phis[block] = NULL;
+            //ending_symbol_tables[block] = NULL;
+            //phi_ending_symbol_tables[block] = NULL;
+            //llvm_exit_blocks[block] = NULL;
             continue;
         }
 
         std::unique_ptr<IRGenerator> generator(createIRGenerator(irstate, llvm_entry_blocks, block, types, out_guards, in_guards, is_partial));
         std::unique_ptr<IREmitter> emitter(createIREmitter(irstate));
-        emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[block->idx]);
+        emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[block]);
 
         PHITable* phis = NULL;
         if (!is_partial) {
             phis = new PHITable();
-            created_phis[block->idx] = phis;
+            created_phis[block] = phis;
         }
 
         // Set initial symbol table:
         if (is_partial) {
             // pass
-        } else if (block->idx == 0) {
+        } else if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
             // number of times a function needs to be called to be reoptimized:
             static const int REOPT_THRESHOLDS[] = {
@@ -504,7 +498,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             assert(strcmp("opt", bb_type) == 0);
 
             if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL && source->ast->type != AST_TYPE::Module) {
-                llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[0]);
+                llvm::BasicBlock* preentry_bb = llvm::BasicBlock::Create(g.context, "pre_entry", irstate->getLLVMFunction(), llvm_entry_blocks[source->cfg->getStartingBlock()]);
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
                 emitter->getBuilder()->SetInsertPoint(preentry_bb);
 
@@ -517,7 +511,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                 llvm::Value* md_vals[] = {llvm::MDString::get(g.context, "branch_weights"), getConstantInt(1), getConstantInt(1000)};
                 llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Value*>(md_vals));
 
-                llvm::BranchInst* guard = emitter->getBuilder()->CreateCondBr(reopt_test, reopt_bb, llvm_entry_blocks[0], branch_weights);
+                llvm::BranchInst* guard = emitter->getBuilder()->CreateCondBr(reopt_test, reopt_bb, llvm_entry_blocks[source->cfg->getStartingBlock()], branch_weights);
 
                 emitter->getBuilder()->SetInsertPoint(reopt_bb);
                 //emitter->getBuilder()->CreateCall(g.funcs.my_assert, getConstantInt(0, g.i1));
@@ -542,7 +536,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                     emitter->getBuilder()->CreateRet(postcall);
                 }
 
-                emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[0]);
+                emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
             generator->unpackArguments(arg_names, cf->sig->arg_types);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
@@ -570,7 +564,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             assert(block->predecessors.size());
             for (int i = 0; i < block->predecessors.size(); i++) {
                 CFGBlock *b2 = block->predecessors[i];
-                assert(ending_symbol_tables.count(b2->idx) == 0);
+                assert(ending_symbol_tables.count(b2) == 0);
                 into_hax.insert(b2);
             }
 
@@ -604,19 +598,19 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             if (block->predecessors.size() == 1)  {
                 // If this block has only one predecessor, it by definition doesn't need any phi nodes.
                 // Assert that the phi_st is empty, and just create the symbol table from the non-phi st:
-                ASSERT(phi_ending_symbol_tables[pred->idx]->size() == 0, "%d %d", block->idx, pred->idx);
-                assert(ending_symbol_tables.count(pred->idx));
-                generator->copySymbolsFrom(ending_symbol_tables[pred->idx]);
+                ASSERT(phi_ending_symbol_tables[pred]->size() == 0, "%d %d", block->idx, pred->idx);
+                assert(ending_symbol_tables.count(pred));
+                generator->copySymbolsFrom(ending_symbol_tables[pred]);
             } else {
                 // With multiple predecessors, the symbol tables at the end of each predecessor should be *exactly* the same.
                 // (this should be satisfied by the post-run() code in this function)
 
                 // With multiple predecessors, we have to combine the non-phi and phi symbol tables.
                 // Start off with the non-phi ones:
-                generator->copySymbolsFrom(ending_symbol_tables[pred->idx]);
+                generator->copySymbolsFrom(ending_symbol_tables[pred]);
 
                 // And go through and add phi nodes:
-                ConcreteSymbolTable *pred_st = phi_ending_symbol_tables[pred->idx];
+                ConcreteSymbolTable *pred_st = phi_ending_symbol_tables[pred];
                 for (ConcreteSymbolTable::iterator it = pred_st->begin(); it != pred_st->end(); it++) {
                     //printf("adding phi for %s\n", it->first.c_str());
                     llvm::PHINode *phi = emitter->getBuilder()->CreatePHI(it->second->getType()->llvmType(), block->predecessors.size(), it->first);
@@ -632,9 +626,9 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         generator->run(block);
 
         const IRGenerator::EndingState &ending_st = generator->getEndingSymbolTable();
-        ending_symbol_tables[block->idx] = ending_st.symbol_table;
-        phi_ending_symbol_tables[block->idx] = ending_st.phi_symbol_table;
-        llvm_exit_blocks[block->idx] = ending_st.ending_block;
+        ending_symbol_tables[block] = ending_st.symbol_table;
+        phi_ending_symbol_tables[block] = ending_st.phi_symbol_table;
+        llvm_exit_blocks[block] = ending_st.ending_block;
 
         if (into_hax.count(block))
             ASSERT(ending_st.symbol_table->size() == 0, "%d", block->idx);
@@ -646,14 +640,12 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     // the relevant IR, so after we have done all of it, go back through and populate the phi nodes.
     // Also, do some checking to make sure that the phi analysis stuff worked out, and that all blocks
     // agreed on what symbols + types they should be propagating for the phis.
-    for (int i = 0; i < source->cfg->blocks.size(); i++) {
-        PHITable *phis = created_phis[i];
+    for (CFGBlock *b : source->cfg->blocks) {
+        PHITable *phis = created_phis[b];
         if (phis == NULL)
             continue;
 
-        bool this_is_osr_entry = (entry_descriptor && i == entry_descriptor->backedge->target->idx);
-
-        CFGBlock *b = source->cfg->blocks[i];
+        bool this_is_osr_entry = (entry_descriptor && b == entry_descriptor->backedge->target);
 
         const std::vector<GuardList::BlockEntryGuard*> &block_guards = in_guards.getGuardsForBlock(b);
         //printf("Found %ld guards for block %p, for %p\n", block_guards.size(), b, &in_guards);
@@ -663,9 +655,9 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
                 continue;
 
-            //printf("%d %d %ld %ld\n", i, b2->idx, phi_ending_symbol_tables[b2->idx]->size(), phis->size());
-            compareKeyset(phi_ending_symbol_tables[b2->idx], phis);
-            assert(phi_ending_symbol_tables[b2->idx]->size() == phis->size());
+            //printf("%d %d %ld %ld\n", i, b2->idx, phi_ending_symbol_tables[b2]->size(), phis->size());
+            compareKeyset(phi_ending_symbol_tables[b2], phis);
+            assert(phi_ending_symbol_tables[b2]->size() == phis->size());
         }
 
         if (this_is_osr_entry) {
@@ -693,14 +685,14 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
                 if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
                     continue;
 
-                ConcreteCompilerVariable *v = (*phi_ending_symbol_tables[b2->idx])[it->first];
+                ConcreteCompilerVariable *v = (*phi_ending_symbol_tables[b2])[it->first];
                 assert(v);
                 assert(v->isGrabbed());
 
                 // Make sure they all prepared for the same type:
                 ASSERT(it->second.first == v->getType(), "%d %d: %s %s %s", b->idx, b2->idx, it->first.c_str(), it->second.first->debugName().c_str(), v->getType()->debugName().c_str());
 
-                llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]->idx]);
+                llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
             }
 
             if (this_is_osr_entry) {
@@ -732,24 +724,24 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         }
 
         for (int i = 0; i < block_guards.size(); i++) {
-            emitters[i]->getBuilder()->CreateBr(llvm_entry_blocks[b->idx]);
+            emitters[i]->getBuilder()->CreateBr(llvm_entry_blocks[b]);
             delete emitters[i];
         }
     }
 
-    for (int i = 0; i < source->cfg->blocks.size(); i++) {
-        if (ending_symbol_tables[i] == NULL)
+    for (CFGBlock *b : source->cfg->blocks) {
+        if (ending_symbol_tables[b] == NULL)
             continue;
 
-        for (SymbolTable::iterator it = ending_symbol_tables[i]->begin(); it != ending_symbol_tables[i]->end(); it++) {
+        for (SymbolTable::iterator it = ending_symbol_tables[b]->begin(); it != ending_symbol_tables[b]->end(); it++) {
             it->second->decvrefNodrop();
         }
-        for (ConcreteSymbolTable::iterator it = phi_ending_symbol_tables[i]->begin(); it != phi_ending_symbol_tables[i]->end(); it++) {
+        for (ConcreteSymbolTable::iterator it = phi_ending_symbol_tables[b]->begin(); it != phi_ending_symbol_tables[b]->end(); it++) {
             it->second->decvrefNodrop();
         }
-        delete phi_ending_symbol_tables[i];
-        delete ending_symbol_tables[i];
-        delete created_phis[i];
+        delete phi_ending_symbol_tables[b];
+        delete ending_symbol_tables[b];
+        delete created_phis[b];
     }
 
     if (entry_descriptor) {
@@ -907,8 +899,8 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
 
     BlockSet full_blocks, partial_blocks;
     if (entry_descriptor == NULL) {
-        for (int i = 0; i < source->cfg->blocks.size(); i++) {
-            full_blocks.insert(source->cfg->blocks[i]);
+        for (CFGBlock *b : source->cfg->blocks) {
+            full_blocks.insert(b);
         }
     } else {
         full_blocks.insert(entry_descriptor->backedge->target);
