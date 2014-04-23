@@ -738,8 +738,9 @@ AST_Module* parse(const char* fn) {
     return static_cast<AST_Module*>(rtn);
 }
 
-#define MAGIC_STRING "a\ncf"
+#define MAGIC_STRING "a\ncg"
 #define MAGIC_STRING_LENGTH 4
+#define LENGTH_SUFFIX_LENGTH 4
 
 static void _reparse(const char* fn, const std::string &cache_fn) {
     std::string cmdline = std::string("python -S codegen/parse_ast.py ") + fn;
@@ -749,13 +750,21 @@ static void _reparse(const char* fn, const std::string &cache_fn) {
 
     fwrite(MAGIC_STRING, 1, MAGIC_STRING_LENGTH, cache_fp);
 
+    int bytes_written = 0;
     char buf[80];
     while (true) {
         int nread = fread(buf, 1, 80, parser);
         if (nread == 0)
             break;
+        bytes_written += nread;
         fwrite(buf, 1, nread, cache_fp);
     }
+
+    // Ideally this should be a full checksum rather than just a length.
+    // And maybe it should be put at the beginning?
+    static_assert(sizeof(bytes_written) >= LENGTH_SUFFIX_LENGTH, "");
+    fwrite(&bytes_written, 1, LENGTH_SUFFIX_LENGTH, cache_fp);
+
     int code = pclose(parser);
     assert(code == 0);
     fclose(cache_fp);
@@ -777,17 +786,43 @@ AST_Module* caching_parse(const char* fn) {
     if (code != 0 || cache_stat.st_mtime < source_stat.st_mtime ||
             (cache_stat.st_mtime == source_stat.st_mtime && cache_stat.st_mtim.tv_nsec < source_stat.st_mtim.tv_nsec)) {
         _reparse(fn, cache_fn);
+        code = stat(cache_fn.c_str(), &cache_stat);
+        assert(code == 0);
     }
 
     FILE *fp = fopen(cache_fn.c_str(), "r");
     assert(fp);
 
     while (true) {
-        char buf[MAGIC_STRING_LENGTH];
-        int read = fread(buf, 1, MAGIC_STRING_LENGTH, fp);
-        if (read != 4 || strncmp(buf, MAGIC_STRING, MAGIC_STRING_LENGTH) != 0) {
+        bool good = true;
+
+        if (good) {
+            char buf[MAGIC_STRING_LENGTH];
+            int read = fread(buf, 1, MAGIC_STRING_LENGTH, fp);
+            if (read != MAGIC_STRING_LENGTH || strncmp(buf, MAGIC_STRING, MAGIC_STRING_LENGTH) != 0) {
+                good = false;
+            }
+        }
+
+        if (good) {
+            int length = 0;
+            fseek(fp, -LENGTH_SUFFIX_LENGTH, SEEK_END);
+            static_assert(sizeof(length) >= LENGTH_SUFFIX_LENGTH, "");
+            int read = fread(&length, 1, LENGTH_SUFFIX_LENGTH, fp);
+            fseek(fp, MAGIC_STRING_LENGTH, SEEK_SET);
+
+            int expected_length = MAGIC_STRING_LENGTH + LENGTH_SUFFIX_LENGTH + length;
+
+            if (read != LENGTH_SUFFIX_LENGTH || expected_length != cache_stat.st_size) {
+                good = false;
+            }
+        }
+
+        if (!good) {
             fclose(fp);
             _reparse(fn, cache_fn);
+            code = stat(cache_fn.c_str(), &cache_stat);
+            assert(code == 0);
 
             fp = fopen(cache_fn.c_str(), "r");
             assert(fp);
@@ -799,7 +834,7 @@ AST_Module* caching_parse(const char* fn) {
     BufferedReader *reader = new BufferedReader(fp);
     AST* rtn = readASTMisc(reader);
     reader->fill();
-    assert(reader->bytesBuffered() == 0);
+    assert(reader->bytesBuffered() == LENGTH_SUFFIX_LENGTH);
     delete reader;
 
     assert(rtn->type == AST_TYPE::Module);
