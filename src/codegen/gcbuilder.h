@@ -24,6 +24,8 @@ namespace pyston {
 class IREmitter;
 class GCBuilder {
     public:
+        virtual ~GCBuilder() {}
+
         virtual llvm::Value* readPointer(IREmitter&, llvm::Value* ptr_ptr) = 0;
         virtual void writePointer(IREmitter&, llvm::Value* ptr_ptr, llvm::Value* ptr_value, bool ignore_existing_value) = 0;
 

@@ -28,6 +28,8 @@ class BBAnalyzer {
         typedef std::unordered_map<std::string, T> Map;
         typedef std::unordered_map<CFGBlock*, Map> AllMap;
 
+        virtual ~BBAnalyzer() {}
+
         virtual T merge(T from, T into) const = 0;
         virtual T mergeBlank(T into) const = 0;
         virtual void processBB(Map &starting, CFGBlock *block) const = 0;

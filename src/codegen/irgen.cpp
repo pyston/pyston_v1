@@ -277,7 +277,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     EffortLevel::EffortLevel effort = irstate->getEffortLevel();
     CompiledFunction *cf = irstate->getCurFunction();
     ConcreteCompilerType *rtn_type = irstate->getReturnType();
-    llvm::MDNode* func_info = irstate->getFuncDbgInfo();
+    //llvm::MDNode* func_info = irstate->getFuncDbgInfo();
 
     if (entry_descriptor != NULL)
         assert(full_blocks.count(source->cfg->getStartingBlock()) == 0);

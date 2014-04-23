@@ -34,6 +34,7 @@ extern CompilerType* UNDEF;
 
 class CompilerType {
     public:
+        virtual ~CompilerType() {}
         virtual std::string debugName() = 0;
         virtual ConcreteCompilerType* getConcreteType() = 0;
         virtual ConcreteCompilerType* getBoxType() = 0;

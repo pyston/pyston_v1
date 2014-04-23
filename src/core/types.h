@@ -32,6 +32,7 @@ namespace pyston {
 
 class GCVisitor {
     public:
+        virtual ~GCVisitor() {}
         virtual void visit(void* p) = 0;
         virtual void visitRange(void** start, void** end) = 0;
         virtual void visitPotential(void* p) = 0;

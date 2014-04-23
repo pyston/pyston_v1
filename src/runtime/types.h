@@ -226,14 +226,6 @@ struct BoxedDict : public Box {
     PyDict d;
 
     BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
-
-    void verify() {
-        int i = 0;
-        for (auto it : d) {
-            ++i;
-        }
-        assert(i == d.size());
-    }
 };
 
 struct BoxedFunction : public HCBox {

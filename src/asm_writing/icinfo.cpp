@@ -190,7 +190,7 @@ static std::unordered_map<void*, ICInfo*> ics_by_return_addr;
 void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo* pp, StackInfo stack_info, std::unordered_set<int> live_outs) {
     int size = pp->totalSize();
     uint8_t* end_addr = start_addr + size;
-    void* slowpath_addr = end_addr;
+    uint8_t* slowpath_addr = end_addr;
 
     uint8_t* rtn_addr;
 
@@ -223,7 +223,7 @@ void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo* pp, St
         //}
 
         initializePatchpoint(start_addr, size);
-        rtn_addr = end_addr;
+        rtn_addr = slowpath_addr;
     }
 
     // we can let the user just slide down the nop section, but instead
@@ -241,7 +241,7 @@ void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo* pp, St
         writer->jmp(JumpDestination::fromStart(pp->slot_size * (pp->num_slots - i)));
     }
 
-    ics_by_return_addr[rtn_addr] = new ICInfo(start_addr, end_addr, stack_info, pp->num_slots, pp->slot_size, pp->getCallingConvention(), live_outs, return_register, pp->type_recorder);
+    ics_by_return_addr[rtn_addr] = new ICInfo(start_addr, slowpath_addr, stack_info, pp->num_slots, pp->slot_size, pp->getCallingConvention(), live_outs, return_register, pp->type_recorder);
 }
 
 ICInfo* getICInfo(void* rtn_addr) {

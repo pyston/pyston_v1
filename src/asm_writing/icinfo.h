@@ -43,6 +43,7 @@ class ICSlotRewrite {
     public:
         class CommitHook {
             public:
+                virtual ~CommitHook() {}
                 virtual void finishAssembly(int fastpath_offset) = 0;
         };
     private:

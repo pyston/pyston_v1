@@ -130,6 +130,8 @@ class AST_keyword;
 
 class AST {
     public:
+        virtual ~AST() {}
+
         const AST_TYPE::AST_TYPE type;
         uint32_t lineno, col_offset;
 

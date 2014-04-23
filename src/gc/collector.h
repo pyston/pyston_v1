@@ -76,7 +76,7 @@ class TraceStackGCVisitor : public GCVisitor {
         void _visit(void* p);
     public:
         TraceStack *stack;
-        constexpr TraceStackGCVisitor(TraceStack *stack) : stack(stack) {}
+        TraceStackGCVisitor(TraceStack *stack) : stack(stack) {}
 
         void visit(void* p) override;
         void visitRange(void** start, void** end) override;

@@ -50,7 +50,7 @@ PystonJITEventListener::PystonJITEventListener() {
     assert(target);
 
     const llvm::StringRef triple = g.tm->getTargetTriple();
-    llvm::Triple *ltriple = new llvm::Triple(triple);
+    //llvm::Triple *ltriple = new llvm::Triple(triple);
     const llvm::StringRef CPU = "";
 
     const llvm::MCRegisterInfo *MRI = target->createMCRegInfo(triple);
