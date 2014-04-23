@@ -122,7 +122,7 @@ ifeq ($(ENABLE_VALGRIND),0)
 	VALGRIND := false
 else
 	COMMON_CXXFLAGS += -I$(DEPS_DIR)/valgrind-3.9.0/include
-	VALGRIND := VALGRIND_LIB=$(HOME)/pyston_deps/valgrind-3.9.0-install/lib/valgrind $(HOME)/pyston_deps/valgrind-3.9.0-install/bin/valgrind
+	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.9.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.9.0-install/bin/valgrind
 endif
 
 # Extra flags to enable soon:
