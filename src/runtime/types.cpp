@@ -253,6 +253,22 @@ extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     return rtn;
 }
 
+extern "C" Box* sliceNew2(Box* cls, Box* stop) {
+    assert(cls == slice_cls);
+    return createSlice(None, stop, None);
+}
+
+extern "C" Box* sliceNew3(Box* cls, Box* start, Box* stop) {
+    assert(cls == slice_cls);
+    return createSlice(start, stop, None);
+}
+
+extern "C" Box* sliceNew4(Box* cls, Box* start, Box* stop, Box** args) {
+    assert(cls == slice_cls);
+    Box* step = args[0];
+    return createSlice(start, stop, step);
+}
+
 Box* instancemethodRepr(BoxedInstanceMethod* self) {
     return boxStrConstant("<bound instancemethod object>");
 }
@@ -397,6 +413,10 @@ void setupRuntime() {
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__name__", boxStrConstant("slice"));
+    CLFunction *slice_new = boxRTFunction((void*)sliceNew2, NULL, 2, false);
+    addRTFunction(slice_new, (void*)sliceNew3, NULL, 3, false);
+    addRTFunction(slice_new, (void*)sliceNew4, NULL, 4, false);
+    slice_cls->giveAttr("__new__", new BoxedFunction(slice_new));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, NULL, 1, true)));
     slice_cls->setattr("__str__", slice_cls->peekattr("__repr__"), NULL, NULL);
     slice_cls->freeze();
