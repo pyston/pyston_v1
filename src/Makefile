@@ -274,7 +274,7 @@ tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
 	$(ECHO) Computing tags...
 	$(VERB) ctags $^
 
-$(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -I$(GTEST_DIR)/include
+$(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -isystem $(GTEST_DIR)/include
 NON_ENTRY_OBJS := $(filter-out jit.o,$(OBJS))
 
 define add_unittest
