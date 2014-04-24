@@ -119,7 +119,7 @@ Assuming you've already built the normal version above:
 ```
 cd ~/pyston_deps
 cp -rv libunwind-1.1 libunwind-1.1-debug
-mkdir ../libunwind-1.1-debug-install
+mkdir libunwind-1.1-debug-install
 cd libunwind-1.1-debug
 ./configure --prefix=$HOME/pyston_deps/libunwind-1.1-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
 make -j4
