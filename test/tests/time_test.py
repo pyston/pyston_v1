@@ -1,2 +1,2 @@
 import time
-print time
+print type(time)
