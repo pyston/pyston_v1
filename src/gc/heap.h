@@ -91,7 +91,7 @@ class Heap {
 
         void* alloc(size_t bytes) {
             //assert(bytes >= 16);
-            if (bytes == 16)
+            if (bytes <= 16)
                 return allocSmall(16, &heads[0], &full_heads[0]);
             if (bytes <= 32)
                 return allocSmall(32, &heads[1], &full_heads[1]);
