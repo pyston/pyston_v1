@@ -14,7 +14,7 @@ Benchmarks are not currently that meaningful since the supported set of benchmar
 
 ##### Contributing
 
-Pyston welcomes any sorts of contributions; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
+Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
 
 ### Roadmap
 

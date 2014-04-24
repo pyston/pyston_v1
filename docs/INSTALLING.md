@@ -100,6 +100,7 @@ To install:
 
 ```
 cd ~/pyston_deps
+sudo apt-get install liblzma-dev
 wget http://valgrind.org/downloads/valgrind-3.9.0.tar.bz2
 tar xvf valgrind-3.9.0.tar.bz2
 mkdir valgrind-3.9.0-install

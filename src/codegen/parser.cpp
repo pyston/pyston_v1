@@ -19,6 +19,9 @@
 #include <cstring>
 #include <sys/stat.h>
 
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
+
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -750,7 +753,15 @@ AST_Module* parse(const char* fn) {
 #define LENGTH_SUFFIX_LENGTH 4
 
 static void _reparse(const char* fn, const std::string &cache_fn) {
-    std::string cmdline = std::string("python -S codegen/parse_ast.py ") + fn;
+    llvm::SmallString<128> parse_ast_fn;
+    // TODO supposed to pass argv0, main_addr to this function:
+    parse_ast_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
+    assert(parse_ast_fn.size() && "could not find the path to the pyston src dir");
+    llvm::sys::path::remove_filename(parse_ast_fn);
+    llvm::sys::path::append(parse_ast_fn, "codegen/parse_ast.py");
+
+    std::string cmdline = std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
+    printf("%s\n", cmdline.c_str());
     FILE *parser = popen(cmdline.c_str(), "r");
     FILE *cache_fp = fopen(cache_fn.c_str(), "w");
     assert(cache_fp);
