@@ -93,7 +93,7 @@ extern "C" void typeGCHandler(GCVisitor *v, void* p) {
 
 extern "C" void hcGCHandler(GCVisitor *v, void* p) {
     HiddenClass *hc = (HiddenClass*)p;
-    for (auto it : hc->children) {
+    for (auto &it : hc->children) {
         v->visit(it.second);
     }
 }
@@ -426,7 +426,7 @@ BoxedModule* createModule(const std::string &name, const std::string &fn) {
 }
 
 void freeHiddenClasses(HiddenClass *hcls) {
-    for (auto it : hcls->children) {
+    for (auto &it : hcls->children) {
         freeHiddenClasses(it.second);
     }
     rt_free(hcls);

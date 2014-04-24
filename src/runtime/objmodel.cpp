@@ -282,8 +282,8 @@ extern "C" const std::string* getTypeName(Box* o) {
     return getNameOfClass(o->cls);
 }
 
-HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
-    std::unordered_map<std::string, HiddenClass*>::iterator it = children.find(attr);
+HiddenClass* HiddenClass::getOrMakeChild(const llvm::StringRef attr) {
+    auto it = children.find(attr);
     if (it != children.end())
         return it->second;
 
@@ -310,7 +310,7 @@ HCBox::HCBox(const ObjectFlavor *flavor, BoxedClass *cls) : Box(flavor, cls), hc
 }
 
 
-Box* HCBox::getattr(const std::string &attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2) {
+Box* HCBox::getattr(const llvm::StringRef attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2) {
     if (rewrite_args) {
         rewrite_args->out_success = true;
 
@@ -355,16 +355,15 @@ Box* HCBox::getattr(const std::string &attr, GetattrRewriteArgs* rewrite_args, G
     return rtn;
 }
 
-void HCBox::giveAttr(const std::string& attr, Box* val) {
+void HCBox::giveAttr(const llvm::StringRef attr, Box* val) {
     assert(this->peekattr(attr) == NULL);
     this->setattr(attr, val, NULL, NULL);
 }
 
-void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs *rewrite_args, SetattrRewriteArgs2 *rewrite_args2) {
+void HCBox::setattr(const llvm::StringRef attr, Box* val, SetattrRewriteArgs *rewrite_args, SetattrRewriteArgs2 *rewrite_args2) {
     RELEASE_ASSERT(attr != "None" || this == builtins_module, "can't assign to None");
 
-    bool isgetattr = (attr == "__getattr__" || attr == "__getattribute__");
-    if (isgetattr && this->cls == type_cls) {
+    if ((this->cls == type_cls) && (attr == "__getattr__" || attr == "__getattribute__")) {
         // Will have to embed the clear in the IC, so just disable the patching for now:
         rewrite_args = NULL;
         rewrite_args2 = NULL;
@@ -424,8 +423,8 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs *rewri
     // TODO need to make sure we don't need to rearrange the attributes
     assert(new_hcls->attr_offsets[attr] == numattrs);
 #ifndef NDEBUG
-    for (auto p : hcls->attr_offsets) {
-        assert(new_hcls->attr_offsets[p.first] == p.second);
+    for (auto &p : hcls->attr_offsets) {
+        assert(new_hcls->attr_offsets[p.first()] == p.second);
     }
 #endif
 

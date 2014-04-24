@@ -22,6 +22,8 @@
 #include "core/common.h"
 #include "core/stats.h"
 
+#include <llvm/ADT/StringMap.h>
+
 namespace llvm {
 class Function;
 class Type;
@@ -269,16 +271,19 @@ extern "C" const AllocationKind hc_kind;
 class HiddenClass : public GCObject {
     private:
         HiddenClass() : GCObject(&hc_kind) {}
-        HiddenClass(const HiddenClass* parent) : GCObject(&hc_kind), attr_offsets(parent->attr_offsets) {}
+        HiddenClass(const HiddenClass* parent) : GCObject(&hc_kind) {
+            for (auto &it : parent->attr_offsets)
+                attr_offsets[it.first().str()] = it.second;
+        }
     public:
         static HiddenClass* getRoot();
-        std::unordered_map<std::string, int> attr_offsets;
-        std::unordered_map<std::string, HiddenClass*> children;
+        llvm::StringMap<int> attr_offsets;
+        llvm::StringMap<HiddenClass*> children;
 
-        HiddenClass* getOrMakeChild(const std::string &attr);
+        HiddenClass* getOrMakeChild(const llvm::StringRef attr);
 
-        int getOffset(const std::string& attr) {
-            std::unordered_map<std::string, int>::iterator it = attr_offsets.find(attr);
+        int getOffset(const llvm::StringRef attr) {
+            auto it = attr_offsets.find(attr);
             if (it == attr_offsets.end())
                 return -1;
             return it->second;
@@ -319,10 +324,10 @@ class HCBox : public Box {
 
         HCBox(const ObjectFlavor *flavor, BoxedClass *cls);
 
-        void setattr(const std::string &attr, Box* val, SetattrRewriteArgs* rewrite_args, SetattrRewriteArgs2 *rewrite_args2);
-        void giveAttr(const std::string &attr, Box* val);
-        Box* getattr(const std::string &attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-        Box* peekattr(const std::string &attr) {
+        void setattr(const llvm::StringRef attr, Box* val, SetattrRewriteArgs* rewrite_args, SetattrRewriteArgs2 *rewrite_args2);
+        void giveAttr(const llvm::StringRef attr, Box* val);
+        Box* getattr(const llvm::StringRef attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+        Box* peekattr(const llvm::StringRef attr) {
             int offset = hcls->getOffset(attr);
             if (offset == -1) return NULL;
             return attr_list->attrs[offset];

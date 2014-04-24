@@ -65,27 +65,24 @@ static llvm::Constant* getStringConstant(const std::string &str) {
 }
 */
 
-std::unordered_map<std::string, const char*> strings;
+llvm::StringMap<const char*> strings;
 
 // Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(const std::string &str) {
+llvm::Constant* getStringConstantPtr(const llvm::StringRef str) {
     const char* c;
-    if (strings.count(str)) {
-        c = strings[str];
+
+    auto it = strings.find(str);
+    if (it != strings.end()) {
+        c = it->second;
     } else {
         char *buf = (char*)malloc(str.size() + 1);
-        memcpy(buf, str.c_str(), str.size());
+        memcpy(buf, str.data(), str.size());
         buf[str.size()] = '\0';
 
         strings[str] = buf;
         c = buf;
     }
     return embedConstantPtr(c, g.i8->getPointerTo());
-}
-
-// Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(const char* str) {
-    return getStringConstantPtr(std::string(str, strlen(str) + 1));
 }
 
 // Sometimes we want to embed pointers into the emitted code, usually to link the emitted code

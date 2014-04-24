@@ -24,8 +24,7 @@ class Type;
 
 namespace pyston {
 
-llvm::Constant* getStringConstantPtr(const std::string &str);
-llvm::Constant* getStringConstantPtr(const char* str);
+llvm::Constant* getStringConstantPtr(const llvm::StringRef str);
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type*);
 llvm::Constant* getConstantInt(int val);
 llvm::Constant* getConstantInt(int val, llvm::Type*);
