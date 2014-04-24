@@ -147,12 +147,12 @@ static int readColOffset(BufferedReader *reader) {
 }
 
 AST_alias* read_alias(BufferedReader *reader) {
-    AST_alias *rtn = new AST_alias();
+    std::string asname = readString(reader);
+    std::string name = readString(reader);
 
-    rtn->asname = readString(reader);
+    AST_alias *rtn = new AST_alias(name, asname);
     rtn->col_offset = -1;
     rtn->lineno = -1;
-    rtn->name = readString(reader);
 
     return rtn;
 }
@@ -341,7 +341,7 @@ AST_FunctionDef* read_functiondef(BufferedReader *reader) {
         printf("reading functiondef\n");
     AST_FunctionDef *rtn = new AST_FunctionDef();
 
-    rtn->args = static_cast<AST_arguments*>(readASTMisc(reader));
+    rtn->args = ast_cast<AST_arguments>(readASTMisc(reader));
     readStmtVector(rtn->body, reader);
     rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->decorator_list, reader);
@@ -386,13 +386,18 @@ AST_Import* read_import(BufferedReader *reader) {
 
     rtn->col_offset = readColOffset(reader);
     rtn->lineno = reader->readULL();
+    readMiscVector(rtn->names, reader);
+    return rtn;
+}
 
-    int num_elts = reader->readShort();
-    for (int i = 0; i < num_elts; i++) {
-        AST* elt = readASTMisc(reader);
-        assert(elt->type == AST_TYPE::alias);
-        rtn->names.push_back(static_cast<AST_alias*>(elt));
-    }
+AST_ImportFrom* read_importfrom(BufferedReader *reader) {
+    AST_ImportFrom *rtn = new AST_ImportFrom();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->level = reader->readULL();
+    rtn->lineno = reader->readULL();
+    rtn->module = readString(reader);
+    readMiscVector(rtn->names, reader);
     return rtn;
 }
 
@@ -668,6 +673,8 @@ AST_stmt* readASTStmt(BufferedReader *reader) {
             return read_if(reader);
         case AST_TYPE::Import:
             return read_import(reader);
+        case AST_TYPE::ImportFrom:
+            return read_importfrom(reader);
         case AST_TYPE::Pass:
             return read_pass(reader);
         case AST_TYPE::Print:
@@ -735,7 +742,7 @@ AST_Module* parse(const char* fn) {
     static StatCounter us_parsing("us_parsing");
     us_parsing.log(us);
 
-    return static_cast<AST_Module*>(rtn);
+    return ast_cast<AST_Module>(rtn);
 }
 
 #define MAGIC_STRING "a\ncg"
@@ -843,7 +850,7 @@ AST_Module* caching_parse(const char* fn) {
     static StatCounter us_parsing("us_parsing");
     us_parsing.log(us);
 
-    return static_cast<AST_Module*>(rtn);
+    return ast_cast<AST_Module>(rtn);
 }
 
 }

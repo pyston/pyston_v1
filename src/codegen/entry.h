@@ -24,9 +24,7 @@ class CompiledFunction;
 void initCodegen();
 void teardownCodegen();
 void printAllIR();
-CompiledFunction* compileModule(AST_Module *m, BoxedModule* bm); // hacky but this method is actually defined in irgen.cpp
 int joinRuntime();
-BoxedModule* createMainModule(const char* fn);
 
 }
 

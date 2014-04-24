@@ -46,9 +46,9 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction *f) : HCBox(&function_flavor,
     }
 }
 
-BoxedModule::BoxedModule(const std::string *name, const std::string *fn) : HCBox(&module_flavor, module_cls), fn(*fn) {
-    this->giveAttr("__name__", boxString(*name));
-    this->giveAttr("__file__", boxString(*fn));
+BoxedModule::BoxedModule(const std::string &name, const std::string &fn) : HCBox(&module_flavor, module_cls), fn(fn) {
+    this->giveAttr("__name__", boxString(name));
+    this->giveAttr("__file__", boxString(fn));
 }
 
 extern "C" Box* boxCLFunction(CLFunction *f) {
@@ -230,10 +230,6 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
     return new BoxedString("function");
 }
 
-extern "C" BoxedModule* createModule(const std::string *name, const std::string *fn) {
-    return new BoxedModule(name, fn);
-}
-
 extern "C" {
     Box *None = NULL;
     Box *NotImplemented = NULL;
@@ -311,8 +307,11 @@ Box* moduleRepr(BoxedModule* m) {
         os << sname->s;
     }
 
-    // TODO not all modules will be built-in
-    os << "' (built-in)>";
+    if (m->fn == "__builtin__") {
+        os << "' (built-in)>";
+    } else {
+        os << "' from '" << m->fn << "'>";
+    }
     return boxString(os.str());
 }
 
@@ -402,17 +401,28 @@ void setupRuntime() {
     slice_cls->setattr("__str__", slice_cls->peekattr("__repr__"), NULL, NULL);
     slice_cls->freeze();
 
-    setupMath();
-    gc::registerStaticRootObj(math_module);
-    setupTime();
-    gc::registerStaticRootObj(time_module);
-    setupBuiltins();
-    gc::registerStaticRootObj(builtins_module);
+    // sys is the first module that needs to be set up, due to modules
+    // being tracked in sys.modules:
+    setupSys();
 
+    setupMath();
+    setupTime();
+    setupBuiltins();
 
     setupCAPI();
 
     TRACK_ALLOCATIONS = true;
+}
+
+BoxedModule* createModule(const std::string &name, const std::string &fn) {
+    assert(fn.size() && "probably wanted to set the fn to <stdin>?");
+    BoxedModule* module = new BoxedModule(name, fn);
+
+    BoxedDict* d = getSysModulesDict();
+    Box *b_name = boxStringPtr(&name);
+    assert(d->d.count(b_name) == 0);
+    d->d[b_name] = module;
+    return module;
 }
 
 void freeHiddenClasses(HiddenClass *hcls) {

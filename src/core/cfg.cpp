@@ -299,7 +299,7 @@ class CFGVisitor : public ASTVisitor {
                 // TODO this is a cludge to make sure that "callattrs" stick together.
                 // Probably better to create an AST_Callattr type, and solidify the
                 // idea that a callattr is a single expression.
-                rtn->func = remapAttribute(static_cast<AST_Attribute*>(node->func));
+                rtn->func = remapAttribute(ast_cast<AST_Attribute>(node->func));
             } else {
                 rtn->func = remapExpr(node->func);
             }
@@ -594,52 +594,52 @@ class CFGVisitor : public ASTVisitor {
             AST_expr* rtn;
             switch (node->type) {
                 case AST_TYPE::Attribute:
-                    rtn = remapAttribute(static_cast<AST_Attribute*>(node));
+                    rtn = remapAttribute(ast_cast<AST_Attribute>(node));
                     break;
                 case AST_TYPE::BinOp:
-                    rtn = remapBinOp(static_cast<AST_BinOp*>(node));
+                    rtn = remapBinOp(ast_cast<AST_BinOp>(node));
                     break;
                 case AST_TYPE::BoolOp:
-                    rtn = remapBoolOp(static_cast<AST_BoolOp*>(node));
+                    rtn = remapBoolOp(ast_cast<AST_BoolOp>(node));
                     break;
                 case AST_TYPE::Call:
-                    rtn = remapCall(static_cast<AST_Call*>(node));
+                    rtn = remapCall(ast_cast<AST_Call>(node));
                     break;
                 case AST_TYPE::Compare:
-                    rtn = remapCompare(static_cast<AST_Compare*>(node));
+                    rtn = remapCompare(ast_cast<AST_Compare>(node));
                     break;
                 case AST_TYPE::Dict:
-                    rtn = remapDict(static_cast<AST_Dict*>(node));
+                    rtn = remapDict(ast_cast<AST_Dict>(node));
                     break;
                 case AST_TYPE::IfExp:
-                    rtn = remapIfExp(static_cast<AST_IfExp*>(node));
+                    rtn = remapIfExp(ast_cast<AST_IfExp>(node));
                     break;
                 case AST_TYPE::Index:
-                    rtn = remapIndex(static_cast<AST_Index*>(node));
+                    rtn = remapIndex(ast_cast<AST_Index>(node));
                     break;
                 case AST_TYPE::List:
-                    rtn = remapList(static_cast<AST_List*>(node));
+                    rtn = remapList(ast_cast<AST_List>(node));
                     break;
                 case AST_TYPE::ListComp:
-                    rtn = remapListComp(static_cast<AST_ListComp*>(node));
+                    rtn = remapListComp(ast_cast<AST_ListComp>(node));
                     break;
                 case AST_TYPE::Name:
                     return node;
                 case AST_TYPE::Num:
                     return node;
                 case AST_TYPE::Slice:
-                    rtn = remapSlice(static_cast<AST_Slice*>(node));
+                    rtn = remapSlice(ast_cast<AST_Slice>(node));
                     break;
                 case AST_TYPE::Str:
                     return node;
                 case AST_TYPE::Subscript:
-                    rtn = remapSubscript(static_cast<AST_Subscript*>(node));
+                    rtn = remapSubscript(ast_cast<AST_Subscript>(node));
                     break;
                 case AST_TYPE::Tuple:
-                    rtn = remapTuple(static_cast<AST_Tuple*>(node));
+                    rtn = remapTuple(ast_cast<AST_Tuple>(node));
                     break;
                 case AST_TYPE::UnaryOp:
-                    rtn = remapUnaryOp(static_cast<AST_UnaryOp*>(node));
+                    rtn = remapUnaryOp(ast_cast<AST_UnaryOp>(node));
                     break;
                 default:
                     RELEASE_ASSERT(0, "%d", node->type);
@@ -674,6 +674,7 @@ class CFGVisitor : public ASTVisitor {
         virtual bool visit_functiondef(AST_FunctionDef* node) { push_back(node); return true; }
         virtual bool visit_global(AST_Global* node) { push_back(node); return true; }
         virtual bool visit_import(AST_Import* node) { push_back(node); return true; }
+        virtual bool visit_importfrom(AST_ImportFrom* node) { push_back(node); return true; }
         virtual bool visit_pass(AST_Pass* node) { return true; }
 
         virtual bool visit_assign(AST_Assign* node) {
@@ -708,7 +709,7 @@ class CFGVisitor : public ASTVisitor {
             // TODO bad that it's reusing the AST nodes?
             switch (node->target->type) {
                 case AST_TYPE::Name: {
-                    AST_Name* n = static_cast<AST_Name*>(node->target);
+                    AST_Name* n = ast_cast<AST_Name>(node->target);
                     assert(n->ctx_type == AST_TYPE::Store);
                     push_back(makeAssign(nodeName(node), makeName(n->id, AST_TYPE::Load)));
                     remapped_target = n;
@@ -716,7 +717,7 @@ class CFGVisitor : public ASTVisitor {
                     break;
                 }
                 case AST_TYPE::Subscript: {
-                    AST_Subscript *s = static_cast<AST_Subscript*>(node->target);
+                    AST_Subscript *s = ast_cast<AST_Subscript>(node->target);
                     assert(s->ctx_type == AST_TYPE::Store);
 
                     AST_Subscript *s_target = new AST_Subscript();
@@ -734,7 +735,7 @@ class CFGVisitor : public ASTVisitor {
                     break;
                 }
                 case AST_TYPE::Attribute: {
-                    AST_Attribute *a = static_cast<AST_Attribute*>(node->target);
+                    AST_Attribute *a = ast_cast<AST_Attribute>(node->target);
                     assert(a->ctx_type == AST_TYPE::Store);
 
                     AST_Attribute *a_target = new AST_Attribute();

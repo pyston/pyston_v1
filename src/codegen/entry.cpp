@@ -263,24 +263,7 @@ void printAllIR() {
     fprintf(stderr, "==============\n");
 }
 
-static BoxedModule* main_module = NULL;
-BoxedModule* createMainModule(const char* fn) {
-    //static std::unordered_map<AST_Module*, BoxedModule*> made;
-    //assert(made.count(m) == 0);
-    assert(main_module == NULL);
-    std::string s_fn;
-    if (fn != NULL)
-        s_fn = fn;
-    else
-        s_fn = "<stdin>";
-    std::string name("__main__");
-    main_module = createModule(&name, &s_fn);
-    return main_module;
-}
-
 int joinRuntime() {
-    assert(main_module != NULL);
-
     // In the future this will have to wait for non-daemon
     // threads to finish
 

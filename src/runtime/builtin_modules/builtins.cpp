@@ -222,9 +222,7 @@ BoxedClass *notimplemented_cls;
 BoxedModule* builtins_module;
 
 void setupBuiltins() {
-    std::string name("__builtin__");
-    std::string fn("__builtin__");
-    builtins_module = new BoxedModule(&name, &fn);
+    builtins_module = createModule("__builtin__", "__builtin__");
 
     builtins_module->setattr("None", None, NULL, NULL);
 

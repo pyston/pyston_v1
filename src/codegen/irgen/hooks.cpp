@@ -50,7 +50,7 @@ const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::FunctionDef:
-            return static_cast<AST_FunctionDef*>(ast)->name;
+            return ast_cast<AST_FunctionDef>(ast)->name;
         case AST_TYPE::Module:
             return "module";
         default:
@@ -62,7 +62,7 @@ AST_arguments* SourceInfo::getArgsAST() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::FunctionDef:
-            return static_cast<AST_FunctionDef*>(ast)->args;
+            return ast_cast<AST_FunctionDef>(ast)->args;
         case AST_TYPE::Module:
             return NULL;
         default:
@@ -83,9 +83,9 @@ const std::vector<AST_stmt*>& SourceInfo::getBody() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::FunctionDef:
-            return static_cast<AST_FunctionDef*>(ast)->body;
+            return ast_cast<AST_FunctionDef>(ast)->body;
         case AST_TYPE::Module:
-            return static_cast<AST_Module*>(ast)->body;
+            return ast_cast<AST_Module>(ast)->body;
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -226,7 +226,7 @@ static EffortLevel::EffortLevel initialEffort() {
     return EffortLevel::MINIMAL;
 }
 
-CompiledFunction* compileModule(AST_Module *m, BoxedModule *bm) {
+void compileAndRunModule(AST_Module *m, BoxedModule *bm) {
     Timer _t("for compileModule()");
 
     ScopingAnalysis *scoping = runScopingAnalysis(m);
@@ -244,7 +244,12 @@ CompiledFunction* compileModule(AST_Module *m, BoxedModule *bm) {
     CompiledFunction *cf = _doCompile(cl_f, new FunctionSignature(VOID, false), effort, NULL);
     assert(cf->clfunc->versions.size());
 
-    return cf;
+    _t.end();
+
+    if (cf->is_interpreted)
+        interpretFunction(cf->func, 0, NULL, NULL, NULL, NULL);
+    else
+        ((void (*)())cf->code)();
 }
 
 /// Reoptimizes the given function version at the new effort level.

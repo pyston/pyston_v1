@@ -32,9 +32,7 @@ Box* timeTime() {
 }
 
 void setupTime() {
-    std::string name("time");
-    std::string fn("__builtin__");
-    time_module = new BoxedModule(&name, &fn);
+    time_module = createModule("time", "__builtin__");
 
     time_module->giveAttr("time", new BoxedFunction(boxRTFunction((void*)timeTime, NULL, 0, false)));
 }

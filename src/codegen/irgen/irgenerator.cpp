@@ -529,13 +529,13 @@ class IRGeneratorImpl : public IRGenerator {
             if (node->func->type == AST_TYPE::Attribute) {
                 is_callattr = true;
                 callattr_clsonly = false;
-                AST_Attribute* attr_ast = static_cast<AST_Attribute*>(node->func);
+                AST_Attribute* attr_ast = ast_cast<AST_Attribute>(node->func);
                 func = evalExpr(attr_ast->value);
                 attr = &attr_ast->attr;
             } else if (node->func->type == AST_TYPE::ClsAttribute) {
                 is_callattr = true;
                 callattr_clsonly = true;
-                AST_ClsAttribute* attr_ast = static_cast<AST_ClsAttribute*>(node->func);
+                AST_ClsAttribute* attr_ast = ast_cast<AST_ClsAttribute>(node->func);
                 func = evalExpr(attr_ast->value);
                 attr = &attr_ast->attr;
             } else {
@@ -819,52 +819,52 @@ class IRGeneratorImpl : public IRGenerator {
             if (state != PARTIAL) {
                 switch (node->type) {
                     case AST_TYPE::Attribute:
-                        rtn = evalAttribute(static_cast<AST_Attribute*>(node));
+                        rtn = evalAttribute(ast_cast<AST_Attribute>(node));
                         break;
                     case AST_TYPE::AugBinOp:
-                        rtn = evalAugBinOp(static_cast<AST_AugBinOp*>(node));
+                        rtn = evalAugBinOp(ast_cast<AST_AugBinOp>(node));
                         break;
                     case AST_TYPE::BinOp:
-                        rtn = evalBinOp(static_cast<AST_BinOp*>(node));
+                        rtn = evalBinOp(ast_cast<AST_BinOp>(node));
                         break;
                     case AST_TYPE::Call:
-                        rtn = evalCall(static_cast<AST_Call*>(node));
+                        rtn = evalCall(ast_cast<AST_Call>(node));
                         break;
                     case AST_TYPE::Compare:
-                        rtn = evalCompare(static_cast<AST_Compare*>(node));
+                        rtn = evalCompare(ast_cast<AST_Compare>(node));
                         break;
                     case AST_TYPE::Dict:
-                        rtn = evalDict(static_cast<AST_Dict*>(node));
+                        rtn = evalDict(ast_cast<AST_Dict>(node));
                         break;
                     case AST_TYPE::Index:
-                        rtn = evalIndex(static_cast<AST_Index*>(node));
+                        rtn = evalIndex(ast_cast<AST_Index>(node));
                         break;
                     case AST_TYPE::List:
-                        rtn = evalList(static_cast<AST_List*>(node));
+                        rtn = evalList(ast_cast<AST_List>(node));
                         break;
                     case AST_TYPE::Name:
-                        rtn = evalName(static_cast<AST_Name*>(node));
+                        rtn = evalName(ast_cast<AST_Name>(node));
                         break;
                     case AST_TYPE::Num:
-                        rtn = evalNum(static_cast<AST_Num*>(node));
+                        rtn = evalNum(ast_cast<AST_Num>(node));
                         break;
                     case AST_TYPE::Slice:
-                        rtn = evalSlice(static_cast<AST_Slice*>(node));
+                        rtn = evalSlice(ast_cast<AST_Slice>(node));
                         break;
                     case AST_TYPE::Str:
-                        rtn = evalStr(static_cast<AST_Str*>(node));
+                        rtn = evalStr(ast_cast<AST_Str>(node));
                         break;
                     case AST_TYPE::Subscript:
-                        rtn = evalSubscript(static_cast<AST_Subscript*>(node));
+                        rtn = evalSubscript(ast_cast<AST_Subscript>(node));
                         break;
                     case AST_TYPE::Tuple:
-                        rtn = evalTuple(static_cast<AST_Tuple*>(node));
+                        rtn = evalTuple(ast_cast<AST_Tuple>(node));
                         break;
                     case AST_TYPE::UnaryOp:
-                        rtn = evalUnaryOp(static_cast<AST_UnaryOp*>(node));
+                        rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node));
                         break;
                     case AST_TYPE::ClsAttribute:
-                        rtn = evalClsAttribute(static_cast<AST_ClsAttribute*>(node));
+                        rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node));
                         break;
                     default:
                         printf("Unhandled expr type: %d (irgen.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
@@ -1105,16 +1105,16 @@ class IRGeneratorImpl : public IRGenerator {
             assert(state != PARTIAL);
             switch (target->type) {
                 case AST_TYPE::Attribute:
-                    _doSetattr(static_cast<AST_Attribute*>(target), val);
+                    _doSetattr(ast_cast<AST_Attribute>(target), val);
                     break;
                 case AST_TYPE::Name:
-                    _doSet(static_cast<AST_Name*>(target)->id, val);
+                    _doSet(ast_cast<AST_Name>(target)->id, val);
                     break;
                 case AST_TYPE::Subscript:
-                    _doSetitem(static_cast<AST_Subscript*>(target), val);
+                    _doSetitem(ast_cast<AST_Subscript>(target), val);
                     break;
                 case AST_TYPE::Tuple:
-                    _doUnpackTuple(static_cast<AST_Tuple*>(target), val);
+                    _doUnpackTuple(ast_cast<AST_Tuple>(target), val);
                     break;
                 default:
                     ASSERT(0, "Unknown type for IRGenerator: %d", target->type);
@@ -1144,7 +1144,7 @@ class IRGeneratorImpl : public IRGenerator {
 
             RELEASE_ASSERT(node->bases.size() == 1, "");
             RELEASE_ASSERT(node->bases[0]->type == AST_TYPE::Name, "");
-            RELEASE_ASSERT(static_cast<AST_Name*>(node->bases[0])->id == "object", "");
+            RELEASE_ASSERT(ast_cast<AST_Name>(node->bases[0])->id == "object", "");
 
             //CompilerVariable* name = makeStr(&node->name);
             //cls->setattr(emitter, "__name__", name);
@@ -1155,7 +1155,7 @@ class IRGeneratorImpl : public IRGenerator {
                 if (type == AST_TYPE::Pass) {
                     continue;
                 } else if (type == AST_TYPE::FunctionDef) {
-                    AST_FunctionDef *fdef = static_cast<AST_FunctionDef*>(node->body[i]);
+                    AST_FunctionDef *fdef = ast_cast<AST_FunctionDef>(node->body[i]);
                     CLFunction *cl = this->_wrapFunction(fdef);
                     CompilerVariable *func = makeFunction(emitter, cl);
                     cls->setattr(emitter, getEmptyOpInfo(), &fdef->name, func);
@@ -1205,14 +1205,37 @@ class IRGeneratorImpl : public IRGenerator {
             for (int i = 0; i < node->names.size(); i++) {
                 AST_alias *alias = node->names[i];
 
-                std::string &modname = alias->name;
-                std::string &asname = alias->asname.size() ? alias->asname : alias->name;
+                const std::string &modname = alias->name;
+                const std::string &asname = alias->asname.size() ? alias->asname : alias->name;
 
                 llvm::Value* imported = emitter.getBuilder()->CreateCall(g.funcs.import, embedConstantPtr(&modname, g.llvm_str_type_ptr));
                 ConcreteCompilerVariable *v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
                 _doSet(asname, v);
                 v->decvref(emitter);
             }
+        }
+
+        void doImportFrom(AST_ImportFrom *node) {
+            if (state == PARTIAL)
+                return;
+
+            assert(node->level == 0);
+
+            llvm::Value* imported_v = emitter.getBuilder()->CreateCall(g.funcs.import, embedConstantPtr(&node->module, g.llvm_str_type_ptr));
+            ConcreteCompilerVariable *module = new ConcreteCompilerVariable(typeFromClass(module_cls), imported_v, true);
+
+            for (int i = 0; i < node->names.size(); i++) {
+                AST_alias *alias = node->names[i];
+
+                const std::string &name = alias->name;
+                const std::string &asname = alias->asname.size() ? alias->asname : alias->name;
+
+                CompilerVariable *v = module->getattr(emitter, getEmptyOpInfo(), &name, false);
+                _doSet(asname, v);
+                v->decvref(emitter);
+            }
+
+            module->decvref(emitter);
         }
 
         void doPrint(AST_Print *node) {
@@ -1474,22 +1497,25 @@ class IRGeneratorImpl : public IRGenerator {
         void doStmt(AST *node) {
             switch (node->type) {
                 case AST_TYPE::Assign:
-                    doAssign(static_cast<AST_Assign*>(node));
+                    doAssign(ast_cast<AST_Assign>(node));
                     break;
                 case AST_TYPE::ClassDef:
-                    doClassDef(static_cast<AST_ClassDef*>(node));
+                    doClassDef(ast_cast<AST_ClassDef>(node));
                     break;
                 case AST_TYPE::Expr:
-                    doExpr(static_cast<AST_Expr*>(node));
+                    doExpr(ast_cast<AST_Expr>(node));
                     break;
                 case AST_TYPE::FunctionDef:
-                    doFunction(static_cast<AST_FunctionDef*>(node));
+                    doFunction(ast_cast<AST_FunctionDef>(node));
                     break;
                 //case AST_TYPE::If:
-                    //doIf(static_cast<AST_If*>(node));
+                    //doIf(ast_cast<AST_If>(node));
                     //break;
                 case AST_TYPE::Import:
-                    doImport(static_cast<AST_Import*>(node));
+                    doImport(ast_cast<AST_Import>(node));
+                    break;
+                case AST_TYPE::ImportFrom:
+                    doImportFrom(ast_cast<AST_ImportFrom>(node));
                     break;
                 case AST_TYPE::Global:
                     // Should have been handled already
@@ -1497,16 +1523,16 @@ class IRGeneratorImpl : public IRGenerator {
                 case AST_TYPE::Pass:
                     break;
                 case AST_TYPE::Print:
-                    doPrint(static_cast<AST_Print*>(node));
+                    doPrint(ast_cast<AST_Print>(node));
                     break;
                 case AST_TYPE::Return:
-                    doReturn(static_cast<AST_Return*>(node));
+                    doReturn(ast_cast<AST_Return>(node));
                     break;
                 case AST_TYPE::Branch:
-                    doBranch(static_cast<AST_Branch*>(node));
+                    doBranch(ast_cast<AST_Branch>(node));
                     break;
                 case AST_TYPE::Jump:
-                    doJump(static_cast<AST_Jump*>(node));
+                    doJump(ast_cast<AST_Jump>(node));
                     break;
                 default:
                     printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);

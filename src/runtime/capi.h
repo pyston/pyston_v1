@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_RUNTIME_IMPORTING_H
-#define PYSTON_RUNTIME_IMPORTING_H
+#ifndef PYSTON_RUNTIME_CAPI_H
+#define PYSTON_RUNTIME_CAPI_H
 
 namespace pyston {
 

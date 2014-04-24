@@ -53,9 +53,7 @@ class BoxedCApiFunction : public Box {
 };
 
 extern "C" void* Py_InitModule4(const char *arg0, PyMethodDef *arg1, const char *arg2, PyObject *arg3, int arg4) {
-    std::string name("test");
-    std::string fn("../test/test_extension/test.so");
-    test_module = new BoxedModule(&name, &fn);
+    test_module = createModule("test", "../test/test_extension/test.so");
 
     while (arg1->ml_name) {
         if (VERBOSITY()) printf("Loading method %s\n", arg1->ml_name);

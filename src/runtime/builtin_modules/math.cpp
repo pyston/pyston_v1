@@ -56,9 +56,7 @@ Box* mathTan(Box* b) {
 }
 
 void setupMath() {
-    std::string name("math");
-    std::string fn("__builtin__");
-    math_module = new BoxedModule(&name, &fn);
+    math_module = createModule("math", "__builtin__");
 
     math_module->giveAttr("pi", boxFloat(M_PI));
 

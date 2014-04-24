@@ -364,10 +364,12 @@ class BoxedClass : public HCBox {
 // TODO these shouldn't be here
 void setupRuntime();
 void teardownRuntime();
-extern "C" BoxedModule* createModule(const std::string *name, const std::string *fn);
+BoxedModule* createModule(const std::string &name, const std::string &fn);
 
 std::string getPythonFuncAt(void* ip, void* sp);
 
+// TODO where to put this
+void addToSysPath(const std::string &path);
 
 }
 

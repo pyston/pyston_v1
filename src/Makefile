@@ -125,17 +125,6 @@ else
 	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.9.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.9.0-install/bin/valgrind
 endif
 
-# Extra flags to enable soon:
-COMMON_CXXFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int -Wmissing-include-dirs -Wstrict-overflow=5 -Wundef -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wstrict-prototypes -Wold-style-definition -Wmissing-field-initializers -Wredundant-decls -Wnested-externs -Winline -Wint-to-pointer-cast -Wpointer-to-int-cast -Wlong-long -Wvla
-# Want this one but there's a lot of places that I haven't followed it:
-# COMMON_CXXFLAGS += -Wold-style-cast
-# llvm headers fail on this one:
-# COMMON_CXXFLAGS += -Wswitch-enum
-# Not sure about these:
-# COMMON_CXXFLAGS += -Wbad-function-cast -Wcast-qual -Wcast-align -Wmissing-prototypes -Wunreachable-code -Wfloat-equal -Wunused -Wunused-variable
-# Or everything:
-# COMMON_CXXFLAGS += -Weverything -Wno-c++98-compat-pedantic -Wno-shadow -Wno-padded -Wno-zero-length-array
-
 # libunwind's include files warn on -Wextern-c-compat, so turn that off;
 # ideally would just turn it off for header files in libunwind, maybe by
 # having an internal libunwind.h that pushed/popped the diagnostic state,
@@ -201,6 +190,17 @@ else
 endif
 CLANGFLAGS := $(CXXFLAGS) $(CLANG_EXTRA_FLAGS)
 CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
+
+# Extra flags to enable soon:
+CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int -Wmissing-include-dirs -Wstrict-overflow=5 -Wundef -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wstrict-prototypes -Wold-style-definition -Wmissing-field-initializers -Wredundant-decls -Wnested-externs -Winline -Wint-to-pointer-cast -Wpointer-to-int-cast -Wlong-long -Wvla
+# Want this one but there's a lot of places that I haven't followed it:
+# CLANGFLAGS += -Wold-style-cast
+# llvm headers fail on this one:
+# CLANGFLAGS += -Wswitch-enum
+# Not sure about these:
+# CLANGFLAGS += -Wbad-function-cast -Wcast-qual -Wcast-align -Wmissing-prototypes -Wunreachable-code -Wfloat-equal -Wunused -Wunused-variable
+# Or everything:
+# CLANGFLAGS += -Weverything -Wno-c++98-compat-pedantic -Wno-shadow -Wno-padded -Wno-zero-length-array
 
 CXX := $(GPP)
 CXX_PROFILE := $(GPP)

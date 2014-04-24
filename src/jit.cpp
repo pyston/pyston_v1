@@ -21,7 +21,8 @@
 #include <sys/time.h>
 
 #include "llvm/Support/ManagedStatic.h"
-//#include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
 
 #include "core/common.h"
@@ -33,8 +34,8 @@
 #include "core/util.h"
 
 #include "codegen/entry.h"
-#include "codegen/llvm_interpreter.h"
 #include "codegen/parser.h"
+#include "codegen/irgen/hooks.h"
 
 
 #ifndef GITREV
@@ -103,10 +104,23 @@ int main(int argc, char** argv) {
         initCodegen();
     }
 
-    BoxedModule* main = createMainModule(fn);
+    BoxedModule* main = createModule("__main__", fn);
 
     _t.split("to run");
     if (fn != NULL) {
+        llvm::SmallString<128> path;
+
+        if (!llvm::sys::path::is_absolute(fn)) {
+            char cwd_buf[1026];
+            char* cwd = getcwd(cwd_buf, sizeof(cwd_buf));
+            assert(cwd);
+            path = cwd;
+        }
+
+        llvm::sys::path::append(path, fn);
+        llvm::sys::path::remove_filename(path);
+        addToSysPath(path.str());
+
         int num_iterations = 1;
         if (BENCH)
             num_iterations = 1000;
@@ -124,15 +138,7 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "==============\n");
             }
 
-            CompiledFunction* compiled = compileModule(m, main);
-            if (VERBOSITY() >= 1)
-                fprintf(stderr, "compiled module.main to machine code; running:\n");
-            if (compiled->is_interpreted)
-                interpretFunction(compiled->func, 0, NULL, NULL, NULL, NULL);
-            else
-                ((void (*)())compiled->code)();
-            if (VERBOSITY() >= 1)
-                fprintf(stderr, "finished running\n");
+            compileAndRunModule(m, main);
         }
     }
 
@@ -146,11 +152,7 @@ int main(int argc, char** argv) {
             run++;
 
             AST_Module *m = new AST_Module();
-            CompiledFunction* compiled = compileModule(m, main);
-            if (compiled->is_interpreted)
-                interpretFunction(compiled->func, 0, NULL, NULL, NULL, NULL);
-            else
-                ((void (*)())compiled->code)();
+            compileAndRunModule(m, main);
 
             if (run >= MAX_RUNS) {
                 printf("Quitting after %d iterations\n", run);
@@ -201,7 +203,7 @@ int main(int argc, char** argv) {
             removeDirectoryIfExists(tmpdir);
 
             if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                AST_Expr *e = static_cast<AST_Expr*>(m->body[0]);
+                AST_Expr *e = ast_cast<AST_Expr>(m->body[0]);
                 AST_Print *p = new AST_Print();
                 p->dest = NULL;
                 p->nl = true;
@@ -209,11 +211,7 @@ int main(int argc, char** argv) {
                 m->body[0] = p;
             }
 
-            CompiledFunction* compiled = compileModule(m, main);
-            if (compiled->is_interpreted)
-                interpretFunction(compiled->func, 0, NULL, NULL, NULL, NULL);
-            else
-                ((void (*)())compiled->code)();
+            compileAndRunModule(m, main);
 
             if (VERBOSITY() >= 1) {
                 gettimeofday(&end, NULL);

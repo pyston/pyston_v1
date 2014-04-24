@@ -51,6 +51,8 @@ std::string getOpSymbol(int op_type) {
             return ">";
         case AST_TYPE::GtE:
             return ">=";
+        case AST_TYPE::In:
+            return "in";
         case AST_TYPE::Invert:
             return "~";
         case AST_TYPE::Is:
@@ -117,6 +119,8 @@ std::string getOpName(int op_type) {
             return "__gt__";
         case AST_TYPE::GtE:
             return "__ge__";
+        case AST_TYPE::In:
+            return "__contains__";
         case AST_TYPE::Invert:
             return "__invert__";
         case AST_TYPE::Mod:
@@ -431,6 +435,17 @@ void AST_Import::accept(ASTVisitor *v) {
 
 void AST_Import::accept_stmt(StmtVisitor *v) {
     v->visit_import(this);
+}
+
+void AST_ImportFrom::accept(ASTVisitor *v) {
+    bool skip = v->visit_importfrom(this);
+    if (skip) return;
+
+    visitVector(names, v);
+}
+
+void AST_ImportFrom::accept_stmt(StmtVisitor *v) {
+    v->visit_importfrom(this);
 }
 
 void AST_Index::accept(ASTVisitor *v) {
@@ -976,6 +991,15 @@ bool PrintVisitor::visit_import(AST_Import *node) {
     return true;
 }
 
+bool PrintVisitor::visit_importfrom(AST_ImportFrom *node) {
+    printf("from %s import ", node->module.c_str());
+    for (int i = 0; i < node->names.size(); i++) {
+        if (i > 0) printf(", ");
+        node->names[i]->accept(this);
+    }
+    return true;
+}
+
 bool PrintVisitor::visit_index(AST_Index *node) {
     return false;
 }
@@ -1220,6 +1244,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_global(AST_Global *node) { output->push_back(node); return false; }
         virtual bool visit_if(AST_If *node) { output->push_back(node); return false; }
         virtual bool visit_import(AST_Import *node) { output->push_back(node); return false; }
+        virtual bool visit_importfrom(AST_ImportFrom *node) { output->push_back(node); return false; }
         virtual bool visit_index(AST_Index *node) { output->push_back(node); return false; }
         virtual bool visit_keyword(AST_keyword *node) { output->push_back(node); return false; }
         virtual bool visit_list(AST_List *node) { output->push_back(node); return false; }

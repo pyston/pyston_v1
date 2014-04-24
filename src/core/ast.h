@@ -158,11 +158,13 @@ class AST_stmt : public AST {
 
 class AST_alias : public AST {
     public:
-        std::string name, asname;
+        const std::string name, asname;
 
         virtual void accept(ASTVisitor *v);
 
-        AST_alias() : AST(AST_TYPE::alias) {}
+        AST_alias(const std::string& name, const std::string &asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::alias;
 };
 
 class AST_arguments : public AST {
@@ -175,6 +177,8 @@ class AST_arguments : public AST {
         virtual void accept(ASTVisitor *v);
 
         AST_arguments() : AST(AST_TYPE::arguments) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::arguments;
 };
 
 class AST_Assign : public AST_stmt {
@@ -186,6 +190,8 @@ class AST_Assign : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Assign() : AST_stmt(AST_TYPE::Assign) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assign;
 };
 
 class AST_AugAssign : public AST_stmt {
@@ -198,6 +204,8 @@ class AST_AugAssign : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_AugAssign() : AST_stmt(AST_TYPE::AugAssign) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugAssign;
 };
 
 class AST_AugBinOp : public AST_expr {
@@ -209,6 +217,8 @@ class AST_AugBinOp : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_AugBinOp() : AST_expr(AST_TYPE::AugBinOp) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugBinOp;
 };
 
 class AST_Attribute : public AST_expr {
@@ -221,6 +231,8 @@ class AST_Attribute : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Attribute;
 };
 
 class AST_BinOp : public AST_expr {
@@ -232,6 +244,8 @@ class AST_BinOp : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_BinOp() : AST_expr(AST_TYPE::BinOp) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BinOp;
 };
 
 class AST_BoolOp : public AST_expr {
@@ -243,6 +257,8 @@ class AST_BoolOp : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_BoolOp() : AST_expr(AST_TYPE::BoolOp) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BoolOp;
 };
 
 class AST_Break : public AST_stmt {
@@ -251,6 +267,8 @@ class AST_Break : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Break() : AST_stmt(AST_TYPE::Break) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Break;
 };
 
 class AST_Call : public AST_expr {
@@ -277,6 +295,8 @@ class AST_Compare : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Compare() : AST_expr(AST_TYPE::Compare) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Compare;
 };
 
 class AST_comprehension : public AST {
@@ -302,6 +322,8 @@ class AST_ClassDef : public AST_stmt {
         std::string name;
 
         AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClassDef;
 };
 
 class AST_Continue : public AST_stmt {
@@ -310,6 +332,8 @@ class AST_Continue : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Continue() : AST_stmt(AST_TYPE::Continue) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Continue;
 };
 
 class AST_Dict : public AST_expr {
@@ -320,6 +344,8 @@ class AST_Dict : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Dict() : AST_expr(AST_TYPE::Dict) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Dict;
 };
 
 class AST_Expr : public AST_stmt {
@@ -330,11 +356,12 @@ class AST_Expr : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Expr() : AST_stmt(AST_TYPE::Expr) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expr;
 };
 
 class AST_For : public AST_stmt {
     public:
-        const static int TYPE = AST_TYPE::For;
         std::vector<AST_stmt*> body, orelse;
         AST_expr *target, *iter;
 
@@ -342,11 +369,12 @@ class AST_For : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_For() : AST_stmt(AST_TYPE::For) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::For;
 };
 
 class AST_FunctionDef : public AST_stmt {
     public:
-        const static int TYPE = AST_TYPE::FunctionDef;
         std::vector<AST_stmt*> body;
         std::vector<AST_expr*> decorator_list;
         std::string name;
@@ -356,6 +384,8 @@ class AST_FunctionDef : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_FunctionDef() : AST_stmt(AST_TYPE::FunctionDef) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::FunctionDef;
 };
 
 class AST_Global : public AST_stmt {
@@ -366,6 +396,8 @@ class AST_Global : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Global() : AST_stmt(AST_TYPE::Global) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Global;
 };
 
 class AST_If : public AST_stmt {
@@ -377,17 +409,20 @@ class AST_If : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_If() : AST_stmt(AST_TYPE::If) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::If;
 };
 
 class AST_IfExp : public AST_expr {
     public:
-        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::IfExp;
         AST_expr *body, *test, *orelse;
 
         virtual void accept(ASTVisitor *v);
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::IfExp;
 };
 
 class AST_Import : public AST_stmt {
@@ -398,17 +433,34 @@ class AST_Import : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Import() : AST_stmt(AST_TYPE::Import) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Import;
+};
+
+class AST_ImportFrom : public AST_stmt {
+    public:
+        std::string module;
+        std::vector<AST_alias*> names;
+        int level;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void accept_stmt(StmtVisitor *v);
+
+        AST_ImportFrom() : AST_stmt(AST_TYPE::ImportFrom) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ImportFrom;
 };
 
 class AST_Index : public AST_expr {
     public:
-        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::Index;
         AST_expr *value;
 
         virtual void accept(ASTVisitor *v);
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Index() : AST_expr(AST_TYPE::Index) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Index;
 };
 
 class AST_keyword : public AST {
@@ -426,8 +478,6 @@ class AST_keyword : public AST {
 
 class AST_List : public AST_expr {
     public:
-        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::List;
-
         std::vector<AST_expr*> elts;
         AST_TYPE::AST_TYPE ctx_type;
 
@@ -435,12 +485,12 @@ class AST_List : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_List() : AST_expr(AST_TYPE::List) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::List;
 };
 
 class AST_ListComp : public AST_expr {
     public:
-        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::ListComp;
-
         std::vector<AST_comprehension*> generators;
         AST_expr* elt;
 
@@ -448,22 +498,24 @@ class AST_ListComp : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_ListComp() : AST_expr(AST_TYPE::ListComp) {}
+
+        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::ListComp;
 };
 
 class AST_Module : public AST {
     public:
         // no lineno, col_offset attributes
-        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
         std::vector<AST_stmt*> body;
 
         virtual void accept(ASTVisitor *v);
 
         AST_Module() : AST(AST_TYPE::Module) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
 };
 
 class AST_Name : public AST_expr {
     public:
-        const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
         AST_TYPE::AST_TYPE ctx_type;
         std::string id;
 
@@ -471,6 +523,8 @@ class AST_Name : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Name() : AST_expr(AST_TYPE::Name) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
 
 class AST_Num : public AST_expr {
@@ -490,6 +544,8 @@ class AST_Num : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Num() : AST_expr(AST_TYPE::Num) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Num;
 };
 
 class AST_Pass : public AST_stmt {
@@ -498,6 +554,8 @@ class AST_Pass : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Pass() : AST_stmt(AST_TYPE::Pass) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Pass;
 };
 
 class AST_Print : public AST_stmt {
@@ -510,6 +568,8 @@ class AST_Print : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Print() : AST_stmt(AST_TYPE::Print) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Print;
 };
 
 class AST_Return : public AST_stmt {
@@ -520,6 +580,8 @@ class AST_Return : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Return() : AST_stmt(AST_TYPE::Return) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Return;
 };
 
 class AST_Slice : public AST_expr {
@@ -530,6 +592,8 @@ class AST_Slice : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Slice() : AST_expr(AST_TYPE::Slice) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Slice;
 };
 
 class AST_Str : public AST_expr {
@@ -540,6 +604,8 @@ class AST_Str : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Str() : AST_expr(AST_TYPE::Str) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };
 
 class AST_Subscript : public AST_expr {
@@ -551,6 +617,8 @@ class AST_Subscript : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Subscript;
 };
 
 class AST_Tuple : public AST_expr {
@@ -562,6 +630,8 @@ class AST_Tuple : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_Tuple() : AST_expr(AST_TYPE::Tuple) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Tuple;
 };
 
 class AST_UnaryOp : public AST_expr {
@@ -573,6 +643,8 @@ class AST_UnaryOp : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_UnaryOp() : AST_expr(AST_TYPE::UnaryOp) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::UnaryOp;
 };
 
 class AST_While : public AST_stmt {
@@ -584,6 +656,8 @@ class AST_While : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_While() : AST_stmt(AST_TYPE::While) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::While;
 };
 
 class AST_With : public AST_stmt {
@@ -595,6 +669,8 @@ class AST_With : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_With() : AST_stmt(AST_TYPE::With) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::With;
 };
 
 
@@ -612,6 +688,8 @@ class AST_Branch : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Branch;
 };
 
 class AST_Jump : public AST_stmt {
@@ -622,6 +700,8 @@ class AST_Jump : public AST_stmt {
         virtual void accept_stmt(StmtVisitor *v);
 
         AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
 };
 
 class AST_ClsAttribute : public AST_expr {
@@ -633,7 +713,17 @@ class AST_ClsAttribute : public AST_expr {
         virtual void* accept_expr(ExprVisitor *v);
 
         AST_ClsAttribute() : AST_expr(AST_TYPE::ClsAttribute) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClsAttribute;
 };
+
+template <typename T>
+T* ast_cast(AST* node) {
+    assert(node->type == T::TYPE);
+    return static_cast<T*>(node);
+}
+
+
 
 class ASTVisitor {
     protected:
@@ -663,6 +753,7 @@ class ASTVisitor {
         virtual bool visit_if(AST_If *node) { assert(0); abort(); }
         virtual bool visit_ifexp(AST_IfExp *node) { assert(0); abort(); }
         virtual bool visit_import(AST_Import *node) { assert(0); abort(); }
+        virtual bool visit_importfrom(AST_ImportFrom *node) { assert(0); abort(); }
         virtual bool visit_index(AST_Index *node) { assert(0); abort(); }
         virtual bool visit_keyword(AST_keyword *node) { assert(0); abort(); }
         virtual bool visit_list(AST_List *node) { assert(0); abort(); }
@@ -713,6 +804,7 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_if(AST_If *node) { return false; }
         virtual bool visit_ifexp(AST_IfExp *node) { return false; }
         virtual bool visit_import(AST_Import *node) { return false; }
+        virtual bool visit_importfrom(AST_ImportFrom *node) { return false; }
         virtual bool visit_index(AST_Index *node) { return false; }
         virtual bool visit_keyword(AST_keyword *node) { return false; }
         virtual bool visit_list(AST_List *node) { return false; }
@@ -777,6 +869,7 @@ class StmtVisitor {
         virtual void visit_global(AST_Global *node) { assert(0); abort(); }
         virtual void visit_if(AST_If *node) { assert(0); abort(); }
         virtual void visit_import(AST_Import *node) { assert(0); abort(); }
+        virtual void visit_importfrom(AST_ImportFrom *node) { assert(0); abort(); }
         virtual void visit_pass(AST_Pass *node) { assert(0); abort(); }
         virtual void visit_print(AST_Print *node) { assert(0); abort(); }
         virtual void visit_return(AST_Return *node) { assert(0); abort(); }
@@ -819,6 +912,7 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_if(AST_If *node);
         virtual bool visit_ifexp(AST_IfExp *node);
         virtual bool visit_import(AST_Import *node);
+        virtual bool visit_importfrom(AST_ImportFrom *node);
         virtual bool visit_index(AST_Index *node);
         virtual bool visit_keyword(AST_keyword *node);
         virtual bool visit_list(AST_List *node);

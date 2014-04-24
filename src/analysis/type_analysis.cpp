@@ -63,10 +63,10 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
         return NULL;
     }
 
-    if (node->func->type == AST_TYPE::Name && static_cast<AST_Name*>(node->func)->id == "xrange")
+    if (node->func->type == AST_TYPE::Name && ast_cast<AST_Name>(node->func)->id == "xrange")
         return xrange_cls;
 
-    //if (node->func->type == AST_TYPE::Attribute && static_cast<AST_Attribute*>(node->func)->attr == "dot")
+    //if (node->func->type == AST_TYPE::Attribute && ast_cast<AST_Attribute>(node->func)->attr == "dot")
         //return float_cls;
 
     return NULL;
@@ -141,12 +141,12 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
                     // doesn't affect types (yet?)
                     break;
                 case AST_TYPE::Name:
-                    _doSet(static_cast<AST_Name*>(target)->id, t);
+                    _doSet(ast_cast<AST_Name>(target)->id, t);
                     break;
                 case AST_TYPE::Subscript:
                     break;
                 case AST_TYPE::Tuple: {
-                    AST_Tuple *tt = static_cast<AST_Tuple*>(target);
+                    AST_Tuple *tt = ast_cast<AST_Tuple>(target);
                     for (int i = 0; i < tt->elts.size(); i++) {
                         _doSet(tt->elts[i], UNKNOWN);
                     }
@@ -427,15 +427,22 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
         virtual void visit_global(AST_Global* node) {
         }
 
-        virtual void visit_import(AST_Import *node) {
-            for (int i = 0; i < node->names.size(); i++) {
-                AST_alias *alias = node->names[i];
-                std::string &name = alias->name;
-                if (alias->asname.size())
-                    name = alias->asname;
+        virtual void visit_alias(AST_alias* node) {
+            const std::string *name = &node->name;
+            if (node->asname.size())
+                name = &node->asname;
 
-                _doSet(name, UNKNOWN);
-            }
+            _doSet(*name, UNKNOWN);
+        }
+
+        virtual void visit_import(AST_Import *node) {
+            for (AST_alias* alias : node->names)
+                visit_alias(alias);
+        }
+
+        virtual void visit_importfrom(AST_ImportFrom *node) {
+            for (AST_alias* alias : node->names)
+                visit_alias(alias);
         }
 
         virtual void visit_jump(AST_Jump* node) {}
@@ -542,7 +549,7 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 for (int i = 0; i < arg_names.size(); i++) {
                     AST_expr* arg = arg_names[i];
                     assert(arg->type == AST_TYPE::Name);
-                    AST_Name *arg_name = static_cast<AST_Name*>(arg);
+                    AST_Name *arg_name = ast_cast<AST_Name>(arg);
                     initial_types[arg_name->id] = unboxedType(arg_types[i]);
                 }
             }

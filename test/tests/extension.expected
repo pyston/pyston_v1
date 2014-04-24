@@ -1,4 +1,4 @@
-<module 'test' (built-in)>
+<module 'test' from '../test/test_extension/test.so'>
 []
 This will break
 []

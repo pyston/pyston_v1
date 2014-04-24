@@ -1,13 +1,11 @@
 Pyston currently only supports installing from source; the following instructions have only been tested on Ubuntu, and currently has some non-trivial build issues on Mac (hopefully will be addressed soon once we get access to a Mac VM).
 
-Pyston's build system expects to find all of its dependencies in `~/pyston_deps`:
+The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `src/Makefile`.
+
+Start off by making the relevant directories:
+
 ```
 mkdir ~/pyston_deps
-```
-
-The instructions in this file assume that pyston is checked out to `~/pyston`, though it can be checked out anywhere as long as the rest of these instructions are appropriately modified.
-
-```
 git clone https://github.com/dropbox/pyston.git ~/pyston
 ```
 
@@ -73,6 +71,16 @@ patch -p1 <~/pyston/libunwind_patches/0001-Change-the-RBP-validation-heuristic-t
 make -j4
 make install
 ```
+
+Note: if you followed the previous version of the directions and installed libunwind globally, you'll need to uninstall it by doing the following:
+
+```
+cd ~/pyston_deps/libunwind-1.1
+./configure
+sudo make uninstall
+```
+
+and then repeat the correct process
 
 ### zsh
 `zsh` is needed when running pyston tests.

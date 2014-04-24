@@ -160,7 +160,7 @@ class DefinednessVisitor : public ASTVisitor {
                 case AST_TYPE::Subscript:
                     break;
                 case AST_TYPE::Tuple: {
-                    AST_Tuple *tt = static_cast<AST_Tuple*>(t);
+                    AST_Tuple *tt = ast_cast<AST_Tuple>(t);
                     for (int i = 0; i < tt->elts.size(); i++) {
                         _doSet(tt->elts[i]);
                     }
@@ -192,17 +192,16 @@ class DefinednessVisitor : public ASTVisitor {
             return true;
         }
 
-        virtual bool visit_import(AST_Import *node) {
-            for (int i = 0; i < node->names.size(); i++) {
-                AST_alias *alias = node->names[i];
-                std::string &name = alias->name;
-                if (alias->asname.size())
-                    name = alias->asname;
+        virtual bool visit_alias(AST_alias* node) {
+            const std::string* name = &node->name;
+            if (node->asname.size())
+                name = &node->asname;
 
-                _doSet(name);
-            }
+            _doSet(*name);
             return true;
         }
+        virtual bool visit_import(AST_Import *node) { return false; }
+        virtual bool visit_importfrom(AST_ImportFrom *node) { return false; }
 
         virtual bool visit_assign(AST_Assign *node) {
             for (int i = 0; i < node->targets.size(); i++) {
