@@ -15,7 +15,3 @@ print sorted(s2 - s1)
 print sorted(s1 ^ s2)
 print sorted(s1 & s2)
 print sorted(s1 | s2)
-
-s3 = s1
-s1 -= s2
-print sorted(s1), sorted(s2), sorted(s3)

@@ -761,7 +761,6 @@ static void _reparse(const char* fn, const std::string &cache_fn) {
     llvm::sys::path::append(parse_ast_fn, "codegen/parse_ast.py");
 
     std::string cmdline = std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
-    printf("%s\n", cmdline.c_str());
     FILE *parser = popen(cmdline.c_str(), "r");
     FILE *cache_fp = fopen(cache_fn.c_str(), "w");
     assert(cache_fp);

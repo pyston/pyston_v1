@@ -14,6 +14,7 @@
 
 #include <cstring>
 #include <sstream>
+#include <algorithm>
 
 #include "core/common.h"
 #include "core/stats.h"
@@ -267,6 +268,14 @@ Box* listAdd(BoxedList* self, Box* _rhs) {
     return rtn;
 }
 
+Box* listSort1(BoxedList* self) {
+    assert(self->cls == list_cls);
+
+    std::sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
+
+    return None;
+}
+
 BoxedClass *list_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor *v, void* p) {
     boxGCHandler(v, p);
@@ -336,6 +345,8 @@ void setupList() {
 
     list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, NULL, 2, false)));
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, NULL, 2, false)));
+
+    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NULL, 1, false)));
 
     CLFunction *new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
     addRTFunction(new_, (void*)listNew2, NULL, 2, false);
