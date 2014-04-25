@@ -330,12 +330,18 @@ Box* strSplit1(BoxedString* self) {
 
     std::ostringstream os("");
     for (char c : self->s) {
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f') {
-            listAppendInternal(rtn, boxString(os.str()));
-            os.str("");
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') {
+            if (os.tellp()) {
+                listAppendInternal(rtn, boxString(os.str()));
+                os.str("");
+            }
+        } else {
+            os << c;
         }
     }
-    listAppendInternal(rtn, boxString(os.str()));
+    if (os.tellp()) {
+        listAppendInternal(rtn, boxString(os.str()));
+    }
     return rtn;
 }
 

@@ -453,7 +453,7 @@ Box* floatNew2(BoxedClass *cls, Box* a) {
         if (s == "-inf")
             return boxFloat(-INFINITY);
 
-        RELEASE_ASSERT(0, "%s", s.c_str());
+        return boxFloat(strtod(s.c_str(), NULL));
     }
     RELEASE_ASSERT(0, "%s", getTypeName(a)->c_str());
 }
