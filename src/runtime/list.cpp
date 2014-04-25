@@ -284,18 +284,26 @@ extern "C" Box* listNew1(Box* cls) {
     return new BoxedList();
 }
 
-extern "C" Box* listNew2(Box* cls, Box* rhs) {
+extern "C" Box* listNew2(Box* cls, Box* container) {
     assert(cls == list_cls);
 
-    RELEASE_ASSERT(rhs->cls == list_cls, "unsupported for now");
-    BoxedList *lrhs = static_cast<BoxedList*>(rhs);
-    int size = lrhs->size;
+    static std::string _iter("__iter__");
+    static std::string _hasnext("__hasnext__");
+    static std::string _next("next");
 
-    BoxedList *rtn = new BoxedList();
-    rtn->elts = new (size) BoxedList::ElementArray();
-    memcpy(rtn->elts->elts, lrhs->elts->elts, size * sizeof(Box*));
-    rtn->size = size;
-    rtn->capacity = size;
+    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
+
+    Box* rtn = new BoxedList();
+
+    while (true) {
+        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
+        bool hasnext_bool = nonzero(hasnext);
+        if (!hasnext_bool)
+            break;
+
+        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
+        listAppendInternal(rtn, next);
+    }
     return rtn;
 }
 

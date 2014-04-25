@@ -378,7 +378,8 @@ if __name__ == "__main__":
     subprocess.check_call(["make", "-j4", IMAGE], stdout=open("/dev/null", 'w'), stderr=subprocess.PIPE)
     print "done"
 
-    tests.sort(key=fileSize)
+    if not patterns:
+        tests.sort(key=fileSize)
 
     for fn in tests:
         if fn in TOSKIP:

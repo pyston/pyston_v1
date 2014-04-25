@@ -1,0 +1,183 @@
+// Copyright (c) 2014 Dropbox, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "runtime/set.h"
+
+#include "runtime/objmodel.h"
+
+#include "codegen/compvars.h"
+
+#include <sstream>
+
+namespace pyston {
+
+BoxedClass *set_cls;
+const ObjectFlavor set_flavor(&boxGCHandler, NULL);
+
+Box* setAdd2(Box* _self, Box* b) {
+    assert(_self->cls == set_cls);
+    BoxedSet* self = static_cast<BoxedSet*>(_self);
+
+    self->s.insert(b);
+    return None;
+}
+
+Box* setNew1(Box* cls) {
+    assert(cls == set_cls);
+    return new BoxedSet();
+}
+
+Box* setNew2(Box* cls, Box *container) {
+    assert(cls == set_cls);
+
+    static std::string _iter("__iter__");
+    static std::string _hasnext("__hasnext__");
+    static std::string _next("next");
+
+    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
+
+    Box* rtn = new BoxedSet();
+
+    while (true) {
+        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
+        bool hasnext_bool = nonzero(hasnext);
+        if (!hasnext_bool)
+            break;
+
+        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
+
+        setAdd2(rtn, next);
+    }
+    return rtn;
+}
+
+Box* setRepr(BoxedSet* self) {
+    assert(self->cls == set_cls);
+
+    std::ostringstream os("");
+
+    os << "set([";
+    bool first = true;
+    for (Box* elt : self->s) {
+        if (!first) {
+            os << ", ";
+        }
+        os << repr(elt)->s;
+        first = false;
+    }
+    os << "])";
+    return boxString(os.str());
+}
+
+Box* setOrSet(BoxedSet *lhs, BoxedSet *rhs) {
+    assert(lhs->cls == set_cls);
+    assert(rhs->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+
+    for (Box* elt : lhs->s) {
+        rtn->s.insert(elt);
+    }
+    for (Box* elt : rhs->s) {
+        rtn->s.insert(elt);
+    }
+    return rtn;
+}
+
+Box* setAndSet(BoxedSet *lhs, BoxedSet *rhs) {
+    assert(lhs->cls == set_cls);
+    assert(rhs->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+
+    for (Box* elt : lhs->s) {
+        if (rhs->s.count(elt))
+            rtn->s.insert(elt);
+    }
+    return rtn;
+}
+
+Box* setSubSet(BoxedSet *lhs, BoxedSet *rhs) {
+    assert(lhs->cls == set_cls);
+    assert(rhs->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+
+    for (Box* elt : lhs->s) {
+        // TODO if len(rhs) << len(lhs), it might be more efficient
+        // to delete the elements of rhs from lhs?
+        if (rhs->s.count(elt) == 0)
+            rtn->s.insert(elt);
+    }
+    return rtn;
+}
+
+Box* setXorSet(BoxedSet *lhs, BoxedSet *rhs) {
+    assert(lhs->cls == set_cls);
+    assert(rhs->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+
+    for (Box* elt : lhs->s) {
+        if (rhs->s.count(elt) == 0)
+            rtn->s.insert(elt);
+    }
+
+    for (Box* elt : rhs->s) {
+        if (lhs->s.count(elt) == 0)
+            rtn->s.insert(elt);
+    }
+
+    return rtn;
+}
+
+void setupSet() {
+    set_cls->giveAttr("__name__", boxStrConstant("set"));
+
+    CLFunction *new_ = boxRTFunction((void*)setNew1, SET, 1, false);
+    addRTFunction(new_, (void*)setNew2, SET, 2, false);
+    set_cls->giveAttr("__new__", new BoxedFunction(new_));
+
+    Box* repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1, false));
+    set_cls->giveAttr("__repr__", repr);
+    set_cls->giveAttr("__str__", repr);
+
+    std::vector<ConcreteCompilerType*> v_ss, v_su;
+    v_ss.push_back(SET); v_ss.push_back(SET);
+    v_su.push_back(SET); v_su.push_back(UNKNOWN);
+
+    CLFunction *or_ = createRTFunction();
+    addRTFunction(or_, (void*)setOrSet, SET, v_ss, false);
+    set_cls->giveAttr("__or__", new BoxedFunction(or_));
+
+    CLFunction *sub_ = createRTFunction();
+    addRTFunction(sub_, (void*)setSubSet, SET, v_ss, false);
+    set_cls->giveAttr("__sub__", new BoxedFunction(sub_));
+
+    CLFunction *xor_ = createRTFunction();
+    addRTFunction(xor_, (void*)setXorSet, SET, v_ss, false);
+    set_cls->giveAttr("__xor__", new BoxedFunction(xor_));
+
+    CLFunction *and_ = createRTFunction();
+    addRTFunction(and_, (void*)setAndSet, SET, v_ss, false);
+    set_cls->giveAttr("__and__", new BoxedFunction(and_));
+
+    set_cls->freeze();
+}
+
+void teardownSet() {
+}
+
+}
+

@@ -238,8 +238,7 @@ class StlCompatAllocator {
 
 class BoxedDict : public Box {
     public:
-        typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > PyDict;
-        PyDict d;
+        std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > d;
 
         BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
 };

@@ -21,6 +21,7 @@
 
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
+#include "runtime/set.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -315,6 +316,7 @@ void setupBuiltins() {
     builtins_module->setattr("file", file_cls, NULL, NULL);
     builtins_module->setattr("bool", bool_cls, NULL, NULL);
     builtins_module->setattr("dict", dict_cls, NULL, NULL);
+    builtins_module->setattr("set", set_cls, NULL, NULL);
     builtins_module->setattr("tuple", tuple_cls, NULL, NULL);
     builtins_module->setattr("instancemethod", instancemethod_cls, NULL, NULL);
 }

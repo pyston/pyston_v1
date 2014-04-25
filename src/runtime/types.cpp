@@ -25,6 +25,7 @@
 
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
+#include "runtime/set.h"
 #include "runtime/types.h"
 
 #include "gc/collector.h"
@@ -354,6 +355,9 @@ void setupRuntime() {
 
     module_cls = new BoxedClass(true, NULL);
 
+    // TODO it'd be nice to be able to do these in the respective setupType methods,
+    // but those setup methods probably want access to these objects.
+    // We could have a multi-stage setup process, but that seems overkill for now.
     bool_cls = new BoxedClass(false, NULL);
     int_cls = new BoxedClass(false, NULL);
     float_cls = new BoxedClass(false, NULL);
@@ -365,6 +369,7 @@ void setupRuntime() {
     dict_cls = new BoxedClass(false, (BoxedClass::Dtor)dict_dtor);
     tuple_cls = new BoxedClass(false, (BoxedClass::Dtor)tuple_dtor);
     file_cls = new BoxedClass(false, (BoxedClass::Dtor)file_dtor);
+    set_cls = new BoxedClass(false, NULL);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -375,6 +380,7 @@ void setupRuntime() {
     SLICE = typeFromClass(slice_cls);
     MODULE = typeFromClass(module_cls);
     DICT = typeFromClass(dict_cls);
+    SET = typeFromClass(set_cls);
     BOXED_TUPLE = typeFromClass(tuple_cls);
 
     type_cls->giveAttr("__name__", boxStrConstant("type"));
@@ -400,6 +406,7 @@ void setupRuntime() {
     setupStr();
     setupList();
     setupDict();
+    setupSet();
     setupTuple();
     setupFile();
 
@@ -467,6 +474,7 @@ void teardownRuntime() {
     teardownStr();
     teardownBool();
     teardownDict();
+    teardownSet();
     teardownTuple();
     teardownFile();
 

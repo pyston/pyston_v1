@@ -1388,6 +1388,6 @@ CompilerVariable* undefVariable() {
 }
 
 
-ConcreteCompilerType *LIST, *SLICE, *MODULE, *DICT;
+ConcreteCompilerType *LIST, *SLICE, *MODULE, *DICT, *SET;
 
 } // namespace pyston

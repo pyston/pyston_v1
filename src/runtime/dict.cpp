@@ -104,9 +104,8 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
 void dict_dtor(BoxedDict* self) {
     self->d.clear();
 
-    // Not sure how to express this without the typedef:
-    typedef BoxedDict::PyDict T;
-    (&self->d)->~T();
+    // I can't believe this works:
+    (&self->d)->~decltype(self->d)();
 }
 
 void setupDict() {
