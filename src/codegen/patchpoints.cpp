@@ -86,7 +86,7 @@ void processStackmap(StackMap* stackmap) {
         uint8_t* start_addr = func_addr + r->offset;
 
         std::unordered_set<int> live_outs;
-        for (auto live_out : r->live_outs) {
+        for (const auto &live_out : r->live_outs) {
             live_outs.insert(live_out.regnum);
         }
 

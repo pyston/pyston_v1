@@ -231,7 +231,7 @@ void DefinednessBBAnalyzer::processBB(Map &starting, CFGBlock *block) const {
 
     if (VERBOSITY("analysis") >= 2) {
         printf("At end of block %d:\n", block->idx);
-        for (auto p : starting) {
+        for (const auto &p : starting) {
             printf("%s: %d\n", p.first.c_str(), p.second);
         }
     }
@@ -240,15 +240,14 @@ void DefinednessBBAnalyzer::processBB(Map &starting, CFGBlock *block) const {
 DefinednessAnalysis::DefinednessAnalysis(AST_arguments *args, CFG* cfg, ScopeInfo *scope_info) : scope_info(scope_info) {
     results = computeFixedPoint(cfg, DefinednessBBAnalyzer(cfg, args), false);
 
-    for (auto p : results) {
+    for (const auto &p : results) {
         RequiredSet required;
-        for (std::unordered_map<std::string, DefinitionLevel>::iterator it2 = p.second.begin(), end2 = p.second.end();
-                it2 != end2; ++it2) {
-            if (scope_info->refersToGlobal(it2->first))
+        for (const auto &p2 : p.second) {
+            if (scope_info->refersToGlobal(p2.first))
                 continue;
 
-            //printf("%d %s %d\n", p.first->idx, it2->first.c_str(), it2->second);
-            required.insert(it2->first);
+            //printf("%d %s %d\n", p.first->idx, p2.first.c_str(), p2.second);
+            required.insert(p2.first);
         }
         defined.insert(make_pair(p.first, required));
     }
@@ -275,7 +274,7 @@ PhiAnalysis::PhiAnalysis(AST_arguments* args, CFG* cfg, LivenessAnalysis *livene
         const RequiredSet& defined = definedness.getDefinedNamesAt(block);
         if (defined.size())
             assert(block->predecessors.size());
-        for (auto s : defined) {
+        for (const auto &s : defined) {
             if (liveness->isLiveAtEnd(s, block->predecessors[0])) {
                 required.insert(s);
             }

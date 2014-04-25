@@ -69,6 +69,10 @@ void setupSys() {
 
     BoxedList* sys_path = new BoxedList();
     sys_module->giveAttr("path", sys_path);
+
+    sys_module->giveAttr("stdout", new BoxedFile(stdout));
+    sys_module->giveAttr("stdin", new BoxedFile(stdin));
+    sys_module->giveAttr("stderr", new BoxedFile(stderr));
 }
 
 }

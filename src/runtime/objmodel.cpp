@@ -424,7 +424,7 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs *rewri
     // TODO need to make sure we don't need to rearrange the attributes
     assert(new_hcls->attr_offsets[attr] == numattrs);
 #ifndef NDEBUG
-    for (auto p : hcls->attr_offsets) {
+    for (const auto &p : hcls->attr_offsets) {
         assert(new_hcls->attr_offsets[p.first] == p.second);
     }
 #endif

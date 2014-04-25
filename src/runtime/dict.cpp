@@ -27,7 +27,7 @@ Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     chars.push_back('{');
     bool first = true;
-    for (auto p : self->d) {
+    for (const auto &p : self->d) {
         if (!first) {
             chars.push_back(',');
             chars.push_back(' ');
@@ -48,7 +48,7 @@ Box* dictRepr(BoxedDict* self) {
 Box* dictItems(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
 
-    for (auto p : self->d) {
+    for (const auto &p : self->d) {
         std::vector<Box*> elts;
         elts.push_back(p.first);
         elts.push_back(p.second);
@@ -61,7 +61,7 @@ Box* dictItems(BoxedDict* self) {
 
 Box* dictValues(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
-    for (auto p : self->d) {
+    for (const auto &p : self->d) {
         listAppendInternal(rtn, p.second);
     }
     return rtn;
@@ -69,7 +69,7 @@ Box* dictValues(BoxedDict* self) {
 
 Box* dictKeys(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
-    for (auto p : self->d) {
+    for (const auto &p : self->d) {
         listAppendInternal(rtn, p.first);
     }
     return rtn;

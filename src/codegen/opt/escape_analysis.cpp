@@ -150,7 +150,7 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
         {
             std::deque<const BasicBlock*> queue;
 
-            for (auto I : chain->escape_points) {
+            for (const auto I : chain->escape_points) {
                 chain->bb_escapes[I->getParent()] = BBPartialEscape;
                 queue.insert(queue.end(), succ_begin(I->getParent()), succ_end(I->getParent()));
             }
@@ -181,10 +181,10 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
 
 void EscapeAnalysis::ChainInfo::dump() {
     errs() << "Chain starting at " << *allocation << ":\n";
-    for (auto escape_point : escape_points) {
+    for (const auto escape_point : escape_points) {
         errs() << "Escapes at: " << *escape_point << '\n';
     }
-    for (auto ptr : derived) {
+    for (const auto ptr : derived) {
         errs() << "Derived: " << *ptr << '\n';
     }
 }

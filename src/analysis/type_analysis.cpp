@@ -303,9 +303,9 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             // Get all the sub-types, even though they're not necessary to
             // determine the expression type, so that things like speculations
             // can be processed.
-            for (auto k : node->keys)
+            for (AST_expr* k : node->keys)
                 getType(k);
-            for (auto v : node->values)
+            for (AST_expr* v : node->values)
                 getType(v);
 
             return DICT;
@@ -319,7 +319,7 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             // Get all the sub-types, even though they're not necessary to
             // determine the expression type, so that things like speculations
             // can be processed.
-            for (auto elt : node->elts) {
+            for (AST_expr* elt : node->elts) {
                 getType(elt);
             }
 
@@ -449,7 +449,9 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
         virtual void visit_pass(AST_Pass* node) {}
 
         virtual void visit_print(AST_Print* node) {
-            assert(node->dest == NULL);
+            if (node->dest)
+                getType(node->dest);
+
             if (EXPAND_UNNEEDED) {
                 for (int i = 0; i < node->values.size(); i++) {
                     getType(node->values[i]);
@@ -571,7 +573,7 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 if (VERBOSITY("types") >= 2) {
                     printf("before:\n");
                     TypeMap &starting = starting_types[block];
-                    for (auto p : starting) {
+                    for (const auto &p : starting) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
@@ -582,12 +584,12 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                 if (VERBOSITY("types") >= 2) {
                     printf("before (after):\n");
                     TypeMap &starting = starting_types[block];
-                    for (auto p : starting) {
+                    for (const auto &p : starting) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
                     printf("after:\n");
-                    for (auto p : ending) {
+                    for (const auto &p : ending) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }
@@ -608,7 +610,7 @@ class PropagatingTypeAnalysis : public TypeAnalysis {
                     printf("Types at beginning of block %d:\n", b->idx);
 
                     TypeMap &starting = starting_types[b];
-                    for (auto p : starting) {
+                    for (const auto &p : starting) {
                         ASSERT(p.second, "%s", p.first.c_str());
                         printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
                     }

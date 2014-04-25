@@ -325,7 +325,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
 
         // Handle loading symbols from the passed osr arguments:
         int arg_num = -1;
-        for (auto p : entry_descriptor->args) {
+        for (const auto &p : entry_descriptor->args) {
             llvm::Value* from_arg;
             arg_num++;
             if (arg_num < 3) {
@@ -417,7 +417,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
         }
         unbox_emitter->getBuilder()->CreateBr(llvm_entry_blocks[entry_descriptor->backedge->target]);
 
-        for (auto p : *initial_syms) {
+        for (const auto &p : *initial_syms) {
             delete p.second;
         }
         delete initial_syms;
@@ -544,7 +544,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             assert(osr_entry_block);
             assert(phis);
 
-            for (auto p : entry_descriptor->args) {
+            for (const auto &p : entry_descriptor->args) {
                 ConcreteCompilerType *analyzed_type;
                 if (startswith(p.first, "!is_defined"))
                     analyzed_type = BOOL;
@@ -569,7 +569,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
             }
 
             const PhiAnalysis::RequiredSet &names = source->phis->getAllDefinedAt(block);
-            for (auto s : names) {
+            for (const auto &s : names) {
                 // TODO the list from getAllDefinedAt should come filtered:
                 if (!source->liveness->isLiveAtEnd(s, block->predecessors[0]))
                     continue;
@@ -745,7 +745,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList &out_gua
     }
 
     if (entry_descriptor) {
-        for (auto p : *osr_syms) {
+        for (const auto &p : *osr_syms) {
             delete p.second;
         }
         delete osr_syms;
@@ -869,7 +869,7 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
         }
     } else {
         int arg_num = -1;
-        for (auto p : entry_descriptor->args) {
+        for (const auto &p : entry_descriptor->args) {
             arg_num++;
             //printf("Loading %s: %s\n", p.first.c_str(), p.second->debugName().c_str());
             if (arg_num < 3)
@@ -920,7 +920,7 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
         //Worklist guard_worklist;
 
         guards.getBlocksWithGuards(deopt_full_blocks);
-        for (auto p : guards.exprGuards()) {
+        for (const auto &p : guards.exprGuards()) {
             deopt_partial_blocks.insert(p.second->cfg_block);
         }
 
@@ -937,7 +937,7 @@ CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *
     }
     guards.assertGotPatched();
 
-    for (auto p : guards.exprGuards()) {
+    for (const auto &p : guards.exprGuards()) {
         delete p.second;
     }
 

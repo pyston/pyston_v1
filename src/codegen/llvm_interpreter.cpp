@@ -206,8 +206,8 @@ void gatherInterpreterRootsForFrame(GCVisitor *visitor, void* frame_ptr) {
     auto it = interpreter_roots.find(frame_ptr);
     if (it == interpreter_roots.end()) {
         printf("%p is not an interpreter frame; they are", frame_ptr);
-        for (auto it2 : interpreter_roots) {
-            printf(" %p", it2.first);
+        for (const auto &p2 : interpreter_roots) {
+            printf(" %p", p2.first);
         }
         printf("\n");
         abort();
@@ -216,8 +216,8 @@ void gatherInterpreterRootsForFrame(GCVisitor *visitor, void* frame_ptr) {
     //printf("Gathering roots for frame %p\n", frame_ptr);
     const SymMap* symbols = it->second;
 
-    for (auto it2 : *symbols) {
-        visitor->visitPotential(it2.second.o);
+    for (const auto &p2 : *symbols) {
+        visitor->visitPotential(p2.second.o);
     }
 }
 

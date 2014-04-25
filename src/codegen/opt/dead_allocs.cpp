@@ -423,11 +423,11 @@ class DeadAllocsPass : public FunctionPass {
                 if (VERBOSITY("opt") >= 1) {
                     errs() << "\nFound dead alloc:" << *inst_it << '\n';
                     errs() << "Taking along with it:\n";
-                    for (auto I : chain.deletions) {
+                    for (const auto I : chain.deletions) {
                         errs() << *I << '\n';
                     }
                     errs() << "\nLoads that need to be remapped:\n";
-                    for (auto I : chain.loads) {
+                    for (const auto I : chain.loads) {
                         errs() << *I << '\n';
                     }
                 }
@@ -447,7 +447,7 @@ class DeadAllocsPass : public FunctionPass {
                 }
 
                 sc_numdeleted.log(chain.deletions.size());
-                for (auto I : chain.deletions) {
+                for (const auto I : chain.deletions) {
                     I->eraseFromParent();
                 }
             }

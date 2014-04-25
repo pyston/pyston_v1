@@ -47,7 +47,7 @@ void FunctionAddressRegistry::dumpPerfMap() {
     char buf[80];
     snprintf(buf, 80, "/tmp/perf-%d.map", getpid());
     FILE *f = fopen(buf, "w");
-    for (auto p : functions) {
+    for (const auto &p : functions) {
         const FuncInfo& info = p.second;
         fprintf(f, "%lx %x %s\n", (uintptr_t)p.first, info.length, info.name.c_str());
 

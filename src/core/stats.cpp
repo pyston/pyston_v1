@@ -45,7 +45,7 @@ void Stats::dump() {
     printf("Stats:\n");
 
     std::vector<std::pair<std::string, int> > pairs;
-    for (auto p : *names) {
+    for (const auto &p : *names) {
         pairs.push_back(make_pair(p.second, p.first));
     }
 

@@ -256,7 +256,7 @@ static std::vector<ScopingAnalysis::ScopeNameUsage*> sortNameUsages(ScopingAnaly
     std::vector<ScopingAnalysis::ScopeNameUsage*> rtn;
     std::unordered_set<ScopingAnalysis::ScopeNameUsage*> added;
 
-    for (auto p : *usages) {
+    for (const auto &p : *usages) {
         ScopingAnalysis::ScopeNameUsage *usage = p.second;
 
         std::vector<ScopingAnalysis::ScopeNameUsage*> traversed;
@@ -281,7 +281,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
     typedef ScopeNameUsage::StrSet StrSet;
 
     // Resolve name lookups:
-    for (auto p : *usages) {
+    for (const auto &p : *usages) {
         ScopeNameUsage *usage = p.second;
         for (StrSet::iterator it2 = usage->read.begin(), end2 = usage->read.end();
                 it2 != end2; ++it2) {

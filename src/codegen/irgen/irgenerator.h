@@ -127,20 +127,20 @@ class GuardList {
         }
 
         void getBlocksWithGuards(std::unordered_set<CFGBlock*> &add_to) {
-            for (auto p : block_begin_guards) {
+            for (const auto &p : block_begin_guards) {
                 add_to.insert(p.first);
             }
         }
 
         void assertGotPatched() {
 #ifndef NDEBUG
-            for (auto p : block_begin_guards) {
-                for (auto g : p.second) {
+            for (const auto &p : block_begin_guards) {
+                for (const auto g : p.second) {
                     assert(g->branch->getSuccessor(0) != g->branch->getSuccessor(1));
                 }
             }
 
-            for (auto p : expr_type_guards) {
+            for (const auto &p : expr_type_guards) {
                 assert(p.second->branch->getSuccessor(0) != p.second->branch->getSuccessor(1));
             }
 #endif

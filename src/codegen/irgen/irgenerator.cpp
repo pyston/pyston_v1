@@ -79,7 +79,7 @@ GuardList::ExprTypeGuard::ExprTypeGuard(CFGBlock *cfg_block, llvm::BranchInst* b
     DupCache cache;
     this->val = val->dup(cache);
 
-    for (auto p : st) {
+    for (const auto &p : st) {
         this->st[p.first] = p.second->dup(cache);
     }
 }
@@ -87,7 +87,7 @@ GuardList::ExprTypeGuard::ExprTypeGuard(CFGBlock *cfg_block, llvm::BranchInst* b
 GuardList::BlockEntryGuard::BlockEntryGuard(CFGBlock *cfg_block, llvm::BranchInst* branch, const SymbolTable &symbol_table) :
         cfg_block(cfg_block), branch(branch) {
     DupCache cache;
-    for (auto p : symbol_table) {
+    for (const auto &p : symbol_table) {
         this->symbol_table[p.first] = p.second->dup(cache);
     }
 }
@@ -926,7 +926,7 @@ class IRGeneratorImpl : public IRGenerator {
                     llvm::BasicBlock *ramp_block = llvm::BasicBlock::Create(g.context, "deopt_ramp", irstate->getLLVMFunction());
                     llvm::BasicBlock *join_block = llvm::BasicBlock::Create(g.context, "deopt_join", irstate->getLLVMFunction());
                     SymbolTable joined_st;
-                    for (auto p : guard->st) {
+                    for (const auto &p : guard->st) {
                         //if (VERBOSITY("irgen") >= 1) printf("merging %s\n", p.first.c_str());
                         CompilerVariable *curval = symbol_table[p.first];
                         // I'm not sure this is necessary or even correct:
@@ -1399,7 +1399,7 @@ class IRGeneratorImpl : public IRGenerator {
             }
 
             int arg_num = -1;
-            for (auto p : sorted_symbol_table) {
+            for (const auto &p : sorted_symbol_table) {
                 arg_num++;
                 // I don't think this can fail, but if it can we should filter out dead symbols before
                 // passing them on:

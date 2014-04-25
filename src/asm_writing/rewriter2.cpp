@@ -533,7 +533,7 @@ RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, st
     }
 
 #ifndef NDEBUG
-    for (auto p : vars_by_location) {
+    for (const auto &p : vars_by_location) {
         Location l = p.first;
         //l.dump();
         if (l.isClobberedByCall()) {

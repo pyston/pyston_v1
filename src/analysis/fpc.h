@@ -68,7 +68,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
             }
 
             Map &next = states[next_block];
-            for (auto p : ending) {
+            for (const auto &p : ending) {
                 if (next.count(p.first) == 0) {
                     changed = true;
                     if (initial) {
@@ -87,7 +87,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
                 }
             }
 
-            for (auto p : ending) {
+            for (const auto &p : ending) {
                 if (ending.count(p.first))
                     continue;
 
