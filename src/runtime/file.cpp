@@ -15,6 +15,8 @@
 #include <cstring>
 #include <sstream>
 
+#include "codegen/compvars.h"
+
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -62,6 +64,24 @@ static Box* _fileRead(BoxedFile* self, i64 size) {
 Box* fileRead1(BoxedFile* self) {
     assert(self->cls == file_cls);
     return _fileRead(self, -1);
+}
+
+Box* fileReadline1(BoxedFile* self) {
+    assert(self->cls == file_cls);
+
+    std::ostringstream os("");
+
+    while (true) {
+        char c;
+        int nread = fread(&c, 1, 1, self->f);
+        if (nread == 0)
+            break;
+        os << c;
+
+        if (c == '\n')
+            break;
+    }
+    return boxString(os.str());
 }
 
 Box* fileRead2(BoxedFile* self, Box* size) {
@@ -159,6 +179,9 @@ void setupFile() {
     CLFunction *read = boxRTFunction((void*)fileRead1, NULL, 1, false);
     addRTFunction(read, (void*)fileRead2, NULL, 2, false);
     file_cls->giveAttr("read", new BoxedFunction(read));
+
+    CLFunction *readline = boxRTFunction((void*)fileReadline1, STR, 1, false);
+    file_cls->giveAttr("readline", new BoxedFunction(readline));
 
     file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NULL, 2, false)));
     file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NULL, 1, false)));

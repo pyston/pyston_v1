@@ -17,6 +17,8 @@
 #include "core/ast.h"
 #include "core/types.h"
 
+#include "codegen/compvars.h"
+
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -217,6 +219,29 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
     return rtn;
 }
 
+Box* map2(Box* f, Box* container) {
+    static std::string _iter("__iter__");
+    static std::string _hasnext("__hasnext__");
+    static std::string _next("next");
+
+    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
+
+    Box* rtn = new BoxedList();
+
+    while (true) {
+        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
+        bool hasnext_bool = nonzero(hasnext);
+        if (!hasnext_bool)
+            break;
+
+        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
+
+        Box* r = runtimeCall(f, 1, next, NULL, NULL, NULL);
+        listAppendInternal(rtn, r);
+    }
+    return rtn;
+}
+
 extern "C" const ObjectFlavor notimplemented_flavor(&boxGCHandler, NULL);
 BoxedClass *notimplemented_cls;
 BoxedModule* builtins_module;
@@ -279,6 +304,7 @@ void setupBuiltins() {
     open_obj = new BoxedFunction(open);
     builtins_module->giveAttr("open", open_obj);
 
+    builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
 
     builtins_module->setattr("str", str_cls, NULL, NULL);
     builtins_module->setattr("int", int_cls, NULL, NULL);

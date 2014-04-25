@@ -4,20 +4,3 @@ import sys
 
 sys.stdout.write("hello world\n")
 print >>sys.stdout, "hello world"
-
-class StringBuf(object):
-    def __init__(self):
-        self.s = ""
-
-    def write(self, s):
-        self.s += s
-
-    def getvalue(self):
-        return self.s
-
-sys_stdout = sys.stdout
-sys.stdout = StringBuf()
-
-print "hello world"
-
-print >>sys_stdout, "stringio contains:", repr(sys.stdout.getvalue())

@@ -323,6 +323,22 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     }
 }
 
+Box* strSplit1(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    BoxedList* rtn = new BoxedList();
+
+    std::ostringstream os("");
+    for (char c : self->s) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f') {
+            listAppendInternal(rtn, boxString(os.str()));
+            os.str("");
+        }
+    }
+    listAppendInternal(rtn, boxString(os.str()));
+    return rtn;
+}
+
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     if (slice->cls == int_cls) {
         BoxedInt* islice = static_cast<BoxedInt*>(slice);
@@ -368,6 +384,7 @@ void setupStr() {
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, NULL, 2, false)));
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
+    str_cls->giveAttr("split", new BoxedFunction(boxRTFunction((void*)strSplit1, LIST, 1, false)));
 
     CLFunction *__new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)strNew2, NULL, 2, false);
