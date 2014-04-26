@@ -100,7 +100,7 @@ void removeDirectoryIfExists(const std::string& path) {
         if (llvm::sys::fs::is_directory(status)) {
             removeDirectoryIfExists(it->path());
         } else {
-            llvm::errs() << "Removing file " << it->path() << '\n';
+            if (VERBOSITY()) llvm::errs() << "Removing file " << it->path() << '\n';
             code = llvm::sys::fs::remove(it->path(), false);
             assert(!code);
         }
@@ -109,7 +109,7 @@ void removeDirectoryIfExists(const std::string& path) {
         assert(!code);
     }
 
-    llvm::errs() << "Removing directory " << path << '\n';
+    if (VERBOSITY()) llvm::errs() << "Removing directory " << path << '\n';
     code = llvm::sys::fs::remove(path, false);
     assert(!code);
 }

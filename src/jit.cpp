@@ -87,27 +87,32 @@ int main(int argc, char** argv) {
     }
 
     const char* fn = NULL;
-    if (optind != argc-1 && optind != argc) {
-        fprintf(stderr, "Error: python-level arguments not supported yet (first given was %s)\n", argv[optind+1]);
-        exit(1);
-    }
-    if (optind != argc) {
-        fn = argv[optind];
-        if (!force_repl)
-            repl = false;
-    }
-
-    // end of argument parsing
 
     {
         Timer _t("for initCodegen");
         initCodegen();
     }
 
-    BoxedModule* main = createModule("__main__", fn);
+    if (optind != argc) {
+        fn = argv[optind];
+        if (strcmp("-", fn) == 0)
+            fn = NULL;
+        else if (!force_repl)
+            repl = false;
+
+        for (int i = optind; i < argc; i++) {
+            addToSysArgv(argv[i]);
+        }
+    } else {
+        addToSysArgv("");
+    }
+
+    // end of argument parsing
 
     _t.split("to run");
     if (fn != NULL) {
+        BoxedModule* main = createModule("__main__", fn);
+
         llvm::SmallString<128> path;
 
         if (!llvm::sys::path::is_absolute(fn)) {
@@ -143,6 +148,8 @@ int main(int argc, char** argv) {
     }
 
     if (repl && BENCH) {
+        BoxedModule* main = createModule("__main__", "<bench>");
+
         timeval start, end;
         gettimeofday(&start, NULL);
         const int MAX_RUNS = 1000;
@@ -173,50 +180,53 @@ int main(int argc, char** argv) {
 
     if (repl) {
         printf("Pyston v0.1, rev " STRINGIFY(GITREV) "\n");
-    }
-    while (repl) {
-        printf(">> ");
-        fflush(stdout);
 
-        char* line = NULL;
-        size_t size;
-        int read;
-        if ((read = getline(&line, &size, stdin)) == -1) {
-            repl = false;
-        } else {
-            timeval start, end;
-            gettimeofday(&start, NULL);
+        BoxedModule* main = createModule("__main__", "<stdin>");
 
-            char buf[] = "pystontmp_XXXXXX";
-            char *tmpdir = mkdtemp(buf);
-            assert(tmpdir);
-            std::string tmp = std::string(tmpdir) + "/in.py";
-            if (VERBOSITY() >= 1) {
-                printf("writing %d bytes to %s\n", read, tmp.c_str());
-            }
+        while (repl) {
+            printf(">> ");
+            fflush(stdout);
 
-            FILE* f = fopen(tmp.c_str(), "w");
-            fwrite(line, 1, read, f);
-            fclose(f);
+            char* line = NULL;
+            size_t size;
+            int read;
+            if ((read = getline(&line, &size, stdin)) == -1) {
+                repl = false;
+            } else {
+                timeval start, end;
+                gettimeofday(&start, NULL);
 
-            AST_Module* m = parse(tmp.c_str());
-            removeDirectoryIfExists(tmpdir);
+                char buf[] = "pystontmp_XXXXXX";
+                char *tmpdir = mkdtemp(buf);
+                assert(tmpdir);
+                std::string tmp = std::string(tmpdir) + "/in.py";
+                if (VERBOSITY() >= 1) {
+                    printf("writing %d bytes to %s\n", read, tmp.c_str());
+                }
 
-            if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                AST_Expr *e = ast_cast<AST_Expr>(m->body[0]);
-                AST_Print *p = new AST_Print();
-                p->dest = NULL;
-                p->nl = true;
-                p->values.push_back(e->value);
-                m->body[0] = p;
-            }
+                FILE* f = fopen(tmp.c_str(), "w");
+                fwrite(line, 1, read, f);
+                fclose(f);
 
-            compileAndRunModule(m, main);
+                AST_Module* m = parse(tmp.c_str());
+                removeDirectoryIfExists(tmpdir);
 
-            if (VERBOSITY() >= 1) {
-                gettimeofday(&end, NULL);
-                long ms = 1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
-                printf("%ldms\n", ms);
+                if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
+                    AST_Expr *e = ast_cast<AST_Expr>(m->body[0]);
+                    AST_Print *p = new AST_Print();
+                    p->dest = NULL;
+                    p->nl = true;
+                    p->values.push_back(e->value);
+                    m->body[0] = p;
+                }
+
+                compileAndRunModule(m, main);
+
+                if (VERBOSITY() >= 1) {
+                    gettimeofday(&end, NULL);
+                    long ms = 1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
+                    printf("%ldms\n", ms);
+                }
             }
         }
     }

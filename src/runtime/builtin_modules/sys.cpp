@@ -53,6 +53,13 @@ BoxedList* getSysPath() {
     return static_cast<BoxedList*>(_sys_path);
 }
 
+void addToSysArgv(const char* str) {
+    Box *sys_argv = sys_module->peekattr("argv");
+    assert(sys_argv);
+    assert(sys_argv->cls == list_cls);
+    listAppendInternal(sys_argv, boxStrConstant(str));
+}
+
 void addToSysPath(const std::string &path) {
     BoxedList *sys_path = getSysPath();
     listAppendInternal(sys_path, boxStringPtr(&path));
@@ -69,6 +76,8 @@ void setupSys() {
 
     BoxedList* sys_path = new BoxedList();
     sys_module->giveAttr("path", sys_path);
+
+    sys_module->giveAttr("argv", new BoxedList());
 
     sys_module->giveAttr("stdout", new BoxedFile(stdout));
     sys_module->giveAttr("stdin", new BoxedFile(stdin));

@@ -370,6 +370,7 @@ std::string getPythonFuncAt(void* ip, void* sp);
 
 // TODO where to put this
 void addToSysPath(const std::string &path);
+void addToSysArgv(const char* str);
 
 }
 
