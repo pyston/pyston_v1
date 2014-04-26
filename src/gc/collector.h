@@ -60,7 +60,7 @@ class TraceStack {
         }
 
         void reserve(int num) {
-            v.reserve(num + size());
+            v.reserve(num + v.size());
         }
 
         void* pop() {

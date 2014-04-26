@@ -80,9 +80,7 @@ extern "C" void hcBoxGCHandler(GCVisitor *v, void* p) {
         HCBox::AttrList *attr_list = b->attr_list;
         assert(attr_list);
         v->visit(attr_list);
-        for (int i = 0; i < nattrs; i++) {
-            v->visit(attr_list->attrs[i]);
-        }
+        v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
     }
 }
 
@@ -127,8 +125,8 @@ extern "C" void tupleGCHandler(GCVisitor *v, void* p) {
 
     BoxedTuple *t = (BoxedTuple*)p;
     int size = t->elts.size();
-    for (int i = 0; i < size; i++) {
-        v->visit(t->elts[i]);
+    if (size) {
+        v->visitRange((void**)&t->elts[0], (void**)&t->elts[size]);
     }
 }
 
