@@ -59,6 +59,10 @@ class TraceStack {
             return v.size();
         }
 
+        void reserve(int num) {
+            v.reserve(num + size());
+        }
+
         void* pop() {
             if (v.size()) {
                 void* r = v.back();
