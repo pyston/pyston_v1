@@ -28,6 +28,9 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
+#include <llvm/ADT/StringRef.h>
+#include <llvm/ADT/SmallVector.h>
+
 namespace pyston {
 
 extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
@@ -345,6 +348,29 @@ Box* strSplit1(BoxedString* self) {
     return rtn;
 }
 
+Box* strSplit2(BoxedString* self, BoxedString* sep) {
+    assert(self->cls == str_cls);
+
+    BoxedList* rtn = new BoxedList();
+
+    if (sep->cls == str_cls)
+    {
+        llvm::SmallVector<llvm::StringRef, 16> parts;
+        llvm::StringRef(self->s).split(parts, sep->s);
+
+        for (const auto &s : parts)
+            listAppendInternal(rtn, boxString(s.str()));
+    }
+    else
+    {
+        fprintf(stderr, "TypeError: expected a character buffer object\n");
+        raiseExc();
+    }
+
+    return rtn;
+}
+
+
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     if (slice->cls == int_cls) {
         BoxedInt* islice = static_cast<BoxedInt*>(slice);
@@ -390,7 +416,10 @@ void setupStr() {
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, NULL, 2, false)));
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
-    str_cls->giveAttr("split", new BoxedFunction(boxRTFunction((void*)strSplit1, LIST, 1, false)));
+
+    CLFunction *strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
+    addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
+    str_cls->giveAttr("split", new BoxedFunction(strSplit));
 
     CLFunction *__new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)strNew2, NULL, 2, false);
