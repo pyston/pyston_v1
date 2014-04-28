@@ -51,6 +51,10 @@ class TraceStack {
         std::vector<void*> v;
 
     public:
+        void pushall(void** start, void** end) {
+            v.insert(v.end(), start, end);
+        }
+
         void push(void* p) {
             v.push_back(p);
         }
