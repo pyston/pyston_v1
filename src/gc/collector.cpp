@@ -55,6 +55,7 @@ void TraceStackGCVisitor::visit(void* p) {
 }
 
 void TraceStackGCVisitor::visitRange(void** start, void** end) {
+    stack->reserve(end-start);
     while (start < end) {
         _visit(*start);
         start++;
