@@ -7,4 +7,6 @@ print repr("'\"")
 
 print "hello world\tmore\nwords\va\fb\ao".split()
 print "  test  ".split()
-# print "  test  ".split(' ')
+print "  test  ".split(' ')
+print "  test  ".split(None)
+print "1<>2<>3".split('<>')
