@@ -353,16 +353,18 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
 
     BoxedList* rtn = new BoxedList();
 
-    if (sep->cls == str_cls)
-    {
-        llvm::SmallVector<llvm::StringRef, 16> parts;
-        llvm::StringRef(self->s).split(parts, sep->s);
+    if (sep->cls == str_cls) {
+        if (!sep->s.empty()) {
+            llvm::SmallVector<llvm::StringRef, 16> parts;
+            llvm::StringRef(self->s).split(parts, sep->s);
 
-        for (const auto &s : parts)
-            listAppendInternal(rtn, boxString(s.str()));
-    }
-    else
-    {
+            for (const auto &s : parts)
+                listAppendInternal(rtn, boxString(s.str()));
+        } else {
+            fprintf(stderr, "ValueError: empty separator\n");
+            raiseExc();
+        }
+    } else {
         fprintf(stderr, "TypeError: expected a character buffer object\n");
         raiseExc();
     }
