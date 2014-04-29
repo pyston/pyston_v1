@@ -1,3 +1,6 @@
+# expected: fail
+# - arbitrary stuff in classes
+
 # You can put arbitrary stuff in class definitions, which end up being added as class attributes
 
 class C(object):

@@ -1,3 +1,5 @@
+# expected: fail
+# - arbitrary stuff in classes
 
 X = 0
 Y = 0

@@ -1,3 +1,6 @@
+# expected: fail
+# setattr() not implemented
+
 class C(object):
     def print_none(self):
         print None

@@ -1,3 +1,6 @@
+# expected: fail
+# - lambdas, varargs
+
 # Testing im-boxing:
 
 class C(object):

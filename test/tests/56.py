@@ -1,3 +1,6 @@
+# expected: fail
+# - arbitrary stuff in classes
+
 # I guess type.__name__ works specially:
 
 class C(object):

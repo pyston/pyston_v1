@@ -1,3 +1,6 @@
+# expected: fail
+# - real iteration protocol is unsupported (no exceptions yet)
+
 class C(object):
     def __iter__(self):
         print "orig iter"

@@ -1,3 +1,6 @@
+# expected: fail
+# - setattr() not supported
+
 class C(object):
     pass
 

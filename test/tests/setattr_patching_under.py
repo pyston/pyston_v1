@@ -1,3 +1,7 @@
+# expected: fail
+# - finalization not implemented yet
+# This test might also be broken in the presence of GC
+
 class C(object):
     pass
 

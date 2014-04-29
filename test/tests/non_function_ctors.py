@@ -1,3 +1,6 @@
+# expected: fail
+# - not implemented yet
+
 class CallableNew(object):
     def __call__(self, cls, arg):
         print "new", cls, arg

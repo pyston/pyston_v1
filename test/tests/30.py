@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: 1 <= stats["OSR exits"] <= 2
+# statcheck: ("-O" in EXTRA_JIT_ARGS) or (1 <= stats["OSR exits"] <= 2)
 # statcheck: stats['slowpath_binop'] <= 10
 
 x = 100000

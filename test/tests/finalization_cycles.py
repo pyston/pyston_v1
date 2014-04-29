@@ -1,3 +1,6 @@
+# expected: fail
+#  - finalization not implemented yet
+
 # Finalizers should be called before any objects are deallocated
 # Note: the behavior here will differ from cPython and maybe PyPy
 

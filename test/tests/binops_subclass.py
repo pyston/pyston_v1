@@ -1,3 +1,6 @@
+# expected: fail
+# - this particular check isn't implemented yet
+
 class M(type):
     def __instancecheck__(self, rhs):
         print "M.instancecheck",

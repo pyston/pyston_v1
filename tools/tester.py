@@ -91,7 +91,7 @@ def run_test(fn, check_stats, run_memcheck):
         elif l.startswith("# expected:"):
             expected = l[len("# run_args:"):].strip()
 
-    assert expected in ("success", "fail"), expected
+    assert expected in ("success", "fail", "statfail"), expected
 
     run_args = ["./%s" % IMAGE] + jit_args + ["-q", fn]
     start = time.time()
@@ -173,7 +173,10 @@ def run_test(fn, check_stats, run_memcheck):
         for l in statchecks:
             test = eval(l)
             if not test:
-                if KEEP_GOING:
+                if expected == "statfail":
+                    r += "    (expected statfailure)"
+                    break
+                elif KEEP_GOING:
                     r += "    \033[31mFailed statcheck\033[0m"
                     failed.append(fn)
                     return r
@@ -183,6 +186,15 @@ def run_test(fn, check_stats, run_memcheck):
                         statname = m.group(1)
                         raise Exception((l, statname, stats[statname]))
                     raise Exception((l, stats))
+        else:
+            # only can get here if all statchecks passed
+            if expected == "statfail":
+                if KEEP_GOING:
+                    r += "    \033[31mUnexpected statcheck success\033[0m"
+                    failed.append(fn)
+                    return r
+                else:
+                    raise Exception(("Unexpected statcheck success!", statchecks, stats))
     else:
         r += "    (ignoring stats)"
 
@@ -309,34 +321,6 @@ if __name__ == "__main__":
             l.append("%s/%s.py" % (TEST_DIR, t))
     skip = functools.partial(_addto, TOSKIP)
     nostat = functools.partial(_addto, IGNORE_STATS)
-
-    if '-O' in EXTRA_JIT_ARGS:
-        # OSR tests, doesn't make sense with -O
-        skip(["30", "listcomp_osr"])
-
-    if datetime.datetime.now() < datetime.datetime(2014,4,29):
-        nostat(["nondirectly_callable_ics"]) # WIP
-        skip(["finalization_cycles", "resurrection", "nonself_resurrection"]) # WIP
-
-    if datetime.datetime.now() < datetime.datetime(2014,4,29):
-        skip(["class_noctor", "non_function_ctors"]) # object.__new__
-        skip(["setattr_patching_under"]) # requires __del__
-
-    if datetime.datetime.now() < datetime.datetime(2014,5,1):
-        # varargs
-        skip([57, 61])
-        # arbitrary stuff in classes
-        skip([56, "classdef_arbitrary", "scoping_classes", "return_in_class"])
-        # sequence comparisons
-        skip(["comparisons_more"])
-
-    if datetime.datetime.now() < datetime.datetime(2014,5,1):
-        # Metaclass tests
-        skip([46, 55])
-
-    if datetime.datetime.now() < datetime.datetime(2014,5,1):
-        # random tests that aren't too important right now:
-        skip([54, 65, 66, 69, 70, 72, "many_attrs_setattr", "for_iter", "none_not_settable", "math_more", "global_and_local", "metaclass_parent", "class_freeing_time", "xrange", "binops_subclass", "class_changing"])
 
     if not patterns:
         skip(["t", "t2"])

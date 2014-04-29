@@ -1,3 +1,6 @@
+# expected: statfail
+# - callable not being patched like this test checks for
+#
 # run_args: -n
 # statcheck: stats['slowpath_runtimecall'] < 10
 

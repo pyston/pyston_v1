@@ -22,7 +22,7 @@ print type(1)
 
 # As evidenced by the following real + important example:
 # type() is a special function that gets the type of an object:
-print type(C) # prints "<type 'type'>"
+print type(C) is type
 # but type.__call__() is the clsattr for any (non-metaclassed) class,
 # which is how object creation gets handled:
-print repr(type.__call__(C))[:20] # prints "<__main__.C object at 0xXXXXXXX>"
+print type.__call__(C) is type

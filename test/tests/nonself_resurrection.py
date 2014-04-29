@@ -1,3 +1,6 @@
+# expected: fail
+#  - finalization (let alone resurrection) not implemented yet
+
 # Objects are allowed to resurrect other objects too, I guess
 
 class C(object):

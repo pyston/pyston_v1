@@ -1242,7 +1242,7 @@ class IRGeneratorImpl : public IRGenerator {
             if (state == PARTIAL)
                 return;
 
-            assert(node->dest == NULL);
+            RELEASE_ASSERT(node->dest == NULL, "");
             for (int i = 0; i < node->values.size(); i++) {
                 if (i > 0) {
                     emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));

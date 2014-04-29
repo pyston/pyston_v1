@@ -1,3 +1,7 @@
+# expected: fail
+# - min/max on iterables
+
+import math
 
 print max(range(5))
 print min(range(5))

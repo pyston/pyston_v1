@@ -1,6 +1,6 @@
 # While perhaps not required in practice, we should have the ability to
 # OSR from inside a list comprehension.
-# statcheck: stats['OSR exits'] in (1, 2)
+# statcheck: ("-O" in EXTRA_JIT_ARGS) or (1 <= stats["OSR exits"] <= 2)
 
 def p(i):
     print i

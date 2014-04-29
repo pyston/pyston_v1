@@ -1,3 +1,6 @@
+# expected: fail
+# - varargs
+
 # varargs (but not starargs yet)
 
 def f(*args):

@@ -1,3 +1,6 @@
+# expected: fail
+# - I'm not sure how this is supposed to work
+
 # I guess the __name__ attribute on classes is weird?
 
 class C(object):

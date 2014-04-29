@@ -1,3 +1,7 @@
+# expected: fail
+# - __del__ not supported
+# probably need to have some gc collections going on as well
+
 # Classes should be freed right away
 
 class DeallocShower(object):
