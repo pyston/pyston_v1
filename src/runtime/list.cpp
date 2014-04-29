@@ -186,6 +186,10 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     }
 }
 
+ extern "C" Box * listDelitem() {
+ 
+   }
+
 extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {
         fprintf(stderr, "TypeError: an integer is required\n");
