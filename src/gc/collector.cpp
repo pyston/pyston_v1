@@ -56,9 +56,10 @@ void TraceStackGCVisitor::visit(void* p) {
 
 void TraceStackGCVisitor::visitRange(void** start, void** end) {
 #ifndef NDEBUG
-    while (start < end) {
-        assert(isValid(*start));
-        start++;
+    void** cur = start;
+    while (cur < end) {
+        assert(isValid(*cur));
+        cur++;
     }
 #endif
     stack->pushall(start, end);
