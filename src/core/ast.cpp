@@ -339,6 +339,10 @@ void AST_Continue::accept_stmt(StmtVisitor *v) {
     v->visit_continue(this);
 }
 
+void AST_Delete::accept(ASTVisitor *v){
+    v->visit_expr(this);
+}
+
 void AST_Dict::accept(ASTVisitor *v) {
     bool skip = v->visit_dict(this);
     if (skip) return;
@@ -1237,6 +1241,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_compare(AST_Compare *node) { output->push_back(node); return false; }
         virtual bool visit_comprehension(AST_comprehension *node) { output->push_back(node); return false; }
         virtual bool visit_continue(AST_Continue *node) { output->push_back(node); return false; }
+    virtual bool visit_delete(AST_Delete *node){output->push_back(node); return false}
         virtual bool visit_dict(AST_Dict *node) { output->push_back(node); return false; }
         virtual bool visit_expr(AST_Expr *node) { output->push_back(node); return false; }
         virtual bool visit_for(AST_For *node) { output->push_back(node); return !expand_scopes; }

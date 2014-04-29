@@ -306,6 +306,16 @@ AST_Continue* read_continue(BufferedReader *reader) {
     return rtn;
 }
 
+AST_Delete* read_delete(BufferedReader * reader) {
+    AST_Delete *rtn = new AST_Delete();
+    
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    readExprVector(rtn->targets, reader);
+       
+    return rtn;
+}
+
 AST_Dict* read_dict(BufferedReader *reader) {
     AST_Dict *rtn = new AST_Dict();
 
@@ -612,6 +622,8 @@ AST_expr* readASTExpr(BufferedReader *reader) {
             return read_call(reader);
         case AST_TYPE::Compare:
             return read_compare(reader);
+    case AST_TYPE::Delete:
+	return read_delete(reader);
         case AST_TYPE::Dict:
             return read_dict(reader);
         case AST_TYPE::IfExp:
