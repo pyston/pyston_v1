@@ -104,8 +104,11 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
 void dict_dtor(BoxedDict* self) {
     self->d.clear();
 
-    // I can't believe this works:
-    (&self->d)->~decltype(self->d)();
+    // I thought, in disbelief, that this works:
+    //(&self->d)->~decltype(self->d)();
+    // but that's only on clang, so instead do this:
+    typedef decltype(self->d) T;
+    (&self->d)->~T();
 }
 
 void setupDict() {

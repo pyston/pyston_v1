@@ -126,7 +126,8 @@ extern "C" void tupleGCHandler(GCVisitor *v, void* p) {
     BoxedTuple *t = (BoxedTuple*)p;
     int size = t->elts.size();
     if (size) {
-        v->visitRange((void**)&t->elts[0], (void**)&t->elts[size]);
+        v->visitRange(const_cast<void**>((void const*const*)&t->elts[0]),
+                      const_cast<void**>((void const*const*)&t->elts[size]));
     }
 }
 
