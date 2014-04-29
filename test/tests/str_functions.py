@@ -10,3 +10,8 @@ print "  test  ".split()
 print "  test  ".split(' ')
 print "  test  ".split(None)
 print "1<>2<>3".split('<>')
+
+print map(bool, ["hello", "", "world"])
+
+if "":
+    print "bad"

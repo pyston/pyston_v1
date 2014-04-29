@@ -395,6 +395,12 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
 
 
+        virtual void visit_assert(AST_Assert* node) {
+            getType(node->test);
+            if (node->msg)
+                getType(node->msg);
+        }
+
         virtual void visit_assign(AST_Assign* node) {
             CompilerType* t = getType(node->value);
             for (int i = 0; i < node->targets.size(); i++) {

@@ -1122,6 +1122,29 @@ class IRGeneratorImpl : public IRGenerator {
             }
         }
 
+        void doAssert(AST_Assert *node) {
+            AST_expr* test = node->test;
+            assert(test->type == AST_TYPE::Num);
+            AST_Num* num = ast_cast<AST_Num>(test);
+            assert(num->num_type == AST_Num::INT);
+            assert(num->n_int == 0);
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+
+            ConcreteCompilerVariable *converted_msg = NULL;
+            if (node->msg) {
+                CompilerVariable *msg = evalExpr(node->msg);
+                converted_msg = msg->makeConverted(emitter, msg->getBoxType());
+                msg->decvref(emitter);
+                llvm_args.push_back(converted_msg->getValue());
+            } else {
+                llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr));
+            }
+            llvm::CallInst *call = emitter.getBuilder()->CreateCall(g.funcs.assertFail, llvm_args);
+            call->setDoesNotReturn();
+        }
+
         void doAssign(AST_Assign *node) {
             CompilerVariable *val = evalExpr(node->value);
             if (state == PARTIAL)
@@ -1496,6 +1519,9 @@ class IRGeneratorImpl : public IRGenerator {
 
         void doStmt(AST *node) {
             switch (node->type) {
+                case AST_TYPE::Assert:
+                    doAssert(ast_cast<AST_Assert>(node));
+                    break;
                 case AST_TYPE::Assign:
                     doAssign(ast_cast<AST_Assign>(node));
                     break;

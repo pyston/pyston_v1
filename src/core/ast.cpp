@@ -194,6 +194,18 @@ void AST_arguments::accept(ASTVisitor *v) {
     if (kwarg) kwarg->accept(v);
 }
 
+void AST_Assert::accept(ASTVisitor *v) {
+    bool skip = v->visit_assert(this);
+    if (skip) return;
+
+    test->accept(v);
+    if (msg) msg->accept(v);
+}
+
+void AST_Assert::accept_stmt(StmtVisitor *v) {
+    v->visit_assert(this);
+}
+
 void AST_Assign::accept(ASTVisitor *v) {
     bool skip = v->visit_assign(this);
     if (skip) return;
@@ -694,6 +706,16 @@ bool PrintVisitor::visit_arguments(AST_arguments *node) {
             printf("=");
             node->defaults[i - (nargs - ndefault)]->accept(this);
         }
+    }
+    return true;
+}
+
+bool PrintVisitor::visit_assert(AST_Assert *node) {
+    printf("assert ");
+    node->test->accept(this);
+    if (node->msg) {
+        printf(", ");
+        node->msg->accept(this);
     }
     return true;
 }
@@ -1225,6 +1247,7 @@ class FlattenVisitor : public ASTVisitor {
 
         virtual bool visit_alias(AST_alias *node) { output->push_back(node); return false; }
         virtual bool visit_arguments(AST_arguments *node) { output->push_back(node); return false; }
+        virtual bool visit_assert(AST_Assert *node) { output->push_back(node); return false; }
         virtual bool visit_assign(AST_Assign *node) { output->push_back(node); return false; }
         virtual bool visit_augassign(AST_AugAssign *node) { output->push_back(node); return false; }
         virtual bool visit_augbinop(AST_AugBinOp *node) { output->push_back(node); return false; }
@@ -1243,6 +1266,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_functiondef(AST_FunctionDef *node) { output->push_back(node); return !expand_scopes; }
         virtual bool visit_global(AST_Global *node) { output->push_back(node); return false; }
         virtual bool visit_if(AST_If *node) { output->push_back(node); return false; }
+        virtual bool visit_ifexp(AST_IfExp *node) { output->push_back(node); return false; }
         virtual bool visit_import(AST_Import *node) { output->push_back(node); return false; }
         virtual bool visit_importfrom(AST_ImportFrom *node) { output->push_back(node); return false; }
         virtual bool visit_index(AST_Index *node) { output->push_back(node); return false; }

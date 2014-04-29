@@ -226,6 +226,17 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
+extern "C" void assertFail(BoxedModule *inModule, Box *msg) {
+    if (msg) {
+        BoxedString *tostr = str(msg);
+        fprintf(stderr, "AssertionError: %s\n", tostr->s.c_str());
+        raiseExc();
+    } else {
+        fprintf(stderr, "AssertionError\n");
+        raiseExc();
+    }
+}
+
 extern "C" void assertNameDefined(bool b, const char* name) {
     if (!b) {
         fprintf(stderr, "UnboundLocalError: local variable '%s' referenced before assignment\n", name);
@@ -1840,7 +1851,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrit
         if (op_type == AST_TYPE::LtE)
             return boxBool(cmp1 <= cmp2);
     }
-    RELEASE_ASSERT(0, "");
+    RELEASE_ASSERT(0, "%d", op_type);
 }
 
 extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {

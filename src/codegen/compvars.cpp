@@ -669,7 +669,7 @@ class IntType : public ConcreteCompilerType {
 } _INT;
 ConcreteCompilerType *INT = &_INT;
 
-CompilerVariable* makeInt(int64_t n) {
+ConcreteCompilerVariable* makeInt(int64_t n) {
     return new ConcreteCompilerVariable(INT, llvm::ConstantInt::get(g.i64, n, true), true);
 }
 
@@ -761,7 +761,7 @@ class FloatType : public ConcreteCompilerType {
 } _FLOAT;
 ConcreteCompilerType *FLOAT = &_FLOAT;
 
-CompilerVariable* makeFloat(double d) {
+ConcreteCompilerVariable* makeFloat(double d) {
     return new ConcreteCompilerVariable(FLOAT, llvm::ConstantFP::get(g.double_, d), true);
 }
 
@@ -1032,18 +1032,23 @@ class StrConstantType : public ValuedCompilerType<std::string*> {
         std::string debugName() {
             return "str_constant";
         }
+
         virtual ConcreteCompilerType* getConcreteType() {
             return STR;
         }
+
         virtual ConcreteCompilerType* getBoxType() {
             return STR;
         }
+
         virtual void drop(IREmitter &emitter, VAR *var) {
             // pass
         }
+
         virtual void grab(IREmitter &emitter, VAR *var) {
             // pass
         }
+
         virtual void print(IREmitter &emitter, ValuedCompilerVariable<std::string*> *value) {
             llvm::Constant* ptr = getStringConstantPtr(*(value->getValue()) + '\0');
             llvm::Constant* fmt = getStringConstantPtr("%s\0");
@@ -1079,6 +1084,10 @@ class StrConstantType : public ValuedCompilerType<std::string*> {
             CompilerVariable *rtn = converted->getitem(emitter, info, slice);
             converted->decvref(emitter);
             return rtn;
+        }
+
+        ConcreteCompilerVariable *nonzero(IREmitter &emitter, const OpInfo& info, VAR *var) override {
+            return makeBool(var->getValue()->size() != 0);
         }
 
         virtual CompilerVariable* dup(VAR *var, DupCache &cache) {
@@ -1152,7 +1161,7 @@ class BoolType : public ConcreteCompilerType {
         }
 };
 ConcreteCompilerType *BOOL = new BoolType();
-CompilerVariable* makeBool(bool b) {
+ConcreteCompilerVariable* makeBool(bool b) {
     return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(g.i1, b, false), true);
 }
 

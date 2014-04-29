@@ -313,9 +313,9 @@ class ValuedCompilerVariable : public CompilerVariable {
     //assert(value->getType() == type->llvmType());
 //}
 
-CompilerVariable* makeInt(int64_t);
-CompilerVariable* makeFloat(double);
-CompilerVariable* makeBool(bool);
+ConcreteCompilerVariable* makeInt(int64_t);
+ConcreteCompilerVariable* makeFloat(double);
+ConcreteCompilerVariable* makeBool(bool);
 CompilerVariable* makeStr(std::string*);
 CompilerVariable* makeFunction(IREmitter &emitter, CLFunction*);
 CompilerVariable* undefVariable();

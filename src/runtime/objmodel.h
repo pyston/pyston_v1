@@ -63,6 +63,7 @@ extern "C" Box* unaryop(Box* operand, int op_type);
 extern "C" Box* import(const std::string *name);
 extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
+extern "C" void assertFail(BoxedModule *inModule, Box *msg);
 
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrite_args);

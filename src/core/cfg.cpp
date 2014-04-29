@@ -677,6 +677,55 @@ class CFGVisitor : public ASTVisitor {
         virtual bool visit_importfrom(AST_ImportFrom* node) { push_back(node); return true; }
         virtual bool visit_pass(AST_Pass* node) { return true; }
 
+        bool visit_assert(AST_Assert* node) override {
+            AST_Branch* br = new AST_Branch();
+            br->test = remapExpr(node->test);
+            push_back(br);
+
+            CFGBlock *iffalse = cfg->addBlock();
+            iffalse->info = "assert_fail";
+            curblock->connectTo(iffalse);
+            CFGBlock *iftrue = cfg->addBlock();
+            iftrue->info = "assert_pass";
+            curblock->connectTo(iftrue);
+            br->iftrue = iftrue;
+            br->iffalse = iffalse;
+
+            curblock = iffalse;
+
+            // The rest of this is pretty hacky:
+            // Emit a "assert(0, msg()); while (1) {}" section that basically captures
+            // what the assert will do but in a very hacky way.
+            AST_Assert* remapped = new AST_Assert();
+            if (node->msg)
+                remapped->msg = remapExpr(node->msg);
+            else
+                remapped->msg = NULL;
+            AST_Num* fake_test = new AST_Num();
+            fake_test->num_type = AST_Num::INT;
+            fake_test->n_int = 0;
+            remapped->test = fake_test;
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            push_back(remapped);
+
+            CFGBlock* unreachable = cfg->addBlock();
+            unreachable->info = "unreachable";
+            curblock->connectTo(unreachable);
+
+            AST_Jump* j = new AST_Jump();
+            j->target = unreachable;
+            push_back(j);
+
+            curblock = unreachable;
+            push_back(j);
+            curblock->connectTo(unreachable, true);
+
+            curblock = iftrue;
+
+            return true;
+        }
+
         virtual bool visit_assign(AST_Assign* node) {
             AST_Assign* remapped = new AST_Assign();
             remapped->lineno = node->lineno;

@@ -175,6 +175,16 @@ AST_arguments* read_arguments(BufferedReader *reader) {
     return rtn;
 }
 
+AST_Assert* read_assert(BufferedReader *reader) {
+    AST_Assert *rtn = new AST_Assert();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    rtn->msg = readASTExpr(reader);
+    rtn->test = readASTExpr(reader);
+    return rtn;
+}
+
 AST_Assign* read_assign(BufferedReader *reader) {
     AST_Assign *rtn = new AST_Assign();
 
@@ -654,6 +664,8 @@ AST_stmt* readASTStmt(BufferedReader *reader) {
     assert(checkbyte == 0xae);
 
     switch (type) {
+        case AST_TYPE::Assert:
+            return read_assert(reader);
         case AST_TYPE::Assign:
             return read_assign(reader);
         case AST_TYPE::AugAssign:

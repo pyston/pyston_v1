@@ -174,6 +174,7 @@ class DefinednessVisitor : public ASTVisitor {
         DefinednessVisitor(Map &state) : state(state) {
         }
 
+        virtual bool visit_assert(AST_Assert* node) { return true; }
         virtual bool visit_branch(AST_Branch* node) { return true; }
         virtual bool visit_expr(AST_Expr* node) { return true; }
         virtual bool visit_global(AST_Global* node) { return true; }
