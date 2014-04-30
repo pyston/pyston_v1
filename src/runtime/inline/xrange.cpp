@@ -52,13 +52,6 @@ class BoxedXrangeIterator : public Box {
             BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
         }
 
-        static Box* xrangeIteratorHasnext(Box *s) __attribute__((visibility("default"))) {
-            assert(s->cls == xrange_iterator_cls);
-            BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
-            assert(self->xrange->step > 0);
-            return boxBool(self->cur < self->xrange->stop);
-        }
-
         static bool xrangeIteratorHasnextUnboxed(Box *s) __attribute__((visibility("default"))) {
             assert(s->cls == xrange_iterator_cls);
             BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
@@ -66,13 +59,8 @@ class BoxedXrangeIterator : public Box {
             return self->cur < self->xrange->stop;
         }
 
-        static Box* xrangeIteratorNext(Box *s) __attribute__((visibility("default"))) {
-            assert(s->cls == xrange_iterator_cls);
-            BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
-
-            i64 rtn = self->cur;
-            self->cur += self->xrange->step;
-            return boxInt(rtn);
+        static Box* xrangeIteratorHasnext(Box *s) __attribute__((visibility("default"))) {
+            return boxBool(xrangeIteratorHasnextUnboxed(s));
         }
 
         static i64 xrangeIteratorNextUnboxed(Box *s) __attribute__((visibility("default"))) {
@@ -82,6 +70,10 @@ class BoxedXrangeIterator : public Box {
             i64 rtn = self->cur;
             self->cur += self->xrange->step;
             return rtn;
+        }
+
+        static Box* xrangeIteratorNext(Box *s) __attribute__((visibility("default"))) {
+            return boxInt(xrangeIteratorNextUnboxed(s));
         }
 
         static void xrangeIteratorGCHandler(GCVisitor *v, void* p) {
