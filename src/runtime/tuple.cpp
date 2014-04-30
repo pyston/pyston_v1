@@ -162,10 +162,23 @@ Box* tupleNe(BoxedTuple *self, Box *rhs) {
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::NotEq);
 }
 
+Box* tupleContains(BoxedTuple* self, Box *elt) {
+    int size = self->elts.size();
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+        if (b)
+            return True;
+    }
+    return False;
+}
+
 void setupTuple() {
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, NULL, 2, false)));
+    tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, NULL, 2, false)));
 
     tuple_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)tupleLt, NULL, 2, false)));
     tuple_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)tupleLe, NULL, 2, false)));

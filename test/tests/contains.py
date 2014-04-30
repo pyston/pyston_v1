@@ -18,3 +18,6 @@ print 2 in [C("")] # False
 
 for i in xrange(1, 4):
     print i in range(6), i not in range(5)
+
+    print i in (1, 2, 5)
+

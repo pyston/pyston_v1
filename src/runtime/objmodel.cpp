@@ -1774,6 +1774,9 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrit
             if (getitem)
                 ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
             RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
+
+            fprintf(stderr, "TypeError: argument of type '%s' is not iterable\n", getTypeName(rhs)->c_str());
+            raiseExc();
         }
 
         bool b = nonzero(contained);
