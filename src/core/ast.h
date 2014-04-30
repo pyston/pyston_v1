@@ -336,6 +336,11 @@ class AST_Continue : public AST_stmt {
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Continue;
 };
 
+ class AST_Delete : public AST_stmt {
+ public:
+  std::vector<AST_expr*> targets;
+  virtual void accept(ASTVisitor *v
+}
 class AST_Dict : public AST_expr {
     public:
         std::vector<AST_expr*> keys, values;

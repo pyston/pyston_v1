@@ -334,6 +334,9 @@ class CFGVisitor : public ASTVisitor {
             return rtn;
         }
 
+  AST_expr* remapDelete(AST_Dict* node){
+    
+  }
         AST_expr* remapDict(AST_Dict* node) {
             AST_Dict *rtn = new AST_Dict();
             rtn->lineno = node->lineno;
