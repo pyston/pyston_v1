@@ -67,6 +67,8 @@ std::string getOpSymbol(int op_type) {
             return "not";
         case AST_TYPE::NotEq:
             return "!=";
+        case AST_TYPE::NotIn:
+            return "not in";
         case AST_TYPE::Pow:
             return "**";
         case AST_TYPE::RShift:

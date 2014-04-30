@@ -1758,6 +1758,30 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrit
         return boxBool((lhs == rhs) ^ neg);
     }
 
+    if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
+        // TODO do rewrite
+
+        static const std::string str_contains("__contains__");
+        Box* contained = callattrInternal1(rhs, &str_contains, CLASS_ONLY, NULL, 1, lhs);
+        if (contained == NULL) {
+            static const std::string str_iter("__iter__");
+            Box* iter = callattrInternal0(rhs, &str_iter, CLASS_ONLY, NULL, 0);
+            if (iter)
+                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
+            RELEASE_ASSERT(iter == NULL, "need to try iterating");
+
+            Box* getitem = getattr_internal(rhs, "__getitem__", false, false, NULL, NULL);
+            if (getitem)
+                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
+            RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
+        }
+
+        bool b = nonzero(contained);
+        if (op_type == AST_TYPE::NotIn)
+            return boxBool(!b);
+        return boxBool(b);
+    }
+
     // Can do the guard checks after the Is/IsNot handling, since that is
     // irrespective of the object classes
     if (rewrite_args) {
