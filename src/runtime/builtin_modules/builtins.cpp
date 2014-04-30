@@ -108,6 +108,7 @@ Box* range1(Box* end) {
 
     BoxedList *rtn = new BoxedList();
     i64 iend = static_cast<BoxedInt*>(end)->n;
+    rtn->ensure(iend);
     for (i64 i = 0; i < iend; i++) {
         Box *bi = boxInt(i);
         listAppendInternal(rtn, bi);
@@ -122,10 +123,10 @@ Box* range2(Box* start, Box* end) {
     BoxedList *rtn = new BoxedList();
     i64 istart = static_cast<BoxedInt*>(start)->n;
     i64 iend = static_cast<BoxedInt*>(end)->n;
-
+    if ((iend-istart) > 0)
+        rtn->ensure(iend-istart);
     for (i64 i = istart; i < iend; i++) {
-        Box *bi = boxInt(i);
-        listAppendInternal(rtn, bi);
+        listAppendInternal(rtn, boxInt(i));
     }
     return rtn;
 }

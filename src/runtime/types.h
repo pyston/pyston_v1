@@ -75,6 +75,7 @@ extern "C" Box* boxStringPtr(const std::string *s);
 Box* boxString(const std::string &s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" void listAppendInternal(Box* self, Box* v);
+extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction *f);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createClass(std::string *name, BoxedModule *parent_module);

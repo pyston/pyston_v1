@@ -224,11 +224,17 @@ Box* listMul(BoxedList* self, Box* rhs) {
     int s = self->size;
 
     BoxedList* rtn = new BoxedList();
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < s; j++) {
-            listAppendInternal(rtn, self->elts->elts[j]);
+    rtn->ensure(n*s);
+    if (s == 1) {
+        for (int i = 0; i < n; i++) {
+            listAppendInternal(rtn, self->elts->elts[0]);
+        }
+    } else {
+        for (int i = 0; i < n; i++) {
+            listAppendArrayInternal(rtn, &self->elts->elts[0], s);
         }
     }
+
     return rtn;
 }
 
