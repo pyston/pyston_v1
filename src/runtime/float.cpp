@@ -553,7 +553,7 @@ extern "C" void printFloat(double d) {
 static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ff, v_fi, v_fu;
     v_ff.push_back(BOXED_FLOAT); v_ff.push_back(BOXED_FLOAT);
-    v_fi.push_back(BOXED_FLOAT); v_ff.push_back(BOXED_INT);
+    v_fi.push_back(BOXED_FLOAT); v_fi.push_back(BOXED_INT);
     v_fu.push_back(BOXED_FLOAT); v_fu.push_back(NULL);
 
     CLFunction *cl = createRTFunction();
