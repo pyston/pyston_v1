@@ -570,20 +570,19 @@ class IRGeneratorImpl : public IRGenerator {
             return rtn;
         }
 
-   CompilerVariable* evalDelete(AST_Delete* node) {
-    assert(state != PARTIAL);
-
-    for(int i = 0; i < node->targets.size();i++) {
-      if (node->targets[i]->type == AST_TYPE::Subscript){
-	AST_Subscript* substmt = static_cast<AST_Subscript*>(node->targets[i]);
-	_doDelitem(substmt);
-    } else if (node->targets[i]->type == AST_TYPE::Attribute){
-      //delete an attribute
-    }else if(node->targets[i]->type == AST_TYPE::Name){
-      //delete a instance
-    }
-      return None;
-    }
+	    void doDelete(AST_Delete* node) {
+			assert(state != PARTIAL);
+			for(int i = 0; i < node->targets.size();i++) {
+				if (node->targets[i]->type == AST_TYPE::Subscript){
+					AST_Subscript* substmt = static_cast<AST_Subscript*>(node->targets[i]);
+					_doDelitem(substmt);
+				} else if (node->targets[i]->type == AST_TYPE::Attribute){
+					//delete an attribute
+				}else if(node->targets[i]->type == AST_TYPE::Name){
+					//delete a instance
+				}
+			}
+		}
 
     //invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
         void _doDelitem(AST_Subscript* target) {
@@ -878,10 +877,7 @@ class IRGeneratorImpl : public IRGenerator {
                     case AST_TYPE::Compare:
                         rtn = evalCompare(ast_cast<AST_Compare>(node));
                         break;
-		case AST_TYPE::Delete:
-		  rtn = evalDelete(ast_cast<AST_Delete>(node));
-		  break;
-                    case AST_TYPE::Dict:
+				    case AST_TYPE::Dict:
                         rtn = evalDict(ast_cast<AST_Dict>(node));
                         break;
                     case AST_TYPE::Index:
@@ -1550,7 +1546,10 @@ class IRGeneratorImpl : public IRGenerator {
                 case AST_TYPE::ClassDef:
                     doClassDef(ast_cast<AST_ClassDef>(node));
                     break;
-                case AST_TYPE::Expr:
+			    case AST_TYPE::Delete:
+					doDelete(ast_cast<AST_Delete>(node));
+					break;
+    			case AST_TYPE::Expr:
                     doExpr(ast_cast<AST_Expr>(node));
                     break;
                 case AST_TYPE::FunctionDef:

@@ -1959,8 +1959,8 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
 
 // del target[slice]
 extern "C" void delitem(Box* target, Box* slice) {
-    static StatCounter slowpath_setitem("slowpath_delitem");
-    slowpath_setitem.log();
+    static StatCounter slowpath_delitem("slowpath_delitem");
+    slowpath_delitem.log();
     static std::string str_setitem("__delitem__");
 
     //not sure about the temporal register number

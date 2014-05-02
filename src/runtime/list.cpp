@@ -186,51 +186,44 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     }
 }
 
-  extern "C" Box * listDelitem(BoxedList* self, Box* slice) {
-    if (idx->cls == int_cls){
-       BoxedInt* islice = static_cast<BoxedInt*>(slice);
+extern "C" Box * listDelitem(BoxedList* self, Box* slice) {
+    if (slice->cls == int_cls){
+		BoxedInt* islice = static_cast<BoxedInt*>(slice);
         int64_t n = islice->n;
         if (n < 0)
             n = self->size + n;
-
+		
         if (n < 0 || n >= self->size) {
             fprintf(stderr, "IndexError: list index out of range\n");
             raiseExc();
         }
-	memmove(self->elts->elts + n, self->elts->elts + n+1, (self->size - n-1) * sizeof(Box*));
-	self->size--;
-    } else if(idx->cls == slice_cls){
-      BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
+		memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
+		self->size--;
+		self->capacity++;
+    } else if(slice->cls == slice_cls){
+		BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
 
-      i64 start, stop, step;
-      parseSlice(sslice, self->size, &start, &stop, &step);
-      RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
-      
-      assert(0 <= start && start < self->size);
-      ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
-      assert(start <= stop);
-      
-      ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
-      BoxedList *lv = static_cast<BoxedList*>(v);
-      
-      int delts = lv->size - (stop - start);
-      int remaining_elts = self->size - stop;
-      self->ensure(delts);
-      
-      memmove(self->elts->elts + start + lv->size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
-      for (int i = 0; i < lv->size; i++) {
-	Box* r = lv->elts->elts[i];
-	self->elts->elts[start + i] = r;
-      }
-      
-      self->size -= delts;
+		i64 start, stop, step;
+		parseSlice(sslice, self->size, &start, &stop, &step);
+		RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
+		
+		assert(0 <= start && start < self->size);
+		ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
+		assert(start <= stop);
+		
+		int remaining_elts = self->size - stop;
+		
+		memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
+		//TODO release memory?
+		self->size -= (stop - start);
+		self->capacity += (stop - start);
     }else{
-      fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
-      raiseExc();
+		fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
+		raiseExc();
     }      
     
     return None;
-  }
+}
 
 extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {

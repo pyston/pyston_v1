@@ -622,9 +622,7 @@ AST_expr* readASTExpr(BufferedReader *reader) {
             return read_call(reader);
         case AST_TYPE::Compare:
             return read_compare(reader);
-    case AST_TYPE::Delete:
-	return read_delete(reader);
-        case AST_TYPE::Dict:
+	    case AST_TYPE::Dict:
             return read_dict(reader);
         case AST_TYPE::IfExp:
             return read_ifexp(reader);
@@ -676,6 +674,8 @@ AST_stmt* readASTStmt(BufferedReader *reader) {
             return read_classdef(reader);
         case AST_TYPE::Continue:
             return read_continue(reader);
+	    case AST_TYPE::Delete:
+			return read_delete(reader);
         case AST_TYPE::Expr:
             return read_expr(reader);
         case AST_TYPE::For:
