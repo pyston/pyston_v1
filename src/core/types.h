@@ -335,24 +335,24 @@ class BoxedClass : public HCBox {
         //typedef void (*Dtor)(Box*);
         typedef void* Dtor;
 
-        // whether or not instances of this class are subclasses of HCBox,
-        // ie they have python-level instance attributes:
-        const bool hasattrs;
-
         // compiler-level (cf python-level) destructor, that does things like decrementing
         // refcounts of any attributes
         const Dtor dtor;
-
-        // Whether this class object is constant or not.
-        // Does not necessarily imply that the instances of this class are constant,
-        // though for now (is_constant && !hasattrs) does imply that the instances are constant.
-        bool is_constant;
 
         // If the user sets __getattribute__ or __getattr__, we will have to invalidate
         // all getattr IC entries that relied on the fact that those functions didn't exist.
         // Doing this via invalidation means that instance attr lookups don't have
         // to guard on anything about the class.
         ICInvalidator dependent_icgetattrs;
+
+        // whether or not instances of this class are subclasses of HCBox,
+        // ie they have python-level instance attributes:
+        const bool hasattrs;
+
+        // Whether this class object is constant or not.
+        // Does not necessarily imply that the instances of this class are constant,
+        // though for now (is_constant && !hasattrs) does imply that the instances are constant.
+        bool is_constant;
 
         BoxedClass(bool hasattrs, Dtor dtor);
         void freeze() {
