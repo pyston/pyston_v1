@@ -81,6 +81,7 @@ def f2_2():
             print n, sys.exc_info()[0].__name__
 
         print "done", n, sys.exc_info()[0].__name__
+    print "after", n, sys.exc_info()[0].__name__
 f2_2()
 
 def f3():
@@ -109,3 +110,51 @@ def f3():
     finally:
         print "outer finally"
 f3()
+
+def f4():
+    print
+    print "f4"
+
+    # This test answers the question of what the exact behavior of the "raise" (no argument) statement is,
+    # especially after a sub-exception has changed sys.exc_info
+
+    try:
+        try:
+            raise AttributeError()
+        except AttributeError:
+            try:
+                raise NotImplementedError()
+            except:
+                pass
+
+            # Even though lexically it looks like we're handling an AttributeError,
+            # at this point the "most recent exception" is a NotImplementedError,
+            # so when we "raise" we should throw that.
+            raise
+    except AttributeError:
+        print "caught attribute error (makes sense, but wrong)"
+    except NotImplementedError:
+        print "caught not implemented error (weird, but right)"
+f4()
+
+def f5():
+    print
+    print "f5"
+
+    # Based on what I learned from f4, I guess you can put a "raise" outside a try-catch block:
+
+    def inner():
+        try:
+            raise AttributeError()
+        except:
+            pass
+
+        print "reraising"
+        raise
+
+    try:
+        inner()
+        assert 0, "shouldn't get here"
+    except AttributeError:
+        print sys.exc_info()[0].__name__
+f5()
