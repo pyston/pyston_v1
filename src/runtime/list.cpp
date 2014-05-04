@@ -113,74 +113,93 @@ Box* _listSlice(BoxedList *self, i64 start, i64 stop, i64 step) {
     return rtn;
 }
 
+extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
+    assert(self->cls == list_cls);
+    assert(slice->cls == int_cls);
+    int64_t n = slice->n;
+    if (n < 0)
+        n = self->size + n;
+
+    if (n < 0 || n >= self->size) {
+        fprintf(stderr, "IndexError: list index out of range\n");
+        raiseExc();
+    }
+    Box* rtn = self->elts->elts[n];
+    return rtn;
+}
+
+extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
+    assert(self->cls == list_cls);
+    assert(slice->cls == slice_cls);
+    i64 start, stop, step;
+    parseSlice(slice, self->size, &start, &stop, &step);
+    return _listSlice(self, start, stop, step);
+}
+
 extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
+    assert(self->cls == list_cls);
     if (slice->cls == int_cls) {
-        BoxedInt* islice = static_cast<BoxedInt*>(slice);
-        int64_t n = islice->n;
-        if (n < 0)
-            n = self->size + n;
-
-        if (n < 0 || n >= self->size) {
-            fprintf(stderr, "IndexError: list index out of range\n");
-            raiseExc();
-        }
-        Box* rtn = self->elts->elts[n];
-        return rtn;
+        return listGetitemInt(self, static_cast<BoxedInt*>(slice));
     } else if (slice->cls == slice_cls) {
-        BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
-
-        i64 start, stop, step;
-        parseSlice(sslice, self->size, &start, &stop, &step);
-        return _listSlice(self, start, stop, step);
+        return listGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
         fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
         raiseExc();
     }
 }
 
+
+extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
+    assert(self->cls == list_cls);
+    assert(slice->cls == int_cls);
+    int64_t n = slice->n;
+    if (n < 0)
+        n = self->size + n;
+
+    if (n < 0 || n >= self->size) {
+        fprintf(stderr, "IndexError: list index out of range\n");
+        raiseExc();
+    }
+
+    self->elts->elts[n] = v;
+    return None;
+}
+
+extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
+    assert(self->cls == list_cls);
+    assert(slice->cls == slice_cls);
+    i64 start, stop, step;
+    parseSlice(slice, self->size, &start, &stop, &step);
+    RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
+
+    assert(0 <= start && start < self->size);
+    ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
+    assert(start <= stop);
+
+    ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
+    BoxedList *lv = static_cast<BoxedList*>(v);
+
+    int delts = lv->size - (stop - start);
+    int remaining_elts = self->size - stop;
+    self->ensure(delts);
+
+    memmove(self->elts->elts + start + lv->size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
+    for (int i = 0; i < lv->size; i++) {
+        Box* r = lv->elts->elts[i];
+        self->elts->elts[start + i] = r;
+    }
+
+    self->size += delts;
+
+    return None;
+}
+
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
+    assert(self->cls == list_cls);
     if (slice->cls == int_cls) {
-        BoxedInt* islice = static_cast<BoxedInt*>(slice);
-        int64_t n = islice->n;
-        if (n < 0)
-            n = self->size + n;
-
-        if (n < 0 || n >= self->size) {
-            fprintf(stderr, "IndexError: list index out of range\n");
-            raiseExc();
-        }
-
-        Box* prev = self->elts->elts[n];
-        self->elts->elts[n] = v;
-
-        return None;
+        return listSetitemInt(self, static_cast<BoxedInt*>(slice), v);
     } else if (slice->cls == slice_cls) {
-        BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
-
-        i64 start, stop, step;
-        parseSlice(sslice, self->size, &start, &stop, &step);
-        RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
-
-        assert(0 <= start && start < self->size);
-        ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
-        assert(start <= stop);
-
-        ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
-        BoxedList *lv = static_cast<BoxedList*>(v);
-
-        int delts = lv->size - (stop - start);
-        int remaining_elts = self->size - stop;
-        self->ensure(delts);
-
-        memmove(self->elts->elts + start + lv->size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
-        for (int i = 0; i < lv->size; i++) {
-            Box* r = lv->elts->elts[i];
-            self->elts->elts[start + i] = r;
-        }
-
-        self->size += delts;
-
-        return None;
+        return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
     } else {
         fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
         raiseExc();
@@ -347,20 +366,32 @@ void setupList() {
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 
-    list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, NULL, 1, false)));
-    list_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)listGetitem, NULL, 2, false)));
+    list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1, false)));
+
+    CLFunction *getitem = createRTFunction();
+    addRTFunction(getitem, (void*)listGetitemInt, NULL, std::vector<ConcreteCompilerType*>{LIST, BOXED_INT}, false);
+    addRTFunction(getitem, (void*)listGetitemSlice, NULL, std::vector<ConcreteCompilerType*>{LIST, SLICE}, false);
+    addRTFunction(getitem, (void*)listGetitem, NULL, std::vector<ConcreteCompilerType*>{LIST, NULL}, false);
+    list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
+
     list_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
 
-    list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, NULL, 1, false)));
+    list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1, false)));
     list_cls->setattr("__str__", list_cls->peekattr("__repr__"), NULL, NULL);
-    list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, NULL, 1, false)));
+    list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1, false)));
 
     CLFunction *pop = boxRTFunction((void*)listPop1, NULL, 1, false);
     addRTFunction(pop, (void*)listPop2, NULL, 2, false);
     list_cls->giveAttr("pop", new BoxedFunction(pop));
 
     list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NULL, 2, false)));
-    list_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)listSetitem, NULL, 3, false)));
+
+    CLFunction *setitem = createRTFunction();
+    addRTFunction(setitem, (void*)listSetitemInt, NULL, std::vector<ConcreteCompilerType*>{LIST, BOXED_INT, NULL}, false);
+    addRTFunction(setitem, (void*)listSetitemSlice, NULL, std::vector<ConcreteCompilerType*>{LIST, SLICE, NULL}, false);
+    addRTFunction(setitem, (void*)listSetitem, NULL, std::vector<ConcreteCompilerType*>{LIST, NULL, NULL}, false);
+    list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
+
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NULL, 3, false)));
     list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NULL, 2, false)));
 
