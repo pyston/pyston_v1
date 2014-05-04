@@ -137,6 +137,12 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box *rhs) {
     }
 }
 
+extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxInt(lhs->n & rhs->n);
+}
+
 extern "C" Box* intAnd(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
@@ -174,6 +180,12 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box *rhs) {
     }
 }
 
+extern "C" Box* intEqInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxBool(lhs->n == rhs->n);
+}
+
 extern "C" Box* intEq(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
@@ -181,6 +193,12 @@ extern "C" Box* intEq(BoxedInt* lhs, Box *rhs) {
     }
     BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n == rhs_int->n);
+}
+
+extern "C" Box* intNeInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxBool(lhs->n != rhs->n);
 }
 
 extern "C" Box* intNe(BoxedInt* lhs, Box *rhs) {
@@ -192,6 +210,12 @@ extern "C" Box* intNe(BoxedInt* lhs, Box *rhs) {
     return boxBool(lhs->n != rhs_int->n);
 }
 
+extern "C" Box* intLtInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxBool(lhs->n < rhs->n);
+}
+
 extern "C" Box* intLt(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
@@ -199,6 +223,12 @@ extern "C" Box* intLt(BoxedInt* lhs, Box *rhs) {
     }
     BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n < rhs_int->n);
+}
+
+extern "C" Box* intLeInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxBool(lhs->n <= rhs->n);
 }
 
 extern "C" Box* intLe(BoxedInt* lhs, Box *rhs) {
@@ -210,6 +240,12 @@ extern "C" Box* intLe(BoxedInt* lhs, Box *rhs) {
     return boxBool(lhs->n <= rhs_int->n);
 }
 
+extern "C" Box* intGtInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxBool(lhs->n > rhs->n);
+}
+
 extern "C" Box* intGt(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
@@ -217,6 +253,12 @@ extern "C" Box* intGt(BoxedInt* lhs, Box *rhs) {
     }
     BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n > rhs_int->n);
+}
+
+extern "C" Box* intGeInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxBool(lhs->n >= rhs->n);
 }
 
 extern "C" Box* intGe(BoxedInt* lhs, Box *rhs) {
@@ -228,6 +270,12 @@ extern "C" Box* intGe(BoxedInt* lhs, Box *rhs) {
     return boxBool(lhs->n >= rhs_int->n);
 }
 
+extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxInt(lhs->n << rhs->n);
+}
+
 extern "C" Box* intLShift(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
@@ -237,13 +285,18 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box *rhs) {
     return boxInt(lhs->n << rhs_int->n);
 }
 
+extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxInt(mod_i64_i64(lhs->n, rhs->n));
+}
+
 extern "C" Box* intMod(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
     BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
-
     return boxInt(mod_i64_i64(lhs->n, rhs_int->n));
 }
 
@@ -272,6 +325,19 @@ extern "C" Box* intMul(BoxedInt* lhs, Box *rhs) {
     }
 }
 
+extern "C" Box* intPowInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
+}
+
+extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == float_cls);
+    return boxFloat(pow(lhs->n, rhs->d));
+}
+
 extern "C" Box* intPow(BoxedInt* lhs, Box *rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
@@ -283,6 +349,12 @@ extern "C" Box* intPow(BoxedInt* lhs, Box *rhs) {
     } else {
         return NotImplemented;
     }
+}
+
+extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt *rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxInt(lhs->n >> rhs->n);
 }
 
 extern "C" Box* intRShift(BoxedInt* lhs, Box *rhs) {
@@ -390,7 +462,7 @@ extern "C" Box* intInit2(BoxedInt* self, Box* val) {
     return None;
 }
 
-static void _addFunc(const char* name, void* int_func, void* float_func, void* boxed_func) {
+static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_if, v_iu;
     assert(BOXED_INT);
     v_ii.push_back(BOXED_INT); v_ii.push_back(BOXED_INT);
@@ -398,8 +470,20 @@ static void _addFunc(const char* name, void* int_func, void* float_func, void* b
     v_iu.push_back(BOXED_INT); v_iu.push_back(NULL);
 
     CLFunction *cl = createRTFunction();
-    addRTFunction(cl, int_func, NULL, v_ii, false);
-    addRTFunction(cl, float_func, NULL, v_if, false);
+    addRTFunction(cl, int_func, BOXED_INT, v_ii, false);
+    addRTFunction(cl, float_func, BOXED_FLOAT, v_if, false);
+    addRTFunction(cl, boxed_func, NULL, v_iu, false);
+    int_cls->giveAttr(name, new BoxedFunction(cl));
+}
+
+static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
+    std::vector<ConcreteCompilerType*> v_ii, v_iu;
+    assert(BOXED_INT);
+    v_ii.push_back(BOXED_INT); v_ii.push_back(BOXED_INT);
+    v_iu.push_back(BOXED_INT); v_iu.push_back(NULL);
+
+    CLFunction *cl = createRTFunction();
+    addRTFunction(cl, int_func, rtn_type, v_ii, false);
     addRTFunction(cl, boxed_func, NULL, v_iu, false);
     int_cls->giveAttr(name, new BoxedFunction(cl));
 }
@@ -407,33 +491,31 @@ static void _addFunc(const char* name, void* int_func, void* float_func, void* b
 void setupInt() {
     int_cls->giveAttr("__name__", boxStrConstant("int"));
 
-    //int_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)intAdd, NULL, 2, false)));
-    _addFunc("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
-    int_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)intAnd, NULL, 2, false)));
-    _addFunc("__div__", (void*)intDivInt, (void*)intDivFloat, (void*)intDiv);
-    //int_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)intDiv, NULL, 2, false)));
-    int_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)intEq, NULL, 2, false)));
-    int_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)intNe, NULL, 2, false)));
-    int_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)intLt, NULL, 2, false)));
-    int_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)intLe, NULL, 2, false)));
-    int_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)intGt, NULL, 2, false)));
-    int_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)intGe, NULL, 2, false)));
-    int_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)intLShift, NULL, 2, false)));
-    int_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)intMod, NULL, 2, false)));
-    _addFunc("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);
-    //int_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)intMul, NULL, 2, false)));
-    int_cls->giveAttr("__pow__", new BoxedFunction(boxRTFunction((void*)intPow, NULL, 2, false)));
-    int_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)intRShift, NULL, 2, false)));
-    _addFunc("__sub__", (void*)intSubInt, (void*)intSubFloat, (void*)intSub);
-    //int_cls->giveAttr("__sub__", new BoxedFunction(boxRTFunction((void*)intSub, NULL, 2, false)));
+    _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
+    _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);
+    _addFuncIntFloatUnknown("__sub__", (void*)intSubInt, (void*)intSubFloat, (void*)intSub);
+    _addFuncIntFloatUnknown("__div__", (void*)intDivInt, (void*)intDivFloat, (void*)intDiv);
+    _addFuncIntFloatUnknown("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);
+    _addFuncIntUnknown("__mod__", BOXED_INT, (void*)intModInt, (void*)intMod);
+    _addFuncIntFloatUnknown("__pow__", (void*)intPowInt, (void*)intPowFloat, (void*)intPow);
 
-    int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, NULL, 1, false)));
-    int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, NULL, 1, false)));
-    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, NULL, 1, false)));
-    int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, NULL, 1, false)));
-    int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, NULL, 1, false)));
+    _addFuncIntUnknown("__eq__", BOXED_BOOL, (void*)intEqInt, (void*)intEq);
+    _addFuncIntUnknown("__ne__", BOXED_BOOL, (void*)intNeInt, (void*)intNe);
+    _addFuncIntUnknown("__lt__", BOXED_BOOL, (void*)intLtInt, (void*)intLt);
+    _addFuncIntUnknown("__le__", BOXED_BOOL, (void*)intLeInt, (void*)intLe);
+    _addFuncIntUnknown("__gt__", BOXED_BOOL, (void*)intGtInt, (void*)intGt);
+    _addFuncIntUnknown("__ge__", BOXED_BOOL, (void*)intGeInt, (void*)intGe);
+
+    _addFuncIntUnknown("__lshift__", BOXED_INT, (void*)intLShiftInt, (void*)intLShift);
+    _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
+
+    int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1, false)));
+    int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1, false)));
+    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1, false)));
+    int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1, false)));
+    int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1, false)));
     int_cls->setattr("__str__", int_cls->peekattr("__repr__"), NULL, NULL);
-    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, NULL, 1, false)));
+    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1, false)));
 
     CLFunction *__new__ = boxRTFunction((void*)intNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)intNew2, NULL, 2, false);
