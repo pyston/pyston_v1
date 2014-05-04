@@ -181,6 +181,18 @@ class AST_arguments : public AST {
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::arguments;
 };
 
+class AST_Assert : public AST_stmt {
+    public:
+        AST_expr *msg, *test;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void accept_stmt(StmtVisitor *v);
+
+        AST_Assert() : AST_stmt(AST_TYPE::Assert) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assert;
+};
+
 class AST_Assign : public AST_stmt {
     public:
         std::vector<AST_expr*> targets;
@@ -748,6 +760,7 @@ class ASTVisitor {
 
         virtual bool visit_alias(AST_alias *node) { assert(0); abort(); }
         virtual bool visit_arguments(AST_arguments *node) { assert(0); abort(); }
+        virtual bool visit_assert(AST_Assert *node) { assert(0); abort(); }
         virtual bool visit_assign(AST_Assign *node) { assert(0); abort(); }
         virtual bool visit_augassign(AST_AugAssign *node) { assert(0); abort(); }
         virtual bool visit_augbinop(AST_AugBinOp *node) { assert(0); abort(); }
@@ -800,6 +813,7 @@ class NoopASTVisitor : public ASTVisitor {
 
         virtual bool visit_alias(AST_alias *node) { return false; }
         virtual bool visit_arguments(AST_arguments *node) { return false; }
+        virtual bool visit_assert(AST_Assert *node) { return false; }
         virtual bool visit_assign(AST_Assign *node) { return false; }
         virtual bool visit_augassign(AST_AugAssign *node) { return false; }
         virtual bool visit_augbinop(AST_AugBinOp *node) { return false; }
@@ -877,6 +891,7 @@ class StmtVisitor {
     public:
         virtual ~StmtVisitor() {}
 
+        virtual void visit_assert(AST_Assert *node) { assert(0); abort(); }
         virtual void visit_assign(AST_Assign *node) { assert(0); abort(); }
         virtual void visit_augassign(AST_AugAssign *node) { assert(0); abort(); }
         virtual void visit_break(AST_Break *node) { assert(0); abort(); }
@@ -911,6 +926,7 @@ class PrintVisitor : public ASTVisitor {
 
         virtual bool visit_alias(AST_alias *node);
         virtual bool visit_arguments(AST_arguments *node);
+        virtual bool visit_assert(AST_Assert *node);
         virtual bool visit_assign(AST_Assign *node);
         virtual bool visit_augassign(AST_AugAssign *node);
         virtual bool visit_augbinop(AST_AugBinOp *node);

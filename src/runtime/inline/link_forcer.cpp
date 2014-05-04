@@ -77,6 +77,7 @@ void force() {
     FORCE(raiseAttributeErrorStr);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
+    FORCE(assertFail);
 
     FORCE(printFloat);
     FORCE(listAppendInternal);

@@ -16,6 +16,7 @@
 #include <sstream>
 #include <algorithm>
 
+#include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -262,11 +263,17 @@ Box* listMul(BoxedList* self, Box* rhs) {
     int s = self->size;
 
     BoxedList* rtn = new BoxedList();
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < s; j++) {
-            listAppendInternal(rtn, self->elts->elts[j]);
+    rtn->ensure(n*s);
+    if (s == 1) {
+        for (int i = 0; i < n; i++) {
+            listAppendInternal(rtn, self->elts->elts[0]);
+        }
+    } else {
+        for (int i = 0; i < n; i++) {
+            listAppendArrayInternal(rtn, &self->elts->elts[0], s);
         }
     }
+
     return rtn;
 }
 
@@ -314,6 +321,20 @@ Box* listSort1(BoxedList* self) {
 
     return None;
 }
+
+Box* listContains(BoxedList* self, Box *elt) {
+    int size = self->size;
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+        if (b)
+            return True;
+    }
+    return False;
+}
+
+
 
 BoxedClass *list_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor *v, void* p) {
@@ -387,6 +408,7 @@ void setupList() {
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, NULL, 2, false)));
 
     list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NULL, 1, false)));
+    list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2, false)));
 
     CLFunction *new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
     addRTFunction(new_, (void*)listNew2, NULL, 2, false);

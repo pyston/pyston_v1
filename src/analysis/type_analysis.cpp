@@ -284,10 +284,12 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             CompilerType *left = getType(node->left);
             CompilerType *right = getType(node->comparators[0]);
 
-            if (node->ops[0] == AST_TYPE::Is || node->ops[0] == AST_TYPE::IsNot) {
+            AST_TYPE::AST_TYPE op_type = node->ops[0];
+            if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
                 assert(node->ops.size() == 1 && "I don't think this should happen");
                 return BOOL;
             }
+
             std::string name = getOpName(node->ops[0]);
             CompilerType *attr_type = left->getattrType(&name, true);
 
@@ -394,6 +396,12 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
 
 
 
+
+        virtual void visit_assert(AST_Assert* node) {
+            getType(node->test);
+            if (node->msg)
+                getType(node->msg);
+        }
 
         virtual void visit_assign(AST_Assign* node) {
             CompilerType* t = getType(node->value);

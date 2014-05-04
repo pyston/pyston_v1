@@ -174,6 +174,7 @@ class DefinednessVisitor : public ASTVisitor {
         DefinednessVisitor(Map &state) : state(state) {
         }
 
+        virtual bool visit_assert(AST_Assert* node) { return true; }
         virtual bool visit_branch(AST_Branch* node) { return true; }
      	virtual bool visit_delete(AST_Delete* node) {
 			//TODO what happens if delete an attribute or an element
