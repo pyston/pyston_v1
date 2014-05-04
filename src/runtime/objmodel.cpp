@@ -226,6 +226,17 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
+extern "C" void assertFail(BoxedModule *inModule, Box *msg) {
+    if (msg) {
+        BoxedString *tostr = str(msg);
+        fprintf(stderr, "AssertionError: %s\n", tostr->s.c_str());
+        raiseExc();
+    } else {
+        fprintf(stderr, "AssertionError\n");
+        raiseExc();
+    }
+}
+
 extern "C" void assertNameDefined(bool b, const char* name) {
     if (!b) {
         fprintf(stderr, "UnboundLocalError: local variable '%s' referenced before assignment\n", name);
@@ -1747,6 +1758,33 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrit
         return boxBool((lhs == rhs) ^ neg);
     }
 
+    if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
+        // TODO do rewrite
+
+        static const std::string str_contains("__contains__");
+        Box* contained = callattrInternal1(rhs, &str_contains, CLASS_ONLY, NULL, 1, lhs);
+        if (contained == NULL) {
+            static const std::string str_iter("__iter__");
+            Box* iter = callattrInternal0(rhs, &str_iter, CLASS_ONLY, NULL, 0);
+            if (iter)
+                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
+            RELEASE_ASSERT(iter == NULL, "need to try iterating");
+
+            Box* getitem = getattr_internal(rhs, "__getitem__", false, false, NULL, NULL);
+            if (getitem)
+                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
+            RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
+
+            fprintf(stderr, "TypeError: argument of type '%s' is not iterable\n", getTypeName(rhs)->c_str());
+            raiseExc();
+        }
+
+        bool b = nonzero(contained);
+        if (op_type == AST_TYPE::NotIn)
+            return boxBool(!b);
+        return boxBool(b);
+    }
+
     // Can do the guard checks after the Is/IsNot handling, since that is
     // irrespective of the object classes
     if (rewrite_args) {
@@ -1840,7 +1878,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrit
         if (op_type == AST_TYPE::LtE)
             return boxBool(cmp1 <= cmp2);
     }
-    RELEASE_ASSERT(0, "");
+    RELEASE_ASSERT(0, "%d", op_type);
 }
 
 extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {

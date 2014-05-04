@@ -69,3 +69,8 @@ for i in xrange(2):
     print max(C(""), 2)
     print C("hi") > 1
     print C("") > 1
+
+print (1, 2) < (1, 3)
+print (1, 4) < (1, 3)
+print [1, 2] < [1, 3]
+print {1:2} < {1:3}

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstring>
+
 #include "runtime/list.h"
 #include "runtime/gc_runtime.h"
 
@@ -78,6 +80,20 @@ extern "C" void listAppendInternal(Box* s, Box* v) {
     assert(self->size < self->capacity);
     self->elts->elts[self->size] = v;
     self->size++;
+}
+
+
+extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
+    assert(s->cls == list_cls);
+    BoxedList* self = static_cast<BoxedList*>(s);
+
+    assert(self->size <= self->capacity);
+    self->ensure(nelts);
+
+    assert(self->size <= self->capacity);
+    memcpy(&self->elts->elts[self->size], &v[0], nelts*sizeof(Box*));
+
+    self->size += nelts;
 }
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?

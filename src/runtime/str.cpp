@@ -422,6 +422,7 @@ void setupStr() {
     CLFunction *strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
     addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
     str_cls->giveAttr("split", new BoxedFunction(strSplit));
+    str_cls->giveAttr("rsplit", str_cls->peekattr("split"));
 
     CLFunction *__new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)strNew2, NULL, 2, false);
