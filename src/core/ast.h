@@ -336,11 +336,6 @@ class AST_Continue : public AST_stmt {
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Continue;
 };
 
- class AST_Delete : public AST_stmt {
- public:
-  std::vector<AST_expr*> targets;
-  virtual void accept(ASTVisitor *v
-}
 class AST_Dict : public AST_expr {
     public:
         std::vector<AST_expr*> keys, values;
@@ -354,14 +349,14 @@ class AST_Dict : public AST_expr {
 };
 
 class AST_Delete : public AST_stmt {
-public:
-std:vector<AST_expr*>  targets;
-        virtual void accept(ASTVisitor *v);
-        virtual void accept_stmt(StmtVisitor *v);
+ public:
+	std::vector<AST_expr*>  targets;
+	virtual void accept(ASTVisitor *v);
+	virtual void accept_stmt(StmtVisitor *v);
 
-        AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
+ AST_Delete() : AST_stmt(AST_TYPE::Delete) {};
 	
-        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
+	static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
 };
 
 class AST_Expr : public AST_stmt {
@@ -761,8 +756,8 @@ class ASTVisitor {
         virtual bool visit_comprehension(AST_comprehension *node) { assert(0); abort(); }
         virtual bool visit_classdef(AST_ClassDef *node) { assert(0); abort(); }
         virtual bool visit_continue(AST_Continue *node) { assert(0); abort(); }
-    virtual bool visit_delete(AST_Delete *node){assert{0}; abort();}
-    virtual bool visit_dict(AST_Dict *node) { assert(0); abort(); }
+		virtual bool visit_delete(AST_Delete *node){assert(0); abort();}
+		virtual bool visit_dict(AST_Dict *node) { assert(0); abort(); }
         virtual bool visit_expr(AST_Expr *node) { assert(0); abort(); }
         virtual bool visit_for(AST_For *node) { assert(0); abort(); }
         virtual bool visit_functiondef(AST_FunctionDef *node) { assert(0); abort(); }
@@ -857,8 +852,7 @@ class ExprVisitor {
         virtual void* visit_call(AST_Call *node) { assert(0); abort(); }
         virtual void* visit_clsattribute(AST_ClsAttribute *node) { assert(0); abort(); }
         virtual void* visit_compare(AST_Compare *node) { assert(0); abort(); }
-        virtual void* visit_delete(AST_Delete *node) { assert(0); abort(); }
-        virtual void* visit_dict(AST_Dict *node) { assert(0); abort(); }
+		virtual void* visit_dict(AST_Dict *node) { assert(0); abort(); }
         virtual void* visit_ifexp(AST_IfExp *node) { assert(0); abort(); }
         virtual void* visit_index(AST_Index *node) { assert(0); abort(); }
         virtual void* visit_list(AST_List *node) { assert(0); abort(); }
