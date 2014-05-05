@@ -1117,7 +1117,7 @@ bool PrintVisitor::visit_repr(AST_Repr *node) {
     printf("`");
     node->value->accept(this);
     printf("`");
-    return false;
+    return true;
 }
 
 bool PrintVisitor::visit_return(AST_Return *node) {
