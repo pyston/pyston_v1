@@ -39,3 +39,23 @@ def f1():
 
     __builtin__.StopIteration = _StopIteration
 f1()
+
+def f2(throw):
+    print "f2"
+    try:
+        try:
+            print "inner try"
+            if throw:
+                raise Exception()
+        except:
+            print "inner except"
+        else:
+            print "inner else"
+            raise Exception()
+    except:
+        print "outer except"
+    else:
+        print "outer else"
+f2(True)
+f2(False)
+

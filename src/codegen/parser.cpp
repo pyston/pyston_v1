@@ -328,6 +328,18 @@ AST_Dict* read_dict(BufferedReader *reader) {
     return rtn;
 }
 
+AST_ExceptHandler* read_excepthandler(BufferedReader *reader) {
+    AST_ExceptHandler *rtn = new AST_ExceptHandler();
+
+    readStmtVector(rtn->body, reader);
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    rtn->name = readASTExpr(reader);
+    rtn->type = readASTExpr(reader);
+
+    return rtn;
+}
+
 AST_Expr* read_expr(BufferedReader *reader) {
     AST_Expr *rtn = new AST_Expr();
 
@@ -521,6 +533,19 @@ AST_Print* read_print(BufferedReader *reader) {
     return rtn;
 }
 
+AST_Raise* read_raise(BufferedReader *reader) {
+    AST_Raise *rtn = new AST_Raise();
+
+    // "arg0" "arg1" "arg2" are called "type", "inst", and "tback" in the python ast,
+    // so that's the order we have to read them:
+    rtn->col_offset = readColOffset(reader);
+    rtn->arg1 /*inst*/ = readASTExpr(reader);
+    rtn->lineno = reader->readULL();
+    rtn->arg2 /*tback*/ = readASTExpr(reader);
+    rtn->arg0 /*type*/ = readASTExpr(reader);
+    return rtn;
+}
+
 AST_Return* read_return(BufferedReader *reader) {
     AST_Return *rtn = new AST_Return();
 
@@ -561,6 +586,27 @@ AST_Subscript* read_subscript(BufferedReader *reader) {
     rtn->slice = readASTExpr(reader);
     rtn->value = readASTExpr(reader);
 
+    return rtn;
+}
+
+AST_TryExcept* read_tryexcept(BufferedReader *reader) {
+    AST_TryExcept *rtn = new AST_TryExcept();
+
+    readStmtVector(rtn->body, reader);
+    rtn->col_offset = readColOffset(reader);
+    readMiscVector(rtn->handlers, reader);
+    rtn->lineno = reader->readULL();
+    readStmtVector(rtn->orelse, reader);
+    return rtn;
+}
+
+AST_TryFinally* read_tryfinally(BufferedReader *reader) {
+    AST_TryFinally *rtn = new AST_TryFinally();
+
+    readStmtVector(rtn->body, reader);
+    rtn->col_offset = readColOffset(reader);
+    readStmtVector(rtn->finalbody, reader);
+    rtn->lineno = reader->readULL();
     return rtn;
 }
 
@@ -705,8 +751,14 @@ AST_stmt* readASTStmt(BufferedReader *reader) {
             return read_pass(reader);
         case AST_TYPE::Print:
             return read_print(reader);
+        case AST_TYPE::Raise:
+            return read_raise(reader);
         case AST_TYPE::Return:
             return read_return(reader);
+        case AST_TYPE::TryExcept:
+            return read_tryexcept(reader);
+        case AST_TYPE::TryFinally:
+            return read_tryfinally(reader);
         case AST_TYPE::While:
             return read_while(reader);
         case AST_TYPE::With:
@@ -735,6 +787,8 @@ AST* readASTMisc(BufferedReader *reader) {
             return read_arguments(reader);
         case AST_TYPE::comprehension:
             return read_comprehension(reader);
+        case AST_TYPE::ExceptHandler:
+            return read_excepthandler(reader);
         case AST_TYPE::keyword:
             return read_keyword(reader);
         case AST_TYPE::Module:

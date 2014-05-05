@@ -372,6 +372,19 @@ class AST_Expr : public AST_stmt {
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expr;
 };
 
+class AST_ExceptHandler : public AST{
+    public:
+        std::vector<AST_stmt*> body;
+        AST_expr* type; // can be NULL for a bare "except:" clause
+        AST_expr* name; // can be NULL if the exception doesn't get a name
+
+        virtual void accept(ASTVisitor *v);
+
+        AST_ExceptHandler() : AST(AST_TYPE::ExceptHandler) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExceptHandler;
+};
+
 class AST_For : public AST_stmt {
     public:
         std::vector<AST_stmt*> body, orelse;
@@ -596,6 +609,22 @@ class AST_Print : public AST_stmt {
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Print;
 };
 
+class AST_Raise : public AST_stmt {
+    public:
+        // In the python ast module, these are called "type", "inst", and "tback", respectively.
+        // Renaming to arg{0..2} since I find that confusing, since they are filled in
+        // sequentially rather than semantically.
+        // Ie "raise Exception()" will have type==Exception(), inst==None, tback==None
+        AST_expr *arg0, *arg1, *arg2;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void accept_stmt(StmtVisitor *v);
+
+        AST_Raise() : AST_stmt(AST_TYPE::Raise) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Raise;
+};
+
 class AST_Return : public AST_stmt {
     public:
         AST_expr* value;
@@ -643,6 +672,31 @@ class AST_Subscript : public AST_expr {
         AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
 
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Subscript;
+};
+
+class AST_TryExcept : public AST_stmt {
+    public:
+        std::vector<AST_stmt*> body, orelse;
+        std::vector<AST_ExceptHandler*> handlers;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void accept_stmt(StmtVisitor *v);
+
+        AST_TryExcept() : AST_stmt(AST_TYPE::TryExcept) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::TryExcept;
+};
+
+class AST_TryFinally : public AST_stmt {
+    public:
+        std::vector<AST_stmt*> body, finalbody;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void accept_stmt(StmtVisitor *v);
+
+        AST_TryFinally() : AST_stmt(AST_TYPE::TryFinally) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::TryFinally;
 };
 
 class AST_Tuple : public AST_expr {
@@ -771,6 +825,7 @@ class ASTVisitor {
         virtual bool visit_classdef(AST_ClassDef *node) { assert(0); abort(); }
         virtual bool visit_continue(AST_Continue *node) { assert(0); abort(); }
         virtual bool visit_dict(AST_Dict *node) { assert(0); abort(); }
+        virtual bool visit_excepthandler(AST_ExceptHandler *node) { assert(0); abort(); }
         virtual bool visit_expr(AST_Expr *node) { assert(0); abort(); }
         virtual bool visit_for(AST_For *node) { assert(0); abort(); }
         virtual bool visit_functiondef(AST_FunctionDef *node) { assert(0); abort(); }
@@ -788,11 +843,14 @@ class ASTVisitor {
         virtual bool visit_num(AST_Num *node) { assert(0); abort(); }
         virtual bool visit_pass(AST_Pass *node) { assert(0); abort(); }
         virtual bool visit_print(AST_Print *node) { assert(0); abort(); }
+        virtual bool visit_raise(AST_Raise *node) { assert(0); abort(); }
         virtual bool visit_repr(AST_Repr *node) { assert(0); abort(); }
         virtual bool visit_return(AST_Return *node) { assert(0); abort(); }
         virtual bool visit_slice(AST_Slice *node) { assert(0); abort(); }
         virtual bool visit_str(AST_Str *node) { assert(0); abort(); }
         virtual bool visit_subscript(AST_Subscript *node) { assert(0); abort(); }
+        virtual bool visit_tryexcept(AST_TryExcept *node) { assert(0); abort(); }
+        virtual bool visit_tryfinally(AST_TryFinally *node) { assert(0); abort(); }
         virtual bool visit_tuple(AST_Tuple *node) { assert(0); abort(); }
         virtual bool visit_unaryop(AST_UnaryOp *node) { assert(0); abort(); }
         virtual bool visit_while(AST_While *node) { assert(0); abort(); }
@@ -824,6 +882,7 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_classdef(AST_ClassDef *node) { return false; }
         virtual bool visit_continue(AST_Continue *node) { return false; }
         virtual bool visit_dict(AST_Dict *node) { return false; }
+        virtual bool visit_excepthandler(AST_ExceptHandler *node) { return false; }
         virtual bool visit_expr(AST_Expr *node) { return false; }
         virtual bool visit_for(AST_For *node) { return false; }
         virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
@@ -841,11 +900,14 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node) { return false; }
         virtual bool visit_pass(AST_Pass *node) { return false; }
         virtual bool visit_print(AST_Print *node) { return false; }
+        virtual bool visit_raise(AST_Raise *node) {return false; }
         virtual bool visit_repr(AST_Repr *node) { return false; }
         virtual bool visit_return(AST_Return *node) { return false; }
         virtual bool visit_slice(AST_Slice *node) { return false; }
         virtual bool visit_str(AST_Str *node) { return false; }
         virtual bool visit_subscript(AST_Subscript *node) { return false; }
+        virtual bool visit_tryexcept(AST_TryExcept *node) { return false; }
+        virtual bool visit_tryfinally(AST_TryFinally *node) { return false; }
         virtual bool visit_tuple(AST_Tuple *node) { return false; }
         virtual bool visit_unaryop(AST_UnaryOp *node) { return false; }
         virtual bool visit_while(AST_While *node) { return false; }
@@ -902,7 +964,10 @@ class StmtVisitor {
         virtual void visit_importfrom(AST_ImportFrom *node) { assert(0); abort(); }
         virtual void visit_pass(AST_Pass *node) { assert(0); abort(); }
         virtual void visit_print(AST_Print *node) { assert(0); abort(); }
+        virtual void visit_raise(AST_Raise *node) { assert(0); abort(); }
         virtual void visit_return(AST_Return *node) { assert(0); abort(); }
+        virtual void visit_tryexcept(AST_TryExcept *node) { assert(0); abort(); }
+        virtual void visit_tryfinally(AST_TryFinally *node) { assert(0); abort(); }
         virtual void visit_while(AST_While *node) { assert(0); abort(); }
         virtual void visit_with(AST_With *node) { assert(0); abort(); }
 
@@ -936,6 +1001,7 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_clsattribute(AST_ClsAttribute *node);
         virtual bool visit_continue(AST_Continue *node);
         virtual bool visit_dict(AST_Dict *node);
+        virtual bool visit_excepthandler(AST_ExceptHandler *node);
         virtual bool visit_expr(AST_Expr *node);
         virtual bool visit_for(AST_For *node);
         virtual bool visit_functiondef(AST_FunctionDef *node);
@@ -953,12 +1019,15 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node);
         virtual bool visit_pass(AST_Pass *node);
         virtual bool visit_print(AST_Print *node);
+        virtual bool visit_raise(AST_Raise *node);
         virtual bool visit_repr(AST_Repr *node);
         virtual bool visit_return(AST_Return *node);
         virtual bool visit_slice(AST_Slice *node);
         virtual bool visit_str(AST_Str *node);
         virtual bool visit_subscript(AST_Subscript *node);
         virtual bool visit_tuple(AST_Tuple *node);
+        virtual bool visit_tryexcept(AST_TryExcept *node);
+        virtual bool visit_tryfinally(AST_TryFinally *node);
         virtual bool visit_unaryop(AST_UnaryOp *node);
         virtual bool visit_while(AST_While *node);
         virtual bool visit_with(AST_With *node);
