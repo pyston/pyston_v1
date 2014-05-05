@@ -189,6 +189,7 @@ class NameCollectorVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node) { return false; }
         virtual bool visit_pass(AST_Pass *node) { return false; }
         virtual bool visit_print(AST_Print *node) { return false; }
+        virtual bool visit_repr(AST_Repr *node) { return false; }
         virtual bool visit_return(AST_Return *node) { return false; }
         virtual bool visit_slice(AST_Slice *node) { return false; }
         virtual bool visit_str(AST_Str *node) { return false; }

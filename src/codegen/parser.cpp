@@ -493,6 +493,15 @@ AST_Num* read_num(BufferedReader *reader) {
     return rtn;
 }
 
+AST_Repr* read_repr(BufferedReader *reader) {
+    AST_Repr *rtn = new AST_Repr();
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    rtn->value = readASTExpr(reader);
+
+    return rtn;
+}
+
 AST_Pass* read_pass(BufferedReader *reader) {
     AST_Pass *rtn = new AST_Pass();
 
@@ -636,6 +645,8 @@ AST_expr* readASTExpr(BufferedReader *reader) {
             return read_name(reader);
         case AST_TYPE::Num:
             return read_num(reader);
+        case AST_TYPE::Repr:
+            return read_repr(reader);
         case AST_TYPE::Slice:
             return read_slice(reader);
         case AST_TYPE::Str:

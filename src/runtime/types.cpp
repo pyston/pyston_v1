@@ -274,9 +274,9 @@ Box* instancemethodRepr(BoxedInstanceMethod* self) {
 }
 
 Box* sliceRepr(BoxedSlice* self) {
-    BoxedString *start = repr(self->start);
-    BoxedString *stop = repr(self->stop);
-    BoxedString *step = repr(self->step);
+    BoxedString *start = static_cast<BoxedString*>(repr(self->start));
+    BoxedString *stop = static_cast<BoxedString*>(repr(self->stop));
+    BoxedString *step = static_cast<BoxedString*>(repr(self->step));
     std::string s = "slice(" + start->s + ", " + stop->s + ", " + step->s + ")";
     return new BoxedString(s);
 }
