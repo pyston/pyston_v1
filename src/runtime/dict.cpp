@@ -34,8 +34,8 @@ Box* dictRepr(BoxedDict* self) {
         }
         first = false;
 
-        BoxedString *k = repr(p.first);
-        BoxedString *v = repr(p.second);
+        BoxedString *k = static_cast<BoxedString*>(repr(p.first));
+        BoxedString *v = static_cast<BoxedString*>(repr(p.second));
         chars.insert(chars.end(), k->s.begin(), k->s.end());
         chars.push_back(':');
         chars.push_back(' ');
@@ -79,7 +79,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
     Box* &pos = self->d[k];
 
     if (pos == NULL) {
-        BoxedString *s = repr(k);
+        BoxedString *s = static_cast<BoxedString*>(repr(k));
         fprintf(stderr, "KeyError: %s\n", s->s.c_str());
         raiseExc();
     }

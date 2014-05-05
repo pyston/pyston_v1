@@ -529,6 +529,15 @@ void* AST_Num::accept_expr(ExprVisitor *v) {
     return v->visit_num(this);
 }
 
+void AST_Repr::accept(ASTVisitor *v) {
+    bool skip = v->visit_repr(this);
+}
+
+void* AST_Repr::accept_expr(ExprVisitor *v) {
+    return v->visit_repr(this);
+}
+
+
 void AST_Pass::accept(ASTVisitor *v) {
     bool skip = v->visit_pass(this);
 }
@@ -1104,6 +1113,13 @@ bool PrintVisitor::visit_print(AST_Print *node) {
     return true;
 }
 
+bool PrintVisitor::visit_repr(AST_Repr *node) {
+    printf("`");
+    node->value->accept(this);
+    printf("`");
+    return false;
+}
+
 bool PrintVisitor::visit_return(AST_Return *node) {
     printf("return ");
     return false;
@@ -1280,6 +1296,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node) { output->push_back(node); return false; }
         virtual bool visit_pass(AST_Pass *node) { output->push_back(node); return false; }
         virtual bool visit_print(AST_Print *node) { output->push_back(node); return false; }
+        virtual bool visit_repr(AST_Repr *node) { output->push_back(node); return false; }
         virtual bool visit_return(AST_Return *node) { output->push_back(node); return false; }
         virtual bool visit_slice(AST_Slice *node) { output->push_back(node); return false; }
         virtual bool visit_str(AST_Str *node) { output->push_back(node); return false; }

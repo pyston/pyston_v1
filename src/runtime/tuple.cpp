@@ -72,7 +72,7 @@ Box* tupleRepr(BoxedTuple *t) {
     for (int i = 0; i < n; i++) {
         if (i) os << ", ";
 
-        BoxedString *elt_repr =repr(t->elts[i]);
+        BoxedString *elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
         os << elt_repr->s;
     }
     if (n == 1) os << ",";

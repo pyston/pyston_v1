@@ -41,7 +41,7 @@ extern "C" Box* listRepr(BoxedList* self) {
         if (i > 0)
             os << ", ";
 
-        BoxedString *s = repr(self->elts->elts[i]);
+        BoxedString *s = static_cast<BoxedString*>(repr(self->elts->elts[i]));
         os << s->s;
     }
     os << ']';

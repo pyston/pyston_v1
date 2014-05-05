@@ -159,6 +159,7 @@ void initGlobalFuncs(GlobalState &g) {
     GET(getclsattr);
     GET(unaryop);
     GET(import);
+    GET(repr);
 
     GET(checkUnpackingLength);
     GET(raiseAttributeError);

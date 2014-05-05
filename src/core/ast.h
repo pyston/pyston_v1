@@ -560,6 +560,18 @@ class AST_Num : public AST_expr {
         static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Num;
 };
 
+class AST_Repr : public AST_expr {
+    public:
+        AST_expr* value;
+
+        virtual void accept(ASTVisitor *v);
+        virtual void* accept_expr(ExprVisitor *v);
+
+        AST_Repr() : AST_expr(AST_TYPE::Repr) {}
+
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Repr;
+};
+
 class AST_Pass : public AST_stmt {
     public:
         virtual void accept(ASTVisitor *v);
@@ -776,6 +788,7 @@ class ASTVisitor {
         virtual bool visit_num(AST_Num *node) { assert(0); abort(); }
         virtual bool visit_pass(AST_Pass *node) { assert(0); abort(); }
         virtual bool visit_print(AST_Print *node) { assert(0); abort(); }
+        virtual bool visit_repr(AST_Repr *node) { assert(0); abort(); }
         virtual bool visit_return(AST_Return *node) { assert(0); abort(); }
         virtual bool visit_slice(AST_Slice *node) { assert(0); abort(); }
         virtual bool visit_str(AST_Str *node) { assert(0); abort(); }
@@ -828,6 +841,7 @@ class NoopASTVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node) { return false; }
         virtual bool visit_pass(AST_Pass *node) { return false; }
         virtual bool visit_print(AST_Print *node) { return false; }
+        virtual bool visit_repr(AST_Repr *node) { return false; }
         virtual bool visit_return(AST_Return *node) { return false; }
         virtual bool visit_slice(AST_Slice *node) { return false; }
         virtual bool visit_str(AST_Str *node) { return false; }
@@ -860,6 +874,7 @@ class ExprVisitor {
         virtual void* visit_listcomp(AST_ListComp *node) { assert(0); abort(); }
         virtual void* visit_name(AST_Name *node) { assert(0); abort(); }
         virtual void* visit_num(AST_Num *node) { assert(0); abort(); }
+        virtual void* visit_repr(AST_Repr *node) { assert(0); abort(); }
         virtual void* visit_slice(AST_Slice *node) { assert(0); abort(); }
         virtual void* visit_str(AST_Str *node) { assert(0); abort(); }
         virtual void* visit_subscript(AST_Subscript *node) { assert(0); abort(); }
@@ -938,6 +953,7 @@ class PrintVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node);
         virtual bool visit_pass(AST_Pass *node);
         virtual bool visit_print(AST_Print *node);
+        virtual bool visit_repr(AST_Repr *node);
         virtual bool visit_return(AST_Return *node);
         virtual bool visit_slice(AST_Slice *node);
         virtual bool visit_str(AST_Str *node);
