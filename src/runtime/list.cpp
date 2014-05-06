@@ -350,6 +350,19 @@ Box* listContains(BoxedList* self, Box *elt) {
     return False;
 }
 
+Box* listCount(BoxedList* self, Box *elt) {
+    int size = self->size;
+    int count = 0;
+
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+        if (b)
+            count++;
+    }
+    return new BoxedInt(count);
+}
 
 
 BoxedClass *list_iterator_cls = NULL;
@@ -441,6 +454,8 @@ void setupList() {
     CLFunction *new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
     addRTFunction(new_, (void*)listNew2, NULL, 2, false);
     list_cls->giveAttr("__new__", new BoxedFunction(new_));
+
+    list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2, false)));
 
     list_cls->freeze();
 
