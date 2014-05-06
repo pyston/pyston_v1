@@ -15,6 +15,8 @@
 #ifndef PYSTON_RUNTIME_UTIL_H
 #define PYSTON_RUNTIME_UTIL_H
 
+#include <functional>
+
 #include "core/types.h"
 
 namespace pyston {
@@ -24,6 +26,8 @@ class BoxedSlice;
 void parseSlice(BoxedSlice* slice, int size, i64 *out_start, i64 *out_stop, i64 *out_end);
 
 void raiseExc() __attribute__((__noreturn__));
+
+void iterateOverContainer(Box* container, std::function<void(Box*)> func);
 
 }
 #endif

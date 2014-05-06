@@ -222,25 +222,11 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
 }
 
 Box* map2(Box* f, Box* container) {
-    static std::string _iter("__iter__");
-    static std::string _hasnext("__hasnext__");
-    static std::string _next("next");
-
-    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
-
     Box* rtn = new BoxedList();
-
-    while (true) {
-        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
-        bool hasnext_bool = nonzero(hasnext);
-        if (!hasnext_bool)
-            break;
-
-        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
-
-        Box* r = runtimeCall(f, 1, next, NULL, NULL, NULL);
-        listAppendInternal(rtn, r);
-    }
+    auto func = [&](Box* e){
+        listAppendInternal(rtn, runtimeCall(f, 1, e, NULL, NULL, NULL));
+    };
+    iterateOverContainer(container, func);
     return rtn;
 }
 

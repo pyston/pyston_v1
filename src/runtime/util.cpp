@@ -15,6 +15,7 @@
 #include "core/options.h"
 
 #include "runtime/types.h"
+#include "runtime/objmodel.h"
 #include "runtime/util.h"
 
 namespace pyston {
@@ -82,6 +83,26 @@ void parseSlice(BoxedSlice* slice, int size, i64 *out_start, i64 *out_stop, i64 
     *out_start = istart;
     *out_stop = istop;
     *out_step = istep;
+}
+
+
+void iterateOverContainer(Box* container, std::function<void(Box*)> func)
+{
+    static std::string _iter("__iter__");
+    static std::string _hasnext("__hasnext__");
+    static std::string _next("next");
+
+    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
+
+    while (true) {
+        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
+        bool hasnext_bool = nonzero(hasnext);
+        if (!hasnext_bool)
+            break;
+
+        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
+        func(next);
+    }
 }
 
 }
