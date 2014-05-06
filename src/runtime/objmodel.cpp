@@ -1999,7 +1999,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
 extern "C" void delitem(Box* target, Box* slice) {
     static StatCounter slowpath_delitem("slowpath_delitem");
     slowpath_delitem.log();
-    static std::string str_setitem("__delitem__");
+    static std::string str_delitem("__delitem__");
 
     //not sure about the temporal register number
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "delitem"));
@@ -2007,18 +2007,18 @@ extern "C" void delitem(Box* target, Box* slice) {
     Box* rtn;
     RewriterVar r_rtn;
     if (rewriter.get()) {
-      //?true
+		//correct?
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0));
         rewrite_args.arg1 = rewriter->getArg(1);
        
-        rtn = callattrInternal1(target, &str_setitem, CLASS_ONLY, &rewrite_args, 1, slice);
+        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, &rewrite_args, 1, slice);
 
         if (!rewrite_args.out_success)
             rewriter.reset(NULL);
         else if (rtn)
             r_rtn = rewrite_args.out_rtn;
     } else {
-        rtn = callattrInternal1(target, &str_setitem, CLASS_ONLY, NULL, 1, slice);
+        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, NULL, 1, slice);
     }
 
     if (rtn == NULL) {

@@ -594,18 +594,19 @@ class IRGeneratorImpl : public IRGenerator {
             ConcreteCompilerVariable *converted_slice = slice->makeConverted(emitter, slice->getBoxType());
             tget->decvref(emitter);
             slice->decvref(emitter);
-
+			
             bool do_patchpoint = ENABLE_ICSETITEMS && (irstate ->getEffortLevel() != EffortLevel::INTERPRETED);
             if (do_patchpoint) {
-	      PatchpointSetupInfo *pp = patchpoints::createSetitemPatchpoint(emitter.currentFunction(), getEmptyOpInfo().getTypeRecorder());
+				PatchpointSetupInfo *pp = patchpoints::createDelitemPatchpoint(emitter.currentFunction(), getEmptyOpInfo().getTypeRecorder());
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());
                 llvm_args.push_back(converted_slice->getValue());
               
-                emitter.createPatchpoint(pp, (void*)pyston::setitem, llvm_args);
+                emitter.createPatchpoint(pp, (void*)pyston::delitem, llvm_args);
             } else {
-                emitter.getBuilder()->CreateCall2(g.funcs.delitem,
+            
+				emitter.getBuilder()->CreateCall2(g.funcs.delitem,
                         converted_target->getValue(), converted_slice->getValue());
             }
 

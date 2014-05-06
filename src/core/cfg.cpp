@@ -813,18 +813,18 @@ class CFGVisitor : public ASTVisitor {
             push_back(assign);
             return true;
         }
-	virtual bool visit_delete(AST_Delete* node){
-		AST_Delete *rtn = new AST_Delete();
-		rtn->lineno = node->lineno;
-		rtn->col_offset = node->col_offset;
-		
-		for (auto t : node->targets) {
-			//TODO is false the correct value?
-			rtn->targets.push_back(remapExpr(t,false));
+	    virtual bool visit_delete(AST_Delete* node){
+			AST_Delete *astdel = new AST_Delete();
+			astdel->lineno = node->lineno;
+			astdel->col_offset = node->col_offset;
+			
+			for (auto t : node->targets) {
+				//TODO is false the correct value?
+				astdel->targets.push_back(remapExpr(t,false));
+			}
+			push_back(astdel);
+			return true;
 		}
-		push_back(rtn);
-		return true;
-	}
 
         virtual bool visit_expr(AST_Expr* node) {
             AST_Expr* remapped = new AST_Expr();

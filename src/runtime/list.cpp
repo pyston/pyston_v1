@@ -200,8 +200,7 @@ extern "C" Box * listDelitem(BoxedList* self, Box* slice) {
         }
 		memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
 		self->size--;
-		self->capacity++;
-    } else if(slice->cls == slice_cls){
+	} else if(slice->cls == slice_cls){
 		BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
 
 		i64 start, stop, step;
@@ -217,8 +216,7 @@ extern "C" Box * listDelitem(BoxedList* self, Box* slice) {
 		memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
 		//TODO release memory?
 		self->size -= (stop - start);
-		self->capacity += (stop - start);
-    }else{
+	}else{
 		fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
 		raiseExc();
     }      
