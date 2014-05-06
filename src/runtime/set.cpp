@@ -107,7 +107,7 @@ Box* setRepr(BoxedSet* self) {
         if (!first) {
             os << ", ";
         }
-        os << repr(elt)->s;
+        os << static_cast<BoxedString*>(repr(elt))->s;
         first = false;
     }
     os << "])";

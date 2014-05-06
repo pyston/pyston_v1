@@ -358,6 +358,10 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             abort();
         }
 
+        virtual void* visit_repr(AST_Repr *node) {
+            return STR;
+        }
+
         virtual void* visit_slice(AST_Slice *node) {
             return SLICE;
         }

@@ -71,6 +71,7 @@ void force() {
 	FORCE(delitem);
     FORCE(unaryop);
     FORCE(import);
+    FORCE(repr);
 
     FORCE(checkUnpackingLength);
     FORCE(raiseAttributeError);

@@ -378,6 +378,15 @@ void* AST_Dict::accept_expr(ExprVisitor *v) {
     return v->visit_dict(this);
 }
 
+void AST_ExceptHandler::accept(ASTVisitor *v) {
+    bool skip = v->visit_excepthandler(this);
+    if (skip) return;
+
+    if (type) type->accept(v);
+    if (name) name->accept(v);
+    visitVector(body, v);
+}
+
 void AST_Expr::accept(ASTVisitor *v) {
     bool skip = v->visit_expr(this);
     if (skip) return;
@@ -560,6 +569,28 @@ void AST_Print::accept_stmt(StmtVisitor *v) {
     v->visit_print(this);
 }
 
+void AST_Raise::accept(ASTVisitor *v) {
+    bool skip = v->visit_raise(this);
+    if (skip) return;
+
+    if (arg0) arg0->accept(v);
+    if (arg1) arg1->accept(v);
+    if (arg2) arg2->accept(v);
+}
+
+void AST_Raise::accept_stmt(StmtVisitor *v) {
+    v->visit_raise(this);
+}
+
+void AST_Repr::accept(ASTVisitor *v) {
+    bool skip = v->visit_repr(this);
+    if (skip) return;
+}
+
+void* AST_Repr::accept_expr(ExprVisitor *v) {
+    return v->visit_repr(this);
+}
+
 void AST_Return::accept(ASTVisitor *v) {
     bool skip = v->visit_return(this);
     if (skip) return;
@@ -603,6 +634,31 @@ void AST_Subscript::accept(ASTVisitor *v) {
 
 void* AST_Subscript::accept_expr(ExprVisitor *v) {
     return v->visit_subscript(this);
+}
+
+void AST_TryExcept::accept(ASTVisitor *v) {
+    bool skip = v->visit_tryexcept(this);
+    if (skip) return;
+
+    visitVector(body, v);
+    visitVector(orelse, v);
+    visitVector(handlers, v);
+}
+
+void AST_TryExcept::accept_stmt(StmtVisitor *v) {
+    v->visit_tryexcept(this);
+}
+
+void AST_TryFinally::accept(ASTVisitor *v) {
+    bool skip = v->visit_tryfinally(this);
+    if (skip) return;
+
+    visitVector(body, v);
+    visitVector(finalbody, v);
+}
+
+void AST_TryFinally::accept_stmt(StmtVisitor *v) {
+    v->visit_tryfinally(this);
 }
 
 void AST_Tuple::accept(ASTVisitor *v) {
@@ -945,6 +1001,28 @@ bool PrintVisitor::visit_dict(AST_Dict *node) {
     return true;
 }
 
+bool PrintVisitor::visit_excepthandler(AST_ExceptHandler *node) {
+    printf("except");
+    if (node->type) {
+        printf(" ");
+        node->type->accept(this);
+    }
+    if (node->name) {
+        printf(" as ");
+        node->name->accept(this);
+    }
+    printf(":\n");
+
+    indent += 4;
+    for (AST* subnode : node->body) {
+        printIndent();
+        subnode->accept(this);
+        printf("\n");
+    }
+    indent -= 4;
+    return true;
+}
+
 bool PrintVisitor::visit_expr(AST_Expr *node) {
     return false;
 }
@@ -1123,6 +1201,30 @@ bool PrintVisitor::visit_print(AST_Print *node) {
     return true;
 }
 
+bool PrintVisitor::visit_raise(AST_Raise *node) {
+    printf("raise");
+    if (node->arg0) {
+        printf(" ");
+        node->arg0->accept(this);
+    }
+    if (node->arg1) {
+        printf(", ");
+        node->arg1->accept(this);
+    }
+    if (node->arg2) {
+        printf(", ");
+        node->arg2->accept(this);
+    }
+    return true;
+}
+
+bool PrintVisitor::visit_repr(AST_Repr *node) {
+    printf("`");
+    node->value->accept(this);
+    printf("`");
+    return true;
+}
+
 bool PrintVisitor::visit_return(AST_Return *node) {
     printf("return ");
     return false;
@@ -1152,6 +1254,70 @@ bool PrintVisitor::visit_subscript(AST_Subscript *node) {
     printf("[");
     node->slice->accept(this);
     printf("]");
+    return true;
+}
+
+bool PrintVisitor::visit_tryexcept(AST_TryExcept *node) {
+    printf("try:\n");
+    indent += 4;
+    for (AST* subnode : node->body) {
+        printIndent();
+        subnode->accept(this);
+        printf("\n");
+    }
+    indent -= 4;
+    for (AST_ExceptHandler* handler : node->handlers) {
+        printIndent();
+        handler->accept(this);
+    }
+
+    if (node->orelse.size()) {
+        printIndent();
+        printf("else:\n");
+        indent += 4;
+        for (AST* subnode : node->orelse) {
+            printIndent();
+            subnode->accept(this);
+            printf("\n");
+        }
+        indent -= 4;
+    }
+    return true;
+}
+
+bool PrintVisitor::visit_tryfinally(AST_TryFinally *node) {
+    if (node->body.size() == 1 && node->body[0]->type == AST_TYPE::TryExcept) {
+        node->body[0]->accept(this);
+        printIndent();
+        printf("finally:\n");
+
+        indent += 4;
+        for (AST* subnode : node->finalbody) {
+            printIndent();
+            subnode->accept(this);
+            printf("\n");
+        }
+        indent -= 4;
+    } else {
+        printf("try:\n");
+        indent += 4;
+        for (AST* subnode : node->body) {
+            printIndent();
+            subnode->accept(this);
+            printf("\n");
+        }
+        indent -= 4;
+
+        printIndent();
+        printf("finally:\n");
+        indent += 4;
+        for (AST* subnode : node->finalbody) {
+            printIndent();
+            subnode->accept(this);
+            printf("\n");
+        }
+        indent -= 4;
+    }
     return true;
 }
 
@@ -1300,6 +1466,7 @@ class FlattenVisitor : public ASTVisitor {
         virtual bool visit_num(AST_Num *node) { output->push_back(node); return false; }
         virtual bool visit_pass(AST_Pass *node) { output->push_back(node); return false; }
         virtual bool visit_print(AST_Print *node) { output->push_back(node); return false; }
+        virtual bool visit_repr(AST_Repr *node) { output->push_back(node); return false; }
         virtual bool visit_return(AST_Return *node) { output->push_back(node); return false; }
         virtual bool visit_slice(AST_Slice *node) { output->push_back(node); return false; }
         virtual bool visit_str(AST_Str *node) { output->push_back(node); return false; }

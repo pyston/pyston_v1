@@ -752,6 +752,20 @@ class IRGeneratorImpl : public IRGenerator {
                 RELEASE_ASSERT(0, "");
         }
 
+        CompilerVariable* evalRepr(AST_Repr *node) {
+            assert(state != PARTIAL);
+
+            CompilerVariable *var = evalExpr(node->value);
+            ConcreteCompilerVariable *cvar = var->makeConverted(emitter, var->getBoxType());
+            var->decvref(emitter);
+
+            std::vector<llvm::Value*> args{cvar->getValue()};
+            llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.repr, args);
+            cvar->decvref(emitter);
+
+            return new ConcreteCompilerVariable(STR, rtn, true);
+        }
+
         CompilerVariable* evalSlice(AST_Slice *node) {
             assert(state != PARTIAL);
 
@@ -893,6 +907,9 @@ class IRGeneratorImpl : public IRGenerator {
                     case AST_TYPE::Num:
                         rtn = evalNum(ast_cast<AST_Num>(node));
                         break;
+                    case AST_TYPE::Repr:
+                        rtn = evalRepr(ast_cast<AST_Repr>(node));
+                        break;
                     case AST_TYPE::Slice:
                         rtn = evalSlice(ast_cast<AST_Slice>(node));
                         break;
@@ -912,7 +929,7 @@ class IRGeneratorImpl : public IRGenerator {
                         rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node));
                         break;
                     default:
-                        printf("Unhandled expr type: %d (irgen.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
+                        printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
                         exit(1);
                 }
 

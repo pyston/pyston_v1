@@ -542,6 +542,14 @@ class CFGVisitor : public ASTVisitor {
             return makeName(rtn_name, AST_TYPE::Load);
         };
 
+        AST_expr* remapRepr(AST_Repr* node) {
+            AST_Repr *rtn = new AST_Repr();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
+            rtn->value = remapExpr(node->value);
+            return rtn;
+        }
+
         AST_expr* remapSlice(AST_Slice* node) {
             AST_Slice *rtn = new AST_Slice();
             rtn->lineno = node->lineno;
@@ -627,6 +635,9 @@ class CFGVisitor : public ASTVisitor {
                     return node;
                 case AST_TYPE::Num:
                     return node;
+                case AST_TYPE::Repr:
+                    rtn = remapRepr(ast_cast<AST_Repr>(node));
+                    break;
                 case AST_TYPE::Slice:
                     rtn = remapSlice(ast_cast<AST_Slice>(node));
                     break;

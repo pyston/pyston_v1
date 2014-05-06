@@ -278,7 +278,7 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
     raiseExc();
 }
 
-BoxedClass::BoxedClass(bool hasattrs, BoxedClass::Dtor dtor): HCBox(&type_flavor, type_cls), hasattrs(hasattrs), dtor(dtor), is_constant(false) {
+BoxedClass::BoxedClass(bool hasattrs, BoxedClass::Dtor dtor): HCBox(&type_flavor, type_cls), dtor(dtor), hasattrs(hasattrs), is_constant(false) {
 }
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
@@ -949,7 +949,7 @@ extern "C" BoxedString* str(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
-extern "C" BoxedString* repr(Box* obj) {
+extern "C" Box* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 

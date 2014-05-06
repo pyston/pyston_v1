@@ -22,7 +22,7 @@ struct GlobalFuncs {
 
     llvm::Value *boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction, *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice, *createClass;
 
-    llvm::Value *getattr, *setattr, *print, *nonzero, *binop, *compare, *augbinop, *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem,*delitem, *unaryop, *import;
+	llvm::Value *getattr, *setattr, *print, *nonzero, *binop, *compare, *augbinop, *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *delitem, *unaryop, *import, *repr;
 
     llvm::Value *checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError, *assertNameDefined, *assertFail;
 
