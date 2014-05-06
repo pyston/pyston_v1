@@ -42,8 +42,6 @@ extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
 extern "C" BoxedInt* hash(Box* obj);
 //extern "C" Box* abs_(Box* obj);
-//extern "C" Box* min_(Box* o0, Box* o1);
-//extern "C" Box* max_(Box* o0, Box* o1);
 extern "C" Box* open1(Box* arg);
 extern "C" Box* open2(Box* arg1, Box* arg2);
 //extern "C" Box* chr(Box* arg);

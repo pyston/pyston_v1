@@ -58,7 +58,24 @@ extern "C" Box* min_(Box* o0, Box* o1) {
     return o0;
 }
 
-extern "C" Box* max_(Box* o0, Box* o1) {
+extern "C" Box* max1(Box* container) {
+    Box* maxElement = 0;
+    auto func = [&](Box* e){
+        if (!maxElement) {
+            maxElement = e;
+        } else {
+            Box *comp_result = compareInternal(maxElement, e, AST_TYPE::Lt, NULL);
+            bool b = nonzero(comp_result);
+            if (b) {
+                maxElement = e;
+            }
+        }
+    };
+    iterateOverContainer(container, func);
+    return maxElement;
+}
+
+extern "C" Box* max2(Box* o0, Box* o1) {
     Box *comp_result = compareInternal(o0, o1, AST_TYPE::Lt, NULL);
     bool b = nonzero(comp_result);
     if (b) {
@@ -259,8 +276,12 @@ void setupBuiltins() {
     builtins_module->giveAttr("abs", abs_obj);
     min_obj = new BoxedFunction(boxRTFunction((void*)min_, NULL, 2, false));
     builtins_module->giveAttr("min", min_obj);
-    max_obj = new BoxedFunction(boxRTFunction((void*)max_, NULL, 2, false));
+
+    CLFunction* max_func = boxRTFunction((void*)max1, NULL, 1, false);
+    addRTFunction(max_func, (void*)max2, NULL, 2, false);
+    max_obj = new BoxedFunction(max_func);
     builtins_module->giveAttr("max", max_obj);
+
     chr_obj = new BoxedFunction(boxRTFunction((void*)chr, NULL, 1, false));
     builtins_module->giveAttr("chr", chr_obj);
     trap_obj = new BoxedFunction(boxRTFunction((void*)trap, NULL, 0, false));
