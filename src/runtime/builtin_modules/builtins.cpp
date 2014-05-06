@@ -49,7 +49,24 @@ extern "C" Box* abs_(Box* x) {
     }
 }
 
-extern "C" Box* min_(Box* o0, Box* o1) {
+extern "C" Box* min1(Box* container) {
+    Box* minElement = 0;
+    auto func = [&](Box* e){
+        if (!minElement) {
+            minElement = e;
+        } else {
+            Box *comp_result = compareInternal(minElement, e, AST_TYPE::Gt, NULL);
+            bool b = nonzero(comp_result);
+            if (b) {
+                minElement = e;
+            }
+        }
+    };
+    iterateOverContainer(container, func);
+    return minElement;
+}
+
+extern "C" Box* min2(Box* o0, Box* o1) {
     Box *comp_result = compareInternal(o0, o1, AST_TYPE::Gt, NULL);
     bool b = nonzero(comp_result);
     if (b) {
@@ -274,7 +291,10 @@ void setupBuiltins() {
     builtins_module->giveAttr("hash", hash_obj);
     abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, NULL, 1, false));
     builtins_module->giveAttr("abs", abs_obj);
-    min_obj = new BoxedFunction(boxRTFunction((void*)min_, NULL, 2, false));
+
+    CLFunction* min_func = boxRTFunction((void*)min1, NULL, 1, false);
+    addRTFunction(min_func, (void*)min2, NULL, 2, false);
+    min_obj = new BoxedFunction(min_func);
     builtins_module->giveAttr("min", min_obj);
 
     CLFunction* max_func = boxRTFunction((void*)max1, NULL, 1, false);
