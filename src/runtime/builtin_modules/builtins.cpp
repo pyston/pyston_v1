@@ -63,6 +63,10 @@ extern "C" Box* min1(Box* container) {
         }
     };
     iterateOverContainer(container, func);
+    if (!minElement) {
+        fprintf(stderr, "ValueError: min() arg is an empty sequence\n");
+        raiseExc();
+    }
     return minElement;
 }
 
@@ -89,6 +93,10 @@ extern "C" Box* max1(Box* container) {
         }
     };
     iterateOverContainer(container, func);
+    if (!maxElement) {
+        fprintf(stderr, "ValueError: max() arg is an empty sequence\n");
+        raiseExc();
+    }
     return maxElement;
 }
 
