@@ -28,3 +28,8 @@ for i in xrange(-5, 4):
     print l3
 
 print [1, 2, 3, 4, 5]
+
+# test count method
+l = [1, 2, 1, 2, 3]
+print l.count(1)
+print l.count(42)
