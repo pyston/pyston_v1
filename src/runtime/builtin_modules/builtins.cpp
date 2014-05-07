@@ -49,7 +49,28 @@ extern "C" Box* abs_(Box* x) {
     }
 }
 
-extern "C" Box* min_(Box* o0, Box* o1) {
+extern "C" Box* min1(Box* container) {
+    Box* minElement = 0;
+    auto func = [&](Box* e){
+        if (!minElement) {
+            minElement = e;
+        } else {
+            Box *comp_result = compareInternal(minElement, e, AST_TYPE::Gt, NULL);
+            bool b = nonzero(comp_result);
+            if (b) {
+                minElement = e;
+            }
+        }
+    };
+    iterateOverContainer(container, func);
+    if (!minElement) {
+        fprintf(stderr, "ValueError: min() arg is an empty sequence\n");
+        raiseExc();
+    }
+    return minElement;
+}
+
+extern "C" Box* min2(Box* o0, Box* o1) {
     Box *comp_result = compareInternal(o0, o1, AST_TYPE::Gt, NULL);
     bool b = nonzero(comp_result);
     if (b) {
@@ -58,7 +79,28 @@ extern "C" Box* min_(Box* o0, Box* o1) {
     return o0;
 }
 
-extern "C" Box* max_(Box* o0, Box* o1) {
+extern "C" Box* max1(Box* container) {
+    Box* maxElement = 0;
+    auto func = [&](Box* e){
+        if (!maxElement) {
+            maxElement = e;
+        } else {
+            Box *comp_result = compareInternal(maxElement, e, AST_TYPE::Lt, NULL);
+            bool b = nonzero(comp_result);
+            if (b) {
+                maxElement = e;
+            }
+        }
+    };
+    iterateOverContainer(container, func);
+    if (!maxElement) {
+        fprintf(stderr, "ValueError: max() arg is an empty sequence\n");
+        raiseExc();
+    }
+    return maxElement;
+}
+
+extern "C" Box* max2(Box* o0, Box* o1) {
     Box *comp_result = compareInternal(o0, o1, AST_TYPE::Lt, NULL);
     bool b = nonzero(comp_result);
     if (b) {
@@ -222,25 +264,11 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
 }
 
 Box* map2(Box* f, Box* container) {
-    static std::string _iter("__iter__");
-    static std::string _hasnext("__hasnext__");
-    static std::string _next("next");
-
-    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
-
     Box* rtn = new BoxedList();
-
-    while (true) {
-        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
-        bool hasnext_bool = nonzero(hasnext);
-        if (!hasnext_bool)
-            break;
-
-        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
-
-        Box* r = runtimeCall(f, 1, next, NULL, NULL, NULL);
-        listAppendInternal(rtn, r);
-    }
+    auto func = [&](Box* e){
+        listAppendInternal(rtn, runtimeCall(f, 1, e, NULL, NULL, NULL));
+    };
+    iterateOverContainer(container, func);
     return rtn;
 }
 
@@ -271,10 +299,17 @@ void setupBuiltins() {
     builtins_module->giveAttr("hash", hash_obj);
     abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, NULL, 1, false));
     builtins_module->giveAttr("abs", abs_obj);
-    min_obj = new BoxedFunction(boxRTFunction((void*)min_, NULL, 2, false));
+
+    CLFunction* min_func = boxRTFunction((void*)min1, NULL, 1, false);
+    addRTFunction(min_func, (void*)min2, NULL, 2, false);
+    min_obj = new BoxedFunction(min_func);
     builtins_module->giveAttr("min", min_obj);
-    max_obj = new BoxedFunction(boxRTFunction((void*)max_, NULL, 2, false));
+
+    CLFunction* max_func = boxRTFunction((void*)max1, NULL, 1, false);
+    addRTFunction(max_func, (void*)max2, NULL, 2, false);
+    max_obj = new BoxedFunction(max_func);
     builtins_module->giveAttr("max", max_obj);
+
     chr_obj = new BoxedFunction(boxRTFunction((void*)chr, NULL, 1, false));
     builtins_module->giveAttr("chr", chr_obj);
     trap_obj = new BoxedFunction(boxRTFunction((void*)trap, NULL, 0, false));
