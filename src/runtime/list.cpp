@@ -105,11 +105,16 @@ Box* _listSlice(BoxedList *self, i64 start, i64 stop, i64 step) {
 
     BoxedList *rtn = new BoxedList();
 
-    int cur = start;
-    while ((step > 0 && cur < stop) || (step < 0 && cur > stop)) {
-        listAppendInternal(rtn, self->elts->elts[cur]);
-        cur += step;
+    if ((step == 1) && ((stop-start) > 0)) {
+        listAppendArrayInternal(rtn, &self->elts->elts[start], stop-start);
+    } else {
+        int cur = start;
+        while ((step > 0 && cur < stop) || (step < 0 && cur > stop)) {
+            listAppendInternal(rtn, self->elts->elts[cur]);
+            cur += step;
+        }
     }
+
     return rtn;
 }
 
