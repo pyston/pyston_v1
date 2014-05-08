@@ -246,10 +246,14 @@ extern "C" {
 }
 
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
+    static const std::string start_str("start");
+    static const std::string stop_str("stop");
+    static const std::string step_str("step");
+
     BoxedSlice *rtn = new BoxedSlice(start, stop, step);
-    rtn->setattr("start", start, NULL, NULL);
-    rtn->setattr("stop", stop, NULL, NULL);
-    rtn->setattr("step", step, NULL, NULL);
+    rtn->setattr(start_str, start, NULL, NULL);
+    rtn->setattr(stop_str, stop, NULL, NULL);
+    rtn->setattr(step_str, step, NULL, NULL);
     return rtn;
 }
 
