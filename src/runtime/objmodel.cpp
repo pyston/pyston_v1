@@ -376,10 +376,13 @@ void HCBox::giveAttr(const std::string& attr, Box* val) {
 }
 
 void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs *rewrite_args, SetattrRewriteArgs2 *rewrite_args2) {
-    RELEASE_ASSERT(attr != "None" || this == builtins_module, "can't assign to None");
+    static const std::string none_str("None");
+    static const std::string getattr_str("__getattr__");
+    static const std::string getattribute_str("__getattribute__");
 
-    bool isgetattr = (attr == "__getattr__" || attr == "__getattribute__");
-    if (isgetattr && this->cls == type_cls) {
+    RELEASE_ASSERT(attr != none_str || this == builtins_module, "can't assign to None");
+
+    if ((this->cls == type_cls) && (attr == getattr_str || attr == getattribute_str)) {
         // Will have to embed the clear in the IC, so just disable the patching for now:
         rewrite_args = NULL;
         rewrite_args2 = NULL;
