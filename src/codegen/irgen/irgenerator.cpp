@@ -565,26 +565,28 @@ class IRGeneratorImpl : public IRGenerator {
             }
 
             //if (VERBOSITY("irgen") >= 1)
-                //_addAnnotation("end_of_call");
+            //_addAnnotation("end_of_call");
 
             return rtn;
         }
 
-	    void doDelete(AST_Delete* node) {
-			assert(state != PARTIAL);
-			for(int i = 0; i < node->targets.size();i++) {
-				if (node->targets[i]->type == AST_TYPE::Subscript){
-					AST_Subscript* substmt = static_cast<AST_Subscript*>(node->targets[i]);
-					_doDelitem(substmt);
-				} else if (node->targets[i]->type == AST_TYPE::Attribute){
-					//delete an attribute
-				}else if(node->targets[i]->type == AST_TYPE::Name){
-					//delete a instance
-				}
-			}
-		}
-
-    //invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
+        void doDelete(AST_Delete* node) {
+            assert(state != PARTIAL);
+            for(int i = 0; i < node->targets.size();i++) {
+                assert(node->targets[i]->type == AST_TYPE::Subscript);
+                if (node->targets[i]->type == AST_TYPE::Subscript){
+                    AST_Subscript* substmt = static_cast<AST_Subscript*>(node->targets[i]);
+                    _doDelitem(substmt);
+                } else if (node->targets[i]->type == AST_TYPE::Attribute){
+                    //delete an attribute
+                }else if(node->targets[i]->type == AST_TYPE::Name){
+                    //delete a instance
+                    
+                }
+            }
+        }
+        
+        //invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
         void _doDelitem(AST_Subscript* target) {
             assert(state != PARTIAL);
             CompilerVariable *tget = evalExpr(target->value);

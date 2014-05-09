@@ -319,6 +319,7 @@ class HCBox : public Box {
 
         HCBox(const ObjectFlavor *flavor, BoxedClass *cls);
 
+		void delattr(const std::string &attr);
         void setattr(const std::string &attr, Box* val, SetattrRewriteArgs* rewrite_args, SetattrRewriteArgs2 *rewrite_args2);
         void giveAttr(const std::string &attr, Box* val);
         Box* getattr(const std::string &attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);

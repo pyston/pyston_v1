@@ -34,6 +34,7 @@ enum PatchpointType {
     Setattr,
     Getitem,
     Setitem,
+	Delitem,
     Binexp,
     Nonzero,
 };
@@ -88,6 +89,7 @@ PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction* parent_cf, TypeRe
 PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
 PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
 PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
+PatchpointSetupInfo* createDelitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
 PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
 PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction* parent_cf, TypeRecorder *type_recorder);
 

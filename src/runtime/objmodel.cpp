@@ -366,6 +366,10 @@ Box* HCBox::getattr(const std::string &attr, GetattrRewriteArgs* rewrite_args, G
     return rtn;
 }
 
+void HCBox::delattr(const std::string& attr) {
+
+}
+
 void HCBox::giveAttr(const std::string& attr, Box* val) {
     assert(this->peekattr(attr) == NULL);
     this->setattr(attr, val, NULL, NULL);
