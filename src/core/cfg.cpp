@@ -334,7 +334,7 @@ class CFGVisitor : public ASTVisitor {
             return rtn;
         }
 
-        AST_expr* remapDict(AST_Dict* node) {
+	    AST_expr* remapDict(AST_Dict* node) {
             AST_Dict *rtn = new AST_Dict();
             rtn->lineno = node->lineno;
             rtn->col_offset = node->col_offset;
@@ -824,6 +824,18 @@ class CFGVisitor : public ASTVisitor {
             push_back(assign);
             return true;
         }
+	    virtual bool visit_delete(AST_Delete* node){
+			AST_Delete *astdel = new AST_Delete();
+			astdel->lineno = node->lineno;
+			astdel->col_offset = node->col_offset;
+			
+			for (auto t : node->targets) {
+				//TODO is false the correct value?
+				astdel->targets.push_back(remapExpr(t,false));
+			}
+			push_back(astdel);
+			return true;
+		}
 
         virtual bool visit_expr(AST_Expr* node) {
             AST_Expr* remapped = new AST_Expr();

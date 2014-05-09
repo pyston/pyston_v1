@@ -425,6 +425,12 @@ class BasicBlockTypePropagator : public ExprVisitor, public StmtVisitor {
             _doSet(node->name, t);
         }
 
+	    virtual void visit_delete(AST_Delete *node) {
+			//TODO again, what happens if i delete attribute or object
+			for(int i = 0; i < node->targets.size();i++) {
+				getType(node->targets[i]);
+			}
+		}
         virtual void visit_expr(AST_Expr* node) {
             if (EXPAND_UNNEEDED) {
                 if (node->value != NULL)

@@ -1998,6 +1998,43 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     }
 }
 
+// del target[slice]
+extern "C" void delitem(Box* target, Box* slice) {
+    static StatCounter slowpath_delitem("slowpath_delitem");
+    slowpath_delitem.log();
+    static std::string str_delitem("__delitem__");
+
+    //not sure about the temporal register number
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "delitem"));
+
+    Box* rtn;
+    RewriterVar r_rtn;
+    if (rewriter.get()) {
+		//correct?
+        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0));
+        rewrite_args.arg1 = rewriter->getArg(1);
+       
+        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, &rewrite_args, 1, slice);
+
+        if (!rewrite_args.out_success)
+            rewriter.reset(NULL);
+        else if (rtn)
+            r_rtn = rewrite_args.out_rtn;
+    } else {
+        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, NULL, 1, slice);
+    }
+
+    if (rtn == NULL) {
+      //TODO provide the correct error here
+        fprintf(stderr, "TODO TypeError: '%s' doesn't support del\n", getTypeName(target)->c_str());
+        raiseExc();
+    }
+
+    if (rewriter.get()) {
+        rewriter->commit();
+    }
+}
+
 // A wrapper around the HCBox constructor
 // TODO is there a way to avoid the indirection?
 static Box* makeHCBox(ObjectFlavor *flavor, BoxedClass *cls) {

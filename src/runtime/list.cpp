@@ -211,6 +211,43 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     }
 }
 
+extern "C" Box * listDelitem(BoxedList* self, Box* slice) {
+    if (slice->cls == int_cls){
+		BoxedInt* islice = static_cast<BoxedInt*>(slice);
+        int64_t n = islice->n;
+        if (n < 0)
+            n = self->size + n;
+		
+        if (n < 0 || n >= self->size) {
+            fprintf(stderr, "IndexError: list index out of range\n");
+            raiseExc();
+        }
+		memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
+		self->size--;
+	} else if(slice->cls == slice_cls){
+		BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
+
+		i64 start, stop, step;
+		parseSlice(sslice, self->size, &start, &stop, &step);
+		RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
+		
+		assert(0 <= start && start < self->size);
+		ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
+		assert(start <= stop);
+		
+		int remaining_elts = self->size - stop;
+		
+		memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
+		//TODO release memory?
+		self->size -= (stop - start);
+	}else{
+		fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
+		raiseExc();
+    }      
+    
+    return None;
+}
+
 extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {
         fprintf(stderr, "TypeError: an integer is required\n");
@@ -391,6 +428,7 @@ void setupList() {
     addRTFunction(getitem, (void*)listGetitemSlice, NULL, std::vector<ConcreteCompilerType*>{LIST, SLICE}, false);
     addRTFunction(getitem, (void*)listGetitem, NULL, std::vector<ConcreteCompilerType*>{LIST, NULL}, false);
     list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
+	list_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)listDelitem, NULL, 2, false)));
 
     list_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
 
