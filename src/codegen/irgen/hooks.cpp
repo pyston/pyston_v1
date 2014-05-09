@@ -52,7 +52,7 @@ const std::string SourceInfo::getName() {
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->name;
         case AST_TYPE::Module:
-            return "module";
+            return this->parent_module->name();
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }

@@ -52,6 +52,16 @@ BoxedModule::BoxedModule(const std::string &name, const std::string &fn) : HCBox
     this->giveAttr("__file__", boxString(fn));
 }
 
+std::string BoxedModule::name(){
+    Box* name = this->peekattr("__name__");
+    if (!name || name->cls != str_cls) {
+        return "?";
+    } else {
+        BoxedString *sname = static_cast<BoxedString*>(name);
+        return sname->s;
+    }
+}
+
 extern "C" Box* boxCLFunction(CLFunction *f) {
     return new BoxedFunction(f);
 }
@@ -317,20 +327,12 @@ Box* moduleRepr(BoxedModule* m) {
     assert(m->cls == module_cls);
 
     std::ostringstream os;
-    os << "<module '";
-
-    Box* name = m->peekattr("__name__");
-    if (!name || name->cls != str_cls) {
-        os << '?';
-    } else {
-        BoxedString *sname = static_cast<BoxedString*>(name);
-        os << sname->s;
-    }
+    os << "<module '" << m->name() << "' ";
 
     if (m->fn == "__builtin__") {
-        os << "' (built-in)>";
+        os << "(built-in)>";
     } else {
-        os << "' from '" << m->fn << "'>";
+        os << "from '" << m->fn << "'>";
     }
     return boxString(os.str());
 }
