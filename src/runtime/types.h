@@ -256,6 +256,7 @@ class BoxedModule : public HCBox {
         const std::string fn; // for traceback purposes; not the same as __file__
 
         BoxedModule(const std::string &name, const std::string &fn);
+        std::string name();
 };
 
 class BoxedSlice : public HCBox {
