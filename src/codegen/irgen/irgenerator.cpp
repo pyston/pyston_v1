@@ -569,19 +569,26 @@ class IRGeneratorImpl : public IRGenerator {
 
             return rtn;
         }
-
+        
         void doDelete(AST_Delete* node) {
             assert(state != PARTIAL);
-            for(int i = 0; i < node->targets.size();i++) {
-                assert(node->targets[i]->type == AST_TYPE::Subscript);
-                if (node->targets[i]->type == AST_TYPE::Subscript){
-                    AST_Subscript* substmt = static_cast<AST_Subscript*>(node->targets[i]);
-                    _doDelitem(substmt);
-                } else if (node->targets[i]->type == AST_TYPE::Attribute){
-                    //delete an attribute
-                }else if(node->targets[i]->type == AST_TYPE::Name){
-                    //delete a instance
-                    
+            //each del statement only del on targets now
+            RELEASE_ASSERT(node->targets[0]->type == AST_TYPE::Subscript, "");
+            for (int i = 0; i < node->targets.size(); i++){
+                switch (node->targets[i]->type) {
+                    case AST_TYPE::Subscript:
+                        _doDelitem(static_cast<AST_Subscript*>(node->targets[i]));
+                        break;
+                    case AST_TYPE::Attribute:
+                        //delete an attribute
+                        break;
+                    case AST_TYPE::Name:
+                        //delete a instance
+                        break;
+                    default:
+                        //already grantee this in cfg.cpp
+                        ASSERT(0, "UnSupported del target: %d", node->targets[i]->type);
+                        abort();
                 }
             }
         }
@@ -591,27 +598,26 @@ class IRGeneratorImpl : public IRGenerator {
             assert(state != PARTIAL);
             CompilerVariable *tget = evalExpr(target->value);
             CompilerVariable *slice = evalExpr(target->slice);
-
+            
             ConcreteCompilerVariable *converted_target = tget->makeConverted(emitter, tget->getBoxType());
             ConcreteCompilerVariable *converted_slice = slice->makeConverted(emitter, slice->getBoxType());
             tget->decvref(emitter);
             slice->decvref(emitter);
-			
+            
             bool do_patchpoint = ENABLE_ICSETITEMS && (irstate ->getEffortLevel() != EffortLevel::INTERPRETED);
             if (do_patchpoint) {
-				PatchpointSetupInfo *pp = patchpoints::createDelitemPatchpoint(emitter.currentFunction(), getEmptyOpInfo().getTypeRecorder());
+                PatchpointSetupInfo *pp = patchpoints::createDelitemPatchpoint(emitter.currentFunction(), getEmptyOpInfo().getTypeRecorder());
 
                 std::vector<llvm::Value*> llvm_args;
                 llvm_args.push_back(converted_target->getValue());
                 llvm_args.push_back(converted_slice->getValue());
-              
+                
                 emitter.createPatchpoint(pp, (void*)pyston::delitem, llvm_args);
             } else {
-            
-				emitter.getBuilder()->CreateCall2(g.funcs.delitem,
-                        converted_target->getValue(), converted_slice->getValue());
+                emitter.getBuilder()->CreateCall2(g.funcs.delitem,
+                                                  converted_target->getValue(), converted_slice->getValue());
             }
-
+            
             converted_target->decvref(emitter);
             converted_slice->decvref(emitter);
         }
@@ -1592,10 +1598,10 @@ class IRGeneratorImpl : public IRGenerator {
                 case AST_TYPE::ClassDef:
                     doClassDef(ast_cast<AST_ClassDef>(node));
                     break;
-			    case AST_TYPE::Delete:
-					doDelete(ast_cast<AST_Delete>(node));
-					break;
-    			case AST_TYPE::Expr:
+                case AST_TYPE::Delete:
+                    doDelete(ast_cast<AST_Delete>(node));
+                    break;
+                case AST_TYPE::Expr:
                     doExpr(ast_cast<AST_Expr>(node));
                     break;
                 case AST_TYPE::FunctionDef:

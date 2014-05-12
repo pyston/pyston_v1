@@ -233,13 +233,12 @@ extern "C" Box * listDelitem(BoxedList* self, Box* slice) {
         int remaining_elts = self->size - stop;
 	
         memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
-        //TODO release memory?
         self->size -= (stop - start);
     }else{
         fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
         raiseExc();
     }      
-    
+    //TODO maybe we need to realloc the elts here
     return None;
 }
 

@@ -334,18 +334,18 @@ class CFGVisitor : public ASTVisitor {
             return rtn;
         }
 
-	    AST_expr* remapDict(AST_Dict* node) {
+        AST_expr* remapDict(AST_Dict* node) {
             AST_Dict *rtn = new AST_Dict();
             rtn->lineno = node->lineno;
             rtn->col_offset = node->col_offset;
-
+            
             for (auto k : node->keys) {
                 rtn->keys.push_back(remapExpr(k));
             }
             for (auto v : node->values) {
                 rtn->values.push_back(remapExpr(v));
             }
-
+            
             return rtn;
         };
 
@@ -824,19 +824,39 @@ class CFGVisitor : public ASTVisitor {
             push_back(assign);
             return true;
         }
-	    virtual bool visit_delete(AST_Delete* node){
-			AST_Delete *astdel = new AST_Delete();
-			astdel->lineno = node->lineno;
-			astdel->col_offset = node->col_offset;
-			
-			for (auto t : node->targets) {
-				//TODO is false the correct value?
-				astdel->targets.push_back(remapExpr(t,false));
-			}
-			push_back(astdel);
-			return true;
-		}
-
+        
+        virtual bool visit_delete(AST_Delete* node){
+            for (auto t : node->targets) {
+                RELEASE_ASSERT(t->type == AST_TYPE::Subscript, "");
+                AST_Delete *astdel = new AST_Delete();
+                astdel->lineno = node->lineno;
+                astdel->col_offset = node->col_offset;
+                AST_expr* target = NULL;
+                switch ( t->type ) {
+                    case AST_TYPE::Subscript: {
+                        AST_Subscript* s = static_cast<AST_Subscript*>(t);
+                        AST_Subscript* astsubs = new AST_Subscript();
+                        astsubs->value = remapExpr(s->value);
+                        astsubs->slice = remapExpr(s->slice);
+                        astsubs->ctx_type = AST_TYPE::Del;
+                        target = astsubs;
+                        break;
+                    }
+                    
+                    case AST_TYPE::Name:
+                    case AST_TYPE::Attribute:
+                        break;
+                    default:
+                        ASSERT(0, "UnSupported del target: %d", t->type);
+                        abort();
+                }
+                astdel->targets.push_back(target);
+                push_back(astdel);
+            }
+           
+            return true;
+        }
+        
         virtual bool visit_expr(AST_Expr* node) {
             AST_Expr* remapped = new AST_Expr();
             remapped->lineno = node->lineno;

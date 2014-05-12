@@ -361,14 +361,14 @@ class AST_Dict : public AST_expr {
 };
 
 class AST_Delete : public AST_stmt {
- public:
-	std::vector<AST_expr*>  targets;
-	virtual void accept(ASTVisitor *v);
-	virtual void accept_stmt(StmtVisitor *v);
+    public:
+        std::vector<AST_expr*>  targets;
+        virtual void accept(ASTVisitor *v);
+        virtual void accept_stmt(StmtVisitor *v);
 
- AST_Delete() : AST_stmt(AST_TYPE::Delete) {};
-	
-	static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
+        AST_Delete() : AST_stmt(AST_TYPE::Delete) {};
+        	
+        static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
 };
 
 class AST_Expr : public AST_stmt {

@@ -68,7 +68,7 @@ void force() {
     FORCE(getclsattr);
     FORCE(getGlobal);
     FORCE(setitem);
-	FORCE(delitem);
+    FORCE(delitem);
     FORCE(unaryop);
     FORCE(import);
     FORCE(repr);
