@@ -309,7 +309,8 @@ endef
 format:
 	find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
 check_format:
-	$(TOOLS_DIR)/check_format.sh $(LLVM_BIN)/clang-format
+	$(ECHO) checking formatting...
+	$(VERB) $(TOOLS_DIR)/check_format.sh $(LLVM_BIN)/clang-format
 
 .PHONY: test test_debug test_prof test_release
 test_debug: pyston_dbg ext
