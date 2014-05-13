@@ -911,6 +911,36 @@ public:
         return true;
     }
 
+    virtual bool visit_delete(AST_Delete* node) {
+        for (auto t : node->targets) {
+            AST_Delete* astdel = new AST_Delete();
+            astdel->lineno = node->lineno;
+            astdel->col_offset = node->col_offset;
+            AST_expr* target = NULL;
+            switch (t->type) {
+                case AST_TYPE::Subscript: {
+                    AST_Subscript* s = static_cast<AST_Subscript*>(t);
+                    AST_Subscript* astsubs = new AST_Subscript();
+                    astsubs->value = remapExpr(s->value);
+                    astsubs->slice = remapExpr(s->slice);
+                    astsubs->ctx_type = AST_TYPE::Del;
+                    target = astsubs;
+                    break;
+                }
+
+                case AST_TYPE::Name:
+                case AST_TYPE::Attribute:
+                    RELEASE_ASSERT(t->type == AST_TYPE::Subscript, "");
+                default:
+                    RELEASE_ASSERT(0, "UnSupported del target: %d", t->type);
+            }
+            astdel->targets.push_back(target);
+            push_back(astdel);
+        }
+
+        return true;
+    }
+
     virtual bool visit_expr(AST_Expr* node) {
         AST_Expr* remapped = new AST_Expr();
         remapped->lineno = node->lineno;

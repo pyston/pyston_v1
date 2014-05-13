@@ -1,3 +1,4 @@
+
 // Copyright (c) 2014 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,6 +51,24 @@ Box* listiterNext(Box* s) {
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
     return rtn;
+}
+
+const int BoxedList::INITIAL_CAPACITY = 8;
+// TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
+void BoxedList::shrink() {
+    // TODO more attention to the shrink condition to avoid frequent shrink and alloc
+    if (capacity > size * 3) {
+        int new_capacity = std::max(static_cast<int64_t>(INITIAL_CAPACITY), capacity / 2);
+        if (size > 0) {
+            elts = (BoxedList::ElementArray*)rt_realloc(elts,
+                                                        new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+            capacity = new_capacity;
+        } else if (size == 0) {
+            rt_free(elts);
+            elts = NULL;
+            capacity = 0;
+        }
+    }
 }
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?

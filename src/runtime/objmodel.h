@@ -60,6 +60,7 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* getGlobal(BoxedModule* m, std::string* name, bool from_global);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
+extern "C" void delitem(Box* target, Box* slice);
 extern "C" Box* getclsattr(Box* obj, const char* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);
 extern "C" Box* import(const std::string* name);
