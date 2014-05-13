@@ -1,0 +1,24 @@
+BasedOnStyle: WebKit
+
+AccessModifierOffset: -4
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+BreakBeforeBraces: Attach
+BreakConstructorInitializersBeforeComma: false
+ColumnLimit: 120
+IndentCaseLabels: true
+IndentWidth: 4
+Language: Cpp
+MaxEmptyLinesToKeep: 3
+NamespaceIndentation: None
+PointerBindsToType: true
+SpaceBeforeParens: ControlStatements
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+Standard: Cpp03
+TabWidth: 4
+UseTab: Never
+
+# Unset settings are undecided
