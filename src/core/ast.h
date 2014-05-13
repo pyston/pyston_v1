@@ -15,6 +15,8 @@
 #ifndef PYSTON_CORE_AST_H
 #define PYSTON_CORE_AST_H
 
+#include "core/common.h"
+
 #include <cassert>
 #include <cstdlib>
 #include <stdint.h>

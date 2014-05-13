@@ -57,7 +57,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
         assert(!code);
 
         if (name == "__LLVM_StackMaps") {
-            uint64_t stackmap_offset;
+            uint64_t stackmap_offset = 0;
             code = I->getFileOffset(stackmap_offset);
             assert(!code);
             // code = I->getSize(stackmap_size);

@@ -173,7 +173,7 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
 
     for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
         llvm::StringRef name;
-        uint64_t addr, size, offset;
+        uint64_t addr, size, offset=0;
         code = I->getName(name);
         assert(!code);
         code = I->getAddress(addr);
