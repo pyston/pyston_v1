@@ -58,7 +58,6 @@ struct StackMap {
 
 StackMap* parseStackMap();
 llvm::JITEventListener* makeStackMapListener();
-
 }
 
 #endif

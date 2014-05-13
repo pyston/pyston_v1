@@ -41,7 +41,7 @@ void showBacktrace() {
     while (unw_step(&cursor) > 0) {
         unw_get_reg(&cursor, UNW_REG_IP, &ip);
         unw_get_reg(&cursor, UNW_REG_SP, &sp);
-        printf ("ip = %lx, sp = %lx\n", (long) ip, (long) sp);
+        printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
 
         std::string py_info = getPythonFuncAt((void*)ip, (void*)sp);
         if (py_info.size()) {
@@ -51,10 +51,11 @@ void showBacktrace() {
 }
 
 void raiseExc() {
-    if (VERBOSITY()) showBacktrace();
-    //if (VERBOSITY()) raise(SIGTRAP);
-    if (VERBOSITY()) abort();
+    if (VERBOSITY())
+        showBacktrace();
+    // if (VERBOSITY()) raise(SIGTRAP);
+    if (VERBOSITY())
+        abort();
     exit(1);
 }
-
 }

@@ -22,21 +22,20 @@
 
 namespace pyston {
 
-template <typename T>
-class BBAnalyzer {
-    public:
-        typedef std::unordered_map<std::string, T> Map;
-        typedef std::unordered_map<CFGBlock*, Map> AllMap;
+template <typename T> class BBAnalyzer {
+public:
+    typedef std::unordered_map<std::string, T> Map;
+    typedef std::unordered_map<CFGBlock*, Map> AllMap;
 
-        virtual ~BBAnalyzer() {}
+    virtual ~BBAnalyzer() {}
 
-        virtual T merge(T from, T into) const = 0;
-        virtual T mergeBlank(T into) const = 0;
-        virtual void processBB(Map &starting, CFGBlock *block) const = 0;
+    virtual T merge(T from, T into) const = 0;
+    virtual T mergeBlank(T into) const = 0;
+    virtual void processBB(Map& starting, CFGBlock* block) const = 0;
 };
 
 template <typename T>
-typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &analyzer, bool reverse) {
+typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& analyzer, bool reverse) {
     assert(!reverse);
 
     typedef typename BBAnalyzer<T>::Map Map;
@@ -49,17 +48,18 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
     q.push_back(cfg->getStartingBlock());
 
     while (q.size()) {
-        CFGBlock *block = q.back();
+        CFGBlock* block = q.back();
         q.pop_back();
 
         Map initial = states[block];
-        if (VERBOSITY("analysis") >= 2) printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
+        if (VERBOSITY("analysis") >= 2)
+            printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
 
         Map ending = Map(initial);
         analyzer.processBB(ending, block);
 
         for (int i = 0; i < block->successors.size(); i++) {
-            CFGBlock *next_block = block->successors[i];
+            CFGBlock* next_block = block->successors[i];
             bool changed = false;
             bool initial = false;
             if (states.count(next_block) == 0) {
@@ -67,8 +67,8 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
                 initial = true;
             }
 
-            Map &next = states[next_block];
-            for (const auto &p : ending) {
+            Map& next = states[next_block];
+            for (const auto& p : ending) {
                 if (next.count(p.first) == 0) {
                     changed = true;
                     if (initial) {
@@ -77,7 +77,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
                         next[p.first] = analyzer.mergeBlank(p.second);
                     }
                 } else {
-                    T &next_elt = next[p.first];
+                    T& next_elt = next[p.first];
 
                     T new_elt = analyzer.merge(p.second, next_elt);
                     if (next_elt != new_elt) {
@@ -87,7 +87,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
                 }
             }
 
-            for (const auto &p : ending) {
+            for (const auto& p : ending) {
                 if (ending.count(p.first))
                     continue;
 
@@ -108,7 +108,6 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T> &
 
     return states;
 }
-
 }
 
 #endif

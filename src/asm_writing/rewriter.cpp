@@ -50,11 +50,12 @@ Register fromArgnum(int argnum) {
     RELEASE_ASSERT(0, "%d", argnum);
 }
 
-RewriterVar::RewriterVar(Rewriter *rewriter, int argnum, int version) : rewriter(rewriter), argnum(argnum), version(version) {
-    //assert(rewriter.icentry.get());
+RewriterVar::RewriterVar(Rewriter* rewriter, int argnum, int version)
+    : rewriter(rewriter), argnum(argnum), version(version) {
+    // assert(rewriter.icentry.get());
 }
 
-RewriterVar& RewriterVar::operator=(const RewriterVar &rhs) {
+RewriterVar& RewriterVar::operator=(const RewriterVar& rhs) {
     assert(rewriter == NULL || rewriter == rhs.rewriter);
     rhs.assertValid();
     rewriter = rhs.rewriter;
@@ -81,7 +82,7 @@ void RewriterVar::unlock() {
 #endif
 
 int RewriterVar::getArgnum() {
-    //assert(rewriter);
+    // assert(rewriter);
     return argnum;
 }
 
@@ -128,7 +129,7 @@ RewriterVar RewriterVar::move(int dest_argnum) {
                 rewriter->assembler->mov(Indirect(RSP, offset), fromArgnum(dest_argnum));
             } else {
                 int stack_size = rewriter->rewrite->getFuncStackSize();
-                ASSERT(stack_size > 0 && stack_size < (1<<30), "%d", stack_size);
+                ASSERT(stack_size > 0 && stack_size < (1 << 30), "%d", stack_size);
                 int offset = (this->argnum - 6) * 8 - (stack_size - 8);
                 rewriter->assembler->mov(Indirect(RBP, offset), fromArgnum(dest_argnum));
             }
@@ -151,7 +152,7 @@ void RewriterVar::addGuard(intptr_t val) {
 
     int bytes = 8 * rewriter->pushes.size() + rewriter->alloca_bytes;
 
-    if (val < (-1L<<31) || val >= (1L<<31) - 1) {
+    if (val < (-1L << 31) || val >= (1L << 31) - 1) {
         rewriter->assembler->push(RBP);
         rewriter->assembler->mov(Immediate(val), RBP);
         rewriter->assembler->cmp(fromArgnum(this->argnum), RBP);
@@ -159,7 +160,7 @@ void RewriterVar::addGuard(intptr_t val) {
     } else {
         rewriter->assembler->cmp(fromArgnum(this->argnum), Immediate(val));
     }
-    rewriter->assembler->jne(JumpDestination::fromStart(rewriter->rewrite->getSlotSize() - bytes/8));
+    rewriter->assembler->jne(JumpDestination::fromStart(rewriter->rewrite->getSlotSize() - bytes / 8));
 }
 
 void RewriterVar::addAttrGuard(int offset, intptr_t val) {
@@ -170,7 +171,7 @@ void RewriterVar::addAttrGuard(int offset, intptr_t val) {
 
     int bytes = 8 * rewriter->pushes.size() + rewriter->alloca_bytes;
 
-    if (val < (-1L<<31) || val >= (1L<<31) - 1) {
+    if (val < (-1L << 31) || val >= (1L << 31) - 1) {
         rewriter->assembler->push(RBP);
         rewriter->assembler->mov(Immediate(val), RBP);
         rewriter->assembler->cmp(Indirect(fromArgnum(this->argnum), offset), RBP);
@@ -178,7 +179,7 @@ void RewriterVar::addAttrGuard(int offset, intptr_t val) {
     } else {
         rewriter->assembler->cmp(Indirect(fromArgnum(this->argnum), offset), Immediate(val));
     }
-    rewriter->assembler->jne(JumpDestination::fromStart(rewriter->rewrite->getSlotSize() - bytes/8));
+    rewriter->assembler->jne(JumpDestination::fromStart(rewriter->rewrite->getSlotSize() - bytes / 8));
 }
 
 void RewriterVar::addGuardNotEq(intptr_t val) {
@@ -189,7 +190,7 @@ void RewriterVar::addGuardNotEq(intptr_t val) {
 
     int bytes = 8 * rewriter->pushes.size() + rewriter->alloca_bytes;
     rewriter->assembler->cmp(fromArgnum(this->argnum), Immediate(val));
-    rewriter->assembler->je(JumpDestination::fromStart(rewriter->rewrite->getSlotSize() - bytes/8));
+    rewriter->assembler->je(JumpDestination::fromStart(rewriter->rewrite->getSlotSize() - bytes / 8));
 }
 
 bool RewriterVar::isInReg() {
@@ -205,7 +206,7 @@ void RewriterVar::push() {
     rewriter->addPush(this->version);
 }
 
-RewriterVar RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, const RewriterVar &val, int dest) {
+RewriterVar RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, const RewriterVar& val, int dest) {
     assertValid();
 
     rewriter->assembler->cmp(fromArgnum(this->argnum), fromArgnum(val.argnum));
@@ -239,7 +240,7 @@ Rewriter* Rewriter::createRewriter(void* ic_rtn_addr, int num_orig_args, int num
 
     static StatCounter rewriter_nopatch("rewriter_nopatch");
 
-    ICInfo *ic = getICInfo(ic_rtn_addr);
+    ICInfo* ic = getICInfo(ic_rtn_addr);
     if (ic == NULL) {
         rewriter_nopatch.log();
         return NULL;
@@ -249,21 +250,22 @@ Rewriter* Rewriter::createRewriter(void* ic_rtn_addr, int num_orig_args, int num
     return new Rewriter(ic->startRewrite(debug_name), num_orig_args, num_temp_regs);
 }
 
-Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_orig_args, int num_temp_regs) :
-    rewrite(rewrite), assembler(rewrite->getAssembler()),
-        num_orig_args(num_orig_args), num_temp_regs(num_temp_regs), alloca_bytes(0), max_pushes(0)
+Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_orig_args, int num_temp_regs)
+    : rewrite(rewrite), assembler(rewrite->getAssembler()), num_orig_args(num_orig_args), num_temp_regs(num_temp_regs),
+      alloca_bytes(0), max_pushes(0)
 #ifndef NDEBUG
-        , next_version(2), changed_something(false)
+      ,
+      next_version(2), changed_something(false)
 #endif
-        , ndecisions(0), decision_path(1)
-         {
+      ,
+      ndecisions(0), decision_path(1) {
 
-    //printf("trapping here\n");
-    //assembler->trap();
+// printf("trapping here\n");
+// assembler->trap();
 
-    //for (int i = 0; i < num_temp_regs; i++) {
-        //icentry->push(-2 - i);
-    //}
+// for (int i = 0; i < num_temp_regs; i++) {
+// icentry->push(-2 - i);
+//}
 
 #ifndef NDEBUG
     for (int i = -3; i < MAX_ARGS; i++) {
@@ -279,7 +281,7 @@ void Rewriter::addPush(int version) {
 
 RewriterVar Rewriter::alloca_(int bytes, int dest_argnum) {
     // TODO should check to make sure we aren't crossing push+pops and allocas
-    //printf("alloca()ing %d bytes\n", bytes);
+    // printf("alloca()ing %d bytes\n", bytes);
     assert(bytes % sizeof(void*) == 0);
     alloca_bytes += bytes;
 
@@ -314,7 +316,7 @@ int Rewriter::mutate(int argnum) {
     assert(versions.count(argnum));
 
     int rtn_version = ++next_version;
-    //printf("mutating %d to %d\n", argnum, rtn_version);
+    // printf("mutating %d to %d\n", argnum, rtn_version);
     versions[argnum] = rtn_version;
     return rtn_version;
 }
@@ -357,7 +359,7 @@ RewriterVar Rewriter::call(void* func_addr) {
 #ifndef NDEBUG
     changed_something = true;
 #endif
-    //printf("%ld pushes, %d alloca bytes\n", pushes.size(), alloca_bytes);
+    // printf("%ld pushes, %d alloca bytes\n", pushes.size(), alloca_bytes);
 
     int bytes = 8 * pushes.size() + alloca_bytes;
     bool didpush;
@@ -391,7 +393,7 @@ RewriterVar Rewriter::pop(int argnum) {
 #ifndef NDEBUG
     versions[argnum] = version;
 #endif
-    //printf("popping %d to %d\n", version, argnum);
+    // printf("popping %d to %d\n", version, argnum);
 
     assembler->pop(fromArgnum(argnum));
     return RewriterVar(this, argnum, version);
@@ -403,7 +405,7 @@ void Rewriter::addDecision(int way) {
     decision_path = (decision_path << 1) | way;
 }
 
-void Rewriter::addDependenceOn(ICInvalidator &invalidator) {
+void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
     rewrite->addDependenceOn(invalidator);
 }
 
@@ -426,5 +428,4 @@ void Rewriter::finishAssembly(int continue_offset) {
         assembler->pop(RAX);
     }
 }
-
 }

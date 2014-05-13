@@ -46,17 +46,17 @@ union Val {
 
 typedef std::unordered_map<llvm::Value*, Val> SymMap;
 
-int width(llvm::Type *t, const llvm::DataLayout &dl) {
+int width(llvm::Type* t, const llvm::DataLayout& dl) {
     return dl.getTypeSizeInBits(t) / 8;
-    //if (t == g.i1) return 1;
-    //if (t == g.i64) return 8;
-    //if (t->isPointerTy()) return 8;
-//
-    //t->dump();
-    //RELEASE_ASSERT(0, "");
+    // if (t == g.i1) return 1;
+    // if (t == g.i64) return 8;
+    // if (t->isPointerTy()) return 8;
+    //
+    // t->dump();
+    // RELEASE_ASSERT(0, "");
 }
 
-int width(llvm::Value *v, const llvm::DataLayout &dl) {
+int width(llvm::Value* v, const llvm::DataLayout& dl) {
     return width(v->getType(), dl);
 }
 
@@ -64,22 +64,22 @@ int width(llvm::Value *v, const llvm::DataLayout &dl) {
 //#define VERBOSITY(x) 2
 #define TIME_INTERPRETS
 
-Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
+Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
     assert(v);
 
     int opcode = v->getValueID();
 
-    //std::ostringstream os("");
-    //os << "fetch_" << opcode;
-    //int statid = Stats::getStatId(os.str());
-    //Stats::log(statid);
+    // std::ostringstream os("");
+    // os << "fetch_" << opcode;
+    // int statid = Stats::getStatId(os.str());
+    // Stats::log(statid);
 
     if (opcode >= llvm::Value::InstructionVal) {
         assert(symbols.count(v));
         return symbols.find(v)->second;
     }
 
-    switch(opcode) {
+    switch (opcode) {
         case llvm::Value::ArgumentVal: {
             assert(symbols.count(v));
             return symbols.find(v)->second;
@@ -96,7 +96,7 @@ Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
             return llvm::cast<llvm::ConstantFP>(v)->getValueAPF().convertToDouble();
         }
         case llvm::Value::ConstantExprVal: {
-            llvm::ConstantExpr *ce = llvm::cast<llvm::ConstantExpr>(v);
+            llvm::ConstantExpr* ce = llvm::cast<llvm::ConstantExpr>(v);
             if (ce->isCast()) {
                 assert(width(ce->getOperand(0), dl) == 8 && width(ce, dl) == 8);
 
@@ -104,7 +104,7 @@ Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
                 return o;
             } else if (ce->getOpcode() == llvm::Instruction::GetElementPtr) {
                 int64_t base = (int64_t)fetch(ce->getOperand(0), dl, symbols).o;
-                llvm::Type *t = ce->getOperand(0)->getType();
+                llvm::Type* t = ce->getOperand(0)->getType();
 
                 llvm::User::value_op_iterator begin = ce->value_op_begin();
                 ++begin;
@@ -146,15 +146,15 @@ Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
             if (!gv->isDeclaration() && gv->getLinkage() == llvm::GlobalVariable::InternalLinkage) {
                 static std::unordered_map<llvm::GlobalVariable*, void*> made;
 
-                void* &r = made[gv];
+                void*& r = made[gv];
                 if (r == NULL) {
-                    llvm::Type *t = gv->getType()->getElementType();
+                    llvm::Type* t = gv->getType()->getElementType();
                     r = (void*)malloc(width(t, dl));
                     if (gv->hasInitializer()) {
                         llvm::Constant* init = gv->getInitializer();
                         assert(init->getType() == t);
                         if (t == g.i64) {
-                            llvm::ConstantInt *ci = llvm::cast<llvm::ConstantInt>(init);
+                            llvm::ConstantInt* ci = llvm::cast<llvm::ConstantInt>(init);
                             *(int64_t*)r = ci->getSExtValue();
                         } else {
                             gv->dump();
@@ -163,10 +163,10 @@ Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
                     }
                 }
 
-                //gv->getType()->dump();
-                //gv->dump();
-                //printf("%p\n", r);
-                //RELEASE_ASSERT(0, "");
+                // gv->getType()->dump();
+                // gv->dump();
+                // printf("%p\n", r);
+                // RELEASE_ASSERT(0, "");
                 return (int64_t)r;
             }
 
@@ -179,14 +179,14 @@ Val fetch(llvm::Value* v, const llvm::DataLayout &dl, const SymMap &symbols) {
             // Typically this happens if we need to propagate the 'value' of an
             // maybe-defined Python variable; we won't actually read from it if
             // it's undef, since it should be guarded by an !is_defined variable.
-            return (int64_t)-1337;
+            return (int64_t) - 1337;
         default:
             v->dump();
             RELEASE_ASSERT(0, "%d", v->getValueID());
     }
 }
 
-static void set(SymMap &symbols, const llvm::BasicBlock::iterator &it, Val v) {
+static void set(SymMap& symbols, const llvm::BasicBlock::iterator& it, Val v) {
     if (VERBOSITY() >= 2) {
         printf("Setting to %lx / %f: ", v.n, v.d);
         fflush(stdout);
@@ -198,43 +198,43 @@ static void set(SymMap &symbols, const llvm::BasicBlock::iterator &it, Val v) {
         f->second = v;
     else
         symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*it)), v));
-//#define SET(v) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*it)), Val(v)))
+    //#define SET(v) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*it)), Val(v)))
 }
 
 static std::unordered_map<void*, const SymMap*> interpreter_roots;
-void gatherInterpreterRootsForFrame(GCVisitor *visitor, void* frame_ptr) {
+void gatherInterpreterRootsForFrame(GCVisitor* visitor, void* frame_ptr) {
     auto it = interpreter_roots.find(frame_ptr);
     if (it == interpreter_roots.end()) {
         printf("%p is not an interpreter frame; they are", frame_ptr);
-        for (const auto &p2 : interpreter_roots) {
+        for (const auto& p2 : interpreter_roots) {
             printf(" %p", p2.first);
         }
         printf("\n");
         abort();
     }
 
-    //printf("Gathering roots for frame %p\n", frame_ptr);
+    // printf("Gathering roots for frame %p\n", frame_ptr);
     const SymMap* symbols = it->second;
 
-    for (const auto &p2 : *symbols) {
+    for (const auto& p2 : *symbols) {
         visitor->visitPotential(p2.second.o);
     }
 }
 
 class UnregisterHelper {
-    private:
-        void* frame_ptr;
+private:
+    void* frame_ptr;
 
-    public:
-        constexpr UnregisterHelper(void* frame_ptr) : frame_ptr(frame_ptr) {}
+public:
+    constexpr UnregisterHelper(void* frame_ptr) : frame_ptr(frame_ptr) {}
 
-        ~UnregisterHelper() {
-            assert(interpreter_roots.count(frame_ptr));
-            interpreter_roots.erase(frame_ptr);
-        }
+    ~UnregisterHelper() {
+        assert(interpreter_roots.count(frame_ptr));
+        interpreter_roots.erase(frame_ptr);
+    }
 };
 
-Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* arg3, Box* *args) {
+Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(f);
 
 #ifdef TIME_INTERPRETS
@@ -247,8 +247,8 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
 
     llvm::DataLayout dl(f->getParent());
 
-    //f->dump();
-    //assert(nargs == f->getArgumentList().size());
+    // f->dump();
+    // assert(nargs == f->getArgumentList().size());
 
     SymMap symbols;
 
@@ -260,39 +260,42 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
     for (llvm::Argument& arg : f->args()) {
         arg_num++;
 
-        if (arg_num == 0) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg1)));
-        else if (arg_num == 1) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg2)));
-        else if (arg_num == 2) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg3)));
+        if (arg_num == 0)
+            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg1)));
+        else if (arg_num == 1)
+            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg2)));
+        else if (arg_num == 2)
+            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg3)));
         else {
             assert(arg_num == 3);
             assert(f->getArgumentList().size() == 4);
             assert(f->getArgumentList().back().getType() == g.llvm_value_type_ptr->getPointerTo());
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val((int64_t)args)));
-            //printf("loading %%4 with %p\n", (void*)args);
+            // printf("loading %%4 with %p\n", (void*)args);
             break;
         }
     }
 
-    llvm::BasicBlock *prevblock = NULL;
-    llvm::BasicBlock *curblock = &f->getEntryBlock();
+    llvm::BasicBlock* prevblock = NULL;
+    llvm::BasicBlock* curblock = &f->getEntryBlock();
 
 
     while (true) {
-        for (llvm::Instruction &_inst : *curblock) {
-            llvm::Instruction *inst = &_inst;
+        for (llvm::Instruction& _inst : *curblock) {
+            llvm::Instruction* inst = &_inst;
 
             if (VERBOSITY("interpreter") >= 2) {
                 printf("executing in %s: ", f->getName().data());
                 fflush(stdout);
                 inst->dump();
-                //f->dump();
+                // f->dump();
             }
 
 #define SET(v) set(symbols, inst, (v))
-            if (llvm::LoadInst *li = llvm::dyn_cast<llvm::LoadInst>(inst)) {
-                llvm::Value *ptr = li->getOperand(0);
+            if (llvm::LoadInst* li = llvm::dyn_cast<llvm::LoadInst>(inst)) {
+                llvm::Value* ptr = li->getOperand(0);
                 Val v = fetch(ptr, dl, symbols);
-                //printf("loading from %p\n", v.o);
+                // printf("loading from %p\n", v.o);
 
                 if (width(li, dl) == 1) {
                     Val r = Val(*(bool*)v.o);
@@ -306,13 +309,13 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     li->dump();
                     RELEASE_ASSERT(0, "");
                 }
-            } else if (llvm::StoreInst *si = llvm::dyn_cast<llvm::StoreInst>(inst)) {
-                llvm::Value *val = si->getOperand(0);
-                llvm::Value *ptr = si->getOperand(1);
+            } else if (llvm::StoreInst* si = llvm::dyn_cast<llvm::StoreInst>(inst)) {
+                llvm::Value* val = si->getOperand(0);
+                llvm::Value* ptr = si->getOperand(1);
                 Val v = fetch(val, dl, symbols);
                 Val p = fetch(ptr, dl, symbols);
 
-                //printf("storing %lx at %lx\n", v.n, p.n);
+                // printf("storing %lx at %lx\n", v.n, p.n);
 
                 if (width(val, dl) == 1) {
                     *(bool*)p.o = v.b;
@@ -324,7 +327,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     si->dump();
                     RELEASE_ASSERT(0, "");
                 }
-            } else if (llvm::CmpInst *ci = llvm::dyn_cast<llvm::CmpInst>(inst)) {
+            } else if (llvm::CmpInst* ci = llvm::dyn_cast<llvm::CmpInst>(inst)) {
                 assert(ci->getType() == g.i1);
 
                 Val a0 = fetch(ci->getOperand(0), dl, symbols);
@@ -372,10 +375,10 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                         RELEASE_ASSERT(0, "");
                 }
                 continue;
-            } else if (llvm::BinaryOperator *bo = llvm::dyn_cast<llvm::BinaryOperator>(inst)) {
+            } else if (llvm::BinaryOperator* bo = llvm::dyn_cast<llvm::BinaryOperator>(inst)) {
                 if (bo->getOperand(0)->getType() == g.i64 || bo->getOperand(0)->getType() == g.i1) {
-                    //assert(bo->getOperand(0)->getType() == g.i64);
-                    //assert(bo->getOperand(1)->getType() == g.i64);
+                    // assert(bo->getOperand(0)->getType() == g.i64);
+                    // assert(bo->getOperand(1)->getType() == g.i64);
 
                     Val a0 = fetch(bo->getOperand(0), dl, symbols);
                     Val a1 = fetch(bo->getOperand(1), dl, symbols);
@@ -411,8 +414,8 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     }
                     continue;
                 } else if (bo->getOperand(0)->getType() == g.double_) {
-                    //assert(bo->getOperand(0)->getType() == g.i64);
-                    //assert(bo->getOperand(1)->getType() == g.i64);
+                    // assert(bo->getOperand(0)->getType() == g.i64);
+                    // assert(bo->getOperand(1)->getType() == g.i64);
 
                     double lhs = fetch(bo->getOperand(0), dl, symbols).d;
                     double rhs = fetch(bo->getOperand(1), dl, symbols).d;
@@ -436,7 +439,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     bo->dump();
                     RELEASE_ASSERT(0, "");
                 }
-            } else if (llvm::GetElementPtrInst *gep = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
+            } else if (llvm::GetElementPtrInst* gep = llvm::dyn_cast<llvm::GetElementPtrInst>(inst)) {
                 int64_t base = fetch(gep->getPointerOperand(), dl, symbols).n;
 
                 llvm::User::value_op_iterator begin = gep->value_op_begin();
@@ -444,34 +447,36 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 std::vector<llvm::Value*> indices(begin, gep->value_op_end());
 
                 int64_t offset = dl.getIndexedOffset(gep->getPointerOperandType(), indices);
-                //gep->dump();
-                //printf("offset for inst: %ld (base is %lx)\n", offset, base);
+                // gep->dump();
+                // printf("offset for inst: %ld (base is %lx)\n", offset, base);
                 SET(base + offset);
                 continue;
-            } else if (llvm::AllocaInst *al = llvm::dyn_cast<llvm::AllocaInst>(inst)) {
+            } else if (llvm::AllocaInst* al = llvm::dyn_cast<llvm::AllocaInst>(inst)) {
                 int size = fetch(al->getArraySize(), dl, symbols).n * width(al->getAllocatedType(), dl);
                 void* ptr = alloca(size);
-                //void* ptr = malloc(size);
-                //printf("alloca()'d at %p\n", ptr);
+                // void* ptr = malloc(size);
+                // printf("alloca()'d at %p\n", ptr);
                 SET((int64_t)ptr);
                 continue;
-            } else if (llvm::SIToFPInst *si = llvm::dyn_cast<llvm::SIToFPInst>(inst)) {
+            } else if (llvm::SIToFPInst* si = llvm::dyn_cast<llvm::SIToFPInst>(inst)) {
                 assert(width(si->getOperand(0), dl) == 8);
                 SET((double)fetch(si->getOperand(0), dl, symbols).n);
                 continue;
-            } else if (llvm::BitCastInst *bc = llvm::dyn_cast<llvm::BitCastInst>(inst)) {
+            } else if (llvm::BitCastInst* bc = llvm::dyn_cast<llvm::BitCastInst>(inst)) {
                 assert(width(bc->getOperand(0), dl) == 8);
                 SET(fetch(bc->getOperand(0), dl, symbols));
                 continue;
-            } else if (llvm::IntToPtrInst *bc = llvm::dyn_cast<llvm::IntToPtrInst>(inst)) {
+            } else if (llvm::IntToPtrInst* bc = llvm::dyn_cast<llvm::IntToPtrInst>(inst)) {
                 assert(width(bc->getOperand(0), dl) == 8);
                 SET(fetch(bc->getOperand(0), dl, symbols));
                 continue;
-            } else if (llvm::CallInst *ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
+            } else if (llvm::CallInst* ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
                 void* f;
                 int arg_start;
-                if (ci->getCalledFunction() && (ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.void" || ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
-                    //ci->dump();
+                if (ci->getCalledFunction()
+                    && (ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.void"
+                        || ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
+                    // ci->dump();
                     assert(0 && "shouldn't be generating patchpoints for interpretation!");
                     f = (void*)fetch(ci->getArgOperand(2), dl, symbols).n;
                     arg_start = 4;
@@ -480,17 +485,18 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                     arg_start = 0;
                 }
 
-                if (VERBOSITY("interpreter") >= 2) printf("calling %s\n", g.func_addr_registry.getFuncNameAtAddress(f, true).c_str());
+                if (VERBOSITY("interpreter") >= 2)
+                    printf("calling %s\n", g.func_addr_registry.getFuncNameAtAddress(f, true).c_str());
 
                 std::vector<Val> args;
                 int nargs = ci->getNumArgOperands();
                 for (int i = arg_start; i < nargs; i++) {
-                    //ci->getArgOperand(i)->dump();
+                    // ci->getArgOperand(i)->dump();
                     args.push_back(fetch(ci->getArgOperand(i), dl, symbols));
                 }
 
                 int npassed_args = nargs - arg_start;
-                //printf("%d %d %d\n", nargs, arg_start, npassed_args);
+// printf("%d %d %d\n", nargs, arg_start, npassed_args);
 
 #ifdef TIME_INTERPRETS
                 this_us += _t.end();
@@ -539,7 +545,8 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                         r = reinterpret_cast<double (*)(double, double)>(f)(args[0].d, args[1].d);
                         break;
                     case 0b10000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n,
+                                                                                        args[2].n);
                         break;
                     case 0b10001:
                         r = reinterpret_cast<int64_t (*)(int64_t, int64_t, double)>(f)(args[0].n, args[1].n, args[2].d);
@@ -548,28 +555,38 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                         r = reinterpret_cast<int64_t (*)(int64_t, double, double)>(f)(args[0].n, args[1].d, args[2].d);
                         break;
                     case 0b100000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n,
+                                                                                                 args[2].n, args[3].n);
                         break;
                     case 0b100001:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, double)>(f)(args[0].n, args[1].n, args[2].n, args[3].d);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, double)>(f)(args[0].n, args[1].n,
+                                                                                                args[2].n, args[3].d);
                         break;
                     case 0b100110:
-                        r = reinterpret_cast<int64_t (*)(int64_t, double, double, int64_t)>(f)(args[0].n, args[1].d, args[2].d, args[3].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, double, double, int64_t)>(f)(args[0].n, args[1].d,
+                                                                                               args[2].d, args[3].n);
                         break;
                     case 0b101010:
-                        r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n, args[2].d, args[3].n);
+                        r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n,
+                                                                                           args[2].d, args[3].n);
                         break;
                     case 0b1000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
+                            args[0].n, args[1].n, args[2].n, args[3].n, args[4].n);
                         break;
                     case 0b10000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
+                            args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n);
                         break;
                     case 0b100000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n, args[6].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                                         int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
+                                                                      args[4].n, args[5].n, args[6].n);
                         break;
                     case 0b1000000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n, args[6].n, args[7].n);
+                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                                         int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
+                                                                      args[4].n, args[5].n, args[6].n, args[7].n);
                         break;
                     default:
                         inst->dump();
@@ -584,7 +601,7 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 _t.restart("to interpret", 10000000);
 #endif
                 continue;
-            } else if (llvm::SelectInst *si = llvm::dyn_cast<llvm::SelectInst>(inst)) {
+            } else if (llvm::SelectInst* si = llvm::dyn_cast<llvm::SelectInst>(inst)) {
                 Val test = fetch(si->getCondition(), dl, symbols);
                 Val vt = fetch(si->getTrueValue(), dl, symbols);
                 Val vf = fetch(si->getFalseValue(), dl, symbols);
@@ -593,11 +610,11 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 else
                     SET(vf);
                 continue;
-            } else if (llvm::PHINode *phi = llvm::dyn_cast<llvm::PHINode>(inst)) {
+            } else if (llvm::PHINode* phi = llvm::dyn_cast<llvm::PHINode>(inst)) {
                 assert(prevblock);
                 SET(fetch(phi->getIncomingValueForBlock(prevblock), dl, symbols));
                 continue;
-            } else if (llvm::BranchInst *br = llvm::dyn_cast<llvm::BranchInst>(inst)) {
+            } else if (llvm::BranchInst* br = llvm::dyn_cast<llvm::BranchInst>(inst)) {
                 prevblock = curblock;
                 if (br->isConditional()) {
                     Val t = fetch(br->getCondition(), dl, symbols);
@@ -609,11 +626,11 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
                 } else {
                     curblock = br->getSuccessor(0);
                 }
-                //if (VERBOSITY()) {
-                    //printf("jumped to %s\n", curblock->getName().data());
+                // if (VERBOSITY()) {
+                // printf("jumped to %s\n", curblock->getName().data());
                 //}
                 break;
-            } else if (llvm::ReturnInst *ret = llvm::dyn_cast<llvm::ReturnInst>(inst)) {
+            } else if (llvm::ReturnInst* ret = llvm::dyn_cast<llvm::ReturnInst>(inst)) {
                 llvm::Value* r = ret->getReturnValue();
 
 #ifdef TIME_INTERPRETS
@@ -636,5 +653,4 @@ Box* interpretFunction(llvm::Function *f, int nargs, Box* arg1, Box* arg2, Box* 
 
     RELEASE_ASSERT(0, "");
 }
-
 }

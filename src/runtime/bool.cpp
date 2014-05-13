@@ -23,7 +23,7 @@
 
 namespace pyston {
 
-Box *True, *False;
+Box* True, *False;
 
 extern "C" Box* boolInvert(BoxedBool* v) {
     return boxInt(~v->b);
@@ -69,7 +69,7 @@ void setupBool() {
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, NULL, 1, false)));
     bool_cls->setattr("__str__", bool_cls->peekattr("__repr__"), NULL, NULL);
 
-    CLFunction *__new__ = boxRTFunction((void*)boolNew1, NULL, 1, false);
+    CLFunction* __new__ = boxRTFunction((void*)boolNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)boolNew2, NULL, 2, false);
     bool_cls->giveAttr("__new__", new BoxedFunction(__new__));
 
@@ -85,6 +85,4 @@ void setupBool() {
 
 void teardownBool() {
 }
-
 }
-

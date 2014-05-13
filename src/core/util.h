@@ -23,31 +23,31 @@
 namespace pyston {
 
 class Timer {
-    private:
-        static int level;
-        timeval start_time;
-        const char* desc;
-        int min_usec;
-        bool ended;
-    public:
-        Timer(const char* desc, int min_usec=-1);
-        ~Timer();
+private:
+    static int level;
+    timeval start_time;
+    const char* desc;
+    int min_usec;
+    bool ended;
 
-        void restart(const char* newdesc, int min_usec=-1);
-        long end();
-        long split(const char* newdesc, int min_usec=-1) {
-            long rtn = end();
-            restart(newdesc, min_usec);
-            return rtn;
-        }
+public:
+    Timer(const char* desc, int min_usec = -1);
+    ~Timer();
+
+    void restart(const char* newdesc, int min_usec = -1);
+    long end();
+    long split(const char* newdesc, int min_usec = -1) {
+        long rtn = end();
+        restart(newdesc, min_usec);
+        return rtn;
+    }
 };
 
-bool startswith(const std::string &s, const std::string &pattern);
+bool startswith(const std::string& s, const std::string& pattern);
 
 void removeDirectoryIfExists(const std::string& path);
 
-template <class T1, class T2>
-void compareKeyset(T1 *lhs, T2 *rhs) {
+template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
     std::vector<std::string> lv, rv;
     for (typename T1::iterator it = lhs->begin(); it != lhs->end(); it++) {
         lv.push_back(it->first);
@@ -60,7 +60,8 @@ void compareKeyset(T1 *lhs, T2 *rhs) {
     std::sort(rv.begin(), rv.end());
 
     std::vector<std::string> lextra(lv.size());
-    std::vector<std::string>::iterator diffend = std::set_difference(lv.begin(), lv.end(), rv.begin(), rv.end(), lextra.begin());
+    std::vector<std::string>::iterator diffend
+        = std::set_difference(lv.begin(), lv.end(), rv.begin(), rv.end(), lextra.begin());
     lextra.resize(diffend - lextra.begin());
 
     bool good = true;
@@ -85,7 +86,6 @@ void compareKeyset(T1 *lhs, T2 *rhs) {
     }
     assert(good);
 }
-
 }
 
 #endif

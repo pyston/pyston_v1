@@ -30,7 +30,7 @@
 namespace pyston {
 namespace gc {
 
-//extern unsigned numAllocs;
+// extern unsigned numAllocs;
 //#define ALLOCS_PER_COLLECTION 1000
 extern unsigned bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 2000000
@@ -48,47 +48,42 @@ Heap global_heap;
 
 #define PAGE_SIZE 4096
 class Arena {
-    private:
-        void* start;
-        void* cur;
+private:
+    void* start;
+    void* cur;
 
-    public:
-        constexpr Arena(void* start) : start(start), cur(start) {
-        }
+public:
+    constexpr Arena(void* start) : start(start), cur(start) {}
 
-        void* doMmap(size_t size) {
-            assert(size % PAGE_SIZE == 0);
-            //printf("mmap %ld\n", size);
+    void* doMmap(size_t size) {
+        assert(size % PAGE_SIZE == 0);
+        // printf("mmap %ld\n", size);
 
-            void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
-            ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
-            cur = (uint8_t*)cur + size;
-            return mrtn;
-        }
+        void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
+        ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
+        cur = (uint8_t*)cur + size;
+        return mrtn;
+    }
 
-        bool contains(void* addr) {
-            return start <= addr && addr < cur;
-        }
+    bool contains(void* addr) { return start <= addr && addr < cur; }
 };
 
 Arena small_arena((void*)0x1270000000L);
 Arena large_arena((void*)0x2270000000L);
 
 struct LargeObj {
-    LargeObj *next, **prev;
+    LargeObj* next, **prev;
     size_t obj_size;
     char data[0];
 
     int mmap_size() {
         size_t total_size = obj_size + sizeof(LargeObj);
-        total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE-1);
+        total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         return total_size;
     }
 
-    int capacity() {
-        return mmap_size() - sizeof(LargeObj);
-    }
+    int capacity() { return mmap_size() - sizeof(LargeObj); }
 
     static LargeObj* fromPointer(void* ptr) {
         char* rtn = (char*)ptr + ((char*)NULL - ((LargeObj*)(NULL))->data);
@@ -101,7 +96,7 @@ void* Heap::allocLarge(size_t size) {
     _collectIfNeeded(size);
 
     size_t total_size = size + sizeof(LargeObj);
-    total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE-1);
+    total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     LargeObj* rtn = (LargeObj*)large_arena.doMmap(total_size);
     rtn->obj_size = size;
 
@@ -124,8 +119,8 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     rtn->next = NULL;
 
 #ifndef NVALGRIND
-    // Not sure if this mempool stuff is better than the malloc-like interface:
-    //VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
+// Not sure if this mempool stuff is better than the malloc-like interface:
+// VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
 #endif
 
     // Don't think I need to do this:
@@ -138,12 +133,12 @@ static Block* alloc_block(uint64_t size, Block** prev) {
         int idx = i / 64;
         int bit = i % 64;
         rtn->isfree[idx] ^= (1L << bit);
-        //printf("%d %d\n", idx, bit);
+        // printf("%d %d\n", idx, bit);
     }
 
-    //printf("%d %d %d\n", num_objects, num_lost, atoms_per_object);
-    //for (int i =0; i < BITFIELD_ELTS; i++) {
-        //printf("%d: %lx\n", i, rtn->isfree[i]);
+    // printf("%d %d %d\n", num_objects, num_lost, atoms_per_object);
+    // for (int i =0; i < BITFIELD_ELTS; i++) {
+    // printf("%d: %lx\n", i, rtn->isfree[i]);
     //}
     return rtn;
 }
@@ -151,18 +146,18 @@ static Block* alloc_block(uint64_t size, Block** prev) {
 void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
     _collectIfNeeded(rounded_size);
 
-    Block *cur = *prev;
+    Block* cur = *prev;
     assert(!cur || prev == cur->prev);
     int scanned = 0;
 
-    //printf("alloc(%ld)\n", rounded_size);
+    // printf("alloc(%ld)\n", rounded_size);
 
-    //Block **full_prev = full_head;
+    // Block **full_prev = full_head;
     while (true) {
-        //printf("cur = %p, prev = %p\n", cur, prev);
+        // printf("cur = %p, prev = %p\n", cur, prev);
         if (cur == NULL) {
-            Block *next = alloc_block(rounded_size, &cur->next);
-            //printf("allocated new block %p\n", next);
+            Block* next = alloc_block(rounded_size, &cur->next);
+            // printf("allocated new block %p\n", next);
             *prev = next;
             next->prev = prev;
             prev = &cur->next;
@@ -185,11 +180,12 @@ void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
 
         if (i == BITFIELD_ELTS) {
             scanned++;
-            //printf("moving on\n");
+            // printf("moving on\n");
 
-            Block *t = *prev = cur->next;
+            Block* t = *prev = cur->next;
             cur->next = NULL;
-            if (t) t->prev = prev;
+            if (t)
+                t->prev = prev;
 
             cur->prev = full_head;
             cur->next = *full_head;
@@ -201,27 +197,27 @@ void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
             continue;
         }
 
-        //printf("scanned %d\n", scanned);
+        // printf("scanned %d\n", scanned);
         int first = __builtin_ctzll(mask);
         assert(first < 64);
-        //printf("mask: %lx, first: %d\n", mask, first);
+        // printf("mask: %lx, first: %d\n", mask, first);
         cur->isfree[i] ^= (1L << first);
 
         int idx = first + i * 64;
 
-        //printf("Using index %d\n", idx);
+        // printf("Using index %d\n", idx);
 
         void* rtn = &cur->atoms[idx];
 
 #ifndef NDEBUG
-        Block *b = Block::forPointer(rtn);
+        Block* b = Block::forPointer(rtn);
         assert(b == cur);
         int offset = (char*)rtn - (char*)b;
         assert(offset % rounded_size == 0);
 #endif
 
 #ifndef NVALGRIND
-        //VALGRIND_MEMPOOL_ALLOC(cur, rtn, rounded_size);
+// VALGRIND_MEMPOOL_ALLOC(cur, rtn, rounded_size);
 #endif
 
         return rtn;
@@ -243,11 +239,11 @@ void _freeFrom(void* ptr, Block* b) {
     b->isfree[bitmap_idx] ^= mask;
 
 #ifndef NVALGRIND
-    //VALGRIND_MEMPOOL_FREE(b, ptr);
+// VALGRIND_MEMPOOL_FREE(b, ptr);
 #endif
 }
 
-static void _freeLargeObj(LargeObj *lobj) {
+static void _freeLargeObj(LargeObj* lobj) {
     *lobj->prev = lobj->next;
     if (lobj->next)
         lobj->next->prev = lobj->prev;
@@ -258,19 +254,19 @@ static void _freeLargeObj(LargeObj *lobj) {
 
 void Heap::free(void* ptr) {
     if (large_arena.contains(ptr)) {
-        LargeObj *lobj = LargeObj::fromPointer(ptr);
+        LargeObj* lobj = LargeObj::fromPointer(ptr);
         _freeLargeObj(lobj);
         return;
     }
 
     assert(small_arena.contains(ptr));
-    Block *b = Block::forPointer(ptr);
+    Block* b = Block::forPointer(ptr);
     _freeFrom(ptr, b);
 }
 
 void* Heap::realloc(void* ptr, size_t bytes) {
     if (large_arena.contains(ptr)) {
-        LargeObj *lobj = LargeObj::fromPointer(ptr);
+        LargeObj* lobj = LargeObj::fromPointer(ptr);
 
         int capacity = lobj->capacity();
         if (capacity >= bytes && capacity < bytes * 2)
@@ -284,7 +280,7 @@ void* Heap::realloc(void* ptr, size_t bytes) {
     }
 
     assert(small_arena.contains(ptr));
-    Block *b = Block::forPointer(ptr);
+    Block* b = Block::forPointer(ptr);
 
     size_t size = b->size;
 
@@ -307,7 +303,7 @@ void* Heap::realloc(void* ptr, size_t bytes) {
 
 void* Heap::getAllocationFromInteriorPointer(void* ptr) {
     if (large_arena.contains(ptr)) {
-        LargeObj *cur = large_head;
+        LargeObj* cur = large_head;
         while (cur) {
             if (ptr >= cur && ptr < &cur->data[cur->obj_size])
                 return &cur->data[0];
@@ -319,7 +315,7 @@ void* Heap::getAllocationFromInteriorPointer(void* ptr) {
     if (!small_arena.contains(ptr))
         return NULL;
 
-    Block *b = Block::forPointer(ptr);
+    Block* b = Block::forPointer(ptr);
     size_t size = b->size;
     int offset = (char*)ptr - (char*)b;
     int obj_idx = offset / size;
@@ -354,14 +350,15 @@ static long freeChain(Block* head) {
             if (head->isfree[bitmap_idx] & mask)
                 continue;
 
-            void *p = &head->atoms[atom_idx];
+            void* p = &head->atoms[atom_idx];
             GCObjectHeader* header = headerFromObject(p);
 
             if (isMarked(header)) {
                 clearMark(header);
             } else {
-                if (VERBOSITY() >= 2) printf("Freeing %p\n", p);
-                //assert(p != (void*)0x127000d960); // the main module
+                if (VERBOSITY() >= 2)
+                    printf("Freeing %p\n", p);
+                // assert(p != (void*)0x127000d960); // the main module
                 bytes_freed += head->size;
                 head->isfree[bitmap_idx] |= mask;
             }
@@ -379,20 +376,22 @@ void Heap::freeUnmarked() {
         bytes_freed += freeChain(full_heads[bidx]);
     }
 
-    LargeObj *cur = large_head;
+    LargeObj* cur = large_head;
     while (cur) {
-        void *p = cur->data;
+        void* p = cur->data;
         GCObjectHeader* header = headerFromObject(p);
         if (isMarked(header)) {
             clearMark(header);
         } else {
-            if (VERBOSITY() >= 2) printf("Freeing %p\n", p);
+            if (VERBOSITY() >= 2)
+                printf("Freeing %p\n", p);
             bytes_freed += cur->mmap_size();
 
             *cur->prev = cur->next;
-            if (cur->next) cur->next->prev = cur->prev;
+            if (cur->next)
+                cur->next->prev = cur->prev;
 
-            LargeObj *to_free = cur;
+            LargeObj* to_free = cur;
             cur = cur->next;
             _freeLargeObj(to_free);
             continue;
@@ -401,8 +400,9 @@ void Heap::freeUnmarked() {
         cur = cur->next;
     }
 
-    if (VERBOSITY("gc") >= 2) if (bytes_freed) printf("Freed %ld bytes\n", bytes_freed);
+    if (VERBOSITY("gc") >= 2)
+        if (bytes_freed)
+            printf("Freed %ld bytes\n", bytes_freed);
 }
-
 }
 }

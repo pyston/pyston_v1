@@ -62,7 +62,8 @@ void BoxedList::ensure(int space) {
             capacity = initial;
         } else {
             int new_capacity = std::max(capacity * 2, size + space);
-            elts = (BoxedList::ElementArray*)rt_realloc(elts, new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+            elts = (BoxedList::ElementArray*)rt_realloc(elts,
+                                                        new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
             capacity = new_capacity;
         }
     }
@@ -91,7 +92,7 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
     self->ensure(nelts);
 
     assert(self->size <= self->capacity);
-    memcpy(&self->elts->elts[self->size], &v[0], nelts*sizeof(Box*));
+    memcpy(&self->elts->elts[self->size], &v[0], nelts * sizeof(Box*));
 
     self->size += nelts;
 }
@@ -105,5 +106,4 @@ extern "C" Box* listAppend(Box* s, Box* v) {
 
     return None;
 }
-
 }

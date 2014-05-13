@@ -46,7 +46,7 @@ extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
-    const std::vector<Box*> *elts;
+    const std::vector<Box*>* elts;
     std::vector<Box*> _elts;
     if (rhs->cls == tuple_cls) {
         elts = &static_cast<BoxedTuple*>(rhs)->elts;
@@ -112,7 +112,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     Box* b = (*elts)[elt_num];
                     elt_num++;
 
-                    BoxedString *s = str(b);
+                    BoxedString* s = str(b);
                     os << s->s;
                     break;
                 } else if (c == 'd') {
@@ -208,14 +208,28 @@ extern "C" Box* strStr(BoxedString* self) {
     return self;
 }
 
-static bool _needs_escaping[256] = {
-    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true
-};
+static bool _needs_escaping[256]
+    = { true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        false, false, false, false, false, false, false, true,  false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, true,  false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+        true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true };
 static char _hex[17] = "0123456789abcdef"; // really only needs to be 16 but clang will complain
 extern "C" Box* strRepr(BoxedString* self) {
     std::ostringstream os("");
 
-    const std::string &s = self->s;
+    const std::string& s = self->s;
     os << '\'';
     for (int i = 0; i < s.size(); i++) {
         char c = s[i];
@@ -279,8 +293,8 @@ extern "C" Box* strNew2(BoxedClass* cls, Box* obj) {
     return str(obj);
 }
 
-Box* _strSlice(BoxedString *self, i64 start, i64 stop, i64 step) {
-    const std::string &s = self->s;
+Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
+    const std::string& s = self->s;
 
     assert(step != 0);
     if (step > 0) {
@@ -312,11 +326,12 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     assert(self->cls == str_cls);
 
     if (rhs->cls == list_cls) {
-        BoxedList *list = static_cast<BoxedList*>(rhs);
+        BoxedList* list = static_cast<BoxedList*>(rhs);
         std::ostringstream os;
         for (int i = 0; i < list->size; i++) {
-            if (i > 0) os << self->s;
-            BoxedString *elt_str = str(list->elts->elts[i]);
+            if (i > 0)
+                os << self->s;
+            BoxedString* elt_str = str(list->elts->elts[i]);
             os << elt_str->s;
         }
         return boxString(os.str());
@@ -357,7 +372,7 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
             llvm::StringRef(self->s).split(parts, sep->s);
 
             BoxedList* rtn = new BoxedList();
-            for (const auto &s : parts)
+            for (const auto& s : parts)
                 listAppendInternal(rtn, boxString(s.str()));
             return rtn;
         } else {
@@ -389,7 +404,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
         char c = self->s[n];
         return new BoxedString(std::string(1, c));
     } else if (slice->cls == slice_cls) {
-        BoxedSlice *sslice = static_cast<BoxedSlice*>(slice);
+        BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
         i64 start, stop, step;
         parseSlice(sslice, self->s.size(), &start, &stop, &step);
@@ -419,12 +434,12 @@ void setupStr() {
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
 
-    CLFunction *strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
+    CLFunction* strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
     addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
     str_cls->giveAttr("split", new BoxedFunction(strSplit));
     str_cls->giveAttr("rsplit", str_cls->peekattr("split"));
 
-    CLFunction *__new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
+    CLFunction* __new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)strNew2, NULL, 2, false);
     str_cls->giveAttr("__new__", new BoxedFunction(__new__));
 
@@ -433,5 +448,4 @@ void setupStr() {
 
 void teardownStr() {
 }
-
 }

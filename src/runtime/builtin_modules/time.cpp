@@ -36,6 +36,4 @@ void setupTime() {
 
     time_module->giveAttr("time", new BoxedFunction(boxRTFunction((void*)timeTime, NULL, 0, false)));
 }
-
 }
-

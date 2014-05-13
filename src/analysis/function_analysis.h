@@ -27,52 +27,50 @@ class CFGBlock;
 class ScopeInfo;
 
 class LivenessAnalysis {
-    public:
-        bool isLiveAtEnd(const std::string &name, CFGBlock *block);
+public:
+    bool isLiveAtEnd(const std::string& name, CFGBlock* block);
 };
 class DefinednessAnalysis {
-    public:
-        enum DefinitionLevel {
-            Undefined,
-            PotentiallyDefined,
-            Defined,
-        };
-        typedef std::unordered_set<std::string> RequiredSet;
+public:
+    enum DefinitionLevel {
+        Undefined,
+        PotentiallyDefined,
+        Defined,
+    };
+    typedef std::unordered_set<std::string> RequiredSet;
 
-    private:
-        std::unordered_map<CFGBlock*, std::unordered_map<std::string, DefinitionLevel> > results;
-        std::unordered_map<CFGBlock*, const RequiredSet> defined;
-        ScopeInfo *scope_info;
+private:
+    std::unordered_map<CFGBlock*, std::unordered_map<std::string, DefinitionLevel> > results;
+    std::unordered_map<CFGBlock*, const RequiredSet> defined;
+    ScopeInfo* scope_info;
 
-    public:
-        DefinednessAnalysis(AST_arguments *args, CFG* cfg, ScopeInfo *scope_info);
+public:
+    DefinednessAnalysis(AST_arguments* args, CFG* cfg, ScopeInfo* scope_info);
 
-        DefinitionLevel isDefinedAt(const std::string &name, CFGBlock *block);
-        const RequiredSet& getDefinedNamesAt(CFGBlock *block);
+    DefinitionLevel isDefinedAt(const std::string& name, CFGBlock* block);
+    const RequiredSet& getDefinedNamesAt(CFGBlock* block);
 };
 class PhiAnalysis {
-    public:
-        typedef std::unordered_set<std::string> RequiredSet;
+public:
+    typedef std::unordered_set<std::string> RequiredSet;
 
-    private:
-        DefinednessAnalysis definedness;
-        LivenessAnalysis *liveness;
-        std::unordered_map<CFGBlock*, const RequiredSet> required_phis;
+private:
+    DefinednessAnalysis definedness;
+    LivenessAnalysis* liveness;
+    std::unordered_map<CFGBlock*, const RequiredSet> required_phis;
 
-    public:
-        PhiAnalysis(AST_arguments*, CFG* cfg, LivenessAnalysis *liveness, ScopeInfo *scope_info);
+public:
+    PhiAnalysis(AST_arguments*, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
-        bool isRequired(const std::string &name, CFGBlock* block);
-        bool isRequiredAfter(const std::string &name, CFGBlock* block);
-        const RequiredSet& getAllRequiredAfter(CFGBlock *block);
-        const RequiredSet& getAllDefinedAt(CFGBlock *block);
-        bool isPotentiallyUndefinedAfter(const std::string &name, CFGBlock* block);
+    bool isRequired(const std::string& name, CFGBlock* block);
+    bool isRequiredAfter(const std::string& name, CFGBlock* block);
+    const RequiredSet& getAllRequiredAfter(CFGBlock* block);
+    const RequiredSet& getAllDefinedAt(CFGBlock* block);
+    bool isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block);
 };
 
 LivenessAnalysis* computeLivenessInfo(CFG*);
 PhiAnalysis* computeRequiredPhis(AST_arguments*, CFG*, LivenessAnalysis*, ScopeInfo* scope_Info);
-
 }
 
 #endif
-

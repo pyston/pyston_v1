@@ -30,10 +30,10 @@ BoxedDict* sys_modules_dict;
 
 BoxedDict* getSysModulesDict() {
     // PyPy's behavior: fetch from sys.modules each time:
-    //Box *_sys_modules = sys_module->peekattr("modules");
-    //assert(_sys_modules);
-    //assert(_sys_modules->cls == dict_cls);
-    //return static_cast<BoxedDict*>(_sys_modules);
+    // Box *_sys_modules = sys_module->peekattr("modules");
+    // assert(_sys_modules);
+    // assert(_sys_modules->cls == dict_cls);
+    // return static_cast<BoxedDict*>(_sys_modules);
 
     // CPython's behavior: return an internalized reference:
     return sys_modules_dict;
@@ -41,7 +41,7 @@ BoxedDict* getSysModulesDict() {
 
 BoxedList* getSysPath() {
     // Unlike sys.modules, CPython handles sys.path by fetching it each time:
-    Box *_sys_path = sys_module->peekattr("path");
+    Box* _sys_path = sys_module->peekattr("path");
     assert(_sys_path);
 
     if (_sys_path->cls != list_cls) {
@@ -54,14 +54,14 @@ BoxedList* getSysPath() {
 }
 
 void addToSysArgv(const char* str) {
-    Box *sys_argv = sys_module->peekattr("argv");
+    Box* sys_argv = sys_module->peekattr("argv");
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
     listAppendInternal(sys_argv, boxStrConstant(str));
 }
 
-void addToSysPath(const std::string &path) {
-    BoxedList *sys_path = getSysPath();
+void addToSysPath(const std::string& path) {
+    BoxedList* sys_path = getSysPath();
     listAppendInternal(sys_path, boxStringPtr(&path));
 }
 
@@ -83,6 +83,4 @@ void setupSys() {
     sys_module->giveAttr("stdin", new BoxedFile(stdin));
     sys_module->giveAttr("stderr", new BoxedFile(stderr));
 }
-
 }
-

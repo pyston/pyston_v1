@@ -101,9 +101,7 @@ void force() {
 
     FORCE(gc::sizes);
 
-    //FORCE(listIter);
+    // FORCE(listIter);
 }
-
 }
-
 }

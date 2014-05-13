@@ -21,20 +21,19 @@
 
 namespace pyston {
 
-extern BoxedClass *list_iterator_cls;
+extern BoxedClass* list_iterator_cls;
 struct BoxedListIterator : public Box {
-    BoxedList *l;
+    BoxedList* l;
     int pos;
     BoxedListIterator(BoxedList* l);
 };
 
 extern "C" const ObjectFlavor list_iterator_flavor;
 Box* listIter(Box* self);
-Box* listiterHasnext(Box *self);
-i1 listiterHasnextUnboxed(Box *self);
-Box* listiterNext(Box *self);
+Box* listiterHasnext(Box* self);
+i1 listiterHasnextUnboxed(Box* self);
+Box* listiterNext(Box* self);
 extern "C" Box* listAppend(Box* self, Box* v);
-
 }
 
 #endif

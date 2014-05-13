@@ -59,7 +59,8 @@ static llvm::Constant* getStringConstant(const std::string &str) {
     }
     llvm::ArrayType *at = llvm::ArrayType::get(g.i8, len);
     llvm::Constant *val = llvm::ConstantArray::get(at, llvm::ArrayRef<llvm::Constant*>(chars));
-    llvm::GlobalVariable *gv = new llvm::GlobalVariable(*g.cur_module, at, true, llvm::GlobalValue::ExternalLinkage, val, getStringName(str));
+    llvm::GlobalVariable *gv = new llvm::GlobalVariable(*g.cur_module, at, true, llvm::GlobalValue::ExternalLinkage,
+val, getStringName(str));
     g.global_string_table[str] = gv;
     return gv;
 }
@@ -68,12 +69,12 @@ static llvm::Constant* getStringConstant(const std::string &str) {
 std::unordered_map<std::string, const char*> strings;
 
 // Returns a llvm::Constant char* to a global string constant
-llvm::Constant* getStringConstantPtr(const std::string &str) {
+llvm::Constant* getStringConstantPtr(const std::string& str) {
     const char* c;
     if (strings.count(str)) {
         c = strings[str];
     } else {
-        char *buf = (char*)malloc(str.size() + 1);
+        char* buf = (char*)malloc(str.size() + 1);
         memcpy(buf, str.c_str(), str.size());
         buf[str.size()] = '\0';
 
@@ -94,8 +95,8 @@ llvm::Constant* getStringConstantPtr(const char* str) {
 // but doing it this way makes it clearer what's going on.
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     assert(type);
-    llvm::Constant *int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
-    llvm::Constant *ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
+    llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
+    llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
     return ptr_val;
 }
 
@@ -108,42 +109,42 @@ llvm::Constant* getConstantInt(int n) {
 }
 
 class PrettifyingMaterializer : public llvm::ValueMaterializer {
-    private:
-        llvm::Module* module;
-    public:
-        PrettifyingMaterializer(llvm::Module* module) : module(module) {
-        }
+private:
+    llvm::Module* module;
 
-        virtual llvm::Value* materializeValueFor(llvm::Value* v) {
-            if (llvm::ConstantExpr *ce = llvm::dyn_cast<llvm::ConstantExpr>(v)) {
-                llvm::PointerType* pt = llvm::dyn_cast<llvm::PointerType>(ce->getType());
-                if (ce->isCast() && ce->getOpcode() == llvm::Instruction::IntToPtr && pt) {
-                    llvm::ConstantInt* addr_const = llvm::cast<llvm::ConstantInt>(ce->getOperand(0));
-                    void* addr = (void*)addr_const->getSExtValue();
+public:
+    PrettifyingMaterializer(llvm::Module* module) : module(module) {}
 
-                    bool lookup_success = true;
-                    std::string name;
-                    if (addr == (void*)None) {
-                        name = "None";
-                    } else {
-                        name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
-                    }
+    virtual llvm::Value* materializeValueFor(llvm::Value* v) {
+        if (llvm::ConstantExpr* ce = llvm::dyn_cast<llvm::ConstantExpr>(v)) {
+            llvm::PointerType* pt = llvm::dyn_cast<llvm::PointerType>(ce->getType());
+            if (ce->isCast() && ce->getOpcode() == llvm::Instruction::IntToPtr && pt) {
+                llvm::ConstantInt* addr_const = llvm::cast<llvm::ConstantInt>(ce->getOperand(0));
+                void* addr = (void*)addr_const->getSExtValue();
 
-                    if (!lookup_success)
-                        return v;
-
-                    return module->getOrInsertGlobal(name, pt->getElementType());
+                bool lookup_success = true;
+                std::string name;
+                if (addr == (void*)None) {
+                    name = "None";
+                } else {
+                    name = g.func_addr_registry.getFuncNameAtAddress(addr, true, &lookup_success);
                 }
+
+                if (!lookup_success)
+                    return v;
+
+                return module->getOrInsertGlobal(name, pt->getElementType());
             }
-            return v;
         }
+        return v;
+    }
 };
 
-void dumpPrettyIR(llvm::Function *f) {
+void dumpPrettyIR(llvm::Function* f) {
     std::unique_ptr<llvm::Module> tmp_module(llvm::CloneModule(f->getParent()));
-    //std::unique_ptr<llvm::Module> tmp_module(new llvm::Module("tmp", g.context));
+    // std::unique_ptr<llvm::Module> tmp_module(new llvm::Module("tmp", g.context));
 
-    llvm::Function *new_f = tmp_module->begin();
+    llvm::Function* new_f = tmp_module->begin();
 
     llvm::ValueToValueMapTy VMap;
     PrettifyingMaterializer materializer(tmp_module.get());
@@ -154,8 +155,6 @@ void dumpPrettyIR(llvm::Function *f) {
         llvm::RemapInstruction(&*it, VMap, llvm::RF_None, NULL, &materializer);
     }
     tmp_module->begin()->dump();
-    //tmp_module->dump();
+    // tmp_module->dump();
 }
-
-
 }

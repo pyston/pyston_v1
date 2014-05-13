@@ -23,38 +23,36 @@ class AST;
 class AST_Module;
 
 class ScopeInfo {
-    public:
-        virtual ~ScopeInfo() {}
-        virtual ScopeInfo* getParent() = 0;
+public:
+    virtual ~ScopeInfo() {}
+    virtual ScopeInfo* getParent() = 0;
 
-        virtual bool createsClosure() = 0;
-        virtual bool takesClosure() = 0;
+    virtual bool createsClosure() = 0;
+    virtual bool takesClosure() = 0;
 
-        virtual bool refersToGlobal(const std::string &name) = 0;
-        virtual bool refersToClosure(const std::string name) = 0;
-        virtual bool saveInClosure(const std::string name) = 0;
+    virtual bool refersToGlobal(const std::string& name) = 0;
+    virtual bool refersToClosure(const std::string name) = 0;
+    virtual bool saveInClosure(const std::string name) = 0;
 };
 
 class ScopingAnalysis {
-    public:
-        struct ScopeNameUsage;
-        typedef std::unordered_map<AST*, ScopeNameUsage*> NameUsageMap;
+public:
+    struct ScopeNameUsage;
+    typedef std::unordered_map<AST*, ScopeNameUsage*> NameUsageMap;
 
-    private:
+private:
+    std::unordered_map<AST*, ScopeInfo*> scopes;
+    AST_Module* parent_module;
 
-        std::unordered_map<AST*, ScopeInfo*> scopes;
-        AST_Module* parent_module;
+    ScopeInfo* analyzeSubtree(AST* node);
+    void processNameUsages(NameUsageMap* usages);
 
-        ScopeInfo* analyzeSubtree(AST* node);
-        void processNameUsages(NameUsageMap* usages);
-
-    public:
-        ScopingAnalysis(AST_Module *m);
-        ScopeInfo* getScopeInfoForNode(AST* node);
+public:
+    ScopingAnalysis(AST_Module* m);
+    ScopeInfo* getScopeInfoForNode(AST* node);
 };
 
 ScopingAnalysis* runScopingAnalysis(AST_Module* m);
-
 }
 
 #endif

@@ -175,42 +175,47 @@ std::string getReverseOpName(int op_type) {
     return "__r" + normal_name.substr(2);
 }
 
-template <class T>
-static void visitVector(const std::vector<T*> &vec, ASTVisitor *v) {
+template <class T> static void visitVector(const std::vector<T*>& vec, ASTVisitor* v) {
     for (int i = 0; i < vec.size(); i++) {
         vec[i]->accept(v);
     }
 }
 
-void AST_alias::accept(ASTVisitor *v) {
+void AST_alias::accept(ASTVisitor* v) {
     bool skip = v->visit_alias(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void AST_arguments::accept(ASTVisitor *v) {
+void AST_arguments::accept(ASTVisitor* v) {
     bool skip = v->visit_arguments(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(defaults, v);
     visitVector(args, v);
-    if (kwarg) kwarg->accept(v);
+    if (kwarg)
+        kwarg->accept(v);
 }
 
-void AST_Assert::accept(ASTVisitor *v) {
+void AST_Assert::accept(ASTVisitor* v) {
     bool skip = v->visit_assert(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     test->accept(v);
-    if (msg) msg->accept(v);
+    if (msg)
+        msg->accept(v);
 }
 
-void AST_Assert::accept_stmt(StmtVisitor *v) {
+void AST_Assert::accept_stmt(StmtVisitor* v) {
     v->visit_assert(this);
 }
 
-void AST_Assign::accept(ASTVisitor *v) {
+void AST_Assign::accept(ASTVisitor* v) {
     bool skip = v->visit_assign(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     value->accept(v);
     for (int i = 0; i < targets.size(); i++) {
@@ -222,107 +227,118 @@ void AST_Assign::accept(ASTVisitor *v) {
     }
 }
 
-void AST_Assign::accept_stmt(StmtVisitor *v) {
+void AST_Assign::accept_stmt(StmtVisitor* v) {
     v->visit_assign(this);
 }
 
-void AST_AugAssign::accept(ASTVisitor *v) {
+void AST_AugAssign::accept(ASTVisitor* v) {
     bool skip = v->visit_augassign(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     value->accept(v);
     target->accept(v);
 }
 
-void AST_AugAssign::accept_stmt(StmtVisitor *v) {
+void AST_AugAssign::accept_stmt(StmtVisitor* v) {
     v->visit_augassign(this);
 }
 
-void AST_AugBinOp::accept(ASTVisitor *v) {
+void AST_AugBinOp::accept(ASTVisitor* v) {
     bool skip = v->visit_augbinop(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     left->accept(v);
     right->accept(v);
 }
 
-void* AST_AugBinOp::accept_expr(ExprVisitor *v) {
+void* AST_AugBinOp::accept_expr(ExprVisitor* v) {
     return v->visit_augbinop(this);
 }
 
-void AST_Attribute::accept(ASTVisitor *v) {
+void AST_Attribute::accept(ASTVisitor* v) {
     bool skip = v->visit_attribute(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     value->accept(v);
 }
 
-void* AST_Attribute::accept_expr(ExprVisitor *v) {
+void* AST_Attribute::accept_expr(ExprVisitor* v) {
     return v->visit_attribute(this);
 }
 
-void AST_BinOp::accept(ASTVisitor *v) {
+void AST_BinOp::accept(ASTVisitor* v) {
     bool skip = v->visit_binop(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     left->accept(v);
     right->accept(v);
 }
 
-void* AST_BinOp::accept_expr(ExprVisitor *v) {
+void* AST_BinOp::accept_expr(ExprVisitor* v) {
     return v->visit_binop(this);
 }
 
-void AST_BoolOp::accept(ASTVisitor *v) {
+void AST_BoolOp::accept(ASTVisitor* v) {
     bool skip = v->visit_boolop(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(values, v);
 }
 
-void* AST_BoolOp::accept_expr(ExprVisitor *v) {
+void* AST_BoolOp::accept_expr(ExprVisitor* v) {
     return v->visit_boolop(this);
 }
 
-void AST_Break::accept(ASTVisitor *v) {
+void AST_Break::accept(ASTVisitor* v) {
     bool skip = v->visit_break(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void AST_Break::accept_stmt(StmtVisitor *v) {
+void AST_Break::accept_stmt(StmtVisitor* v) {
     v->visit_break(this);
 }
 
-void AST_Call::accept(ASTVisitor *v) {
+void AST_Call::accept(ASTVisitor* v) {
     bool skip = v->visit_call(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     func->accept(v);
     visitVector(args, v);
     visitVector(keywords, v);
-    if (starargs) starargs->accept(v);
-    if (kwargs) kwargs->accept(v);
+    if (starargs)
+        starargs->accept(v);
+    if (kwargs)
+        kwargs->accept(v);
 }
 
-void* AST_Call::accept_expr(ExprVisitor *v) {
+void* AST_Call::accept_expr(ExprVisitor* v) {
     return v->visit_call(this);
 }
 
-void AST_Compare::accept(ASTVisitor *v) {
+void AST_Compare::accept(ASTVisitor* v) {
     bool skip = v->visit_compare(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     left->accept(v);
     visitVector(comparators, v);
 }
 
-void* AST_Compare::accept_expr(ExprVisitor *v) {
+void* AST_Compare::accept_expr(ExprVisitor* v) {
     return v->visit_compare(this);
 }
 
-void AST_comprehension::accept(ASTVisitor *v) {
+void AST_comprehension::accept(ASTVisitor* v) {
     bool skip = v->visit_comprehension(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     target->accept(v);
     iter->accept(v);
@@ -331,31 +347,34 @@ void AST_comprehension::accept(ASTVisitor *v) {
     }
 }
 
-void AST_ClassDef::accept(ASTVisitor *v) {
+void AST_ClassDef::accept(ASTVisitor* v) {
     bool skip = v->visit_classdef(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(this->bases, v);
     visitVector(this->decorator_list, v);
     visitVector(this->body, v);
 }
 
-void AST_ClassDef::accept_stmt(StmtVisitor *v) {
+void AST_ClassDef::accept_stmt(StmtVisitor* v) {
     v->visit_classdef(this);
 }
 
-void AST_Continue::accept(ASTVisitor *v) {
+void AST_Continue::accept(ASTVisitor* v) {
     bool skip = v->visit_continue(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void AST_Continue::accept_stmt(StmtVisitor *v) {
+void AST_Continue::accept_stmt(StmtVisitor* v) {
     v->visit_continue(this);
 }
 
-void AST_Dict::accept(ASTVisitor *v) {
+void AST_Dict::accept(ASTVisitor* v) {
     bool skip = v->visit_dict(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     for (int i = 0; i < keys.size(); i++) {
         keys[i]->accept(v);
@@ -363,33 +382,38 @@ void AST_Dict::accept(ASTVisitor *v) {
     }
 }
 
-void* AST_Dict::accept_expr(ExprVisitor *v) {
+void* AST_Dict::accept_expr(ExprVisitor* v) {
     return v->visit_dict(this);
 }
 
-void AST_ExceptHandler::accept(ASTVisitor *v) {
+void AST_ExceptHandler::accept(ASTVisitor* v) {
     bool skip = v->visit_excepthandler(this);
-    if (skip) return;
+    if (skip)
+        return;
 
-    if (type) type->accept(v);
-    if (name) name->accept(v);
+    if (type)
+        type->accept(v);
+    if (name)
+        name->accept(v);
     visitVector(body, v);
 }
 
-void AST_Expr::accept(ASTVisitor *v) {
+void AST_Expr::accept(ASTVisitor* v) {
     bool skip = v->visit_expr(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     value->accept(v);
 }
 
-void AST_Expr::accept_stmt(StmtVisitor *v) {
+void AST_Expr::accept_stmt(StmtVisitor* v) {
     v->visit_expr(this);
 }
 
-void AST_For::accept(ASTVisitor *v) {
+void AST_For::accept(ASTVisitor* v) {
     bool skip = v->visit_for(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     iter->accept(v);
     target->accept(v);
@@ -397,112 +421,122 @@ void AST_For::accept(ASTVisitor *v) {
     visitVector(orelse, v);
 }
 
-void AST_For::accept_stmt(StmtVisitor *v) {
+void AST_For::accept_stmt(StmtVisitor* v) {
     v->visit_for(this);
 }
 
-void AST_FunctionDef::accept(ASTVisitor *v) {
+void AST_FunctionDef::accept(ASTVisitor* v) {
     bool skip = v->visit_functiondef(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(decorator_list, v);
     args->accept(v);
     visitVector(body, v);
 }
 
-void AST_FunctionDef::accept_stmt(StmtVisitor *v) {
+void AST_FunctionDef::accept_stmt(StmtVisitor* v) {
     v->visit_functiondef(this);
 }
 
-void AST_Global::accept(ASTVisitor *v) {
+void AST_Global::accept(ASTVisitor* v) {
     bool skip = v->visit_global(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void AST_Global::accept_stmt(StmtVisitor *v) {
+void AST_Global::accept_stmt(StmtVisitor* v) {
     v->visit_global(this);
 }
 
-void AST_If::accept(ASTVisitor *v) {
+void AST_If::accept(ASTVisitor* v) {
     bool skip = v->visit_if(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     test->accept(v);
     visitVector(body, v);
     visitVector(orelse, v);
 }
 
-void AST_If::accept_stmt(StmtVisitor *v) {
+void AST_If::accept_stmt(StmtVisitor* v) {
     v->visit_if(this);
 }
 
-void AST_IfExp::accept(ASTVisitor *v) {
+void AST_IfExp::accept(ASTVisitor* v) {
     bool skip = v->visit_ifexp(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     this->test->accept(v);
     this->body->accept(v);
     this->orelse->accept(v);
 }
 
-void* AST_IfExp::accept_expr(ExprVisitor *v) {
+void* AST_IfExp::accept_expr(ExprVisitor* v) {
     return v->visit_ifexp(this);
 }
 
-void AST_Import::accept(ASTVisitor *v) {
+void AST_Import::accept(ASTVisitor* v) {
     bool skip = v->visit_import(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(names, v);
 }
 
-void AST_Import::accept_stmt(StmtVisitor *v) {
+void AST_Import::accept_stmt(StmtVisitor* v) {
     v->visit_import(this);
 }
 
-void AST_ImportFrom::accept(ASTVisitor *v) {
+void AST_ImportFrom::accept(ASTVisitor* v) {
     bool skip = v->visit_importfrom(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(names, v);
 }
 
-void AST_ImportFrom::accept_stmt(StmtVisitor *v) {
+void AST_ImportFrom::accept_stmt(StmtVisitor* v) {
     v->visit_importfrom(this);
 }
 
-void AST_Index::accept(ASTVisitor *v) {
+void AST_Index::accept(ASTVisitor* v) {
     bool skip = v->visit_index(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     this->value->accept(v);
 }
 
-void* AST_Index::accept_expr(ExprVisitor *v) {
+void* AST_Index::accept_expr(ExprVisitor* v) {
     return v->visit_index(this);
 }
 
-void AST_keyword::accept(ASTVisitor *v) {
+void AST_keyword::accept(ASTVisitor* v) {
     bool skip = v->visit_keyword(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     value->accept(v);
 }
 
-void AST_List::accept(ASTVisitor *v) {
+void AST_List::accept(ASTVisitor* v) {
     bool skip = v->visit_list(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(elts, v);
 }
 
-void* AST_List::accept_expr(ExprVisitor *v) {
+void* AST_List::accept_expr(ExprVisitor* v) {
     return v->visit_list(this);
 }
 
-void AST_ListComp::accept(ASTVisitor *v) {
+void AST_ListComp::accept(ASTVisitor* v) {
     bool skip = v->visit_listcomp(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     for (auto c : generators) {
         c->accept(v);
@@ -511,227 +545,251 @@ void AST_ListComp::accept(ASTVisitor *v) {
     elt->accept(v);
 }
 
-void* AST_ListComp::accept_expr(ExprVisitor *v) {
+void* AST_ListComp::accept_expr(ExprVisitor* v) {
     return v->visit_listcomp(this);
 }
 
-void AST_Module::accept(ASTVisitor *v) {
+void AST_Module::accept(ASTVisitor* v) {
     bool skip = v->visit_module(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(body, v);
 }
 
-void AST_Name::accept(ASTVisitor *v) {
+void AST_Name::accept(ASTVisitor* v) {
     bool skip = v->visit_name(this);
 }
 
-void* AST_Name::accept_expr(ExprVisitor *v) {
+void* AST_Name::accept_expr(ExprVisitor* v) {
     return v->visit_name(this);
 }
 
-void AST_Num::accept(ASTVisitor *v) {
+void AST_Num::accept(ASTVisitor* v) {
     bool skip = v->visit_num(this);
 }
 
-void* AST_Num::accept_expr(ExprVisitor *v) {
+void* AST_Num::accept_expr(ExprVisitor* v) {
     return v->visit_num(this);
 }
 
-void AST_Pass::accept(ASTVisitor *v) {
+void AST_Pass::accept(ASTVisitor* v) {
     bool skip = v->visit_pass(this);
 }
 
-void AST_Pass::accept_stmt(StmtVisitor *v) {
+void AST_Pass::accept_stmt(StmtVisitor* v) {
     v->visit_pass(this);
 }
 
-void AST_Print::accept(ASTVisitor *v) {
+void AST_Print::accept(ASTVisitor* v) {
     bool skip = v->visit_print(this);
-    if (skip) return;
+    if (skip)
+        return;
 
-    if (dest) dest->accept(v);
+    if (dest)
+        dest->accept(v);
     visitVector(values, v);
 }
 
-void AST_Print::accept_stmt(StmtVisitor *v) {
+void AST_Print::accept_stmt(StmtVisitor* v) {
     v->visit_print(this);
 }
 
-void AST_Raise::accept(ASTVisitor *v) {
+void AST_Raise::accept(ASTVisitor* v) {
     bool skip = v->visit_raise(this);
-    if (skip) return;
+    if (skip)
+        return;
 
-    if (arg0) arg0->accept(v);
-    if (arg1) arg1->accept(v);
-    if (arg2) arg2->accept(v);
+    if (arg0)
+        arg0->accept(v);
+    if (arg1)
+        arg1->accept(v);
+    if (arg2)
+        arg2->accept(v);
 }
 
-void AST_Raise::accept_stmt(StmtVisitor *v) {
+void AST_Raise::accept_stmt(StmtVisitor* v) {
     v->visit_raise(this);
 }
 
-void AST_Repr::accept(ASTVisitor *v) {
+void AST_Repr::accept(ASTVisitor* v) {
     bool skip = v->visit_repr(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void* AST_Repr::accept_expr(ExprVisitor *v) {
+void* AST_Repr::accept_expr(ExprVisitor* v) {
     return v->visit_repr(this);
 }
 
-void AST_Return::accept(ASTVisitor *v) {
+void AST_Return::accept(ASTVisitor* v) {
     bool skip = v->visit_return(this);
-    if (skip) return;
+    if (skip)
+        return;
 
-    if (value) value->accept(v);
+    if (value)
+        value->accept(v);
 }
 
-void AST_Return::accept_stmt(StmtVisitor *v) {
+void AST_Return::accept_stmt(StmtVisitor* v) {
     v->visit_return(this);
 }
 
-void AST_Slice::accept(ASTVisitor *v) {
+void AST_Slice::accept(ASTVisitor* v) {
     bool skip = v->visit_slice(this);
-    if (skip) return;
+    if (skip)
+        return;
 
-    if (lower) lower->accept(v);
-    if (upper) upper->accept(v);
-    if (step) step->accept(v);
+    if (lower)
+        lower->accept(v);
+    if (upper)
+        upper->accept(v);
+    if (step)
+        step->accept(v);
 }
 
-void* AST_Slice::accept_expr(ExprVisitor *v) {
+void* AST_Slice::accept_expr(ExprVisitor* v) {
     return v->visit_slice(this);
 }
 
-void AST_Str::accept(ASTVisitor *v) {
+void AST_Str::accept(ASTVisitor* v) {
     bool skip = v->visit_str(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void* AST_Str::accept_expr(ExprVisitor *v) {
+void* AST_Str::accept_expr(ExprVisitor* v) {
     return v->visit_str(this);
 }
 
-void AST_Subscript::accept(ASTVisitor *v) {
+void AST_Subscript::accept(ASTVisitor* v) {
     bool skip = v->visit_subscript(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     this->value->accept(v);
     this->slice->accept(v);
 }
 
-void* AST_Subscript::accept_expr(ExprVisitor *v) {
+void* AST_Subscript::accept_expr(ExprVisitor* v) {
     return v->visit_subscript(this);
 }
 
-void AST_TryExcept::accept(ASTVisitor *v) {
+void AST_TryExcept::accept(ASTVisitor* v) {
     bool skip = v->visit_tryexcept(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(body, v);
     visitVector(orelse, v);
     visitVector(handlers, v);
 }
 
-void AST_TryExcept::accept_stmt(StmtVisitor *v) {
+void AST_TryExcept::accept_stmt(StmtVisitor* v) {
     v->visit_tryexcept(this);
 }
 
-void AST_TryFinally::accept(ASTVisitor *v) {
+void AST_TryFinally::accept(ASTVisitor* v) {
     bool skip = v->visit_tryfinally(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(body, v);
     visitVector(finalbody, v);
 }
 
-void AST_TryFinally::accept_stmt(StmtVisitor *v) {
+void AST_TryFinally::accept_stmt(StmtVisitor* v) {
     v->visit_tryfinally(this);
 }
 
-void AST_Tuple::accept(ASTVisitor *v) {
+void AST_Tuple::accept(ASTVisitor* v) {
     bool skip = v->visit_tuple(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     visitVector(elts, v);
 }
 
-void* AST_Tuple::accept_expr(ExprVisitor *v) {
+void* AST_Tuple::accept_expr(ExprVisitor* v) {
     return v->visit_tuple(this);
 }
 
-void AST_UnaryOp::accept(ASTVisitor *v) {
+void AST_UnaryOp::accept(ASTVisitor* v) {
     bool skip = v->visit_unaryop(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     operand->accept(v);
 }
 
-void* AST_UnaryOp::accept_expr(ExprVisitor *v) {
+void* AST_UnaryOp::accept_expr(ExprVisitor* v) {
     return v->visit_unaryop(this);
 }
 
-void AST_While::accept(ASTVisitor *v) {
+void AST_While::accept(ASTVisitor* v) {
     bool skip = v->visit_while(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     test->accept(v);
     visitVector(body, v);
     visitVector(orelse, v);
 }
 
-void AST_While::accept_stmt(StmtVisitor *v) {
+void AST_While::accept_stmt(StmtVisitor* v) {
     v->visit_while(this);
 }
 
-void AST_With::accept(ASTVisitor *v) {
+void AST_With::accept(ASTVisitor* v) {
     bool skip = v->visit_with(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     context_expr->accept(v);
-    if (optional_vars) optional_vars->accept(v);
+    if (optional_vars)
+        optional_vars->accept(v);
     visitVector(body, v);
 }
 
-void AST_With::accept_stmt(StmtVisitor *v) {
+void AST_With::accept_stmt(StmtVisitor* v) {
     v->visit_with(this);
 }
 
 
-void AST_Branch::accept(ASTVisitor *v) {
+void AST_Branch::accept(ASTVisitor* v) {
     bool skip = v->visit_branch(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     test->accept(v);
 }
 
-void AST_Branch::accept_stmt(StmtVisitor *v) {
+void AST_Branch::accept_stmt(StmtVisitor* v) {
     v->visit_branch(this);
 }
 
 
-void AST_Jump::accept(ASTVisitor *v) {
+void AST_Jump::accept(ASTVisitor* v) {
     bool skip = v->visit_jump(this);
-    if (skip) return;
+    if (skip)
+        return;
 }
 
-void AST_Jump::accept_stmt(StmtVisitor *v) {
+void AST_Jump::accept_stmt(StmtVisitor* v) {
     v->visit_jump(this);
 }
 
-void AST_ClsAttribute::accept(ASTVisitor *v) {
+void AST_ClsAttribute::accept(ASTVisitor* v) {
     bool skip = v->visit_clsattribute(this);
-    if (skip) return;
+    if (skip)
+        return;
 
     value->accept(v);
 }
 
-void* AST_ClsAttribute::accept_expr(ExprVisitor *v) {
+void* AST_ClsAttribute::accept_expr(ExprVisitor* v) {
     return v->visit_clsattribute(this);
 }
-
-
 
 
 
@@ -746,18 +804,19 @@ void PrintVisitor::printIndent() {
     }
 }
 
-bool PrintVisitor::visit_alias(AST_alias *node) {
+bool PrintVisitor::visit_alias(AST_alias* node) {
     printf("%s", node->name.c_str());
     if (node->asname.size())
         printf(" as %s", node->asname.c_str());
     return true;
 }
 
-bool PrintVisitor::visit_arguments(AST_arguments *node) {
+bool PrintVisitor::visit_arguments(AST_arguments* node) {
     int nargs = node->args.size();
     int ndefault = node->defaults.size();
     for (int i = 0; i < nargs; i++) {
-        if (i > 0) printf(", ");
+        if (i > 0)
+            printf(", ");
 
         node->args[i]->accept(this);
         if (i >= nargs - ndefault) {
@@ -768,7 +827,7 @@ bool PrintVisitor::visit_arguments(AST_arguments *node) {
     return true;
 }
 
-bool PrintVisitor::visit_assert(AST_Assert *node) {
+bool PrintVisitor::visit_assert(AST_Assert* node) {
     printf("assert ");
     node->test->accept(this);
     if (node->msg) {
@@ -778,7 +837,7 @@ bool PrintVisitor::visit_assert(AST_Assert *node) {
     return true;
 }
 
-bool PrintVisitor::visit_assign(AST_Assign *node) {
+bool PrintVisitor::visit_assign(AST_Assign* node) {
     for (int i = 0; i < node->targets.size(); i++) {
         node->targets[i]->accept(this);
         printf(" = ");
@@ -828,7 +887,7 @@ static void printOp(AST_TYPE::AST_TYPE op_type) {
     }
 }
 
-bool PrintVisitor::visit_augassign(AST_AugAssign *node) {
+bool PrintVisitor::visit_augassign(AST_AugAssign* node) {
     node->target->accept(this);
     printOp(node->op_type);
     putchar('=');
@@ -836,7 +895,7 @@ bool PrintVisitor::visit_augassign(AST_AugAssign *node) {
     return true;
 }
 
-bool PrintVisitor::visit_augbinop(AST_AugBinOp *node) {
+bool PrintVisitor::visit_augbinop(AST_AugBinOp* node) {
     node->left->accept(this);
     printf("=");
     printOp(node->op_type);
@@ -844,25 +903,26 @@ bool PrintVisitor::visit_augbinop(AST_AugBinOp *node) {
     return true;
 }
 
-bool PrintVisitor::visit_attribute(AST_Attribute *node) {
+bool PrintVisitor::visit_attribute(AST_Attribute* node) {
     node->value->accept(this);
     putchar('.');
     printf("%s", node->attr.c_str());
     return true;
 }
 
-bool PrintVisitor::visit_binop(AST_BinOp *node) {
+bool PrintVisitor::visit_binop(AST_BinOp* node) {
     node->left->accept(this);
     printOp(node->op_type);
     node->right->accept(this);
     return true;
 }
 
-bool PrintVisitor::visit_boolop(AST_BoolOp *node) {
+bool PrintVisitor::visit_boolop(AST_BoolOp* node) {
     for (int i = 0; i < node->values.size(); i++) {
         node->values[i]->accept(this);
 
-        if (i == node->values.size() - 1) continue;
+        if (i == node->values.size() - 1)
+            continue;
         switch (node->op_type) {
             case AST_TYPE::And:
                 printf(" and ");
@@ -878,33 +938,37 @@ bool PrintVisitor::visit_boolop(AST_BoolOp *node) {
     return true;
 }
 
-bool PrintVisitor::visit_break(AST_Break *node) {
+bool PrintVisitor::visit_break(AST_Break* node) {
     printf("break");
     return true;
 }
 
-bool PrintVisitor::visit_call(AST_Call *node) {
+bool PrintVisitor::visit_call(AST_Call* node) {
     node->func->accept(this);
     printf("(");
 
     bool prevarg = false;
     for (int i = 0; i < node->args.size(); i++) {
-        if (prevarg) printf(", ");
+        if (prevarg)
+            printf(", ");
         node->args[i]->accept(this);
         prevarg = true;
     }
     for (int i = 0; i < node->keywords.size(); i++) {
-        if (prevarg) printf(", ");
+        if (prevarg)
+            printf(", ");
         node->keywords[i]->accept(this);
         prevarg = true;
     }
     if (node->starargs) {
-        if (prevarg) printf(", ");
+        if (prevarg)
+            printf(", ");
         node->starargs->accept(this);
         prevarg = true;
     }
     if (node->kwargs) {
-        if (prevarg) printf(", ");
+        if (prevarg)
+            printf(", ");
         node->kwargs->accept(this);
         prevarg = true;
     }
@@ -912,7 +976,7 @@ bool PrintVisitor::visit_call(AST_Call *node) {
     return true;
 }
 
-bool PrintVisitor::visit_compare(AST_Compare *node) {
+bool PrintVisitor::visit_compare(AST_Compare* node) {
     node->left->accept(this);
 
     for (int i = 0; i < node->ops.size(); i++) {
@@ -925,13 +989,13 @@ bool PrintVisitor::visit_compare(AST_Compare *node) {
     return true;
 }
 
-bool PrintVisitor::visit_comprehension(AST_comprehension *node) {
+bool PrintVisitor::visit_comprehension(AST_comprehension* node) {
     printf("for ");
     node->target->accept(this);
     printf(" in ");
     node->iter->accept(this);
 
-    for (AST_expr *i : node->ifs) {
+    for (AST_expr* i : node->ifs) {
         printf(" if ");
         i->accept(this);
     }
@@ -939,7 +1003,7 @@ bool PrintVisitor::visit_comprehension(AST_comprehension *node) {
     return true;
 }
 
-bool PrintVisitor::visit_classdef(AST_ClassDef *node) {
+bool PrintVisitor::visit_classdef(AST_ClassDef* node) {
     for (int i = 0, n = node->decorator_list.size(); i < n; i++) {
         printf("@");
         node->decorator_list[i]->accept(this);
@@ -965,15 +1029,16 @@ bool PrintVisitor::visit_classdef(AST_ClassDef *node) {
     return true;
 }
 
-bool PrintVisitor::visit_continue(AST_Continue *node) {
+bool PrintVisitor::visit_continue(AST_Continue* node) {
     printf("continue");
     return true;
 }
 
-bool PrintVisitor::visit_dict(AST_Dict *node) {
+bool PrintVisitor::visit_dict(AST_Dict* node) {
     printf("{");
     for (int i = 0; i < node->keys.size(); i++) {
-        if (i > 0) printf(", ");
+        if (i > 0)
+            printf(", ");
         node->keys[i]->accept(this);
         printf(":");
         node->values[i]->accept(this);
@@ -982,7 +1047,7 @@ bool PrintVisitor::visit_dict(AST_Dict *node) {
     return true;
 }
 
-bool PrintVisitor::visit_excepthandler(AST_ExceptHandler *node) {
+bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     printf("except");
     if (node->type) {
         printf(" ");
@@ -1004,16 +1069,16 @@ bool PrintVisitor::visit_excepthandler(AST_ExceptHandler *node) {
     return true;
 }
 
-bool PrintVisitor::visit_expr(AST_Expr *node) {
+bool PrintVisitor::visit_expr(AST_Expr* node) {
     return false;
 }
 
-bool PrintVisitor::visit_for(AST_For *node) {
+bool PrintVisitor::visit_for(AST_For* node) {
     printf("<for loop>\n");
     return true;
 }
 
-bool PrintVisitor::visit_functiondef(AST_FunctionDef *node) {
+bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
     assert(node->decorator_list.size() == 0);
     printf("def %s(", node->name.c_str());
     node->args->accept(this);
@@ -1029,22 +1094,23 @@ bool PrintVisitor::visit_functiondef(AST_FunctionDef *node) {
     return true;
 }
 
-bool PrintVisitor::visit_global(AST_Global *node) {
+bool PrintVisitor::visit_global(AST_Global* node) {
     printf("global ");
     for (int i = 0; i < node->names.size(); i++) {
-        if (i > 0) printf(", ");
+        if (i > 0)
+            printf(", ");
         printf("%s", node->names[i].c_str());
     }
     return true;
 }
 
-bool PrintVisitor::visit_if(AST_If *node) {
+bool PrintVisitor::visit_if(AST_If* node) {
     printf("if ");
     node->test->accept(this);
     printf(":\n");
 
     indent += 4;
-    for(int i = 0; i < node->body.size(); i++) {
+    for (int i = 0; i < node->body.size(); i++) {
         printIndent();
         node->body[i]->accept(this);
         printf("\n");
@@ -1064,8 +1130,9 @@ bool PrintVisitor::visit_if(AST_If *node) {
             printf("else:\n");
             indent += 4;
         }
-        for(int i = 0; i < node->orelse.size(); i++) {
-            if (i) printf("\n");
+        for (int i = 0; i < node->orelse.size(); i++) {
+            if (i)
+                printf("\n");
             printIndent();
             node->orelse[i]->accept(this);
         }
@@ -1075,7 +1142,7 @@ bool PrintVisitor::visit_if(AST_If *node) {
     return true;
 }
 
-bool PrintVisitor::visit_ifexp(AST_IfExp *node) {
+bool PrintVisitor::visit_ifexp(AST_IfExp* node) {
     node->body->accept(this);
     printf(" if ");
     node->test->accept(this);
@@ -1084,29 +1151,31 @@ bool PrintVisitor::visit_ifexp(AST_IfExp *node) {
     return true;
 }
 
-bool PrintVisitor::visit_import(AST_Import *node) {
+bool PrintVisitor::visit_import(AST_Import* node) {
     printf("import ");
     for (int i = 0; i < node->names.size(); i++) {
-        if (i > 0) printf(", ");
+        if (i > 0)
+            printf(", ");
         node->names[i]->accept(this);
     }
     return true;
 }
 
-bool PrintVisitor::visit_importfrom(AST_ImportFrom *node) {
+bool PrintVisitor::visit_importfrom(AST_ImportFrom* node) {
     printf("from %s import ", node->module.c_str());
     for (int i = 0; i < node->names.size(); i++) {
-        if (i > 0) printf(", ");
+        if (i > 0)
+            printf(", ");
         node->names[i]->accept(this);
     }
     return true;
 }
 
-bool PrintVisitor::visit_index(AST_Index *node) {
+bool PrintVisitor::visit_index(AST_Index* node) {
     return false;
 }
 
-bool PrintVisitor::visit_list(AST_List *node) {
+bool PrintVisitor::visit_list(AST_List* node) {
     printf("[");
     for (int i = 0, n = node->elts.size(); i < n; ++i) {
         if (i > 0)
@@ -1117,7 +1186,7 @@ bool PrintVisitor::visit_list(AST_List *node) {
     return true;
 }
 
-bool PrintVisitor::visit_listcomp(AST_ListComp *node) {
+bool PrintVisitor::visit_listcomp(AST_ListComp* node) {
     printf("[");
     node->elt->accept(this);
     for (auto c : node->generators) {
@@ -1128,14 +1197,14 @@ bool PrintVisitor::visit_listcomp(AST_ListComp *node) {
     return true;
 }
 
-bool PrintVisitor::visit_keyword(AST_keyword *node) {
+bool PrintVisitor::visit_keyword(AST_keyword* node) {
     printf("%s=", node->arg.c_str());
     node->value->accept(this);
     return true;
 }
 
-bool PrintVisitor::visit_module(AST_Module *node) {
-    //printf("<module>\n");
+bool PrintVisitor::visit_module(AST_Module* node) {
+    // printf("<module>\n");
     for (int i = 0; i < node->body.size(); i++) {
         node->body[i]->accept(this);
         printf("\n");
@@ -1143,13 +1212,13 @@ bool PrintVisitor::visit_module(AST_Module *node) {
     return true;
 }
 
-bool PrintVisitor::visit_name(AST_Name *node) {
+bool PrintVisitor::visit_name(AST_Name* node) {
     printf("%s", node->id.c_str());
-    //printf("%s(%d)", node->id.c_str(), node->ctx_type);
+    // printf("%s(%d)", node->id.c_str(), node->ctx_type);
     return false;
 }
 
-bool PrintVisitor::visit_num(AST_Num *node) {
+bool PrintVisitor::visit_num(AST_Num* node) {
     if (node->num_type == AST_Num::INT) {
         printf("%ld", node->n_int);
     } else if (node->num_type == AST_Num::FLOAT) {
@@ -1160,12 +1229,12 @@ bool PrintVisitor::visit_num(AST_Num *node) {
     return false;
 }
 
-bool PrintVisitor::visit_pass(AST_Pass *node) {
+bool PrintVisitor::visit_pass(AST_Pass* node) {
     printf("pass");
     return true;
 }
 
-bool PrintVisitor::visit_print(AST_Print *node) {
+bool PrintVisitor::visit_print(AST_Print* node) {
     printf("print ");
     if (node->dest) {
         printf(">>");
@@ -1182,7 +1251,7 @@ bool PrintVisitor::visit_print(AST_Print *node) {
     return true;
 }
 
-bool PrintVisitor::visit_raise(AST_Raise *node) {
+bool PrintVisitor::visit_raise(AST_Raise* node) {
     printf("raise");
     if (node->arg0) {
         printf(" ");
@@ -1199,19 +1268,19 @@ bool PrintVisitor::visit_raise(AST_Raise *node) {
     return true;
 }
 
-bool PrintVisitor::visit_repr(AST_Repr *node) {
+bool PrintVisitor::visit_repr(AST_Repr* node) {
     printf("`");
     node->value->accept(this);
     printf("`");
     return true;
 }
 
-bool PrintVisitor::visit_return(AST_Return *node) {
+bool PrintVisitor::visit_return(AST_Return* node) {
     printf("return ");
     return false;
 }
 
-bool PrintVisitor::visit_slice(AST_Slice *node) {
+bool PrintVisitor::visit_slice(AST_Slice* node) {
     if (node->lower)
         node->lower->accept(this);
     if (node->upper || node->step)
@@ -1225,12 +1294,12 @@ bool PrintVisitor::visit_slice(AST_Slice *node) {
     return true;
 }
 
-bool PrintVisitor::visit_str(AST_Str *node) {
+bool PrintVisitor::visit_str(AST_Str* node) {
     printf("\"%s\"", node->s.c_str());
     return false;
 }
 
-bool PrintVisitor::visit_subscript(AST_Subscript *node) {
+bool PrintVisitor::visit_subscript(AST_Subscript* node) {
     node->value->accept(this);
     printf("[");
     node->slice->accept(this);
@@ -1238,7 +1307,7 @@ bool PrintVisitor::visit_subscript(AST_Subscript *node) {
     return true;
 }
 
-bool PrintVisitor::visit_tryexcept(AST_TryExcept *node) {
+bool PrintVisitor::visit_tryexcept(AST_TryExcept* node) {
     printf("try:\n");
     indent += 4;
     for (AST* subnode : node->body) {
@@ -1266,7 +1335,7 @@ bool PrintVisitor::visit_tryexcept(AST_TryExcept *node) {
     return true;
 }
 
-bool PrintVisitor::visit_tryfinally(AST_TryFinally *node) {
+bool PrintVisitor::visit_tryfinally(AST_TryFinally* node) {
     if (node->body.size() == 1 && node->body[0]->type == AST_TYPE::TryExcept) {
         node->body[0]->accept(this);
         printIndent();
@@ -1302,11 +1371,12 @@ bool PrintVisitor::visit_tryfinally(AST_TryFinally *node) {
     return true;
 }
 
-bool PrintVisitor::visit_tuple(AST_Tuple *node) {
+bool PrintVisitor::visit_tuple(AST_Tuple* node) {
     printf("(");
     int n = node->elts.size();
     for (int i = 0; i < n; i++) {
-        if (i) printf(", ");
+        if (i)
+            printf(", ");
         node->elts[i]->accept(this);
     }
     if (n == 1)
@@ -1315,7 +1385,7 @@ bool PrintVisitor::visit_tuple(AST_Tuple *node) {
     return true;
 }
 
-bool PrintVisitor::visit_unaryop(AST_UnaryOp *node) {
+bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
     switch (node->op_type) {
         case AST_TYPE::Invert:
             printf("~");
@@ -1337,7 +1407,7 @@ bool PrintVisitor::visit_unaryop(AST_UnaryOp *node) {
     return true;
 }
 
-bool PrintVisitor::visit_while(AST_While *node) {
+bool PrintVisitor::visit_while(AST_While* node) {
     printf("while ");
     node->test->accept(this);
     printf("\n");
@@ -1364,7 +1434,7 @@ bool PrintVisitor::visit_while(AST_While *node) {
     return true;
 }
 
-bool PrintVisitor::visit_with(AST_With *node) {
+bool PrintVisitor::visit_with(AST_With* node) {
     printf("with ");
     node->context_expr->accept(this);
     if (node->optional_vars) {
@@ -1375,7 +1445,8 @@ bool PrintVisitor::visit_with(AST_With *node) {
 
     indent += 4;
     for (int i = 0; i < node->body.size(); i++) {
-        if (i > 0) printf("\n");
+        if (i > 0)
+            printf("\n");
         printIndent();
         node->body[i]->accept(this);
     }
@@ -1384,84 +1455,219 @@ bool PrintVisitor::visit_with(AST_With *node) {
     return true;
 }
 
-bool PrintVisitor::visit_branch(AST_Branch *node) {
+bool PrintVisitor::visit_branch(AST_Branch* node) {
     printf("if ");
     node->test->accept(this);
     printf(" goto %d else goto %d", node->iftrue->idx, node->iffalse->idx);
     return true;
 }
 
-bool PrintVisitor::visit_jump(AST_Jump *node) {
+bool PrintVisitor::visit_jump(AST_Jump* node) {
     printf("goto %d", node->target->idx);
     return true;
 }
 
-bool PrintVisitor::visit_clsattribute(AST_ClsAttribute *node) {
-    //printf("getclsattr(");
-    //node->value->accept(this);
-    //printf(", '%s')", node->attr.c_str());
+bool PrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
+    // printf("getclsattr(");
+    // node->value->accept(this);
+    // printf(", '%s')", node->attr.c_str());
     node->value->accept(this);
     printf(":%s", node->attr.c_str());
     return true;
 }
 
 class FlattenVisitor : public ASTVisitor {
-    private:
-        std::vector<AST*> *output;
-        bool expand_scopes;
-    public:
-        FlattenVisitor(std::vector<AST*> *output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {
-        }
+private:
+    std::vector<AST*>* output;
+    bool expand_scopes;
 
-        virtual bool visit_alias(AST_alias *node) { output->push_back(node); return false; }
-        virtual bool visit_arguments(AST_arguments *node) { output->push_back(node); return false; }
-        virtual bool visit_assert(AST_Assert *node) { output->push_back(node); return false; }
-        virtual bool visit_assign(AST_Assign *node) { output->push_back(node); return false; }
-        virtual bool visit_augassign(AST_AugAssign *node) { output->push_back(node); return false; }
-        virtual bool visit_augbinop(AST_AugBinOp *node) { output->push_back(node); return false; }
-        virtual bool visit_attribute(AST_Attribute *node) { output->push_back(node); return false; }
-        virtual bool visit_binop(AST_BinOp *node) { output->push_back(node); return false; }
-        virtual bool visit_boolop(AST_BoolOp *node) { output->push_back(node); return false; }
-        virtual bool visit_break(AST_Break *node) { output->push_back(node); return false; }
-        virtual bool visit_call(AST_Call *node) { output->push_back(node); return false; }
-        virtual bool visit_classdef(AST_ClassDef *node) { output->push_back(node); return !expand_scopes; }
-        virtual bool visit_compare(AST_Compare *node) { output->push_back(node); return false; }
-        virtual bool visit_comprehension(AST_comprehension *node) { output->push_back(node); return false; }
-        virtual bool visit_continue(AST_Continue *node) { output->push_back(node); return false; }
-        virtual bool visit_dict(AST_Dict *node) { output->push_back(node); return false; }
-        virtual bool visit_expr(AST_Expr *node) { output->push_back(node); return false; }
-        virtual bool visit_for(AST_For *node) { output->push_back(node); return !expand_scopes; }
-        virtual bool visit_functiondef(AST_FunctionDef *node) { output->push_back(node); return !expand_scopes; }
-        virtual bool visit_global(AST_Global *node) { output->push_back(node); return false; }
-        virtual bool visit_if(AST_If *node) { output->push_back(node); return false; }
-        virtual bool visit_ifexp(AST_IfExp *node) { output->push_back(node); return false; }
-        virtual bool visit_import(AST_Import *node) { output->push_back(node); return false; }
-        virtual bool visit_importfrom(AST_ImportFrom *node) { output->push_back(node); return false; }
-        virtual bool visit_index(AST_Index *node) { output->push_back(node); return false; }
-        virtual bool visit_keyword(AST_keyword *node) { output->push_back(node); return false; }
-        virtual bool visit_list(AST_List *node) { output->push_back(node); return false; }
-        virtual bool visit_listcomp(AST_ListComp *node) { output->push_back(node); return false; }
-        virtual bool visit_module(AST_Module *node) { output->push_back(node); return !expand_scopes; }
-        virtual bool visit_name(AST_Name *node) { output->push_back(node); return false; }
-        virtual bool visit_num(AST_Num *node) { output->push_back(node); return false; }
-        virtual bool visit_pass(AST_Pass *node) { output->push_back(node); return false; }
-        virtual bool visit_print(AST_Print *node) { output->push_back(node); return false; }
-        virtual bool visit_repr(AST_Repr *node) { output->push_back(node); return false; }
-        virtual bool visit_return(AST_Return *node) { output->push_back(node); return false; }
-        virtual bool visit_slice(AST_Slice *node) { output->push_back(node); return false; }
-        virtual bool visit_str(AST_Str *node) { output->push_back(node); return false; }
-        virtual bool visit_subscript(AST_Subscript *node) { output->push_back(node); return false; }
-        virtual bool visit_tuple(AST_Tuple *node) { output->push_back(node); return false; }
-        virtual bool visit_unaryop(AST_UnaryOp *node) { output->push_back(node); return false; }
-        virtual bool visit_while(AST_While *node) { output->push_back(node); return false; }
-        virtual bool visit_with(AST_With *node) { output->push_back(node); return false; }
+public:
+    FlattenVisitor(std::vector<AST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {}
 
-        virtual bool visit_branch(AST_Branch *node) { output->push_back(node); return false; }
-        virtual bool visit_jump(AST_Jump *node) { output->push_back(node); return false; }
-        virtual bool visit_clsattribute(AST_ClsAttribute *node) { output->push_back(node); return false; }
+    virtual bool visit_alias(AST_alias* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_arguments(AST_arguments* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_assert(AST_Assert* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_assign(AST_Assign* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_augassign(AST_AugAssign* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_augbinop(AST_AugBinOp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_attribute(AST_Attribute* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_binop(AST_BinOp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_boolop(AST_BoolOp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_break(AST_Break* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_call(AST_Call* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_classdef(AST_ClassDef* node) {
+        output->push_back(node);
+        return !expand_scopes;
+    }
+    virtual bool visit_compare(AST_Compare* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_comprehension(AST_comprehension* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_continue(AST_Continue* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_dict(AST_Dict* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_expr(AST_Expr* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_for(AST_For* node) {
+        output->push_back(node);
+        return !expand_scopes;
+    }
+    virtual bool visit_functiondef(AST_FunctionDef* node) {
+        output->push_back(node);
+        return !expand_scopes;
+    }
+    virtual bool visit_global(AST_Global* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_if(AST_If* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_ifexp(AST_IfExp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_import(AST_Import* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_importfrom(AST_ImportFrom* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_index(AST_Index* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_keyword(AST_keyword* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_list(AST_List* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_listcomp(AST_ListComp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_module(AST_Module* node) {
+        output->push_back(node);
+        return !expand_scopes;
+    }
+    virtual bool visit_name(AST_Name* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_num(AST_Num* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_pass(AST_Pass* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_print(AST_Print* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_repr(AST_Repr* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_return(AST_Return* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_slice(AST_Slice* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_str(AST_Str* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_subscript(AST_Subscript* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_tuple(AST_Tuple* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_unaryop(AST_UnaryOp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_while(AST_While* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_with(AST_With* node) {
+        output->push_back(node);
+        return false;
+    }
+
+    virtual bool visit_branch(AST_Branch* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_jump(AST_Jump* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_clsattribute(AST_ClsAttribute* node) {
+        output->push_back(node);
+        return false;
+    }
 };
 
-void flatten(const std::vector<AST_stmt*> &roots, std::vector<AST*> &output, bool expand_scopes) {
+void flatten(const std::vector<AST_stmt*>& roots, std::vector<AST*>& output, bool expand_scopes) {
     FlattenVisitor visitor(&output, expand_scopes);
 
     for (int i = 0; i < roots.size(); i++) {
@@ -1469,10 +1675,9 @@ void flatten(const std::vector<AST_stmt*> &roots, std::vector<AST*> &output, boo
     }
 }
 
-void flatten(AST_expr* root, std::vector<AST*> &output, bool expand_scopes) {
+void flatten(AST_expr* root, std::vector<AST*>& output, bool expand_scopes) {
     FlattenVisitor visitor(&output, expand_scopes);
 
     root->accept(&visitor);
 }
-
 }

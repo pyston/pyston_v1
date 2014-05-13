@@ -26,35 +26,37 @@
 namespace pyston {
 
 class TracebacksEventListener : public llvm::JITEventListener {
-    public:
-        void NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
-            llvm::DIContext* Context = llvm::DIContext::getDWARFContext(Obj.getObjectFile());
+public:
+    void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+        llvm::DIContext* Context = llvm::DIContext::getDWARFContext(Obj.getObjectFile());
 
-            llvm::error_code ec;
-            for (llvm::object::symbol_iterator I = Obj.begin_symbols(),
-                    E = Obj.end_symbols();
-                    I != E && !ec;
-                    ++I) {
-                std::string SourceFileName;
+        llvm::error_code ec;
+        for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
+            std::string SourceFileName;
 
-                llvm::object::SymbolRef::Type SymType;
-                if (I->getType(SymType)) continue;
-                if (SymType == llvm::object::SymbolRef::ST_Function) {
-                    llvm::StringRef  Name;
-                    uint64_t   Addr;
-                    uint64_t   Size;
-                    if (I->getName(Name)) continue;
-                    if (I->getAddress(Addr)) continue;
-                    if (I->getSize(Size)) continue;
+            llvm::object::SymbolRef::Type SymType;
+            if (I->getType(SymType))
+                continue;
+            if (SymType == llvm::object::SymbolRef::ST_Function) {
+                llvm::StringRef Name;
+                uint64_t Addr;
+                uint64_t Size;
+                if (I->getName(Name))
+                    continue;
+                if (I->getAddress(Addr))
+                    continue;
+                if (I->getSize(Size))
+                    continue;
 
-                    llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo);
-                    for (int i = 0; i < lines.size(); i++) {
-                        //printf("%s:%d, %s: %lx\n", lines[i].second.getFileName(), lines[i].second.getLine(), lines[i].second.getFunctionName(), lines[i].first);
-                    }
+                llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
+                    Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo);
+                for (int i = 0; i < lines.size(); i++) {
+                    // printf("%s:%d, %s: %lx\n", lines[i].second.getFileName(), lines[i].second.getLine(),
+                    // lines[i].second.getFunctionName(), lines[i].first);
                 }
             }
-
         }
+    }
 };
 
 std::string getPythonFuncAt(void* addr, void* sp) {
@@ -64,5 +66,4 @@ std::string getPythonFuncAt(void* addr, void* sp) {
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();
 }
-
 }

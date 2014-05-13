@@ -20,10 +20,10 @@ namespace pyston {
 
 std::vector<long>* Stats::counts;
 std::unordered_map<int, std::string>* Stats::names;
-StatCounter::StatCounter(const std::string &name) : id(Stats::getStatId(name)) {
+StatCounter::StatCounter(const std::string& name) : id(Stats::getStatId(name)) {
 }
 
-int Stats::getStatId(const std::string &name) {
+int Stats::getStatId(const std::string& name) {
     // hacky but easy way of getting around static constructor ordering issues for now:
     static std::unordered_map<int, std::string> names;
     Stats::names = &names;
@@ -45,7 +45,7 @@ void Stats::dump() {
     printf("Stats:\n");
 
     std::vector<std::pair<std::string, int> > pairs;
-    for (const auto &p : *names) {
+    for (const auto& p : *names) {
         pairs.push_back(make_pair(p.second, p.first));
     }
 
@@ -55,5 +55,4 @@ void Stats::dump() {
         printf("%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
     }
 }
-
 }

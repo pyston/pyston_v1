@@ -25,63 +25,64 @@ namespace pyston {
 extern "C" const ObjectFlavor xrange_flavor(&boxGCHandler, NULL);
 
 extern "C" const ObjectFlavor xrange_iterator_flavor;
-BoxedClass *xrange_cls, *xrange_iterator_cls;
+BoxedClass* xrange_cls, *xrange_iterator_cls;
 
 class BoxedXrangeIterator;
 class BoxedXrange : public Box {
-    private:
-        const int64_t start, stop, step;
+private:
+    const int64_t start, stop, step;
 
-    public:
-        BoxedXrange(i64 start, i64 stop, i64 step) : Box(&xrange_flavor, xrange_cls), start(start), stop(stop), step(step) {}
+public:
+    BoxedXrange(i64 start, i64 stop, i64 step)
+        : Box(&xrange_flavor, xrange_cls), start(start), stop(stop), step(step) {}
 
-        friend class BoxedXrangeIterator;
+    friend class BoxedXrangeIterator;
 };
 
 class BoxedXrangeIterator : public Box {
-    private:
-        BoxedXrange * const xrange;
-        int64_t cur;
+private:
+    BoxedXrange* const xrange;
+    int64_t cur;
 
-    public:
-        BoxedXrangeIterator(BoxedXrange *xrange) : Box(&xrange_iterator_flavor, xrange_iterator_cls), xrange(xrange), cur(xrange->start) {
-        }
+public:
+    BoxedXrangeIterator(BoxedXrange* xrange)
+        : Box(&xrange_iterator_flavor, xrange_iterator_cls), xrange(xrange), cur(xrange->start) {}
 
-        static void xrangeIteratorDtor(Box *s) __attribute__((visibility("default"))) {
-            assert(s->cls == xrange_iterator_cls);
-            BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
-        }
+    static void xrangeIteratorDtor(Box* s) __attribute__((visibility("default"))) {
+        assert(s->cls == xrange_iterator_cls);
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
+    }
 
-        static bool xrangeIteratorHasnextUnboxed(Box *s) __attribute__((visibility("default"))) {
-            assert(s->cls == xrange_iterator_cls);
-            BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
-            assert(self->xrange->step > 0);
-            return self->cur < self->xrange->stop;
-        }
+    static bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
+        assert(s->cls == xrange_iterator_cls);
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
+        assert(self->xrange->step > 0);
+        return self->cur < self->xrange->stop;
+    }
 
-        static Box* xrangeIteratorHasnext(Box *s) __attribute__((visibility("default"))) {
-            return boxBool(xrangeIteratorHasnextUnboxed(s));
-        }
+    static Box* xrangeIteratorHasnext(Box* s) __attribute__((visibility("default"))) {
+        return boxBool(xrangeIteratorHasnextUnboxed(s));
+    }
 
-        static i64 xrangeIteratorNextUnboxed(Box *s) __attribute__((visibility("default"))) {
-            assert(s->cls == xrange_iterator_cls);
-            BoxedXrangeIterator *self = static_cast<BoxedXrangeIterator*>(s);
+    static i64 xrangeIteratorNextUnboxed(Box* s) __attribute__((visibility("default"))) {
+        assert(s->cls == xrange_iterator_cls);
+        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
 
-            i64 rtn = self->cur;
-            self->cur += self->xrange->step;
-            return rtn;
-        }
+        i64 rtn = self->cur;
+        self->cur += self->xrange->step;
+        return rtn;
+    }
 
-        static Box* xrangeIteratorNext(Box *s) __attribute__((visibility("default"))) {
-            return boxInt(xrangeIteratorNextUnboxed(s));
-        }
+    static Box* xrangeIteratorNext(Box* s) __attribute__((visibility("default"))) {
+        return boxInt(xrangeIteratorNextUnboxed(s));
+    }
 
-        static void xrangeIteratorGCHandler(GCVisitor *v, void* p) {
-            boxGCHandler(v, p);
+    static void xrangeIteratorGCHandler(GCVisitor* v, void* p) {
+        boxGCHandler(v, p);
 
-            BoxedXrangeIterator *it = (BoxedXrangeIterator*)p;
-            v->visit(it->xrange);
-        }
+        BoxedXrangeIterator* it = (BoxedXrangeIterator*)p;
+        v->visit(it->xrange);
+    }
 };
 extern "C" const ObjectFlavor xrange_iterator_flavor(&BoxedXrangeIterator::xrangeIteratorGCHandler, NULL);
 
@@ -131,17 +132,18 @@ void setupXrange() {
     xrange_iterator_cls = new BoxedClass(false, (BoxedClass::Dtor)BoxedXrangeIterator::xrangeIteratorDtor);
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 
-    CLFunction *xrange_clf = boxRTFunction((void*)xrange1, NULL, 2, false);
+    CLFunction* xrange_clf = boxRTFunction((void*)xrange1, NULL, 2, false);
     addRTFunction(xrange_clf, (void*)xrange2, NULL, 3, false);
     addRTFunction(xrange_clf, (void*)xrange3, NULL, 4, false);
     xrange_cls->giveAttr("__new__", new BoxedFunction(xrange_clf));
-    xrange_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1, false)));
+    xrange_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1, false)));
 
-    CLFunction *hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1, false);
+    CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1, false);
     addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL, 1, false);
     xrange_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    CLFunction *next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1, false);
+    CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1, false);
     addRTFunction(next, (void*)BoxedXrangeIterator::xrangeIteratorNext, BOXED_INT, 1, false);
     xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
 
@@ -151,5 +153,4 @@ void setupXrange() {
     xrange_cls->freeze();
     xrange_iterator_cls->freeze();
 }
-
 }

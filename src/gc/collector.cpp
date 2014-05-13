@@ -32,7 +32,7 @@
 namespace pyston {
 namespace gc {
 
-//unsigned numAllocs = 0;
+// unsigned numAllocs = 0;
 unsigned bytesAllocatedSinceCollection = 0;
 
 static TraceStack roots;
@@ -84,7 +84,7 @@ void TraceStackGCVisitor::visitPotentialRange(void** start, void** end) {
 static kindid_t num_kinds = 0;
 static AllocationKind::GCHandler handlers[MAX_KINDS];
 
-extern "C" kindid_t registerKind(const AllocationKind *kind) {
+extern "C" kindid_t registerKind(const AllocationKind* kind) {
     assert(kind == &untracked_kind || kind->gc_handler);
     assert(num_kinds < MAX_KINDS);
     assert(handlers[num_kinds] == NULL);
@@ -104,38 +104,38 @@ static void markPhase() {
 
     TraceStackGCVisitor visitor(&stack);
 
-    //if (VERBOSITY()) printf("Found %d roots\n", stack.size());
+    // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {
         assert(((intptr_t)p) % 8 == 0);
         GCObjectHeader* header = headerFromObject(p);
-        //printf("%p\n", p);
+        // printf("%p\n", p);
 
         if (isMarked(header)) {
-            //printf("Already marked, skipping\n");
+            // printf("Already marked, skipping\n");
             continue;
         }
 
-        //printf("Marking + scanning %p\n", p);
+        // printf("Marking + scanning %p\n", p);
 
         setMark(header);
 
-        ASSERT(KIND_OFFSET <= header->kind_id && header->kind_id < KIND_OFFSET + num_kinds, "%p %d", header, header->kind_id);
+        ASSERT(KIND_OFFSET <= header->kind_id && header->kind_id < KIND_OFFSET + num_kinds, "%p %d", header,
+               header->kind_id);
 
         if (header->kind_id == untracked_kind.kind_id)
             continue;
 
-        //ASSERT(kind->_cookie == AllocationKind::COOKIE, "%lx %lx", kind->_cookie, AllocationKind::COOKIE);
-        //AllocationKind::GCHandler gcf = kind->gc_handler;
+        // ASSERT(kind->_cookie == AllocationKind::COOKIE, "%lx %lx", kind->_cookie, AllocationKind::COOKIE);
+        // AllocationKind::GCHandler gcf = kind->gc_handler;
         AllocationKind::GCHandler gcf = handlers[header->kind_id - KIND_OFFSET];
 
         assert(gcf);
-        //if (!gcf) {
-            //std::string name = g.func_addr_registry.getFuncNameAtAddress((void*)kind, true);
-            //ASSERT(gcf, "%p %s", kind, name.c_str());
+        // if (!gcf) {
+        // std::string name = g.func_addr_registry.getFuncNameAtAddress((void*)kind, true);
+        // ASSERT(gcf, "%p %s", kind, name.c_str());
         //}
 
         gcf(&visitor, p);
-
     }
 
 #ifndef NVALGRIND
@@ -152,10 +152,11 @@ void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
 
-    if (VERBOSITY("gc") >= 2) printf("Collection #%d\n", ++ncollections);
+    if (VERBOSITY("gc") >= 2)
+        printf("Collection #%d\n", ++ncollections);
 
-    //if (ncollections == 754) {
-        //raise(SIGTRAP);
+    // if (ncollections == 754) {
+    // raise(SIGTRAP);
     //}
 
     markPhase();

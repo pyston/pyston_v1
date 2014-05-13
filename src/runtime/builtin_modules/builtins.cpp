@@ -50,7 +50,7 @@ extern "C" Box* abs_(Box* x) {
 }
 
 extern "C" Box* min_(Box* o0, Box* o1) {
-    Box *comp_result = compareInternal(o0, o1, AST_TYPE::Gt, NULL);
+    Box* comp_result = compareInternal(o0, o1, AST_TYPE::Gt, NULL);
     bool b = nonzero(comp_result);
     if (b) {
         return o1;
@@ -59,7 +59,7 @@ extern "C" Box* min_(Box* o0, Box* o1) {
 }
 
 extern "C" Box* max_(Box* o0, Box* o1) {
-    Box *comp_result = compareInternal(o0, o1, AST_TYPE::Lt, NULL);
+    Box* comp_result = compareInternal(o0, o1, AST_TYPE::Lt, NULL);
     bool b = nonzero(comp_result);
     if (b) {
         return o1;
@@ -69,16 +69,18 @@ extern "C" Box* max_(Box* o0, Box* o1) {
 
 extern "C" Box* open2(Box* arg1, Box* arg2) {
     if (arg1->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg1)->c_str());
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
+                getTypeName(arg1)->c_str());
         raiseExc();
     }
     if (arg2->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg2)->c_str());
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
+                getTypeName(arg2)->c_str());
         raiseExc();
     }
 
-    const std::string &fn = static_cast<BoxedString*>(arg1)->s;
-    const std::string &mode = static_cast<BoxedString*>(arg2)->s;
+    const std::string& fn = static_cast<BoxedString*>(arg1)->s;
+    const std::string& mode = static_cast<BoxedString*>(arg2)->s;
 
     FILE* f = fopen(fn.c_str(), mode.c_str());
     RELEASE_ASSERT(f, "");
@@ -88,7 +90,7 @@ extern "C" Box* open2(Box* arg1, Box* arg2) {
 
 extern "C" Box* open1(Box* arg) {
     Box* mode = boxStrConstant("r");
-    Box *rtn = open2(arg, mode);
+    Box* rtn = open2(arg, mode);
     return rtn;
 }
 
@@ -106,11 +108,11 @@ extern "C" Box* chr(Box* arg) {
 Box* range1(Box* end) {
     RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
 
-    BoxedList *rtn = new BoxedList();
+    BoxedList* rtn = new BoxedList();
     i64 iend = static_cast<BoxedInt*>(end)->n;
     rtn->ensure(iend);
     for (i64 i = 0; i < iend; i++) {
-        Box *bi = boxInt(i);
+        Box* bi = boxInt(i);
         listAppendInternal(rtn, bi);
     }
     return rtn;
@@ -120,11 +122,11 @@ Box* range2(Box* start, Box* end) {
     RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
     RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
 
-    BoxedList *rtn = new BoxedList();
+    BoxedList* rtn = new BoxedList();
     i64 istart = static_cast<BoxedInt*>(start)->n;
     i64 iend = static_cast<BoxedInt*>(end)->n;
-    if ((iend-istart) > 0)
-        rtn->ensure(iend-istart);
+    if ((iend - istart) > 0)
+        rtn->ensure(iend - istart);
     for (i64 i = istart; i < iend; i++) {
         listAppendInternal(rtn, boxInt(i));
     }
@@ -136,7 +138,7 @@ Box* range3(Box* start, Box* end, Box* step) {
     RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
     RELEASE_ASSERT(step->cls == int_cls, "%s", getTypeName(step)->c_str());
 
-    BoxedList *rtn = new BoxedList();
+    BoxedList* rtn = new BoxedList();
     i64 istart = static_cast<BoxedInt*>(start)->n;
     i64 iend = static_cast<BoxedInt*>(end)->n;
     i64 istep = static_cast<BoxedInt*>(step)->n;
@@ -144,12 +146,12 @@ Box* range3(Box* start, Box* end, Box* step) {
 
     if (istep > 0) {
         for (i64 i = istart; i < iend; i += istep) {
-            Box *bi = boxInt(i);
+            Box* bi = boxInt(i);
             listAppendInternal(rtn, bi);
         }
     } else {
         for (i64 i = istart; i > iend; i += istep) {
-            Box *bi = boxInt(i);
+            Box* bi = boxInt(i);
             listAppendInternal(rtn, bi);
         }
     }
@@ -164,8 +166,8 @@ Box* notimplementedRepr(Box* self) {
 Box* sorted(Box* obj) {
     RELEASE_ASSERT(obj->cls == list_cls, "");
 
-    BoxedList *lobj = static_cast<BoxedList*>(obj);
-    BoxedList *rtn = new BoxedList();
+    BoxedList* lobj = static_cast<BoxedList*>(obj);
+    BoxedList* rtn = new BoxedList();
 
     int size = lobj->size;
     rtn->elts = new (size) BoxedList::ElementArray();
@@ -180,9 +182,9 @@ Box* sorted(Box* obj) {
     return rtn;
 }
 
-Box* isinstance(Box* obj, Box *cls) {
+Box* isinstance(Box* obj, Box* cls) {
     assert(cls->cls == type_cls);
-    BoxedClass *ccls = static_cast<BoxedClass*>(cls);
+    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
 
     // TODO need to check if it's a subclass, or if subclasshook exists
     return boxBool(obj->cls == cls);
@@ -198,7 +200,8 @@ Box* getattr2(Box* obj, Box* _str) {
     Box* rtn = getattr_internal(obj, str->s.c_str(), true, true, NULL, NULL);
 
     if (!rtn) {
-        fprintf(stderr, "AttributeError: '%s' object has no attribute '%s'\n", getTypeName(obj)->c_str(), str->s.c_str());
+        fprintf(stderr, "AttributeError: '%s' object has no attribute '%s'\n", getTypeName(obj)->c_str(),
+                str->s.c_str());
         raiseExc();
     }
 
@@ -245,7 +248,7 @@ Box* map2(Box* f, Box* container) {
 }
 
 extern "C" const ObjectFlavor notimplemented_flavor(&boxGCHandler, NULL);
-BoxedClass *notimplemented_cls;
+BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
 void setupBuiltins() {
@@ -255,7 +258,8 @@ void setupBuiltins() {
 
     notimplemented_cls = new BoxedClass(false, NULL);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
-    notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, NULL, 1, false)));
+    notimplemented_cls->giveAttr("__repr__",
+                                 new BoxedFunction(boxRTFunction((void*)notimplementedRepr, NULL, 1, false)));
     notimplemented_cls->freeze();
     NotImplemented = new Box(&notimplemented_flavor, notimplemented_cls);
     gc::registerStaticRootObj(NotImplemented);
@@ -292,7 +296,7 @@ void setupBuiltins() {
     builtins_module->setattr("True", True, NULL, NULL);
     builtins_module->setattr("False", False, NULL, NULL);
 
-    CLFunction *range_clf = boxRTFunction((void*)range1, NULL, 1, false);
+    CLFunction* range_clf = boxRTFunction((void*)range1, NULL, 1, false);
     addRTFunction(range_clf, (void*)range2, NULL, 2, false);
     addRTFunction(range_clf, (void*)range3, NULL, 3, false);
     range_obj = new BoxedFunction(range_clf);
@@ -301,7 +305,7 @@ void setupBuiltins() {
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    CLFunction *open = boxRTFunction((void*)open1, NULL, 1, false);
+    CLFunction* open = boxRTFunction((void*)open1, NULL, 1, false);
     addRTFunction(open, (void*)open2, NULL, 2, false);
     open_obj = new BoxedFunction(open);
     builtins_module->giveAttr("open", open_obj);
@@ -321,5 +325,4 @@ void setupBuiltins() {
     builtins_module->setattr("tuple", tuple_cls, NULL, NULL);
     builtins_module->setattr("instancemethod", instancemethod_cls, NULL, NULL);
 }
-
 }

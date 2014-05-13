@@ -26,7 +26,7 @@
 
 namespace pyston {
 
-extern "C" Box* createTuple(int64_t nelts, Box* *elts) {
+extern "C" Box* createTuple(int64_t nelts, Box** elts) {
     std::vector<Box*> velts(elts, elts + nelts);
     return new BoxedTuple(velts);
 }
@@ -36,7 +36,7 @@ void tuple_dtor(BoxedTuple* t) {
     (&t->elts)->~T();
 }
 
-Box* tupleGetitem(BoxedTuple *self, Box* slice) {
+Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
     i64 size = self->elts.size();
@@ -44,7 +44,8 @@ Box* tupleGetitem(BoxedTuple *self, Box* slice) {
     if (slice->cls == int_cls) {
         i64 n = static_cast<BoxedInt*>(slice)->n;
 
-        if (n < 0) n = size - n;
+        if (n < 0)
+            n = size - n;
         if (n < 0 || n >= size) {
             fprintf(stderr, "indexerror\n");
             raiseExc();
@@ -57,12 +58,12 @@ Box* tupleGetitem(BoxedTuple *self, Box* slice) {
     }
 }
 
-Box* tupleLen(BoxedTuple *t) {
+Box* tupleLen(BoxedTuple* t) {
     assert(t->cls == tuple_cls);
     return boxInt(t->elts.size());
 }
 
-Box* tupleRepr(BoxedTuple *t) {
+Box* tupleRepr(BoxedTuple* t) {
     assert(t->cls == tuple_cls);
 
     std::ostringstream os("");
@@ -70,29 +71,33 @@ Box* tupleRepr(BoxedTuple *t) {
 
     int n = t->elts.size();
     for (int i = 0; i < n; i++) {
-        if (i) os << ", ";
+        if (i)
+            os << ", ";
 
-        BoxedString *elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
+        BoxedString* elt_repr = static_cast<BoxedString*>(repr(t->elts[i]));
         os << elt_repr->s;
     }
-    if (n == 1) os << ",";
+    if (n == 1)
+        os << ",";
     os << ")";
 
     return boxString(os.str());
 }
 
-Box* _tupleCmp(BoxedTuple *lhs, BoxedTuple *rhs, AST_TYPE::AST_TYPE op_type) {
+Box* _tupleCmp(BoxedTuple* lhs, BoxedTuple* rhs, AST_TYPE::AST_TYPE op_type) {
     int lsz = lhs->elts.size();
     int rsz = rhs->elts.size();
 
-    bool is_order = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
+    bool is_order
+        = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
 
     int n = std::min(lsz, rsz);
     for (int i = 0; i < n; i++) {
         Box* is_eq = compareInternal(lhs->elts[i], rhs->elts[i], AST_TYPE::Eq, NULL);
         bool bis_eq = nonzero(is_eq);
 
-        if (bis_eq) continue;
+        if (bis_eq)
+            continue;
 
         if (op_type == AST_TYPE::Eq) {
             return boxBool(false);
@@ -120,49 +125,49 @@ Box* _tupleCmp(BoxedTuple *lhs, BoxedTuple *rhs, AST_TYPE::AST_TYPE op_type) {
     RELEASE_ASSERT(0, "%d", op_type);
 }
 
-Box* tupleLt(BoxedTuple *self, Box *rhs) {
+Box* tupleLt(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != tuple_cls) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Lt);
 }
 
-Box* tupleLe(BoxedTuple *self, Box *rhs) {
+Box* tupleLe(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != tuple_cls) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::LtE);
 }
 
-Box* tupleGt(BoxedTuple *self, Box *rhs) {
+Box* tupleGt(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != tuple_cls) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Gt);
 }
 
-Box* tupleGe(BoxedTuple *self, Box *rhs) {
+Box* tupleGe(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != tuple_cls) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::GtE);
 }
 
-Box* tupleEq(BoxedTuple *self, Box *rhs) {
+Box* tupleEq(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != tuple_cls) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Eq);
 }
 
-Box* tupleNe(BoxedTuple *self, Box *rhs) {
+Box* tupleNe(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != tuple_cls) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::NotEq);
 }
 
-Box* tupleContains(BoxedTuple* self, Box *elt) {
+Box* tupleContains(BoxedTuple* self, Box* elt) {
     int size = self->elts.size();
     for (int i = 0; i < size; i++) {
         Box* e = self->elts[i];
@@ -196,5 +201,4 @@ void setupTuple() {
 
 void teardownTuple() {
 }
-
 }

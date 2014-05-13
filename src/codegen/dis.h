@@ -28,21 +28,19 @@ class MCInstPrinter;
 namespace pyston {
 
 class PystonJITEventListener : public llvm::JITEventListener {
-    private:
-        llvm::AsmPrinter *asm_printer;
-        llvm::MCDisassembler *DisAsm;
-        llvm::MCInstrAnalysis *MIA;
-        llvm::MCInstPrinter *IP;
+private:
+    llvm::AsmPrinter* asm_printer;
+    llvm::MCDisassembler* DisAsm;
+    llvm::MCInstrAnalysis* MIA;
+    llvm::MCInstPrinter* IP;
 
-    public:
-        PystonJITEventListener();
-        virtual void NotifyFunctionEmitted(const llvm::Function &f,
-                void *ptr, size_t size,
-                const llvm::JITEvent_EmittedFunctionDetails &details);
+public:
+    PystonJITEventListener();
+    virtual void NotifyFunctionEmitted(const llvm::Function& f, void* ptr, size_t size,
+                                       const llvm::JITEvent_EmittedFunctionDetails& details);
 
-        virtual void NotifyObjectEmitted(const llvm::ObjectImage &Obj);
+    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
 };
-
 }
 
 #endif

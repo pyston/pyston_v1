@@ -95,7 +95,7 @@ static void _addFunc(const char* name, void* int_func, void* float_func, void* b
     v_f.push_back(BOXED_FLOAT);
     v_u.push_back(NULL);
 
-    CLFunction *cl = createRTFunction();
+    CLFunction* cl = createRTFunction();
     addRTFunction(cl, int_func, BOXED_FLOAT, v_i, false);
     addRTFunction(cl, float_func, BOXED_FLOAT, v_f, false);
     addRTFunction(cl, boxed_func, NULL, v_u, false);
@@ -109,5 +109,4 @@ void setupMath() {
     _addFunc("sqrt", (void*)mathSqrtInt, (void*)mathSqrtFloat, (void*)mathSqrt);
     _addFunc("tan", (void*)mathTanInt, (void*)mathTanFloat, (void*)mathSqrt);
 }
-
 }

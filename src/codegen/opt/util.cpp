@@ -20,7 +20,7 @@
 
 namespace pyston {
 
-bool isAllocCall(const std::string &name) {
+bool isAllocCall(const std::string& name) {
     if (name == "malloc")
         return true;
 
@@ -30,15 +30,14 @@ bool isAllocCall(const std::string &name) {
     return false;
 }
 
-bool isAllocCall(const llvm::CallInst *CI) {
+bool isAllocCall(const llvm::CallInst* CI) {
     if (!CI)
         return false;
 
-    llvm::Function *Callee = CI->getCalledFunction();
+    llvm::Function* Callee = CI->getCalledFunction();
     if (Callee == 0 || !Callee->isDeclaration())
         return false;
 
     return isAllocCall(Callee->getName());
 }
-
 }

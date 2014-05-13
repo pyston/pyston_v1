@@ -26,22 +26,23 @@ namespace pyston {
 class ScopeInfo;
 
 class TypeAnalysis {
-    public:
-        enum SpeculationLevel {
-            NONE,
-            SOME,
-        };
+public:
+    enum SpeculationLevel {
+        NONE,
+        SOME,
+    };
 
-        virtual ~TypeAnalysis() {}
+    virtual ~TypeAnalysis() {}
 
-        virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string &name, CFGBlock* block) = 0;
-        virtual ConcreteCompilerType* getTypeAtBlockEnd(const std::string &name, CFGBlock* block) = 0;
-        virtual BoxedClass* speculatedExprClass(AST_expr*) = 0;
+    virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) = 0;
+    virtual ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) = 0;
+    virtual BoxedClass* speculatedExprClass(AST_expr*) = 0;
 };
 
-//TypeAnalysis* analyze(CFG *cfg, std::unordered_map<std::string, ConcreteCompilerType*> arg_types);
-TypeAnalysis* doTypeAnalysis(CFG *cfg, const std::vector<AST_expr*> &arg_names, const std::vector<ConcreteCompilerType*> &arg_types, TypeAnalysis::SpeculationLevel speculation, ScopeInfo *scope_info);
-
+// TypeAnalysis* analyze(CFG *cfg, std::unordered_map<std::string, ConcreteCompilerType*> arg_types);
+TypeAnalysis* doTypeAnalysis(CFG* cfg, const std::vector<AST_expr*>& arg_names,
+                             const std::vector<ConcreteCompilerType*>& arg_types,
+                             TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info);
 }
 
 #endif

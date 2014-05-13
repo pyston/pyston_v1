@@ -37,20 +37,20 @@ extern "C" i1 lt_i64_i64(i64 lhs, i64 rhs);
 extern "C" i1 le_i64_i64(i64 lhs, i64 rhs);
 extern "C" i1 gt_i64_i64(i64 lhs, i64 rhs);
 extern "C" i1 ge_i64_i64(i64 lhs, i64 rhs);
-extern "C" Box* intAdd(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intAnd(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intDiv(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intEq(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intNe(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intLt(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intLe(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intGt(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intGe(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intLShift(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intMod(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intMul(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intRShift(BoxedInt* lhs, Box *rhs);
-extern "C" Box* intSub(BoxedInt* lhs, Box *rhs);
+extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intEq(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intNe(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intLt(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intLe(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intGt(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intGe(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intMod(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intMul(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs);
+extern "C" Box* intSub(BoxedInt* lhs, Box* rhs);
 extern "C" Box* intInvert(BoxedInt* v);
 extern "C" Box* intPos(BoxedInt* v);
 extern "C" Box* intNeg(BoxedInt* v);
@@ -64,7 +64,6 @@ extern "C" Box* intInit2(BoxedInt* self, Box* val);
 
 #define NUM_INTERNED_INTS 100
 extern BoxedInt* interned_ints[NUM_INTERNED_INTS];
-
 }
 
 #endif

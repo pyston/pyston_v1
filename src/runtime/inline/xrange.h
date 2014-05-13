@@ -18,7 +18,6 @@
 namespace pyston {
 
 void setupXrange();
-
 }
 
 #endif

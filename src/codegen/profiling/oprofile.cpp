@@ -25,22 +25,21 @@
 namespace pyston {
 
 class OprofileJITEventListener : public llvm::JITEventListener {
-    private:
-        op_agent_t agent;
-    public:
-        OprofileJITEventListener() {
-            agent = op_open_agent();
-            assert(agent);
-        }
+private:
+    op_agent_t agent;
 
-        virtual ~OprofileJITEventListener() {
-            op_close_agent(agent);
-        }
+public:
+    OprofileJITEventListener() {
+        agent = op_open_agent();
+        assert(agent);
+    }
 
-        virtual void NotifyObjectEmitted(const llvm::ObjectImage &Obj);
+    virtual ~OprofileJITEventListener() { op_close_agent(agent); }
+
+    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
 };
 
-void OprofileJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
+void OprofileJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     if (VERBOSITY() >= 1)
         printf("An object has been emitted:\n");
 
@@ -63,11 +62,11 @@ void OprofileJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj)
                 printf("registering with oprofile: %s %p 0x%lx\n", name.data(), (void*)addr, size);
             int r = op_write_native_code(agent, name.data(), addr, (void*)addr, size);
             assert(r == 0);
-        //} else {
-            //llvm::StringRef name;
-            //code = I->getName(name);
-            //assert(!code);
-            //printf("Skipping %s\n", name.data());
+            //} else {
+            // llvm::StringRef name;
+            // code = I->getName(name);
+            // assert(!code);
+            // printf("Skipping %s\n", name.data());
         }
         ++I;
     }
@@ -77,5 +76,4 @@ llvm::JITEventListener* makeOprofileJITEventListener() {
     return new OprofileJITEventListener();
 }
 static RegisterHelper X(makeOprofileJITEventListener);
-
 }

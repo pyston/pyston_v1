@@ -23,8 +23,7 @@ extern "C" char* reoptCompiledFunc(CompiledFunction*);
 
 class AST_Module;
 class BoxedModule;
-void compileAndRunModule(AST_Module *m, BoxedModule *bm);
-
+void compileAndRunModule(AST_Module* m, BoxedModule* bm);
 }
 
 #endif

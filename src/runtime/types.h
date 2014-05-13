@@ -58,104 +58,116 @@ void setupBuiltins();
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
 
-extern "C" { extern BoxedClass *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls; }
-extern "C" { extern const ObjectFlavor type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor, function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor, tuple_flavor, file_flavor, xrange_flavor; }
+extern "C" {
+extern BoxedClass* type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls, *instancemethod_cls,
+    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls;
+}
+extern "C" {
+extern const ObjectFlavor type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor, function_flavor, none_flavor,
+    instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor, tuple_flavor, file_flavor,
+    xrange_flavor;
+}
 extern "C" { extern const ObjectFlavor user_flavor; }
 
-extern "C" { extern Box *None, *NotImplemented, *True, *False; }
-extern "C" { extern Box *repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *chr_obj, *trap_obj; } // these are only needed for functionRepr, which is hacky
-extern "C" { extern BoxedModule *sys_module, *math_module, *time_module, *builtins_module; }
+extern "C" { extern Box* None, *NotImplemented, *True, *False; }
+extern "C" {
+extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *chr_obj, *trap_obj;
+} // these are only needed for functionRepr, which is hacky
+extern "C" { extern BoxedModule* sys_module, *math_module, *time_module, *builtins_module; }
 
 extern "C" Box* boxBool(bool);
 extern "C" Box* boxInt(i64);
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func);
-extern "C" Box* boxStringPtr(const std::string *s);
-Box* boxString(const std::string &s);
+extern "C" Box* boxStringPtr(const std::string* s);
+Box* boxString(const std::string& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction *f);
+extern "C" Box* boxCLFunction(CLFunction* f);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createClass(std::string *name, BoxedModule *parent_module);
-extern "C" double unboxFloat(Box *b);
+extern "C" Box* createClass(std::string* name, BoxedModule* parent_module);
+extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step);
-extern "C" Box* createTuple(int64_t nelts, Box* *elts);
+extern "C" Box* createTuple(int64_t nelts, Box** elts);
 extern "C" void printFloat(double d);
 
 
 class BoxedInt : public Box {
-    public:
-        int64_t n;
+public:
+    int64_t n;
 
-        BoxedInt(int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, int_cls), n(n) {}
+    BoxedInt(int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, int_cls), n(n) {}
 };
 
 class BoxedFloat : public Box {
-    public:
-        double d;
+public:
+    double d;
 
-        BoxedFloat(double d) __attribute__((visibility("default"))) : Box(&float_flavor, float_cls), d(d) {}
+    BoxedFloat(double d) __attribute__((visibility("default"))) : Box(&float_flavor, float_cls), d(d) {}
 };
 
 class BoxedBool : public Box {
-    public:
-        bool b;
+public:
+    bool b;
 
-        BoxedBool(bool b) __attribute__((visibility("default"))) : Box(&bool_flavor, bool_cls), b(b) {}
+    BoxedBool(bool b) __attribute__((visibility("default"))) : Box(&bool_flavor, bool_cls), b(b) {}
 };
 
 class BoxedString : public Box {
-    public:
-        const std::string s;
+public:
+    const std::string s;
 
-        BoxedString(const std::string &&s) __attribute__((visibility("default"))) : Box(&str_flavor, str_cls), s(std::move(s)) {}
-        BoxedString(const std::string &s) __attribute__((visibility("default"))) : Box(&str_flavor, str_cls), s(s) {}
+    BoxedString(const std::string&& s) __attribute__((visibility("default")))
+    : Box(&str_flavor, str_cls), s(std::move(s)) {}
+    BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(&str_flavor, str_cls), s(s) {}
 };
 
 class BoxedInstanceMethod : public Box {
-    public:
-        Box *obj, *func;
+public:
+    Box* obj, *func;
 
-        BoxedInstanceMethod(Box *obj, Box *func) __attribute__((visibility("default"))) : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
+    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
+    : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
 };
 
 class BoxedList : public Box {
+public:
+    class ElementArray : GCObject {
     public:
-        class ElementArray : GCObject {
-            public:
-                Box* elts[0];
+        Box* elts[0];
 
-                ElementArray() : GCObject(&untracked_kind) {}
+        ElementArray() : GCObject(&untracked_kind) {}
 
-                void *operator new(size_t size, int capacity) {
-                    return rt_alloc(capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
-                }
-        };
+        void* operator new(size_t size, int capacity) {
+            return rt_alloc(capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+        }
+    };
 
-        int64_t size, capacity;
-        ElementArray *elts;
+    int64_t size, capacity;
+    ElementArray* elts;
 
-        BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
+    BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
 
-        void ensure(int space);
+    void ensure(int space);
 };
 
 class BoxedTuple : public Box {
-    public:
-        const std::vector<Box*> elts;
+public:
+    const std::vector<Box*> elts;
 
-        BoxedTuple(std::vector<Box*> &elts) __attribute__((visibility("default"))) : Box(&tuple_flavor, tuple_cls), elts(elts) {}
+    BoxedTuple(std::vector<Box*>& elts) __attribute__((visibility("default")))
+    : Box(&tuple_flavor, tuple_cls), elts(elts) {}
 };
 
 class BoxedFile : public Box {
-    public:
-        FILE *f;
-        bool closed;
-        BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(&file_flavor, file_cls), f(f), closed(false) {}
+public:
+    FILE* f;
+    bool closed;
+    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(&file_flavor, file_cls), f(f), closed(false) {}
 };
 
 struct PyHasher {
@@ -171,102 +183,94 @@ struct PyLt {
 };
 
 class ConservativeWrapper : public GCObject {
-    public:
-        void* data[0];
+public:
+    void* data[0];
 
-        ConservativeWrapper(size_t data_size) : GCObject(&conservative_kind), data() {
-            assert(data_size % sizeof(void*) == 0);
-            gc_header.kind_data = data_size;
-        }
+    ConservativeWrapper(size_t data_size) : GCObject(&conservative_kind), data() {
+        assert(data_size % sizeof(void*) == 0);
+        gc_header.kind_data = data_size;
+    }
 
-        void *operator new(size_t size, size_t data_size) {
-            assert(size == sizeof(ConservativeWrapper));
-            return rt_alloc(data_size + size);
-        }
+    void* operator new(size_t size, size_t data_size) {
+        assert(size == sizeof(ConservativeWrapper));
+        return rt_alloc(data_size + size);
+    }
 
-        static ConservativeWrapper* fromPointer(void* p) {
-            ConservativeWrapper* o = (ConservativeWrapper*)((void**)p - 1);
-            assert(&o->data == p);
-            return o;
-        }
+    static ConservativeWrapper* fromPointer(void* p) {
+        ConservativeWrapper* o = (ConservativeWrapper*)((void**)p - 1);
+        assert(&o->data == p);
+        return o;
+    }
 };
 
-template <class T>
-class StlCompatAllocator {
-    public:
-        typedef size_t size_type;
-        typedef T value_type;
-        typedef T* pointer;
-        typedef const T* const_pointer;
-        typedef T& reference;
-        typedef const T& const_reference;
-        typedef std::ptrdiff_t difference_type;
+template <class T> class StlCompatAllocator {
+public:
+    typedef size_t size_type;
+    typedef T value_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef std::ptrdiff_t difference_type;
 
-        StlCompatAllocator() {}
-        template <class U>
-        StlCompatAllocator(const StlCompatAllocator<U>& other) {}
+    StlCompatAllocator() {}
+    template <class U> StlCompatAllocator(const StlCompatAllocator<U>& other) {}
 
-        template <class U>
-        struct rebind {
-            typedef StlCompatAllocator<U> other;
-        };
+    template <class U> struct rebind {
+        typedef StlCompatAllocator<U> other;
+    };
 
-        pointer allocate(size_t n) {
-            size_t to_allocate = n * sizeof(value_type);
-            //assert(to_allocate < (1<<16));
+    pointer allocate(size_t n) {
+        size_t to_allocate = n * sizeof(value_type);
+        // assert(to_allocate < (1<<16));
 
-            ConservativeWrapper* rtn = new (to_allocate) ConservativeWrapper(to_allocate);
-            return (pointer)&rtn->data[0];
-        }
+        ConservativeWrapper* rtn = new (to_allocate) ConservativeWrapper(to_allocate);
+        return (pointer) & rtn->data[0];
+    }
 
-        void deallocate(pointer p, size_t n) {
-            ConservativeWrapper* o = ConservativeWrapper::fromPointer(p);
-            rt_free(o);
-        }
+    void deallocate(pointer p, size_t n) {
+        ConservativeWrapper* o = ConservativeWrapper::fromPointer(p);
+        rt_free(o);
+    }
 
-        // I would never be able to come up with this on my own:
-        // http://en.cppreference.com/w/cpp/memory/allocator/construct
-        template <class U, class... Args>
-        void construct(U* p, Args&&... args) {
-            ::new((void*)p) U(std::forward<Args>(args)...);
-        }
+    // I would never be able to come up with this on my own:
+    // http://en.cppreference.com/w/cpp/memory/allocator/construct
+    template <class U, class... Args> void construct(U* p, Args&&... args) {
+        ::new ((void*)p) U(std::forward<Args>(args)...);
+    }
 
-        template <class U>
-        void destroy(U* p) {
-            p->~U();
-        }
+    template <class U> void destroy(U* p) { p->~U(); }
 };
 
 class BoxedDict : public Box {
-    public:
-        std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > d;
+public:
+    std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > d;
 
-        BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
+    BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
 };
 
 class BoxedFunction : public HCBox {
-    public:
-        CLFunction *f;
+public:
+    CLFunction* f;
 
-        BoxedFunction(CLFunction *f);
+    BoxedFunction(CLFunction* f);
 };
 
 class BoxedModule : public HCBox {
-    public:
-        const std::string fn; // for traceback purposes; not the same as __file__
+public:
+    const std::string fn; // for traceback purposes; not the same as __file__
 
-        BoxedModule(const std::string &name, const std::string &fn);
-        std::string name();
+    BoxedModule(const std::string& name, const std::string& fn);
+    std::string name();
 };
 
 class BoxedSlice : public HCBox {
-    public:
-        Box *start, *stop, *step;
-        BoxedSlice(Box *lower, Box *upper, Box *step) : HCBox(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
+public:
+    Box* start, *stop, *step;
+    BoxedSlice(Box* lower, Box* upper, Box* step)
+        : HCBox(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
 };
 
-extern "C" void boxGCHandler(GCVisitor *v, void* p);
-
+extern "C" void boxGCHandler(GCVisitor* v, void* p);
 }
 #endif
-

@@ -31,50 +31,46 @@ class Value;
 namespace pyston {
 
 class GCVisitor {
-    public:
-        virtual ~GCVisitor() {}
-        virtual void visit(void* p) = 0;
-        virtual void visitRange(void** start, void** end) = 0;
-        virtual void visitPotential(void* p) = 0;
-        virtual void visitPotentialRange(void** start, void** end) = 0;
+public:
+    virtual ~GCVisitor() {}
+    virtual void visit(void* p) = 0;
+    virtual void visitRange(void** start, void** end) = 0;
+    virtual void visitPotential(void* p) = 0;
+    virtual void visitPotentialRange(void** start, void** end) = 0;
 };
 
 typedef int kindid_t;
 class AllocationKind;
 extern "C" kindid_t registerKind(const AllocationKind*);
 class AllocationKind {
-    public:
+public:
 #ifndef NDEBUG
-        static const int64_t COOKIE = 0x1234abcd0c00c1e;
-        const int64_t _cookie = COOKIE;
+    static const int64_t COOKIE = 0x1234abcd0c00c1e;
+    const int64_t _cookie = COOKIE;
 #endif
 
-        typedef void (*GCHandler)(GCVisitor*, void*);
-        GCHandler gc_handler;
+    typedef void (*GCHandler)(GCVisitor*, void*);
+    GCHandler gc_handler;
 
-        typedef void (*FinalizationFunc)(void*);
-        FinalizationFunc finalizer;
+    typedef void (*FinalizationFunc)(void*);
+    FinalizationFunc finalizer;
 
-        const kindid_t kind_id;
+    const kindid_t kind_id;
 
-    public:
-        AllocationKind(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default"))) :
-                gc_handler(gc_handler), finalizer(finalizer), kind_id(registerKind(this)) {
-        }
+public:
+    AllocationKind(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
+    : gc_handler(gc_handler), finalizer(finalizer), kind_id(registerKind(this)) {}
 };
 extern "C" const AllocationKind untracked_kind, conservative_kind;
 
 class ObjectFlavor;
 extern "C" const ObjectFlavor user_flavor;
 class ObjectFlavor : public AllocationKind {
-    public:
-        bool isUserDefined() const {
-            return this == &user_flavor;
-        }
+public:
+    bool isUserDefined() const { return this == &user_flavor; }
 
-        ObjectFlavor(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default"))) :
-                AllocationKind(gc_handler, finalizer) {
-        }
+    ObjectFlavor(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
+    : AllocationKind(gc_handler, finalizer) {}
 };
 
 
@@ -118,89 +114,93 @@ class CLFunction;
 class OSREntryDescriptor;
 
 class ICInvalidator {
-    private:
-        int64_t cur_version;
-        std::unordered_set<ICSlotInfo*> dependents;
-    public:
-        ICInvalidator() : cur_version(0) {}
+private:
+    int64_t cur_version;
+    std::unordered_set<ICSlotInfo*> dependents;
 
-        void addDependent(ICSlotInfo* icentry);
-        int64_t version();
-        void invalidateAll();
+public:
+    ICInvalidator() : cur_version(0) {}
+
+    void addDependent(ICSlotInfo* icentry);
+    int64_t version();
+    void invalidateAll();
 };
 
 // Codegen types:
 
 struct FunctionSignature {
-    ConcreteCompilerType *rtn_type;
+    ConcreteCompilerType* rtn_type;
     std::vector<ConcreteCompilerType*> arg_types;
     bool is_vararg;
 
-    FunctionSignature(ConcreteCompilerType *rtn_type, bool is_vararg) : rtn_type(rtn_type), is_vararg(is_vararg) {
-    }
+    FunctionSignature(ConcreteCompilerType* rtn_type, bool is_vararg) : rtn_type(rtn_type), is_vararg(is_vararg) {}
 
-    FunctionSignature(ConcreteCompilerType *rtn_type, ConcreteCompilerType *arg1, ConcreteCompilerType *arg2, bool is_vararg) : rtn_type(rtn_type), is_vararg(is_vararg) {
+    FunctionSignature(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2,
+                      bool is_vararg)
+        : rtn_type(rtn_type), is_vararg(is_vararg) {
         arg_types.push_back(arg1);
         arg_types.push_back(arg2);
     }
 
-    FunctionSignature(ConcreteCompilerType *rtn_type, std::vector<ConcreteCompilerType*> &arg_types, bool is_vararg) : rtn_type(rtn_type), arg_types(arg_types), is_vararg(is_vararg) {
-    }
+    FunctionSignature(ConcreteCompilerType* rtn_type, std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg)
+        : rtn_type(rtn_type), arg_types(arg_types), is_vararg(is_vararg) {}
 };
 
 struct CompiledFunction {
-    private:
-    public:
-        CLFunction *clfunc;
-        llvm::Function *func; // the llvm IR object
-        FunctionSignature *sig;
-        const OSREntryDescriptor *entry_descriptor;
-        bool is_interpreted;
+private:
+public:
+    CLFunction* clfunc;
+    llvm::Function* func; // the llvm IR object
+    FunctionSignature* sig;
+    const OSREntryDescriptor* entry_descriptor;
+    bool is_interpreted;
 
-        union {
-            Box* (*call)(Box*, Box*, Box*, Box**);
-            void* code;
-        };
-        llvm::Value *llvm_code; // the llvm callable.
+    union {
+        Box* (*call)(Box*, Box*, Box*, Box**);
+        void* code;
+    };
+    llvm::Value* llvm_code; // the llvm callable.
 
-        EffortLevel::EffortLevel effort;
+    EffortLevel::EffortLevel effort;
 
-        int64_t times_called;
-        ICInvalidator dependent_callsites;
+    int64_t times_called;
+    ICInvalidator dependent_callsites;
 
-        CompiledFunction(llvm::Function *func, FunctionSignature *sig, bool is_interpreted, void* code, llvm::Value *llvm_code, EffortLevel::EffortLevel effort, const OSREntryDescriptor* entry_descriptor) :
-            clfunc(NULL), func(func), sig(sig), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted), code(code), llvm_code(llvm_code), effort(effort), times_called(0) {
-        }
+    CompiledFunction(llvm::Function* func, FunctionSignature* sig, bool is_interpreted, void* code,
+                     llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
+                     const OSREntryDescriptor* entry_descriptor)
+        : clfunc(NULL), func(func), sig(sig), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
+          code(code), llvm_code(llvm_code), effort(effort), times_called(0) {}
 };
 
 class BoxedModule;
 class SourceInfo {
-    public:
-        BoxedModule *parent_module;
-        ScopingAnalysis *scoping;
-        AST *ast;
-        CFG *cfg;
-        LivenessAnalysis *liveness;
-        PhiAnalysis *phis;
+public:
+    BoxedModule* parent_module;
+    ScopingAnalysis* scoping;
+    AST* ast;
+    CFG* cfg;
+    LivenessAnalysis* liveness;
+    PhiAnalysis* phis;
 
-        const std::string getName();
-        AST_arguments* getArgsAST();
-        const std::vector<AST_expr*>& getArgNames();
-        const std::vector<AST_stmt*>& getBody();
+    const std::string getName();
+    AST_arguments* getArgsAST();
+    const std::vector<AST_expr*>& getArgNames();
+    const std::vector<AST_stmt*>& getBody();
 
-        SourceInfo(BoxedModule* m, ScopingAnalysis *scoping) : parent_module(m), scoping(scoping),
-                ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
+        : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
 };
 typedef std::vector<CompiledFunction*> FunctionList;
 struct CLFunction {
-    SourceInfo *source;
-    FunctionList versions; // any compiled versions along with their type parameters; in order from most preferred to least
+    SourceInfo* source;
+    FunctionList
+    versions; // any compiled versions along with their type parameters; in order from most preferred to least
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
-    CLFunction(SourceInfo *source) : source(source) {
-    }
+    CLFunction(SourceInfo* source) : source(source) {}
 
-    void addVersion(CompiledFunction *compiled) {
+    void addVersion(CompiledFunction* compiled) {
         assert(compiled);
         assert((source == NULL) == (compiled->func == NULL));
         assert(compiled->sig);
@@ -217,12 +217,13 @@ struct CLFunction {
 
 extern "C" CLFunction* createRTFunction();
 extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
-void addRTFunction(CLFunction *cf, void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
-void addRTFunction(CLFunction *cf, void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*> &arg_types, bool is_vararg);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
+                   const std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg);
 CLFunction* unboxRTFunction(Box*);
-//extern "C" CLFunction* boxRTFunctionVariadic(const char* name, int nargs_min, int nargs_max, void* f);
-extern "C" CompiledFunction* resolveCLFunc(CLFunction *f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
-extern "C" Box* callCompiledFunc(CompiledFunction *cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+// extern "C" CLFunction* boxRTFunctionVariadic(const char* name, int nargs_min, int nargs_max, void* f);
+extern "C" CompiledFunction* resolveCLFunc(CLFunction* f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+extern "C" Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
 std::string getOpName(int op_type);
 std::string getReverseOpName(int op_type);
@@ -246,57 +247,53 @@ struct GCObjectHeader {
     uint16_t kind_data; // this part of the header is free for the kind to set as it wishes.
     uint8_t gc_flags;
 
-    constexpr GCObjectHeader(const AllocationKind *kind) : kind_id(kind->kind_id), kind_data(0), gc_flags(0) {}
+    constexpr GCObjectHeader(const AllocationKind* kind) : kind_id(kind->kind_id), kind_data(0), gc_flags(0) {}
 };
 static_assert(sizeof(GCObjectHeader) <= sizeof(void*), "");
 
 class GCObject {
-    public:
-        GCObjectHeader gc_header;
+public:
+    GCObjectHeader gc_header;
 
-        constexpr GCObject(const AllocationKind *kind) : gc_header(kind) {
-        }
+    constexpr GCObject(const AllocationKind* kind) : gc_header(kind) {}
 
-        void* operator new(size_t size) __attribute__((visibility("default"))) {
-            return rt_alloc(size);
-        }
-        void operator delete(void* ptr) __attribute__((visibility("default"))) {
-            rt_free(ptr);
-        }
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return rt_alloc(size); }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { rt_free(ptr); }
 };
 
 extern "C" const AllocationKind hc_kind;
 class HiddenClass : public GCObject {
-    private:
-        HiddenClass() : GCObject(&hc_kind) {}
-        HiddenClass(const HiddenClass* parent) : GCObject(&hc_kind), attr_offsets(parent->attr_offsets) {}
-    public:
-        static HiddenClass* getRoot();
-        std::unordered_map<std::string, int> attr_offsets;
-        std::unordered_map<std::string, HiddenClass*> children;
+private:
+    HiddenClass() : GCObject(&hc_kind) {}
+    HiddenClass(const HiddenClass* parent) : GCObject(&hc_kind), attr_offsets(parent->attr_offsets) {}
 
-        HiddenClass* getOrMakeChild(const std::string &attr);
+public:
+    static HiddenClass* getRoot();
+    std::unordered_map<std::string, int> attr_offsets;
+    std::unordered_map<std::string, HiddenClass*> children;
 
-        int getOffset(const std::string& attr) {
-            std::unordered_map<std::string, int>::iterator it = attr_offsets.find(attr);
-            if (it == attr_offsets.end())
-                return -1;
-            return it->second;
-        }
+    HiddenClass* getOrMakeChild(const std::string& attr);
+
+    int getOffset(const std::string& attr) {
+        std::unordered_map<std::string, int>::iterator it = attr_offsets.find(attr);
+        if (it == attr_offsets.end())
+            return -1;
+        return it->second;
+    }
 };
 
 extern bool TRACK_ALLOCATIONS;
 class Box : public GCObject {
-    public:
-        BoxedClass *cls;
+public:
+    BoxedClass* cls;
 
-        constexpr Box(const ObjectFlavor *flavor, BoxedClass *c) __attribute__((visibility("default"))) : GCObject(flavor), cls(c) {
-            //if (TRACK_ALLOCATIONS) {
-                //int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
-                //Stats::log(id);
-            //}
-        }
-
+    constexpr Box(const ObjectFlavor* flavor, BoxedClass* c) __attribute__((visibility("default")))
+    : GCObject(flavor), cls(c) {
+        // if (TRACK_ALLOCATIONS) {
+        // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
+        // Stats::log(id);
+        //}
+    }
 };
 
 
@@ -308,70 +305,71 @@ class GetattrRewriteArgs2;
 // but I'm not putting these into Box so that things that don't have any python-level instance
 // attributes (ex: integers) don't need to allocate the extra space.
 class HCBox : public Box {
-    public:
-        struct AttrList : GCObject {
-            Box* attrs[0];
-        };
+public:
+    struct AttrList : GCObject {
+        Box* attrs[0];
+    };
 
-        HiddenClass *hcls;
-        // Python-level attributes:
-        AttrList *attr_list;
+    HiddenClass* hcls;
+    // Python-level attributes:
+    AttrList* attr_list;
 
-        HCBox(const ObjectFlavor *flavor, BoxedClass *cls);
+    HCBox(const ObjectFlavor* flavor, BoxedClass* cls);
 
-        void setattr(const std::string &attr, Box* val, SetattrRewriteArgs* rewrite_args, SetattrRewriteArgs2 *rewrite_args2);
-        void giveAttr(const std::string &attr, Box* val);
-        Box* getattr(const std::string &attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-        Box* peekattr(const std::string &attr) {
-            int offset = hcls->getOffset(attr);
-            if (offset == -1) return NULL;
-            return attr_list->attrs[offset];
-        }
+    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args,
+                 SetattrRewriteArgs2* rewrite_args2);
+    void giveAttr(const std::string& attr, Box* val);
+    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+    Box* peekattr(const std::string& attr) {
+        int offset = hcls->getOffset(attr);
+        if (offset == -1)
+            return NULL;
+        return attr_list->attrs[offset];
+    }
 };
 
 class BoxedClass : public HCBox {
-    public:
-        // This first typedef is right, but clang miscompiles it (how??), so use the second one:
-        //typedef void (*Dtor)(Box*);
-        typedef void* Dtor;
+public:
+    // This first typedef is right, but clang miscompiles it (how??), so use the second one:
+    // typedef void (*Dtor)(Box*);
+    typedef void* Dtor;
 
-        // compiler-level (cf python-level) destructor, that does things like decrementing
-        // refcounts of any attributes
-        const Dtor dtor;
+    // compiler-level (cf python-level) destructor, that does things like decrementing
+    // refcounts of any attributes
+    const Dtor dtor;
 
-        // If the user sets __getattribute__ or __getattr__, we will have to invalidate
-        // all getattr IC entries that relied on the fact that those functions didn't exist.
-        // Doing this via invalidation means that instance attr lookups don't have
-        // to guard on anything about the class.
-        ICInvalidator dependent_icgetattrs;
+    // If the user sets __getattribute__ or __getattr__, we will have to invalidate
+    // all getattr IC entries that relied on the fact that those functions didn't exist.
+    // Doing this via invalidation means that instance attr lookups don't have
+    // to guard on anything about the class.
+    ICInvalidator dependent_icgetattrs;
 
-        // whether or not instances of this class are subclasses of HCBox,
-        // ie they have python-level instance attributes:
-        const bool hasattrs;
+    // whether or not instances of this class are subclasses of HCBox,
+    // ie they have python-level instance attributes:
+    const bool hasattrs;
 
-        // Whether this class object is constant or not.
-        // Does not necessarily imply that the instances of this class are constant,
-        // though for now (is_constant && !hasattrs) does imply that the instances are constant.
-        bool is_constant;
+    // Whether this class object is constant or not.
+    // Does not necessarily imply that the instances of this class are constant,
+    // though for now (is_constant && !hasattrs) does imply that the instances are constant.
+    bool is_constant;
 
-        BoxedClass(bool hasattrs, Dtor dtor);
-        void freeze() {
-            assert(!is_constant);
-            is_constant = true;
-        }
+    BoxedClass(bool hasattrs, Dtor dtor);
+    void freeze() {
+        assert(!is_constant);
+        is_constant = true;
+    }
 };
 
 // TODO these shouldn't be here
 void setupRuntime();
 void teardownRuntime();
-BoxedModule* createModule(const std::string &name, const std::string &fn);
+BoxedModule* createModule(const std::string& name, const std::string& fn);
 
 std::string getPythonFuncAt(void* ip, void* sp);
 
 // TODO where to put this
-void addToSysPath(const std::string &path);
+void addToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
-
 }
 
 #endif

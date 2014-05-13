@@ -19,7 +19,6 @@ namespace pyston {
 
 class BoxedModule;
 BoxedModule* getTestModule();
-
 }
 
 #endif

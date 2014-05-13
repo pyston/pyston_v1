@@ -25,31 +25,27 @@
 namespace pyston {
 
 struct Stats {
-    private:
-        static std::vector<long> *counts;
-        static std::unordered_map<int, std::string> *names;
+private:
+    static std::vector<long>* counts;
+    static std::unordered_map<int, std::string>* names;
 
-    public:
-        static int getStatId(const std::string &name);
+public:
+    static int getStatId(const std::string& name);
 
-        static void log(int id, int count=1) {
-            (*counts)[id] += count;
-        }
+    static void log(int id, int count = 1) { (*counts)[id] += count; }
 
-        static void dump();
+    static void dump();
 };
 
 struct StatCounter {
-    private:
-        int id;
-    public:
-        StatCounter(const std::string &name);
+private:
+    int id;
 
-        void log(int count=1) {
-            Stats::log(id, count);
-        }
+public:
+    StatCounter(const std::string& name);
+
+    void log(int count = 1) { Stats::log(id, count); }
 };
-
 }
 
 #endif

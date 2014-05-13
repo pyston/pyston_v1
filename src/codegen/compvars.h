@@ -29,302 +29,292 @@ class OpInfo;
 class CompilerType;
 class IREmitter;
 
-extern ConcreteCompilerType *INT, *BOXED_INT, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST, *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET;
+extern ConcreteCompilerType* INT, *BOXED_INT, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST, *SLICE,
+    *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET;
 extern CompilerType* UNDEF;
 
 class CompilerType {
-    public:
-        virtual ~CompilerType() {}
-        virtual std::string debugName() = 0;
-        virtual ConcreteCompilerType* getConcreteType() = 0;
-        virtual ConcreteCompilerType* getBoxType() = 0;
-        virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
-        virtual CompilerType* getattrType(const std::string *attr, bool cls_only) = 0;
-        virtual CompilerType* callType(std::vector<CompilerType*> &arg_types) = 0;
-        virtual BoxedClass* guaranteedClass() = 0;
+public:
+    virtual ~CompilerType() {}
+    virtual std::string debugName() = 0;
+    virtual ConcreteCompilerType* getConcreteType() = 0;
+    virtual ConcreteCompilerType* getBoxType() = 0;
+    virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
+    virtual CompilerType* getattrType(const std::string* attr, bool cls_only) = 0;
+    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) = 0;
+    virtual BoxedClass* guaranteedClass() = 0;
 };
 
 typedef std::unordered_map<CompilerVariable*, CompilerVariable*> DupCache;
 
-template <class V>
-class _ValuedCompilerType : public CompilerType {
-    public:
-        typedef ValuedCompilerVariable<V> VAR;
+template <class V> class _ValuedCompilerType : public CompilerType {
+public:
+    typedef ValuedCompilerVariable<V> VAR;
 
-        virtual CompilerVariable* dup(VAR *v, DupCache &cache) {
-            printf("dup not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        ConcreteCompilerType* getConcreteType() override {
-            printf("getConcreteType not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        ConcreteCompilerType* getBoxType() override {
-            printf("getBoxType not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual void drop(IREmitter &emmitter, VAR* value) {
-            printf("drop not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual void grab(IREmitter &emmitter, VAR* value) {
-            printf("grab not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        bool canConvertTo(ConcreteCompilerType* other_type) override {
-            printf("canConvertTo not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual ConcreteCompilerVariable* makeConverted(IREmitter &emitter, VAR* value, ConcreteCompilerType* other_type) {
-            printf("makeConverted not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter, const OpInfo& info, VAR* value) {
-            printf("nonzero not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual CompilerVariable* getattr(IREmitter &emitter, const OpInfo& info, VAR* value, const std::string *attr, bool cls_only) {
-            printf("getattr not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual void setattr(IREmitter &emitter, const OpInfo& info, VAR* value, const std::string *attr, CompilerVariable *v) {
-            printf("setattr not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual CompilerVariable* callattr(IREmitter &emitter, const OpInfo& info, VAR* value, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
-            printf("callattr not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual CompilerVariable* call(IREmitter &emitter, const OpInfo& info, VAR* value, const std::vector<CompilerVariable*>& args) {
-            printf("call not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual void print(IREmitter &emitter, VAR* value) {
-            printf("print not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual ConcreteCompilerVariable* len(IREmitter &emitter, const OpInfo& info, VAR* value) {
-            printf("len not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual CompilerVariable* getitem(IREmitter &emitter, const OpInfo& info, VAR* value, CompilerVariable *v) {
-            printf("getitem not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        virtual llvm::Value* makeClassCheck(IREmitter &emitter, VAR* value, BoxedClass* c) {
-            printf("makeClassCheck not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        CompilerType* getattrType(const std::string *attr, bool cls_only) override {
-            printf("getattrType not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        CompilerType* callType(std::vector<CompilerType*> &arg_types) override {
-            printf("callType not defined for %s\n", debugName().c_str());
-            abort();
-        }
-        BoxedClass* guaranteedClass() override {
-            ASSERT((CompilerType*)getConcreteType() != this, "%s", debugName().c_str());
-            return getConcreteType()->guaranteedClass();
-        }
+    virtual CompilerVariable* dup(VAR* v, DupCache& cache) {
+        printf("dup not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    ConcreteCompilerType* getConcreteType() override {
+        printf("getConcreteType not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    ConcreteCompilerType* getBoxType() override {
+        printf("getBoxType not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual void drop(IREmitter& emmitter, VAR* value) {
+        printf("drop not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual void grab(IREmitter& emmitter, VAR* value) {
+        printf("grab not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    bool canConvertTo(ConcreteCompilerType* other_type) override {
+        printf("canConvertTo not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* value, ConcreteCompilerType* other_type) {
+        printf("makeConverted not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* value) {
+        printf("nonzero not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
+                                      bool cls_only) {
+        printf("getattr not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
+                         CompilerVariable* v) {
+        printf("setattr not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
+                                       bool clsonly, const std::vector<CompilerVariable*>& args) {
+        printf("callattr not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* value,
+                                   const std::vector<CompilerVariable*>& args) {
+        printf("call not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual void print(IREmitter& emitter, VAR* value) {
+        printf("print not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* value) {
+        printf("len not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* value, CompilerVariable* v) {
+        printf("getitem not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual llvm::Value* makeClassCheck(IREmitter& emitter, VAR* value, BoxedClass* c) {
+        printf("makeClassCheck not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    CompilerType* getattrType(const std::string* attr, bool cls_only) override {
+        printf("getattrType not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    CompilerType* callType(std::vector<CompilerType*>& arg_types) override {
+        printf("callType not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    BoxedClass* guaranteedClass() override {
+        ASSERT((CompilerType*)getConcreteType() != this, "%s", debugName().c_str());
+        return getConcreteType()->guaranteedClass();
+    }
 };
 
-template <class V>
-class ValuedCompilerType : public _ValuedCompilerType<V> {
-    public:
+template <class V> class ValuedCompilerType : public _ValuedCompilerType<V> {
+public:
 };
 
-template <>
-class ValuedCompilerType<llvm::Value*> : public _ValuedCompilerType<llvm::Value*> {
-    public:
-        virtual llvm::Type* llvmType() = 0;
-        virtual std::string debugName();
+template <> class ValuedCompilerType<llvm::Value*> : public _ValuedCompilerType<llvm::Value*> {
+public:
+    virtual llvm::Type* llvmType() = 0;
+    virtual std::string debugName();
 
-        virtual bool isFitBy(BoxedClass*) {
-            printf("isFitBy not defined for %s\n", debugName().c_str());
-            abort();
-        }
+    virtual bool isFitBy(BoxedClass*) {
+        printf("isFitBy not defined for %s\n", debugName().c_str());
+        abort();
+    }
 
-        virtual CompilerVariable* dup(ConcreteCompilerVariable *v, DupCache &cache);
-        virtual ConcreteCompilerType* getConcreteType() {
-            return this;
-        }
-        virtual bool canConvertTo(ConcreteCompilerType* other_type) {
-            return other_type == this || other_type == UNKNOWN;
-        }
-        virtual ConcreteCompilerVariable* makeConverted(IREmitter &emitter, ConcreteCompilerVariable* var, ConcreteCompilerType* other_type);
+    virtual CompilerVariable* dup(ConcreteCompilerVariable* v, DupCache& cache);
+    virtual ConcreteCompilerType* getConcreteType() { return this; }
+    virtual bool canConvertTo(ConcreteCompilerType* other_type) { return other_type == this || other_type == UNKNOWN; }
+    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
+                                                    ConcreteCompilerType* other_type);
 };
 
 class CompilerVariable {
-    private:
-        int vrefs;
-        bool grabbed;
-    protected:
-        virtual void drop(IREmitter &emitter) = 0;
-        virtual void grab(IREmitter &emmitter) = 0;
-    public:
-        CompilerVariable(bool grabbed) : vrefs(1), grabbed(grabbed) {}
-        virtual ~CompilerVariable() {}
+private:
+    int vrefs;
+    bool grabbed;
 
-        bool isGrabbed() { return grabbed; }
-        void incvref() {
-            assert(vrefs);
-            vrefs++;
-        }
-        void decvrefNodrop() {
-            assert(vrefs > 0 && vrefs < (1<<20));
-            // It'd be nice to print out the type of the variable, but this is all happening
-            // after the object got deleted so it's pretty precarious, and the getType()
-            // debugging call will probably segfault:
-            //ASSERT(vrefs, "%s", getType()->debugName().c_str());
-            vrefs--;
-            if (vrefs == 0) {
-                delete this;
-            }
-        }
-        void decvref(IREmitter &emitter) {
-            assert(vrefs > 0 && vrefs < (1<<20));
-            //ASSERT(vrefs, "%s", getType()->debugName().c_str());
-            vrefs--;
-            if (vrefs == 0) {
-                if (grabbed)
-                    drop(emitter);
-                delete this;
-            }
-        }
-        int getVrefs() {
-            return vrefs;
-        }
-        void ensureGrabbed(IREmitter &emitter) {
-            if (!grabbed) {
-                grab(emitter);
-                grabbed = true;
-            }
-        }
-        virtual CompilerVariable* split(IREmitter &emitter) = 0;
-        virtual CompilerVariable* dup(DupCache &cache) = 0;
+protected:
+    virtual void drop(IREmitter& emitter) = 0;
+    virtual void grab(IREmitter& emmitter) = 0;
 
-        virtual CompilerType* getType() = 0;
-        virtual ConcreteCompilerType* getConcreteType() = 0;
-        virtual ConcreteCompilerType* getBoxType() = 0;
-        virtual bool canConvertTo(ConcreteCompilerType *other_type) = 0;
-        virtual ConcreteCompilerVariable* makeConverted(IREmitter &emitter, ConcreteCompilerType *other_type) = 0;
-        virtual llvm::Value* makeClassCheck(IREmitter &emitter, BoxedClass* cls) = 0;
-        virtual BoxedClass* guaranteedClass() = 0;
+public:
+    CompilerVariable(bool grabbed) : vrefs(1), grabbed(grabbed) {}
+    virtual ~CompilerVariable() {}
 
-        virtual ConcreteCompilerVariable* nonzero(IREmitter &emitter, const OpInfo& info) = 0;
-        virtual CompilerVariable* getattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool cls_only) = 0;
-        virtual void setattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, CompilerVariable* v) = 0;
-        virtual CompilerVariable* callattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) = 0;
-        virtual CompilerVariable* call(IREmitter &emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args) = 0;
-        virtual void print(IREmitter &emitter) = 0;
-        virtual ConcreteCompilerVariable* len(IREmitter &emitter, const OpInfo& info) = 0;
-        virtual CompilerVariable* getitem(IREmitter &emitter, const OpInfo& info, CompilerVariable*) = 0;
+    bool isGrabbed() { return grabbed; }
+    void incvref() {
+        assert(vrefs);
+        vrefs++;
+    }
+    void decvrefNodrop() {
+        assert(vrefs > 0 && vrefs < (1 << 20));
+        // It'd be nice to print out the type of the variable, but this is all happening
+        // after the object got deleted so it's pretty precarious, and the getType()
+        // debugging call will probably segfault:
+        // ASSERT(vrefs, "%s", getType()->debugName().c_str());
+        vrefs--;
+        if (vrefs == 0) {
+            delete this;
+        }
+    }
+    void decvref(IREmitter& emitter) {
+        assert(vrefs > 0 && vrefs < (1 << 20));
+        // ASSERT(vrefs, "%s", getType()->debugName().c_str());
+        vrefs--;
+        if (vrefs == 0) {
+            if (grabbed)
+                drop(emitter);
+            delete this;
+        }
+    }
+    int getVrefs() { return vrefs; }
+    void ensureGrabbed(IREmitter& emitter) {
+        if (!grabbed) {
+            grab(emitter);
+            grabbed = true;
+        }
+    }
+    virtual CompilerVariable* split(IREmitter& emitter) = 0;
+    virtual CompilerVariable* dup(DupCache& cache) = 0;
+
+    virtual CompilerType* getType() = 0;
+    virtual ConcreteCompilerType* getConcreteType() = 0;
+    virtual ConcreteCompilerType* getBoxType() = 0;
+    virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
+    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerType* other_type) = 0;
+    virtual llvm::Value* makeClassCheck(IREmitter& emitter, BoxedClass* cls) = 0;
+    virtual BoxedClass* guaranteedClass() = 0;
+
+    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) = 0;
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only)
+        = 0;
+    virtual void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) = 0;
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool clsonly,
+                                       const std::vector<CompilerVariable*>& args) = 0;
+    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args)
+        = 0;
+    virtual void print(IREmitter& emitter) = 0;
+    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
+    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
 };
 
-template <class V>
-class ValuedCompilerVariable : public CompilerVariable {
-    private:
-        typedef ValuedCompilerType<V> T;
-        T *type;
-        V value;
+template <class V> class ValuedCompilerVariable : public CompilerVariable {
+private:
+    typedef ValuedCompilerType<V> T;
+    T* type;
+    V value;
 
-    protected:
-        virtual void drop(IREmitter &emitter) {
-            type->drop(emitter, this);
-        }
-        virtual void grab(IREmitter &emmitter) {
-            type->grab(emmitter, this);
-        }
+protected:
+    virtual void drop(IREmitter& emitter) { type->drop(emitter, this); }
+    virtual void grab(IREmitter& emmitter) { type->grab(emmitter, this); }
 
-    public:
-        ValuedCompilerVariable(T *type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {}
-        virtual T* getType() { return type; }
-        virtual V getValue() { return value; }
+public:
+    ValuedCompilerVariable(T* type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {}
+    virtual T* getType() { return type; }
+    virtual V getValue() { return value; }
 
-        ConcreteCompilerType* getConcreteType() override {
-            return type->getConcreteType();
-        }
-        ConcreteCompilerType* getBoxType() override {
-            return type->getBoxType();
-        }
+    ConcreteCompilerType* getConcreteType() override { return type->getConcreteType(); }
+    ConcreteCompilerType* getBoxType() override { return type->getBoxType(); }
 
-        ValuedCompilerVariable<V>* split(IREmitter &emitter) override {
-            ValuedCompilerVariable<V>* rtn;
-            if (getVrefs() == 1) {
-                rtn = this;
-            } else {
-                rtn = new ValuedCompilerVariable<V>(type, value, false);
-                this->decvref(emitter);
-            }
-            rtn->ensureGrabbed(emitter);
-            return rtn;
+    ValuedCompilerVariable<V>* split(IREmitter& emitter) override {
+        ValuedCompilerVariable<V>* rtn;
+        if (getVrefs() == 1) {
+            rtn = this;
+        } else {
+            rtn = new ValuedCompilerVariable<V>(type, value, false);
+            this->decvref(emitter);
         }
-        CompilerVariable* dup(DupCache &cache) override {
-            CompilerVariable *rtn = type->dup(this, cache);
+        rtn->ensureGrabbed(emitter);
+        return rtn;
+    }
+    CompilerVariable* dup(DupCache& cache) override {
+        CompilerVariable* rtn = type->dup(this, cache);
 
-            ASSERT(rtn->getVrefs() == getVrefs(), "%d %s", rtn->getVrefs(), type->debugName().c_str());
-            return rtn;
-        }
+        ASSERT(rtn->getVrefs() == getVrefs(), "%d %s", rtn->getVrefs(), type->debugName().c_str());
+        return rtn;
+    }
 
-        bool canConvertTo(ConcreteCompilerType *other_type) override {
-            return type->canConvertTo(other_type);
-        }
-        ConcreteCompilerVariable* makeConverted(IREmitter &emitter, ConcreteCompilerType *other_type) override {
-            ConcreteCompilerVariable* rtn = type->makeConverted(emitter, this, other_type);
-            ASSERT(rtn->getType() == other_type, "%s", type->debugName().c_str());
-            return rtn;
-        }
-        ConcreteCompilerVariable* nonzero(IREmitter &emitter, const OpInfo& info) override {
-            return type->nonzero(emitter, info, this);
-        }
-        virtual CompilerVariable* getattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool cls_only) {
-            return type->getattr(emitter, info, this, attr, cls_only);
-        }
-        virtual void setattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, CompilerVariable *v) {
-            type->setattr(emitter, info, this, attr, v);
-        }
-        virtual CompilerVariable* callattr(IREmitter &emitter, const OpInfo& info, const std::string *attr, bool clsonly, const std::vector<CompilerVariable*>& args) {
-            return type->callattr(emitter, info, this, attr, clsonly, args);
-        }
-        CompilerVariable* call(IREmitter &emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args) override {
-            return type->call(emitter, info, this, args);
-        }
-        void print(IREmitter &emitter) override {
-            type->print(emitter, this);
-        }
-        ConcreteCompilerVariable* len(IREmitter &emitter, const OpInfo& info) override {
-            return type->len(emitter, info, this);
-        }
-        CompilerVariable* getitem(IREmitter &emitter, const OpInfo& info, CompilerVariable *slice) override {
-            return type->getitem(emitter, info, this, slice);
-        }
-        llvm::Value* makeClassCheck(IREmitter &emitter, BoxedClass* cls) override {
-            return type->makeClassCheck(emitter, this, cls);
-        }
+    bool canConvertTo(ConcreteCompilerType* other_type) override { return type->canConvertTo(other_type); }
+    ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerType* other_type) override {
+        ConcreteCompilerVariable* rtn = type->makeConverted(emitter, this, other_type);
+        ASSERT(rtn->getType() == other_type, "%s", type->debugName().c_str());
+        return rtn;
+    }
+    ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) override {
+        return type->nonzero(emitter, info, this);
+    }
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only) {
+        return type->getattr(emitter, info, this, attr, cls_only);
+    }
+    virtual void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) {
+        type->setattr(emitter, info, this, attr, v);
+    }
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool clsonly,
+                                       const std::vector<CompilerVariable*>& args) {
+        return type->callattr(emitter, info, this, attr, clsonly, args);
+    }
+    CompilerVariable* call(IREmitter& emitter, const OpInfo& info,
+                           const std::vector<CompilerVariable*>& args) override {
+        return type->call(emitter, info, this, args);
+    }
+    void print(IREmitter& emitter) override { type->print(emitter, this); }
+    ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) override {
+        return type->len(emitter, info, this);
+    }
+    CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable* slice) override {
+        return type->getitem(emitter, info, this, slice);
+    }
+    llvm::Value* makeClassCheck(IREmitter& emitter, BoxedClass* cls) override {
+        return type->makeClassCheck(emitter, this, cls);
+    }
 
-        BoxedClass* guaranteedClass() override {
-            return type->guaranteedClass();
-        }
+    BoxedClass* guaranteedClass() override { return type->guaranteedClass(); }
 };
 
-//template <>
-//inline ConcreteCompilerVariable::ValuedCompilerVariable(ConcreteCompilerType *type, llvm::Value* value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {
-    //assert(value->getType() == type->llvmType());
+// template <>
+// inline ConcreteCompilerVariable::ValuedCompilerVariable(ConcreteCompilerType *type, llvm::Value* value, bool grabbed)
+// : CompilerVariable(grabbed), type(type), value(value) {
+// assert(value->getType() == type->llvmType());
 //}
 
 ConcreteCompilerVariable* makeInt(int64_t);
 ConcreteCompilerVariable* makeFloat(double);
 ConcreteCompilerVariable* makeBool(bool);
 CompilerVariable* makeStr(std::string*);
-CompilerVariable* makeFunction(IREmitter &emitter, CLFunction*);
+CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*);
 CompilerVariable* undefVariable();
-CompilerVariable* makeTuple(const std::vector<CompilerVariable*> &elts);
+CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
 
 ConcreteCompilerType* typeFromClass(BoxedClass*);
 CompilerType* typeOfClassobj(BoxedClass*);
-CompilerType* makeTupleType(const std::vector<CompilerType*> &elt_types);
-CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*> &arg_types);
+CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types);
+CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types);
 
 } // namespace pyston
 

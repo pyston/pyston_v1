@@ -33,11 +33,11 @@ using namespace llvm;
 namespace pyston {
 
 // TODO Copy-paste
-static bool isMallocCall(const CallInst *CI) {
+static bool isMallocCall(const CallInst* CI) {
     if (!CI)
         return false;
 
-    Function *Callee = CI->getCalledFunction();
+    Function* Callee = CI->getCalledFunction();
     if (Callee == 0 || !Callee->isDeclaration())
         return false;
     if (Callee->getName() != "malloc" /*&&
@@ -45,38 +45,36 @@ static bool isMallocCall(const CallInst *CI) {
             Callee->getName() != "_Znwj" && // operator new(unsigned int)
             Callee->getName() != "_Znwm" && // operator new(unsigned long)
             Callee->getName() != "_Znaj" && // operator new[](unsigned int)
-            Callee->getName() != "_Znam"*/)   // operator new[](unsigned long)
-            return false;
+            Callee->getName() != "_Znam"*/) // operator new[](unsigned long)
+        return false;
 
     // Check malloc prototype.
-    // FIXME: workaround for PR5130, this will be obsolete when a nobuiltin 
+    // FIXME: workaround for PR5130, this will be obsolete when a nobuiltin
     // attribute will exist.
-    FunctionType *FTy = Callee->getFunctionType();
-    return FTy->getReturnType() == Type::getInt8PtrTy(FTy->getContext()) &&
-        FTy->getNumParams() == 1 &&
-        (FTy->getParamType(0)->isIntegerTy(32) ||
-         FTy->getParamType(0)->isIntegerTy(64));
+    FunctionType* FTy = Callee->getFunctionType();
+    return FTy->getReturnType() == Type::getInt8PtrTy(FTy->getContext()) && FTy->getNumParams() == 1
+           && (FTy->getParamType(0)->isIntegerTy(32) || FTy->getParamType(0)->isIntegerTy(64));
 }
 
 /// isFreeCall - Returns non-null if the value is a call to the builtin free()
-static const CallInst *isFreeCall(const Value *I) {
-    const CallInst *CI = dyn_cast<CallInst>(I);
+static const CallInst* isFreeCall(const Value* I) {
+    const CallInst* CI = dyn_cast<CallInst>(I);
     if (!CI)
         return 0;
-    Function *Callee = CI->getCalledFunction();
+    Function* Callee = CI->getCalledFunction();
     if (Callee == 0 || !Callee->isDeclaration())
         return 0;
 
     if (Callee->getName() != "free" /*&&
             Callee->getName() != "my_free" &&
             Callee->getName() != "_ZdlPv" && // operator delete(void*)
-            Callee->getName() != "_ZdaPv"*/)   // operator delete[](void*)
-            return 0;
+            Callee->getName() != "_ZdaPv"*/) // operator delete[](void*)
+        return 0;
 
     // Check free prototype.
-    // FIXME: workaround for PR5130, this will be obsolete when a nobuiltin 
+    // FIXME: workaround for PR5130, this will be obsolete when a nobuiltin
     // attribute will exist.
-    FunctionType *FTy = Callee->getFunctionType();
+    FunctionType* FTy = Callee->getFunctionType();
     if (!FTy->getReturnType()->isVoidTy())
         return 0;
     if (FTy->getNumParams() != 1)
@@ -94,21 +92,19 @@ private:
     Instruction* processing;
 
 public:
-    ComparisonFinder(CallInst* malloc) : any_changes(false) {
-        to_process.push_back(malloc);
-    }
+    ComparisonFinder(CallInst* malloc) : any_changes(false) { to_process.push_back(malloc); }
 
     bool elide_comparisons() {
         while (to_process.size()) {
             processing = to_process.front();
             to_process.pop_front();
 
-            //errs() << "processing: " << *processing << '\n';
+            // errs() << "processing: " << *processing << '\n';
             bool changed = false;
             do {
                 changed = false;
                 for (User* user : processing->users()) {
-                    //errs() << "looking at: " << *user << '\n';
+                    // errs() << "looking at: " << *user << '\n';
                     changed = visit(cast<Instruction>(user));
                     if (changed)
                         break;
@@ -118,13 +114,13 @@ public:
         return any_changes;
     }
 
-    bool visitBitCastInst(BitCastInst &inst) {
+    bool visitBitCastInst(BitCastInst& inst) {
         to_process.push_back(&inst);
         return false;
     }
 
-    bool visitICmpInst(ICmpInst &inst) {
-        //errs() << "got icmp instruction!  " << inst << '\n';
+    bool visitICmpInst(ICmpInst& inst) {
+        // errs() << "got icmp instruction!  " << inst << '\n';
 
         bool changed = false;
         if (inst.getPredicate() == CmpInst::ICMP_EQ) {
@@ -153,45 +149,40 @@ public:
         return changed;
     }
 
-    bool visitInstruction(Instruction &inst) {
-        //errs() << "got misc instruction: " << inst << '\n';
+    bool visitInstruction(Instruction& inst) {
+        // errs() << "got misc instruction: " << inst << '\n';
         return false;
     }
 };
 
 class MallocsNonNullPass : public FunctionPass {
-    public:
-        static char ID;
-        MallocsNonNullPass() : FunctionPass(ID) {}
+public:
+    static char ID;
+    MallocsNonNullPass() : FunctionPass(ID) {}
 
-        virtual void getAnalysisUsage(AnalysisUsage &info) const {
-            info.setPreservesCFG();
-        }
+    virtual void getAnalysisUsage(AnalysisUsage& info) const { info.setPreservesCFG(); }
 
-        virtual bool runOnFunction(Function &F) {
-            int num_changed = 0;
-            for (inst_iterator inst_it = inst_begin(F), _inst_end = inst_end(F); inst_it != _inst_end; ++inst_it) {
-                if (!isMallocCall(dyn_cast<CallInst>(&*inst_it)))
-                    continue;
+    virtual bool runOnFunction(Function& F) {
+        int num_changed = 0;
+        for (inst_iterator inst_it = inst_begin(F), _inst_end = inst_end(F); inst_it != _inst_end; ++inst_it) {
+            if (!isMallocCall(dyn_cast<CallInst>(&*inst_it)))
+                continue;
 
-                if (VERBOSITY("opt") >= 2) {
-                    errs() << "\nFound malloc call:\n" << *inst_it << '\n';
-                }
-                num_changed += ComparisonFinder(cast<CallInst>(&*inst_it)).elide_comparisons();
+            if (VERBOSITY("opt") >= 2) {
+                errs() << "\nFound malloc call:\n" << *inst_it << '\n';
             }
-
-            return num_changed > 0;
+            num_changed += ComparisonFinder(cast<CallInst>(&*inst_it)).elide_comparisons();
         }
+
+        return num_changed > 0;
+    }
 };
 char MallocsNonNullPass::ID = 0;
 
 FunctionPass* createMallocsNonNullPass() {
     return new MallocsNonNullPass();
 }
-
 }
 
-static RegisterPass<pyston::MallocsNonNullPass> X("mallocs_nonnull", "Use the fact that malloc() doesnt return NULL", true, false);
-
-
-
+static RegisterPass<pyston::MallocsNonNullPass> X("mallocs_nonnull", "Use the fact that malloc() doesnt return NULL",
+                                                  true, false);

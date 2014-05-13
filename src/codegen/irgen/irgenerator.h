@@ -25,7 +25,7 @@ namespace llvm {
 class AllocaInst;
 class BasicBlock;
 class BranchInst;
-//class Function;
+// class Function;
 class MDNode;
 }
 
@@ -44,165 +44,156 @@ typedef std::unordered_map<std::string, ConcreteCompilerVariable*> ConcreteSymbo
 // to the specific phase or pass we're in.
 // TODO this probably shouldn't be here
 class IRGenState {
-    private:
-        CompiledFunction *cf;
-        SourceInfo* source_info;
-        GCBuilder *gc;
-        llvm::MDNode* func_dbg_info;
+private:
+    CompiledFunction* cf;
+    SourceInfo* source_info;
+    GCBuilder* gc;
+    llvm::MDNode* func_dbg_info;
 
-        llvm::AllocaInst *scratch_space;
-        int scratch_size;
+    llvm::AllocaInst* scratch_space;
+    int scratch_size;
 
-    public:
-        IRGenState(CompiledFunction *cf, SourceInfo* source_info, GCBuilder *gc, llvm::MDNode* func_dbg_info) : cf(cf), source_info(source_info), gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), scratch_size(0) {
-            assert(cf->func);
-            assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
-        }
+public:
+    IRGenState(CompiledFunction* cf, SourceInfo* source_info, GCBuilder* gc, llvm::MDNode* func_dbg_info)
+        : cf(cf), source_info(source_info), gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), scratch_size(0) {
+        assert(cf->func);
+        assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
+    }
 
-        CompiledFunction* getCurFunction() {
-            return cf;
-        }
+    CompiledFunction* getCurFunction() { return cf; }
 
-        llvm::Function* getLLVMFunction() {
-            return cf->func;
-        }
+    llvm::Function* getLLVMFunction() { return cf->func; }
 
-        EffortLevel::EffortLevel getEffortLevel() {
-            return cf->effort;
-        }
+    EffortLevel::EffortLevel getEffortLevel() { return cf->effort; }
 
-        GCBuilder* getGC() {
-            return gc;
-        }
+    GCBuilder* getGC() { return gc; }
 
-        llvm::Value* getScratchSpace(int min_bytes);
+    llvm::Value* getScratchSpace(int min_bytes);
 
-        ConcreteCompilerType* getReturnType() {
-            assert(cf->sig);
-            return cf->sig->rtn_type;
-        }
+    ConcreteCompilerType* getReturnType() {
+        assert(cf->sig);
+        return cf->sig->rtn_type;
+    }
 
-        SourceInfo* getSourceInfo() {
-            return source_info;
-        }
+    SourceInfo* getSourceInfo() { return source_info; }
 
-        ScopeInfo* getScopeInfo();
+    ScopeInfo* getScopeInfo();
 
-        llvm::MDNode* getFuncDbgInfo() {
-            return func_dbg_info;
-        }
+    llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
 };
 
 class GuardList {
-    public:
-        struct ExprTypeGuard {
-            CFGBlock *cfg_block;
-            llvm::BranchInst* branch;
-            AST_expr* ast_node;
-            CompilerVariable* val;
-            SymbolTable st;
+public:
+    struct ExprTypeGuard {
+        CFGBlock* cfg_block;
+        llvm::BranchInst* branch;
+        AST_expr* ast_node;
+        CompilerVariable* val;
+        SymbolTable st;
 
-            ExprTypeGuard(CFGBlock *cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val, const SymbolTable &st);
-        };
+        ExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val,
+                      const SymbolTable& st);
+    };
 
-        struct BlockEntryGuard {
-            CFGBlock *cfg_block;
-            llvm::BranchInst* branch;
-            SymbolTable symbol_table;
+    struct BlockEntryGuard {
+        CFGBlock* cfg_block;
+        llvm::BranchInst* branch;
+        SymbolTable symbol_table;
 
-            BlockEntryGuard(CFGBlock *cfg_block, llvm::BranchInst* branch, const SymbolTable &symbol_table);
-        };
+        BlockEntryGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& symbol_table);
+    };
 
-    private:
-        std::unordered_map<AST_expr*, ExprTypeGuard*> expr_type_guards;
-        std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> > block_begin_guards;
-        //typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::iterator expr_type_guard_iterator;
-        //typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::const_iterator expr_type_guard_const_iterator;
-        typedef decltype(expr_type_guards)::iterator expr_type_guard_iterator;
-        typedef decltype(expr_type_guards)::const_iterator expr_type_guard_const_iterator;
+private:
+    std::unordered_map<AST_expr*, ExprTypeGuard*> expr_type_guards;
+    std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> > block_begin_guards;
+    // typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::iterator expr_type_guard_iterator;
+    // typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::const_iterator expr_type_guard_const_iterator;
+    typedef decltype(expr_type_guards)::iterator expr_type_guard_iterator;
+    typedef decltype(expr_type_guards)::const_iterator expr_type_guard_const_iterator;
 
-    public:
-        llvm::iterator_range<expr_type_guard_iterator> exprGuards() {
-            return llvm::iterator_range<expr_type_guard_iterator>(expr_type_guards.begin(), expr_type_guards.end());
+public:
+    llvm::iterator_range<expr_type_guard_iterator> exprGuards() {
+        return llvm::iterator_range<expr_type_guard_iterator>(expr_type_guards.begin(), expr_type_guards.end());
+    }
+
+    void getBlocksWithGuards(std::unordered_set<CFGBlock*>& add_to) {
+        for (const auto& p : block_begin_guards) {
+            add_to.insert(p.first);
         }
+    }
 
-        void getBlocksWithGuards(std::unordered_set<CFGBlock*> &add_to) {
-            for (const auto &p : block_begin_guards) {
-                add_to.insert(p.first);
-            }
-        }
-
-        void assertGotPatched() {
+    void assertGotPatched() {
 #ifndef NDEBUG
-            for (const auto &p : block_begin_guards) {
-                for (const auto g : p.second) {
-                    assert(g->branch->getSuccessor(0) != g->branch->getSuccessor(1));
-                }
+        for (const auto& p : block_begin_guards) {
+            for (const auto g : p.second) {
+                assert(g->branch->getSuccessor(0) != g->branch->getSuccessor(1));
             }
+        }
 
-            for (const auto &p : expr_type_guards) {
-                assert(p.second->branch->getSuccessor(0) != p.second->branch->getSuccessor(1));
-            }
+        for (const auto& p : expr_type_guards) {
+            assert(p.second->branch->getSuccessor(0) != p.second->branch->getSuccessor(1));
+        }
 #endif
-        }
+    }
 
-        ExprTypeGuard* getNodeTypeGuard(AST_expr* node) const {
-            expr_type_guard_const_iterator it = expr_type_guards.find(node);
-            if (it == expr_type_guards.end())
-                return NULL;
+    ExprTypeGuard* getNodeTypeGuard(AST_expr* node) const {
+        expr_type_guard_const_iterator it = expr_type_guards.find(node);
+        if (it == expr_type_guards.end())
+            return NULL;
+        return it->second;
+    }
+
+    bool isEmpty() const { return expr_type_guards.size() == 0 && block_begin_guards.size() == 0; }
+
+    void addExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val,
+                          const SymbolTable& st) {
+        ExprTypeGuard*& g = expr_type_guards[ast_node];
+        assert(g == NULL);
+        g = new ExprTypeGuard(cfg_block, branch, ast_node, val, st);
+    }
+
+    void registerGuardForBlockEntry(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& st) {
+        // printf("Adding guard for block %p, in %p\n", cfg_block, this);
+        std::vector<BlockEntryGuard*>& v = block_begin_guards[cfg_block];
+        v.push_back(new BlockEntryGuard(cfg_block, branch, st));
+    }
+
+    const std::vector<BlockEntryGuard*>& getGuardsForBlock(CFGBlock* block) const {
+        std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> >::const_iterator it
+            = block_begin_guards.find(block);
+        if (it != block_begin_guards.end())
             return it->second;
-        }
 
-        bool isEmpty() const {
-            return expr_type_guards.size() == 0 && block_begin_guards.size() == 0;
-        }
-
-        void addExprTypeGuard(CFGBlock *cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val, const SymbolTable &st) {
-            ExprTypeGuard* &g = expr_type_guards[ast_node];
-            assert(g == NULL);
-            g = new ExprTypeGuard(cfg_block, branch, ast_node, val, st);
-        }
-
-        void registerGuardForBlockEntry(CFGBlock *cfg_block, llvm::BranchInst* branch, const SymbolTable &st) {
-            //printf("Adding guard for block %p, in %p\n", cfg_block, this);
-            std::vector<BlockEntryGuard*> &v = block_begin_guards[cfg_block];
-            v.push_back(new BlockEntryGuard(cfg_block, branch, st));
-        }
-
-        const std::vector<BlockEntryGuard*>& getGuardsForBlock(CFGBlock *block) const {
-            std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> >::const_iterator it = block_begin_guards.find(block);
-            if (it != block_begin_guards.end())
-                return it->second;
-
-            static std::vector<BlockEntryGuard*> empty_list;
-            return empty_list;
-        }
+        static std::vector<BlockEntryGuard*> empty_list;
+        return empty_list;
+    }
 };
 
 class IRGenerator {
-    private:
-    public:
-        struct EndingState {
-            SymbolTable* symbol_table;
-            ConcreteSymbolTable* phi_symbol_table;
-            llvm::BasicBlock* ending_block;
-            EndingState(SymbolTable* symbol_table, ConcreteSymbolTable* phi_symbol_table, llvm::BasicBlock* ending_block) :
-                    symbol_table(symbol_table), phi_symbol_table(phi_symbol_table), ending_block(ending_block) {}
-        };
+private:
+public:
+    struct EndingState {
+        SymbolTable* symbol_table;
+        ConcreteSymbolTable* phi_symbol_table;
+        llvm::BasicBlock* ending_block;
+        EndingState(SymbolTable* symbol_table, ConcreteSymbolTable* phi_symbol_table, llvm::BasicBlock* ending_block)
+            : symbol_table(symbol_table), phi_symbol_table(phi_symbol_table), ending_block(ending_block) {}
+    };
 
-        virtual ~IRGenerator() {}
+    virtual ~IRGenerator() {}
 
-        virtual void unpackArguments(const std::vector<AST_expr*> &arg_names, const std::vector<ConcreteCompilerType*> &arg_types) = 0;
-        virtual void giveLocalSymbol(const std::string &name, CompilerVariable *var) = 0;
-        virtual void copySymbolsFrom(SymbolTable* st) = 0;
-        virtual void run(const CFGBlock* block) = 0;
-        virtual EndingState getEndingSymbolTable() = 0;
+    virtual void unpackArguments(const std::vector<AST_expr*>& arg_names,
+                                 const std::vector<ConcreteCompilerType*>& arg_types) = 0;
+    virtual void giveLocalSymbol(const std::string& name, CompilerVariable* var) = 0;
+    virtual void copySymbolsFrom(SymbolTable* st) = 0;
+    virtual void run(const CFGBlock* block) = 0;
+    virtual EndingState getEndingSymbolTable() = 0;
 };
 
-IREmitter *createIREmitter(IRGenState *irstate);
-IRGenerator *createIRGenerator(IRGenState *irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*> &entry_blocks, CFGBlock *myblock, TypeAnalysis *types, GuardList &out_guards, const GuardList &in_guards, bool is_partial);
-
+IREmitter* createIREmitter(IRGenState* irstate);
+IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
+                               CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,
+                               const GuardList& in_guards, bool is_partial);
 }
 
 #endif
-

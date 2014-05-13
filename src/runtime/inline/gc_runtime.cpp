@@ -46,7 +46,7 @@ void* rt_alloc(size_t size) {
 #endif
 
 #ifndef NDEBUG
-    //nallocs++;
+// nallocs++;
 #endif
 #ifdef DEBUG_GC
     getAlive()->insert(ptr);
@@ -70,7 +70,7 @@ void* rt_realloc(void* ptr, size_t new_size) {
 
 void rt_free(void* ptr) {
 #ifndef NDEBUG
-    //nallocs--;
+// nallocs--;
 #endif
 #ifdef DEBUG_GC
     getAlive()->erase(ptr);
@@ -82,7 +82,7 @@ void rt_free(void* ptr) {
     free(ptr);
 #endif
 
-    //assert(nallocs >= 0);
+    // assert(nallocs >= 0);
 }
 
 void gc_teardown() {
@@ -104,5 +104,4 @@ void gc_teardown() {
     }
     */
 }
-
 }

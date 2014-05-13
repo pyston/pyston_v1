@@ -21,7 +21,6 @@ class AST_Module;
 
 AST_Module* parse(const char* fn);
 AST_Module* caching_parse(const char* fn);
-
 }
 
 #endif

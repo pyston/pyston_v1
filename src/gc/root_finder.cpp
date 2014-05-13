@@ -58,7 +58,7 @@ void collectRoots(void* start, void* end, TraceStack* stack) {
     }
 }
 
-void collectStackRoots(TraceStack *stack) {
+void collectStackRoots(TraceStack* stack) {
     unw_cursor_t cursor;
     unw_context_t uc;
     unw_word_t ip, sp, bp;
@@ -83,7 +83,7 @@ void collectStackRoots(TraceStack *stack) {
     setjmp(registers);
 
     assert(sizeof(registers) % 8 == 0);
-    //void* stack_bottom = __builtin_frame_address(0);
+    // void* stack_bottom = __builtin_frame_address(0);
     collectRoots(&registers, &registers + 1, stack);
 
     unw_getcontext(&uc);
@@ -105,13 +105,13 @@ void collectStackRoots(TraceStack *stack) {
         void* cur_sp = (void*)sp;
         void* cur_bp = (void*)bp;
 
-        //std::string name = g.func_addr_registry.getFuncNameAtAddress((void*)ip, true);
-        //if (VERBOSITY()) printf("ip = %lx (%s), stack = [%p, %p)\n", (long) ip, name.c_str(), cur_sp, cur_bp);
+        // std::string name = g.func_addr_registry.getFuncNameAtAddress((void*)ip, true);
+        // if (VERBOSITY()) printf("ip = %lx (%s), stack = [%p, %p)\n", (long) ip, name.c_str(), cur_sp, cur_bp);
 
         unw_proc_info_t pip;
         unw_get_proc_info(&cursor, &pip);
 
-        if (pip.start_ip == (uintptr_t)&__libc_start_main) {
+        if (pip.start_ip == (uintptr_t) & __libc_start_main) {
             break;
         }
 
@@ -123,6 +123,5 @@ void collectStackRoots(TraceStack *stack) {
         collectRoots(cur_sp, (char*)cur_bp, stack);
     }
 }
-
 }
 }

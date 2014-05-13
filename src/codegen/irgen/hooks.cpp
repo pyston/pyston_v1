@@ -95,10 +95,10 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
     assert(cf);
     assert(cf->func);
 
-    //g.engine->finalizeOBject();
+    // g.engine->finalizeOBject();
     if (VERBOSITY("irgen") >= 1) {
         printf("Compiling...\n");
-        //g.cur_module->dump();
+        // g.cur_module->dump();
     }
 
     void* compiled = NULL;
@@ -124,23 +124,24 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
         printf("Compiled function to %p\n", compiled);
     }
 
-    StackMap *stackmap = parseStackMap();
+    StackMap* stackmap = parseStackMap();
     patchpoints::processStackmap(stackmap);
 }
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-static CompiledFunction* _doCompile(CLFunction *f, FunctionSignature *sig, EffortLevel::EffortLevel effort, const OSREntryDescriptor *entry) {
+static CompiledFunction* _doCompile(CLFunction* f, FunctionSignature* sig, EffortLevel::EffortLevel effort,
+                                    const OSREntryDescriptor* entry) {
     Timer _t("for _doCompile()");
     assert(sig);
 
     ASSERT(f->versions.size() < 20, "%ld", f->versions.size());
-    SourceInfo *source = f->source;
+    SourceInfo* source = f->source;
     assert(source);
 
     std::string name = source->getName();
-    const std::vector<AST_expr*> &arg_names = source->getArgNames();
-    AST_arguments *args = source->getArgsAST();
+    const std::vector<AST_expr*>& arg_names = source->getArgNames();
+    AST_arguments* args = source->getArgsAST();
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
@@ -148,16 +149,18 @@ static CompiledFunction* _doCompile(CLFunction *f, FunctionSignature *sig, Effor
 
         ss << "\033[34;1mJIT'ing " << name << " with signature (";
         for (int i = 0; i < sig->arg_types.size(); i++) {
-            if (i > 0) ss << ", ";
+            if (i > 0)
+                ss << ", ";
             ss << sig->arg_types[i]->debugName();
-            //sig->arg_types[i]->llvmType()->print(ss);
+            // sig->arg_types[i]->llvmType()->print(ss);
         }
         ss << ") -> ";
         ss << sig->rtn_type->debugName();
-        //sig->rtn_type->llvmType()->print(ss);
+        // sig->rtn_type->llvmType()->print(ss);
         ss << " at effort level " << effort;
         if (entry != NULL) {
-            ss << "\nDoing OSR-entry partial compile, starting with backedge to block " << entry->backedge->target->idx << '\n';
+            ss << "\nDoing OSR-entry partial compile, starting with backedge to block " << entry->backedge->target->idx
+               << '\n';
         }
         ss << "\033[0m";
         printf("%s\n", ss.str().c_str());
@@ -168,11 +171,11 @@ static CompiledFunction* _doCompile(CLFunction *f, FunctionSignature *sig, Effor
         assert(source->ast);
         source->cfg = computeCFG(source->ast->type, source->getBody());
         source->liveness = computeLivenessInfo(source->cfg);
-        source->phis = computeRequiredPhis(args, source->cfg, source->liveness, 
-                source->scoping->getScopeInfoForNode(source->ast));
+        source->phis = computeRequiredPhis(args, source->cfg, source->liveness,
+                                           source->scoping->getScopeInfoForNode(source->ast));
     }
 
-    CompiledFunction *cf = compileFunction(source, entry, effort, sig, arg_names, name);
+    CompiledFunction* cf = compileFunction(source, entry, effort, sig, arg_names, name);
 
     compileIR(cf, effort);
     f->addVersion(cf);
@@ -184,7 +187,7 @@ static CompiledFunction* _doCompile(CLFunction *f, FunctionSignature *sig, Effor
     static StatCounter num_compiles("num_compiles");
     num_compiles.log();
 
-    switch(effort) {
+    switch (effort) {
         case EffortLevel::INTERPRETED: {
             static StatCounter us_compiling("us_compiling_0_interpreted");
             us_compiling.log(us);
@@ -226,22 +229,22 @@ static EffortLevel::EffortLevel initialEffort() {
     return EffortLevel::MINIMAL;
 }
 
-void compileAndRunModule(AST_Module *m, BoxedModule *bm) {
+void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     Timer _t("for compileModule()");
 
-    ScopingAnalysis *scoping = runScopingAnalysis(m);
+    ScopingAnalysis* scoping = runScopingAnalysis(m);
 
-    SourceInfo *si = new SourceInfo(bm, scoping);
+    SourceInfo* si = new SourceInfo(bm, scoping);
     si->cfg = computeCFG(AST_TYPE::Module, m->body);
     si->ast = m;
     si->liveness = computeLivenessInfo(si->cfg);
     si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 
-    CLFunction *cl_f = new CLFunction(si);
+    CLFunction* cl_f = new CLFunction(si);
 
     EffortLevel::EffortLevel effort = initialEffort();
 
-    CompiledFunction *cf = _doCompile(cl_f, new FunctionSignature(VOID, false), effort, NULL);
+    CompiledFunction* cf = _doCompile(cl_f, new FunctionSignature(VOID, false), effort, NULL);
     assert(cf->clfunc->versions.size());
 
     _t.end();
@@ -255,24 +258,26 @@ void compileAndRunModule(AST_Module *m, BoxedModule *bm) {
 /// Reoptimizes the given function version at the new effort level.
 /// The cf must be an active version in its parents CLFunction; the given
 /// version will be replaced by the new version, which will be returned.
-static CompiledFunction* _doReopt(CompiledFunction *cf, EffortLevel::EffortLevel new_effort) {
+static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel new_effort) {
     assert(cf->clfunc->versions.size());
 
     assert(cf);
     assert(cf->entry_descriptor == NULL && "We can't reopt an osr-entry compile!");
     assert(cf->sig);
 
-    CLFunction *clfunc = cf->clfunc;
+    CLFunction* clfunc = cf->clfunc;
     assert(clfunc);
 
     assert(new_effort > cf->effort);
 
-    FunctionList &versions = clfunc->versions;
+    FunctionList& versions = clfunc->versions;
     for (int i = 0; i < versions.size(); i++) {
         if (versions[i] == cf) {
             versions.erase(versions.begin() + i);
 
-            CompiledFunction *new_cf = _doCompile(clfunc, cf->sig, new_effort, NULL); // this pushes the new CompiledVersion to the back of the version list
+            CompiledFunction* new_cf
+                = _doCompile(clfunc, cf->sig, new_effort,
+                             NULL); // this pushes the new CompiledVersion to the back of the version list
 
             cf->dependent_callsites.invalidateAll();
 
@@ -290,17 +295,17 @@ void* compilePartialFunc(OSRExit* exit) {
     assert(exit->parent_cf->effort < EffortLevel::MAXIMAL);
     stat_osrexits.log();
 
-    //if (VERBOSITY("irgen") >= 1) printf("In compilePartialFunc, handling %p\n", exit);
+    // if (VERBOSITY("irgen") >= 1) printf("In compilePartialFunc, handling %p\n", exit);
 
     assert(exit->parent_cf->clfunc);
-    CompiledFunction* &new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
+    CompiledFunction*& new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
         EffortLevel::EffortLevel new_effort = EffortLevel::MAXIMAL;
         if (exit->parent_cf->effort == EffortLevel::INTERPRETED)
             new_effort = EffortLevel::MINIMAL;
-        //EffortLevel::EffortLevel new_effort = (EffortLevel::EffortLevel)(exit->parent_cf->effort + 1);
-        //new_effort = EffortLevel::MAXIMAL;
-        CompiledFunction *compiled = _doCompile(exit->parent_cf->clfunc, exit->parent_cf->sig, new_effort, exit->entry);
+        // EffortLevel::EffortLevel new_effort = (EffortLevel::EffortLevel)(exit->parent_cf->effort + 1);
+        // new_effort = EffortLevel::MAXIMAL;
+        CompiledFunction* compiled = _doCompile(exit->parent_cf->clfunc, exit->parent_cf->sig, new_effort, exit->entry);
         assert(compiled = new_cf);
     }
 
@@ -308,25 +313,26 @@ void* compilePartialFunc(OSRExit* exit) {
 }
 
 static StatCounter stat_reopt("reopts");
-extern "C" char* reoptCompiledFunc(CompiledFunction *cf) {
-    if (VERBOSITY("irgen") >= 1) printf("In reoptCompiledFunc, %p, %ld\n", cf, cf->times_called);
+extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
+    if (VERBOSITY("irgen") >= 1)
+        printf("In reoptCompiledFunc, %p, %ld\n", cf, cf->times_called);
     stat_reopt.log();
 
     assert(cf->effort < EffortLevel::MAXIMAL);
     assert(cf->clfunc->versions.size());
-    CompiledFunction *new_cf = _doReopt(cf, (EffortLevel::EffortLevel(cf->effort + 1)));
+    CompiledFunction* new_cf = _doReopt(cf, (EffortLevel::EffortLevel(cf->effort + 1)));
     assert(!new_cf->is_interpreted);
     return (char*)new_cf->code;
 }
 
-CompiledFunction* resolveCLFunc(CLFunction *f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+CompiledFunction* resolveCLFunc(CLFunction* f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     static StatCounter slowpath_resolveclfunc("slowpath_resolveclfunc");
     slowpath_resolveclfunc.log();
 
-    FunctionList &versions = f->versions;
+    FunctionList& versions = f->versions;
 
     for (int i = 0; i < versions.size(); i++) {
-        CompiledFunction *cf = versions[i];
+        CompiledFunction* cf = versions[i];
         FunctionSignature* sig = cf->sig;
         if (sig->rtn_type->llvmType() != g.llvm_value_type_ptr)
             continue;
@@ -358,14 +364,15 @@ CompiledFunction* resolveCLFunc(CLFunction *f, int64_t nargs, Box* arg1, Box* ar
         }
         bool bad = false;
         for (int j = 3; j < nsig_args; j++) {
-            if (sig->arg_types[j]->isFitBy(args[j-3]->cls)) {
+            if (sig->arg_types[j]->isFitBy(args[j - 3]->cls)) {
                 // pass
             } else {
                 bad = true;
                 break;
             }
         }
-        if (bad) continue;
+        if (bad)
+            continue;
 
         assert(cf);
         assert(!cf->entry_descriptor);
@@ -378,7 +385,7 @@ CompiledFunction* resolveCLFunc(CLFunction *f, int64_t nargs, Box* arg1, Box* ar
         printf("Error: couldn't find suitable function version and no source to recompile!\n");
         printf("%ld args:", nargs);
         for (int i = 0; i < nargs; i++) {
-            Box* firstargs[] = {arg1, arg2, arg3};
+            Box* firstargs[] = { arg1, arg2, arg3 };
             printf(" %s", getTypeName(firstargs[i])->c_str());
             if (i == 3) {
                 printf(" [and more]");
@@ -389,14 +396,14 @@ CompiledFunction* resolveCLFunc(CLFunction *f, int64_t nargs, Box* arg1, Box* ar
         for (int j = 0; j < f->versions.size(); j++) {
             std::string func_name = g.func_addr_registry.getFuncNameAtAddress(f->versions[j]->code, true);
             printf("Version %d, %s:", j, func_name.c_str());
-            FunctionSignature *sig = f->versions[j]->sig;
+            FunctionSignature* sig = f->versions[j]->sig;
             for (int i = 0; i < sig->arg_types.size(); i++) {
                 printf(" %s", sig->arg_types[i]->debugName().c_str());
             }
             if (sig->is_vararg)
                 printf(" *vararg");
             printf("\n");
-            //printf(" @%p %s\n", f->versions[j]->code, func_name.c_str());
+            // printf(" @%p %s\n", f->versions[j]->code, func_name.c_str());
         }
         abort();
     }
@@ -415,25 +422,26 @@ CompiledFunction* resolveCLFunc(CLFunction *f, int64_t nargs, Box* arg1, Box* ar
         arg_types.push_back(typeFromClass(arg3->cls));
     }
     for (int j = 3; j < nargs; j++) {
-        arg_types.push_back(typeFromClass(args[j-3]->cls));
+        arg_types.push_back(typeFromClass(args[j - 3]->cls));
     }
-    FunctionSignature *sig = new FunctionSignature(UNKNOWN, arg_types, is_vararg);
+    FunctionSignature* sig = new FunctionSignature(UNKNOWN, arg_types, is_vararg);
 
     EffortLevel::EffortLevel new_effort = initialEffort();
 
-    CompiledFunction *cf = _doCompile(f, sig, new_effort, NULL); // this pushes the new CompiledVersion to the back of the version list
+    CompiledFunction* cf
+        = _doCompile(f, sig, new_effort, NULL); // this pushes the new CompiledVersion to the back of the version list
     assert(cf->is_interpreted == (cf->code == NULL));
 
     return cf;
 }
 
-Box* callCompiledFunc(CompiledFunction *cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box**args) {
+Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(cf);
 
     // TODO these shouldn't have to be initialized, but I don't want to issue a #pragma
     // that disables the warning for the whole file:
-    Box *rarg1 = arg1, *rarg2 = arg2, *rarg3 = arg3;
-    Box **rargs = NULL;
+    Box* rarg1 = arg1, *rarg2 = arg2, *rarg3 = arg3;
+    Box** rargs = NULL;
     if (nargs > 3) {
         if (cf->sig->is_vararg) {
             // the +2 is for the varargs and kwargs
@@ -456,13 +464,17 @@ Box* callCompiledFunc(CompiledFunction *cf, int64_t nargs, Box* arg1, Box* arg2,
         else if (nsig_args == 2)
             rarg3 = made_vararg;
         else
-            rargs[nsig_args-3] = made_vararg;
+            rargs[nsig_args - 3] = made_vararg;
 
         for (int i = nsig_args; i < nargs; i++) {
-            if (i == 0) listAppendInternal(made_vararg, arg1);
-            else if (i == 1) listAppendInternal(made_vararg, arg2);
-            else if (i == 2) listAppendInternal(made_vararg, arg3);
-            else listAppendInternal(made_vararg, args[i - 3]);
+            if (i == 0)
+                listAppendInternal(made_vararg, arg1);
+            else if (i == 1)
+                listAppendInternal(made_vararg, arg2);
+            else if (i == 2)
+                listAppendInternal(made_vararg, arg3);
+            else
+                listAppendInternal(made_vararg, args[i - 3]);
         }
     }
 
@@ -483,34 +495,35 @@ CLFunction* createRTFunction() {
 }
 
 extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg) {
-    CLFunction *cl_f = createRTFunction();
+    CLFunction* cl_f = createRTFunction();
 
     addRTFunction(cl_f, f, rtn_type, nargs, is_vararg);
     return cl_f;
 }
 
-void addRTFunction(CLFunction *cl_f, void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg) {
+void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg) {
     std::vector<ConcreteCompilerType*> arg_types(nargs, NULL);
     return addRTFunction(cl_f, f, rtn_type, arg_types, is_vararg);
 }
 
-static ConcreteCompilerType* processType(ConcreteCompilerType *type) {
+static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
     if (type == NULL)
         return UNKNOWN;
     return type;
 }
 
-void addRTFunction(CLFunction *cl_f, void* f, ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*> &arg_types, bool is_vararg) {
-    FunctionSignature *sig = new FunctionSignature(processType(rtn_type), is_vararg);
+void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
+                   const std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg) {
+    FunctionSignature* sig = new FunctionSignature(processType(rtn_type), is_vararg);
     std::vector<llvm::Type*> llvm_arg_types;
     for (int i = 0; i < arg_types.size(); i++) {
         sig->arg_types.push_back(processType(arg_types[i]));
         llvm_arg_types.push_back(g.llvm_value_type_ptr);
     }
 
-    llvm::FunctionType *ft = llvm::FunctionType::get(g.llvm_value_type_ptr, llvm_arg_types, false);
+    llvm::FunctionType* ft = llvm::FunctionType::get(g.llvm_value_type_ptr, llvm_arg_types, false);
 
-    cl_f->addVersion(new CompiledFunction(NULL, sig, false, f, embedConstantPtr(f, ft->getPointerTo()), EffortLevel::MAXIMAL, NULL));
+    cl_f->addVersion(
+        new CompiledFunction(NULL, sig, false, f, embedConstantPtr(f, ft->getPointerTo()), EffortLevel::MAXIMAL, NULL));
 }
-
 }

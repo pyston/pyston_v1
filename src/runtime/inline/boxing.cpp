@@ -34,21 +34,21 @@ extern "C" BoxedString* boxStrConstant(const char* chars) {
     return new BoxedString(chars);
 }
 
-extern "C" Box* boxStringPtr(const std::string *s) {
+extern "C" Box* boxStringPtr(const std::string* s) {
     return new BoxedString(*s);
 }
 
-Box* boxString(const std::string &s) {
+Box* boxString(const std::string& s) {
     return new BoxedString(s);
 }
 
-extern "C" double unboxFloat(Box *b) {
+extern "C" double unboxFloat(Box* b) {
     ASSERT(b->cls == float_cls, "%s", getTypeName(b)->c_str());
-    BoxedFloat *f = (BoxedFloat*)b;
+    BoxedFloat* f = (BoxedFloat*)b;
     return f->d;
 }
 
-i64 unboxInt(Box *b) {
+i64 unboxInt(Box* b) {
     ASSERT(b->cls == int_cls, "%s", getTypeName(b)->c_str());
     return ((BoxedInt*)b)->n;
 }
@@ -60,6 +60,5 @@ Box* boxInt(int64_t n) {
     return new BoxedInt(n);
 }
 
-//BoxedInt::BoxedInt(int64_t n) : Box(int_cls), n(n) {}
-
+// BoxedInt::BoxedInt(int64_t n) : Box(int_cls), n(n) {}
 }

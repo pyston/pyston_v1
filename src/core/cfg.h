@@ -16,11 +16,15 @@
 #define PYSTON_CORE_CFG_H
 
 /*
- * This CFG is a relatively high-level CFG, closely corresponding to the input Python source.  We break down control-flow constructs,
+ * This CFG is a relatively high-level CFG, closely corresponding to the input Python source.  We break down
+ * control-flow constructs,
  * but it doesn't do things like decompose IfExpressions or short-circuit conditional expressions.
- * Those will have to get broken into low-level control flow, so this CFG doesn't exactly correspond to the llvm-level one we will eventually
- * generate; this one is (at least for now) meant to be a slightly-lowered version of the input AST, for doing relatively high-level things such
- * as type analysis, liveness, etc, and then using as the source representation for the next lowering pass (emitting llvm SSA)
+ * Those will have to get broken into low-level control flow, so this CFG doesn't exactly correspond to the llvm-level
+ * one we will eventually
+ * generate; this one is (at least for now) meant to be a slightly-lowered version of the input AST, for doing
+ * relatively high-level things such
+ * as type analysis, liveness, etc, and then using as the source representation for the next lowering pass (emitting
+ * llvm SSA)
  */
 
 #include <vector>
@@ -37,67 +41,62 @@ enum AST_TYPE;
 
 class CFG;
 class CFGBlock {
-    private:
-        CFG* cfg;
-    public:
-        std::vector<AST_stmt*> body;
-        std::vector<CFGBlock*> predecessors, successors;
-        int idx; // index in the CFG
-        const char* info;
+private:
+    CFG* cfg;
 
-        typedef std::vector<AST_stmt*>::iterator iterator;
+public:
+    std::vector<AST_stmt*> body;
+    std::vector<CFGBlock*> predecessors, successors;
+    int idx; // index in the CFG
+    const char* info;
 
-        CFGBlock(CFG *cfg, int idx) : cfg(cfg), idx(idx), info(NULL) {
-        }
+    typedef std::vector<AST_stmt*>::iterator iterator;
 
-        void connectTo(CFGBlock *successor, bool allow_backedge=false);
-        void unconnectFrom(CFGBlock *successor);
+    CFGBlock(CFG* cfg, int idx) : cfg(cfg), idx(idx), info(NULL) {}
 
-        void push_back(AST_stmt* node) {
-            body.push_back(node);
-        }
+    void connectTo(CFGBlock* successor, bool allow_backedge = false);
+    void unconnectFrom(CFGBlock* successor);
+
+    void push_back(AST_stmt* node) { body.push_back(node); }
 };
 
 // Control Flow Graph
 class CFG {
-    private:
-        int next_idx;
-    public:
-        std::vector<CFGBlock*> blocks;
+private:
+    int next_idx;
 
-        CFG() : next_idx(0) {}
+public:
+    std::vector<CFGBlock*> blocks;
 
-        CFGBlock* getStartingBlock() {
-            return blocks[0];
-        }
+    CFG() : next_idx(0) {}
 
-        CFGBlock* addBlock() {
-            int idx = next_idx;
-            next_idx++;
-            CFGBlock* block = new CFGBlock(this, idx);
-            blocks.push_back(block);
+    CFGBlock* getStartingBlock() { return blocks[0]; }
 
-            return block;
-        }
+    CFGBlock* addBlock() {
+        int idx = next_idx;
+        next_idx++;
+        CFGBlock* block = new CFGBlock(this, idx);
+        blocks.push_back(block);
 
-        CFGBlock* addDeferredBlock() {
-            CFGBlock* block = new CFGBlock(this, -1);
-            return block;
-        }
+        return block;
+    }
 
-        void placeBlock(CFGBlock *block) {
-            assert(block->idx == -1);
-            block->idx = next_idx;
-            next_idx++;
-            blocks.push_back(block);
-        }
+    CFGBlock* addDeferredBlock() {
+        CFGBlock* block = new CFGBlock(this, -1);
+        return block;
+    }
 
-        void print();
+    void placeBlock(CFGBlock* block) {
+        assert(block->idx == -1);
+        block->idx = next_idx;
+        next_idx++;
+        blocks.push_back(block);
+    }
+
+    void print();
 };
 
 CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body);
-
-
 }
 
 #endif

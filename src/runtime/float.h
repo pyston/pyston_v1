@@ -22,8 +22,7 @@ extern "C" double div_float_float(double lhs, double rhs);
 extern "C" double pow_float_float(double lhs, double rhs);
 
 class BoxedFloat;
-bool floatNonzeroUnboxed(BoxedFloat *self);
-
+bool floatNonzeroUnboxed(BoxedFloat* self);
 }
 
 #endif

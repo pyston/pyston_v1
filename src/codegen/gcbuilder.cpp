@@ -20,19 +20,18 @@
 namespace pyston {
 
 class ConservativeGCBuilder : public GCBuilder {
-    private:
-        virtual llvm::Value* readPointer(IREmitter& emitter, llvm::Value* ptr_ptr) {
-            assert(ptr_ptr->getType() == g.llvm_value_type_ptr);
-            return emitter.getBuilder()->CreateLoad(ptr_ptr);
-        }
-        virtual void writePointer(IREmitter& emitter, llvm::Value* ptr_ptr, llvm::Value* ptr_value, bool ignore_existing_value) {
-            assert(ptr_ptr->getType() == g.llvm_value_type_ptr);
-            emitter.getBuilder()->CreateStore(ptr_value, ptr_ptr);
-        }
-        virtual void grabPointer(IREmitter& emitter, llvm::Value* ptr) {
-        }
-        virtual void dropPointer(IREmitter& emitter, llvm::Value* ptr) {
-        }
+private:
+    virtual llvm::Value* readPointer(IREmitter& emitter, llvm::Value* ptr_ptr) {
+        assert(ptr_ptr->getType() == g.llvm_value_type_ptr);
+        return emitter.getBuilder()->CreateLoad(ptr_ptr);
+    }
+    virtual void writePointer(IREmitter& emitter, llvm::Value* ptr_ptr, llvm::Value* ptr_value,
+                              bool ignore_existing_value) {
+        assert(ptr_ptr->getType() == g.llvm_value_type_ptr);
+        emitter.getBuilder()->CreateStore(ptr_value, ptr_ptr);
+    }
+    virtual void grabPointer(IREmitter& emitter, llvm::Value* ptr) {}
+    virtual void dropPointer(IREmitter& emitter, llvm::Value* ptr) {}
 };
 
 ConservativeGCBuilder cgc_builder;
@@ -40,5 +39,4 @@ ConservativeGCBuilder cgc_builder;
 GCBuilder* getGCBuilder() {
     return &cgc_builder;
 }
-
 }

@@ -36,46 +36,45 @@ namespace pyston {
 class PystonJITEventListener;
 
 class FunctionAddressRegistry {
-    private:
-        struct FuncInfo {
-            std::string name;
-            int length;
-            llvm::Function *llvm_func;
-            FuncInfo(const std::string& name, int length, llvm::Function *llvm_func) :
-                    name(name), length(length), llvm_func(llvm_func) {
-            }
-        };
-        typedef std::unordered_map<void*, FuncInfo> FuncMap;
-        FuncMap functions;
-        std::unordered_set<void*> lookup_neg_cache;
+private:
+    struct FuncInfo {
+        std::string name;
+        int length;
+        llvm::Function* llvm_func;
+        FuncInfo(const std::string& name, int length, llvm::Function* llvm_func)
+            : name(name), length(length), llvm_func(llvm_func) {}
+    };
+    typedef std::unordered_map<void*, FuncInfo> FuncMap;
+    FuncMap functions;
+    std::unordered_set<void*> lookup_neg_cache;
 
-    public:
-        std::string getFuncNameAtAddress(void* addr, bool demangle, bool *out_success=NULL);
-        llvm::Function* getLLVMFuncAtAddress(void* addr);
-        void registerFunction(const std::string &name, void *addr, int length, llvm::Function* llvm_func);
-        void dumpPerfMap();
+public:
+    std::string getFuncNameAtAddress(void* addr, bool demangle, bool* out_success = NULL);
+    llvm::Function* getLLVMFuncAtAddress(void* addr);
+    void registerFunction(const std::string& name, void* addr, int length, llvm::Function* llvm_func);
+    void dumpPerfMap();
 };
 
 llvm::JITEventListener* makeRegistryListener();
 llvm::JITEventListener* makeTracebacksListener();
 
 struct GlobalState {
-    llvm::LLVMContext &context;
-    llvm::Module *stdlib_module, *cur_module;
-    llvm::TargetMachine *tm;
-    llvm::ExecutionEngine *engine;
+    llvm::LLVMContext& context;
+    llvm::Module* stdlib_module, *cur_module;
+    llvm::TargetMachine* tm;
+    llvm::ExecutionEngine* engine;
 
     std::vector<llvm::JITEventListener*> jit_listeners;
 
     FunctionAddressRegistry func_addr_registry;
-    llvm::Type *llvm_value_type, *llvm_value_type_ptr;
-    llvm::Type *llvm_class_type, *llvm_class_type_ptr;
-    llvm::Type *llvm_flavor_type, *llvm_flavor_type_ptr;
-    llvm::Type *llvm_opaque_type;
-    llvm::Type *llvm_str_type_ptr;
-    llvm::Type *llvm_clfunction_type_ptr;
-    llvm::Type *llvm_module_type_ptr, *llvm_bool_type_ptr;
-    llvm::Type *i1, *i8, *i8_ptr, *i32, *i64, *void_, *double_;
+    llvm::Type* llvm_value_type, *llvm_value_type_ptr;
+    llvm::Type* llvm_class_type, *llvm_class_type_ptr;
+    llvm::Type* llvm_flavor_type, *llvm_flavor_type_ptr;
+    llvm::Type* llvm_opaque_type;
+    llvm::Type* llvm_str_type_ptr;
+    llvm::Type* llvm_clfunction_type_ptr;
+    llvm::Type* llvm_module_type_ptr, *llvm_bool_type_ptr;
+    llvm::Type* i1, *i8, *i8_ptr, *i32, *i64, *void_, *double_;
 
     GlobalFuncs funcs;
 
@@ -85,9 +84,7 @@ struct GlobalState {
 extern GlobalState g;
 
 // in runtime_hooks.cpp:
-void initGlobalFuncs(GlobalState &g);
-
-
+void initGlobalFuncs(GlobalState& g);
 }
 
 #endif

@@ -28,24 +28,23 @@ class TypeRecorder;
 // (I think most compilers pass "this" as the argument 0 and then shift the rest of the
 // arguments, but I'd rather not depend on that behavior since I can't find where that's
 // specified.)
-extern "C" Box* recordType(TypeRecorder *recorder, Box* obj);
+extern "C" Box* recordType(TypeRecorder* recorder, Box* obj);
 class TypeRecorder {
-    private:
-        BoxedClass *last_seen;
-        int64_t last_count;
-    public:
-        constexpr TypeRecorder() : last_seen(NULL), last_count(0) {}
+private:
+    BoxedClass* last_seen;
+    int64_t last_count;
 
-        BoxedClass* predict();
+public:
+    constexpr TypeRecorder() : last_seen(NULL), last_count(0) {}
 
-        friend Box* recordType(TypeRecorder*, Box*);
+    BoxedClass* predict();
+
+    friend Box* recordType(TypeRecorder*, Box*);
 };
 
 TypeRecorder* getTypeRecorderForNode(AST* node);
 
 BoxedClass* predictClassFor(AST* node);
-
 }
 
 #endif
-

@@ -31,50 +31,51 @@ class GCBuilder;
 class IREmitter;
 
 class MyInserter : public llvm::IRBuilderDefaultInserter<true> {
-    private:
-        IREmitter *emitter;
+private:
+    IREmitter* emitter;
 
-    protected:
-        void InsertHelper(llvm::Instruction *I, const llvm::Twine &Name,
-                llvm::BasicBlock *BB, llvm::BasicBlock::iterator InsertPt) const;
+protected:
+    void InsertHelper(llvm::Instruction* I, const llvm::Twine& Name, llvm::BasicBlock* BB,
+                      llvm::BasicBlock::iterator InsertPt) const;
 
-    public:
-        void setEmitter(IREmitter *emitter) {
-            this->emitter = emitter;
-        }
+public:
+    void setEmitter(IREmitter* emitter) { this->emitter = emitter; }
 };
 
 class PatchpointSetupInfo;
 
 class IREmitter {
-    public:
-        typedef llvm::IRBuilder<true, llvm::ConstantFolder, MyInserter> IRBuilder;
+public:
+    typedef llvm::IRBuilder<true, llvm::ConstantFolder, MyInserter> IRBuilder;
 
-        virtual ~IREmitter() {}
+    virtual ~IREmitter() {}
 
-        virtual IRBuilder* getBuilder() = 0;
-        virtual GCBuilder* getGC() = 0;
-        virtual CompiledFunction* currentFunction() = 0;
+    virtual IRBuilder* getBuilder() = 0;
+    virtual GCBuilder* getGC() = 0;
+    virtual CompiledFunction* currentFunction() = 0;
 
-        virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
-        virtual llvm::Value* createPatchpoint(const PatchpointSetupInfo *pp, void* func_addr, const std::vector<llvm::Value*> &args) = 0;
+    virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
+    virtual llvm::Value* createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
+                                          const std::vector<llvm::Value*>& args) = 0;
 };
 
-CompiledFunction* compileFunction(SourceInfo *source, const OSREntryDescriptor *entry_descriptor, EffortLevel::EffortLevel effort, FunctionSignature *sig, const std::vector<AST_expr*> &arg_names, std::string nameprefix);
+CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+                                  EffortLevel::EffortLevel effort, FunctionSignature* sig,
+                                  const std::vector<AST_expr*>& arg_names, std::string nameprefix);
 
 class TypeRecorder;
 class OpInfo {
-    private:
-        const EffortLevel::EffortLevel effort;
-        TypeRecorder* const type_recorder;
-    public:
-        OpInfo(EffortLevel::EffortLevel effort, TypeRecorder* type_recorder) : effort(effort), type_recorder(type_recorder) {
-        }
+private:
+    const EffortLevel::EffortLevel effort;
+    TypeRecorder* const type_recorder;
 
-        bool isInterpreted() const { return effort == EffortLevel::INTERPRETED; }
-        TypeRecorder* getTypeRecorder() const { return type_recorder; }
+public:
+    OpInfo(EffortLevel::EffortLevel effort, TypeRecorder* type_recorder)
+        : effort(effort), type_recorder(type_recorder) {}
+
+    bool isInterpreted() const { return effort == EffortLevel::INTERPRETED; }
+    TypeRecorder* getTypeRecorder() const { return type_recorder; }
 };
-
 }
 
 #endif

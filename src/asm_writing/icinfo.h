@@ -30,102 +30,104 @@ class ICInfo;
 class ICInvalidator;
 
 struct ICSlotInfo {
-    public:
-        ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx) {}
+public:
+    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx) {}
 
-        ICInfo *ic;
-        int idx;
+    ICInfo* ic;
+    int idx;
 
-        void clear();
+    void clear();
 };
 
 class ICSlotRewrite {
+public:
+    class CommitHook {
     public:
-        class CommitHook {
-            public:
-                virtual ~CommitHook() {}
-                virtual void finishAssembly(int fastpath_offset) = 0;
-        };
-    private:
-        ICInfo* ic;
-        assembler::Assembler* assembler;
-        const char* debug_name;
+        virtual ~CommitHook() {}
+        virtual void finishAssembly(int fastpath_offset) = 0;
+    };
 
-        uint8_t *buf;
+private:
+    ICInfo* ic;
+    assembler::Assembler* assembler;
+    const char* debug_name;
 
-        std::vector<std::pair<ICInvalidator*, int64_t> > dependencies;
+    uint8_t* buf;
 
-        ICSlotRewrite(ICInfo* ic, const char* debug_name);
+    std::vector<std::pair<ICInvalidator*, int64_t> > dependencies;
 
-    public:
-        ~ICSlotRewrite();
+    ICSlotRewrite(ICInfo* ic, const char* debug_name);
 
-        assembler::Assembler* getAssembler() { return assembler; }
-        int getSlotSize();
-        int getFuncStackSize();
-        int getScratchRbpOffset();
-        int getScratchBytes();
+public:
+    ~ICSlotRewrite();
 
-        TypeRecorder* getTypeRecorder();
+    assembler::Assembler* getAssembler() { return assembler; }
+    int getSlotSize();
+    int getFuncStackSize();
+    int getScratchRbpOffset();
+    int getScratchBytes();
 
-        assembler::GenericRegister returnRegister();
+    TypeRecorder* getTypeRecorder();
 
-        void addDependenceOn(ICInvalidator&);
-        void commit(uint64_t decision_path, CommitHook *hook);
+    assembler::GenericRegister returnRegister();
 
-        friend class ICInfo;
+    void addDependenceOn(ICInvalidator&);
+    void commit(uint64_t decision_path, CommitHook* hook);
+
+    friend class ICInfo;
 };
 
 class ICInfo {
-    private:
-        struct SlotInfo {
-            bool is_patched;
-            uint64_t decision_path;
-            ICSlotInfo entry;
+private:
+    struct SlotInfo {
+        bool is_patched;
+        uint64_t decision_path;
+        ICSlotInfo entry;
 
-            SlotInfo(ICInfo* ic, int idx) : is_patched(false), decision_path(0), entry(ic, idx) {}
-        };
-        std::vector<SlotInfo> slots;
-        // For now, just use a round-robin eviction policy.
-        // This is probably a bunch worse than LRU, but it's also
-        // probably a bunch better than the "always evict slot #0" policy
-        // that it's replacing.
-        int next_slot_to_try;
+        SlotInfo(ICInfo* ic, int idx) : is_patched(false), decision_path(0), entry(ic, idx) {}
+    };
+    std::vector<SlotInfo> slots;
+    // For now, just use a round-robin eviction policy.
+    // This is probably a bunch worse than LRU, but it's also
+    // probably a bunch better than the "always evict slot #0" policy
+    // that it's replacing.
+    int next_slot_to_try;
 
-        const StackInfo stack_info;
-        const int num_slots;
-        const int slot_size;
-        const llvm::CallingConv::ID calling_conv;
-        const std::vector<int> live_outs;
-        const assembler::GenericRegister return_register;
-        TypeRecorder * const type_recorder;
+    const StackInfo stack_info;
+    const int num_slots;
+    const int slot_size;
+    const llvm::CallingConv::ID calling_conv;
+    const std::vector<int> live_outs;
+    const assembler::GenericRegister return_register;
+    TypeRecorder* const type_recorder;
 
-        // for ICSlotRewrite:
-        ICSlotInfo *pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
+    // for ICSlotRewrite:
+    ICSlotInfo* pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
 
-        void* getSlowpathStart();
+    void* getSlowpathStart();
 
-    public:
-        ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int> &live_outs, assembler::GenericRegister return_register, TypeRecorder *type_recorder);
-        void *const start_addr, *const continue_addr;
+public:
+    ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size,
+           llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
+           assembler::GenericRegister return_register, TypeRecorder* type_recorder);
+    void* const start_addr, *const continue_addr;
 
-        int getSlotSize() { return slot_size; }
-        int getNumSlots() { return num_slots; }
-        llvm::CallingConv::ID getCallingConvention() { return calling_conv; }
-        const std::vector<int>& getLiveOuts() { return live_outs; }
+    int getSlotSize() { return slot_size; }
+    int getNumSlots() { return num_slots; }
+    llvm::CallingConv::ID getCallingConvention() { return calling_conv; }
+    const std::vector<int>& getLiveOuts() { return live_outs; }
 
-        ICSlotRewrite* startRewrite(const char* debug_name);
-        void clear(ICSlotInfo *entry);
+    ICSlotRewrite* startRewrite(const char* debug_name);
+    void clear(ICSlotInfo* entry);
 
-        friend class ICSlotRewrite;
+    friend class ICSlotRewrite;
 };
 
 class PatchpointSetupInfo;
-void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo*, StackInfo stack_info, std::unordered_set<int> live_outs);
+void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo*, StackInfo stack_info,
+                                std::unordered_set<int> live_outs);
 
 ICInfo* getICInfo(void* rtn_addr);
-
-
 }
 
 #endif

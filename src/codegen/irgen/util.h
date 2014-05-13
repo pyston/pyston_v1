@@ -24,14 +24,13 @@ class Type;
 
 namespace pyston {
 
-llvm::Constant* getStringConstantPtr(const std::string &str);
+llvm::Constant* getStringConstantPtr(const std::string& str);
 llvm::Constant* getStringConstantPtr(const char* str);
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type*);
 llvm::Constant* getConstantInt(int val);
 llvm::Constant* getConstantInt(int val, llvm::Type*);
 
-void dumpPrettyIR(llvm::Function *f);
-
+void dumpPrettyIR(llvm::Function* f);
 }
 
 #endif

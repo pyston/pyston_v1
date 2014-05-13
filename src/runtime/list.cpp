@@ -41,7 +41,7 @@ extern "C" Box* listRepr(BoxedList* self) {
         if (i > 0)
             os << ", ";
 
-        BoxedString *s = static_cast<BoxedString*>(repr(self->elts->elts[i]));
+        BoxedString* s = static_cast<BoxedString*>(repr(self->elts->elts[i]));
         os << s->s;
     }
     os << ']';
@@ -92,8 +92,8 @@ extern "C" Box* listLen(BoxedList* self) {
     return new BoxedInt(self->size);
 }
 
-Box* _listSlice(BoxedList *self, i64 start, i64 stop, i64 step) {
-    //printf("%ld %ld %ld\n", start, stop, step);
+Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
+    // printf("%ld %ld %ld\n", start, stop, step);
     assert(step != 0);
     if (step > 0) {
         assert(0 <= start);
@@ -103,10 +103,10 @@ Box* _listSlice(BoxedList *self, i64 start, i64 stop, i64 step) {
         assert(-1 <= stop);
     }
 
-    BoxedList *rtn = new BoxedList();
+    BoxedList* rtn = new BoxedList();
 
-    if ((step == 1) && ((stop-start) > 0)) {
-        listAppendArrayInternal(rtn, &self->elts->elts[start], stop-start);
+    if ((step == 1) && ((stop - start) > 0)) {
+        listAppendArrayInternal(rtn, &self->elts->elts[start], stop - start);
     } else {
         int cur = start;
         while ((step > 0 && cur < stop) || (step < 0 && cur > stop)) {
@@ -182,7 +182,7 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     assert(start <= stop);
 
     ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
-    BoxedList *lv = static_cast<BoxedList*>(v);
+    BoxedList* lv = static_cast<BoxedList*>(v);
 
     int delts = lv->size - (stop - start);
     int remaining_elts = self->size - stop;
@@ -248,7 +248,7 @@ Box* listMul(BoxedList* self, Box* rhs) {
     int s = self->size;
 
     BoxedList* rtn = new BoxedList();
-    rtn->ensure(n*s);
+    rtn->ensure(n * s);
     if (s == 1) {
         for (int i = 0; i < n; i++) {
             listAppendInternal(rtn, self->elts->elts[0]);
@@ -307,7 +307,7 @@ Box* listSort1(BoxedList* self) {
     return None;
 }
 
-Box* listContains(BoxedList* self, Box *elt) {
+Box* listContains(BoxedList* self, Box* elt) {
     int size = self->size;
     for (int i = 0; i < size; i++) {
         Box* e = self->elts->elts[i];
@@ -319,7 +319,7 @@ Box* listContains(BoxedList* self, Box *elt) {
     return False;
 }
 
-Box* listCount(BoxedList* self, Box *elt) {
+Box* listCount(BoxedList* self, Box* elt) {
     int size = self->size;
     int count = 0;
 
@@ -334,16 +334,16 @@ Box* listCount(BoxedList* self, Box *elt) {
 }
 
 
-BoxedClass *list_iterator_cls = NULL;
-extern "C" void listIteratorGCHandler(GCVisitor *v, void* p) {
+BoxedClass* list_iterator_cls = NULL;
+extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
-    BoxedListIterator *it = (BoxedListIterator*)p;
+    BoxedListIterator* it = (BoxedListIterator*)p;
     v->visit(it->l);
 }
 
 extern "C" const ObjectFlavor list_iterator_flavor(&listIteratorGCHandler, NULL);
 
-void listiterDtor(BoxedListIterator *self) {
+void listiterDtor(BoxedListIterator* self) {
 }
 
 extern "C" Box* listNew1(Box* cls) {
@@ -386,28 +386,31 @@ void setupList() {
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1, false)));
 
-    CLFunction *getitem = createRTFunction();
-    addRTFunction(getitem, (void*)listGetitemInt, NULL, std::vector<ConcreteCompilerType*>{LIST, BOXED_INT}, false);
-    addRTFunction(getitem, (void*)listGetitemSlice, NULL, std::vector<ConcreteCompilerType*>{LIST, SLICE}, false);
-    addRTFunction(getitem, (void*)listGetitem, NULL, std::vector<ConcreteCompilerType*>{LIST, NULL}, false);
+    CLFunction* getitem = createRTFunction();
+    addRTFunction(getitem, (void*)listGetitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT }, false);
+    addRTFunction(getitem, (void*)listGetitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, false);
+    addRTFunction(getitem, (void*)listGetitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL }, false);
     list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
-    list_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
+    list_cls->giveAttr("__iter__",
+                       new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
 
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1, false)));
     list_cls->setattr("__str__", list_cls->peekattr("__repr__"), NULL, NULL);
     list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1, false)));
 
-    CLFunction *pop = boxRTFunction((void*)listPop1, NULL, 1, false);
+    CLFunction* pop = boxRTFunction((void*)listPop1, NULL, 1, false);
     addRTFunction(pop, (void*)listPop2, NULL, 2, false);
     list_cls->giveAttr("pop", new BoxedFunction(pop));
 
     list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NULL, 2, false)));
 
-    CLFunction *setitem = createRTFunction();
-    addRTFunction(setitem, (void*)listSetitemInt, NULL, std::vector<ConcreteCompilerType*>{LIST, BOXED_INT, NULL}, false);
-    addRTFunction(setitem, (void*)listSetitemSlice, NULL, std::vector<ConcreteCompilerType*>{LIST, SLICE, NULL}, false);
-    addRTFunction(setitem, (void*)listSetitem, NULL, std::vector<ConcreteCompilerType*>{LIST, NULL, NULL}, false);
+    CLFunction* setitem = createRTFunction();
+    addRTFunction(setitem, (void*)listSetitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, NULL },
+                  false);
+    addRTFunction(setitem, (void*)listSetitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE, NULL },
+                  false);
+    addRTFunction(setitem, (void*)listSetitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL, NULL }, false);
     list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
 
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NULL, 3, false)));
@@ -419,7 +422,7 @@ void setupList() {
     list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NULL, 1, false)));
     list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2, false)));
 
-    CLFunction *new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
+    CLFunction* new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
     addRTFunction(new_, (void*)listNew2, NULL, 2, false);
     list_cls->giveAttr("__new__", new BoxedFunction(new_));
 
@@ -431,7 +434,7 @@ void setupList() {
     gc::registerStaticRootObj(list_iterator_cls);
     list_iterator_cls->giveAttr("__name__", boxStrConstant("listiterator"));
 
-    CLFunction *hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1, false);
+    CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1, false);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL, 1, false);
     list_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
     list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1, false)));
@@ -441,7 +444,6 @@ void setupList() {
 
 void teardownList() {
     // TODO do clearattrs?
-    //decref(list_iterator_cls);
+    // decref(list_iterator_cls);
 }
-
 }

@@ -23,14 +23,14 @@ namespace pyston {
 
 static std::unordered_map<AST*, TypeRecorder*> type_recorders;
 TypeRecorder* getTypeRecorderForNode(AST* node) {
-    TypeRecorder* &r = type_recorders[node];
+    TypeRecorder*& r = type_recorders[node];
     if (r == NULL)
         r = new TypeRecorder();
     return r;
 }
 
 Box* recordType(TypeRecorder* self, Box* obj) {
-    BoxedClass *cls = obj->cls;
+    BoxedClass* cls = obj->cls;
     if (cls != self->last_seen) {
         self->last_seen = cls;
         self->last_count = 1;
@@ -38,7 +38,7 @@ Box* recordType(TypeRecorder* self, Box* obj) {
         self->last_count++;
     }
 
-    //printf("Seen %s %ld times\n", getNameOfClass(cls)->c_str(), self->last_count);
+    // printf("Seen %s %ld times\n", getNameOfClass(cls)->c_str(), self->last_count);
 
     return obj;
 }
@@ -61,5 +61,4 @@ BoxedClass* TypeRecorder::predict() {
 
     return NULL;
 }
-
 }

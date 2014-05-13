@@ -46,8 +46,8 @@ using namespace pyston;
 
 int main(int argc, char** argv) {
     Timer _t("for jit startup");
-    //llvm::sys::PrintStackTraceOnErrorSignal();
-    //llvm::PrettyStackTraceProgram X(argc, argv);
+    // llvm::sys::PrintStackTraceOnErrorSignal();
+    // llvm::PrettyStackTraceProgram X(argc, argv);
     llvm::llvm_shutdown_obj Y;
 
     int code;
@@ -64,8 +64,8 @@ int main(int argc, char** argv) {
             GLOBAL_VERBOSITY = 0;
         else if (code == 'v')
             GLOBAL_VERBOSITY++;
-        //else if (code == 'c') // now always enabled
-            //caching = true;
+        // else if (code == 'c') // now always enabled
+        // caching = true;
         else if (code == 'd')
             SHOW_DISASM = true;
         else if (code == 'i')
@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
             num_iterations = 1000;
 
         for (int i = 0; i < num_iterations; i++) {
-            AST_Module *m;
+            AST_Module* m;
             if (caching)
                 m = caching_parse(fn);
             else
@@ -158,7 +158,7 @@ int main(int argc, char** argv) {
         while (true) {
             run++;
 
-            AST_Module *m = new AST_Module();
+            AST_Module* m = new AST_Module();
             compileAndRunModule(m, main);
 
             if (run >= MAX_RUNS) {
@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
                 gettimeofday(&start, NULL);
 
                 char buf[] = "pystontmp_XXXXXX";
-                char *tmpdir = mkdtemp(buf);
+                char* tmpdir = mkdtemp(buf);
                 assert(tmpdir);
                 std::string tmp = std::string(tmpdir) + "/in.py";
                 if (VERBOSITY() >= 1) {
@@ -212,8 +212,8 @@ int main(int argc, char** argv) {
                 removeDirectoryIfExists(tmpdir);
 
                 if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                    AST_Expr *e = ast_cast<AST_Expr>(m->body[0]);
-                    AST_Print *p = new AST_Print();
+                    AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
+                    AST_Print* p = new AST_Print();
                     p->dest = NULL;
                     p->nl = true;
                     p->values.push_back(e->value);

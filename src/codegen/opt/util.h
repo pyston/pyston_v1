@@ -19,9 +19,8 @@
 
 namespace pyston {
 
-bool isAllocCall(const std::string &name);
-bool isAllocCall(const llvm::CallInst *CI);
-
+bool isAllocCall(const std::string& name);
+bool isAllocCall(const llvm::CallInst* CI);
 }
 
 #endif

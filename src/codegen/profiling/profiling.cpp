@@ -35,5 +35,4 @@ void registerProfileListenerCtor(llvm::JITEventListener* (*c)()) {
     ctors[num_ctors] = c;
     num_ctors++;
 }
-
 }

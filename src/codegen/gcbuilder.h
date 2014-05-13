@@ -23,18 +23,17 @@ namespace pyston {
 
 class IREmitter;
 class GCBuilder {
-    public:
-        virtual ~GCBuilder() {}
+public:
+    virtual ~GCBuilder() {}
 
-        virtual llvm::Value* readPointer(IREmitter&, llvm::Value* ptr_ptr) = 0;
-        virtual void writePointer(IREmitter&, llvm::Value* ptr_ptr, llvm::Value* ptr_value, bool ignore_existing_value) = 0;
+    virtual llvm::Value* readPointer(IREmitter&, llvm::Value* ptr_ptr) = 0;
+    virtual void writePointer(IREmitter&, llvm::Value* ptr_ptr, llvm::Value* ptr_value, bool ignore_existing_value) = 0;
 
-        virtual void grabPointer(IREmitter&, llvm::Value* ptr) = 0;
-        virtual void dropPointer(IREmitter&, llvm::Value* ptr) = 0;
+    virtual void grabPointer(IREmitter&, llvm::Value* ptr) = 0;
+    virtual void dropPointer(IREmitter&, llvm::Value* ptr) = 0;
 };
 
 GCBuilder* getGCBuilder();
-
 }
 
 #endif

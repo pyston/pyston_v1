@@ -103,16 +103,16 @@ Box* fileWrite(BoxedFile* self, Box* val) {
 
 
     if (val->cls == str_cls) {
-        const std::string &s = static_cast<BoxedString*>(val)->s;
+        const std::string& s = static_cast<BoxedString*>(val)->s;
 
         size_t size = s.size();
         size_t written = 0;
         while (written < size) {
-            //const int BUF_SIZE = 1024;
-            //char buf[BUF_SIZE];
-            //int to_write = std::min(BUF_SIZE, size - written);
-            //memcpy(buf, s.c_str() + written, to_write);
-            //size_t new_written = fwrite(buf, 1, to_write, self->f);
+            // const int BUF_SIZE = 1024;
+            // char buf[BUF_SIZE];
+            // int to_write = std::min(BUF_SIZE, size - written);
+            // memcpy(buf, s.c_str() + written, to_write);
+            // size_t new_written = fwrite(buf, 1, to_write, self->f);
 
             size_t new_written = fwrite(s.c_str() + written, 1, size - written, self->f);
 
@@ -163,12 +163,12 @@ Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
 void file_dtor(BoxedFile* t) {
 }
 
-Box* fileNew2(BoxedClass *cls, Box* s) {
+Box* fileNew2(BoxedClass* cls, Box* s) {
     assert(cls == file_cls);
     return open1(s);
 }
 
-Box* fileNew3(BoxedClass *cls, Box* s, Box* m) {
+Box* fileNew3(BoxedClass* cls, Box* s, Box* m) {
     assert(cls == file_cls);
     return open2(s, m);
 }
@@ -176,11 +176,11 @@ Box* fileNew3(BoxedClass *cls, Box* s, Box* m) {
 void setupFile() {
     file_cls->giveAttr("__name__", boxStrConstant("file"));
 
-    CLFunction *read = boxRTFunction((void*)fileRead1, NULL, 1, false);
+    CLFunction* read = boxRTFunction((void*)fileRead1, NULL, 1, false);
     addRTFunction(read, (void*)fileRead2, NULL, 2, false);
     file_cls->giveAttr("read", new BoxedFunction(read));
 
-    CLFunction *readline = boxRTFunction((void*)fileReadline1, STR, 1, false);
+    CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1, false);
     file_cls->giveAttr("readline", new BoxedFunction(readline));
 
     file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NULL, 2, false)));
@@ -192,7 +192,7 @@ void setupFile() {
     file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, NULL, 1, false)));
     file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, NULL, 4, false)));
 
-    CLFunction *__new__ = boxRTFunction((void*)fileNew2, NULL, 2, false);
+    CLFunction* __new__ = boxRTFunction((void*)fileNew2, NULL, 2, false);
     addRTFunction(__new__, (void*)fileNew3, NULL, 3, false);
     file_cls->giveAttr("__new__", new BoxedFunction(__new__));
 
@@ -201,5 +201,4 @@ void setupFile() {
 
 void teardownFile() {
 }
-
 }

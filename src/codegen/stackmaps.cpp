@@ -33,7 +33,7 @@
 namespace pyston {
 
 // TODO shouldn't be recording this in a global variable
-static StackMap *cur_map = NULL;
+static StackMap* cur_map = NULL;
 StackMap* parseStackMap() {
     StackMap* rtn = cur_map;
     cur_map = NULL;
@@ -41,13 +41,13 @@ StackMap* parseStackMap() {
 }
 
 class StackmapJITEventListener : public llvm::JITEventListener {
-    private:
-    public:
-        virtual void NotifyObjectEmitted(const llvm::ObjectImage&);
+private:
+public:
+    virtual void NotifyObjectEmitted(const llvm::ObjectImage&);
 };
 
-void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
-    //llvm::outs() << "An object has been emitted:\n";
+void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+    // llvm::outs() << "An object has been emitted:\n";
 
     llvm::error_code code;
 
@@ -60,10 +60,11 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj)
             uint64_t stackmap_offset;
             code = I->getFileOffset(stackmap_offset);
             assert(!code);
-            //code = I->getSize(stackmap_size);
-            //assert(stackmap_size > 0);
-            //assert(!code);
-            if (VERBOSITY() >= 2) printf("Found the stackmaps at stackmap_offset 0x%lx\n", stackmap_offset);
+            // code = I->getSize(stackmap_size);
+            // assert(stackmap_size > 0);
+            // assert(!code);
+            if (VERBOSITY() >= 2)
+                printf("Found the stackmaps at stackmap_offset 0x%lx\n", stackmap_offset);
 
             assert(cur_map == NULL);
             cur_map = new StackMap();
@@ -93,25 +94,31 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj)
             int nconstants = *ptr.u32++;
             int nrecords = *ptr.u32++;
 
-            if (VERBOSITY() >= 2) printf("%d functions\n", nfunctions);
+            if (VERBOSITY() >= 2)
+                printf("%d functions\n", nfunctions);
             for (int i = 0; i < nfunctions; i++) {
-                const StackMap::StackSizeRecord &size_record = *ptr.size_record++;
+                const StackMap::StackSizeRecord& size_record = *ptr.size_record++;
                 cur_map->stack_size_records.push_back(size_record);
-                if (VERBOSITY() >= 2) printf("function %d: offset 0x%lx, stack size 0x%lx\n", i, size_record.offset, size_record.stack_size);
+                if (VERBOSITY() >= 2)
+                    printf("function %d: offset 0x%lx, stack size 0x%lx\n", i, size_record.offset,
+                           size_record.stack_size);
             }
 
-            if (VERBOSITY() >= 2) printf("%d constants\n", nconstants);
+            if (VERBOSITY() >= 2)
+                printf("%d constants\n", nconstants);
 
             for (int i = 0; i < nconstants; i++) {
                 uint64_t constant = *ptr.u64++;
-                if (VERBOSITY() >= 2) printf("Constant %d: %ld\n", i, constant);
+                if (VERBOSITY() >= 2)
+                    printf("Constant %d: %ld\n", i, constant);
                 cur_map->constants.push_back(constant);
             }
 
-            if (VERBOSITY() >= 2) printf("%d records\n", nrecords);
+            if (VERBOSITY() >= 2)
+                printf("%d records\n", nrecords);
 
             for (int i = 0; i < nrecords; i++) {
-                StackMap::Record *record = new StackMap::Record();
+                StackMap::Record* record = new StackMap::Record();
                 cur_map->records.push_back(record);
 
                 record->id = *ptr.u64++;
@@ -120,35 +127,23 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj)
 
                 int numlocations = *ptr.u16++;
 
-                if (VERBOSITY() >= 2) printf("Stackmap record %ld at 0x%x has %d locations:\n", record->id, record->offset, numlocations);
+                if (VERBOSITY() >= 2)
+                    printf("Stackmap record %ld at 0x%x has %d locations:\n", record->id, record->offset, numlocations);
                 for (int j = 0; j < numlocations; j++) {
                     assert(sizeof(StackMap::Record::Location) == sizeof(*ptr.u64));
-                    const StackMap::Record::Location &r = *ptr.record_loc++;
+                    const StackMap::Record::Location& r = *ptr.record_loc++;
                     record->locations.push_back(r);
 
                     // from http://lxr.free-electrons.com/source/tools/perf/arch/x86/util/dwarf-regs.c
                     // TODO this probably can be fetched more portably from the llvm target files
-                    const char *dwarf_reg_names[] = {
-                        "%rax",
-                        "%rdx",
-                        "%rcx",
-                        "%rbx",
-                        "%rsi",
-                        "%rdi",
-                        "%rbp",
-                        "%rsp",
-                        "%r8",
-                        "%r9",
-                        "%r10",
-                        "%r11",
-                        "%r12",
-                        "%r13",
-                        "%r14",
-                        "%r15",
+                    const char* dwarf_reg_names[] = {
+                        "%rax", "%rdx", "%rcx", "%rbx", "%rsi", "%rdi", "%rbp", "%rsp",
+                        "%r8",  "%r9",  "%r10", "%r11", "%r12", "%r13", "%r14", "%r15",
                     };
                     if (VERBOSITY() >= 2) {
                         if (r.type == 1) {
-                            printf("Location %d: type %d (reg), reg %d (%s), offset %d\n", j, r.type, r.regnum, dwarf_reg_names[r.regnum], r.offset);
+                            printf("Location %d: type %d (reg), reg %d (%s), offset %d\n", j, r.type, r.regnum,
+                                   dwarf_reg_names[r.regnum], r.offset);
                         } else {
                             printf("Location %d: type %d, reg %d, offset %d\n", j, r.type, r.regnum, r.offset);
                         }
@@ -158,7 +153,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj)
                 ptr.u16++; // padding
                 int num_live_outs = *ptr.u16++;
                 for (int i = 0; i < num_live_outs; i++) {
-                    const StackMap::Record::LiveOut &r = *ptr.record_liveout++;
+                    const StackMap::Record::LiveOut& r = *ptr.record_liveout++;
                     record->live_outs.push_back(r);
 
                     if (VERBOSITY() >= 2) {
@@ -193,5 +188,4 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj)
 llvm::JITEventListener* makeStackMapListener() {
     return new StackmapJITEventListener();
 }
-
 }

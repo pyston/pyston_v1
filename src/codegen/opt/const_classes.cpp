@@ -44,196 +44,189 @@ namespace pyston {
 #define FLAVOR_KINDID_OFFSET ((const char*)&(((ObjectFlavor*)0x01)->kind_id) - (const char*)0x1)
 
 class ConstClassesPass : public FunctionPass {
-    private:
-        void* getGVAddr(GlobalVariable* gv) {
-            // TODO cache this?
-            void* handle = dlopen(NULL, RTLD_LAZY);
-            void* addr = dlsym(handle, gv->getName().data());
-            assert(addr);
-            dlclose(handle);
-            return addr;
+private:
+    void* getGVAddr(GlobalVariable* gv) {
+        // TODO cache this?
+        void* handle = dlopen(NULL, RTLD_LAZY);
+        void* addr = dlsym(handle, gv->getName().data());
+        assert(addr);
+        dlclose(handle);
+        return addr;
+    }
+    BoxedClass* getClassFromGV(GlobalVariable* gv) { return *(BoxedClass**)getGVAddr(gv); }
+
+    ObjectFlavor* getFlavorFromGV(GlobalVariable* gv) { return (ObjectFlavor*)getGVAddr(gv); }
+
+    void replaceUsesWithConstant(llvm::Value* v, uintptr_t val) {
+        if (isa<PointerType>(v->getType()))
+            v->replaceAllUsesWith(embedConstantPtr((void*)val, v->getType()));
+        else
+            v->replaceAllUsesWith(getConstantInt(val, v->getType()));
+    }
+
+    bool handleBool(LoadInst* li, GlobalVariable* gv) {
+        if (VERBOSITY()) {
+            llvm::errs() << "Constant-folding this load: " << *li << '\n';
         }
-        BoxedClass* getClassFromGV(GlobalVariable* gv) {
-            return *(BoxedClass**)getGVAddr(gv);
+        if (gv->getName() == "True")
+            li->replaceAllUsesWith(embedConstantPtr(True, g.llvm_bool_type_ptr));
+        else
+            li->replaceAllUsesWith(embedConstantPtr(False, g.llvm_bool_type_ptr));
+        return true;
+    }
+
+    bool handleFlavor(LoadInst* li, ConstantExpr* gepce) {
+        if (VERBOSITY("opt") >= 1) {
+            errs() << "\nFound this load of a flavor attr:\n" << *li << '\n';
         }
 
-        ObjectFlavor* getFlavorFromGV(GlobalVariable* gv) {
-            return (ObjectFlavor*)getGVAddr(gv);
-        }
+        GetElementPtrInst* gep = cast<GetElementPtrInst>(gepce->getAsInstruction());
+        APInt ap_offset(64, 0, true);
+        bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
+        delete gep;
+        assert(success);
+        int64_t offset = ap_offset.getSExtValue();
 
-        void replaceUsesWithConstant(llvm::Value* v, uintptr_t val) {
-            if (isa<PointerType>(v->getType()))
-                v->replaceAllUsesWith(embedConstantPtr((void*)val, v->getType()));
-            else
-                v->replaceAllUsesWith(getConstantInt(val, v->getType()));
-        }
-
-        bool handleBool(LoadInst *li, GlobalVariable *gv) {
-            if (VERBOSITY()) {
-                llvm::errs() << "Constant-folding this load: " << *li << '\n';
-            }
-            if (gv->getName() == "True")
-                li->replaceAllUsesWith(embedConstantPtr(True, g.llvm_bool_type_ptr));
-            else
-                li->replaceAllUsesWith(embedConstantPtr(False, g.llvm_bool_type_ptr));
+        if (offset == FLAVOR_KINDID_OFFSET) {
+            ObjectFlavor* flavor = getFlavorFromGV(cast<GlobalVariable>(gepce->getOperand(0)));
+            replaceUsesWithConstant(li, flavor->kind_id);
             return true;
-        }
-
-        bool handleFlavor(LoadInst *li, ConstantExpr *gepce) {
-            if (VERBOSITY("opt") >= 1) {
-                errs() << "\nFound this load of a flavor attr:\n" << *li << '\n';
-            }
-
-            GetElementPtrInst *gep = cast<GetElementPtrInst>(gepce->getAsInstruction());
-            APInt ap_offset(64, 0, true);
-            bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
-            delete gep;
-            assert(success);
-            int64_t offset = ap_offset.getSExtValue();
-
-            if (offset == FLAVOR_KINDID_OFFSET) {
-                ObjectFlavor* flavor = getFlavorFromGV(cast<GlobalVariable>(gepce->getOperand(0)));
-                replaceUsesWithConstant(li, flavor->kind_id);
-                return true;
-            } else {
-                ASSERT(0, "%ld", offset);
-                return false;
-            }
-
-            assert(0);
+        } else {
+            ASSERT(0, "%ld", offset);
             return false;
         }
 
-        bool handleCls(LoadInst *li, GlobalVariable *gv) {
-            bool changed = true;
+        assert(0);
+        return false;
+    }
 
+    bool handleCls(LoadInst* li, GlobalVariable* gv) {
+        bool changed = true;
+
+        if (VERBOSITY("opt") >= 1) {
+            errs() << "\nFound load of class-typed global variable:\n" << *li << '\n';
+        }
+
+        BoxedClass* cls = getClassFromGV(gv);
+        if (!cls->is_constant) {
+            assert(0 && "what globally-resolved classes are not constant??");
             if (VERBOSITY("opt") >= 1) {
-                errs() << "\nFound load of class-typed global variable:\n" << *li << '\n';
+                errs() << gv->getName() << " is not constant; moving on\n";
             }
+            return false;
+        }
 
-            BoxedClass *cls = getClassFromGV(gv);
-            if (!cls->is_constant) {
-                assert(0 && "what globally-resolved classes are not constant??");
-                if (VERBOSITY("opt") >= 1) {
-                    errs() << gv->getName() << " is not constant; moving on\n";
-                }
-                return false;
-            }
-
-            std::vector<Instruction*> to_remove;
-            for (User* user : li->users()) {
-                if (CallInst *call = dyn_cast<CallInst>(user)) {
-                    if (call->getCalledFunction()->getName() == "_maybeDecrefCls") {
-                        errs() << "Found decrefcls call: " << *call << '\n';
-                        if (!isUserDefined(cls)) {
-                            // Don't delete right away; I think that invalidates the iterator
-                            // we're currently iterating over
-                            to_remove.push_back(call);
-                        }
+        std::vector<Instruction*> to_remove;
+        for (User* user : li->users()) {
+            if (CallInst* call = dyn_cast<CallInst>(user)) {
+                if (call->getCalledFunction()->getName() == "_maybeDecrefCls") {
+                    errs() << "Found decrefcls call: " << *call << '\n';
+                    if (!isUserDefined(cls)) {
+                        // Don't delete right away; I think that invalidates the iterator
+                        // we're currently iterating over
+                        to_remove.push_back(call);
                     }
+                }
+                continue;
+            }
+
+            GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(user);
+            if (!gep) {
+                // errs() << "Not a gep: " << *user << '\n';
+                continue;
+            }
+
+            APInt ap_offset(64, 0, true);
+            bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
+            assert(success);
+            int64_t offset = ap_offset.getSExtValue();
+
+            errs() << "Found a gep at offset " << offset << ": " << *gep << '\n';
+
+            for (User* gep_user : gep->users()) {
+                LoadInst* gep_load = dyn_cast<LoadInst>(gep_user);
+                if (!gep_load) {
+                    // errs() << "Not a load: " << *gep_user << '\n';
                     continue;
                 }
 
-                GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(user);
-                if (!gep) {
-                    //errs() << "Not a gep: " << *user << '\n';
-                    continue;
+
+                errs() << "Found a load: " << *gep_load << '\n';
+
+                if (offset == CLS_DTOR_OFFSET) {
+                    errs() << "Dtor; replacing with " << cls->dtor << "\n";
+                    replaceUsesWithConstant(gep_load, (uintptr_t)cls->dtor);
+                    changed = true;
+                } else if (offset == CLS_HASATTRS_OFFSET) {
+                    errs() << "Hasattrs; replacing with " << cls->hasattrs << "\n";
+                    replaceUsesWithConstant(gep_load, cls->hasattrs);
+                    changed = true;
                 }
-
-                APInt ap_offset(64, 0, true);
-                bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
-                assert(success);
-                int64_t offset = ap_offset.getSExtValue();
-
-                errs() << "Found a gep at offset " << offset << ": " << *gep << '\n';
-
-                for (User* gep_user : gep->users()) {
-                    LoadInst *gep_load = dyn_cast<LoadInst>(gep_user);
-                    if (!gep_load) {
-                        //errs() << "Not a load: " << *gep_user << '\n';
-                        continue;
-                    }
-
-
-                    errs() << "Found a load: " << *gep_load << '\n';
-
-                    if (offset == CLS_DTOR_OFFSET) {
-                        errs() << "Dtor; replacing with " << cls->dtor << "\n";
-                        replaceUsesWithConstant(gep_load, (uintptr_t)cls->dtor);
-                        changed = true;
-                    } else if (offset == CLS_HASATTRS_OFFSET) {
-                        errs() << "Hasattrs; replacing with " << cls->hasattrs << "\n";
-                        replaceUsesWithConstant(gep_load, cls->hasattrs);
-                        changed = true;
-                    }
-                }
-
             }
+        }
 
-            for (int i = 0; i < to_remove.size(); i++) {
-                to_remove[i]->eraseFromParent();
-                changed = true;
-            }
-
-            if (VERBOSITY()) {
-                llvm::errs() << "Constant-folding this load: " << *li << '\n';
-            }
-            li->replaceAllUsesWith(embedConstantPtr(cls, g.llvm_class_type_ptr));
-
+        for (int i = 0; i < to_remove.size(); i++) {
+            to_remove[i]->eraseFromParent();
             changed = true;
-            return changed;
         }
 
-    public:
-        static char ID;
-        ConstClassesPass() : FunctionPass(ID) {}
-
-        virtual void getAnalysisUsage(AnalysisUsage &info) const {
-            info.setPreservesCFG();
+        if (VERBOSITY()) {
+            llvm::errs() << "Constant-folding this load: " << *li << '\n';
         }
+        li->replaceAllUsesWith(embedConstantPtr(cls, g.llvm_class_type_ptr));
 
-        virtual bool runOnFunction(Function &F) {
-            //F.dump();
-            bool changed = false;
-            for (inst_iterator inst_it = inst_begin(F), _inst_end = inst_end(F); inst_it != _inst_end; ++inst_it) {
-                LoadInst *li = dyn_cast<LoadInst>(&*inst_it);
-                if (!li) continue;
+        changed = true;
+        return changed;
+    }
 
-                ConstantExpr *ce = dyn_cast<ConstantExpr>(li->getOperand(0));
-                // Not 100% sure what the isGEPWithNoNotionalOverIndexing() means, but
-                // at least it checks if it's a gep:
-                if (ce && ce->isGEPWithNoNotionalOverIndexing() && ce->getOperand(0)->getType() == g.llvm_flavor_type_ptr) {
-                    changed = handleFlavor(li, ce);
-                }
+public:
+    static char ID;
+    ConstClassesPass() : FunctionPass(ID) {}
 
-                GlobalVariable *gv = dyn_cast<GlobalVariable>(li->getOperand(0));
-                if (!gv) continue;
+    virtual void getAnalysisUsage(AnalysisUsage& info) const { info.setPreservesCFG(); }
 
-                llvm::Type* gv_t = gv->getType();
+    virtual bool runOnFunction(Function& F) {
+        // F.dump();
+        bool changed = false;
+        for (inst_iterator inst_it = inst_begin(F), _inst_end = inst_end(F); inst_it != _inst_end; ++inst_it) {
+            LoadInst* li = dyn_cast<LoadInst>(&*inst_it);
+            if (!li)
+                continue;
 
-                if (gv_t == g.llvm_bool_type_ptr->getPointerTo()) {
-                    changed = handleBool(li, gv) || changed;
-                    continue;
-                }
-
-                if (gv_t == g.llvm_class_type_ptr->getPointerTo()) {
-                    changed = handleCls(li, gv) || changed;
-                    continue;
-                }
+            ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0));
+            // Not 100% sure what the isGEPWithNoNotionalOverIndexing() means, but
+            // at least it checks if it's a gep:
+            if (ce && ce->isGEPWithNoNotionalOverIndexing() && ce->getOperand(0)->getType() == g.llvm_flavor_type_ptr) {
+                changed = handleFlavor(li, ce);
             }
 
-            return changed;
+            GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0));
+            if (!gv)
+                continue;
+
+            llvm::Type* gv_t = gv->getType();
+
+            if (gv_t == g.llvm_bool_type_ptr->getPointerTo()) {
+                changed = handleBool(li, gv) || changed;
+                continue;
+            }
+
+            if (gv_t == g.llvm_class_type_ptr->getPointerTo()) {
+                changed = handleCls(li, gv) || changed;
+                continue;
+            }
         }
+
+        return changed;
+    }
 };
 char ConstClassesPass::ID = 0;
 
 FunctionPass* createConstClassesPass() {
     return new ConstClassesPass();
 }
-
 }
 
-static RegisterPass<pyston::ConstClassesPass> X("const_classes", "Use the fact that builtin classes are constant and their attributes can be constant-folded", true, false);
-
-
-
+static RegisterPass<pyston::ConstClassesPass>
+X("const_classes", "Use the fact that builtin classes are constant and their attributes can be constant-folded", true,
+  false);

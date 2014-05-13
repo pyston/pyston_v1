@@ -46,47 +46,46 @@ PystonJITEventListener::PystonJITEventListener() {
     llvm::InitializeNativeTargetDisassembler();
 
     std::string err;
-    const llvm::Target *target = llvm::TargetRegistry::getClosestTargetForJIT(err);
+    const llvm::Target* target = llvm::TargetRegistry::getClosestTargetForJIT(err);
     assert(target);
 
     const llvm::StringRef triple = g.tm->getTargetTriple();
-    //llvm::Triple *ltriple = new llvm::Triple(triple);
+    // llvm::Triple *ltriple = new llvm::Triple(triple);
     const llvm::StringRef CPU = "";
 
-    const llvm::MCRegisterInfo *MRI = target->createMCRegInfo(triple);
+    const llvm::MCRegisterInfo* MRI = target->createMCRegInfo(triple);
     assert(MRI);
 
-    const llvm::MCAsmInfo *MAI = target->createMCAsmInfo(*MRI, triple);
+    const llvm::MCAsmInfo* MAI = target->createMCAsmInfo(*MRI, triple);
     assert(MAI);
 
-    const llvm::MCInstrInfo *MII = target->createMCInstrInfo();
+    const llvm::MCInstrInfo* MII = target->createMCInstrInfo();
     assert(MII);
 
     std::string FeaturesStr;
-    const llvm::MCSubtargetInfo *STI = target->createMCSubtargetInfo(triple, CPU, FeaturesStr);
+    const llvm::MCSubtargetInfo* STI = target->createMCSubtargetInfo(triple, CPU, FeaturesStr);
     assert(STI);
 
-    llvm::MCObjectFileInfo *MOFI = new llvm::MCObjectFileInfo();
+    llvm::MCObjectFileInfo* MOFI = new llvm::MCObjectFileInfo();
 
-    llvm::MCContext *Ctx = new llvm::MCContext(MAI, MRI, MOFI);
+    llvm::MCContext* Ctx = new llvm::MCContext(MAI, MRI, MOFI);
     assert(Ctx);
     assert(Ctx->getObjectFileInfo());
 
     MOFI->InitMCObjectFileInfo(triple, llvm::Reloc::Default, llvm::CodeModel::Default, *Ctx);
 
-    llvm::MCAsmBackend *TAB = target->createMCAsmBackend(*MRI, triple, CPU);
+    llvm::MCAsmBackend* TAB = target->createMCAsmBackend(*MRI, triple, CPU);
     assert(TAB);
 
     int AsmPrinterVariant = MAI->getAssemblerDialect(); // 0 is ATT, 1 is Intel
-    IP = target->createMCInstPrinter(AsmPrinterVariant,
-            *MAI, *MII, *MRI, *STI);
+    IP = target->createMCInstPrinter(AsmPrinterVariant, *MAI, *MII, *MRI, *STI);
     assert(IP);
 
-    llvm::MCCodeEmitter *CE = target->createMCCodeEmitter(*MII, *MRI, *STI, *Ctx);
+    llvm::MCCodeEmitter* CE = target->createMCCodeEmitter(*MII, *MRI, *STI, *Ctx);
     assert(CE);
 
     bool verbose = false;
-    llvm::MCStreamer *streamer = target->createAsmStreamer(*Ctx, llvm::ferrs(), verbose, true, true, IP, CE, TAB, true);
+    llvm::MCStreamer* streamer = target->createAsmStreamer(*Ctx, llvm::ferrs(), verbose, true, true, IP, CE, TAB, true);
     assert(streamer);
     streamer->InitSections();
     streamer->SwitchSection(Ctx->getObjectFileInfo()->getTextSection());
@@ -95,9 +94,10 @@ PystonJITEventListener::PystonJITEventListener() {
     assert(asm_printer);
 
     llvm::TargetOptions Options;
-    llvm::TargetMachine *tmachine = target->createTargetMachine(triple, "", "", Options, llvm::Reloc::Default, llvm::CodeModel::Default, llvm::CodeGenOpt::Default);
+    llvm::TargetMachine* tmachine = target->createTargetMachine(triple, "", "", Options, llvm::Reloc::Default,
+                                                                llvm::CodeModel::Default, llvm::CodeGenOpt::Default);
 
-    //asm_printer->Mang = new llvm::Mangler(*Ctx, *tmachine->getDataLayout());
+    // asm_printer->Mang = new llvm::Mangler(*Ctx, *tmachine->getDataLayout());
     asm_printer->Mang = new llvm::Mangler(tmachine->getDataLayout());
 
 
@@ -107,24 +107,23 @@ PystonJITEventListener::PystonJITEventListener() {
     assert(MIA);
 }
 
-void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function &f,
-        void *ptr, size_t size,
-        const llvm::JITEvent_EmittedFunctionDetails &details) {
-    const llvm::MachineFunction &MF = *details.MF;//*const_cast<llvm::MachineFunction*>(details.MF);
+void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function& f, void* ptr, size_t size,
+                                                   const llvm::JITEvent_EmittedFunctionDetails& details) {
+    const llvm::MachineFunction& MF = *details.MF; //*const_cast<llvm::MachineFunction*>(details.MF);
     printf("emitted! %p %ld %s\n", ptr, size, f.getName().data());
-    //MF.dump();
-    //MF.print(llvm::errs());
+    // MF.dump();
+    // MF.print(llvm::errs());
 
     asm_printer->MF = &MF;
     for (llvm::MachineFunction::const_iterator it = MF.begin(); it != MF.end(); it++) {
-        //it->dump();
+        // it->dump();
         asm_printer->EmitBasicBlockStart(it);
         for (llvm::MachineBasicBlock::const_instr_iterator it2 = it->instr_begin(); it2 != it->instr_end(); it2++) {
-            //llvm::errs() << "dump:";
-            //it2->print(llvm::errs());
+            // llvm::errs() << "dump:";
+            // it2->print(llvm::errs());
             if (it2->getNumOperands() && (it2->getOperand(0).getType() == llvm::MachineOperand::MO_MCSymbol)) {
-                //it2->print(llvm::errs());
-                //it2->getOperand(0).print(llvm::errs());
+                // it2->print(llvm::errs());
+                // it2->getOperand(0).print(llvm::errs());
                 llvm::errs() << it2->getOperand(0).getMCSymbol()->getName() << '\n';
             } else {
                 asm_printer->EmitInstruction(it2);
@@ -135,7 +134,7 @@ void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function &f,
     llvm::errs().flush();
 }
 
-void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
+void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     llvm::outs() << "An object has been emitted:\n";
 
     llvm::error_code code;
@@ -147,10 +146,22 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
 
         const char* type = "unknown";
         bool b;
-        code = I->isText(b); assert(!code); if (b) type = "text";
-        code = I->isData(b); assert(!code); if (b) type = "data";
-        code = I->isBSS(b); assert(!code); if (b) type = "bss";
-        code = I->isReadOnlyData(b); assert(!code); if (b) type = "rodata";
+        code = I->isText(b);
+        assert(!code);
+        if (b)
+            type = "text";
+        code = I->isData(b);
+        assert(!code);
+        if (b)
+            type = "data";
+        code = I->isBSS(b);
+        assert(!code);
+        if (b)
+            type = "bss";
+        code = I->isReadOnlyData(b);
+        assert(!code);
+        if (b)
+            type = "rodata";
         printf("Section: %s %s\n", name.data(), type);
 
 #if LLVMREV < 200442
@@ -179,8 +190,8 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
 #endif
     }
 
-    llvm::MCObjectDisassembler *OD = new llvm::MCObjectDisassembler(*Obj.getObjectFile(), *DisAsm, *MIA);
-    llvm::MCModule *Mod = OD->buildModule(true);
+    llvm::MCObjectDisassembler* OD = new llvm::MCObjectDisassembler(*Obj.getObjectFile(), *DisAsm, *MIA);
+    llvm::MCModule* Mod = OD->buildModule(true);
 
     // This is taken from llvm-objdump.cpp:
     uint64_t text_start = 0;
@@ -188,13 +199,13 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
         llvm::outs() << "Atom " << (*AI)->getName() << ", starts at " << (void*)(*AI)->getBeginAddr() << ": \n";
         if ((*AI)->getName() == ".text")
             text_start = (*AI)->getBeginAddr();
-        if (const llvm::MCTextAtom *TA = llvm::dyn_cast<llvm::MCTextAtom>(*AI)) {
+        if (const llvm::MCTextAtom* TA = llvm::dyn_cast<llvm::MCTextAtom>(*AI)) {
             for (llvm::MCTextAtom::const_iterator II = TA->begin(), IE = TA->end(); II != IE; ++II) {
                 llvm::outs() << "0x";
                 llvm::outs().write_hex(II->Address);
 
-                //llvm::outs() << " (+0x";
-                //llvm::outs().write_hex(II->Address - text_start);
+                // llvm::outs() << " (+0x";
+                // llvm::outs().write_hex(II->Address - text_start);
                 llvm::outs() << "   (+" << II->Address - text_start;
 
                 llvm::outs() << ")   ";
@@ -206,5 +217,4 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
 
     llvm::outs().flush();
 }
-
 }

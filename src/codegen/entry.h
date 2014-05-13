@@ -25,8 +25,6 @@ void initCodegen();
 void teardownCodegen();
 void printAllIR();
 int joinRuntime();
-
 }
 
 #endif
-

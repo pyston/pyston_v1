@@ -20,7 +20,6 @@ namespace gc {
 
 class TraceStack;
 void collectStackRoots(TraceStack*);
-
 }
 }
 

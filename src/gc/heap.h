@@ -40,80 +40,67 @@ struct Atoms {
 struct Block {
     union {
         struct {
-            Block *next, **prev;
+            Block* next, **prev;
             uint64_t size;
             uint64_t isfree[BITFIELD_ELTS];
         };
         Atoms atoms[ATOMS_PER_BLOCK];
     };
 
-    inline int minObjIndex() {
-        return (BLOCK_HEADER_SIZE + size - 1) / size;
-    }
+    inline int minObjIndex() { return (BLOCK_HEADER_SIZE + size - 1) / size; }
 
-    inline int numObjects() {
-        return BLOCK_SIZE / size;
-    }
+    inline int numObjects() { return BLOCK_SIZE / size; }
 
-    inline int atomsPerObj() {
-        return size / ATOM_SIZE;
-    }
+    inline int atomsPerObj() { return size / ATOM_SIZE; }
 
-    static Block* forPointer(void* ptr) {
-        return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE-1));
-    }
+    static Block* forPointer(void* ptr) { return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE - 1)); }
 };
 static_assert(sizeof(Block) == BLOCK_SIZE, "bad size");
 
-constexpr const size_t sizes[] = {
-    16, 32, 48, 64,
-    80, 96, 112, 128,
-    160, 192, 224, 256,
-    320, 384, 448, 512,
-    640, 768, 896, 1024,
-    1280, 1536, 1792, 2048,
-    //2560, 3072, 3584, // 4096,
+constexpr const size_t sizes[] = { 16,  32,  48,  64,  80,  96,  112, 128,  160,  192,  224,  256,
+                                   320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048,
+                                   // 2560, 3072, 3584, // 4096,
 };
 #define NUM_BUCKETS (sizeof(sizes) / sizeof(sizes[0]))
 
 class LargeObj;
 class Heap {
-    private:
-        Block* heads[NUM_BUCKETS];
-        Block* full_heads[NUM_BUCKETS];
-        LargeObj *large_head = NULL;
+private:
+    Block* heads[NUM_BUCKETS];
+    Block* full_heads[NUM_BUCKETS];
+    LargeObj* large_head = NULL;
 
-        void* allocSmall(size_t rounded_size, Block **head, Block **full_head);
-        void* allocLarge(size_t bytes);
+    void* allocSmall(size_t rounded_size, Block** head, Block** full_head);
+    void* allocLarge(size_t bytes);
 
-    public:
-        void* realloc(void* ptr, size_t bytes);
+public:
+    void* realloc(void* ptr, size_t bytes);
 
-        void* alloc(size_t bytes) {
-            //assert(bytes >= 16);
-            if (bytes <= 16)
-                return allocSmall(16, &heads[0], &full_heads[0]);
-            if (bytes <= 32)
-                return allocSmall(32, &heads[1], &full_heads[1]);
+    void* alloc(size_t bytes) {
+        // assert(bytes >= 16);
+        if (bytes <= 16)
+            return allocSmall(16, &heads[0], &full_heads[0]);
+        if (bytes <= 32)
+            return allocSmall(32, &heads[1], &full_heads[1]);
 
-            if (bytes > sizes[NUM_BUCKETS-1]) {
-                return allocLarge(bytes);
-            }
-
-            for (int i = 2; i < NUM_BUCKETS; i++) {
-                if (sizes[i] >= bytes) {
-                    return allocSmall(sizes[i], &heads[i], &full_heads[i]);
-                }
-            }
-
-            //unreachable
-            abort();
+        if (bytes > sizes[NUM_BUCKETS - 1]) {
+            return allocLarge(bytes);
         }
 
-        void free(void* ptr);
+        for (int i = 2; i < NUM_BUCKETS; i++) {
+            if (sizes[i] >= bytes) {
+                return allocSmall(sizes[i], &heads[i], &full_heads[i]);
+            }
+        }
 
-        void* getAllocationFromInteriorPointer(void* ptr);
-        void freeUnmarked();
+        // unreachable
+        abort();
+    }
+
+    void free(void* ptr);
+
+    void* getAllocationFromInteriorPointer(void* ptr);
+    void freeUnmarked();
 };
 
 extern Heap global_heap;

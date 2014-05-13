@@ -22,7 +22,7 @@
 
 namespace pyston {
 
-BoxedClass *set_cls, *set_iterator_cls;
+BoxedClass* set_cls, *set_iterator_cls;
 
 const ObjectFlavor set_flavor(&boxGCHandler, NULL);
 const ObjectFlavor set_iterator_flavor(&boxGCHandler, NULL);
@@ -30,31 +30,28 @@ const ObjectFlavor set_iterator_flavor(&boxGCHandler, NULL);
 namespace set {
 
 class BoxedSetIterator : public Box {
-    private:
-        BoxedSet *s;
-        decltype(BoxedSet::s)::iterator it;
+private:
+    BoxedSet* s;
+    decltype(BoxedSet::s)::iterator it;
 
-    public:
-        BoxedSetIterator(BoxedSet *s) : Box(&set_iterator_flavor, set_iterator_cls), s(s), it(s->s.begin()) {
-        }
+public:
+    BoxedSetIterator(BoxedSet* s) : Box(&set_iterator_flavor, set_iterator_cls), s(s), it(s->s.begin()) {}
 
-        bool hasNext() {
-            return it != s->s.end();
-        }
+    bool hasNext() { return it != s->s.end(); }
 
-        Box* next() {
-            Box* rtn = *it;
-            ++it;
-            return rtn;
-        }
+    Box* next() {
+        Box* rtn = *it;
+        ++it;
+        return rtn;
+    }
 };
 
-Box* setiteratorHasnext(BoxedSetIterator *self) {
+Box* setiteratorHasnext(BoxedSetIterator* self) {
     assert(self->cls == set_iterator_cls);
     return boxBool(self->hasNext());
 }
 
-Box* setiteratorNext(BoxedSetIterator *self) {
+Box* setiteratorNext(BoxedSetIterator* self) {
     assert(self->cls == set_iterator_cls);
     return self->next();
 }
@@ -72,7 +69,7 @@ Box* setNew1(Box* cls) {
     return new BoxedSet();
 }
 
-Box* setNew2(Box* cls, Box *container) {
+Box* setNew2(Box* cls, Box* container) {
     assert(cls == set_cls);
 
     static std::string _iter("__iter__");
@@ -114,7 +111,7 @@ Box* setRepr(BoxedSet* self) {
     return boxString(os.str());
 }
 
-Box* setOrSet(BoxedSet *lhs, BoxedSet *rhs) {
+Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls);
     assert(rhs->cls == set_cls);
 
@@ -129,7 +126,7 @@ Box* setOrSet(BoxedSet *lhs, BoxedSet *rhs) {
     return rtn;
 }
 
-Box* setAndSet(BoxedSet *lhs, BoxedSet *rhs) {
+Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls);
     assert(rhs->cls == set_cls);
 
@@ -142,7 +139,7 @@ Box* setAndSet(BoxedSet *lhs, BoxedSet *rhs) {
     return rtn;
 }
 
-Box* setSubSet(BoxedSet *lhs, BoxedSet *rhs) {
+Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls);
     assert(rhs->cls == set_cls);
 
@@ -157,7 +154,7 @@ Box* setSubSet(BoxedSet *lhs, BoxedSet *rhs) {
     return rtn;
 }
 
-Box* setXorSet(BoxedSet *lhs, BoxedSet *rhs) {
+Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls);
     assert(rhs->cls == set_cls);
 
@@ -176,7 +173,7 @@ Box* setXorSet(BoxedSet *lhs, BoxedSet *rhs) {
     return rtn;
 }
 
-Box* setIter(BoxedSet *self) {
+Box* setIter(BoxedSet* self) {
     assert(self->cls == set_cls);
     return new BoxedSetIterator(self);
 }
@@ -190,11 +187,12 @@ void setupSet() {
 
     set_iterator_cls = new BoxedClass(false, NULL);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
-    set_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1, false)));
+    set_iterator_cls->giveAttr("__hasnext__",
+                               new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1, false)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1, false)));
     set_iterator_cls->freeze();
 
-    CLFunction *new_ = boxRTFunction((void*)setNew1, SET, 1, false);
+    CLFunction* new_ = boxRTFunction((void*)setNew1, SET, 1, false);
     addRTFunction(new_, (void*)setNew2, SET, 2, false);
     set_cls->giveAttr("__new__", new BoxedFunction(new_));
 
@@ -203,32 +201,33 @@ void setupSet() {
     set_cls->giveAttr("__str__", repr);
 
     std::vector<ConcreteCompilerType*> v_ss, v_su;
-    v_ss.push_back(SET); v_ss.push_back(SET);
-    v_su.push_back(SET); v_su.push_back(UNKNOWN);
+    v_ss.push_back(SET);
+    v_ss.push_back(SET);
+    v_su.push_back(SET);
+    v_su.push_back(UNKNOWN);
 
-    CLFunction *or_ = createRTFunction();
+    CLFunction* or_ = createRTFunction();
     addRTFunction(or_, (void*)setOrSet, SET, v_ss, false);
     set_cls->giveAttr("__or__", new BoxedFunction(or_));
 
-    CLFunction *sub_ = createRTFunction();
+    CLFunction* sub_ = createRTFunction();
     addRTFunction(sub_, (void*)setSubSet, SET, v_ss, false);
     set_cls->giveAttr("__sub__", new BoxedFunction(sub_));
 
-    CLFunction *xor_ = createRTFunction();
+    CLFunction* xor_ = createRTFunction();
     addRTFunction(xor_, (void*)setXorSet, SET, v_ss, false);
     set_cls->giveAttr("__xor__", new BoxedFunction(xor_));
 
-    CLFunction *and_ = createRTFunction();
+    CLFunction* and_ = createRTFunction();
     addRTFunction(and_, (void*)setAndSet, SET, v_ss, false);
     set_cls->giveAttr("__and__", new BoxedFunction(and_));
 
-    set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1, false)));
+    set_cls->giveAttr("__iter__",
+                      new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1, false)));
 
     set_cls->freeze();
 }
 
 void teardownSet() {
 }
-
 }
-

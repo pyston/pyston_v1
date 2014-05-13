@@ -42,25 +42,26 @@ using namespace llvm;
 namespace pyston {
 
 EscapeAnalysis::~EscapeAnalysis() {
-    for (ChainInfo *chain : chains) {
+    for (ChainInfo* chain : chains) {
         delete chain;
     }
 }
 
-void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage &info) const {
+void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage& info) const {
     info.setPreservesCFG();
     info.addRequiredTransitive<DataLayoutPass>();
 }
 
-bool EscapeAnalysis::runOnFunction(Function &F) {
-    if (VERBOSITY("opt") >= 1) outs() << "Running escape analysis on " << F.getName() << '\n';
+bool EscapeAnalysis::runOnFunction(Function& F) {
+    if (VERBOSITY("opt") >= 1)
+        outs() << "Running escape analysis on " << F.getName() << '\n';
 
     for (inst_iterator inst_it = inst_begin(F), _inst_end = inst_end(F); inst_it != _inst_end; ++inst_it) {
-        CallInst *alloc = dyn_cast<CallInst>(&*inst_it);
+        CallInst* alloc = dyn_cast<CallInst>(&*inst_it);
         if (!alloc || !isAllocCall(alloc))
             continue;
 
-        ChainInfo *chain = new ChainInfo(alloc);
+        ChainInfo* chain = new ChainInfo(alloc);
         chains.push_back(chain);
 
         if (VERBOSITY("opt") >= 2) {
@@ -86,21 +87,21 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
                 checked.insert(next);
 
                 for (User* user : next->users()) {
-                    if (GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(user)) {
+                    if (GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(user)) {
                         queue.push_back(gep);
                         chain->derived.insert(gep);
                         chain_by_pointer[gep] = chain;
                         continue;
                     }
 
-                    if (CastInst *bc = dyn_cast<CastInst>(user)) {
+                    if (CastInst* bc = dyn_cast<CastInst>(user)) {
                         queue.push_back(bc);
                         chain->derived.insert(bc);
                         chain_by_pointer[bc] = chain;
                         continue;
                     }
 
-                    if (PHINode *phi = dyn_cast<PHINode>(user)) {
+                    if (PHINode* phi = dyn_cast<PHINode>(user)) {
                         queue.push_back(phi);
                         chain->derived.insert(phi);
                         chain_by_pointer[phi] = chain;
@@ -111,29 +112,29 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
                         continue;
                     }
 
-                    if (ReturnInst *ret = dyn_cast<ReturnInst>(user)) {
-                        if (VERBOSITY() >= 2) errs() << "Not dead; used here: " << *ret << '\n';
+                    if (ReturnInst* ret = dyn_cast<ReturnInst>(user)) {
+                        if (VERBOSITY() >= 2)
+                            errs() << "Not dead; used here: " << *ret << '\n';
                         chain->escape_points.insert(ret);
                         continue;
                     }
 
 
 
-
-
-
-                    if (StoreInst *si = dyn_cast<StoreInst>(user)) {
+                    if (StoreInst* si = dyn_cast<StoreInst>(user)) {
                         if (si->getPointerOperand() == next) {
                         } else {
                             assert(si->getValueOperand() == next);
-                            if (VERBOSITY() >= 2) errs() << "Escapes here: " << *si << '\n';
+                            if (VERBOSITY() >= 2)
+                                errs() << "Escapes here: " << *si << '\n';
                             chain->escape_points.insert(si);
                         }
                         continue;
                     }
 
-                    if (CallInst *si = dyn_cast<CallInst>(user)) {
-                        if (VERBOSITY() >= 2) errs() << "Escapes here: " << *si << '\n';
+                    if (CallInst* si = dyn_cast<CallInst>(user)) {
+                        if (VERBOSITY() >= 2)
+                            errs() << "Escapes here: " << *si << '\n';
                         chain->escape_points.insert(si);
                         continue;
                     }
@@ -166,11 +167,11 @@ bool EscapeAnalysis::runOnFunction(Function &F) {
                 queue.insert(queue.end(), succ_begin(bb), succ_end(bb));
             }
 
-            for (BasicBlock &bb : F) {
+            for (BasicBlock& bb : F) {
                 if (chain->bb_escapes.count(&bb) == 0)
                     chain->bb_escapes[&bb] = BBNoEscape;
 
-                //outs() << bb.getName() << ' ' << chain->bb_escapes[&bb] << '\n';
+                // outs() << bb.getName() << ' ' << chain->bb_escapes[&bb] << '\n';
             }
         }
     }
@@ -189,7 +190,7 @@ void EscapeAnalysis::ChainInfo::dump() {
     }
 }
 
-EscapeAnalysis::EscapeResult EscapeAnalysis::escapes(const Value* ptr, const Instruction *at_instruction) {
+EscapeAnalysis::EscapeResult EscapeAnalysis::escapes(const Value* ptr, const Instruction* at_instruction) {
     // FIXME the escape analysis either needs to get rerun as appropriate, or not store any
     // data between queries.
     // Disabled for now.
@@ -201,11 +202,11 @@ EscapeAnalysis::EscapeResult EscapeAnalysis::escapes(const Value* ptr, const Ins
     if (chain_by_pointer.count(ptr) == 0)
         return Escaped;
 
-    ChainInfo *chain = chain_by_pointer[ptr];
+    ChainInfo* chain = chain_by_pointer[ptr];
     assert(chain);
 
     if (chain->escape_points.size() == 0) {
-        //ptr->dump();
+        // ptr->dump();
         return NoEscape;
     }
 
@@ -218,7 +219,7 @@ EscapeAnalysis::EscapeResult EscapeAnalysis::escapes(const Value* ptr, const Ins
     // This pointer escapes at some point in this bb.
     // If the at_instruction occurs before any of the escape points, then we're fine.
     assert(bb_escape == BBPartialEscape);
-    for (const Instruction &I : *at_instruction->getParent()) {
+    for (const Instruction& I : *at_instruction->getParent()) {
         if (chain->escape_points.count(&I))
             return Escaped;
         if (&I == at_instruction)
@@ -236,6 +237,4 @@ static RegisterPass<EscapeAnalysis> X("escape_analysis", "Escape analysis", fals
 FunctionPass* createEscapeAnalysisPass() {
     return new EscapeAnalysis();
 }
-
 }
-

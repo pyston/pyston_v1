@@ -112,53 +112,53 @@ extern "C" i1 ge_i64_i64(i64 lhs, i64 rhs) {
 }
 
 
-extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(lhs->n + rhs->n);
 }
 
-extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat *rhs) {
+extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n + rhs->d);
 }
 
-extern "C" Box* intAdd(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
-        BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return boxInt(lhs->n + rhs_int->n);
     } else if (rhs->cls == float_cls) {
-        BoxedFloat *rhs_float = static_cast<BoxedFloat*>(rhs);
+        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n + rhs_float->d);
     } else {
         return NotImplemented;
     }
 }
 
-extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(lhs->n & rhs->n);
 }
 
-extern "C" Box* intAnd(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n & rhs_int->n);
 }
 
-extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(div_i64_i64(lhs->n, rhs->n));
 }
 
-extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat *rhs) {
+extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == float_cls);
 
@@ -169,7 +169,7 @@ extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat *rhs) {
     return boxFloat(lhs->n / rhs->d);
 }
 
-extern "C" Box* intDiv(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
@@ -180,211 +180,211 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box *rhs) {
     }
 }
 
-extern "C" Box* intEqInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intEqInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxBool(lhs->n == rhs->n);
 }
 
-extern "C" Box* intEq(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intEq(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n == rhs_int->n);
 }
 
-extern "C" Box* intNeInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intNeInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxBool(lhs->n != rhs->n);
 }
 
-extern "C" Box* intNe(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intNe(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n != rhs_int->n);
 }
 
-extern "C" Box* intLtInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intLtInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxBool(lhs->n < rhs->n);
 }
 
-extern "C" Box* intLt(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intLt(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n < rhs_int->n);
 }
 
-extern "C" Box* intLeInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intLeInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxBool(lhs->n <= rhs->n);
 }
 
-extern "C" Box* intLe(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intLe(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n <= rhs_int->n);
 }
 
-extern "C" Box* intGtInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intGtInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxBool(lhs->n > rhs->n);
 }
 
-extern "C" Box* intGt(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intGt(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n > rhs_int->n);
 }
 
-extern "C" Box* intGeInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intGeInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxBool(lhs->n >= rhs->n);
 }
 
-extern "C" Box* intGe(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxBool(lhs->n >= rhs_int->n);
 }
 
-extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(lhs->n << rhs->n);
 }
 
-extern "C" Box* intLShift(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n << rhs_int->n);
 }
 
-extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(mod_i64_i64(lhs->n, rhs->n));
 }
 
-extern "C" Box* intMod(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(mod_i64_i64(lhs->n, rhs_int->n));
 }
 
-extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(lhs->n * rhs->n);
 }
 
-extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat *rhs) {
+extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n * rhs->d);
 }
 
-extern "C" Box* intMul(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
-        BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return boxInt(lhs->n * rhs_int->n);
     } else if (rhs->cls == float_cls) {
-        BoxedFloat *rhs_float = static_cast<BoxedFloat*>(rhs);
+        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n * rhs_float->d);
     } else {
         return NotImplemented;
     }
 }
 
-extern "C" Box* intPowInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intPowInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
 }
 
-extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat *rhs) {
+extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == float_cls);
     return boxFloat(pow(lhs->n, rhs->d));
 }
 
-extern "C" Box* intPow(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intPow(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
-        BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
     } else if (rhs->cls == float_cls) {
-        BoxedFloat *rhs_float = static_cast<BoxedFloat*>(rhs);
+        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(pow(lhs->n, rhs_float->d));
     } else {
         return NotImplemented;
     }
 }
 
-extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(lhs->n >> rhs->n);
 }
 
-extern "C" Box* intRShift(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
-    BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(lhs->n >> rhs_int->n);
 }
 
-extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt *rhs) {
+extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     return boxInt(lhs->n - rhs->n);
 }
 
-extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat *rhs) {
+extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n - rhs->d);
 }
 
-extern "C" Box* intSub(BoxedInt* lhs, Box *rhs) {
+extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
-        BoxedInt *rhs_int = static_cast<BoxedInt*>(rhs);
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return boxInt(lhs->n - rhs_int->n);
     } else if (rhs->cls == float_cls) {
-        BoxedFloat *rhs_float = static_cast<BoxedFloat*>(rhs);
+        BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n - rhs_float->d);
     } else {
         return NotImplemented;
@@ -434,7 +434,7 @@ extern "C" Box* intNew2(Box* cls, Box* val) {
     if (val->cls == int_cls) {
         return val;
     } else if (val->cls == str_cls) {
-        BoxedString *s = static_cast<BoxedString*>(val);
+        BoxedString* s = static_cast<BoxedString*>(val);
 
         std::istringstream ss(s->s);
         int64_t n;
@@ -465,11 +465,14 @@ extern "C" Box* intInit2(BoxedInt* self, Box* val) {
 static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_if, v_iu;
     assert(BOXED_INT);
-    v_ii.push_back(BOXED_INT); v_ii.push_back(BOXED_INT);
-    v_if.push_back(BOXED_INT); v_if.push_back(BOXED_FLOAT);
-    v_iu.push_back(BOXED_INT); v_iu.push_back(NULL);
+    v_ii.push_back(BOXED_INT);
+    v_ii.push_back(BOXED_INT);
+    v_if.push_back(BOXED_INT);
+    v_if.push_back(BOXED_FLOAT);
+    v_iu.push_back(BOXED_INT);
+    v_iu.push_back(NULL);
 
-    CLFunction *cl = createRTFunction();
+    CLFunction* cl = createRTFunction();
     addRTFunction(cl, int_func, BOXED_INT, v_ii, false);
     addRTFunction(cl, float_func, BOXED_FLOAT, v_if, false);
     addRTFunction(cl, boxed_func, NULL, v_iu, false);
@@ -479,10 +482,12 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
 static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_iu;
     assert(BOXED_INT);
-    v_ii.push_back(BOXED_INT); v_ii.push_back(BOXED_INT);
-    v_iu.push_back(BOXED_INT); v_iu.push_back(NULL);
+    v_ii.push_back(BOXED_INT);
+    v_ii.push_back(BOXED_INT);
+    v_iu.push_back(BOXED_INT);
+    v_iu.push_back(NULL);
 
-    CLFunction *cl = createRTFunction();
+    CLFunction* cl = createRTFunction();
     addRTFunction(cl, int_func, rtn_type, v_ii, false);
     addRTFunction(cl, boxed_func, NULL, v_iu, false);
     int_cls->giveAttr(name, new BoxedFunction(cl));
@@ -517,11 +522,11 @@ void setupInt() {
     int_cls->setattr("__str__", int_cls->peekattr("__repr__"), NULL, NULL);
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1, false)));
 
-    CLFunction *__new__ = boxRTFunction((void*)intNew1, NULL, 1, false);
+    CLFunction* __new__ = boxRTFunction((void*)intNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)intNew2, NULL, 2, false);
     int_cls->giveAttr("__new__", new BoxedFunction(__new__));
 
-    CLFunction *__init__ = boxRTFunction((void*)intInit1, NULL, 1, false);
+    CLFunction* __init__ = boxRTFunction((void*)intInit1, NULL, 1, false);
     addRTFunction(__init__, (void*)intInit2, NULL, 2, false);
     int_cls->giveAttr("__init__", new BoxedFunction(__init__));
 
@@ -535,5 +540,4 @@ void setupInt() {
 
 void teardownInt() {
 }
-
 }

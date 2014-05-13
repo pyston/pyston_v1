@@ -41,33 +41,34 @@ extern "C" Box* callattr(Box*, std::string*, bool, int64_t, Box*, Box*, Box*, Bo
 extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
 extern "C" BoxedInt* hash(Box* obj);
-//extern "C" Box* abs_(Box* obj);
-//extern "C" Box* min_(Box* o0, Box* o1);
-//extern "C" Box* max_(Box* o0, Box* o1);
+// extern "C" Box* abs_(Box* obj);
+// extern "C" Box* min_(Box* o0, Box* o1);
+// extern "C" Box* max_(Box* o0, Box* o1);
 extern "C" Box* open1(Box* arg);
 extern "C" Box* open2(Box* arg1, Box* arg2);
-//extern "C" Box* chr(Box* arg);
+// extern "C" Box* chr(Box* arg);
 extern "C" Box* compare(Box*, Box*, int);
 extern "C" BoxedInt* len(Box* obj);
 extern "C" void print(Box* obj);
 extern "C" void dump(Box* obj);
-//extern "C" Box* trap();
+// extern "C" Box* trap();
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
-extern "C" Box* getGlobal(BoxedModule* m, std::string *name, bool from_global);
+extern "C" Box* getGlobal(BoxedModule* m, std::string* name, bool from_global);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" Box* getclsattr(Box* obj, const char* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);
-extern "C" Box* import(const std::string *name);
+extern "C" Box* import(const std::string* name);
 extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
-extern "C" void assertFail(BoxedModule *inModule, Box *msg);
+extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 
 struct CompareRewriteArgs;
-Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs *rewrite_args);
-Box* getattr_internal(Box *obj, const char* attr, bool check_cls, bool allow_custom, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
+Box* getattr_internal(Box* obj, const char* attr, bool check_cls, bool allow_custom, GetattrRewriteArgs* rewrite_args,
+                      GetattrRewriteArgs2* rewrite_args2);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
@@ -75,7 +76,6 @@ extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__nor
 
 Box* typeCall(Box*, BoxedList*);
 Box* typeNew(Box*, Box*);
-bool isUserDefined(BoxedClass *cls);
-
+bool isUserDefined(BoxedClass* cls);
 }
 #endif

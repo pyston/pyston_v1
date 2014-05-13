@@ -74,7 +74,7 @@ Timer::~Timer() {
     end();
 }
 
-bool startswith(const std::string &s, const std::string &pattern) {
+bool startswith(const std::string& s, const std::string& pattern) {
     if (s.size() == 0)
         return pattern.size() == 0;
     return s.compare(0, pattern.size(), pattern) == 0;
@@ -100,7 +100,8 @@ void removeDirectoryIfExists(const std::string& path) {
         if (llvm::sys::fs::is_directory(status)) {
             removeDirectoryIfExists(it->path());
         } else {
-            if (VERBOSITY()) llvm::errs() << "Removing file " << it->path() << '\n';
+            if (VERBOSITY())
+                llvm::errs() << "Removing file " << it->path() << '\n';
             code = llvm::sys::fs::remove(it->path(), false);
             assert(!code);
         }
@@ -109,9 +110,9 @@ void removeDirectoryIfExists(const std::string& path) {
         assert(!code);
     }
 
-    if (VERBOSITY()) llvm::errs() << "Removing directory " << path << '\n';
+    if (VERBOSITY())
+        llvm::errs() << "Removing directory " << path << '\n';
     code = llvm::sys::fs::remove(path, false);
     assert(!code);
 }
-
 }

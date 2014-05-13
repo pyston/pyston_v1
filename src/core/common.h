@@ -35,22 +35,25 @@
 #define ALWAYSINLINE __attribute__((always_inline))
 #define NOINLINE __attribute__((noinline))
 #else
-#define ALWAYSINLINE 
+#define ALWAYSINLINE
 #define NOINLINE
 #endif
 
 // From http://stackoverflow.com/questions/3767869/adding-message-to-assert, modified to use fprintf
-#define RELEASE_ASSERT(condition, fmt, ...) \
-do { \
-    if (! (condition)) { \
-        fprintf(stderr, __FILE__ ":" STRINGIFY(__LINE__) ": %s: Assertion `" #condition "' failed: " fmt "\n", __PRETTY_FUNCTION__, ##__VA_ARGS__); \
-        abort(); \
-    } \
-} while (false)
+#define RELEASE_ASSERT(condition, fmt, ...)                                                                            \
+    do {                                                                                                               \
+        if (!(condition)) {                                                                                            \
+            fprintf(stderr, __FILE__ ":" STRINGIFY(__LINE__) ": %s: Assertion `" #condition "' failed: " fmt "\n",     \
+                    __PRETTY_FUNCTION__, ##__VA_ARGS__);                                                               \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    } while (false)
 #ifndef NDEBUG
-#   define ASSERT RELEASE_ASSERT
+#define ASSERT RELEASE_ASSERT
 #else
-#   define ASSERT(condition, fmt, ...) do { } while (false)
+#define ASSERT(condition, fmt, ...)                                                                                    \
+    do {                                                                                                               \
+    } while (false)
 #endif
 
 #define UNIMPLEMENTED() RELEASE_ASSERT(0, "unimplemented")
@@ -59,12 +62,9 @@ do { \
 
 // Allow using std::pair as keys in hashtables:
 namespace std {
-    template <typename T1, typename T2> struct hash<pair<T1, T2> > {
-        size_t operator() (const pair<T1, T2> p) const {
-            return hash<T1>()(p.first) ^ (hash<T2>()(p.second) << 1);
-        }
-    };
+template <typename T1, typename T2> struct hash<pair<T1, T2> > {
+    size_t operator()(const pair<T1, T2> p) const { return hash<T1>()(p.first) ^ (hash<T2>()(p.second) << 1); }
+};
 }
 
 #endif
-

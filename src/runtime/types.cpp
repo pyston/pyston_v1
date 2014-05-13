@@ -36,10 +36,10 @@ namespace pyston {
 
 bool IN_SHUTDOWN = false;
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction *f) : HCBox(&function_flavor, function_cls), f(f) {
+extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : HCBox(&function_flavor, function_cls), f(f) {
     if (f->source) {
         assert(f->source->ast);
-        //this->giveAttr("__name__", boxString(&f->source->ast->name));
+        // this->giveAttr("__name__", boxString(&f->source->ast->name));
         this->giveAttr("__name__", boxString(f->source->getName()));
 
         Box* modname = f->source->parent_module->getattr("__name__", NULL, NULL);
@@ -47,22 +47,22 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction *f) : HCBox(&function_flavor,
     }
 }
 
-BoxedModule::BoxedModule(const std::string &name, const std::string &fn) : HCBox(&module_flavor, module_cls), fn(fn) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : HCBox(&module_flavor, module_cls), fn(fn) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
 }
 
-std::string BoxedModule::name(){
+std::string BoxedModule::name() {
     Box* name = this->peekattr("__name__");
     if (!name || name->cls != str_cls) {
         return "?";
     } else {
-        BoxedString *sname = static_cast<BoxedString*>(name);
+        BoxedString* sname = static_cast<BoxedString*>(name);
         return sname->s;
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction *f) {
+extern "C" Box* boxCLFunction(CLFunction* f) {
     return new BoxedFunction(f);
 }
 
@@ -70,7 +70,7 @@ extern "C" CLFunction* unboxCLFunction(Box* b) {
     return static_cast<BoxedFunction*>(b)->f;
 }
 
-extern "C" void boxGCHandler(GCVisitor *v, void* p) {
+extern "C" void boxGCHandler(GCVisitor* v, void* p) {
     Box* b = (Box*)p;
 
     if (b->cls) {
@@ -80,34 +80,34 @@ extern "C" void boxGCHandler(GCVisitor *v, void* p) {
     }
 }
 
-extern "C" void hcBoxGCHandler(GCVisitor *v, void* p) {
+extern "C" void hcBoxGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
     HCBox* b = (HCBox*)p;
     v->visit(b->hcls);
     int nattrs = b->hcls->attr_offsets.size();
     if (nattrs) {
-        HCBox::AttrList *attr_list = b->attr_list;
+        HCBox::AttrList* attr_list = b->attr_list;
         assert(attr_list);
         v->visit(attr_list);
         v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
     }
 }
 
-extern "C" void typeGCHandler(GCVisitor *v, void* p) {
+extern "C" void typeGCHandler(GCVisitor* v, void* p) {
     hcBoxGCHandler(v, p);
 
-    BoxedClass *b = (BoxedClass*)p;
+    BoxedClass* b = (BoxedClass*)p;
 }
 
-extern "C" void hcGCHandler(GCVisitor *v, void* p) {
-    HiddenClass *hc = (HiddenClass*)p;
-    for (const auto &p : hc->children) {
+extern "C" void hcGCHandler(GCVisitor* v, void* p) {
+    HiddenClass* hc = (HiddenClass*)p;
+    for (const auto& p : hc->children) {
         v->visit(p.second);
     }
 }
 
-extern "C" void instancemethodGCHandler(GCVisitor *v, void* p) {
+extern "C" void instancemethodGCHandler(GCVisitor* v, void* p) {
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)p;
 
     v->visit(im->obj);
@@ -115,10 +115,10 @@ extern "C" void instancemethodGCHandler(GCVisitor *v, void* p) {
 }
 
 // This probably belongs in list.cpp?
-extern "C" void listGCHandler(GCVisitor *v, void* p) {
+extern "C" void listGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
-    BoxedList *l = (BoxedList*)p;
+    BoxedList* l = (BoxedList*)p;
     int size = l->size;
     if (size) {
         v->visit(l->elts);
@@ -130,73 +130,74 @@ extern "C" void listGCHandler(GCVisitor *v, void* p) {
 }
 
 // This probably belongs in tuple.cpp?
-extern "C" void tupleGCHandler(GCVisitor *v, void* p) {
+extern "C" void tupleGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
-    BoxedTuple *t = (BoxedTuple*)p;
+    BoxedTuple* t = (BoxedTuple*)p;
     int size = t->elts.size();
     if (size) {
-        v->visitRange(const_cast<void**>((void const*const*)&t->elts[0]),
-                      const_cast<void**>((void const*const*)&t->elts[size]));
+        v->visitRange(const_cast<void**>((void const* const*)&t->elts[0]),
+                      const_cast<void**>((void const* const*)&t->elts[size]));
     }
 }
 
 // This probably belongs in dict.cpp?
-extern "C" void dictGCHandler(GCVisitor *v, void* p) {
+extern "C" void dictGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
-    BoxedDict *d = (BoxedDict*)p;
+    BoxedDict* d = (BoxedDict*)p;
 
     // This feels like a cludge, but we need to find anything that
     // the unordered_map might have allocated.
     // Another way to handle this would be to rt_alloc the unordered_map
     // as well, though that incurs extra memory dereferences which would
     // be nice to avoid.
-    void **start = (void**)&d->d;
-    void **end = start + (sizeof(d->d) / 8);
+    void** start = (void**)&d->d;
+    void** end = start + (sizeof(d->d) / 8);
     v->visitPotentialRange(start, end);
 }
 
-extern "C" void conservativeGCHandler(GCVisitor *v, void* p) {
-    ConservativeWrapper *wrapper = static_cast<ConservativeWrapper*>(p);
+extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
+    ConservativeWrapper* wrapper = static_cast<ConservativeWrapper*>(p);
     assert(wrapper->gc_header.kind_id == conservative_kind.kind_id);
 
     int size = wrapper->gc_header.kind_data;
     assert(size % sizeof(void*) == 0);
 
     void** start = &wrapper->data[0];
-    //printf("Found a %d-byte object; header is %p (object is %p)\n", size, p, start);
+    // printf("Found a %d-byte object; header is %p (object is %p)\n", size, p, start);
     v->visitPotentialRange(start, start + (size / sizeof(void*)));
 }
 
 extern "C" {
-    BoxedClass *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls;
+BoxedClass* type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *instancemethod_cls,
+    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls;
 
-    const ObjectFlavor type_flavor(&typeGCHandler, NULL);
-    const ObjectFlavor none_flavor(&boxGCHandler, NULL);
-    const ObjectFlavor bool_flavor(&boxGCHandler, NULL);
-    const ObjectFlavor int_flavor(&boxGCHandler, NULL);
-    const ObjectFlavor float_flavor(&boxGCHandler, NULL);
-    const ObjectFlavor str_flavor(&boxGCHandler, NULL);
-    const ObjectFlavor function_flavor(&hcBoxGCHandler, NULL);
-    const ObjectFlavor instancemethod_flavor(&instancemethodGCHandler, NULL);
-    const ObjectFlavor list_flavor(&listGCHandler, NULL);
-    const ObjectFlavor slice_flavor(&hcBoxGCHandler, NULL);
-    const ObjectFlavor module_flavor(&hcBoxGCHandler, NULL);
-    const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
-    const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
-    const ObjectFlavor file_flavor(&boxGCHandler, NULL);
-    const ObjectFlavor user_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor type_flavor(&typeGCHandler, NULL);
+const ObjectFlavor none_flavor(&boxGCHandler, NULL);
+const ObjectFlavor bool_flavor(&boxGCHandler, NULL);
+const ObjectFlavor int_flavor(&boxGCHandler, NULL);
+const ObjectFlavor float_flavor(&boxGCHandler, NULL);
+const ObjectFlavor str_flavor(&boxGCHandler, NULL);
+const ObjectFlavor function_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor instancemethod_flavor(&instancemethodGCHandler, NULL);
+const ObjectFlavor list_flavor(&listGCHandler, NULL);
+const ObjectFlavor slice_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor module_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
+const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
+const ObjectFlavor file_flavor(&boxGCHandler, NULL);
+const ObjectFlavor user_flavor(&hcBoxGCHandler, NULL);
 
-    const AllocationKind untracked_kind(NULL, NULL);
-    const AllocationKind hc_kind(&hcGCHandler, NULL);
-    const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
+const AllocationKind untracked_kind(NULL, NULL);
+const AllocationKind hc_kind(&hcGCHandler, NULL);
+const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 }
 
 void instancemethod_dtor(BoxedInstanceMethod* b) {
 }
 
-extern "C" Box* createClass(std::string *name, BoxedModule *parent_module) {
+extern "C" Box* createClass(std::string* name, BoxedModule* parent_module) {
     BoxedClass* rtn = new BoxedClass(true, NULL);
     rtn->giveAttr("__name__", boxString(*name));
 
@@ -206,7 +207,7 @@ extern "C" Box* createClass(std::string *name, BoxedModule *parent_module) {
     return rtn;
 }
 
-extern "C" Box* boxInstanceMethod(Box* obj, Box* func)  {
+extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
     static StatCounter num_ims("num_instancemethods");
     num_ims.log();
 
@@ -241,18 +242,18 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
 }
 
 extern "C" {
-    Box *None = NULL;
-    Box *NotImplemented = NULL;
-    Box *repr_obj = NULL;
-    Box *len_obj = NULL;
-    Box *hash_obj = NULL;
-    Box *abs_obj = NULL;
-    Box *min_obj = NULL;
-    Box *max_obj = NULL;
-    Box *open_obj = NULL;
-    Box *chr_obj = NULL;
-    Box *trap_obj = NULL;
-    Box *range_obj = NULL;
+Box* None = NULL;
+Box* NotImplemented = NULL;
+Box* repr_obj = NULL;
+Box* len_obj = NULL;
+Box* hash_obj = NULL;
+Box* abs_obj = NULL;
+Box* min_obj = NULL;
+Box* max_obj = NULL;
+Box* open_obj = NULL;
+Box* chr_obj = NULL;
+Box* trap_obj = NULL;
+Box* range_obj = NULL;
 }
 
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
@@ -260,7 +261,7 @@ extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     static const std::string stop_str("stop");
     static const std::string step_str("step");
 
-    BoxedSlice *rtn = new BoxedSlice(start, stop, step);
+    BoxedSlice* rtn = new BoxedSlice(start, stop, step);
     rtn->setattr(start_str, start, NULL, NULL);
     rtn->setattr(stop_str, stop, NULL, NULL);
     rtn->setattr(step_str, step, NULL, NULL);
@@ -288,9 +289,9 @@ Box* instancemethodRepr(BoxedInstanceMethod* self) {
 }
 
 Box* sliceRepr(BoxedSlice* self) {
-    BoxedString *start = static_cast<BoxedString*>(repr(self->start));
-    BoxedString *stop = static_cast<BoxedString*>(repr(self->stop));
-    BoxedString *step = static_cast<BoxedString*>(repr(self->step));
+    BoxedString* start = static_cast<BoxedString*>(repr(self->start));
+    BoxedString* stop = static_cast<BoxedString*>(repr(self->stop));
+    BoxedString* step = static_cast<BoxedString*>(repr(self->step));
     std::string s = "slice(" + start->s + ", " + stop->s + ", " + step->s + ")";
     return new BoxedString(s);
 }
@@ -300,17 +301,17 @@ Box* typeRepr(BoxedClass* self) {
         std::ostringstream os;
         os << "<class '";
 
-        Box *m = self->peekattr("__module__");
+        Box* m = self->peekattr("__module__");
         RELEASE_ASSERT(m, "");
         if (m->cls == str_cls) {
-            BoxedString *sm = static_cast<BoxedString*>(m);
+            BoxedString* sm = static_cast<BoxedString*>(m);
             os << sm->s << '.';
         }
 
-        Box *n = self->peekattr("__name__");
+        Box* n = self->peekattr("__name__");
         RELEASE_ASSERT(n, "");
         RELEASE_ASSERT(n->cls == str_cls, "should have prevented you from setting __name__ to non-string");
-        BoxedString *sn = static_cast<BoxedString*>(n);
+        BoxedString* sn = static_cast<BoxedString*>(n);
         os << sn->s;
 
         os << "'>";
@@ -421,11 +422,12 @@ void setupRuntime() {
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
-    instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, NULL, 1, true)));
+    instancemethod_cls->giveAttr("__repr__",
+                                 new BoxedFunction(boxRTFunction((void*)instancemethodRepr, NULL, 1, true)));
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__name__", boxStrConstant("slice"));
-    CLFunction *slice_new = boxRTFunction((void*)sliceNew2, NULL, 2, false);
+    CLFunction* slice_new = boxRTFunction((void*)sliceNew2, NULL, 2, false);
     addRTFunction(slice_new, (void*)sliceNew3, NULL, 3, false);
     addRTFunction(slice_new, (void*)sliceNew4, NULL, 4, false);
     slice_cls->giveAttr("__new__", new BoxedFunction(slice_new));
@@ -446,19 +448,19 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string &name, const std::string &fn) {
+BoxedModule* createModule(const std::string& name, const std::string& fn) {
     assert(fn.size() && "probably wanted to set the fn to <stdin>?");
     BoxedModule* module = new BoxedModule(name, fn);
 
     BoxedDict* d = getSysModulesDict();
-    Box *b_name = boxStringPtr(&name);
+    Box* b_name = boxStringPtr(&name);
     assert(d->d.count(b_name) == 0);
     d->d[b_name] = module;
     return module;
 }
 
-void freeHiddenClasses(HiddenClass *hcls) {
-    for (const auto &p : hcls->children) {
+void freeHiddenClasses(HiddenClass* hcls) {
+    for (const auto& p : hcls->children) {
         freeHiddenClasses(p.second);
     }
     rt_free(hcls);
@@ -469,7 +471,8 @@ void teardownRuntime() {
     // TODO it's probably a waste of time to tear these down in non-debugging mode
     IN_SHUTDOWN = true;
 
-    if (VERBOSITY("runtime") >= 1) printf("In teardownRuntime\n");
+    if (VERBOSITY("runtime") >= 1)
+        printf("In teardownRuntime\n");
 
     teardownCAPI();
 
@@ -526,5 +529,4 @@ void teardownRuntime() {
 
     gc_teardown();
 }
-
 }

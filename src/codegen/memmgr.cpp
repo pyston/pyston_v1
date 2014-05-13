@@ -33,86 +33,72 @@ using namespace llvm;
 namespace pyston {
 
 class PystonMemoryManager : public RTDyldMemoryManager {
-    public:
-        PystonMemoryManager() { }
-        virtual ~PystonMemoryManager();
+public:
+    PystonMemoryManager() {}
+    virtual ~PystonMemoryManager();
 
-        virtual uint8_t *allocateCodeSection(uintptr_t Size, unsigned Alignment,
-                unsigned SectionID,
-                StringRef SectionName);
+    virtual uint8_t* allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName);
 
-        virtual uint8_t *allocateDataSection(uintptr_t Size, unsigned Alignment,
-                unsigned SectionID,
-                StringRef SectionName,
-                bool isReadOnly);
+    virtual uint8_t* allocateDataSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName,
+                                         bool isReadOnly);
 
-        virtual bool finalizeMemory(std::string *ErrMsg = 0);
+    virtual bool finalizeMemory(std::string* ErrMsg = 0);
 
-        virtual void invalidateInstructionCache();
+    virtual void invalidateInstructionCache();
 
-    private:
-        struct MemoryGroup {
-            SmallVector<sys::MemoryBlock, 16> AllocatedMem;
-            SmallVector<sys::MemoryBlock, 16> FreeMem;
-            sys::MemoryBlock Near;
-        };
+private:
+    struct MemoryGroup {
+        SmallVector<sys::MemoryBlock, 16> AllocatedMem;
+        SmallVector<sys::MemoryBlock, 16> FreeMem;
+        sys::MemoryBlock Near;
+    };
 
-        uint8_t *allocateSection(MemoryGroup &MemGroup, uintptr_t Size,
-                unsigned Alignment);
+    uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment);
 
-        error_code applyMemoryGroupPermissions(MemoryGroup &MemGroup,
-                unsigned Permissions);
+    error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions);
 
-        virtual uint64_t getSymbolAddress(const std::string &Name);
+    virtual uint64_t getSymbolAddress(const std::string& Name);
 
-        MemoryGroup CodeMem;
-        MemoryGroup RWDataMem;
-        MemoryGroup RODataMem;
+    MemoryGroup CodeMem;
+    MemoryGroup RWDataMem;
+    MemoryGroup RODataMem;
 };
 
-uint8_t *PystonMemoryManager::allocateDataSection(uintptr_t Size,
-        unsigned Alignment,
-        unsigned SectionID,
-        StringRef SectionName,
-        bool IsReadOnly) {
-    //printf("allocating data section: %ld %d %d %s %d\n", Size, Alignment, SectionID, SectionName.data(), IsReadOnly);
-    //assert(SectionName != ".llvm_stackmaps");
+uint8_t* PystonMemoryManager::allocateDataSection(uintptr_t Size, unsigned Alignment, unsigned SectionID,
+                                                  StringRef SectionName, bool IsReadOnly) {
+    // printf("allocating data section: %ld %d %d %s %d\n", Size, Alignment, SectionID, SectionName.data(), IsReadOnly);
+    // assert(SectionName != ".llvm_stackmaps");
     if (IsReadOnly)
         return allocateSection(RODataMem, Size, Alignment);
     return allocateSection(RWDataMem, Size, Alignment);
 }
 
-uint8_t *PystonMemoryManager::allocateCodeSection(uintptr_t Size,
-        unsigned Alignment,
-        unsigned SectionID,
-        StringRef SectionName) {
-    //printf("allocating code section: %ld %d %d %s\n", Size, Alignment, SectionID, SectionName.data());
+uint8_t* PystonMemoryManager::allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID,
+                                                  StringRef SectionName) {
+    // printf("allocating code section: %ld %d %d %s\n", Size, Alignment, SectionID, SectionName.data());
     return allocateSection(CodeMem, Size, Alignment);
 }
 
-uint8_t *PystonMemoryManager::allocateSection(MemoryGroup &MemGroup,
-        uintptr_t Size,
-        unsigned Alignment) {
+uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment) {
     if (!Alignment)
         Alignment = 16;
 
     assert(!(Alignment & (Alignment - 1)) && "Alignment must be a power of two.");
 
-    uintptr_t RequiredSize = Alignment * ((Size + Alignment - 1)/Alignment + 1);
+    uintptr_t RequiredSize = Alignment * ((Size + Alignment - 1) / Alignment + 1);
     uintptr_t Addr = 0;
 
     // Look in the list of free memory regions and use a block there if one
     // is available.
     for (int i = 0, e = MemGroup.FreeMem.size(); i != e; ++i) {
-        sys::MemoryBlock &MB = MemGroup.FreeMem[i];
+        sys::MemoryBlock& MB = MemGroup.FreeMem[i];
         if (MB.size() >= RequiredSize) {
             Addr = (uintptr_t)MB.base();
             uintptr_t EndOfBlock = Addr + MB.size();
             // Align the address.
             Addr = (Addr + Alignment - 1) & ~(uintptr_t)(Alignment - 1);
             // Store cutted free memory block.
-            MemGroup.FreeMem[i] = sys::MemoryBlock((void*)(Addr + Size),
-                    EndOfBlock - Addr - Size);
+            MemGroup.FreeMem[i] = sys::MemoryBlock((void*)(Addr + Size), EndOfBlock - Addr - Size);
             return (uint8_t*)Addr;
         }
     }
@@ -127,11 +113,8 @@ uint8_t *PystonMemoryManager::allocateSection(MemoryGroup &MemGroup,
     // FIXME: Initialize the Near member for each memory group to avoid
     // interleaving.
     error_code ec;
-    sys::MemoryBlock MB = sys::Memory::allocateMappedMemory(RequiredSize,
-            &MemGroup.Near,
-            sys::Memory::MF_READ |
-            sys::Memory::MF_WRITE,
-            ec);
+    sys::MemoryBlock MB = sys::Memory::allocateMappedMemory(RequiredSize, &MemGroup.Near,
+                                                            sys::Memory::MF_READ | sys::Memory::MF_WRITE, ec);
     if (ec) {
         // FIXME: Add error propogation to the interface.
         return NULL;
@@ -149,7 +132,7 @@ uint8_t *PystonMemoryManager::allocateSection(MemoryGroup &MemGroup,
 
     // The allocateMappedMemory may allocate much more memory than we need. In
     // this case, we store the unused memory as a free memory block.
-    unsigned FreeSize = EndOfBlock-Addr-Size;
+    unsigned FreeSize = EndOfBlock - Addr - Size;
     if (FreeSize > 16)
         MemGroup.FreeMem.push_back(sys::MemoryBlock((void*)(Addr + Size), FreeSize));
 
@@ -157,8 +140,7 @@ uint8_t *PystonMemoryManager::allocateSection(MemoryGroup &MemGroup,
     return (uint8_t*)Addr;
 }
 
-bool PystonMemoryManager::finalizeMemory(std::string *ErrMsg)
-{
+bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
     // FIXME: Should in-progress permissions be reverted if an error occurs?
     error_code ec;
 
@@ -167,8 +149,7 @@ bool PystonMemoryManager::finalizeMemory(std::string *ErrMsg)
 
     // Make code memory executable.
     // pyston: also make it writeable so we can patch it later
-    ec = applyMemoryGroupPermissions(CodeMem,
-            sys::Memory::MF_READ | sys::Memory::MF_EXEC | sys::Memory::MF_WRITE);
+    ec = applyMemoryGroupPermissions(CodeMem, sys::Memory::MF_READ | sys::Memory::MF_EXEC | sys::Memory::MF_WRITE);
     if (ec) {
         if (ErrMsg) {
             *ErrMsg = ec.message();
@@ -180,8 +161,7 @@ bool PystonMemoryManager::finalizeMemory(std::string *ErrMsg)
     RODataMem.FreeMem.clear();
 
     // Make read-only data memory read-only.
-    ec = applyMemoryGroupPermissions(RODataMem,
-            sys::Memory::MF_READ | sys::Memory::MF_EXEC);
+    ec = applyMemoryGroupPermissions(RODataMem, sys::Memory::MF_READ | sys::Memory::MF_EXEC);
     if (ec) {
         if (ErrMsg) {
             *ErrMsg = ec.message();
@@ -199,13 +179,11 @@ bool PystonMemoryManager::finalizeMemory(std::string *ErrMsg)
     return false;
 }
 
-error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup &MemGroup,
-        unsigned Permissions) {
+error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
 
     for (int i = 0, e = MemGroup.AllocatedMem.size(); i != e; ++i) {
         error_code ec;
-        ec = sys::Memory::protectMappedMemory(MemGroup.AllocatedMem[i],
-                Permissions);
+        ec = sys::Memory::protectMappedMemory(MemGroup.AllocatedMem[i], Permissions);
         if (ec) {
             return ec;
         }
@@ -216,13 +194,13 @@ error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup &MemGrou
 
 void PystonMemoryManager::invalidateInstructionCache() {
     for (int i = 0, e = CodeMem.AllocatedMem.size(); i != e; ++i)
-        sys::Memory::InvalidateInstructionCache(CodeMem.AllocatedMem[i].base(),
-                CodeMem.AllocatedMem[i].size());
+        sys::Memory::InvalidateInstructionCache(CodeMem.AllocatedMem[i].base(), CodeMem.AllocatedMem[i].size());
 }
 
-uint64_t PystonMemoryManager::getSymbolAddress(const std::string &name) {
+uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
     uint64_t base = RTDyldMemoryManager::getSymbolAddress(name);
-    if (base) return base;
+    if (base)
+        return base;
 
     if (startswith(name, "__PRETTY_FUNCTION__")) {
         return getSymbolAddress(".L" + name);
@@ -244,6 +222,4 @@ PystonMemoryManager::~PystonMemoryManager() {
 llvm::RTDyldMemoryManager* createMemoryManager() {
     return new PystonMemoryManager();
 }
-
 }
-

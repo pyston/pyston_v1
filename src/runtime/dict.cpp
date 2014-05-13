@@ -27,15 +27,15 @@ Box* dictRepr(BoxedDict* self) {
     std::vector<char> chars;
     chars.push_back('{');
     bool first = true;
-    for (const auto &p : self->d) {
+    for (const auto& p : self->d) {
         if (!first) {
             chars.push_back(',');
             chars.push_back(' ');
         }
         first = false;
 
-        BoxedString *k = static_cast<BoxedString*>(repr(p.first));
-        BoxedString *v = static_cast<BoxedString*>(repr(p.second));
+        BoxedString* k = static_cast<BoxedString*>(repr(p.first));
+        BoxedString* v = static_cast<BoxedString*>(repr(p.second));
         chars.insert(chars.end(), k->s.begin(), k->s.end());
         chars.push_back(':');
         chars.push_back(' ');
@@ -48,11 +48,11 @@ Box* dictRepr(BoxedDict* self) {
 Box* dictItems(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
 
-    for (const auto &p : self->d) {
+    for (const auto& p : self->d) {
         std::vector<Box*> elts;
         elts.push_back(p.first);
         elts.push_back(p.second);
-        BoxedTuple *t = new BoxedTuple(elts);
+        BoxedTuple* t = new BoxedTuple(elts);
         listAppendInternal(rtn, t);
     }
 
@@ -61,7 +61,7 @@ Box* dictItems(BoxedDict* self) {
 
 Box* dictValues(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
-    for (const auto &p : self->d) {
+    for (const auto& p : self->d) {
         listAppendInternal(rtn, p.second);
     }
     return rtn;
@@ -69,17 +69,17 @@ Box* dictValues(BoxedDict* self) {
 
 Box* dictKeys(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
-    for (const auto &p : self->d) {
+    for (const auto& p : self->d) {
         listAppendInternal(rtn, p.first);
     }
     return rtn;
 }
 
 Box* dictGetitem(BoxedDict* self, Box* k) {
-    Box* &pos = self->d[k];
+    Box*& pos = self->d[k];
 
     if (pos == NULL) {
-        BoxedString *s = static_cast<BoxedString*>(repr(k));
+        BoxedString* s = static_cast<BoxedString*>(repr(k));
         fprintf(stderr, "KeyError: %s\n", s->s.c_str());
         raiseExc();
     }
@@ -88,9 +88,9 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
 }
 
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
-    //printf("Starting setitem\n");
-    Box* &pos = self->d[k];
-    //printf("Got the pos\n");
+    // printf("Starting setitem\n");
+    Box*& pos = self->d[k];
+    // printf("Got the pos\n");
 
     if (pos != NULL) {
         pos = v;
@@ -113,10 +113,10 @@ void dict_dtor(BoxedDict* self) {
 
 void setupDict() {
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
-    //dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1, false)));
-    //dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2, false)));
-    //dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, NULL, 1, false)));
-    //dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1, false)));
+    // dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1, false)));
+    // dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2, false)));
+    // dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, NULL, 1, false)));
+    // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1, false)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, NULL, 1, false)));
     dict_cls->setattr("__str__", dict_cls->peekattr("__repr__"), NULL, NULL);
 
@@ -137,6 +137,4 @@ void setupDict() {
 
 void teardownDict() {
 }
-
 }
-

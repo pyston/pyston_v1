@@ -25,13 +25,9 @@ std::vector<llvm::JITEventListener*> makeJITEventListeners();
 
 void registerProfileListenerCtor(llvm::JITEventListener* (*)());
 class RegisterHelper {
-    public:
-        RegisterHelper(llvm::JITEventListener* (*ctor)()) {
-            registerProfileListenerCtor(ctor);
-        }
+public:
+    RegisterHelper(llvm::JITEventListener* (*ctor)()) { registerProfileListenerCtor(ctor); }
 };
-
 }
 
 #endif
-

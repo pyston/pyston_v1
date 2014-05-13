@@ -28,7 +28,8 @@
 
 namespace pyston {
 
-void FunctionAddressRegistry::registerFunction(const std::string& name, void* addr, int length, llvm::Function* llvm_func) {
+void FunctionAddressRegistry::registerFunction(const std::string& name, void* addr, int length,
+                                               llvm::Function* llvm_func) {
     assert(addr);
     assert(functions.count(addr) == 0);
     functions.insert(std::make_pair(addr, FuncInfo(name, length, llvm_func)));
@@ -42,19 +43,19 @@ void FunctionAddressRegistry::dumpPerfMap() {
     code = llvm::sys::fs::create_directory(out_path, false);
     assert(!code);
 
-    FILE *index_f = fopen((out_path + "/index.txt").c_str(), "w");
+    FILE* index_f = fopen((out_path + "/index.txt").c_str(), "w");
 
     char buf[80];
     snprintf(buf, 80, "/tmp/perf-%d.map", getpid());
-    FILE *f = fopen(buf, "w");
-    for (const auto &p : functions) {
+    FILE* f = fopen(buf, "w");
+    for (const auto& p : functions) {
         const FuncInfo& info = p.second;
         fprintf(f, "%lx %x %s\n", (uintptr_t)p.first, info.length, info.name.c_str());
 
         if (info.length > 0) {
             fprintf(index_f, "%lx %s\n", (uintptr_t)p.first, info.name.c_str());
 
-            FILE *data_f = fopen((out_path + "/" + info.name).c_str(), "wb");
+            FILE* data_f = fopen((out_path + "/" + info.name).c_str(), "wb");
 
             int written = fwrite((void*)p.first, 1, info.length, data_f);
             assert(written == info.length);
@@ -77,7 +78,7 @@ llvm::Function* FunctionAddressRegistry::getLLVMFuncAtAddress(void* addr) {
             return NULL;
         }
 
-        llvm::Function *r = g.stdlib_module->getFunction(name);
+        llvm::Function* r = g.stdlib_module->getFunction(name);
 
         if (!r) {
             lookup_neg_cache.insert(addr);
@@ -101,7 +102,7 @@ static std::string tryDemangle(const char* s) {
     return rtn;
 }
 
-std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool demangle, bool *out_success) {
+std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool demangle, bool* out_success) {
     FuncMap::iterator it = functions.find(addr);
     if (it == functions.end()) {
         Dl_info info;
@@ -110,8 +111,9 @@ std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool deman
         if (success && info.dli_sname == NULL)
             success = false;
 
-        if (out_success) *out_success = success;
-        //if (success && info.dli_saddr == addr) {
+        if (out_success)
+            *out_success = success;
+        // if (success && info.dli_saddr == addr) {
         if (success) {
             if (demangle)
                 return tryDemangle(info.dli_sname);
@@ -121,7 +123,8 @@ std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool deman
         return "<unknown>";
     }
 
-    if (out_success) *out_success = true;
+    if (out_success)
+        *out_success = true;
     if (!demangle)
         return it->second.name;
 
@@ -129,53 +132,51 @@ std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool deman
 }
 
 class RegistryEventListener : public llvm::JITEventListener {
-    public:
-        void NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
-            static StatCounter code_bytes("code_bytes");
-            code_bytes.log(Obj.getData().size());
+public:
+    void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+        static StatCounter code_bytes("code_bytes");
+        code_bytes.log(Obj.getData().size());
 
-            llvm::error_code code;
-            for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;
+        llvm::error_code code;
+        for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;
 #if LLVMREV < 200442
-        I = I.increment(code)
+             I = I.increment(code)
 #else
-        ++I
+             ++I
 #endif
-                    ) {
-                llvm::object::section_iterator section(Obj.end_sections());
-                code = I->getSection(section);
-                assert(!code);
-                bool is_text;
-                code = section->isText(is_text);
-                assert(!code);
-                if (!is_text)
-                    continue;
+             ) {
+            llvm::object::section_iterator section(Obj.end_sections());
+            code = I->getSection(section);
+            assert(!code);
+            bool is_text;
+            code = section->isText(is_text);
+            assert(!code);
+            if (!is_text)
+                continue;
 
-                llvm::StringRef name;
-                uint64_t addr, size, offset;
-                code = I->getName(name);
-                assert(!code);
-                code = I->getAddress(addr);
-                assert(!code);
-                code = I->getSize(size);
-                assert(!code);
-                code = I->getFileOffset(offset);
-                assert(!code);
+            llvm::StringRef name;
+            uint64_t addr, size, offset;
+            code = I->getName(name);
+            assert(!code);
+            code = I->getAddress(addr);
+            assert(!code);
+            code = I->getSize(size);
+            assert(!code);
+            code = I->getFileOffset(offset);
+            assert(!code);
 
-                if (name == ".text")
-                    continue;
+            if (name == ".text")
+                continue;
 
-                //printf("%lx %lx %lx %s\n", addr, addr + size, offset, name.data());
-                g.func_addr_registry.registerFunction(name.data(), (void*)addr, size, NULL);
-            }
+            // printf("%lx %lx %lx %s\n", addr, addr + size, offset, name.data());
+            g.func_addr_registry.registerFunction(name.data(), (void*)addr, size, NULL);
         }
+    }
 };
 
-GlobalState::GlobalState() : context(llvm::getGlobalContext()) {
-};
+GlobalState::GlobalState() : context(llvm::getGlobalContext()) {};
 
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();
 }
-
 }

@@ -32,64 +32,57 @@ inline GCObjectHeader* headerFromObject(void* obj) {
 #endif
 }
 
-inline void setMark(GCObjectHeader *header) {
+inline void setMark(GCObjectHeader* header) {
     header->gc_flags |= MARK_BIT;
 }
 
-inline void clearMark(GCObjectHeader *header) {
+inline void clearMark(GCObjectHeader* header) {
     header->gc_flags &= ~MARK_BIT;
 }
 
-inline bool isMarked(GCObjectHeader *header) {
+inline bool isMarked(GCObjectHeader* header) {
     return (header->gc_flags & MARK_BIT) != 0;
 }
 
 #undef MARK_BIT
 
 class TraceStack {
-    private:
-        std::vector<void*> v;
+private:
+    std::vector<void*> v;
 
-    public:
-        void pushall(void** start, void** end) {
-            v.insert(v.end(), start, end);
-        }
+public:
+    void pushall(void** start, void** end) { v.insert(v.end(), start, end); }
 
-        void push(void* p) {
-            v.push_back(p);
-        }
+    void push(void* p) { v.push_back(p); }
 
-        int size() {
-            return v.size();
-        }
+    int size() { return v.size(); }
 
-        void reserve(int num) {
-            v.reserve(num + v.size());
-        }
+    void reserve(int num) { v.reserve(num + v.size()); }
 
-        void* pop() {
-            if (v.size()) {
-                void* r = v.back();
-                v.pop_back();
-                return r;
-            }
-            return NULL;
+    void* pop() {
+        if (v.size()) {
+            void* r = v.back();
+            v.pop_back();
+            return r;
         }
+        return NULL;
+    }
 };
 
 class TraceStackGCVisitor : public GCVisitor {
-    private:
-        bool isValid(void* p);
+private:
+    bool isValid(void* p);
 
-        void _visit(void* p);
-    public:
-        TraceStack *stack;
-        TraceStackGCVisitor(TraceStack *stack) : stack(stack) {}
+    void _visit(void* p);
 
-        void visit(void* p) override;
-        void visitRange(void** start, void** end) override;
-        void visitPotential(void* p) override;
-        void visitPotentialRange(void** start, void** end) override;
+public:
+    TraceStack* stack;
+    TraceStackGCVisitor(TraceStack* stack) : stack(stack) {}
+
+    void visit(void* p) override;
+    void visitRange(void** start, void** end) override;
+    void visitPotential(void* p) override;
+    void visitPotentialRange(void** start, void** end) override;
 };
 
 // Call it a "root obj" because this function takes the pointer to the object, not a pointer
@@ -98,7 +91,6 @@ class TraceStackGCVisitor : public GCVisitor {
 // (that should be registerStaticRootPtr)
 void registerStaticRootObj(void* root_obj);
 void runCollection();
-
 }
 }
 

@@ -30,13 +30,11 @@ extern BoxedClass* set_cls;
 extern const ObjectFlavor set_flavor;
 
 class BoxedSet : public Box {
-    public:
-        std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > s;
+public:
+    std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > s;
 
-        BoxedSet() __attribute__((visibility("default"))) : Box(&set_flavor, set_cls) {}
+    BoxedSet() __attribute__((visibility("default"))) : Box(&set_flavor, set_cls) {}
 };
-
 }
 
 #endif
-

@@ -23,20 +23,17 @@
 namespace pyston {
 
 class PprofJITEventListener : public llvm::JITEventListener {
-    private:
-        FILE *of;
-    public:
-        PprofJITEventListener() {
-            of = fopen("pprof.jit", "w");
-        }
-        virtual ~PprofJITEventListener() {
-            fclose(of);
-        }
+private:
+    FILE* of;
 
-        virtual void NotifyObjectEmitted(const llvm::ObjectImage &Obj);
+public:
+    PprofJITEventListener() { of = fopen("pprof.jit", "w"); }
+    virtual ~PprofJITEventListener() { fclose(of); }
+
+    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
 };
 
-void PprofJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
+void PprofJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     llvm::error_code code;
     for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
         llvm::object::SymbolRef::Type type;
@@ -52,9 +49,9 @@ void PprofJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
             code = I->getSize(size);
             assert(!code);
 
-            //fprintf(of, "%lx-%lx: %s\n", addr, addr + size, name.data());
-            //if (VERBOSITY() >= 1)
-                //printf("%lx-%lx: %s\n", addr, addr + size, name.data());
+            // fprintf(of, "%lx-%lx: %s\n", addr, addr + size, name.data());
+            // if (VERBOSITY() >= 1)
+            // printf("%lx-%lx: %s\n", addr, addr + size, name.data());
             fprintf(of, "%lx %lx %s\n", addr, addr + size, name.data());
             if (VERBOSITY() >= 1)
                 printf("%lx %lx %s\n", addr, addr + size, name.data());
@@ -67,5 +64,4 @@ llvm::JITEventListener* makePprofJITEventListener() {
     return new PprofJITEventListener();
 }
 static RegisterHelper X(makePprofJITEventListener);
-
 }

@@ -43,9 +43,8 @@ extern "C" inline bool unboxBool(Box* b) {
     // - this function will get inlined as well as boxBool
     // So in the presence of optimizations, I think this should do better:
     return b == True;
-    //return static_cast<BoxedBool*>(b)->b;
+    // return static_cast<BoxedBool*>(b)->b;
 }
-
 }
 
 #endif

@@ -25,13 +25,13 @@
 namespace pyston {
 
 class DumpJITEventListener : public llvm::JITEventListener {
-    private:
-    public:
-        virtual void NotifyObjectEmitted(const llvm::ObjectImage &Obj);
+private:
+public:
+    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
 };
 
 static int num = 0;
-void DumpJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage &Obj) {
+void DumpJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     llvm::error_code code;
 
     std::ostringstream os("");
@@ -47,5 +47,4 @@ llvm::JITEventListener* makeDumpJITEventListener() {
     return NULL;
 }
 static RegisterHelper X(makeDumpJITEventListener);
-
 }
