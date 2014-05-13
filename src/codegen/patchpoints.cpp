@@ -132,6 +132,10 @@ PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf, TypeRe
     return PatchpointSetupInfo::initialize(true, 1, 144, parent_cf, Setitem, type_recorder);
 }
 
+PatchpointSetupInfo* createDelitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(false, 1, 144, parent_cf, Delitem, type_recorder);
+}
+
 PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
     return PatchpointSetupInfo::initialize(false, 2, 128, parent_cf, Setattr, type_recorder);
 }

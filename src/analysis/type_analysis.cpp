@@ -441,6 +441,13 @@ private:
         _doSet(node->name, t);
     }
 
+    virtual void visit_delete(AST_Delete* node) {
+        for (AST_expr* target : node->targets) {
+            RELEASE_ASSERT(target->type == AST_TYPE::Subscript, "");
+            getType(target);
+        }
+    }
+
     virtual void visit_expr(AST_Expr* node) {
         if (EXPAND_UNNEEDED) {
             if (node->value != NULL)

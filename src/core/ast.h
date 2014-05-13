@@ -364,6 +364,17 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Dict;
 };
 
+class AST_Delete : public AST_stmt {
+public:
+    std::vector<AST_expr*> targets;
+    virtual void accept(ASTVisitor* v);
+    virtual void accept_stmt(StmtVisitor* v);
+
+    AST_Delete() : AST_stmt(AST_TYPE::Delete) {};
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
+};
+
 class AST_Expr : public AST_stmt {
 public:
     AST_expr* value;
@@ -862,6 +873,7 @@ public:
     virtual bool visit_comprehension(AST_comprehension* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_classdef(AST_ClassDef* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_continue(AST_Continue* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
@@ -921,6 +933,7 @@ public:
     virtual bool visit_comprehension(AST_comprehension* node) { return false; }
     virtual bool visit_classdef(AST_ClassDef* node) { return false; }
     virtual bool visit_continue(AST_Continue* node) { return false; }
+    virtual bool visit_delete(AST_Delete* node) { return false; }
     virtual bool visit_dict(AST_Dict* node) { return false; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
@@ -997,6 +1010,7 @@ public:
     virtual void visit_augassign(AST_AugAssign* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_break(AST_Break* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_classdef(AST_ClassDef* node) { RELEASE_ASSERT(0, ""); }
+    virtual void visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_continue(AST_Continue* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
@@ -1045,6 +1059,7 @@ public:
     virtual bool visit_classdef(AST_ClassDef* node);
     virtual bool visit_clsattribute(AST_ClsAttribute* node);
     virtual bool visit_continue(AST_Continue* node);
+    virtual bool visit_delete(AST_Delete* node);
     virtual bool visit_dict(AST_Dict* node);
     virtual bool visit_excepthandler(AST_ExceptHandler* node);
     virtual bool visit_expr(AST_Expr* node);
