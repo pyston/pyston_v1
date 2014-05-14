@@ -354,22 +354,9 @@ extern "C" Box* listNew1(Box* cls) {
 extern "C" Box* listNew2(Box* cls, Box* container) {
     assert(cls == list_cls);
 
-    static std::string _iter("__iter__");
-    static std::string _hasnext("__hasnext__");
-    static std::string _next("next");
-
-    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
-
-    Box* rtn = new BoxedList();
-
-    while (true) {
-        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
-        bool hasnext_bool = nonzero(hasnext);
-        if (!hasnext_bool)
-            break;
-
-        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
-        listAppendInternal(rtn, next);
+    BoxedList* rtn = new BoxedList();
+    for (Box* e : *container) {
+        listAppendInternal(rtn, e);
     }
     return rtn;
 }
