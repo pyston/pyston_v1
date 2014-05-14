@@ -72,24 +72,11 @@ Box* setNew1(Box* cls) {
 Box* setNew2(Box* cls, Box* container) {
     assert(cls == set_cls);
 
-    static std::string _iter("__iter__");
-    static std::string _hasnext("__hasnext__");
-    static std::string _next("next");
-
-    Box* iter = callattr(container, &_iter, true, 0, NULL, NULL, NULL, NULL);
-
     Box* rtn = new BoxedSet();
-
-    while (true) {
-        Box* hasnext = callattr(iter, &_hasnext, true, 0, NULL, NULL, NULL, NULL);
-        bool hasnext_bool = nonzero(hasnext);
-        if (!hasnext_bool)
-            break;
-
-        Box* next = callattr(iter, &_next, true, 0, NULL, NULL, NULL, NULL);
-
-        setAdd2(rtn, next);
+    for (Box* e : *container) {
+        setAdd2(rtn, e);
     }
+
     return rtn;
 }
 
