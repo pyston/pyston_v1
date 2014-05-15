@@ -49,6 +49,24 @@ extern "C" Box* abs_(Box* x) {
     }
 }
 
+extern "C" Box* all(Box* container) {
+    for (Box* e : container->pyElements()) {
+        if (!nonzero(e)) {
+            return boxBool(false);
+        }
+    }
+    return boxBool(true);
+}
+
+extern "C" Box* any(Box* container) {
+    for (Box* e : container->pyElements()) {
+        if (nonzero(e)) {
+            return boxBool(true);
+        }
+    }
+    return boxBool(false);
+}
+
 extern "C" Box* min1(Box* container) {
     Box* minElement = nullptr;
     for (Box* e : container->pyElements()) {
@@ -291,6 +309,9 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
     builtins_module->giveAttr("NotImplementedType", notimplemented_cls);
+
+    builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1, false)));
+    builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1, false)));
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, NULL, 1, false));
     builtins_module->giveAttr("repr", repr_obj);

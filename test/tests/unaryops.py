@@ -6,3 +6,5 @@ f(1)
 f(-1)
 f(True)
 f(False)
+print None
+print not None

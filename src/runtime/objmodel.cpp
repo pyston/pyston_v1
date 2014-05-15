@@ -933,6 +933,8 @@ extern "C" bool nonzero(Box* obj) {
             rewriter->commit();
         }
         return static_cast<BoxedFloat*>(obj)->d != 0;
+    } else if (obj->cls == none_cls) {
+        return false;
     }
 
     // FIXME we have internal functions calling this method;
