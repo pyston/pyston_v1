@@ -355,7 +355,7 @@ extern "C" Box* listNew2(Box* cls, Box* container) {
     assert(cls == list_cls);
 
     BoxedList* rtn = new BoxedList();
-    for (Box* e : *container) {
+    for (Box* e : container->pyElements()) {
         listAppendInternal(rtn, e);
     }
     return rtn;

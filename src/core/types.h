@@ -19,6 +19,8 @@
 // over having them spread randomly in different files, this should probably be split again
 // but in a way that makes more sense.
 
+#include <llvm/ADT/iterator_range.h>
+
 #include "core/common.h"
 #include "core/stats.h"
 
@@ -283,7 +285,7 @@ public:
 };
 
 class Box;
-class BoxIterator : public std::iterator<std::forward_iterator_tag, Box*> {
+class BoxIterator {
 public:
     BoxIterator(Box* iter) : iter(iter), value(nullptr) {}
 
@@ -291,7 +293,6 @@ public:
     bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
 
     BoxIterator& operator++();
-
     BoxIterator operator++(int) {
         BoxIterator tmp(*this);
         operator++();
@@ -313,8 +314,7 @@ class Box : public GCObject {
 public:
     BoxedClass* cls;
 
-    BoxIterator begin() const;
-    BoxIterator end() const { return BoxIterator(nullptr); }
+    llvm::iterator_range<BoxIterator> pyElements();
 
     constexpr Box(const ObjectFlavor* flavor, BoxedClass* c) __attribute__((visibility("default")))
     : GCObject(flavor), cls(c) {

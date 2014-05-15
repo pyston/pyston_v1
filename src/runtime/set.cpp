@@ -73,7 +73,7 @@ Box* setNew2(Box* cls, Box* container) {
     assert(cls == set_cls);
 
     Box* rtn = new BoxedSet();
-    for (Box* e : *container) {
+    for (Box* e : container->pyElements()) {
         setAdd2(rtn, e);
     }
 

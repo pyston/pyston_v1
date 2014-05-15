@@ -50,10 +50,14 @@ BoxIterator& BoxIterator::operator++() {
     return *this;
 }
 
-BoxIterator Box::begin() const {
+llvm::iterator_range<BoxIterator> Box::pyElements() {
     static std::string iter_str("__iter__");
+
     Box* iter = callattr(const_cast<Box*>(this), &iter_str, true, 0, NULL, NULL, NULL, NULL);
-    return ++BoxIterator(iter);
+    if (iter) {
+        return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
+    }
+    return llvm::iterator_range<BoxIterator>(BoxIterator(nullptr), BoxIterator(nullptr));
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : HCBox(&function_flavor, function_cls), f(f) {

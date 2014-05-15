@@ -51,7 +51,7 @@ extern "C" Box* abs_(Box* x) {
 
 extern "C" Box* min1(Box* container) {
     Box* minElement = nullptr;
-    for (Box* e : *container) {
+    for (Box* e : container->pyElements()) {
         if (!minElement) {
             minElement = e;
         } else {
@@ -80,7 +80,7 @@ extern "C" Box* min2(Box* o0, Box* o1) {
 
 extern "C" Box* max1(Box* container) {
     Box* maxElement = nullptr;
-    for (Box* e : *container) {
+    for (Box* e : container->pyElements()) {
         if (!maxElement) {
             maxElement = e;
         } else {
@@ -266,7 +266,7 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
 
 Box* map2(Box* f, Box* container) {
     Box* rtn = new BoxedList();
-    for (Box* e : *container) {
+    for (Box* e : container->pyElements()) {
         listAppendInternal(rtn, runtimeCall(f, 1, e, NULL, NULL, NULL));
     }
     return rtn;
