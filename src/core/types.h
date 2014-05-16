@@ -19,6 +19,8 @@
 // over having them spread randomly in different files, this should probably be split again
 // but in a way that makes more sense.
 
+#include <llvm/ADT/iterator_range.h>
+
 #include "core/common.h"
 #include "core/stats.h"
 
@@ -282,10 +284,37 @@ public:
     }
 };
 
+class Box;
+class BoxIterator {
+public:
+    BoxIterator(Box* iter) : iter(iter), value(nullptr) {}
+
+    bool operator==(BoxIterator const& rhs) const { return (iter == rhs.iter && value == rhs.value); }
+    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
+
+    BoxIterator& operator++();
+    BoxIterator operator++(int) {
+        BoxIterator tmp(*this);
+        operator++();
+        return tmp;
+    }
+
+    Box* operator*() const { return value; }
+    Box* operator*() { return value; }
+
+private:
+    Box* iter;
+    Box* value;
+};
+
+
+
 extern bool TRACK_ALLOCATIONS;
 class Box : public GCObject {
 public:
     BoxedClass* cls;
+
+    llvm::iterator_range<BoxIterator> pyElements();
 
     constexpr Box(const ObjectFlavor* flavor, BoxedClass* c) __attribute__((visibility("default")))
     : GCObject(flavor), cls(c) {
@@ -295,6 +324,7 @@ public:
         //}
     }
 };
+
 
 
 class SetattrRewriteArgs;

@@ -36,6 +36,30 @@ namespace pyston {
 
 bool IN_SHUTDOWN = false;
 
+BoxIterator& BoxIterator::operator++() {
+    static std::string hasnext_str("__hasnext__");
+    static std::string next_str("next");
+
+    Box* hasnext = callattr(iter, &hasnext_str, true, 0, NULL, NULL, NULL, NULL);
+    if (nonzero(hasnext)) {
+        value = callattr(iter, &next_str, true, 0, NULL, NULL, NULL, NULL);
+    } else {
+        iter = nullptr;
+        value = nullptr;
+    }
+    return *this;
+}
+
+llvm::iterator_range<BoxIterator> Box::pyElements() {
+    static std::string iter_str("__iter__");
+
+    Box* iter = callattr(const_cast<Box*>(this), &iter_str, true, 0, NULL, NULL, NULL, NULL);
+    if (iter) {
+        return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
+    }
+    return llvm::iterator_range<BoxIterator>(BoxIterator(nullptr), BoxIterator(nullptr));
+}
+
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : HCBox(&function_flavor, function_cls), f(f) {
     if (f->source) {
         assert(f->source->ast);

@@ -534,7 +534,7 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
     return attr;
 }
 
-Box* getclsattr_internal(Box* obj, const char* attr, GetattrRewriteArgs* rewrite_args,
+Box* getclsattr_internal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args,
                          GetattrRewriteArgs2* rewrite_args2) {
     Box* val;
 
@@ -653,15 +653,15 @@ static Box* (*runtimeCall1)(Box*, int64_t, Box*) = (Box * (*)(Box*, int64_t, Box
 static Box* (*runtimeCall2)(Box*, int64_t, Box*, Box*) = (Box * (*)(Box*, int64_t, Box*, Box*))runtimeCall;
 static Box* (*runtimeCall3)(Box*, int64_t, Box*, Box*, Box*) = (Box * (*)(Box*, int64_t, Box*, Box*, Box*))runtimeCall;
 
-Box* getattr_internal(Box* obj, const char* attr, bool check_cls, bool allow_custom, GetattrRewriteArgs* rewrite_args,
-                      GetattrRewriteArgs2* rewrite_args2) {
+Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,
+                      GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2) {
     if (allow_custom) {
         // Don't need to pass icentry args, since we special-case __getattribtue__ and __getattr__ to use
         // invalidation rather than guards
         Box* getattribute = getclsattr_internal(obj, "__getattribute__", NULL, NULL);
         if (getattribute) {
             // TODO this is a good candidate for interning?
-            Box* boxstr = boxStrConstant(attr);
+            Box* boxstr = boxString(attr);
             Box* rtn = runtimeCall1(getattribute, 1, boxstr);
             return rtn;
         }
@@ -720,7 +720,7 @@ Box* getattr_internal(Box* obj, const char* attr, bool check_cls, bool allow_cus
         // invalidation rather than guards
         Box* getattr = getclsattr_internal(obj, "__getattr__", NULL, NULL);
         if (getattr) {
-            Box* boxstr = boxStrConstant(attr);
+            Box* boxstr = boxString(attr);
             Box* rtn = runtimeCall1(getattr, 1, boxstr);
             return rtn;
         }
@@ -933,6 +933,8 @@ extern "C" bool nonzero(Box* obj) {
             rewriter->commit();
         }
         return static_cast<BoxedFloat*>(obj)->d != 0;
+    } else if (obj->cls == none_cls) {
+        return false;
     }
 
     // FIXME we have internal functions calling this method;
@@ -1171,14 +1173,14 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         if (rewrite_args) {
             GetattrRewriteArgs ga_rewrite_args(rewrite_args->rewriter, rewrite_args->obj);
 
-            inst_attr = getattr_internal(obj, attr->c_str(), false, true, &ga_rewrite_args, NULL);
+            inst_attr = getattr_internal(obj, *attr, false, true, &ga_rewrite_args, NULL);
 
             if (!ga_rewrite_args.out_success)
                 rewrite_args = NULL;
             else if (inst_attr)
                 r_instattr = ga_rewrite_args.out_rtn;
         } else {
-            inst_attr = getattr_internal(obj, attr->c_str(), false, true, NULL, NULL);
+            inst_attr = getattr_internal(obj, *attr, false, true, NULL, NULL);
         }
 
         if (inst_attr) {
@@ -1221,14 +1223,14 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             GetattrRewriteArgs ga_rewrite_args(rewrite_args->rewriter, r_cls);
 
             r_cls.assertValid();
-            clsattr = getattr_internal(obj->cls, attr->c_str(), false, false, &ga_rewrite_args, NULL);
+            clsattr = getattr_internal(obj->cls, *attr, false, false, &ga_rewrite_args, NULL);
 
             if (!ga_rewrite_args.out_success)
                 rewrite_args = NULL;
             else if (clsattr)
                 r_clsattr = ga_rewrite_args.out_rtn.move(-1);
         } else {
-            clsattr = getattr_internal(obj->cls, attr->c_str(), false, false, NULL, NULL);
+            clsattr = getattr_internal(obj->cls, *attr, false, false, NULL, NULL);
         }
     }
 
@@ -1729,7 +1731,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     // TODO patch these cases
 
     std::string rop_name = getReverseOpName(op_type);
-    Box* rattr_func = getattr_internal(rhs->cls, rop_name.c_str(), false, false, NULL, NULL);
+    Box* rattr_func = getattr_internal(rhs->cls, rop_name, false, false, NULL, NULL);
     if (rattr_func) {
         Box* rtn = runtimeCall2(rattr_func, 2, rhs, lhs);
         if (rtn != NotImplemented) {
@@ -1927,7 +1929,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 
     std::string rop_name = getReverseOpName(op_type);
-    Box* rattr_func = getattr_internal(rhs->cls, rop_name.c_str(), false, false, NULL, NULL);
+    Box* rattr_func = getattr_internal(rhs->cls, rop_name, false, false, NULL, NULL);
     if (rattr_func) {
         Box* rtn = runtimeCall2(rattr_func, 2, rhs, lhs);
         if (rtn != NotImplemented) {
@@ -2018,7 +2020,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     std::string op_name = getOpName(op_type);
 
-    Box* attr_func = getclsattr_internal(operand, op_name.c_str(), NULL, NULL);
+    Box* attr_func = getclsattr_internal(operand, op_name, NULL, NULL);
 
     ASSERT(attr_func, "%s.%s", getTypeName(operand)->c_str(), op_name.c_str());
 

@@ -42,8 +42,6 @@ extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
 extern "C" BoxedInt* hash(Box* obj);
 // extern "C" Box* abs_(Box* obj);
-// extern "C" Box* min_(Box* o0, Box* o1);
-// extern "C" Box* max_(Box* o0, Box* o1);
 extern "C" Box* open1(Box* arg);
 extern "C" Box* open2(Box* arg1, Box* arg2);
 // extern "C" Box* chr(Box* arg);
@@ -67,8 +65,8 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
-Box* getattr_internal(Box* obj, const char* attr, bool check_cls, bool allow_custom, GetattrRewriteArgs* rewrite_args,
-                      GetattrRewriteArgs2* rewrite_args2);
+Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,
+                      GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));

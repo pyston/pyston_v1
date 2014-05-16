@@ -11,3 +11,6 @@ print __builtins__
 
 __builtins__ = 2
 print __builtins__
+
+print all([]), all([True]), all([False]), all([None]), all([True, False, None])
+print any([]), any([True]), any([False]), any([None]), any([True, False, None])
