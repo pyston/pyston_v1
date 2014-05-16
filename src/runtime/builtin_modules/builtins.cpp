@@ -255,7 +255,7 @@ Box* getattr2(Box* obj, Box* _str) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* rtn = getattr_internal(obj, str->s.c_str(), true, true, NULL, NULL);
+    Box* rtn = getattr_internal(obj, str->s, true, true, NULL, NULL);
 
     if (!rtn) {
         fprintf(stderr, "AttributeError: '%s' object has no attribute '%s'\n", getTypeName(obj)->c_str(),
@@ -273,7 +273,7 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* rtn = getattr_internal(obj, str->s.c_str(), true, true, NULL, NULL);
+    Box* rtn = getattr_internal(obj, str->s, true, true, NULL, NULL);
 
     if (!rtn) {
         return default_value;
