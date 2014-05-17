@@ -182,12 +182,8 @@ Box* sorted(Box* obj) {
     return rtn;
 }
 
-Box* isinstance(Box* obj, Box* cls) {
-    assert(cls->cls == type_cls);
-    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
-
-    // TODO need to check if it's a subclass, or if subclasshook exists
-    return boxBool(obj->cls == cls);
+Box* isinstance_func(Box* obj, Box* cls) {
+    return boxBool(isinstance(obj, cls, 0));
 }
 
 Box* getattr2(Box* obj, Box* _str) {
@@ -288,7 +284,7 @@ void setupBuiltins() {
     addRTFunction(getattr_func, (void*)getattr3, NULL, 3, false);
     builtins_module->giveAttr("getattr", new BoxedFunction(getattr_func));
 
-    Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance, NULL, 2, false));
+    Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, NULL, 2, false));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
     builtins_module->giveAttr("sorted", new BoxedFunction(boxRTFunction((void*)sorted, NULL, 1, false)));

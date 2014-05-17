@@ -116,6 +116,7 @@ COMMON_CXXFLAGS := -g -Werror -Wreturn-type -Woverloaded-virtual -Wall -Wno-sign
 COMMON_CXXFLAGS += -std=c++11
 COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
+COMMON_CXXFLAGS += -fexceptions -fno-rtti
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND

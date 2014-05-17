@@ -34,6 +34,11 @@ static void forceLink(void* x) {
     printf("%p\n", x);
 }
 
+extern "C" void __py_personality_v0() {
+    RELEASE_ASSERT(0, "not used");
+}
+
+
 namespace _force {
 
 #define FORCE(name) forceLink((void*)name)
@@ -71,6 +76,7 @@ void force() {
     FORCE(unaryop);
     FORCE(import);
     FORCE(repr);
+    FORCE(isinstance);
 
     FORCE(checkUnpackingLength);
     FORCE(raiseAttributeError);

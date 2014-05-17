@@ -136,7 +136,7 @@ public:
 
 class BoxedList : public Box {
 public:
-    class ElementArray : GCObject {
+    class ElementArray : public GCObject {
     public:
         Box* elts[0];
 

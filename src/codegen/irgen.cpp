@@ -317,10 +317,10 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         SymbolTable* initial_syms = new SymbolTable();
         // llvm::BranchInst::Create(llvm_entry_blocks[entry_descriptor->backedge->target->idx], entry_block);
 
-        std::unique_ptr<IREmitter> entry_emitter(createIREmitter(irstate));
-        entry_emitter->getBuilder()->SetInsertPoint(osr_entry_block);
-        std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate));
-        unbox_emitter->getBuilder()->SetInsertPoint(osr_unbox_block);
+        llvm::BasicBlock* osr_entry_block_end = osr_entry_block;
+        llvm::BasicBlock* osr_unbox_block_end = osr_unbox_block;
+        std::unique_ptr<IREmitter> entry_emitter(createIREmitter(irstate, osr_entry_block_end));
+        std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate, osr_unbox_block_end));
 
         CFGBlock* target_block = entry_descriptor->backedge->target;
 
@@ -493,8 +493,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
         std::unique_ptr<IRGenerator> generator(
             createIRGenerator(irstate, llvm_entry_blocks, block, types, out_guards, in_guards, is_partial));
-        std::unique_ptr<IREmitter> emitter(createIREmitter(irstate));
-        emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[block]);
+        llvm::BasicBlock* entry_block_end = llvm_entry_blocks[block];
+        std::unique_ptr<IREmitter> emitter(createIREmitter(irstate, entry_block_end));
 
         PHITable* phis = NULL;
         if (!is_partial) {
@@ -703,8 +703,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
             llvm::BasicBlock* off_ramp = llvm::BasicBlock::Create(g.context, "deopt_ramp", irstate->getLLVMFunction());
             offramps.push_back(off_ramp);
-            IREmitter* emitter = createIREmitter(irstate);
-            emitter->getBuilder()->SetInsertPoint(off_ramp);
+            llvm::BasicBlock* off_ramp_end = off_ramp;
+            IREmitter* emitter = createIREmitter(irstate, off_ramp_end);
             emitters.push_back(emitter);
 
             block_guards[i]->branch->setSuccessor(1, off_ramp);

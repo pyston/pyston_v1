@@ -1018,6 +1018,22 @@ extern "C" Box* repr(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
+extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
+    bool false_on_noncls = (flags & 0x1);
+
+    if (!false_on_noncls) {
+        assert(cls->cls == type_cls);
+    } else {
+        if (cls->cls != type_cls)
+            return false;
+    }
+
+    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
+
+    // TODO more complicated than this, but there's no inheritance yet...
+    return ccls == obj->cls;
+}
+
 extern "C" BoxedInt* hash(Box* obj) {
     static StatCounter slowpath_hash("slowpath_hash");
     slowpath_hash.log();

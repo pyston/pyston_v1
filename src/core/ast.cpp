@@ -1200,10 +1200,6 @@ bool PrintVisitor::visit_index(AST_Index* node) {
 }
 
 bool PrintVisitor::visit_invoke(AST_Invoke* node) {
-    // printf("invoke: ");
-    // node->value->accept(this);
-    // printf("; on success goto %d; on error goto %d", node->normal_dest->idx, node->exc_dest->idx);
-
     printf("invoke %d %d: ", node->normal_dest->idx, node->exc_dest->idx);
     node->stmt->accept(this);
     return true;

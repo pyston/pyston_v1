@@ -170,8 +170,8 @@ public:
     virtual bool isFitBy(BoxedClass* c) { return true; }
 
     // XXX should get rid of this implementation and have it just do print o.__repr__()
-    virtual void print(IREmitter& emitter, ConcreteCompilerVariable* var) {
-        emitter.getBuilder()->CreateCall(g.funcs.print, var->getValue());
+    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
+        emitter.createCall(info.exc_info, g.funcs.print, var->getValue());
     }
 
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
@@ -201,9 +201,9 @@ public:
             llvm_args.push_back(ptr);
             llvm_args.push_back(converted->getValue());
 
-            emitter.createPatchpoint(pp, (void*)pyston::setattr, llvm_args);
+            emitter.createPatchpoint(pp, (void*)pyston::setattr, llvm_args, info.exc_info);
         } else {
-            emitter.getBuilder()->CreateCall3(g.funcs.setattr, var->getValue(), ptr, converted->getValue());
+            emitter.createCall3(info.exc_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
         }
         converted->decvref(emitter);
     }
@@ -242,9 +242,9 @@ public:
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
 
-            rtn = emitter.createPatchpoint(pp, (void*)pyston::unboxedLen, llvm_args);
+            rtn = emitter.createPatchpoint(pp, (void*)pyston::unboxedLen, llvm_args, info.exc_info).getInstruction();
         } else {
-            rtn = emitter.getBuilder()->CreateCall(g.funcs.unboxedLen, var->getValue());
+            rtn = emitter.createCall(info.exc_info, g.funcs.unboxedLen, var->getValue()).getInstruction();
         }
         assert(rtn->getType() == g.i64);
         return new ConcreteCompilerVariable(INT, rtn, true);
@@ -264,10 +264,12 @@ public:
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(converted_slice->getValue());
 
-            llvm::Value* uncasted = emitter.createPatchpoint(pp, (void*)pyston::getitem, llvm_args);
+            llvm::Value* uncasted
+                = emitter.createPatchpoint(pp, (void*)pyston::getitem, llvm_args, info.exc_info).getInstruction();
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
-            rtn = emitter.getBuilder()->CreateCall2(g.funcs.getitem, var->getValue(), converted_slice->getValue());
+            rtn = emitter.createCall2(info.exc_info, g.funcs.getitem, var->getValue(), converted_slice->getValue())
+                      .getInstruction();
         }
 
         converted_slice->decvref(emitter);
@@ -302,10 +304,10 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createPatchpoint(pp, raw_func, llvm_args);
+        llvm::Value* uncasted = emitter.createPatchpoint(pp, raw_func, llvm_args, info.exc_info).getInstruction();
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.getBuilder()->CreateCall2(llvm_func, var->getValue(), ptr);
+        rtn_val = emitter.createCall2(info.exc_info, llvm_func, var->getValue(), ptr).getInstruction();
     }
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
 }
@@ -375,7 +377,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         PatchpointSetupInfo* pp
             = patchpoints::createCallsitePatchpoint(emitter.currentFunction(), info.getTypeRecorder(), args.size());
 
-        llvm::Value* uncasted = emitter.createPatchpoint(pp, func_addr, llvm_args);
+        llvm::Value* uncasted = emitter.createPatchpoint(pp, func_addr, llvm_args, info.exc_info).getInstruction();
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
@@ -386,7 +388,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         // a->dump();
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
-        rtn = emitter.getBuilder()->CreateCall(func, llvm_args);
+        rtn = emitter.createCall(info.exc_info, func, llvm_args).getInstruction();
     }
 
     if (mallocsave) {
@@ -460,10 +462,11 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
 
-        llvm::Value* uncasted = emitter.createPatchpoint(pp, (void*)pyston::nonzero, llvm_args);
+        llvm::Value* uncasted
+            = emitter.createPatchpoint(pp, (void*)pyston::nonzero, llvm_args, info.exc_info).getInstruction();
         rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
     } else {
-        rtn_val = emitter.getBuilder()->CreateCall(g.funcs.nonzero, var->getValue());
+        rtn_val = emitter.createCall(info.exc_info, g.funcs.nonzero, var->getValue()).getInstruction();
     }
     return new ConcreteCompilerVariable(BOOL, rtn_val, true);
 }
@@ -572,7 +575,7 @@ public:
         // pass
     }
 
-    virtual void print(IREmitter& emitter, ConcreteCompilerVariable* var) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         assert(var->getValue()->getType() == g.i64);
 
         llvm::Constant* int_fmt = getStringConstantPtr("%ld");
@@ -628,9 +631,9 @@ public:
 
     virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                          CompilerVariable* v) {
-        llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
-            g.funcs.raiseAttributeErrorStr, getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
-        call->setDoesNotReturn();
+        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                  getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
+        call.setDoesNotReturn();
     }
 
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
@@ -655,9 +658,9 @@ public:
     }
 
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
-        llvm::CallInst* call
-            = emitter.getBuilder()->CreateCall(g.funcs.raiseNotIterableError, getStringConstantPtr("int"));
-        call->setDoesNotReturn();
+        llvm::CallSite call
+            = emitter.createCall(info.exc_info, g.funcs.raiseNotIterableError, getStringConstantPtr("int"));
+        call.setDoesNotReturn();
         return new ConcreteCompilerVariable(INT, llvm::UndefValue::get(g.i64), true);
     }
 
@@ -689,7 +692,7 @@ public:
         // pass
     }
 
-    virtual void print(IREmitter& emitter, ConcreteCompilerVariable* var) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         assert(var->getValue()->getType() == g.double_);
 
         emitter.getBuilder()->CreateCall(g.funcs.printFloat, var->getValue());
@@ -737,9 +740,9 @@ public:
 
     virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                          CompilerVariable* v) {
-        llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
-            g.funcs.raiseAttributeErrorStr, getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
-        call->setDoesNotReturn();
+        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                  getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
+        call.setDoesNotReturn();
     }
 
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
@@ -862,10 +865,10 @@ public:
         if (cls->is_constant && !cls->hasattrs) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL) {
-                llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
-                    g.funcs.raiseAttributeErrorStr, getStringConstantPtr(*getNameOfClass(cls) + "\0"),
-                    getStringConstantPtr(*attr + '\0'));
-                call->setDoesNotReturn();
+                llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(*attr + '\0'));
+                call.setDoesNotReturn();
                 return undefVariable();
             }
 
@@ -899,9 +902,9 @@ public:
         return rtn;
     }
 
-    virtual void print(IREmitter& emitter, ConcreteCompilerVariable* var) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        converted->print(emitter);
+        converted->print(emitter, info);
         converted->decvref(emitter);
     }
 
@@ -928,10 +931,10 @@ public:
         if (cls->is_constant && !cls->hasattrs) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL) {
-                llvm::CallInst* call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr,
-                                                                         getStringConstantPtr(debugName() + '\0'),
-                                                                         getStringConstantPtr(*attr + '\0'));
-                call->setDoesNotReturn();
+                llvm::CallSite call
+                    = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                          getStringConstantPtr(debugName() + '\0'), getStringConstantPtr(*attr + '\0'));
+                call.setDoesNotReturn();
                 return undefVariable();
             }
 
@@ -1044,7 +1047,7 @@ public:
         // pass
     }
 
-    virtual void print(IREmitter& emitter, ValuedCompilerVariable<std::string*>* value) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, ValuedCompilerVariable<std::string*>* value) {
         llvm::Constant* ptr = getStringConstantPtr(*(value->getValue()) + '\0');
         llvm::Constant* fmt = getStringConstantPtr("%s\0");
         emitter.getBuilder()->CreateCall2(g.funcs.printf, fmt, ptr);
@@ -1125,7 +1128,7 @@ public:
     virtual void grab(IREmitter& emitter, VAR* var) {
         // pass
     }
-    virtual void print(IREmitter& emitter, ConcreteCompilerVariable* var) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         assert(var->getValue()->getType() == g.i1);
 
         llvm::Value* true_str = getStringConstantPtr("True");
@@ -1207,7 +1210,7 @@ public:
         return rtn;
     }
 
-    virtual void print(IREmitter& emitter, VAR* var) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {
         llvm::Constant* open_paren = getStringConstantPtr("(");
         llvm::Constant* close_paren = getStringConstantPtr(")");
         llvm::Constant* comma = getStringConstantPtr(",");
@@ -1220,7 +1223,7 @@ public:
         for (int i = 0; i < v->size(); i++) {
             if (i)
                 emitter.getBuilder()->CreateCall(g.funcs.printf, comma_space);
-            (*v)[i]->print(emitter);
+            (*v)[i]->print(emitter, info);
         }
         if (v->size() == 1)
             emitter.getBuilder()->CreateCall(g.funcs.printf, comma);
@@ -1273,10 +1276,10 @@ public:
                     rtn->incvref();
                     return rtn;
                 } else {
-                    llvm::CallInst* call = emitter.getBuilder()->CreateCall2(g.funcs.raiseAttributeErrorStr,
-                                                                             getStringConstantPtr(debugName() + '\0'),
-                                                                             getStringConstantPtr("__getitem__\0"));
-                    call->setDoesNotReturn();
+                    llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                              getStringConstantPtr(debugName() + '\0'),
+                                                              getStringConstantPtr("__getitem__\0"));
+                    call.setDoesNotReturn();
                     return undefVariable();
                 }
             }
@@ -1336,7 +1339,7 @@ public:
         }
         return rtn;
     }
-    virtual void print(IREmitter& emitter, VAR* var) {}
+    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {}
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) {
         llvm::Value* v = llvm::UndefValue::get(other_type->llvmType());
         return new ConcreteCompilerVariable(other_type, v, true);

@@ -40,6 +40,7 @@ extern "C" Box* runtimeCall(Box*, int64_t, Box*, Box*, Box*, Box**);
 extern "C" Box* callattr(Box*, std::string*, bool, int64_t, Box*, Box*, Box*, Box**);
 extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
+extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags);
 extern "C" BoxedInt* hash(Box* obj);
 // extern "C" Box* abs_(Box* obj);
 // extern "C" Box* min_(Box* o0, Box* o1);

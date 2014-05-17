@@ -23,7 +23,7 @@ struct GlobalFuncs {
     llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction,
         *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice, *createClass;
     llvm::Value* getattr, *setattr, *print, *nonzero, *binop, *compare, *augbinop, *unboxedLen, *getitem, *getclsattr,
-        *getGlobal, *setitem, *unaryop, *import, *repr;
+        *getGlobal, *setitem, *unaryop, *import, *repr, *isinstance;
     llvm::Value* checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *assertNameDefined, *assertFail;
     llvm::Value* printFloat, *listAppendInternal;
@@ -31,6 +31,8 @@ struct GlobalFuncs {
     llvm::Value* runtimeCall0, *runtimeCall1, *runtimeCall2, *runtimeCall3, *runtimeCall;
     llvm::Value* callattr0, *callattr1, *callattr2, *callattr3, *callattr;
     llvm::Value* reoptCompiledFunc, *compilePartialFunc;
+
+    llvm::Value* __cxa_begin_catch, *__cxa_end_catch, *__cxa_allocate_exception, *__cxa_throw;
 
     llvm::Value* div_i64_i64, *mod_i64_i64, *pow_i64_i64;
     llvm::Value* div_float_float, *mod_float_float, *pow_float_float;
