@@ -272,5 +272,11 @@ public:
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);
+
+Box* exceptionNew1(BoxedClass* cls);
+Box* exceptionNew2(BoxedClass* cls, Box* message);
+
+extern BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
+    *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError;
 }
 #endif

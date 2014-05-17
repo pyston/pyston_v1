@@ -143,7 +143,14 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "==============\n");
             }
 
-            compileAndRunModule(m, main);
+            try {
+                compileAndRunModule(m, main);
+            }
+            catch (Box* b) {
+                std::string msg = formatException(b);
+                fprintf(stderr, "%s\n", msg.c_str());
+                exit(1);
+            }
         }
     }
 
@@ -179,7 +186,8 @@ int main(int argc, char** argv) {
     }
 
     if (repl) {
-        printf("Pyston v0.1, rev " STRINGIFY(GITREV) "\n");
+        printf("Pyston v0.1 (rev " STRINGIFY(GITREV) ")");
+        printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
         BoxedModule* main = createModule("__main__", "<stdin>");
 
@@ -193,8 +201,7 @@ int main(int argc, char** argv) {
             if ((read = getline(&line, &size, stdin)) == -1) {
                 repl = false;
             } else {
-                timeval start, end;
-                gettimeofday(&start, NULL);
+                Timer _t("repl");
 
                 char buf[] = "pystontmp_XXXXXX";
                 char* tmpdir = mkdtemp(buf);
@@ -221,12 +228,6 @@ int main(int argc, char** argv) {
                 }
 
                 compileAndRunModule(m, main);
-
-                if (VERBOSITY() >= 1) {
-                    gettimeofday(&end, NULL);
-                    long ms = 1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
-                    printf("%ldms\n", ms);
-                }
             }
         }
     }

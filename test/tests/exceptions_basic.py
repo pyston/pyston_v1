@@ -1,5 +1,3 @@
-# expected: fail
-# - exceptions
 
 def f(x):
     print x

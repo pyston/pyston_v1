@@ -46,6 +46,17 @@ public:
     virtual void NotifyObjectEmitted(const llvm::ObjectImage&);
 };
 
+// LLVM will silently not register the eh frames with libgcc if these functions don't exist;
+// make sure that these functions exist.
+// TODO I think this breaks it for windows, which apparently loads these dynamically?
+// see llvm/lib/ExecutionEngine/RTDyldMemoryManager.cpp
+extern "C" void __register_frame(void*);
+extern "C" void __deregister_frame(void*);
+extern void _force_link() {
+    __register_frame(nullptr);
+    __deregister_frame(nullptr);
+}
+
 void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     // llvm::outs() << "An object has been emitted:\n";
 

@@ -31,7 +31,7 @@ BoxedModule* math_module;
 static double _extractFloat(Box* b) {
     if (b->cls != int_cls && b->cls != float_cls) {
         fprintf(stderr, "TypeError: a float is required\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "");
     }
 
     if (b->cls == int_cls)
@@ -45,7 +45,7 @@ Box* mathSqrtFloat(Box* b) {
     double d = static_cast<BoxedFloat*>(b)->d;
     if (d < 0) {
         fprintf(stderr, "ValueError: math domain error\n");
-        raiseExc();
+        raiseExcHelper(ValueError, "");
     }
     return boxFloat(sqrt(d));
 }
@@ -55,7 +55,7 @@ Box* mathSqrtInt(Box* b) {
     double d = static_cast<BoxedInt*>(b)->n;
     if (d < 0) {
         fprintf(stderr, "ValueError: math domain error\n");
-        raiseExc();
+        raiseExcHelper(ValueError, "");
     }
     return boxFloat(sqrt(d));
 }
@@ -65,7 +65,7 @@ Box* mathSqrt(Box* b) {
     double d = _extractFloat(b);
     if (d < 0) {
         fprintf(stderr, "ValueError: math domain error\n");
-        raiseExc();
+        raiseExcHelper(ValueError, "");
     }
     return boxFloat(sqrt(d));
 }

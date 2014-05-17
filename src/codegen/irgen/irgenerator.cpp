@@ -35,6 +35,13 @@
 #include "analysis/scoping_analysis.h"
 #include "analysis/type_analysis.h"
 
+extern "C" {
+// Hack: we only need RTTI for a single type (Box*), which we know will get emmitted,
+// so just use the mangled name directly instead of using typeid() since that requires
+// turning on RTTI for *everything* (including llvm)
+extern void* _ZTIPN6pyston3BoxE;
+}
+
 namespace pyston {
 
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
@@ -1693,7 +1700,7 @@ private:
         emitter.getBuilder()->CreateStore(converted_arg0->getValue(), bitcasted);
         converted_arg0->decvref(emitter);
 
-        void* type_id = NULL;
+        void* type_id = &_ZTIPN6pyston3BoxE /* &typeid(Box*) */;
         emitter.createCall(exc_info, g.funcs.__cxa_throw,
                            { exc_mem, embedConstantPtr(type_id, g.i8_ptr), embedConstantPtr(nullptr, g.i8_ptr) });
         emitter.getBuilder()->CreateUnreachable();

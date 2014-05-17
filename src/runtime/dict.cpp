@@ -81,7 +81,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
     if (pos == NULL) {
         BoxedString* s = static_cast<BoxedString*>(repr(k));
         fprintf(stderr, "KeyError: %s\n", s->s.c_str());
-        raiseExc();
+        raiseExcHelper(KeyError, "");
     }
 
     return pos;

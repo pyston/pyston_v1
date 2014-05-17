@@ -23,6 +23,8 @@
 #include <vector>
 #include <string>
 
+#include "llvm/ADT/StringRef.h"
+
 namespace pyston {
 
 namespace AST_TYPE {
@@ -1096,7 +1098,7 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
     }
 }
 
-std::string getOpSymbol(int op_type);
+llvm::StringRef getOpSymbol(int op_type);
 };
 
 #endif

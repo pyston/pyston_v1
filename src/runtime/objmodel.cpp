@@ -238,39 +238,34 @@ extern "C" void my_assert(bool b) {
 extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
     if (msg) {
         BoxedString* tostr = str(msg);
-        fprintf(stderr, "AssertionError: %s\n", tostr->s.c_str());
-        raiseExc();
+        raiseExcHelper(AssertionError, "%s", tostr->s.c_str());
     } else {
-        fprintf(stderr, "AssertionError\n");
-        raiseExc();
+        raiseExcHelper(AssertionError, NULL);
     }
 }
 
 extern "C" void assertNameDefined(bool b, const char* name) {
     if (!b) {
-        fprintf(stderr, "UnboundLocalError: local variable '%s' referenced before assignment\n", name);
-        raiseExc();
+        raiseExcHelper(UnboundLocalError, "local variable '%s' referenced before assignment", name);
     }
 }
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) {
-    fprintf(stderr, "AttributeError: '%s' object has no attribute '%s'\n", typeName, attr);
-    raiseExc();
+    raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr);
 }
 
 extern "C" void raiseAttributeError(Box* obj, const char* attr) {
     if (obj->cls == type_cls) {
-        fprintf(stderr, "AttributeError: type object '%s' has no attribute '%s'\n",
-                getNameOfClass(static_cast<BoxedClass*>(obj))->c_str(), attr);
+        // Slightly different error message:
+        raiseExcHelper(AttributeError, "type object '%s' has no attribute '%s'",
+                       getNameOfClass(static_cast<BoxedClass*>(obj))->c_str(), attr);
     } else {
         raiseAttributeErrorStr(getTypeName(obj)->c_str(), attr);
     }
-    raiseExc();
 }
 
 extern "C" void raiseNotIterableError(const char* typeName) {
-    fprintf(stderr, "TypeError: '%s' object is not iterable\n", typeName);
-    raiseExc();
+    raiseExcHelper(TypeError, "'%s' object is not iterable", typeName);
 }
 
 extern "C" void checkUnpackingLength(i64 expected, i64 given) {
@@ -278,14 +273,13 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
         return;
 
     if (given > expected)
-        fprintf(stderr, "ValueError: too many values to unpack\n");
+        raiseExcHelper(ValueError, "too many values to unpack");
     else {
         if (given == 1)
-            fprintf(stderr, "ValueError: need more than %ld value to unpack\n", given);
+            raiseExcHelper(ValueError, "need more than %ld value to unpack", given);
         else
-            fprintf(stderr, "ValueError: need more than %ld values to unpack\n", given);
+            raiseExcHelper(ValueError, "need more than %ld values to unpack", given);
     }
-    raiseExc();
 }
 
 BoxedClass::BoxedClass(bool hasattrs, BoxedClass::Dtor dtor)
@@ -852,9 +846,8 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
         if (!isUserDefined(cobj)) {
-            fprintf(stderr, "TypeError: can't set attributes of built-in/extension type '%s'\n",
-                    getNameOfClass(cobj)->c_str());
-            raiseExc();
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'",
+                           getNameOfClass(cobj)->c_str());
         }
     }
 
@@ -961,8 +954,7 @@ extern "C" bool nonzero(Box* obj) {
         bool rtn = b->n != 0;
         return rtn;
     } else {
-        fprintf(stderr, "TypeError: __nonzero__ should return bool or int, returned %s\n", getTypeName(r)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "__nonzero__ should return bool or int, returned %s", getTypeName(r)->c_str());
     }
 }
 
@@ -1012,8 +1004,7 @@ extern "C" Box* repr(Box* obj) {
     }
 
     if (obj->cls != str_cls) {
-        fprintf(stderr, "__repr__ did not return a string!\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "__repr__ did not return a string!");
     }
     return static_cast<BoxedString*>(obj);
 }
@@ -1047,8 +1038,7 @@ extern "C" BoxedInt* hash(Box* obj) {
 
     Box* rtn = runtimeCall0(hash, 0);
     if (rtn->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "an integer is required");
     }
     return static_cast<BoxedInt*>(rtn);
 }
@@ -1069,13 +1059,11 @@ extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     }
 
     if (rtn == NULL) {
-        fprintf(stderr, "TypeError: object of type '%s' has no len()\n", getTypeName(obj)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj)->c_str());
     }
 
     if (rtn->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "an integer is required");
     }
 
     if (rewrite_args)
@@ -1220,8 +1208,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             }
 
             if (!rtn) {
-                fprintf(stderr, "TypeError: '%s' object is not callable\n", getTypeName(inst_attr)->c_str());
-                raiseExc();
+                raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(inst_attr)->c_str());
             }
 
             return rtn;
@@ -1409,8 +1396,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         }
 
         if (!rtn) {
-            fprintf(stderr, "TypeError: '%s' object is not callable\n", getTypeName(clsattr)->c_str());
-            raiseExc();
+            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(clsattr)->c_str());
         }
 
         if (rewrite_args)
@@ -1755,13 +1741,12 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         // printf("rfunc doesn't exist\n");
     }
 
+    llvm::StringRef op_sym = getOpSymbol(op_type);
+    const char* op_sym_suffix = "";
     if (inplace) {
-        fprintf(stderr, "TypeError: unsupported operand type(s) for %s: '%s' and '%s'\n",
-                getInplaceOpSymbol(op_type).c_str(), getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
-    } else {
-        fprintf(stderr, "TypeError: unsupported operand type(s) for %s: '%s' and '%s'\n", getOpSymbol(op_type).c_str(),
-                getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
+        op_sym_suffix = "=";
     }
+
     if (VERBOSITY()) {
         if (inplace) {
             if (irtn)
@@ -1780,7 +1765,9 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         else
             fprintf(stderr, "%s does not have %s\n", getTypeName(rhs)->c_str(), rop_name.c_str());
     }
-    raiseExc();
+
+    raiseExcHelper(TypeError, "unsupported operand type(s) for %s%s: '%s' and '%s'", op_sym.data(), op_sym_suffix,
+                   getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
 }
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
@@ -1893,8 +1880,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
                 ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
             RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
 
-            fprintf(stderr, "TypeError: argument of type '%s' is not iterable\n", getTypeName(rhs)->c_str());
-            raiseExc();
+            raiseExcHelper(TypeError, "argument of type '%s' is not iterable", getTypeName(rhs)->c_str());
         }
 
         bool b = nonzero(contained);
@@ -2043,6 +2029,10 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 }
 
 extern "C" Box* getitem(Box* value, Box* slice) {
+    // This possibly could just be represented as a single callattr; the only tricky part
+    // are the error messages.
+    // Ex "(1)[1]" and "(1).__getitem__(1)" give different error messages.
+
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
     static std::string str_getitem("__getitem__");
@@ -2068,14 +2058,13 @@ extern "C" Box* getitem(Box* value, Box* slice) {
     if (rtn == NULL) {
         // different versions of python give different error messages for this:
         if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
-            fprintf(stderr, "TypeError: '%s' object is unsubscriptable\n", getTypeName(value)->c_str()); // 2.6.6
+            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(value)->c_str()); // 2.6.6
         } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
-            fprintf(stderr, "TypeError: '%s' object is not subscriptable\n", getTypeName(value)->c_str()); // 2.7.1
+            raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(value)->c_str()); // 2.7.1
         } else {
-            fprintf(stderr, "TypeError: '%s' object has no attribute '__getitem__'\n",
-                    getTypeName(value)->c_str()); // 2.7.3
+            raiseExcHelper(TypeError, "'%s' object has no attribute '__getitem__'",
+                           getTypeName(value)->c_str()); // 2.7.3
         }
-        raiseExc();
     }
 
     if (rewriter.get())
@@ -2110,8 +2099,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     }
 
     if (rtn == NULL) {
-        fprintf(stderr, "TypeError: '%s' object does not support item assignment\n", getTypeName(target)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "'%s' object does not support item assignment", getTypeName(target)->c_str());
     }
 
     if (rewriter.get()) {
@@ -2128,8 +2116,7 @@ static Box* makeHCBox(ObjectFlavor* flavor, BoxedClass* cls) {
 // For use on __init__ return values
 static void assertInitNone(Box* obj) {
     if (obj != None) {
-        fprintf(stderr, "TypeError: __init__() should return None, not '%s'\n", getTypeName(obj)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj)->c_str());
     }
 }
 
@@ -2160,9 +2147,8 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
 
     Box* cls = arg1;
     if (cls->cls != type_cls) {
-        fprintf(stderr, "TypeError: descriptor '__call__' requires a 'type' object but received an '%s'\n",
-                getTypeName(cls)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
+                       getTypeName(cls)->c_str());
     }
 
     BoxedClass* ccls = static_cast<BoxedClass*>(cls);
@@ -2289,7 +2275,7 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
             // Not sure what type of object to make here; maybe an HCBox? would be disastrous if it ever
             // made the wrong one though, so just err for now:
             fprintf(stderr, "no __new__ defined for %s!\n", getNameOfClass(ccls)->c_str());
-            raiseExc();
+            abort();
         }
     }
 
@@ -2333,8 +2319,7 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
         assertInitNone(initrtn);
     } else {
         if (new_attr == NULL && nargs != 1) {
-            fprintf(stderr, "TypeError: object.__new__() takes no parameters\n");
-            raiseExc();
+            raiseExcHelper(TypeError, "object.__new__() takes no parameters");
         }
     }
 
@@ -2433,10 +2418,9 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name, bool from_global) {
     }
 
     if (from_global)
-        fprintf(stderr, "NameError: name '%s' is not defined\n", name->c_str());
+        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
     else
-        fprintf(stderr, "NameError: global name '%s' is not defined\n", name->c_str());
-    raiseExc();
+        raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
 }
 
 // TODO I feel like importing should go somewhere else; it's more closely tied to codegen
@@ -2454,8 +2438,7 @@ extern "C" Box* import(const std::string* name) {
 
     BoxedList* sys_path = getSysPath();
     if (sys_path->cls != list_cls) {
-        fprintf(stderr, "RuntimeError: sys.path must be a list of directory name\n");
-        raiseExc();
+        raiseExcHelper(RuntimeError, "sys.path must be a list of directory name");
     }
 
     llvm::SmallString<128> joined_path;
@@ -2492,7 +2475,6 @@ extern "C" Box* import(const std::string* name) {
         return getTestModule();
     }
 
-    fprintf(stderr, "ImportError: No module named %s\n", name->c_str());
-    raiseExc();
+    raiseExcHelper(ImportError, "No module named %s", name->c_str());
 }
 }

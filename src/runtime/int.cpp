@@ -48,8 +48,7 @@ extern "C" i64 sub_i64_i64(i64 lhs, i64 rhs) {
 
 extern "C" i64 div_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
-        fprintf(stderr, "ZeroDivisionError: integer division or modulo by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
     if (lhs < 0 && rhs > 0)
         return (lhs - rhs + 1) / rhs;
@@ -60,8 +59,7 @@ extern "C" i64 div_i64_i64(i64 lhs, i64 rhs) {
 
 extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
-        fprintf(stderr, "ZeroDivisionError: integer division or modulo by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
     if (lhs < 0 && rhs > 0)
         return ((lhs + 1) % rhs) + (rhs - 1);
@@ -163,8 +161,7 @@ extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
-        fprintf(stderr, "float divide by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "float divide by zero");
     }
     return boxFloat(lhs->n / rhs->d);
 }
@@ -445,8 +442,9 @@ extern "C" Box* intNew2(Box* cls, Box* val) {
 
         return boxInt(d);
     } else {
-        fprintf(stderr, "int() argument must be a string or a number, not '%s'\n", getTypeName(val)->c_str());
-        raiseExc();
+        fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
+                getTypeName(val)->c_str());
+        raiseExcHelper(TypeError, "");
     }
 }
 

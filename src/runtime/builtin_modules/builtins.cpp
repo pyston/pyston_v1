@@ -71,12 +71,12 @@ extern "C" Box* open2(Box* arg1, Box* arg2) {
     if (arg1->cls != str_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
                 getTypeName(arg1)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "");
     }
     if (arg2->cls != str_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
                 getTypeName(arg2)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "");
     }
 
     const std::string& fn = static_cast<BoxedString*>(arg1)->s;
@@ -97,7 +97,7 @@ extern "C" Box* open1(Box* arg) {
 extern "C" Box* chr(Box* arg) {
     if (arg->cls != int_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "");
     }
     i64 n = static_cast<BoxedInt*>(arg)->n;
     RELEASE_ASSERT(n >= 0 && n < 256, "");
@@ -183,22 +183,22 @@ Box* sorted(Box* obj) {
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
+    assert(cls->cls == type_cls);
+    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
+
     return boxBool(isinstance(obj, cls, 0));
 }
 
 Box* getattr2(Box* obj, Box* _str) {
     if (_str->cls != str_cls) {
-        fprintf(stderr, "TypeError: getattr(): attribute name must be string\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
     Box* rtn = getattr_internal(obj, str->s.c_str(), true, true, NULL, NULL);
 
     if (!rtn) {
-        fprintf(stderr, "AttributeError: '%s' object has no attribute '%s'\n", getTypeName(obj)->c_str(),
-                str->s.c_str());
-        raiseExc();
+        raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj)->c_str(), str->s.c_str());
     }
 
     return rtn;
@@ -206,8 +206,7 @@ Box* getattr2(Box* obj, Box* _str) {
 
 Box* getattr3(Box* obj, Box* _str, Box* default_value) {
     if (_str->cls != str_cls) {
-        fprintf(stderr, "TypeError: getattr(): attribute name must be string\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
@@ -247,6 +246,60 @@ extern "C" const ObjectFlavor notimplemented_flavor(&boxGCHandler, NULL);
 BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
+// TODO looks like CPython and pypy put this into an "exceptions" module:
+BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError, *IOError,
+    *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError;
+
+const ObjectFlavor exception_flavor(&boxGCHandler, NULL);
+Box* exceptionNew1(BoxedClass* cls) {
+    return exceptionNew2(cls, boxStrConstant(""));
+}
+
+Box* exceptionNew2(BoxedClass* cls, Box* message) {
+    HCBox* r = new HCBox(&exception_flavor, cls);
+    r->giveAttr("message", message);
+    return r;
+}
+
+Box* exceptionStr(Box* b) {
+    HCBox* hcb = static_cast<HCBox*>(b);
+
+    // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
+    Box* message = hcb->peekattr("message");
+    assert(message);
+    message = str(message);
+    assert(message->cls == str_cls);
+
+    return message;
+}
+
+Box* exceptionRepr(Box* b) {
+    HCBox* hcb = static_cast<HCBox*>(b);
+
+    // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
+    Box* message = hcb->peekattr("message");
+    assert(message);
+    message = repr(message);
+    assert(message->cls == str_cls);
+
+    BoxedString* message_s = static_cast<BoxedString*>(message);
+    return boxString(*getTypeName(b) + "(" + message_s->s + ",)");
+}
+
+static BoxedClass* makeBuiltinException(const char* name) {
+    BoxedClass* cls = new BoxedClass(true, NULL);
+    cls->giveAttr("__name__", boxStrConstant(name));
+
+    // TODO these should be on the base Exception class:
+    cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew1, NULL, 1, false)));
+    cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, NULL, 1, false)));
+    cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, NULL, 1, false)));
+    cls->freeze();
+
+    builtins_module->giveAttr(name, cls);
+    return cls;
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -262,6 +315,21 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
     builtins_module->giveAttr("NotImplementedType", notimplemented_cls);
+
+    Exception = makeBuiltinException("Exception");
+    AssertionError = makeBuiltinException("AssertionError");
+    AttributeError = makeBuiltinException("AttributeError");
+    TypeError = makeBuiltinException("TypeError");
+    NameError = makeBuiltinException("NameError");
+    KeyError = makeBuiltinException("KeyError");
+    IndexError = makeBuiltinException("IndexError");
+    IOError = makeBuiltinException("IOError");
+    OSError = makeBuiltinException("OSError");
+    ZeroDivisionError = makeBuiltinException("ZeroDivisionError");
+    ValueError = makeBuiltinException("ValueError");
+    UnboundLocalError = makeBuiltinException("UnboundLocalError");
+    RuntimeError = makeBuiltinException("RuntimeError");
+    ImportError = makeBuiltinException("ImportError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, NULL, 1, false));
     builtins_module->giveAttr("repr", repr_obj);

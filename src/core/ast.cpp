@@ -25,7 +25,7 @@
 
 namespace pyston {
 
-std::string getOpSymbol(int op_type) {
+llvm::StringRef getOpSymbol(int op_type) {
     switch (op_type) {
         case AST_TYPE::Add:
             return "+";
@@ -86,7 +86,7 @@ std::string getOpSymbol(int op_type) {
 }
 
 std::string getInplaceOpSymbol(int op_type) {
-    return getOpSymbol(op_type) + '=';
+    return std::string(getOpSymbol(op_type)) + '=';
 }
 
 std::string getOpName(int op_type) {

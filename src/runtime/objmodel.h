@@ -28,6 +28,9 @@ class BoxedInt;
 class BoxedList;
 class BoxedString;
 
+void raiseExc(Box*) __attribute__((__noreturn__));
+void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
+
 extern "C" const std::string* getTypeName(Box* o);
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
