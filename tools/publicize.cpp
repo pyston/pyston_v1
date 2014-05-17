@@ -79,11 +79,20 @@ bool makeVisible(llvm::GlobalValue* gv) {
         changed = true;
     }
 
-    //llvm::GlobalValue::VisibilityTypes visibility = gv->getVisibility();
-    //if (visibility == llvm::GlobalValue::HiddenVisibility) {
-        //gv->setVisibility(llvm::GlobalValue::ProtectedVisibility);
-        //changed = true;
-    //}
+    // Hidden symbols won't end up as globals.
+    // Worse, a hidden symbol, when linked with a default-visibility symbol,
+    // will result in a non-visible symbol.
+    // So it's not enough to just set the visibility here; instead we have to
+    // set it to protected *and* change the name.
+    // The only thing affected by this that I know about is __clang_call_terminate.
+    llvm::GlobalValue::VisibilityTypes visibility = gv->getVisibility();
+    if (visibility == llvm::GlobalValue::HiddenVisibility) {
+        gv->setVisibility(llvm::GlobalValue::ProtectedVisibility);
+        //gv->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+        gv->setName(gv->getName() + "_protected");
+
+        changed = true;
+    }
 
     return changed;
 }
