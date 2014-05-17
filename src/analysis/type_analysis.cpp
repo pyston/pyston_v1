@@ -329,6 +329,17 @@ private:
 
     virtual void* visit_index(AST_Index* node) { return getType(node->value); }
 
+    virtual void* visit_langprimitive(AST_LangPrimitive* node) {
+        switch (node->opcode) {
+            case AST_LangPrimitive::ISINSTANCE:
+                return BOOL;
+            case AST_LangPrimitive::LANDINGPAD:
+                return UNKNOWN;
+            default:
+                RELEASE_ASSERT(0, "%d", node->opcode);
+        }
+    }
+
     virtual void* visit_list(AST_List* node) {
         // Get all the sub-types, even though they're not necessary to
         // determine the expression type, so that things like speculations
@@ -459,6 +470,8 @@ private:
             visit_alias(alias);
     }
 
+    virtual void visit_invoke(AST_Invoke* node) { node->stmt->accept_stmt(this); }
+
     virtual void visit_jump(AST_Jump* node) {}
     virtual void visit_pass(AST_Pass* node) {}
 
@@ -470,6 +483,17 @@ private:
             for (int i = 0; i < node->values.size(); i++) {
                 getType(node->values[i]);
             }
+        }
+    }
+
+    virtual void visit_raise(AST_Raise* node) {
+        if (EXPAND_UNNEEDED) {
+            if (node->arg0)
+                getType(node->arg0);
+            if (node->arg1)
+                getType(node->arg1);
+            if (node->arg2)
+                getType(node->arg2);
         }
     }
 

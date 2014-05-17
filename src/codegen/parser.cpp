@@ -790,12 +790,24 @@ AST* readASTMisc(BufferedReader* reader) {
     }
 }
 
+static std::string getParserCommandLine(const char* fn) {
+    llvm::SmallString<128> parse_ast_fn;
+    // TODO supposed to pass argv0, main_addr to this function:
+    parse_ast_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
+    assert(parse_ast_fn.size() && "could not find the path to the pyston src dir");
+
+    while (llvm::sys::path::filename(parse_ast_fn) != "pyston") {
+        llvm::sys::path::remove_filename(parse_ast_fn);
+    }
+    llvm::sys::path::append(parse_ast_fn, "src/codegen/parse_ast.py");
+
+    return std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
+}
+
 AST_Module* parse(const char* fn) {
     Timer _t("parsing");
 
-    std::string cmdline = "python codegen/parse_ast.py ";
-    cmdline += fn;
-    FILE* fp = popen(cmdline.c_str(), "r");
+    FILE* fp = popen(getParserCommandLine(fn).c_str(), "r");
 
     BufferedReader* reader = new BufferedReader(fp);
     AST* rtn = readASTMisc(reader);
@@ -820,15 +832,7 @@ AST_Module* parse(const char* fn) {
 #define LENGTH_SUFFIX_LENGTH 4
 
 static void _reparse(const char* fn, const std::string& cache_fn) {
-    llvm::SmallString<128> parse_ast_fn;
-    // TODO supposed to pass argv0, main_addr to this function:
-    parse_ast_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
-    assert(parse_ast_fn.size() && "could not find the path to the pyston src dir");
-    llvm::sys::path::remove_filename(parse_ast_fn);
-    llvm::sys::path::append(parse_ast_fn, "codegen/parse_ast.py");
-
-    std::string cmdline = std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
-    FILE* parser = popen(cmdline.c_str(), "r");
+    FILE* parser = popen(getParserCommandLine(fn).c_str(), "r");
     FILE* cache_fp = fopen(cache_fn.c_str(), "w");
     assert(cache_fp);
 

@@ -104,9 +104,9 @@ private:
                 continue;
             }
 
-            if (CallInst* si = dyn_cast<CallInst>(user)) {
+            if (llvm::isa<CallInst>(user) || llvm::isa<InvokeInst>(user)) {
                 if (VERBOSITY() >= 2)
-                    errs() << "Not dead; used here: " << *si << '\n';
+                    errs() << "Not dead; used here: " << *user << '\n';
                 return true;
             }
 

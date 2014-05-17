@@ -145,6 +145,7 @@ public:
     }
 
     virtual bool visit_arguments(AST_arguments* node) { return false; }
+    virtual bool visit_assert(AST_Assert* node) { return false; }
     virtual bool visit_assign(AST_Assign* node) { return false; }
     virtual bool visit_augassign(AST_AugAssign* node) { return false; }
     virtual bool visit_attribute(AST_Attribute* node) { return false; }
@@ -157,6 +158,7 @@ public:
     // virtual bool visit_classdef(AST_ClassDef *node) { return false; }
     virtual bool visit_continue(AST_Continue* node) { return false; }
     virtual bool visit_dict(AST_Dict* node) { return false; }
+    virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
     // virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
@@ -172,11 +174,14 @@ public:
     virtual bool visit_num(AST_Num* node) { return false; }
     virtual bool visit_pass(AST_Pass* node) { return false; }
     virtual bool visit_print(AST_Print* node) { return false; }
+    virtual bool visit_raise(AST_Raise* node) { return false; }
     virtual bool visit_repr(AST_Repr* node) { return false; }
     virtual bool visit_return(AST_Return* node) { return false; }
     virtual bool visit_slice(AST_Slice* node) { return false; }
     virtual bool visit_str(AST_Str* node) { return false; }
     virtual bool visit_subscript(AST_Subscript* node) { return false; }
+    virtual bool visit_tryexcept(AST_TryExcept* node) { return false; }
+    virtual bool visit_tryfinally(AST_TryFinally* node) { return false; }
     virtual bool visit_tuple(AST_Tuple* node) { return false; }
     virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }

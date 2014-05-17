@@ -228,7 +228,6 @@ extern "C" Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1,
 std::string getOpName(int op_type);
 std::string getReverseOpName(int op_type);
 std::string getInplaceOpName(int op_type);
-std::string getOpSymbol(int op_type);
 std::string getInplaceOpSymbol(int op_type);
 
 typedef bool i1;

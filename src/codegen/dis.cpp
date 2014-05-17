@@ -144,6 +144,7 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
         code = I->getName(name);
         assert(!code);
 
+        uint64_t address, size;
         const char* type = "unknown";
         bool b;
         code = I->isText(b);
@@ -162,7 +163,11 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
         assert(!code);
         if (b)
             type = "rodata";
-        printf("Section: %s %s\n", name.data(), type);
+        code = I->getAddress(address);
+        assert(!code);
+        code = I->getSize(size);
+        assert(!code);
+        printf("Section: %s %s (%lx %lx)\n", name.data(), type, address, size);
 
 #if LLVMREV < 200442
         I = I.increment(code);

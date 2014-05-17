@@ -120,6 +120,8 @@ enum AST_TYPE {
     Jump = 201,
     ClsAttribute = 202,
     AugBinOp = 203,
+    Invoke = 204,
+    LangPrimitive = 205,
 };
 };
 
@@ -620,7 +622,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Raise() : AST_stmt(AST_TYPE::Raise) {}
+    AST_Raise() : AST_stmt(AST_TYPE::Raise), arg0(NULL), arg1(NULL), arg2(NULL) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Raise;
 };
@@ -795,6 +797,41 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClsAttribute;
 };
 
+class AST_Invoke : public AST_stmt {
+public:
+    AST_stmt* stmt;
+
+    CFGBlock* normal_dest, *exc_dest;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void accept_stmt(StmtVisitor* v);
+
+    AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke), stmt(stmt) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Invoke;
+};
+
+// "LangPrimitive" represents operations that "primitive" to the language,
+// but aren't directly *exactly* representable as normal Python.
+// ClsAttribute would fall into this category, as would isinstance (which
+// is not the same as the "isinstance" name since that could get redefined).
+class AST_LangPrimitive : public AST_expr {
+public:
+    enum Opcodes {
+        ISINSTANCE,
+        LANDINGPAD,
+    } opcode;
+    std::vector<AST_expr*> args;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_LangPrimitive(Opcodes opcode) : AST_expr(AST_TYPE::LangPrimitive), opcode(opcode) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::LangPrimitive;
+};
+
+
 template <typename T> T* ast_cast(AST* node) {
     assert(node->type == T::TYPE);
     return static_cast<T*>(node);
@@ -834,7 +871,9 @@ public:
     virtual bool visit_import(AST_Import* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_importfrom(AST_ImportFrom* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_invoke(AST_Invoke* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_keyword(AST_keyword* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_module(AST_Module* node) { RELEASE_ASSERT(0, ""); }
@@ -891,7 +930,9 @@ public:
     virtual bool visit_import(AST_Import* node) { return false; }
     virtual bool visit_importfrom(AST_ImportFrom* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }
+    virtual bool visit_invoke(AST_Invoke* node) { return false; }
     virtual bool visit_keyword(AST_keyword* node) { return false; }
+    virtual bool visit_langprimitive(AST_LangPrimitive* node) { return false; }
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
     virtual bool visit_module(AST_Module* node) { return false; }
@@ -931,6 +972,7 @@ public:
     virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_name(AST_Name* node) { RELEASE_ASSERT(0, ""); }
@@ -961,6 +1003,7 @@ public:
     virtual void visit_if(AST_If* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_import(AST_Import* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_importfrom(AST_ImportFrom* node) { RELEASE_ASSERT(0, ""); }
+    virtual void visit_invoke(AST_Invoke* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_pass(AST_Pass* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_print(AST_Print* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_raise(AST_Raise* node) { RELEASE_ASSERT(0, ""); }
@@ -1011,7 +1054,9 @@ public:
     virtual bool visit_import(AST_Import* node);
     virtual bool visit_importfrom(AST_ImportFrom* node);
     virtual bool visit_index(AST_Index* node);
+    virtual bool visit_invoke(AST_Invoke* node);
     virtual bool visit_keyword(AST_keyword* node);
+    virtual bool visit_langprimitive(AST_LangPrimitive* node);
     virtual bool visit_list(AST_List* node);
     virtual bool visit_listcomp(AST_ListComp* node);
     virtual bool visit_module(AST_Module* node);
@@ -1050,6 +1095,8 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
             output.push_back(reinterpret_cast<T*>(n));
     }
 }
+
+std::string getOpSymbol(int op_type);
 };
 
 #endif

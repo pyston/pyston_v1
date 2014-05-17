@@ -283,7 +283,7 @@ $(UNITTEST_DIR)/$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTE
 	$(ECHO) Linking $$@
 	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
 dbg_$1_unittests: $(UNITTEST_DIR)/$1
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time gdb $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
 run_$1_unittests: $(UNITTEST_DIR)/$1
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/$1 $(ARGS)'
 run_unittests:: run_$1_unittests

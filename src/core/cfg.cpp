@@ -56,6 +56,12 @@ private:
     std::vector<LoopInfo> loops;
     std::vector<CFGBlock*> returns;
 
+    struct ExcBlockInfo {
+        CFGBlock* exc_dest;
+        std::string exc_obj_name;
+    };
+    std::vector<ExcBlockInfo> exc_handlers;
+
     void pushLoop(CFGBlock* continue_dest, CFGBlock* break_dest) {
         LoopInfo loop;
         loop.continue_dest = continue_dest;
@@ -394,6 +400,14 @@ private:
         return rtn;
     }
 
+    AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
+        AST_LangPrimitive* rtn = new AST_LangPrimitive(node->opcode);
+        for (AST_expr* arg : node->args) {
+            rtn->args.push_back(remapExpr(arg));
+        }
+        return rtn;
+    }
+
     AST_expr* remapList(AST_List* node) {
         assert(node->ctx_type == AST_TYPE::Load);
 
@@ -621,6 +635,9 @@ private:
             case AST_TYPE::Index:
                 rtn = remapIndex(ast_cast<AST_Index>(node));
                 break;
+            case AST_TYPE::LangPrimitive:
+                rtn = remapLangPrimitive(ast_cast<AST_LangPrimitive>(node));
+                break;
             case AST_TYPE::List:
                 rtn = remapList(ast_cast<AST_List>(node));
                 break;
@@ -670,33 +687,88 @@ public:
     ~CFGVisitor() {
         assert(loops.size() == 0);
         assert(returns.size() == 0);
+        assert(exc_handlers.size() == 0);
     }
 
     void push_back(AST_stmt* node) {
-        if (curblock)
+        assert(node->type != AST_TYPE::Invoke);
+
+        if (!curblock)
+            return;
+
+        if (exc_handlers.size() == 0) {
             curblock->push_back(node);
+            return;
+        }
+
+        AST_TYPE::AST_TYPE type = node->type;
+        if (type == AST_TYPE::Jump) {
+            curblock->push_back(node);
+            return;
+        }
+
+        if (type == AST_TYPE::Branch) {
+            AST_TYPE::AST_TYPE test_type = ast_cast<AST_Branch>(node)->test->type;
+            assert(test_type == AST_TYPE::Name || test_type == AST_TYPE::Num);
+            curblock->push_back(node);
+            return;
+        }
+
+        if (type == AST_TYPE::Return) {
+            curblock->push_back(node);
+            return;
+        }
+
+        CFGBlock* normal_dest = cfg->addBlock();
+        // Add an extra exc_dest trampoline to prevent critical edges:
+        CFGBlock* exc_dest = cfg->addBlock();
+
+        AST_Invoke* invoke = new AST_Invoke(node);
+        invoke->normal_dest = normal_dest;
+        invoke->exc_dest = exc_dest;
+
+        curblock->push_back(invoke);
+        curblock->connectTo(normal_dest);
+        curblock->connectTo(exc_dest);
+
+        ExcBlockInfo& exc_info = exc_handlers.back();
+
+        curblock = exc_dest;
+        curblock->push_back(makeAssign(exc_info.exc_obj_name, new AST_LangPrimitive(AST_LangPrimitive::LANDINGPAD)));
+
+        AST_Jump* j = new AST_Jump();
+        j->target = exc_info.exc_dest;
+        curblock->push_back(j);
+        curblock->connectTo(exc_info.exc_dest);
+
+        curblock = normal_dest;
     }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
         push_back(node);
         return true;
     }
+
     virtual bool visit_functiondef(AST_FunctionDef* node) {
         push_back(node);
         return true;
     }
+
     virtual bool visit_global(AST_Global* node) {
         push_back(node);
         return true;
     }
+
     virtual bool visit_import(AST_Import* node) {
         push_back(node);
         return true;
     }
+
     virtual bool visit_importfrom(AST_ImportFrom* node) {
         push_back(node);
         return true;
     }
+
     virtual bool visit_pass(AST_Pass* node) { return true; }
 
     bool visit_assert(AST_Assert* node) override {
@@ -749,13 +821,16 @@ public:
     }
 
     virtual bool visit_assign(AST_Assign* node) {
-        AST_Assign* remapped = new AST_Assign();
-        remapped->lineno = node->lineno;
-        remapped->col_offset = node->col_offset;
-        remapped->value = remapExpr(node->value, false);
-        // TODO bad that it's reusing the AST nodes?
-        remapped->targets = node->targets;
-        push_back(remapped);
+        AST_expr* remapped_value = remapExpr(node->value);
+
+        for (AST_expr* target : node->targets) {
+            AST_Assign* remapped = new AST_Assign();
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            remapped->value = remapped_value;
+            remapped->targets.push_back(target);
+            push_back(remapped);
+        }
         return true;
     }
 
@@ -958,7 +1033,7 @@ public:
         AST_Jump* j = makeJump();
         push_back(j);
         assert(loops.size());
-        j->target = loops[loops.size() - 1].break_dest;
+        j->target = getBreak();
         curblock->connectTo(j->target, true);
 
         curblock = NULL;
@@ -978,10 +1053,9 @@ public:
         AST_Jump* j = makeJump();
         push_back(j);
         assert(loops.size());
-        j->target = loops[loops.size() - 1].continue_dest;
+        j->target = getContinue();
         curblock->connectTo(j->target, true);
 
-        // See visit_break for explanation:
         curblock = NULL;
         return true;
     }
@@ -1155,6 +1229,111 @@ public:
         return true;
     }
 
+    bool visit_raise(AST_Raise* node) override {
+        AST_Raise* remapped = new AST_Raise();
+        if (node->arg0)
+            remapped->arg0 = remapExpr(node->arg0);
+        if (node->arg1)
+            remapped->arg1 = remapExpr(node->arg1);
+        if (node->arg2)
+            remapped->arg2 = remapExpr(node->arg2);
+        push_back(remapped);
+        return true;
+    }
+
+    bool visit_tryexcept(AST_TryExcept* node) override {
+        assert(node->handlers.size() > 0);
+
+        CFGBlock* exc_handler_block = cfg->addDeferredBlock();
+        std::string exc_obj_name = nodeName(node);
+        exc_handlers.push_back({ exc_handler_block, exc_obj_name });
+
+        for (AST_stmt* subnode : node->body) {
+            subnode->accept(this);
+        }
+
+        exc_handlers.pop_back();
+
+        for (AST_stmt* subnode : node->orelse) {
+            subnode->accept(this);
+        }
+
+        CFGBlock* join_block = cfg->addDeferredBlock();
+        AST_Jump* j = new AST_Jump();
+        j->target = join_block;
+        push_back(j);
+        curblock->connectTo(join_block);
+
+        if (exc_handler_block->predecessors.size() == 0) {
+            delete exc_handler_block;
+        } else {
+            cfg->placeBlock(exc_handler_block);
+            curblock = exc_handler_block;
+
+            AST_expr* exc_obj = makeName(exc_obj_name, AST_TYPE::Load);
+
+            bool caught_all = false;
+            for (AST_ExceptHandler* exc_handler : node->handlers) {
+                assert(!caught_all && "bare except clause not the last one in the list?");
+
+                CFGBlock* exc_next = nullptr;
+                if (exc_handler->type) {
+                    AST_expr* handled_type = remapExpr(exc_handler->type);
+
+                    AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::ISINSTANCE);
+                    is_caught_here->args.push_back(exc_obj);
+                    is_caught_here->args.push_back(handled_type);
+                    is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
+
+                    CFGBlock* exc_handle = cfg->addBlock();
+                    exc_next = cfg->addDeferredBlock();
+
+                    AST_Branch* br = new AST_Branch();
+                    br->test = remapExpr(is_caught_here);
+                    br->iftrue = exc_handle;
+                    br->iffalse = exc_next;
+                    curblock->connectTo(exc_handle);
+                    curblock->connectTo(exc_next);
+                    push_back(br);
+                    curblock = exc_handle;
+                } else {
+                    caught_all = true;
+                }
+
+                if (exc_handler->name) {
+                    push_back(makeAssign(exc_handler->name, exc_obj));
+                }
+
+                for (AST_stmt* subnode : exc_handler->body) {
+                    subnode->accept(this);
+                }
+
+                AST_Jump* j = new AST_Jump();
+                j->target = join_block;
+                push_back(j);
+                curblock->connectTo(join_block);
+
+                if (exc_next) {
+                    cfg->placeBlock(exc_next);
+                } else {
+                    assert(caught_all);
+                }
+                curblock = exc_next;
+            }
+
+            if (!caught_all) {
+                AST_Raise* raise = new AST_Raise();
+                raise->arg0 = exc_obj;
+                push_back(raise);
+                curblock = NULL;
+            }
+        }
+
+        cfg->placeBlock(join_block);
+        curblock = join_block;
+        return true;
+    }
+
     virtual bool visit_with(AST_With* node) {
         char ctxmgrname_buf[80];
         snprintf(ctxmgrname_buf, 80, "#ctxmgr_%p", node);
@@ -1182,13 +1361,12 @@ public:
             break_dest = cfg->addDeferredBlock();
             break_dest->info = "with_break";
 
-            orig_continue_dest = loops[loops.size() - 1].continue_dest;
-            orig_break_dest = loops[loops.size() - 1].break_dest;
+            orig_continue_dest = getContinue();
+            orig_break_dest = getBreak();
 
             pushLoop(continue_dest, break_dest);
         }
 
-        CFGBlock* orig_return_dest = getReturn();
         CFGBlock* return_dest = cfg->addDeferredBlock();
         return_dest->info = "with_return";
         pushReturn(return_dest);
@@ -1309,13 +1487,21 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
 
-// rtn->print();
-
 #ifndef NDEBUG
     ////
     // Check some properties expected by later stages:
 
     assert(rtn->getStartingBlock()->predecessors.size() == 0);
+
+    for (CFGBlock* b : rtn->blocks) {
+        ASSERT(b->idx != -1, "Forgot to place a block!");
+        for (CFGBlock* b2 : b->predecessors) {
+            ASSERT(b2->idx != -1, "Forgot to place a block!");
+        }
+        for (CFGBlock* b2 : b->successors) {
+            ASSERT(b2->idx != -1, "Forgot to place a block!");
+        }
+    }
 
     // We need to generate the CFG in a way that doesn't have any critical edges,
     // since the ir generation requires that.
@@ -1354,6 +1540,11 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         assert(rtn->blocks[i]->predecessors[0]->idx < i);
     }
 
+    assert(rtn->getStartingBlock()->idx == 0);
+
+// TODO make sure the result of Invoke nodes are not used on the exceptional path
+#endif
+
     // Prune unnecessary blocks from the CFG.
     // Not strictly necessary, but makes the output easier to look at,
     // and can make the analyses more efficient.
@@ -1386,33 +1577,8 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         }
     }
 
-    assert(rtn->getStartingBlock()->idx == 0);
-
-/*
-// I keep on going back and forth about whether or not it's ok to reuse AST nodes.
-// On the one hand, it's nice to say that an AST* pointer uniquely identifies a spot
-// in the computation, but then again the sharing can actually be nice because
-// it indicates that there are certain similarities between the points, and things such
-// as type recorders will end up being shared.
-std::vector<AST*> all_ast_nodes;
-for (CFGBlock* block : rtn->blocks) {
-    flatten(block->body, all_ast_nodes, false);
-}
-
-std::unordered_set<AST*> seen_ast_nodes;
-for (AST* n : all_ast_nodes) {
-    if (seen_ast_nodes.count(n)) {
+    if (VERBOSITY())
         rtn->print();
-
-        printf("This node appears multiple times in the tree:\n");
-        print_ast(n);
-        printf("\n");
-        assert(0);
-    }
-    seen_ast_nodes.insert(n);
-}
-*/
-#endif
 
     return rtn;
 }
