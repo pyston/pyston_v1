@@ -796,6 +796,9 @@ static std::string getParserCommandLine(const char* fn) {
     parse_ast_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
     assert(parse_ast_fn.size() && "could not find the path to the pyston src dir");
 
+    // Start by removing the binary name, because the "pyston" binary will break the logic below
+    llvm::sys::path::remove_filename(parse_ast_fn);
+
     while (llvm::sys::path::filename(parse_ast_fn) != "pyston") {
         llvm::sys::path::remove_filename(parse_ast_fn);
     }
