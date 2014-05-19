@@ -48,8 +48,7 @@ extern "C" i64 sub_i64_i64(i64 lhs, i64 rhs) {
 
 extern "C" i64 div_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
-        fprintf(stderr, "ZeroDivisionError: integer division or modulo by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
     if (lhs < 0 && rhs > 0)
         return (lhs - rhs + 1) / rhs;
@@ -60,8 +59,7 @@ extern "C" i64 div_i64_i64(i64 lhs, i64 rhs) {
 
 extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
-        fprintf(stderr, "ZeroDivisionError: integer division or modulo by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
     if (lhs < 0 && rhs > 0)
         return ((lhs + 1) % rhs) + (rhs - 1);
@@ -163,8 +161,7 @@ extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
-        fprintf(stderr, "float divide by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "float divide by zero");
     }
     return boxFloat(lhs->n / rhs->d);
 }
@@ -299,6 +296,25 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return boxInt(mod_i64_i64(lhs->n, rhs_int->n));
 }
+
+extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
+    assert(lhs->cls == int_cls);
+    Box* divResult = intDiv(lhs, rhs);
+
+    if (divResult == NotImplemented) {
+        return NotImplemented;
+    }
+
+    Box* modResult = intMod(lhs, rhs);
+
+    if (modResult == NotImplemented) {
+        return NotImplemented;
+    }
+
+    Box* arg[2] = { divResult, modResult };
+    return createTuple(2, arg);
+}
+
 
 extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
@@ -445,8 +461,9 @@ extern "C" Box* intNew2(Box* cls, Box* val) {
 
         return boxInt(d);
     } else {
-        fprintf(stderr, "int() argument must be a string or a number, not '%s'\n", getTypeName(val)->c_str());
-        raiseExc();
+        fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
+                getTypeName(val)->c_str());
+        raiseExcHelper(TypeError, "");
     }
 }
 
@@ -521,6 +538,7 @@ void setupInt() {
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1, false)));
     int_cls->setattr("__str__", int_cls->peekattr("__repr__"), NULL, NULL);
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1, false)));
+    int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2, false)));
 
     CLFunction* __new__ = boxRTFunction((void*)intNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)intNew2, NULL, 2, false);

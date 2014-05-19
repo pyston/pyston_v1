@@ -54,8 +54,7 @@ extern "C" Box* listNonzero(BoxedList* self) {
 
 extern "C" Box* listPop1(BoxedList* self) {
     if (self->size == 0) {
-        fprintf(stderr, "IndexError: pop from empty list\n");
-        raiseExc();
+        raiseExcHelper(IndexError, "pop from empty list");
     }
 
     self->size--;
@@ -65,8 +64,7 @@ extern "C" Box* listPop1(BoxedList* self) {
 
 extern "C" Box* listPop2(BoxedList* self, Box* idx) {
     if (idx->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "an integer is required");
     }
 
     int64_t n = static_cast<BoxedInt*>(idx)->n;
@@ -78,7 +76,7 @@ extern "C" Box* listPop2(BoxedList* self, Box* idx) {
             fprintf(stderr, "IndexError: pop from empty list\n");
         else
             fprintf(stderr, "IndexError: pop index out of range\n");
-        raiseExc();
+        raiseExcHelper(IndexError, "");
     }
 
     Box* rtn = self->elts->elts[n];
@@ -126,8 +124,7 @@ extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
         n = self->size + n;
 
     if (n < 0 || n >= self->size) {
-        fprintf(stderr, "IndexError: list index out of range\n");
-        raiseExc();
+        raiseExcHelper(IndexError, "list index out of range");
     }
     Box* rtn = self->elts->elts[n];
     return rtn;
@@ -148,8 +145,7 @@ extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
     } else if (slice->cls == slice_cls) {
         return listGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
-        fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
     }
 }
 
@@ -162,8 +158,7 @@ extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
         n = self->size + n;
 
     if (n < 0 || n >= self->size) {
-        fprintf(stderr, "IndexError: list index out of range\n");
-        raiseExc();
+        raiseExcHelper(IndexError, "list index out of range");
     }
 
     self->elts->elts[n] = v;
@@ -206,15 +201,13 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
     } else {
-        fprintf(stderr, "TypeError: list indices must be integers, not %s\n", getTypeName(slice)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
     }
 }
 
 extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "an integer is required");
     }
 
     int64_t n = static_cast<BoxedInt*>(idx)->n;
@@ -240,8 +233,7 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
 
 Box* listMul(BoxedList* self, Box* rhs) {
     if (rhs->cls != int_cls) {
-        fprintf(stderr, "TypeError: can't multiply sequence by non-int of type '%s'\n", getTypeName(rhs)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs)->c_str());
     }
 
     int n = static_cast<BoxedInt*>(rhs)->n;
@@ -264,8 +256,7 @@ Box* listMul(BoxedList* self, Box* rhs) {
 
 Box* listIAdd(BoxedList* self, Box* _rhs) {
     if (_rhs->cls != list_cls) {
-        fprintf(stderr, "TypeError: can only concatenate list (not \"%s\") to list\n", getTypeName(_rhs)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs)->c_str());
     }
 
     BoxedList* rhs = static_cast<BoxedList*>(_rhs);
@@ -281,8 +272,7 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
 Box* listAdd(BoxedList* self, Box* _rhs) {
     if (_rhs->cls != list_cls) {
-        fprintf(stderr, "TypeError: can only concatenate list (not \"%s\") to list\n", getTypeName(_rhs)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs)->c_str());
     }
 
     BoxedList* rhs = static_cast<BoxedList*>(_rhs);

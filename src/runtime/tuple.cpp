@@ -47,8 +47,8 @@ Box* tupleGetitem(BoxedTuple* self, Box* slice) {
         if (n < 0)
             n = size - n;
         if (n < 0 || n >= size) {
-            fprintf(stderr, "indexerror\n");
-            raiseExc();
+            fprintf(stderr, "IndexError: tuple index out of range\n");
+            raiseExcHelper(IndexError, "");
         }
 
         Box* rtn = self->elts[n];

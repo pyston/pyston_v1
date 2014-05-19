@@ -122,7 +122,7 @@ cd ~/pyston_deps
 cp -rv libunwind-1.1 libunwind-1.1-debug
 mkdir libunwind-1.1-debug-install
 cd libunwind-1.1-debug
-./configure --prefix=$HOME/pyston_deps/libunwind-1.1-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
+CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-1.1-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
 make -j4
 make install
 echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/src/Makefile.local
@@ -151,7 +151,7 @@ make -j4
 ```
 
 ### gdb
-A new version of gdb is highly recommended since debugging a JIT tends to stress GDB:
+A new version of gdb is highly recommended since debugging a JIT tends to use new features of GDB:
 
 ```
 cd ~/pyston_deps
@@ -161,8 +161,13 @@ cd gdb-7.6.2
 ./configure
 make -j4
 cd ~/pyston/src
-echo "GDB := \$(HOME)/pyston_deps/gdb-7.6.2/gdb/gdb" >> Makefile.local
+echo "GDB := \$(DEPS_DIR)/gdb-7.6.2/gdb/gdb --data-directory \$(DEPS_DIR)/gdb-7.6.2/gdb/data-directory" >> Makefile.local
 ```
+
+<!---
+TODO: GDB should be able to determine its data directory.  maybe it should be installed rather that run
+from inside the source dir?
+--->
 
 ### gperftools (-lprofiler)
 ```

@@ -103,7 +103,7 @@ public:
         printf("call not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void print(IREmitter& emitter, VAR* value) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* value) {
         printf("print not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -219,7 +219,7 @@ public:
                                        const std::vector<CompilerVariable*>& args) = 0;
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args)
         = 0;
-    virtual void print(IREmitter& emitter) = 0;
+    virtual void print(IREmitter& emitter, const OpInfo& info) = 0;
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
 };
@@ -283,7 +283,7 @@ public:
                            const std::vector<CompilerVariable*>& args) override {
         return type->call(emitter, info, this, args);
     }
-    void print(IREmitter& emitter) override { type->print(emitter, this); }
+    void print(IREmitter& emitter, const OpInfo& info) override { type->print(emitter, info, this); }
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) override {
         return type->len(emitter, info, this);
     }

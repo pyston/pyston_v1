@@ -36,7 +36,7 @@ Box* fileRepr(BoxedFile* self) {
 static Box* _fileRead(BoxedFile* self, i64 size) {
     if (self->closed) {
         fprintf(stderr, "IOError: file not open for reading\n");
-        raiseExc();
+        raiseExcHelper(IOError, "");
     }
 
     std::ostringstream os("");
@@ -88,7 +88,7 @@ Box* fileRead2(BoxedFile* self, Box* size) {
     assert(self->cls == file_cls);
     if (size->cls != int_cls) {
         fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "");
     }
     return _fileRead(self, static_cast<BoxedInt*>(size)->n);
 }
@@ -98,7 +98,7 @@ Box* fileWrite(BoxedFile* self, Box* val) {
 
     if (self->closed) {
         fprintf(stderr, "IOError: file is closed\n");
-        raiseExc();
+        raiseExcHelper(IOError, "");
     }
 
 
@@ -119,7 +119,7 @@ Box* fileWrite(BoxedFile* self, Box* val) {
             if (!new_written) {
                 int error = ferror(self->f);
                 fprintf(stderr, "IOError %d\n", error);
-                raiseExc();
+                raiseExcHelper(IOError, "");
             }
 
             written += new_written;
@@ -127,8 +127,8 @@ Box* fileWrite(BoxedFile* self, Box* val) {
 
         return None;
     } else {
-        fprintf(stderr, "str expected\n");
-        raiseExc();
+        fprintf(stderr, "TypeError: expected a character buffer object\n");
+        raiseExcHelper(TypeError, "");
     }
 }
 
@@ -136,7 +136,7 @@ Box* fileClose(BoxedFile* self) {
     assert(self->cls == file_cls);
     if (self->closed) {
         fprintf(stderr, "IOError: file is closed\n");
-        raiseExc();
+        raiseExcHelper(IOError, "");
     }
 
     fclose(self->f);

@@ -177,9 +177,11 @@ public:
     virtual bool visit_branch(AST_Branch* node) { return true; }
     virtual bool visit_expr(AST_Expr* node) { return true; }
     virtual bool visit_global(AST_Global* node) { return true; }
+    virtual bool visit_invoke(AST_Invoke* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return true; }
     virtual bool visit_pass(AST_Pass* node) { return true; }
     virtual bool visit_print(AST_Print* node) { return true; }
+    virtual bool visit_raise(AST_Raise* node) { return true; }
     virtual bool visit_return(AST_Return* node) { return true; }
 
     virtual bool visit_classdef(AST_ClassDef* node) {

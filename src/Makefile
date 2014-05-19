@@ -116,6 +116,7 @@ COMMON_CXXFLAGS := -g -Werror -Wreturn-type -Woverloaded-virtual -Wall -Wno-sign
 COMMON_CXXFLAGS += -std=c++11
 COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
+COMMON_CXXFLAGS += -fexceptions -fno-rtti
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -283,7 +284,7 @@ $(UNITTEST_DIR)/$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTE
 	$(ECHO) Linking $$@
 	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
 dbg_$1_unittests: $(UNITTEST_DIR)/$1
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time gdb $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
 run_$1_unittests: $(UNITTEST_DIR)/$1
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/$1 $(ARGS)'
 run_unittests:: run_$1_unittests
@@ -538,6 +539,7 @@ PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 %.release.h.pch: CXXFLAGS := $(CXXFLAGS_RELEASE)
 %.release.h.pch %.h.pch: %.h $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling $@
+	$(VERB) rm -f $@-*
 	$(VERB) $(CLANG_EXE) $(CXXFLAGS) -MMD -MP -MF $<.d -x c++-header $< -o $@
 
 CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
@@ -606,10 +608,10 @@ stdlib.release.unopt.bc: $(STDLIB_SRCS:.cpp=.release.o.pub.bc)
 stdlib.bc: OPT_OPTIONS=-O3
 stdlib.release.bc: OPT_OPTIONS=-O3 -strip-debug
 %.bc: %.unopt.bc
-	$(ECHO) Optimizing $@
+	$(ECHO) Optimizing $< -> $@
 	$(VERB) $(LLVM_BIN)/opt $(OPT_OPTIONS) $< -o $@
 %.stripped.bc: %.bc
-	$(ECHO) Optimizing $@
+	$(ECHO) Stripping $< -> $@
 	$(VERB) $(LLVM_BIN)/opt -strip-debug $< -o $@
 
 # Then do "ld -b binary" to create a .o file for embedding into the executable
@@ -787,7 +789,7 @@ watch_%:
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
 		clear; $(MAKE) $$TARGET; true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET; done )
+		Makefile $$(find .. \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET; done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
 		# -r . ; do clear; $(MAKE) $(patsubst watch_%,%,$@); done
 wdbg_%:
@@ -795,14 +797,18 @@ wdbg_%:
 
 .PHONY: test_asm test_cpp_asm
 test_asm:
-	$(CLANG_EXE) tests/test.s -c -o test
+	$(CLANG_EXE) ../test/test.s -c -o test
 	objdump -d test | less
 	@ rm test
 test_cpp_asm:
-	$(CLANG_EXE) tests/test.cpp -o test -c -O3
+	$(CLANG_EXE) ../test/test.cpp -o test -c -O3
 	# $(GPP) tests/test.cpp -o test -c -O3
 	objdump -d test | less
 	rm test
+test_cpp_ll:
+	$(CLANG_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S
+	less test.ll
+	rm test.ll
 
 .PHONY: ext
 ext: ../test/test_extension/test.so

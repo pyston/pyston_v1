@@ -37,8 +37,7 @@ extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
 
     if (_rhs->cls != str_cls) {
-        fprintf(stderr, "TypeError: cannot concatenate 'str' and '%s' objects", getTypeName(_rhs)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs)->c_str());
     }
 
     BoxedString* rhs = static_cast<BoxedString*>(_rhs);
@@ -336,8 +335,7 @@ Box* strJoin(BoxedString* self, Box* rhs) {
         }
         return boxString(os.str());
     } else {
-        fprintf(stderr, "TypeError\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "");
     }
 }
 
@@ -376,14 +374,12 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
                 listAppendInternal(rtn, boxString(s.str()));
             return rtn;
         } else {
-            fprintf(stderr, "ValueError: empty separator\n");
-            raiseExc();
+            raiseExcHelper(ValueError, "empty separator");
         }
     } else if (sep->cls == none_cls) {
         return strSplit1(self);
     } else {
-        fprintf(stderr, "TypeError: expected a character buffer object\n");
-        raiseExc();
+        raiseExcHelper(TypeError, "expected a character buffer object");
     }
 }
 
@@ -397,8 +393,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
             n = size + n;
 
         if (n < 0 || n >= size) {
-            fprintf(stderr, "IndexError: string index out of range\n");
-            raiseExc();
+            raiseExcHelper(IndexError, "string index out of range");
         }
 
         char c = self->s[n];
@@ -410,8 +405,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
         parseSlice(sslice, self->s.size(), &start, &stop, &step);
         return _strSlice(self, start, stop, step);
     } else {
-        fprintf(stderr, "TypeError: string indices must be integers, not %s\n", getTypeName(slice)->c_str());
-        raiseExc();
+        raiseExcHelper(TypeError, "string indices must be integers, not %s", getTypeName(slice)->c_str());
     }
 }
 

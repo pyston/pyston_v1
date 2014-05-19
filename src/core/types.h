@@ -230,7 +230,6 @@ extern "C" Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1,
 std::string getOpName(int op_type);
 std::string getReverseOpName(int op_type);
 std::string getInplaceOpName(int op_type);
-std::string getOpSymbol(int op_type);
 std::string getInplaceOpSymbol(int op_type);
 
 typedef bool i1;
@@ -400,6 +399,8 @@ std::string getPythonFuncAt(void* ip, void* sp);
 // TODO where to put this
 void addToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
+
+std::string formatException(Box* e);
 }
 
 #endif

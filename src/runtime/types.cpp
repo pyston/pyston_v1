@@ -57,7 +57,8 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
     if (iter) {
         return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
     }
-    return llvm::iterator_range<BoxIterator>(BoxIterator(nullptr), BoxIterator(nullptr));
+
+    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(this)->c_str());
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : HCBox(&function_flavor, function_cls), f(f) {

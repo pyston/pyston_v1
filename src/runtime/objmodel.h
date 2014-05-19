@@ -28,6 +28,9 @@ class BoxedInt;
 class BoxedList;
 class BoxedString;
 
+void raiseExc(Box*) __attribute__((__noreturn__));
+void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
+
 extern "C" const std::string* getTypeName(Box* o);
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
@@ -40,6 +43,7 @@ extern "C" Box* runtimeCall(Box*, int64_t, Box*, Box*, Box*, Box**);
 extern "C" Box* callattr(Box*, std::string*, bool, int64_t, Box*, Box*, Box*, Box**);
 extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
+extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags);
 extern "C" BoxedInt* hash(Box* obj);
 // extern "C" Box* abs_(Box* obj);
 extern "C" Box* open1(Box* arg);

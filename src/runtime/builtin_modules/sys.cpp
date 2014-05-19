@@ -46,7 +46,7 @@ BoxedList* getSysPath() {
 
     if (_sys_path->cls != list_cls) {
         fprintf(stderr, "RuntimeError: sys.path must be a list of directory name\n");
-        raiseExc();
+        raiseExcHelper(RuntimeError, "");
     }
 
     assert(_sys_path->cls == list_cls);

@@ -132,10 +132,10 @@ bool EscapeAnalysis::runOnFunction(Function& F) {
                         continue;
                     }
 
-                    if (CallInst* si = dyn_cast<CallInst>(user)) {
+                    if (llvm::isa<CallInst>(user) || llvm::isa<InvokeInst>(user)) {
                         if (VERBOSITY() >= 2)
-                            errs() << "Escapes here: " << *si << '\n';
-                        chain->escape_points.insert(si);
+                            errs() << "Escapes here: " << *user << '\n';
+                        chain->escape_points.insert(dyn_cast<Instruction>(user));
                         continue;
                     }
 

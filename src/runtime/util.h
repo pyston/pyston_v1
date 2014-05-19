@@ -22,7 +22,5 @@ namespace pyston {
 class BoxedSlice;
 
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_end);
-
-void raiseExc() __attribute__((__noreturn__));
 }
 #endif

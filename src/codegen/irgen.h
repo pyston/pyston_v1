@@ -15,6 +15,7 @@
 #ifndef PYSTON_CODEGEN_IRGEN_H
 #define PYSTON_CODEGEN_IRGEN_H
 
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IRBuilder.h"
@@ -30,6 +31,18 @@ class AST_expr;
 class GCBuilder;
 class IREmitter;
 
+struct ExcInfo {
+public:
+    llvm::BasicBlock* exc_dest;
+
+    bool needsInvoke() { return exc_dest != NULL; }
+
+    ExcInfo(llvm::BasicBlock* exc_dest) : exc_dest(exc_dest) {}
+
+    static ExcInfo none() { return ExcInfo(NULL); }
+};
+
+// TODO get rid of this
 class MyInserter : public llvm::IRBuilderDefaultInserter<true> {
 private:
     IREmitter* emitter;
@@ -55,8 +68,14 @@ public:
     virtual CompiledFunction* currentFunction() = 0;
 
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
-    virtual llvm::Value* createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
-                                          const std::vector<llvm::Value*>& args) = 0;
+
+    virtual llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) = 0;
+    virtual llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) = 0;
+    virtual llvm::CallSite createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) = 0;
+    virtual llvm::CallSite createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+                                       llvm::Value* arg3) = 0;
+    virtual llvm::CallSite createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
+                                            const std::vector<llvm::Value*>& args, ExcInfo exc_info) = 0;
 };
 
 CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
@@ -70,8 +89,10 @@ private:
     TypeRecorder* const type_recorder;
 
 public:
-    OpInfo(EffortLevel::EffortLevel effort, TypeRecorder* type_recorder)
-        : effort(effort), type_recorder(type_recorder) {}
+    const ExcInfo exc_info;
+
+    OpInfo(EffortLevel::EffortLevel effort, TypeRecorder* type_recorder, ExcInfo exc_info)
+        : effort(effort), type_recorder(type_recorder), exc_info(exc_info) {}
 
     bool isInterpreted() const { return effort == EffortLevel::INTERPRETED; }
     TypeRecorder* getTypeRecorder() const { return type_recorder; }

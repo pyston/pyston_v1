@@ -35,6 +35,13 @@
 #include "analysis/scoping_analysis.h"
 #include "analysis/type_analysis.h"
 
+extern "C" {
+// Hack: we only need RTTI for a single type (Box*), which we know will get emmitted,
+// so just use the mangled name directly instead of using typeid() since that requires
+// turning on RTTI for *everything* (including llvm)
+extern void* _ZTIPN6pyston3BoxE;
+}
+
 namespace pyston {
 
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
@@ -99,10 +106,13 @@ class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
     IRBuilder* builder;
+    llvm::BasicBlock*& curblock;
 
 public:
-    explicit IREmitterImpl(IRGenState* irstate) : irstate(irstate), builder(new IRBuilder(g.context)) {
+    explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock)
+        : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock) {
         builder->setEmitter(this);
+        builder->SetInsertPoint(curblock);
     }
 
     IRBuilder* getBuilder() override { return builder; }
@@ -115,8 +125,46 @@ public:
 
     CompiledFunction* currentFunction() override { return irstate->getCurFunction(); }
 
-    llvm::Value* createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
-                                  const std::vector<llvm::Value*>& args) override {
+    llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
+        if (exc_info.needsInvoke()) {
+            llvm::BasicBlock* normal_dest
+                = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+            normal_dest->moveAfter(curblock);
+
+            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_info.exc_dest, args);
+            getBuilder()->SetInsertPoint(normal_dest);
+            curblock = normal_dest;
+            return rtn;
+        } else {
+            return getBuilder()->CreateCall(callee, args);
+        }
+    }
+
+    llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) override {
+        return createCall(exc_info, callee, std::vector<llvm::Value*>({ arg1 }));
+    }
+
+    llvm::CallSite createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) override {
+        return createCall(exc_info, callee, { arg1, arg2 });
+    }
+
+    llvm::CallSite createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+                               llvm::Value* arg3) override {
+        return createCall(exc_info, callee, { arg1, arg2, arg3 });
+    }
+
+    llvm::CallSite createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
+                                    const std::vector<llvm::Value*>& args, ExcInfo exc_info) override {
+        if (exc_info.needsInvoke()) {
+            std::vector<llvm::Type*> arg_types;
+            for (auto v : args)
+                arg_types.push_back(v->getType());
+
+            return createCall(
+                exc_info, embedConstantPtr(func_addr, llvm::FunctionType::get(g.i64, arg_types, false)->getPointerTo()),
+                args);
+        }
+
         assert(irstate->getEffortLevel() != EffortLevel::INTERPRETED);
 
         std::vector<llvm::Value*> pp_args;
@@ -136,34 +184,24 @@ public:
         llvm::Intrinsic::ID intrinsic_id = pp->hasReturnValue() ? llvm::Intrinsic::experimental_patchpoint_i64
                                                                 : llvm::Intrinsic::experimental_patchpoint_void;
         llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
-        llvm::CallInst* rtn = this->getBuilder()->CreateCall(patchpoint, pp_args);
 
-        /*
-        static int n = 0;
-        n++;
-        if (n >= 3)
-            rtn->setCallingConv(llvm::CallingConv::PreserveAll);
-        */
-        rtn->setCallingConv(pp->getCallingConvention());
-
-        // Not sure why this doesn't work:
-        // rtn->setCallingConv(llvm::CallingConv::AnyReg);
-
+        llvm::CallSite rtn = this->createCall(exc_info, patchpoint, pp_args);
+        rtn.setCallingConv(pp->getCallingConvention());
         return rtn;
     }
 };
-IREmitter* createIREmitter(IRGenState* irstate) {
-    return new IREmitterImpl(irstate);
+IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock) {
+    return new IREmitterImpl(irstate, curblock);
 }
 
 class IRGeneratorImpl : public IRGenerator {
 private:
     IRGenState* irstate;
 
+    llvm::BasicBlock* curblock;
     IREmitterImpl emitter;
     SymbolTable symbol_table;
     std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks;
-    llvm::BasicBlock* curblock;
     CFGBlock* myblock;
     TypeAnalysis* types;
     GuardList& out_guards;
@@ -180,17 +218,14 @@ public:
     IRGeneratorImpl(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                     CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards, const GuardList& in_guards,
                     bool is_partial)
-        : irstate(irstate), emitter(irstate), entry_blocks(entry_blocks), myblock(myblock), types(types),
-          out_guards(out_guards), in_guards(in_guards), state(is_partial ? PARTIAL : RUNNING) {
-        llvm::BasicBlock* entry_block = entry_blocks[myblock];
-        emitter.getBuilder()->SetInsertPoint(entry_block);
-        curblock = entry_block;
-    }
+        : irstate(irstate), curblock(entry_blocks[myblock]), emitter(irstate, curblock), entry_blocks(entry_blocks),
+          myblock(myblock), types(types), out_guards(out_guards), in_guards(in_guards),
+          state(is_partial ? PARTIAL : RUNNING) {}
 
     ~IRGeneratorImpl() { delete emitter.getBuilder(); }
 
 private:
-    OpInfo getOpInfoForNode(AST* ast) {
+    OpInfo getOpInfoForNode(AST* ast, ExcInfo exc_info) {
         assert(ast);
 
         EffortLevel::EffortLevel effort = irstate->getEffortLevel();
@@ -203,10 +238,10 @@ private:
             type_recorder = NULL;
         }
 
-        return OpInfo(irstate->getEffortLevel(), type_recorder);
+        return OpInfo(irstate->getEffortLevel(), type_recorder, exc_info);
     }
 
-    OpInfo getEmptyOpInfo() { return OpInfo(irstate->getEffortLevel(), NULL); }
+    OpInfo getEmptyOpInfo(ExcInfo exc_info) { return OpInfo(irstate->getEffortLevel(), NULL, exc_info); }
 
     void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, CompilerVariable* node_value) {
         assert(check_val->getType() == g.i1);
@@ -235,23 +270,78 @@ private:
         out_guards.addExprTypeGuard(myblock, guard, node, node_value, symbol_table);
     }
 
-    CompilerVariable* evalAttribute(AST_Attribute* node) {
+    CompilerVariable* evalAttribute(AST_Attribute* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* value = evalExpr(node->value);
+        CompilerVariable* value = evalExpr(node->value, exc_info);
 
-        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node), &node->attr, false);
+        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, exc_info), &node->attr, false);
         value->decvref(emitter);
         return rtn;
     }
 
-    CompilerVariable* evalClsAttribute(AST_ClsAttribute* node) {
+    CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* value = evalExpr(node->value);
-        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node), &node->attr, true);
+        CompilerVariable* value = evalExpr(node->value, exc_info);
+        CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, exc_info), &node->attr, true);
         value->decvref(emitter);
         return rtn;
+    }
+
+    CompilerVariable* evalLangPrimitive(AST_LangPrimitive* node, ExcInfo exc_info) {
+        switch (node->opcode) {
+            case AST_LangPrimitive::ISINSTANCE: {
+                assert(node->args.size() == 3);
+                CompilerVariable* obj = evalExpr(node->args[0], exc_info);
+                CompilerVariable* cls = evalExpr(node->args[1], exc_info);
+                CompilerVariable* flags = evalExpr(node->args[2], exc_info);
+
+                ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
+                ConcreteCompilerVariable* converted_cls = cls->makeConverted(emitter, cls->getBoxType());
+                ConcreteCompilerVariable* converted_flags = flags->makeConverted(emitter, INT);
+                obj->decvref(emitter);
+                cls->decvref(emitter);
+                flags->decvref(emitter);
+
+                llvm::Value* v = emitter.createCall(exc_info, g.funcs.isinstance,
+                                                    { converted_obj->getValue(), converted_cls->getValue(),
+                                                      converted_flags->getValue() }).getInstruction();
+                assert(v->getType() == g.i1);
+
+                return new ConcreteCompilerVariable(BOOL, v, true);
+            }
+            case AST_LangPrimitive::LANDINGPAD: {
+                // llvm::Function* _personality_func = g.stdlib_module->getFunction("__py_personality_v0");
+                llvm::Function* _personality_func = g.stdlib_module->getFunction("__gxx_personality_v0");
+                assert(_personality_func);
+                llvm::Value* personality_func = g.cur_module->getOrInsertFunction(_personality_func->getName(),
+                                                                                  _personality_func->getFunctionType());
+                assert(personality_func);
+                llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
+                    llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
+                landing_pad->addClause(embedConstantPtr(NULL, g.i8_ptr));
+
+                llvm::Value* exc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
+
+                llvm::Value* exc_obj;
+                if (irstate->getEffortLevel() != EffortLevel::INTERPRETED) {
+                    llvm::Value* exc_obj_pointer
+                        = emitter.getBuilder()->CreateCall(g.funcs.__cxa_begin_catch, exc_pointer);
+                    llvm::Value* exc_obj_pointer_casted
+                        = emitter.getBuilder()->CreateBitCast(exc_obj_pointer, g.llvm_value_type_ptr->getPointerTo());
+                    exc_obj = emitter.getBuilder()->CreateLoad(exc_obj_pointer_casted);
+                    emitter.getBuilder()->CreateCall(g.funcs.__cxa_end_catch);
+                } else {
+                    // The interpreter can't really support the full C++ exception handling model since it's
+                    // itself written in C++.  Let's make it easier for the interpreter and use a simpler interface:
+                    exc_obj = emitter.getBuilder()->CreateBitCast(exc_pointer, g.llvm_value_type_ptr);
+                }
+                return new ConcreteCompilerVariable(UNKNOWN, exc_obj, true);
+            }
+            default:
+                RELEASE_ASSERT(0, "%d", node->opcode);
+        }
     }
 
     enum BinExpType {
@@ -260,7 +350,7 @@ private:
         Compare,
     };
     CompilerVariable* _evalBinExp(AST* node, CompilerVariable* left, CompilerVariable* right, AST_TYPE::AST_TYPE type,
-                                  BinExpType exp_type) {
+                                  BinExpType exp_type, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         assert(left);
@@ -271,14 +361,14 @@ private:
             ConcreteCompilerVariable* converted_right = right->makeConverted(emitter, INT);
             llvm::Value* v;
             if (type == AST_TYPE::Mod) {
-                v = emitter.getBuilder()->CreateCall2(g.funcs.mod_i64_i64, converted_left->getValue(),
-                                                      converted_right->getValue());
+                v = emitter.createCall2(exc_info, g.funcs.mod_i64_i64, converted_left->getValue(),
+                                        converted_right->getValue()).getInstruction();
             } else if (type == AST_TYPE::Div || type == AST_TYPE::FloorDiv) {
-                v = emitter.getBuilder()->CreateCall2(g.funcs.div_i64_i64, converted_left->getValue(),
-                                                      converted_right->getValue());
+                v = emitter.createCall2(exc_info, g.funcs.div_i64_i64, converted_left->getValue(),
+                                        converted_right->getValue()).getInstruction();
             } else if (type == AST_TYPE::Pow) {
-                v = emitter.getBuilder()->CreateCall2(g.funcs.pow_i64_i64, converted_left->getValue(),
-                                                      converted_right->getValue());
+                v = emitter.createCall2(exc_info, g.funcs.pow_i64_i64, converted_left->getValue(),
+                                        converted_right->getValue()).getInstruction();
             } else if (exp_type == BinOp || exp_type == AugBinOp) {
                 llvm::Instruction::BinaryOps binopcode;
                 switch (type) {
@@ -365,14 +455,14 @@ private:
             llvm::Value* v;
             bool succeeded = true;
             if (type == AST_TYPE::Mod) {
-                v = emitter.getBuilder()->CreateCall2(g.funcs.mod_float_float, converted_left->getValue(),
-                                                      converted_right->getValue());
+                v = emitter.createCall2(exc_info, g.funcs.mod_float_float, converted_left->getValue(),
+                                        converted_right->getValue()).getInstruction();
             } else if (type == AST_TYPE::Div || type == AST_TYPE::FloorDiv) {
-                v = emitter.getBuilder()->CreateCall2(g.funcs.div_float_float, converted_left->getValue(),
-                                                      converted_right->getValue());
+                v = emitter.createCall2(exc_info, g.funcs.div_float_float, converted_left->getValue(),
+                                        converted_right->getValue()).getInstruction();
             } else if (type == AST_TYPE::Pow) {
-                v = emitter.getBuilder()->CreateCall2(g.funcs.pow_float_float, converted_left->getValue(),
-                                                      converted_right->getValue());
+                v = emitter.createCall2(exc_info, g.funcs.pow_float_float, converted_left->getValue(),
+                                        converted_right->getValue()).getInstruction();
             } else if (exp_type == BinOp || exp_type == AugBinOp) {
                 llvm::Instruction::BinaryOps binopcode;
                 switch (type) {
@@ -464,20 +554,19 @@ private:
         }
 
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp = patchpoints::createBinexpPatchpoint(emitter.currentFunction(),
-                                                                          getOpInfoForNode(node).getTypeRecorder());
+            PatchpointSetupInfo* pp = patchpoints::createBinexpPatchpoint(
+                emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(boxed_left->getValue());
             llvm_args.push_back(boxed_right->getValue());
             llvm_args.push_back(getConstantInt(type, g.i32));
 
-            llvm::Value* uncasted = emitter.createPatchpoint(pp, rt_func_addr, llvm_args);
+            llvm::Value* uncasted = emitter.createPatchpoint(pp, rt_func_addr, llvm_args, exc_info).getInstruction();
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
-
-            rtn = emitter.getBuilder()->CreateCall3(rt_func, boxed_left->getValue(), boxed_right->getValue(),
-                                                    getConstantInt(type, g.i32));
+            rtn = emitter.createCall3(exc_info, rt_func, boxed_left->getValue(), boxed_right->getValue(),
+                                      getConstantInt(type, g.i32)).getInstruction();
         }
 
         boxed_left->decvref(emitter);
@@ -486,52 +575,52 @@ private:
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
-    CompilerVariable* evalBinOp(AST_BinOp* node) {
+    CompilerVariable* evalBinOp(AST_BinOp* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* left = evalExpr(node->left);
-        CompilerVariable* right = evalExpr(node->right);
+        CompilerVariable* left = evalExpr(node->left, exc_info);
+        CompilerVariable* right = evalExpr(node->right, exc_info);
 
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
-        CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, BinOp);
+        CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, BinOp, exc_info);
         left->decvref(emitter);
         right->decvref(emitter);
         return rtn;
     }
 
-    CompilerVariable* evalAugBinOp(AST_AugBinOp* node) {
+    CompilerVariable* evalAugBinOp(AST_AugBinOp* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* left = evalExpr(node->left);
-        CompilerVariable* right = evalExpr(node->right);
+        CompilerVariable* left = evalExpr(node->left, exc_info);
+        CompilerVariable* right = evalExpr(node->right, exc_info);
 
         assert(node->op_type != AST_TYPE::Is && node->op_type != AST_TYPE::IsNot && "not tested yet");
 
-        CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, AugBinOp);
+        CompilerVariable* rtn = this->_evalBinExp(node, left, right, node->op_type, AugBinOp, exc_info);
         left->decvref(emitter);
         right->decvref(emitter);
         return rtn;
     }
 
-    CompilerVariable* evalCompare(AST_Compare* node) {
+    CompilerVariable* evalCompare(AST_Compare* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         RELEASE_ASSERT(node->ops.size() == 1, "");
 
-        CompilerVariable* left = evalExpr(node->left);
-        CompilerVariable* right = evalExpr(node->comparators[0]);
+        CompilerVariable* left = evalExpr(node->left, exc_info);
+        CompilerVariable* right = evalExpr(node->comparators[0], exc_info);
 
         assert(left);
         assert(right);
 
-        CompilerVariable* rtn = _evalBinExp(node, left, right, node->ops[0], Compare);
+        CompilerVariable* rtn = _evalBinExp(node, left, right, node->ops[0], Compare, exc_info);
         left->decvref(emitter);
         right->decvref(emitter);
         return rtn;
     }
 
-    CompilerVariable* evalCall(AST_Call* node) {
+    CompilerVariable* evalCall(AST_Call* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         bool is_callattr;
@@ -542,22 +631,22 @@ private:
             is_callattr = true;
             callattr_clsonly = false;
             AST_Attribute* attr_ast = ast_cast<AST_Attribute>(node->func);
-            func = evalExpr(attr_ast->value);
+            func = evalExpr(attr_ast->value, exc_info);
             attr = &attr_ast->attr;
         } else if (node->func->type == AST_TYPE::ClsAttribute) {
             is_callattr = true;
             callattr_clsonly = true;
             AST_ClsAttribute* attr_ast = ast_cast<AST_ClsAttribute>(node->func);
-            func = evalExpr(attr_ast->value);
+            func = evalExpr(attr_ast->value, exc_info);
             attr = &attr_ast->attr;
         } else {
             is_callattr = false;
-            func = evalExpr(node->func);
+            func = evalExpr(node->func, exc_info);
         }
 
         std::vector<CompilerVariable*> args;
         for (int i = 0; i < node->args.size(); i++) {
-            CompilerVariable* a = evalExpr(node->args[i]);
+            CompilerVariable* a = evalExpr(node->args[i], exc_info);
             args.push_back(a);
         }
 
@@ -566,9 +655,9 @@ private:
 
         CompilerVariable* rtn;
         if (is_callattr) {
-            rtn = func->callattr(emitter, getOpInfoForNode(node), attr, callattr_clsonly, args);
+            rtn = func->callattr(emitter, getOpInfoForNode(node, exc_info), attr, callattr_clsonly, args);
         } else {
-            rtn = func->call(emitter, getOpInfoForNode(node), args);
+            rtn = func->call(emitter, getOpInfoForNode(node, exc_info), args);
         }
 
         func->decvref(emitter);
@@ -582,17 +671,17 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalDict(AST_Dict* node) {
+    CompilerVariable* evalDict(AST_Dict* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
         if (node->keys.size()) {
             static const std::string setitem_str("__setitem__");
-            CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(), &setitem_str, true);
+            CompilerVariable* setitem = rtn->getattr(emitter, getEmptyOpInfo(exc_info), &setitem_str, true);
             for (int i = 0; i < node->keys.size(); i++) {
-                CompilerVariable* key = evalExpr(node->keys[i]);
-                CompilerVariable* value = evalExpr(node->values[i]);
+                CompilerVariable* key = evalExpr(node->keys[i], exc_info);
+                CompilerVariable* value = evalExpr(node->values[i], exc_info);
                 assert(key);
                 assert(value);
 
@@ -600,7 +689,7 @@ private:
                 args.push_back(key);
                 args.push_back(value);
                 // TODO could use the internal _listAppend function to avoid incref/decref'ing None
-                CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(), args);
+                CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(exc_info), args);
                 rtn->decvref(emitter);
 
                 key->decvref(emitter);
@@ -619,18 +708,18 @@ private:
         inst->setMetadata(message, mdnode);
     }
 
-    CompilerVariable* evalIndex(AST_Index* node) {
+    CompilerVariable* evalIndex(AST_Index* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        return evalExpr(node->value);
+        return evalExpr(node->value, exc_info);
     }
 
-    CompilerVariable* evalList(AST_List* node) {
+    CompilerVariable* evalList(AST_List* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* value = evalExpr(node->elts[i]);
+            CompilerVariable* value = evalExpr(node->elts[i], exc_info);
             elts.push_back(value);
         }
 
@@ -647,7 +736,7 @@ private:
             ConcreteCompilerVariable* converted = elt->makeConverted(emitter, elt->getBoxType());
             elt->decvref(emitter);
 
-            emitter.getBuilder()->CreateCall2(f, bitcast, converted->getValue());
+            emitter.createCall2(exc_info, f, bitcast, converted->getValue());
             converted->decvref(emitter);
         }
         return rtn;
@@ -659,7 +748,7 @@ private:
         return v;
     }
 
-    CompilerVariable* evalName(AST_Name* node) {
+    CompilerVariable* evalName(AST_Name* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         if (irstate->getScopeInfo()->refersToGlobal(node->id)) {
@@ -670,7 +759,7 @@ private:
                 bool from_global = irstate->getSourceInfo()->ast->type == AST_TYPE::Module;
                 if (do_patchpoint) {
                     PatchpointSetupInfo* pp = patchpoints::createGetGlobalPatchpoint(
-                        emitter.currentFunction(), getOpInfoForNode(node).getTypeRecorder());
+                        emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
 
                     std::vector<llvm::Value*> llvm_args;
                     llvm_args.push_back(
@@ -678,14 +767,16 @@ private:
                     llvm_args.push_back(embedConstantPtr(&node->id, g.llvm_str_type_ptr));
                     llvm_args.push_back(getConstantInt(from_global, g.i1));
 
-                    llvm::Value* uncasted = emitter.createPatchpoint(pp, (void*)pyston::getGlobal, llvm_args);
+                    llvm::Value* uncasted
+                        = emitter.createPatchpoint(pp, (void*)pyston::getGlobal, llvm_args, exc_info).getInstruction();
                     llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
                     return new ConcreteCompilerVariable(UNKNOWN, r, true);
                 } else {
-                    llvm::Value* r = emitter.getBuilder()->CreateCall3(
-                        g.funcs.getGlobal,
-                        embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
-                        embedConstantPtr(&node->id, g.llvm_str_type_ptr), getConstantInt(from_global, g.i1));
+                    llvm::Value* r = emitter.createCall3(exc_info, g.funcs.getGlobal,
+                                                         embedConstantPtr(irstate->getSourceInfo()->parent_module,
+                                                                          g.llvm_module_type_ptr),
+                                                         embedConstantPtr(&node->id, g.llvm_str_type_ptr),
+                                                         getConstantInt(from_global, g.i1)).getInstruction();
                     return new ConcreteCompilerVariable(UNKNOWN, r, true);
                 }
             } else {
@@ -693,7 +784,7 @@ private:
                 // This option exists for performance testing because method 1 does not currently use patchpoints.
                 ConcreteCompilerVariable* mod = new ConcreteCompilerVariable(
                     MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-                CompilerVariable* attr = mod->getattr(emitter, getOpInfoForNode(node), &node->id, false);
+                CompilerVariable* attr = mod->getattr(emitter, getOpInfoForNode(node, exc_info), &node->id, false);
                 mod->decvref(emitter);
                 return attr;
             }
@@ -701,17 +792,17 @@ private:
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
-                llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
-                    g.funcs.assertNameDefined, getConstantInt(0, g.i1), getStringConstantPtr(node->id + '\0'));
-                call->setDoesNotReturn();
+                llvm::CallSite call = emitter.createCall2(exc_info, g.funcs.assertNameDefined, getConstantInt(0, g.i1),
+                                                          getStringConstantPtr(node->id + '\0'));
+                call.setDoesNotReturn();
                 return undefVariable();
             }
 
             std::string defined_name = _getFakeName("is_defined", node->id.c_str());
             ConcreteCompilerVariable* is_defined = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
             if (is_defined) {
-                emitter.getBuilder()->CreateCall2(g.funcs.assertNameDefined, is_defined->getValue(),
-                                                  getStringConstantPtr(node->id + '\0'));
+                emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined->getValue(),
+                                    getStringConstantPtr(node->id + '\0'));
             }
 
             CompilerVariable* rtn = symbol_table[node->id];
@@ -720,7 +811,7 @@ private:
         }
     }
 
-    CompilerVariable* evalNum(AST_Num* node) {
+    CompilerVariable* evalNum(AST_Num* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         if (node->num_type == AST_Num::INT)
@@ -731,27 +822,27 @@ private:
             RELEASE_ASSERT(0, "");
     }
 
-    CompilerVariable* evalRepr(AST_Repr* node) {
+    CompilerVariable* evalRepr(AST_Repr* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* var = evalExpr(node->value);
+        CompilerVariable* var = evalExpr(node->value, exc_info);
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
         var->decvref(emitter);
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
-        llvm::Value* rtn = emitter.getBuilder()->CreateCall(g.funcs.repr, args);
+        llvm::Value* rtn = emitter.createCall(exc_info, g.funcs.repr, args).getInstruction();
         cvar->decvref(emitter);
 
         return new ConcreteCompilerVariable(STR, rtn, true);
     }
 
-    CompilerVariable* evalSlice(AST_Slice* node) {
+    CompilerVariable* evalSlice(AST_Slice* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         CompilerVariable* start, *stop, *step;
-        start = node->lower ? evalExpr(node->lower) : getNone();
-        stop = node->upper ? evalExpr(node->upper) : getNone();
-        step = node->step ? evalExpr(node->step) : getNone();
+        start = node->lower ? evalExpr(node->lower, exc_info) : getNone();
+        stop = node->upper ? evalExpr(node->upper, exc_info) : getNone();
+        step = node->step ? evalExpr(node->step, exc_info) : getNone();
 
         ConcreteCompilerVariable* cstart, *cstop, *cstep;
         cstart = start->makeConverted(emitter, start->getBoxType());
@@ -773,30 +864,30 @@ private:
         return new ConcreteCompilerVariable(SLICE, rtn, true);
     }
 
-    CompilerVariable* evalStr(AST_Str* node) {
+    CompilerVariable* evalStr(AST_Str* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         return makeStr(&node->s);
     }
 
-    CompilerVariable* evalSubscript(AST_Subscript* node) {
+    CompilerVariable* evalSubscript(AST_Subscript* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* value = evalExpr(node->value);
-        CompilerVariable* slice = evalExpr(node->slice);
+        CompilerVariable* value = evalExpr(node->value, exc_info);
+        CompilerVariable* slice = evalExpr(node->slice, exc_info);
 
-        CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node), slice);
+        CompilerVariable* rtn = value->getitem(emitter, getOpInfoForNode(node, exc_info), slice);
         value->decvref(emitter);
         slice->decvref(emitter);
         return rtn;
     }
 
-    CompilerVariable* evalTuple(AST_Tuple* node) {
+    CompilerVariable* evalTuple(AST_Tuple* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
-            CompilerVariable* value = evalExpr(node->elts[i]);
+            CompilerVariable* value = evalExpr(node->elts[i], exc_info);
             elts.push_back(value);
         }
 
@@ -808,13 +899,13 @@ private:
         return rtn;
     }
 
-    CompilerVariable* evalUnaryOp(AST_UnaryOp* node) {
+    CompilerVariable* evalUnaryOp(AST_UnaryOp* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        CompilerVariable* operand = evalExpr(node->operand);
+        CompilerVariable* operand = evalExpr(node->operand, exc_info);
 
         if (node->op_type == AST_TYPE::Not) {
-            ConcreteCompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node));
+            ConcreteCompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, exc_info));
             operand->decvref(emitter);
 
             llvm::Value* v = rtn->getValue();
@@ -827,8 +918,8 @@ private:
             ConcreteCompilerVariable* converted = operand->makeConverted(emitter, operand->getBoxType());
             operand->decvref(emitter);
 
-            llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.unaryop, converted->getValue(),
-                                                                 getConstantInt(node->op_type, g.i32));
+            llvm::Value* rtn = emitter.createCall2(exc_info, g.funcs.unaryop, converted->getValue(),
+                                                   getConstantInt(node->op_type, g.i32)).getInstruction();
             converted->decvref(emitter);
 
             return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
@@ -851,62 +942,65 @@ private:
         return new ConcreteCompilerVariable(t, v, grabbed);
     }
 
-    CompilerVariable* evalExpr(AST_expr* node) {
+    CompilerVariable* evalExpr(AST_expr* node, ExcInfo exc_info) {
         emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
 
         CompilerVariable* rtn = NULL;
         if (state != PARTIAL) {
             switch (node->type) {
                 case AST_TYPE::Attribute:
-                    rtn = evalAttribute(ast_cast<AST_Attribute>(node));
+                    rtn = evalAttribute(ast_cast<AST_Attribute>(node), exc_info);
                     break;
                 case AST_TYPE::AugBinOp:
-                    rtn = evalAugBinOp(ast_cast<AST_AugBinOp>(node));
+                    rtn = evalAugBinOp(ast_cast<AST_AugBinOp>(node), exc_info);
                     break;
                 case AST_TYPE::BinOp:
-                    rtn = evalBinOp(ast_cast<AST_BinOp>(node));
+                    rtn = evalBinOp(ast_cast<AST_BinOp>(node), exc_info);
                     break;
                 case AST_TYPE::Call:
-                    rtn = evalCall(ast_cast<AST_Call>(node));
+                    rtn = evalCall(ast_cast<AST_Call>(node), exc_info);
                     break;
                 case AST_TYPE::Compare:
-                    rtn = evalCompare(ast_cast<AST_Compare>(node));
+                    rtn = evalCompare(ast_cast<AST_Compare>(node), exc_info);
                     break;
                 case AST_TYPE::Dict:
-                    rtn = evalDict(ast_cast<AST_Dict>(node));
+                    rtn = evalDict(ast_cast<AST_Dict>(node), exc_info);
                     break;
                 case AST_TYPE::Index:
-                    rtn = evalIndex(ast_cast<AST_Index>(node));
+                    rtn = evalIndex(ast_cast<AST_Index>(node), exc_info);
                     break;
                 case AST_TYPE::List:
-                    rtn = evalList(ast_cast<AST_List>(node));
+                    rtn = evalList(ast_cast<AST_List>(node), exc_info);
                     break;
                 case AST_TYPE::Name:
-                    rtn = evalName(ast_cast<AST_Name>(node));
+                    rtn = evalName(ast_cast<AST_Name>(node), exc_info);
                     break;
                 case AST_TYPE::Num:
-                    rtn = evalNum(ast_cast<AST_Num>(node));
+                    rtn = evalNum(ast_cast<AST_Num>(node), exc_info);
                     break;
                 case AST_TYPE::Repr:
-                    rtn = evalRepr(ast_cast<AST_Repr>(node));
+                    rtn = evalRepr(ast_cast<AST_Repr>(node), exc_info);
                     break;
                 case AST_TYPE::Slice:
-                    rtn = evalSlice(ast_cast<AST_Slice>(node));
+                    rtn = evalSlice(ast_cast<AST_Slice>(node), exc_info);
                     break;
                 case AST_TYPE::Str:
-                    rtn = evalStr(ast_cast<AST_Str>(node));
+                    rtn = evalStr(ast_cast<AST_Str>(node), exc_info);
                     break;
                 case AST_TYPE::Subscript:
-                    rtn = evalSubscript(ast_cast<AST_Subscript>(node));
+                    rtn = evalSubscript(ast_cast<AST_Subscript>(node), exc_info);
                     break;
                 case AST_TYPE::Tuple:
-                    rtn = evalTuple(ast_cast<AST_Tuple>(node));
+                    rtn = evalTuple(ast_cast<AST_Tuple>(node), exc_info);
                     break;
                 case AST_TYPE::UnaryOp:
-                    rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node));
+                    rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node), exc_info);
                     break;
                 case AST_TYPE::ClsAttribute:
-                    rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node));
+                    rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node), exc_info);
+                    break;
+                case AST_TYPE::LangPrimitive:
+                    rtn = evalLangPrimitive(ast_cast<AST_LangPrimitive>(node), exc_info);
                     break;
                 default:
                     printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
@@ -1072,13 +1166,13 @@ private:
         return rtn;
     }
 
-    void _doSet(const std::string& name, CompilerVariable* val) {
+    void _doSet(const std::string& name, CompilerVariable* val, ExcInfo exc_info) {
         assert(name != "None");
         if (irstate->getScopeInfo()->refersToGlobal(name)) {
             // TODO do something special here so that it knows to only emit a monomorphic inline cache?
             ConcreteCompilerVariable* module = new ConcreteCompilerVariable(
                 MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-            module->setattr(emitter, getEmptyOpInfo(), &name, val);
+            module->setattr(emitter, getEmptyOpInfo(exc_info), &name, val);
             module->decvref(emitter);
         } else {
             CompilerVariable*& prev = symbol_table[name];
@@ -1095,17 +1189,17 @@ private:
         }
     }
 
-    void _doSetattr(AST_Attribute* target, CompilerVariable* val) {
+    void _doSetattr(AST_Attribute* target, CompilerVariable* val, ExcInfo exc_info) {
         assert(state != PARTIAL);
-        CompilerVariable* t = evalExpr(target->value);
-        t->setattr(emitter, getEmptyOpInfo(), &target->attr, val);
+        CompilerVariable* t = evalExpr(target->value, exc_info);
+        t->setattr(emitter, getEmptyOpInfo(exc_info), &target->attr, val);
         t->decvref(emitter);
     }
 
-    void _doSetitem(AST_Subscript* target, CompilerVariable* val) {
+    void _doSetitem(AST_Subscript* target, CompilerVariable* val, ExcInfo exc_info) {
         assert(state != PARTIAL);
-        CompilerVariable* tget = evalExpr(target->value);
-        CompilerVariable* slice = evalExpr(target->slice);
+        CompilerVariable* tget = evalExpr(target->value, exc_info);
+        CompilerVariable* slice = evalExpr(target->slice, exc_info);
 
         ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
         ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
@@ -1116,18 +1210,18 @@ private:
 
         bool do_patchpoint = ENABLE_ICSETITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp
-                = patchpoints::createSetitemPatchpoint(emitter.currentFunction(), getEmptyOpInfo().getTypeRecorder());
+            PatchpointSetupInfo* pp = patchpoints::createSetitemPatchpoint(emitter.currentFunction(),
+                                                                           getEmptyOpInfo(exc_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(converted_target->getValue());
             llvm_args.push_back(converted_slice->getValue());
             llvm_args.push_back(converted_val->getValue());
 
-            emitter.createPatchpoint(pp, (void*)pyston::setitem, llvm_args);
+            emitter.createPatchpoint(pp, (void*)pyston::setitem, llvm_args, exc_info);
         } else {
-            emitter.getBuilder()->CreateCall3(g.funcs.setitem, converted_target->getValue(),
-                                              converted_slice->getValue(), converted_val->getValue());
+            emitter.createCall3(exc_info, g.funcs.setitem, converted_target->getValue(), converted_slice->getValue(),
+                                converted_val->getValue());
         }
 
         converted_target->decvref(emitter);
@@ -1135,35 +1229,34 @@ private:
         converted_val->decvref(emitter);
     }
 
-    void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val) {
+    void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, ExcInfo exc_info) {
         assert(state != PARTIAL);
         int ntargets = target->elts.size();
         // TODO do type recording here?
-        ConcreteCompilerVariable* len = val->len(emitter, getEmptyOpInfo());
-        emitter.getBuilder()->CreateCall2(g.funcs.checkUnpackingLength, getConstantInt(ntargets, g.i64),
-                                          len->getValue());
+        ConcreteCompilerVariable* len = val->len(emitter, getEmptyOpInfo(exc_info));
+        emitter.createCall2(exc_info, g.funcs.checkUnpackingLength, getConstantInt(ntargets, g.i64), len->getValue());
 
         for (int i = 0; i < ntargets; i++) {
-            CompilerVariable* unpacked = val->getitem(emitter, getEmptyOpInfo(), makeInt(i));
-            _doSet(target->elts[i], unpacked);
+            CompilerVariable* unpacked = val->getitem(emitter, getEmptyOpInfo(exc_info), makeInt(i));
+            _doSet(target->elts[i], unpacked, exc_info);
             unpacked->decvref(emitter);
         }
     }
 
-    void _doSet(AST* target, CompilerVariable* val) {
+    void _doSet(AST* target, CompilerVariable* val, ExcInfo exc_info) {
         assert(state != PARTIAL);
         switch (target->type) {
             case AST_TYPE::Attribute:
-                _doSetattr(ast_cast<AST_Attribute>(target), val);
+                _doSetattr(ast_cast<AST_Attribute>(target), val, exc_info);
                 break;
             case AST_TYPE::Name:
-                _doSet(ast_cast<AST_Name>(target)->id, val);
+                _doSet(ast_cast<AST_Name>(target)->id, val, exc_info);
                 break;
             case AST_TYPE::Subscript:
-                _doSetitem(ast_cast<AST_Subscript>(target), val);
+                _doSetitem(ast_cast<AST_Subscript>(target), val, exc_info);
                 break;
             case AST_TYPE::Tuple:
-                _doUnpackTuple(ast_cast<AST_Tuple>(target), val);
+                _doUnpackTuple(ast_cast<AST_Tuple>(target), val, exc_info);
                 break;
             default:
                 ASSERT(0, "Unknown type for IRGenerator: %d", target->type);
@@ -1171,7 +1264,7 @@ private:
         }
     }
 
-    void doAssert(AST_Assert* node) {
+    void doAssert(AST_Assert* node, ExcInfo exc_info) {
         AST_expr* test = node->test;
         assert(test->type == AST_TYPE::Num);
         AST_Num* num = ast_cast<AST_Num>(test);
@@ -1183,37 +1276,38 @@ private:
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {
-            CompilerVariable* msg = evalExpr(node->msg);
+            CompilerVariable* msg = evalExpr(node->msg, exc_info);
             converted_msg = msg->makeConverted(emitter, msg->getBoxType());
             msg->decvref(emitter);
             llvm_args.push_back(converted_msg->getValue());
         } else {
             llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr));
         }
-        llvm::CallInst* call = emitter.getBuilder()->CreateCall(g.funcs.assertFail, llvm_args);
-        call->setDoesNotReturn();
+        llvm::CallSite call = emitter.createCall(exc_info, g.funcs.assertFail, llvm_args);
+        call.setDoesNotReturn();
     }
 
-    void doAssign(AST_Assign* node) {
-        CompilerVariable* val = evalExpr(node->value);
+    void doAssign(AST_Assign* node, ExcInfo exc_info) {
+        CompilerVariable* val = evalExpr(node->value, exc_info);
         if (state == PARTIAL)
             return;
 
         for (int i = 0; i < node->targets.size(); i++) {
-            _doSet(node->targets[i], val);
+            _doSet(node->targets[i], val, exc_info);
         }
         val->decvref(emitter);
     }
 
-    void doClassDef(AST_ClassDef* node) {
+    void doClassDef(AST_ClassDef* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
 
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
 
-        llvm::Value* classobj = emitter.getBuilder()->CreateCall2(
-            g.funcs.createClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
-            embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+        llvm::Value* classobj
+            = emitter.createCall2(exc_info, g.funcs.createClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
+                                  embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr))
+                  .getInstruction();
         ConcreteCompilerVariable* cls = new ConcreteCompilerVariable(typeFromClass(type_cls), classobj, true);
 
         RELEASE_ASSERT(node->bases.size() == 1, "");
@@ -1232,14 +1326,14 @@ private:
                 AST_FunctionDef* fdef = ast_cast<AST_FunctionDef>(node->body[i]);
                 CLFunction* cl = this->_wrapFunction(fdef);
                 CompilerVariable* func = makeFunction(emitter, cl);
-                cls->setattr(emitter, getEmptyOpInfo(), &fdef->name, func);
+                cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
                 func->decvref(emitter);
             } else {
                 RELEASE_ASSERT(node->body[i]->type == AST_TYPE::Pass, "%d", type);
             }
         }
 
-        _doSet(node->name, cls);
+        _doSet(node->name, cls, exc_info);
         cls->decvref(emitter);
     }
 
@@ -1257,7 +1351,7 @@ private:
         return cl;
     }
 
-    void doFunction(AST_FunctionDef* node) {
+    void doFunction(AST_FunctionDef* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
 
@@ -1269,11 +1363,11 @@ private:
         // boxCLFuncArgType));
         // CompilerVariable *func = new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
 
-        _doSet(node->name, func);
+        _doSet(node->name, func, exc_info);
         func->decvref(emitter);
     }
 
-    void doImport(AST_Import* node) {
+    void doImport(AST_Import* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
 
@@ -1284,21 +1378,23 @@ private:
             const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
 
             llvm::Value* imported
-                = emitter.getBuilder()->CreateCall(g.funcs.import, embedConstantPtr(&modname, g.llvm_str_type_ptr));
+                = emitter.createCall(exc_info, g.funcs.import, embedConstantPtr(&modname, g.llvm_str_type_ptr))
+                      .getInstruction();
             ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
-            _doSet(asname, v);
+            _doSet(asname, v, exc_info);
             v->decvref(emitter);
         }
     }
 
-    void doImportFrom(AST_ImportFrom* node) {
+    void doImportFrom(AST_ImportFrom* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
 
         assert(node->level == 0);
 
         llvm::Value* imported_v
-            = emitter.getBuilder()->CreateCall(g.funcs.import, embedConstantPtr(&node->module, g.llvm_str_type_ptr));
+            = emitter.createCall(exc_info, g.funcs.import, embedConstantPtr(&node->module, g.llvm_str_type_ptr))
+                  .getInstruction();
         ConcreteCompilerVariable* module = new ConcreteCompilerVariable(typeFromClass(module_cls), imported_v, true);
 
         for (int i = 0; i < node->names.size(); i++) {
@@ -1307,15 +1403,15 @@ private:
             const std::string& name = alias->name;
             const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
 
-            CompilerVariable* v = module->getattr(emitter, getEmptyOpInfo(), &name, false);
-            _doSet(asname, v);
+            CompilerVariable* v = module->getattr(emitter, getEmptyOpInfo(exc_info), &name, false);
+            _doSet(asname, v, exc_info);
             v->decvref(emitter);
         }
 
         module->decvref(emitter);
     }
 
-    void doPrint(AST_Print* node) {
+    void doPrint(AST_Print* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
 
@@ -1324,18 +1420,19 @@ private:
             if (i > 0) {
                 emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));
             }
-            CompilerVariable* var = evalExpr(node->values[i]);
-            var->print(emitter);
+            CompilerVariable* var = evalExpr(node->values[i], exc_info);
+            var->print(emitter, getEmptyOpInfo(exc_info));
             var->decvref(emitter);
         }
 
         if (node->nl)
-            emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr("\n"));
+            emitter.createCall(exc_info, g.funcs.printf, getStringConstantPtr("\n"));
         else
-            emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));
+            emitter.createCall(exc_info, g.funcs.printf, getStringConstantPtr(" "));
     }
 
-    void doReturn(AST_Return* node) {
+    void doReturn(AST_Return* node, ExcInfo exc_info) {
+        assert(!exc_info.needsInvoke());
 
         CompilerVariable* val;
         if (node->value == NULL) {
@@ -1347,7 +1444,7 @@ private:
 
             val = new ConcreteCompilerVariable(NONE, embedConstantPtr(None, g.llvm_value_type_ptr), false);
         } else {
-            val = evalExpr(node->value);
+            val = evalExpr(node->value, exc_info);
         }
         assert(state != PARTIAL);
         assert(val);
@@ -1370,18 +1467,23 @@ private:
         endBlock(DEAD);
 
         ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
+        assert(rtn->getValue());
         emitter.getBuilder()->CreateRet(rtn->getValue());
     }
 
-    void doBranch(AST_Branch* node) {
+    void doBranch(AST_Branch* node, ExcInfo exc_info) {
+        assert(!exc_info.needsInvoke());
+
         assert(node->iftrue->idx > myblock->idx);
         assert(node->iffalse->idx > myblock->idx);
 
-        CompilerVariable* val = evalExpr(node->test);
+        CompilerVariable* val = evalExpr(node->test, exc_info);
         assert(state != PARTIAL);
         assert(val);
 
-        ConcreteCompilerVariable* nonzero = val->nonzero(emitter, getOpInfoForNode(node));
+        // ASSERT(val->getType() == BOOL, "%s", val->getType()->debugName().c_str());
+
+        ConcreteCompilerVariable* nonzero = val->nonzero(emitter, getOpInfoForNode(node, exc_info));
         assert(nonzero->getType() == BOOL);
         val->decvref(emitter);
 
@@ -1396,8 +1498,8 @@ private:
         emitter.getBuilder()->CreateCondBr(llvm_nonzero, iftrue, iffalse);
     }
 
-    void doExpr(AST_Expr* node) {
-        CompilerVariable* var = evalExpr(node->value);
+    void doExpr(AST_Expr* node, ExcInfo exc_info) {
+        CompilerVariable* var = evalExpr(node->value, exc_info);
         if (state == PARTIAL)
             return;
 
@@ -1568,7 +1670,7 @@ private:
         emitter.getBuilder()->SetInsertPoint(starting_block);
     }
 
-    void doJump(AST_Jump* node) {
+    void doJump(AST_Jump* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         endBlock(FINISHED);
@@ -1583,31 +1685,54 @@ private:
         }
     }
 
-    void doStmt(AST* node) {
+    void doRaise(AST_Raise* node, ExcInfo exc_info) {
+        RELEASE_ASSERT(node->arg0 != NULL, "");
+        RELEASE_ASSERT(node->arg1 == NULL, "");
+        RELEASE_ASSERT(node->arg2 == NULL, "");
+
+        CompilerVariable* arg0 = evalExpr(node->arg0, exc_info);
+        ConcreteCompilerVariable* converted_arg0 = arg0->makeConverted(emitter, arg0->getBoxType());
+        arg0->decvref(emitter);
+
+        llvm::Value* exc_mem
+            = emitter.getBuilder()->CreateCall(g.funcs.__cxa_allocate_exception, getConstantInt(sizeof(void*), g.i64));
+        llvm::Value* bitcasted = emitter.getBuilder()->CreateBitCast(exc_mem, g.llvm_value_type_ptr->getPointerTo());
+        emitter.getBuilder()->CreateStore(converted_arg0->getValue(), bitcasted);
+        converted_arg0->decvref(emitter);
+
+        void* type_id = &_ZTIPN6pyston3BoxE /* &typeid(Box*) */;
+        emitter.createCall(exc_info, g.funcs.__cxa_throw,
+                           { exc_mem, embedConstantPtr(type_id, g.i8_ptr), embedConstantPtr(nullptr, g.i8_ptr) });
+        emitter.getBuilder()->CreateUnreachable();
+
+        endBlock(DEAD);
+    }
+
+    void doStmt(AST* node, ExcInfo exc_info) {
         switch (node->type) {
             case AST_TYPE::Assert:
-                doAssert(ast_cast<AST_Assert>(node));
+                doAssert(ast_cast<AST_Assert>(node), exc_info);
                 break;
             case AST_TYPE::Assign:
-                doAssign(ast_cast<AST_Assign>(node));
+                doAssign(ast_cast<AST_Assign>(node), exc_info);
                 break;
             case AST_TYPE::ClassDef:
-                doClassDef(ast_cast<AST_ClassDef>(node));
+                doClassDef(ast_cast<AST_ClassDef>(node), exc_info);
                 break;
             case AST_TYPE::Expr:
-                doExpr(ast_cast<AST_Expr>(node));
+                doExpr(ast_cast<AST_Expr>(node), exc_info);
                 break;
             case AST_TYPE::FunctionDef:
-                doFunction(ast_cast<AST_FunctionDef>(node));
+                doFunction(ast_cast<AST_FunctionDef>(node), exc_info);
                 break;
             // case AST_TYPE::If:
             // doIf(ast_cast<AST_If>(node));
             // break;
             case AST_TYPE::Import:
-                doImport(ast_cast<AST_Import>(node));
+                doImport(ast_cast<AST_Import>(node), exc_info);
                 break;
             case AST_TYPE::ImportFrom:
-                doImportFrom(ast_cast<AST_ImportFrom>(node));
+                doImportFrom(ast_cast<AST_ImportFrom>(node), exc_info);
                 break;
             case AST_TYPE::Global:
                 // Should have been handled already
@@ -1615,16 +1740,35 @@ private:
             case AST_TYPE::Pass:
                 break;
             case AST_TYPE::Print:
-                doPrint(ast_cast<AST_Print>(node));
+                doPrint(ast_cast<AST_Print>(node), exc_info);
                 break;
             case AST_TYPE::Return:
-                doReturn(ast_cast<AST_Return>(node));
+                assert(!exc_info.needsInvoke());
+                doReturn(ast_cast<AST_Return>(node), exc_info);
                 break;
             case AST_TYPE::Branch:
-                doBranch(ast_cast<AST_Branch>(node));
+                assert(!exc_info.needsInvoke());
+                doBranch(ast_cast<AST_Branch>(node), exc_info);
                 break;
             case AST_TYPE::Jump:
-                doJump(ast_cast<AST_Jump>(node));
+                assert(!exc_info.needsInvoke());
+                doJump(ast_cast<AST_Jump>(node), exc_info);
+                break;
+            case AST_TYPE::Invoke: {
+                assert(!exc_info.needsInvoke());
+                AST_Invoke* invoke = ast_cast<AST_Invoke>(node);
+                doStmt(invoke->stmt, ExcInfo(entry_blocks[invoke->exc_dest]));
+
+                assert(state == RUNNING || state == DEAD);
+                if (state == RUNNING) {
+                    emitter.getBuilder()->CreateBr(entry_blocks[invoke->normal_dest]);
+                    endBlock(FINISHED);
+                }
+
+                break;
+            }
+            case AST_TYPE::Raise:
+                doRaise(ast_cast<AST_Raise>(node), exc_info);
                 break;
             default:
                 printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);
@@ -1632,9 +1776,9 @@ private:
         }
     }
 
-    template <typename T> void loadArgument(const T& name, ConcreteCompilerType* t, llvm::Value* v) {
+    template <typename T> void loadArgument(const T& name, ConcreteCompilerType* t, llvm::Value* v, ExcInfo exc_info) {
         ConcreteCompilerVariable* var = unboxVar(t, v, false);
-        _doSet(name, var);
+        _doSet(name, var, exc_info);
         var->decvref(emitter);
     }
 
@@ -1813,7 +1957,7 @@ public:
                 argarray = AI;
                 break;
             }
-            loadArgument(arg_names[i], arg_types[i], AI);
+            loadArgument(arg_names[i], arg_types[i], AI, ExcInfo::none());
         }
 
         for (int i = 3; i < arg_types.size(); i++) {
@@ -1825,16 +1969,17 @@ public:
             else
                 assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
 
-            loadArgument(arg_names[i], arg_types[i], loaded);
+            loadArgument(arg_names[i], arg_types[i], loaded, ExcInfo::none());
         }
     }
 
     void run(const CFGBlock* block) override {
+        ExcInfo exc_info = ExcInfo::none();
         for (int i = 0; i < block->body.size(); i++) {
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
-            doStmt(block->body[i]);
+            doStmt(block->body[i], exc_info);
         }
     }
 };

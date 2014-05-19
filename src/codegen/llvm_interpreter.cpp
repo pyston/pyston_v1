@@ -15,6 +15,7 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
@@ -29,6 +30,8 @@
 #include "codegen/llvm_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
+
+extern "C" void* __cxa_allocate_exception(size_t);
 
 namespace pyston {
 
@@ -62,7 +65,7 @@ int width(llvm::Value* v, const llvm::DataLayout& dl) {
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
-#define TIME_INTERPRETS
+//#define TIME_INTERPRETS
 
 Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
     assert(v);
@@ -180,6 +183,8 @@ Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
             // maybe-defined Python variable; we won't actually read from it if
             // it's undef, since it should be guarded by an !is_defined variable.
             return (int64_t) - 1337;
+        case llvm::Value::ConstantPointerNullVal:
+            return (int64_t)0;
         default:
             v->dump();
             RELEASE_ASSERT(0, "%d", v->getValueID());
@@ -279,6 +284,10 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     llvm::BasicBlock* prevblock = NULL;
     llvm::BasicBlock* curblock = &f->getEntryBlock();
 
+    struct {
+        Box* exc_obj;
+        int64_t exc_selector;
+    } landingpad_value;
 
     while (true) {
         for (llvm::Instruction& _inst : *curblock) {
@@ -292,7 +301,25 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
             }
 
 #define SET(v) set(symbols, inst, (v))
-            if (llvm::LoadInst* li = llvm::dyn_cast<llvm::LoadInst>(inst)) {
+
+            if (llvm::LandingPadInst* lpad = llvm::dyn_cast<llvm::LandingPadInst>(inst)) {
+                SET((intptr_t) & landingpad_value);
+                continue;
+            } else if (llvm::ExtractValueInst* ev = llvm::dyn_cast<llvm::ExtractValueInst>(inst)) {
+                Val r = fetch(ev->getAggregateOperand(), dl, symbols);
+                llvm::ArrayRef<unsigned> indexes = ev->getIndices();
+
+#ifndef NDEBUG
+                assert(indexes.size() == 1);
+                llvm::Type* t = llvm::ExtractValueInst::getIndexedType(ev->getAggregateOperand()->getType(), indexes);
+                assert(width(t, dl) == 8);
+#endif
+
+                int64_t* ptr = (int64_t*)r.n;
+                int64_t val = ptr[indexes[0]];
+                SET(val);
+                continue;
+            } else if (llvm::LoadInst* li = llvm::dyn_cast<llvm::LoadInst>(inst)) {
                 llvm::Value* ptr = li->getOperand(0);
                 Val v = fetch(ptr, dl, symbols);
                 // printf("loading from %p\n", v.o);
@@ -470,18 +497,22 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                 assert(width(bc->getOperand(0), dl) == 8);
                 SET(fetch(bc->getOperand(0), dl, symbols));
                 continue;
-            } else if (llvm::CallInst* ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
+                //} else if (llvm::CallInst* ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
+            } else if (llvm::isa<llvm::CallInst>(inst) || llvm::isa<llvm::InvokeInst>(inst)) {
+                llvm::CallSite cs(inst);
+                llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(inst);
+
                 void* f;
                 int arg_start;
-                if (ci->getCalledFunction()
-                    && (ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.void"
-                        || ci->getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
-                    // ci->dump();
+                if (cs.getCalledFunction()
+                    && (cs.getCalledFunction()->getName() == "llvm.experimental.patchpoint.void"
+                        || cs.getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
+                    // cs.dump();
                     assert(0 && "shouldn't be generating patchpoints for interpretation!");
-                    f = (void*)fetch(ci->getArgOperand(2), dl, symbols).n;
+                    f = (void*)fetch(cs.getArgument(2), dl, symbols).n;
                     arg_start = 4;
                 } else {
-                    f = (void*)fetch(ci->getCalledValue(), dl, symbols).n;
+                    f = (void*)fetch(cs.getCalledValue(), dl, symbols).n;
                     arg_start = 0;
                 }
 
@@ -489,10 +520,10 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                     printf("calling %s\n", g.func_addr_registry.getFuncNameAtAddress(f, true).c_str());
 
                 std::vector<Val> args;
-                int nargs = ci->getNumArgOperands();
+                int nargs = cs.arg_size();
                 for (int i = arg_start; i < nargs; i++) {
-                    // ci->getArgOperand(i)->dump();
-                    args.push_back(fetch(ci->getArgOperand(i), dl, symbols));
+                    // cs.getArgument(i)->dump();
+                    args.push_back(fetch(cs.getArgument(i), dl, symbols));
                 }
 
                 int npassed_args = nargs - arg_start;
@@ -504,97 +535,118 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                 // This is dumb but I don't know how else to do it:
 
                 int mask = 1;
-                if (ci->getType() == g.double_)
+                if (cs.getType() == g.double_)
                     mask = 3;
                 else
                     mask = 2;
 
                 for (int i = 0; i < npassed_args; i++) {
                     mask <<= 1;
-                    if (ci->getOperand(i)->getType() == g.double_)
+                    if (cs.getArgument(i)->getType() == g.double_)
                         mask |= 1;
                 }
 
                 Val r((int64_t)0);
-                switch (mask) {
-                    case 0b10:
-                        r = reinterpret_cast<int64_t (*)()>(f)();
-                        break;
-                    case 0b11:
-                        r = reinterpret_cast<double (*)()>(f)();
-                        break;
-                    case 0b100:
-                        r = reinterpret_cast<int64_t (*)(int64_t)>(f)(args[0].n);
-                        break;
-                    case 0b101:
-                        r = reinterpret_cast<int64_t (*)(double)>(f)(args[0].d);
-                        break;
-                    case 0b110:
-                        r = reinterpret_cast<double (*)(int64_t)>(f)(args[0].n);
-                        break;
-                    case 0b1000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t)>(f)(args[0].n, args[1].n);
-                        break;
-                    case 0b1001:
-                        r = reinterpret_cast<int64_t (*)(int64_t, double)>(f)(args[0].n, args[1].d);
-                        break;
-                    case 0b1011:
-                        r = reinterpret_cast<int64_t (*)(double, double)>(f)(args[0].d, args[1].d);
-                        break;
-                    case 0b1111:
-                        r = reinterpret_cast<double (*)(double, double)>(f)(args[0].d, args[1].d);
-                        break;
-                    case 0b10000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n,
-                                                                                        args[2].n);
-                        break;
-                    case 0b10001:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, double)>(f)(args[0].n, args[1].n, args[2].d);
-                        break;
-                    case 0b10011:
-                        r = reinterpret_cast<int64_t (*)(int64_t, double, double)>(f)(args[0].n, args[1].d, args[2].d);
-                        break;
-                    case 0b100000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n,
-                                                                                                 args[2].n, args[3].n);
-                        break;
-                    case 0b100001:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, double)>(f)(args[0].n, args[1].n,
-                                                                                                args[2].n, args[3].d);
-                        break;
-                    case 0b100110:
-                        r = reinterpret_cast<int64_t (*)(int64_t, double, double, int64_t)>(f)(args[0].n, args[1].d,
+                try {
+                    switch (mask) {
+                        case 0b10:
+                            r = reinterpret_cast<int64_t (*)()>(f)();
+                            break;
+                        case 0b11:
+                            r = reinterpret_cast<double (*)()>(f)();
+                            break;
+                        case 0b100:
+                            r = reinterpret_cast<int64_t (*)(int64_t)>(f)(args[0].n);
+                            break;
+                        case 0b101:
+                            r = reinterpret_cast<int64_t (*)(double)>(f)(args[0].d);
+                            break;
+                        case 0b110:
+                            r = reinterpret_cast<double (*)(int64_t)>(f)(args[0].n);
+                            break;
+                        case 0b1000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t)>(f)(args[0].n, args[1].n);
+                            break;
+                        case 0b1001:
+                            r = reinterpret_cast<int64_t (*)(int64_t, double)>(f)(args[0].n, args[1].d);
+                            break;
+                        case 0b1011:
+                            r = reinterpret_cast<int64_t (*)(double, double)>(f)(args[0].d, args[1].d);
+                            break;
+                        case 0b1111:
+                            r = reinterpret_cast<double (*)(double, double)>(f)(args[0].d, args[1].d);
+                            break;
+                        case 0b10000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t)>(f)(args[0].n, args[1].n,
+                                                                                            args[2].n);
+                            break;
+                        case 0b10001:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, double)>(f)(args[0].n, args[1].n,
+                                                                                           args[2].d);
+                            break;
+                        case 0b10011:
+                            r = reinterpret_cast<int64_t (*)(int64_t, double, double)>(f)(args[0].n, args[1].d,
+                                                                                          args[2].d);
+                            break;
+                        case 0b100000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t)>(f)(
+                                args[0].n, args[1].n, args[2].n, args[3].n);
+                            break;
+                        case 0b100001:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, double)>(f)(
+                                args[0].n, args[1].n, args[2].n, args[3].d);
+                            break;
+                        case 0b100110:
+                            r = reinterpret_cast<int64_t (*)(int64_t, double, double, int64_t)>(f)(
+                                args[0].n, args[1].d, args[2].d, args[3].n);
+                            break;
+                        case 0b101010:
+                            r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n,
                                                                                                args[2].d, args[3].n);
-                        break;
-                    case 0b101010:
-                        r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n,
-                                                                                           args[2].d, args[3].n);
-                        break;
-                    case 0b1000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
-                            args[0].n, args[1].n, args[2].n, args[3].n, args[4].n);
-                        break;
-                    case 0b10000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
-                            args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n);
-                        break;
-                    case 0b100000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
-                                                         int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
-                                                                      args[4].n, args[5].n, args[6].n);
-                        break;
-                    case 0b1000000000:
-                        r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
-                                                         int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
-                                                                      args[4].n, args[5].n, args[6].n, args[7].n);
-                        break;
-                    default:
-                        inst->dump();
-                        RELEASE_ASSERT(0, "%d", mask);
-                        break;
+                            break;
+                        case 0b1000000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
+                                args[0].n, args[1].n, args[2].n, args[3].n, args[4].n);
+                            break;
+                        case 0b10000000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
+                                args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n);
+                            break;
+                        case 0b100000000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                                             int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
+                                                                          args[4].n, args[5].n, args[6].n);
+                            break;
+                        case 0b1000000000:
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                                             int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n,
+                                                                                   args[3].n, args[4].n, args[5].n,
+                                                                                   args[6].n, args[7].n);
+                            break;
+                        default:
+                            inst->dump();
+                            RELEASE_ASSERT(0, "%d", mask);
+                            break;
+                    }
+                    if (cs.getType() != g.void_)
+                        SET(r);
+
+                    if (invoke != nullptr) {
+                        prevblock = curblock;
+                        curblock = invoke->getNormalDest();
+                    }
                 }
-                if (ci->getType() != g.void_)
-                    SET(r);
+                catch (Box* e) {
+                    if (invoke == nullptr)
+                        throw;
+
+                    prevblock = curblock;
+                    curblock = invoke->getUnwindDest();
+
+                    landingpad_value.exc_obj = e;
+                    landingpad_value.exc_selector
+                        = 1; // I don't think it's possible to determine what the value should be
+                }
 
 
 #ifdef TIME_INTERPRETS
@@ -647,7 +699,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
 
 
             inst->dump();
-            RELEASE_ASSERT(1, "");
+            RELEASE_ASSERT(0, "");
         }
     }
 

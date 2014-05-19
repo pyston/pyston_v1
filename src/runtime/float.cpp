@@ -30,8 +30,7 @@ namespace pyston {
 
 template <typename T> static inline void raiseDivZeroExcIfZero(T var) {
     if (var == 0) {
-        fprintf(stderr, "float divide by zero\n");
-        raiseExc();
+        raiseExcHelper(ZeroDivisionError, "float divide by zero");
     }
 }
 

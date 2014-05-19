@@ -14,6 +14,7 @@
 
 #include "core/options.h"
 
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -64,7 +65,7 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
 
     if (istep == 0) {
         fprintf(stderr, "ValueError: slice step cannot be zero\n");
-        raiseExc();
+        raiseExcHelper(ValueError, "");
     }
 
     if (istep > 0) {

@@ -25,7 +25,7 @@
 
 namespace pyston {
 
-std::string getOpSymbol(int op_type) {
+llvm::StringRef getOpSymbol(int op_type) {
     switch (op_type) {
         case AST_TYPE::Add:
             return "+";
@@ -86,7 +86,7 @@ std::string getOpSymbol(int op_type) {
 }
 
 std::string getInplaceOpSymbol(int op_type) {
-    return getOpSymbol(op_type) + '=';
+    return std::string(getOpSymbol(op_type)) + '=';
 }
 
 std::string getOpName(int op_type) {
@@ -513,12 +513,36 @@ void* AST_Index::accept_expr(ExprVisitor* v) {
     return v->visit_index(this);
 }
 
+void AST_Invoke::accept(ASTVisitor* v) {
+    bool skip = v->visit_invoke(this);
+    if (skip)
+        return;
+
+    this->stmt->accept(v);
+}
+
+void AST_Invoke::accept_stmt(StmtVisitor* v) {
+    return v->visit_invoke(this);
+}
+
 void AST_keyword::accept(ASTVisitor* v) {
     bool skip = v->visit_keyword(this);
     if (skip)
         return;
 
     value->accept(v);
+}
+
+void AST_LangPrimitive::accept(ASTVisitor* v) {
+    bool skip = v->visit_langprimitive(this);
+    if (skip)
+        return;
+
+    visitVector(args, v);
+}
+
+void* AST_LangPrimitive::accept_expr(ExprVisitor* v) {
+    return v->visit_langprimitive(this);
 }
 
 void AST_List::accept(ASTVisitor* v) {
@@ -1175,6 +1199,34 @@ bool PrintVisitor::visit_index(AST_Index* node) {
     return false;
 }
 
+bool PrintVisitor::visit_invoke(AST_Invoke* node) {
+    printf("invoke %d %d: ", node->normal_dest->idx, node->exc_dest->idx);
+    node->stmt->accept(this);
+    return true;
+}
+
+bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
+    printf(":");
+    switch (node->opcode) {
+        case AST_LangPrimitive::ISINSTANCE:
+            printf("isinstance");
+            break;
+        case AST_LangPrimitive::LANDINGPAD:
+            printf("landingpad");
+            break;
+        default:
+            RELEASE_ASSERT(0, "%d", node->opcode);
+    }
+    printf("(");
+    for (int i = 0, n = node->args.size(); i < n; ++i) {
+        if (i > 0)
+            printf(", ");
+        node->args[i]->accept(this);
+    }
+    printf(")");
+    return true;
+}
+
 bool PrintVisitor::visit_list(AST_List* node) {
     printf("[");
     for (int i = 0, n = node->elts.size(); i < n; ++i) {
@@ -1548,6 +1600,10 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_excepthandler(AST_ExceptHandler* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_expr(AST_Expr* node) {
         output->push_back(node);
         return false;
@@ -1588,6 +1644,10 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_langprimitive(AST_LangPrimitive* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_list(AST_List* node) {
         output->push_back(node);
         return false;
@@ -1616,6 +1676,10 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_raise(AST_Raise* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_repr(AST_Repr* node) {
         output->push_back(node);
         return false;
@@ -1633,6 +1697,14 @@ public:
         return false;
     }
     virtual bool visit_subscript(AST_Subscript* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_tryexcept(AST_TryExcept* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_tryfinally(AST_TryFinally* node) {
         output->push_back(node);
         return false;
     }

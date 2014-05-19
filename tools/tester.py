@@ -37,6 +37,12 @@ FN_JUST_SIZE = 20
 EXTRA_JIT_ARGS = []
 TIME_LIMIT = 2
 
+# For fun, can test pypy.
+# Tough because the tester will check to see if the error messages are exactly the
+# same as the system CPython, but the error messages change over micro CPython versions.
+# Pyston compile-time checks the system CPython version to try to give compatible error messages.
+TEST_PYPY = 0
+
 def set_ulimits():
     # Guard the process from running too long with a hard rlimit.
     # But first try to kill it after a second with a SIGALRM, though that's catchable/clearable by the program:
@@ -77,7 +83,7 @@ def run_test(fn, check_stats, run_memcheck):
     r = fn.rjust(FN_JUST_SIZE)
 
     statchecks = []
-    jit_args = ["-csr"] + EXTRA_JIT_ARGS
+    jit_args = ["-csrq"] + EXTRA_JIT_ARGS
     expected = "success"
     for l in open(fn):
         if not l.startswith("#"):
@@ -93,7 +99,12 @@ def run_test(fn, check_stats, run_memcheck):
 
     assert expected in ("success", "fail", "statfail"), expected
 
-    run_args = ["./%s" % IMAGE] + jit_args + ["-q", fn]
+    if TEST_PYPY:
+        jit_args = []
+        check_stats = False
+        expected = "success"
+
+    run_args = [os.path.abspath(IMAGE)] + jit_args + [fn]
     start = time.time()
     p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
     out, err = p.communicate()
@@ -104,7 +115,7 @@ def run_test(fn, check_stats, run_memcheck):
     elapsed = time.time() - start
 
     stats = {}
-    if code == 0:
+    if code == 0 and not TEST_PYPY:
         assert out.count("Stats:") == 1
         out, stats_str = out.split("Stats:")
         for l in stats_str.strip().split('\n'):
@@ -153,7 +164,7 @@ def run_test(fn, check_stats, run_memcheck):
             diff = p.stdout.read()
             assert p.wait() in (0, 1)
             raise Exception("Failed on %s:\n%s" % (fn, diff))
-    elif err != expected_err:
+    elif not TEST_PYPY and err != expected_err:
         if KEEP_GOING:
             r += "    \033[31mFAILED\033[0m (bad stderr)"
             failed.append(fn)
@@ -357,10 +368,14 @@ if __name__ == "__main__":
 
     FN_JUST_SIZE = max(20, 2 + max(map(len, tests)))
 
-    print "Building...",
-    sys.stdout.flush()
-    subprocess.check_call(["make", "-j4", IMAGE], stdout=open("/dev/null", 'w'), stderr=subprocess.PIPE)
-    print "done"
+    if not TEST_PYPY:
+        print "Building...",
+        sys.stdout.flush()
+        subprocess.check_call(["make", "-j4", IMAGE], stdout=open("/dev/null", 'w'), stderr=subprocess.PIPE)
+        print "done"
+
+    if TEST_PYPY:
+        IMAGE = '/usr/local/bin/pypy'
 
     if not patterns:
         tests.sort(key=fileSize)
