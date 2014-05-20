@@ -74,12 +74,6 @@
                creates={{dep_dir}}/gcc-{{gcc_version}}-install/bin/g++
 
     # Begin some git commands.
-    - name: Configure git, needed by llvm_up
-      command: git config --global user.email "christian.simms@gmail.com"
-
-    - name: Configure git, needed by llvm_up
-      command: git config --global user.name "Christian Simms"
-
     - name: clone llvm git
       git: repo=http://llvm.org/git/llvm.git update=no dest={{dep_dir}}/llvm-trunk
 
