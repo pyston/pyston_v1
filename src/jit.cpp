@@ -229,7 +229,8 @@ int main(int argc, char** argv) {
 
                 try {
                     compileAndRunModule(m, main);
-                } catch (Box* b) {
+                }
+                catch (Box* b) {
                     std::string msg = formatException(b);
                     fprintf(stderr, "%s\n", msg.c_str());
                 }

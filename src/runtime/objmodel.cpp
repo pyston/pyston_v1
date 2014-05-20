@@ -282,8 +282,8 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
     }
 }
 
-BoxedClass::BoxedClass(bool hasattrs)
-    : HCBox(&type_flavor, type_cls), hasattrs(hasattrs), is_constant(false) {
+BoxedClass::BoxedClass(bool hasattrs, bool is_user_defined)
+    : HCBox(&type_flavor, type_cls), hasattrs(hasattrs), is_constant(false), is_user_defined(is_user_defined) {
 }
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
@@ -525,23 +525,49 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
         Box* rtn = boxInstanceMethod(obj, attr);
         return rtn;
     }
+    if (attr->cls == member_cls) {
+        BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(attr);
+        switch (member_desc->type) {
+            case BoxedMemberDescriptor::OBJECT:
+                assert(member_desc->offset % sizeof(Box*) == 0);
+                return reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+            default:
+                RELEASE_ASSERT(0, "%d", member_desc->type);
+        }
+        abort();
+    }
     return attr;
+}
+
+Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args,
+                GetattrRewriteArgs2* rewrite_args2) {
+    Box* val;
+
+    if (rewrite_args) {
+        assert(!rewrite_args->out_success);
+
+        val = cls->getattr(attr, rewrite_args, NULL);
+        return val;
+    } else if (rewrite_args2) {
+        assert(!rewrite_args2->out_success);
+
+        val = cls->getattr(attr, NULL, rewrite_args2);
+        return val;
+    } else {
+        return cls->getattr(attr, NULL, NULL);
+    }
 }
 
 Box* getclsattr_internal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args,
                          GetattrRewriteArgs2* rewrite_args2) {
     Box* val;
-
     if (rewrite_args) {
-        // rewrite_args->rewriter->nop();
-        // rewrite_args->rewriter->trap();
-        RewriterVar cls = rewrite_args->obj.getAttr(BOX_CLS_OFFSET, 4);
+        RewriterVar rcls = rewrite_args->obj.getAttr(BOX_CLS_OFFSET, 4);
 
-        // rewrite_args->obj.push();
-        GetattrRewriteArgs sub_rewrite_args(rewrite_args->rewriter, cls);
+        GetattrRewriteArgs sub_rewrite_args(rewrite_args->rewriter, rcls);
         sub_rewrite_args.preferred_dest_reg = 1;
-        val = getattr_internal(obj->cls, attr, false, false, &sub_rewrite_args, NULL);
-        // rewrite_args->obj = rewrite_args->rewriter->pop(0);
+
+        val = typeLookup(obj->cls, attr, &sub_rewrite_args, NULL);
 
         if (!sub_rewrite_args.out_success) {
             rewrite_args = NULL;
@@ -550,11 +576,12 @@ Box* getclsattr_internal(Box* obj, const std::string& attr, GetattrRewriteArgs* 
                 rewrite_args->out_rtn = sub_rewrite_args.out_rtn;
         }
     } else if (rewrite_args2) {
-        RewriterVarUsage2 cls = rewrite_args2->obj.getAttr(BOX_CLS_OFFSET, RewriterVarUsage2::NoKill);
+        RewriterVarUsage2 rcls = rewrite_args2->obj.getAttr(BOX_CLS_OFFSET, RewriterVarUsage2::NoKill);
 
-        GetattrRewriteArgs2 sub_rewrite_args(rewrite_args2->rewriter, std::move(cls), Location::forArg(1),
+        GetattrRewriteArgs2 sub_rewrite_args(rewrite_args2->rewriter, std::move(rcls), Location::forArg(1),
                                              rewrite_args2->more_guards_after);
-        val = getattr_internal(obj->cls, attr, false, false, NULL, &sub_rewrite_args);
+
+        val = typeLookup(obj->cls, attr, NULL, &sub_rewrite_args);
 
         if (!sub_rewrite_args.out_success) {
             sub_rewrite_args.obj.setDoneUsing();
@@ -567,7 +594,7 @@ Box* getclsattr_internal(Box* obj, const std::string& attr, GetattrRewriteArgs* 
             }
         }
     } else {
-        val = getattr_internal(obj->cls, attr, false, false, NULL, NULL);
+        val = typeLookup(obj->cls, attr, NULL, NULL);
     }
 
     if (val == NULL) {
@@ -668,7 +695,17 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
         }
     }
 
-    if (obj->cls->hasattrs) {
+    if (obj->cls == type_cls) {
+        Box* val = typeLookup(static_cast<BoxedClass*>(obj), attr, rewrite_args, rewrite_args2);
+        if (val)
+            return val;
+
+        // reset these since we reused them:
+        if (rewrite_args)
+            rewrite_args->out_success = false;
+        if (rewrite_args2)
+            rewrite_args2->out_success = false;
+    } else if (obj->cls->hasattrs) {
         HCBox* hobj = static_cast<HCBox*>(obj);
 
         Box* val = NULL;
@@ -774,62 +811,42 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
         Stats::log(id);
     }
 
-    { /* anonymous scope to make sure destructors get run before we err out */
-#if 1
-        std::unique_ptr<Rewriter2> rewriter(
-            Rewriter2::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
+    std::unique_ptr<Rewriter2> rewriter(
+        Rewriter2::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
 
-        Box* val;
-        if (rewriter.get()) {
-            // rewriter->trap();
-            Location dest;
-            TypeRecorder* recorder = rewriter->getTypeRecorder();
-            if (recorder)
-                dest = Location::forArg(1);
-            else
-                dest = rewriter->getReturnDestination();
-            GetattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), dest, false);
-            val = getattr_internal(obj, attr, 1, true, NULL, &rewrite_args);
+    Box* val;
+    if (rewriter.get()) {
+        // rewriter->trap();
+        Location dest;
+        TypeRecorder* recorder = rewriter->getTypeRecorder();
+        if (recorder)
+            dest = Location::forArg(1);
+        else
+            dest = rewriter->getReturnDestination();
+        GetattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), dest, false);
+        val = getattr_internal(obj, attr, true, true, NULL, &rewrite_args);
 
-            if (rewrite_args.out_success && val) {
-                if (recorder) {
-                    RewriterVarUsage2 record_rtn = rewriter->call(
-                        false, (void*)recordType, rewriter->loadConst((intptr_t)recorder, Location::forArg(0)),
-                        std::move(rewrite_args.out_rtn));
-                    rewriter->commitReturning(std::move(record_rtn));
+        if (rewrite_args.out_success && val) {
+            if (recorder) {
+                RewriterVarUsage2 record_rtn = rewriter->call(
+                    false, (void*)recordType, rewriter->loadConst((intptr_t)recorder, Location::forArg(0)),
+                    std::move(rewrite_args.out_rtn));
+                rewriter->commitReturning(std::move(record_rtn));
 
-                    recordType(recorder, val);
-                } else {
-                    rewriter->commitReturning(std::move(rewrite_args.out_rtn));
-                }
+                recordType(recorder, val);
             } else {
-                rewrite_args.obj.setDoneUsing();
+                rewriter->commitReturning(std::move(rewrite_args.out_rtn));
             }
-#else
-
-        std::unique_ptr<Rewriter> rewriter(
-            Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "getattr"));
-
-        Box* val;
-        if (rewriter.get()) {
-            // rewriter->trap();
-            GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0));
-            val = getattr_internal(obj, attr, 1, true, &rewrite_args, NULL);
-
-            if (rewrite_args.out_success && val) {
-                rewrite_args.out_rtn.move(-1);
-                rewriter->commit();
-            }
-#endif
         } else {
-            val = getattr_internal(obj, attr, 1, true, NULL, NULL);
+            rewrite_args.obj.setDoneUsing();
         }
-
-        if (val) {
-            return val;
-        }
+    } else {
+        val = getattr_internal(obj, attr, true, true, NULL, NULL);
     }
 
+    if (val) {
+        return val;
+    }
     raiseAttributeError(obj, attr);
 }
 
@@ -885,8 +902,8 @@ else {
 }
 
 bool isUserDefined(BoxedClass* cls) {
-    // TODO I don't think this is good enough?
-    return cls->hasattrs && (cls != function_cls && cls != type_cls) && !cls->is_constant;
+    return cls->is_user_defined;
+    // return cls->hasattrs && (cls != function_cls && cls != type_cls) && !cls->is_constant;
 }
 
 extern "C" bool nonzero(Box* obj) {
@@ -1226,14 +1243,14 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             GetattrRewriteArgs ga_rewrite_args(rewrite_args->rewriter, r_cls);
 
             r_cls.assertValid();
-            clsattr = getattr_internal(obj->cls, *attr, false, false, &ga_rewrite_args, NULL);
+            clsattr = typeLookup(obj->cls, *attr, &ga_rewrite_args, NULL);
 
             if (!ga_rewrite_args.out_success)
                 rewrite_args = NULL;
             else if (clsattr)
                 r_clsattr = ga_rewrite_args.out_rtn.move(-1);
         } else {
-            clsattr = getattr_internal(obj->cls, *attr, false, false, NULL, NULL);
+            clsattr = typeLookup(obj->cls, *attr, NULL, NULL);
         }
     }
 
@@ -2151,7 +2168,7 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls);
         grewrite_args.preferred_dest_reg = -2;
-        new_attr = getattr_internal(ccls, "__new__", false, false, &grewrite_args, NULL);
+        new_attr = typeLookup(ccls, "__new__", &grewrite_args, NULL);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -2162,12 +2179,12 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
             }
         }
     } else {
-        new_attr = getattr_internal(ccls, "__new__", false, false, NULL, NULL);
+        new_attr = typeLookup(ccls, "__new__", NULL, NULL);
     }
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls);
-        init_attr = getattr_internal(ccls, "__init__", false, false, &grewrite_args, NULL);
+        init_attr = typeLookup(ccls, "__init__", &grewrite_args, NULL);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -2178,7 +2195,7 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
             }
         }
     } else {
-        init_attr = getattr_internal(ccls, "__init__", false, false, NULL, NULL);
+        init_attr = typeLookup(ccls, "__init__", NULL, NULL);
     }
 
     // Box* made = callattrInternal(ccls, &_new_str, INST_ONLY, NULL, nargs, cls, arg2, arg3, args);

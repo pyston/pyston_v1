@@ -36,9 +36,9 @@ class GCVisitor {
 public:
     virtual ~GCVisitor() {}
     virtual void visit(void* p) = 0;
-    virtual void visitRange(void** start, void** end) = 0;
+    virtual void visitRange(void* const* start, void* const* end) = 0;
     virtual void visitPotential(void* p) = 0;
-    virtual void visitPotentialRange(void** start, void** end) = 0;
+    virtual void visitPotentialRange(void* const* start, void* const* end) = 0;
 };
 
 typedef int kindid_t;
@@ -369,12 +369,20 @@ public:
     // ie they have python-level instance attributes:
     const bool hasattrs;
 
-    // Whether this class object is constant or not.
+    // Whether this class object is constant or not, ie whether or not class-level
+    // attributes can be changed or added.
     // Does not necessarily imply that the instances of this class are constant,
     // though for now (is_constant && !hasattrs) does imply that the instances are constant.
     bool is_constant;
 
-    BoxedClass(bool hasattrs);
+    // Whether this class was defined by the user or is a builtin type.
+    // this is used mostly for debugging.
+    const bool is_user_defined;
+
+    // will need to update this once we support tp_getattr-style overriding:
+    bool hasGenericGetattr() { return true; }
+
+    BoxedClass(bool hasattrs, bool is_user_defined);
     void freeze() {
         assert(!is_constant);
         is_constant = true;

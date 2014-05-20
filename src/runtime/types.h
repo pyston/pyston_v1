@@ -60,12 +60,12 @@ BoxedList* getSysPath();
 
 extern "C" {
 extern BoxedClass* type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls, *instancemethod_cls,
-    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls;
+    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
 }
 extern "C" {
 extern const ObjectFlavor type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor, function_flavor, none_flavor,
     instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor, tuple_flavor, file_flavor,
-    xrange_flavor;
+    xrange_flavor, member_flavor;
 }
 extern "C" { extern const ObjectFlavor user_flavor; }
 
@@ -87,7 +87,7 @@ extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createClass(std::string* name, BoxedModule* parent_module);
+extern "C" Box* createUserClass(std::string* name, BoxedModule* parent_module);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -155,12 +155,8 @@ public:
 
     template <class U> void destroy(U* p) { p->~U(); }
 
-    bool operator==(const StlCompatAllocator<T> &rhs) const {
-        return true;
-    }
-    bool operator!=(const StlCompatAllocator<T> &rhs) const {
-        return false;
-    }
+    bool operator==(const StlCompatAllocator<T>& rhs) const { return true; }
+    bool operator!=(const StlCompatAllocator<T>& rhs) const { return false; }
 };
 
 
@@ -187,7 +183,7 @@ public:
 
 class BoxedString : public Box {
 public:
-    //const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
+    // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
     const std::string s;
 
     BoxedString(const std::string&& s) __attribute__((visibility("default")))
@@ -276,11 +272,22 @@ public:
     std::string name();
 };
 
-class BoxedSlice : public HCBox {
+class BoxedSlice : public Box {
 public:
     Box* start, *stop, *step;
     BoxedSlice(Box* lower, Box* upper, Box* step)
-        : HCBox(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
+        : Box(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
+};
+
+class BoxedMemberDescriptor : public Box {
+public:
+    enum MemberType {
+        OBJECT,
+    } type;
+
+    int offset;
+
+    BoxedMemberDescriptor(MemberType type, int offset) : Box(&member_flavor, member_cls), type(type), offset(offset) {}
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);

@@ -148,7 +148,10 @@ public:
     static RewriterVarUsage2 empty();
 
 #ifndef NDEBUG
-    ~RewriterVarUsage2() { assert(done_using); }
+    ~RewriterVarUsage2() {
+        if (!std::uncaught_exception())
+            assert(done_using);
+    }
 #endif
 
     void setDoneUsing();

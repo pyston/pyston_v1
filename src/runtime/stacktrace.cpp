@@ -117,6 +117,11 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         va_list ap;
         va_start(ap, msg);
 
+        // printf("Raising: ");
+        // vprintf(msg, ap);
+        // printf("\n");
+        // va_start(ap, msg);
+
         char buf[1024];
         vsnprintf(buf, sizeof(buf), msg, ap);
 

@@ -1305,7 +1305,7 @@ private:
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
 
         llvm::Value* classobj
-            = emitter.createCall2(exc_info, g.funcs.createClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
+            = emitter.createCall2(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
                                   embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr))
                   .getInstruction();
         ConcreteCompilerVariable* cls = new ConcreteCompilerVariable(typeFromClass(type_cls), classobj, true);
