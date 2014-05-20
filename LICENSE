@@ -18,9 +18,13 @@ limitations under the License.
 
 
 
-Exceptions:
-- The contents of libunwind_patches and llvm_patches are released
-  into the public domain, though the same disclaimer applies:
+Some directories are distributed under different licenses, and contain
+separate LICENSE files:
+- libunwind_patches
+- llvm_patches
+
+Regardless of any separate LICENSE files, all code in this repository
+falls under the following disclaimer:
     Unless required by applicable law or agreed to in writing, software
     distributed is distributed on an "AS IS" BASIS,
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
