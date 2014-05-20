@@ -49,10 +49,10 @@ Box* dictItems(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
 
     for (const auto& p : self->d) {
-        std::vector<Box*> elts;
+        BoxedTuple::GCVector elts;
         elts.push_back(p.first);
         elts.push_back(p.second);
-        BoxedTuple* t = new BoxedTuple(elts);
+        BoxedTuple* t = new BoxedTuple(std::move(elts));
         listAppendInternal(rtn, t);
     }
 
@@ -99,16 +99,6 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
     }
 
     return None;
-}
-
-void dict_dtor(BoxedDict* self) {
-    self->d.clear();
-
-    // I thought, in disbelief, that this works:
-    //(&self->d)->~decltype(self->d)();
-    // but that's only on clang, so instead do this:
-    typedef decltype(self->d) T;
-    (&self->d)->~T();
 }
 
 void setupDict() {

@@ -359,14 +359,6 @@ public:
 
 class BoxedClass : public HCBox {
 public:
-    // This first typedef is right, but clang miscompiles it (how??), so use the second one:
-    // typedef void (*Dtor)(Box*);
-    typedef void* Dtor;
-
-    // compiler-level (cf python-level) destructor, that does things like decrementing
-    // refcounts of any attributes
-    const Dtor dtor;
-
     // If the user sets __getattribute__ or __getattr__, we will have to invalidate
     // all getattr IC entries that relied on the fact that those functions didn't exist.
     // Doing this via invalidation means that instance attr lookups don't have
@@ -382,7 +374,7 @@ public:
     // though for now (is_constant && !hasattrs) does imply that the instances are constant.
     bool is_constant;
 
-    BoxedClass(bool hasattrs, Dtor dtor);
+    BoxedClass(bool hasattrs);
     void freeze() {
         assert(!is_constant);
         is_constant = true;

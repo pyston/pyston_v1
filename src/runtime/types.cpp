@@ -159,11 +159,7 @@ extern "C" void tupleGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
     BoxedTuple* t = (BoxedTuple*)p;
-    int size = t->elts.size();
-    if (size) {
-        v->visitRange(const_cast<void**>((void const* const*)&t->elts[0]),
-                      const_cast<void**>((void const* const*)&t->elts[size]));
-    }
+    v->visitPotentialRange((void**)&t->elts, (void**)(&t->elts + 1));
 }
 
 // This probably belongs in dict.cpp?
@@ -219,11 +215,8 @@ const AllocationKind hc_kind(&hcGCHandler, NULL);
 const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 }
 
-void instancemethod_dtor(BoxedInstanceMethod* b) {
-}
-
 extern "C" Box* createClass(std::string* name, BoxedModule* parent_module) {
-    BoxedClass* rtn = new BoxedClass(true, NULL);
+    BoxedClass* rtn = new BoxedClass(true);
     rtn->giveAttr("__name__", boxString(*name));
 
     Box* modname = parent_module->getattr("__name__", NULL, NULL);
@@ -363,11 +356,6 @@ Box* moduleRepr(BoxedModule* m) {
     return boxString(os.str());
 }
 
-void str_dtor(BoxedString* s) {
-    typedef std::string T;
-    (&s->s)->~T();
-}
-
 CLFunction* unboxRTFunction(Box* b) {
     assert(b->cls == function_cls);
     return static_cast<BoxedFunction*>(b)->f;
@@ -377,30 +365,30 @@ bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     HiddenClass::getRoot();
 
-    type_cls = new BoxedClass(true, NULL);
+    type_cls = new BoxedClass(true);
     type_cls->cls = type_cls;
 
-    none_cls = new BoxedClass(false, NULL);
+    none_cls = new BoxedClass(false);
     None = new Box(&none_flavor, none_cls);
     gc::registerStaticRootObj(None);
 
-    module_cls = new BoxedClass(true, NULL);
+    module_cls = new BoxedClass(true);
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    bool_cls = new BoxedClass(false, NULL);
-    int_cls = new BoxedClass(false, NULL);
-    float_cls = new BoxedClass(false, NULL);
-    str_cls = new BoxedClass(false, (BoxedClass::Dtor)str_dtor);
-    function_cls = new BoxedClass(true, NULL);
-    instancemethod_cls = new BoxedClass(false, (BoxedClass::Dtor)instancemethod_dtor);
-    list_cls = new BoxedClass(false, (BoxedClass::Dtor)list_dtor);
-    slice_cls = new BoxedClass(true, NULL);
-    dict_cls = new BoxedClass(false, (BoxedClass::Dtor)dict_dtor);
-    tuple_cls = new BoxedClass(false, (BoxedClass::Dtor)tuple_dtor);
-    file_cls = new BoxedClass(false, (BoxedClass::Dtor)file_dtor);
-    set_cls = new BoxedClass(false, NULL);
+    bool_cls = new BoxedClass(false);
+    int_cls = new BoxedClass(false);
+    float_cls = new BoxedClass(false);
+    str_cls = new BoxedClass(false);
+    function_cls = new BoxedClass(true);
+    instancemethod_cls = new BoxedClass(false);
+    list_cls = new BoxedClass(false);
+    slice_cls = new BoxedClass(true);
+    dict_cls = new BoxedClass(false);
+    tuple_cls = new BoxedClass(false);
+    file_cls = new BoxedClass(false);
+    set_cls = new BoxedClass(false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);

@@ -48,11 +48,6 @@ public:
     BoxedXrangeIterator(BoxedXrange* xrange)
         : Box(&xrange_iterator_flavor, xrange_iterator_cls), xrange(xrange), cur(xrange->start) {}
 
-    static void xrangeIteratorDtor(Box* s) __attribute__((visibility("default"))) {
-        assert(s->cls == xrange_iterator_cls);
-        BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
-    }
-
     static bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
@@ -127,9 +122,9 @@ Box* xrangeIter(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = new BoxedClass(false, NULL);
+    xrange_cls = new BoxedClass(false);
     xrange_cls->giveAttr("__name__", boxStrConstant("xrange"));
-    xrange_iterator_cls = new BoxedClass(false, (BoxedClass::Dtor)BoxedXrangeIterator::xrangeIteratorDtor);
+    xrange_iterator_cls = new BoxedClass(false);
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 
     CLFunction* xrange_clf = boxRTFunction((void*)xrange1, NULL, 2, false);

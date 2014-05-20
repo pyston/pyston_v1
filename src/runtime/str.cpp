@@ -45,8 +45,8 @@ extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
-    const std::vector<Box*>* elts;
-    std::vector<Box*> _elts;
+    const BoxedTuple::GCVector* elts;
+    BoxedTuple::GCVector _elts;
     if (rhs->cls == tuple_cls) {
         elts = &static_cast<BoxedTuple*>(rhs)->elts;
     } else {

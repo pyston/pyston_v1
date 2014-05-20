@@ -160,9 +160,6 @@ Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
     return fileClose(self);
 }
 
-void file_dtor(BoxedFile* t) {
-}
-
 Box* fileNew2(BoxedClass* cls, Box* s) {
     assert(cls == file_cls);
     return open1(s);

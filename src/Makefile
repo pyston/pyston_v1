@@ -801,12 +801,12 @@ test_asm:
 	objdump -d test | less
 	@ rm test
 test_cpp_asm:
-	$(CLANG_EXE) ../test/test.cpp -o test -c -O3
+	$(CLANG_EXE) ../test/test.cpp -o test -c -O3 -std=c++11
 	# $(GPP) tests/test.cpp -o test -c -O3
 	objdump -d test | less
 	rm test
 test_cpp_ll:
-	$(CLANG_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S
+	$(CLANG_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11
 	less test.ll
 	rm test.ll
 

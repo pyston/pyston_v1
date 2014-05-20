@@ -333,9 +333,6 @@ extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
 
 extern "C" const ObjectFlavor list_iterator_flavor(&listIteratorGCHandler, NULL);
 
-void listiterDtor(BoxedListIterator* self) {
-}
-
 extern "C" Box* listNew1(Box* cls) {
     assert(cls == list_cls);
     return new BoxedList();
@@ -351,13 +348,8 @@ extern "C" Box* listNew2(Box* cls, Box* container) {
     return rtn;
 }
 
-void list_dtor(BoxedList* self) {
-    if (self->capacity)
-        rt_free(self->elts);
-}
-
 void setupList() {
-    list_iterator_cls = new BoxedClass(false, (BoxedClass::Dtor)listiterDtor);
+    list_iterator_cls = new BoxedClass(false);
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 
