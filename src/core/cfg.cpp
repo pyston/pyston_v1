@@ -301,6 +301,11 @@ private:
             // Probably better to create an AST_Callattr type, and solidify the
             // idea that a callattr is a single expression.
             rtn->func = remapAttribute(ast_cast<AST_Attribute>(node->func));
+        } else if (node->func->type == AST_TYPE::ClsAttribute) {
+            // TODO this is a cludge to make sure that "callattrs" stick together.
+            // Probably better to create an AST_Callattr type, and solidify the
+            // idea that a callattr is a single expression.
+            rtn->func = remapClsAttribute(ast_cast<AST_ClsAttribute>(node->func));
         } else {
             rtn->func = remapExpr(node->func);
         }
@@ -317,6 +322,14 @@ private:
         rtn->starargs = remapExpr(node->starargs);
         rtn->kwargs = remapExpr(node->kwargs);
 
+        return rtn;
+    }
+
+    AST_expr* remapClsAttribute(AST_ClsAttribute* node) {
+        AST_ClsAttribute* rtn = new AST_ClsAttribute();
+
+        rtn->attr = node->attr;
+        rtn->value = remapExpr(node->value);
         return rtn;
     }
 
@@ -461,7 +474,7 @@ private:
             push_back(j);
 
             curblock = test_block;
-            AST_expr* test_call = makeCall(hasnext_attr);
+            AST_expr* test_call = remapExpr(makeCall(hasnext_attr));
 
             CFGBlock* body_block = cfg->addBlock();
             body_block->info = "listcomp_body";
@@ -623,6 +636,9 @@ private:
             case AST_TYPE::Call:
                 rtn = remapCall(ast_cast<AST_Call>(node));
                 break;
+            case AST_TYPE::ClsAttribute:
+                rtn = remapClsAttribute(ast_cast<AST_ClsAttribute>(node));
+                break;
             case AST_TYPE::Compare:
                 rtn = remapCompare(ast_cast<AST_Compare>(node));
                 break;
@@ -709,7 +725,7 @@ public:
 
         if (type == AST_TYPE::Branch) {
             AST_TYPE::AST_TYPE test_type = ast_cast<AST_Branch>(node)->test->type;
-            assert(test_type == AST_TYPE::Name || test_type == AST_TYPE::Num);
+            ASSERT(test_type == AST_TYPE::Name || test_type == AST_TYPE::Num, "%d", test_type);
             curblock->push_back(node);
             return;
         }
@@ -1147,7 +1163,7 @@ public:
         curblock = test_block;
 
         AST_expr* test_call = makeCall(hasnext_attr);
-        AST_Branch* test_br = makeBranch(test_call);
+        AST_Branch* test_br = makeBranch(remapExpr(test_call));
         push_back(test_br);
 
         CFGBlock* test_true = cfg->addBlock();
@@ -1187,7 +1203,7 @@ public:
 
         if (curblock) {
             AST_expr* end_call = makeCall(hasnext_attr);
-            AST_Branch* end_br = makeBranch(end_call);
+            AST_Branch* end_br = makeBranch(remapExpr(end_call));
             push_back(end_br);
 
             CFGBlock* end_true = cfg->addBlock();
@@ -1486,6 +1502,8 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     AST_Return* return_stmt = new AST_Return();
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
+
+// rtn->print();
 
 #ifndef NDEBUG
     ////

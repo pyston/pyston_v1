@@ -668,6 +668,7 @@ define make_search
 $(eval \
 $1: ../test/tests/$1 ;
 $1: ../microbenchmarks/$1 ;
+$1: ../millibenchmarks/$1 ;
 $1: ../benchmarks/$1 ;
 )
 endef
