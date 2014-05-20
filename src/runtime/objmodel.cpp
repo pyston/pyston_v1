@@ -1731,17 +1731,16 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     }
 
     // TODO patch these cases
+    if (rewrite_args) {
+        assert(rewrite_args->out_success == false);
+        rewrite_args = NULL;
+    }
 
     std::string rop_name = getReverseOpName(op_type);
-    Box* rattr_func = getattr_internal(rhs->cls, rop_name, false, false, NULL, NULL);
-    if (rattr_func) {
-        Box* rtn = runtimeCall2(rattr_func, 2, rhs, lhs);
-        if (rtn != NotImplemented) {
-            return rtn;
-        }
-    } else {
-        // printf("rfunc doesn't exist\n");
-    }
+    Box* rrtn = callattrInternal1(rhs, &rop_name, CLASS_ONLY, NULL, 1, lhs);
+    if (rrtn != NULL && rrtn != NotImplemented)
+        return rrtn;
+
 
     llvm::StringRef op_sym = getOpSymbol(op_type);
     const char* op_sym_suffix = "";
@@ -1762,7 +1761,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
             fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(), op_name.c_str());
         else
             fprintf(stderr, "%s does not have %s\n", getTypeName(lhs)->c_str(), op_name.c_str());
-        if (rattr_func)
+        if (rrtn)
             fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(rhs)->c_str(), rop_name.c_str());
         else
             fprintf(stderr, "%s does not have %s\n", getTypeName(rhs)->c_str(), rop_name.c_str());
@@ -1877,7 +1876,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
                 ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
             RELEASE_ASSERT(iter == NULL, "need to try iterating");
 
-            Box* getitem = getattr_internal(rhs, "__getitem__", false, false, NULL, NULL);
+            Box* getitem = typeLookup(rhs->cls, "__getitem__", NULL, NULL);
             if (getitem)
                 ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
             RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
@@ -1930,23 +1929,17 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     } else {
     }
 
-    std::string rop_name = getReverseOpName(op_type);
-    Box* rattr_func = getattr_internal(rhs->cls, rop_name, false, false, NULL, NULL);
-    if (rattr_func) {
-        Box* rtn = runtimeCall2(rattr_func, 2, rhs, lhs);
-        if (rtn != NotImplemented) {
-            ////printf("rfunc returned NotImplemented\n");
-            ////bool can_patchpoint = lhs->cls->is_constant && (lattr_func == NULL || (lattr;
-            // bool can_patchpoint = !isUserDefined(lhs->cls) && lhs->cls->is_constant;
-            // if (can_patchpoint && rhs->cls->is_constant && rattr_func->cls == function_cls) {
-            // void* rtn_addr = __builtin_extract_return_addr(__builtin_return_address(0));
-            //_repatchBinExp(rtn_addr, true, lhs, rhs, rattr_func);
-            //}
-            return rtn;
-        }
-    } else {
-        // printf("rfunc doesn't exist\n");
+
+    // TODO patch these cases
+    if (rewrite_args) {
+        assert(rewrite_args->out_success == false);
+        rewrite_args = NULL;
     }
+
+    std::string rop_name = getReverseOpName(op_type);
+    Box* rrtn = callattrInternal1(rhs, &rop_name, CLASS_ONLY, NULL, 1, lhs);
+    if (rrtn != NULL && rrtn != NotImplemented)
+        return rrtn;
 
 
     if (op_type == AST_TYPE::Eq)
