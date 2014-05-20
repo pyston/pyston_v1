@@ -77,6 +77,9 @@ if __name__ == "__main__":
     for patch_fn in patch_fns:
         if patch_fn.startswith('.'):
             continue
+        if patch_fn.startswith("LICENSE"):
+            continue
+
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)
 
