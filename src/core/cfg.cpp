@@ -661,7 +661,8 @@ private:
                 rtn = remapListComp(ast_cast<AST_ListComp>(node));
                 break;
             case AST_TYPE::Name:
-                return node;
+                rtn = node;
+                break;
             case AST_TYPE::Num:
                 return node;
             case AST_TYPE::Repr:
@@ -685,7 +686,7 @@ private:
                 RELEASE_ASSERT(0, "%d", node->type);
         }
 
-        if (wrap_with_assign && rtn->type != AST_TYPE::Name) {
+        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id[0] != '#')) {
             std::string name = nodeName(node);
             push_back(makeAssign(name, rtn));
             return makeName(name, AST_TYPE::Load);

@@ -2362,7 +2362,7 @@ Box* typeNew(Box* cls, Box* obj) {
     return rtn;
 }
 
-extern "C" Box* getGlobal(BoxedModule* m, std::string* name, bool from_global) {
+extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -2429,10 +2429,7 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name, bool from_global) {
             return rtn;
     }
 
-    if (from_global)
-        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
-    else
-        raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
+    raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
 }
 
 // TODO I feel like importing should go somewhere else; it's more closely tied to codegen

@@ -57,7 +57,7 @@ extern "C" void dump(Box* obj);
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
-extern "C" Box* getGlobal(BoxedModule* m, std::string* name, bool from_global);
+extern "C" Box* getGlobal(BoxedModule* m, std::string* name);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" Box* getclsattr(Box* obj, const char* attr);
