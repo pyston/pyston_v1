@@ -227,7 +227,12 @@ int main(int argc, char** argv) {
                     m->body[0] = p;
                 }
 
-                compileAndRunModule(m, main);
+                try {
+                    compileAndRunModule(m, main);
+                } catch (Box* b) {
+                    std::string msg = formatException(b);
+                    fprintf(stderr, "%s\n", msg.c_str());
+                }
             }
         }
     }
