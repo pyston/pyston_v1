@@ -19,6 +19,7 @@ print d.pop(4)
 try:
     d.pop(5)
     assert 0
-except KeyError:
+except KeyError, e:
+    print e.message
     print "ok"
 print sorted(d.items())

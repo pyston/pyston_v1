@@ -144,16 +144,12 @@ std::string formatException(Box* b) {
     if (attr == nullptr)
         return *name;
 
-    Box* r;
-    try {
-        r = str(attr);
-    }
-    catch (Box* b) {
+    BoxedString* r = strOrNull(attr);
+    if (!r)
         return *name;
-    }
 
     assert(r->cls == str_cls);
-    const std::string* msg = &static_cast<BoxedString*>(r)->s;
+    const std::string* msg = &r->s;
     return *name + ": " + *msg;
 }
 }

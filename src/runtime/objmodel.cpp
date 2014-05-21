@@ -1028,6 +1028,25 @@ extern "C" Box* repr(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
+extern "C" BoxedString* reprOrNull(Box* obj) {
+    try {
+        Box* r = repr(obj);
+        assert(r->cls == str_cls); // this should be checked by repr()
+        return static_cast<BoxedString*>(r);
+    } catch (Box* b) {
+        return nullptr;
+    }
+}
+
+extern "C" BoxedString* strOrNull(Box* obj) {
+    try {
+        BoxedString* r = str(obj);
+        return static_cast<BoxedString*>(r);
+    } catch (Box* b) {
+        return nullptr;
+    }
+}
+
 extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
     bool false_on_noncls = (flags & 0x1);
 

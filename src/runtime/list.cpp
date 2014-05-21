@@ -323,6 +323,24 @@ Box* listCount(BoxedList* self, Box* elt) {
     return new BoxedInt(count);
 }
 
+Box* listRemove(BoxedList* self, Box* elt) {
+    assert(self->cls == list_cls);
+
+    for (int i = 0; i < self->size; i++) {
+        Box* e = self->elts->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+
+        if (b) {
+            memmove(self->elts->elts + i, self->elts->elts + i + 1, (self->size - i - 1) * sizeof(Box*));
+            self->size--;
+            return None;
+        }
+    }
+
+    raiseExcHelper(ValueError, "list.remove(x): x not in list");
+}
+
 
 BoxedClass* list_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
@@ -396,6 +414,7 @@ void setupList() {
     list_cls->giveAttr("__new__", new BoxedFunction(new_));
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2, false)));
+    list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2, false)));
 
     list_cls->freeze();
 

@@ -43,6 +43,8 @@ extern "C" Box* runtimeCall(Box*, int64_t, Box*, Box*, Box*, Box**);
 extern "C" Box* callattr(Box*, std::string*, bool, int64_t, Box*, Box*, Box*, Box**);
 extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
+extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
+extern "C" BoxedString* strOrNull(Box* obj); // similar to str, but returns NULL on exception
 extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags);
 extern "C" BoxedInt* hash(Box* obj);
 // extern "C" Box* abs_(Box* obj);

@@ -33,3 +33,13 @@ print [1, 2, 3, 4, 5]
 l = [1, 2, 1, 2, 3]
 print l.count(1)
 print l.count(42)
+
+print l.remove(1)
+print l
+try:
+    l.remove(54)
+    assert 0
+except ValueError, e:
+    print e
+    print "ok"
+print l

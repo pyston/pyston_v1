@@ -108,15 +108,10 @@ Box* dictPop2(BoxedDict* self, Box* k) {
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
-        Box* s = NULL;
-        try {
-            s = repr(k);
-        } catch (Box* e) {
-            s = NULL;
-        }
+        BoxedString* s = reprOrNull(k);
 
         if (s)
-            raiseExcHelper(KeyError, "%s", static_cast<BoxedString*>(s)->s.c_str());
+            raiseExcHelper(KeyError, "%s", s->s.c_str());
         else
             raiseExcHelper(KeyError, "");
     }
