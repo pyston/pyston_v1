@@ -466,7 +466,8 @@ public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s) : Box(&str_iterator_flavor, str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
+    BoxedStringIterator(BoxedString* s)
+        : Box(&str_iterator_flavor, str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
 
     static bool hasnextUnboxed(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
@@ -503,8 +504,10 @@ Box* strIter(BoxedString* self) {
 void setupStr() {
     str_iterator_cls = new BoxedClass(false, false);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
-    str_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, NULL, 1, false)));
-    str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1, false)));
+    str_iterator_cls->giveAttr("__hasnext__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, NULL, 1, false)));
+    str_iterator_cls->giveAttr("next",
+                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1, false)));
     str_iterator_cls->freeze();
 
     str_cls->giveAttr("__name__", boxStrConstant("str"));
@@ -525,7 +528,8 @@ void setupStr() {
     str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, NULL, 2, false)));
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, NULL, 2, false)));
 
-    str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1, false)));
+    str_cls->giveAttr("__iter__",
+                      new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1, false)));
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
 

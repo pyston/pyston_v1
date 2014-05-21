@@ -38,9 +38,7 @@ public:
 
 class CFGBlockMinIndex {
 public:
-    bool operator()(const CFGBlock* lhs, const CFGBlock* rhs) {
-        return lhs->idx > rhs->idx;
-    }
+    bool operator()(const CFGBlock* lhs, const CFGBlock* rhs) { return lhs->idx > rhs->idx; }
 };
 
 template <typename T>
@@ -119,7 +117,8 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
     }
 
     if (VERBOSITY("analysis")) {
-        printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations, 1.0 * num_evaluations / cfg->blocks.size());
+        printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
+               1.0 * num_evaluations / cfg->blocks.size());
     }
 
 

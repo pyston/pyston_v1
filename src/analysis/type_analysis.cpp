@@ -654,7 +654,8 @@ public:
         }
 
         if (VERBOSITY("types")) {
-            printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations, 1.0 * num_evaluations / cfg->blocks.size());
+            printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
+                   1.0 * num_evaluations / cfg->blocks.size());
         }
 
         if (VERBOSITY("types") >= 2) {

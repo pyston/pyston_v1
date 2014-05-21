@@ -1033,7 +1033,8 @@ extern "C" BoxedString* reprOrNull(Box* obj) {
         Box* r = repr(obj);
         assert(r->cls == str_cls); // this should be checked by repr()
         return static_cast<BoxedString*>(r);
-    } catch (Box* b) {
+    }
+    catch (Box* b) {
         return nullptr;
     }
 }
@@ -1042,7 +1043,8 @@ extern "C" BoxedString* strOrNull(Box* obj) {
     try {
         BoxedString* r = str(obj);
         return static_cast<BoxedString*>(r);
-    } catch (Box* b) {
+    }
+    catch (Box* b) {
         return nullptr;
     }
 }
