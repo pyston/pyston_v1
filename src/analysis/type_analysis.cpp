@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "analysis/type_analysis.h"
+
+#include "analysis/fpc.h"
+#include "analysis/scoping_analysis.h"
+#include "codegen/type_recording.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/options.h"
+#include "runtime/types.h"
+
 #include <cstdio>
 #include <deque>
 #include <unordered_set>
-
-#include "core/options.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-
-#include "codegen/type_recording.h"
-
-#include "analysis/scoping_analysis.h"
-#include "analysis/type_analysis.h"
-
-#include "runtime/types.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -602,12 +600,16 @@ public:
         }
 
         std::unordered_set<CFGBlock*> in_queue;
-        std::deque<CFGBlock*> queue;
-        queue.push_back(cfg->getStartingBlock());
+        std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> queue;
+        queue.push(cfg->getStartingBlock());
+        in_queue.insert(cfg->getStartingBlock());
 
+        int num_evaluations = 0;
         while (queue.size()) {
-            CFGBlock* block = queue.front();
-            queue.pop_front();
+            ASSERT(queue.size() == in_queue.size(), "%ld %ld", queue.size(), in_queue.size());
+            num_evaluations++;
+            CFGBlock* block = queue.top();
+            queue.pop();
             in_queue.erase(block);
 
             TypeMap ending;
@@ -646,9 +648,13 @@ public:
                 bool first = (starting_types.count(next_block) == 0);
                 bool changed = merge(ending, starting_types[next_block]);
                 if ((first || changed) && in_queue.insert(next_block).second) {
-                    queue.push_back(next_block);
+                    queue.push(next_block);
                 }
             }
+        }
+
+        if (VERBOSITY("types")) {
+            printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations, 1.0 * num_evaluations / cfg->blocks.size());
         }
 
         if (VERBOSITY("types") >= 2) {

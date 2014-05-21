@@ -18,12 +18,15 @@
 #include <vector>
 #include <unordered_map>
 
-//#include "ast.h"
+#include "core/types.h"
 #include "codegen/compvars.h"
 
 namespace pyston {
 
 class ScopeInfo;
+class CFGBlock;
+class BoxedClass;
+class AST_expr;
 
 class TypeAnalysis {
 public:

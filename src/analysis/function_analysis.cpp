@@ -73,6 +73,14 @@ public:
         }
         return true;
     }
+    bool visit_alias(AST_alias* node) {
+        const std::string* name = &node->name;
+        if (node->asname.size())
+            name = &node->asname;
+
+        _doStore(*name);
+        return true;
+    }
 };
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
