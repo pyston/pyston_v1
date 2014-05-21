@@ -22,9 +22,14 @@
 #include "core/ast.h"
 #include "core/cfg.h"
 
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
+
 namespace pyston {
 
 void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
+    assert(successors.size() <= 1);
+
     if (!allow_backedge) {
         assert(this->idx >= 0);
         ASSERT(successor->idx == -1 || successor->idx > this->idx, "edge from %d to %d", this->idx, successor->idx);
@@ -1165,14 +1170,14 @@ public:
 
         AST_expr* test_call = makeCall(hasnext_attr);
         AST_Branch* test_br = makeBranch(remapExpr(test_call));
-        push_back(test_br);
 
+        push_back(test_br);
         CFGBlock* test_true = cfg->addBlock();
         CFGBlock* test_false = cfg->addBlock();
         test_br->iftrue = test_true;
         test_br->iffalse = test_false;
-        test_block->connectTo(test_true);
-        test_block->connectTo(test_false);
+        curblock->connectTo(test_true);
+        curblock->connectTo(test_false);
 
         CFGBlock* loop_block = cfg->addBlock();
         CFGBlock* end_block = cfg->addDeferredBlock();
@@ -1504,7 +1509,10 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
 
-// rtn->print();
+    if (VERBOSITY("cfg") >= 2) {
+        printf("Before cfg checking and transformations:\n");
+        rtn->print();
+    }
 
 #ifndef NDEBUG
     ////
@@ -1520,6 +1528,13 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         for (CFGBlock* b2 : b->successors) {
             ASSERT(b2->idx != -1, "Forgot to place a block!");
         }
+
+        ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
+        if (b->successors.size() == 0)
+            assert(b->body.back()->type == AST_TYPE::Return || b->body.back()->type == AST_TYPE::Raise);
+
+        if (b->predecessors.size() == 0)
+            assert(b == rtn->getStartingBlock());
     }
 
     // We need to generate the CFG in a way that doesn't have any critical edges,
@@ -1596,8 +1611,11 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         }
     }
 
-    if (VERBOSITY())
+    if (VERBOSITY("cfg") >= 2) {
+        printf("Final cfg:\n");
         rtn->print();
+    }
+
 
     return rtn;
 }

@@ -1,6 +1,3 @@
-# expected: fail
-# - working on it
-
 # Regression test:
 
 for i in xrange(5):
