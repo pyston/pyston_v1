@@ -572,6 +572,10 @@ private:
         boxed_left->decvref(emitter);
         boxed_right->decvref(emitter);
 
+        if (type == AST_TYPE::In || type == AST_TYPE::NotIn || type == AST_TYPE::Is || type == AST_TYPE::IsNot) {
+            return unboxVar(BOXED_BOOL, rtn, true);
+        }
+
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
@@ -935,6 +939,11 @@ private:
         if (t == BOXED_FLOAT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v);
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(FLOAT, unboxed, true);
+            return rtn;
+        }
+        if (t == BOXED_BOOL) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
+            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(BOOL, unboxed, true);
             return rtn;
         }
         return new ConcreteCompilerVariable(t, v, grabbed);

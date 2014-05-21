@@ -138,9 +138,9 @@ int main(int argc, char** argv) {
                 m = parse(fn);
 
             if (VERBOSITY() >= 1) {
-                fprintf(stderr, "Parsed code; ast:\n");
+                printf("Parsed code; ast:\n");
                 print_ast(m);
-                fprintf(stderr, "==============\n");
+                printf("==============\n");
             }
 
             try {

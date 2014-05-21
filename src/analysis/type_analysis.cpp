@@ -54,6 +54,8 @@ static ConcreteCompilerType* unboxedType(ConcreteCompilerType* t) {
         return INT;
     if (t == BOXED_FLOAT)
         return FLOAT;
+    if (t == BOXED_BOOL)
+        return BOOL;
     return t;
 }
 

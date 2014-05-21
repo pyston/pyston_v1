@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "core/cfg.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cassert>
@@ -20,7 +22,6 @@
 #include "core/options.h"
 
 #include "core/ast.h"
-#include "core/cfg.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -1096,6 +1097,7 @@ public:
 
         curblock = test_block;
         AST_Branch* br = makeBranch(remapExpr(node->test));
+        CFGBlock* test_block_end = curblock;
         push_back(br);
 
         // We need a reference to this block early on so we can break to it,
@@ -1107,7 +1109,8 @@ public:
         CFGBlock* body = cfg->addBlock();
         body->info = "while_body_start";
         br->iftrue = body;
-        test_block->connectTo(body);
+
+        test_block_end->connectTo(body);
         curblock = body;
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
@@ -1123,7 +1126,7 @@ public:
         CFGBlock* orelse = cfg->addBlock();
         orelse->info = "while_orelse_start";
         br->iffalse = orelse;
-        test_block->connectTo(orelse);
+        test_block_end->connectTo(orelse);
         curblock = orelse;
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);

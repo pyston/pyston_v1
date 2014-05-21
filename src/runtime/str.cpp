@@ -383,6 +383,49 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
     }
 }
 
+Box* strStrip(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& s = self->s;
+    int n = s.size();
+
+    int strip_beginning = 0;
+    while (strip_beginning < n) {
+        char c = s[strip_beginning];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v')
+            strip_beginning++;
+        else
+            break;
+    }
+
+    if (strip_beginning == n)
+        return boxStrConstant("");
+
+    int strip_end = 0;
+    while (strip_end < n) {
+        char c = s[n - strip_end - 1];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v')
+            strip_end++;
+        else
+            break;
+    }
+
+    return new BoxedString(s.substr(strip_beginning, n - strip_beginning - strip_end));
+}
+
+Box* strContains(BoxedString* self, Box* elt) {
+    assert(self->cls == str_cls);
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt)->c_str());
+
+    BoxedString* sub = static_cast<BoxedString*>(elt);
+
+    size_t found_idx = self->s.find(sub->s);
+    if (found_idx == std::string::npos)
+        return False;
+    return True;
+}
+
 
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     if (slice->cls == int_cls) {
@@ -419,6 +462,8 @@ void setupStr() {
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, NULL, 1, false)));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1, false)));
+    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 1, false)));
+    str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2, false)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, NULL, 2, false)));
     str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, NULL, 2, false)));

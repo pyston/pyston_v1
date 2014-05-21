@@ -1154,6 +1154,18 @@ public:
         return new ConcreteCompilerVariable(other_type, boxed, true);
     }
 
+    virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
+        return BOXED_BOOL->getattrType(attr, cls_only);
+    }
+
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                                      bool cls_only) {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
+        CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     virtual ConcreteCompilerType* getBoxType() { return BOXED_BOOL; }
 };
 ConcreteCompilerType* BOOL = new BoolType();

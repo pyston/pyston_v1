@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "core/ast.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <stdint.h>
 #include <cassert>
 
-#include "core/ast.h"
 #include "core/cfg.h"
 
 #define FUTURE_DIVISION 0
