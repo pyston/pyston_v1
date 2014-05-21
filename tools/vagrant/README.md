@@ -13,7 +13,7 @@ You need to install:
 
 - [Oracle VirtualBox](https://www.virtualbox.org/wiki/Downloads)
 - [Vagrant](http://downloads.vagrantup.com/)
-- [Ansible](http://docs.ansible.com/intro_installation.html#installing-the-control-machine)
+- [Ansible](http://docs.ansible.com/intro_installation.html#installing-the-control-machine) - If you're on a Mac and you use [homebrew](http://brew.sh), you can just run "brew install ansible"
 
 ## Building
 
