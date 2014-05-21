@@ -24,3 +24,7 @@ print repr(" \t\n\v\ftest \t\n\v\f".strip())
 
 for pattern in ["hello", "o w", "nope"]:
     print pattern in "hello world"
+
+print ord("\a")
+for c in "hello world":
+    print repr(c), ord(c)

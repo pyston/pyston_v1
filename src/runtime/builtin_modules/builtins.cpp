@@ -161,6 +161,18 @@ extern "C" Box* chr(Box* arg) {
     return boxString(std::string(1, (char)n));
 }
 
+extern "C" Box* ord(Box* arg) {
+    if (arg->cls != str_cls) {
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg)->c_str());
+    }
+    const std::string& s = static_cast<BoxedString*>(arg)->s;
+
+    if (s.size() != 1)
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but string of length %d found", s.size());
+
+    return boxInt(s[0]);
+}
+
 Box* range1(Box* end) {
     RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
 
@@ -396,6 +408,8 @@ void setupBuiltins() {
 
     chr_obj = new BoxedFunction(boxRTFunction((void*)chr, NULL, 1, false));
     builtins_module->giveAttr("chr", chr_obj);
+    ord_obj = new BoxedFunction(boxRTFunction((void*)ord, NULL, 1, false));
+    builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedFunction(boxRTFunction((void*)trap, NULL, 0, false));
     builtins_module->giveAttr("trap", trap_obj);
 

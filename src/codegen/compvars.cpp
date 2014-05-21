@@ -931,9 +931,9 @@ public:
         if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL) {
-                llvm::CallSite call
-                    = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
-                                          getStringConstantPtr(debugName() + '\0'), getStringConstantPtr(*attr + '\0'));
+                llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
                 return undefVariable();
             }

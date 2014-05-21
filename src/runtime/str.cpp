@@ -452,7 +452,61 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     }
 }
 
+
+// TODO it looks like strings don't have their own iterators, but instead
+// rely on the sequence iteration protocol.
+// Should probably implement that, and maybe once that's implemented get
+// rid of the striterator class?
+BoxedClass* str_iterator_cls = NULL;
+extern "C" void strIteratorGCHandler(GCVisitor* v, void* p);
+extern "C" const ObjectFlavor str_iterator_flavor(&strIteratorGCHandler, NULL);
+
+class BoxedStringIterator : public Box {
+public:
+    BoxedString* s;
+    std::string::const_iterator it, end;
+
+    BoxedStringIterator(BoxedString* s) : Box(&str_iterator_flavor, str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
+
+    static bool hasnextUnboxed(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        return self->it != self->end;
+    }
+
+    static Box* hasnext(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        return boxBool(self->it != self->end);
+    }
+
+    static Box* next(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        assert(hasnextUnboxed(self));
+
+        char c = *self->it;
+        ++self->it;
+        return new BoxedString(std::string(1, c));
+    }
+};
+
+extern "C" void strIteratorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+    BoxedStringIterator* it = (BoxedStringIterator*)p;
+    v->visit(it->s);
+}
+
+Box* strIter(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return new BoxedStringIterator(self);
+}
+
+
 void setupStr() {
+    str_iterator_cls = new BoxedClass(false, false);
+    str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
+    str_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, NULL, 1, false)));
+    str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1, false)));
+    str_iterator_cls->freeze();
+
     str_cls->giveAttr("__name__", boxStrConstant("str"));
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, NULL, 1, false)));
@@ -470,6 +524,8 @@ void setupStr() {
     str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, NULL, 2, false)));
     str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, NULL, 2, false)));
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, NULL, 2, false)));
+
+    str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1, false)));
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
 

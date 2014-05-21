@@ -272,6 +272,8 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
         return boxStrConstant("<built-in function open>");
     if (v == chr_obj)
         return boxStrConstant("<built-in function chr>");
+    if (v == ord_obj)
+        return boxStrConstant("<built-in function ord>");
     return new BoxedString("function");
 }
 
@@ -286,6 +288,7 @@ Box* min_obj = NULL;
 Box* max_obj = NULL;
 Box* open_obj = NULL;
 Box* chr_obj = NULL;
+Box* ord_obj = NULL;
 Box* trap_obj = NULL;
 Box* range_obj = NULL;
 }
