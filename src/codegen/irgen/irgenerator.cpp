@@ -756,7 +756,6 @@ private:
                 // Method 1: calls into the runtime getGlobal(), which handles things like falling back to builtins
                 // or raising the correct error message.
                 bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
-                bool from_global = irstate->getSourceInfo()->ast->type == AST_TYPE::Module;
                 if (do_patchpoint) {
                     PatchpointSetupInfo* pp = patchpoints::createGetGlobalPatchpoint(
                         emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
@@ -765,18 +764,17 @@ private:
                     llvm_args.push_back(
                         embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
                     llvm_args.push_back(embedConstantPtr(&node->id, g.llvm_str_type_ptr));
-                    llvm_args.push_back(getConstantInt(from_global, g.i1));
 
                     llvm::Value* uncasted
                         = emitter.createPatchpoint(pp, (void*)pyston::getGlobal, llvm_args, exc_info).getInstruction();
                     llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
                     return new ConcreteCompilerVariable(UNKNOWN, r, true);
                 } else {
-                    llvm::Value* r = emitter.createCall3(exc_info, g.funcs.getGlobal,
-                                                         embedConstantPtr(irstate->getSourceInfo()->parent_module,
-                                                                          g.llvm_module_type_ptr),
-                                                         embedConstantPtr(&node->id, g.llvm_str_type_ptr),
-                                                         getConstantInt(from_global, g.i1)).getInstruction();
+                    llvm::Value* r
+                        = emitter.createCall2(
+                                      exc_info, g.funcs.getGlobal,
+                                      embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
+                                      embedConstantPtr(&node->id, g.llvm_str_type_ptr)).getInstruction();
                     return new ConcreteCompilerVariable(UNKNOWN, r, true);
                 }
             } else {
@@ -1305,7 +1303,7 @@ private:
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
 
         llvm::Value* classobj
-            = emitter.createCall2(exc_info, g.funcs.createClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
+            = emitter.createCall2(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
                                   embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr))
                   .getInstruction();
         ConcreteCompilerVariable* cls = new ConcreteCompilerVariable(typeFromClass(type_cls), classobj, true);

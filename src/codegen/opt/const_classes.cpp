@@ -39,7 +39,6 @@ using namespace llvm;
 
 namespace pyston {
 
-#define CLS_DTOR_OFFSET ((const char*)&(((BoxedClass*)0x01)->dtor) - (const char*)0x1)
 #define CLS_HASATTRS_OFFSET ((const char*)&(((BoxedClass*)0x01)->hasattrs) - (const char*)0x1)
 #define FLAVOR_KINDID_OFFSET ((const char*)&(((ObjectFlavor*)0x01)->kind_id) - (const char*)0x1)
 
@@ -153,11 +152,7 @@ private:
 
                 errs() << "Found a load: " << *gep_load << '\n';
 
-                if (offset == CLS_DTOR_OFFSET) {
-                    errs() << "Dtor; replacing with " << cls->dtor << "\n";
-                    replaceUsesWithConstant(gep_load, (uintptr_t)cls->dtor);
-                    changed = true;
-                } else if (offset == CLS_HASATTRS_OFFSET) {
+                if (offset == CLS_HASATTRS_OFFSET) {
                     errs() << "Hasattrs; replacing with " << cls->hasattrs << "\n";
                     replaceUsesWithConstant(gep_load, cls->hasattrs);
                     changed = true;

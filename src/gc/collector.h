@@ -51,7 +51,7 @@ private:
     std::vector<void*> v;
 
 public:
-    void pushall(void** start, void** end) { v.insert(v.end(), start, end); }
+    void pushall(void* const* start, void* const* end) { v.insert(v.end(), start, end); }
 
     void push(void* p) { v.push_back(p); }
 
@@ -80,9 +80,9 @@ public:
     TraceStackGCVisitor(TraceStack* stack) : stack(stack) {}
 
     void visit(void* p) override;
-    void visitRange(void** start, void** end) override;
+    void visitRange(void* const* start, void* const* end) override;
     void visitPotential(void* p) override;
-    void visitPotentialRange(void** start, void** end) override;
+    void visitPotentialRange(void* const* start, void* const* end) override;
 };
 
 // Call it a "root obj" because this function takes the pointer to the object, not a pointer

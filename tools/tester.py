@@ -72,11 +72,31 @@ def get_expected_output(fn):
     out, err = p.communicate()
     code = p.wait()
 
-    r = code, out, err.strip().split('\n')[-1]
+    r = code, out, err
     assert code >= 0, "CPython exited with an unexpected exit code: %d" % (code,)
 
     cPickle.dump(r, open(cache_fn, 'w'))
     return r
+
+def canonicalize_stderr(stderr):
+    """
+    For a while we were trying to maintain *exact* stderr compatibility with CPython,
+    at least for the last line of the stderr.
+
+    It was starting to get silly to do this, so instead apply some "canonicalizations"
+    to map certain groups of error messages together.
+    """
+
+    stderr = stderr.strip().split('\n')[-1]
+
+    substitutions = [
+            ("NameError: global name '", "NameError: name '"),
+            ]
+
+    for pattern, subst_with in substitutions:
+        stderr = stderr.replace(pattern, subst_with)
+
+    return stderr
 
 failed = []
 def run_test(fn, check_stats, run_memcheck):
@@ -107,9 +127,8 @@ def run_test(fn, check_stats, run_memcheck):
     run_args = [os.path.abspath(IMAGE)] + jit_args + [fn]
     start = time.time()
     p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
-    out, err = p.communicate()
-    full_err = err
-    err = err.strip().split('\n')[-1]
+    out, stderr = p.communicate()
+    last_stderr_line = stderr.strip().split('\n')[-1]
 
     code = p.wait()
     elapsed = time.time() - start
@@ -128,6 +147,8 @@ def run_test(fn, check_stats, run_memcheck):
 
         if code == 0:
             err = "(Unexpected success)"
+        else:
+            err = last_stderr_line
 
         if code == -signal.SIGALRM:
             msg = "Timed out"
@@ -146,7 +167,7 @@ def run_test(fn, check_stats, run_memcheck):
                 failed.append(fn)
                 return r
             else:
-                raise Exception("%s\n%s\n%s" % (msg, err, full_err))
+                raise Exception("%s\n%s\n%s" % (msg, err, stderr))
     elif out != expected_out:
         if expected == "fail":
             r += "    Expected failure (bad output)"
@@ -164,13 +185,13 @@ def run_test(fn, check_stats, run_memcheck):
             diff = p.stdout.read()
             assert p.wait() in (0, 1)
             raise Exception("Failed on %s:\n%s" % (fn, diff))
-    elif not TEST_PYPY and err != expected_err:
+    elif not TEST_PYPY and canonicalize_stderr(stderr) != canonicalize_stderr(expected_err):
         if KEEP_GOING:
             r += "    \033[31mFAILED\033[0m (bad stderr)"
             failed.append(fn)
             return r
         else:
-            raise Exception((err, expected_err))
+            raise Exception((canonicalize_stderr(stderr), canonicalize_stderr(expected_err)))
     elif expected == "fail":
         if KEEP_GOING:
             r += "    \033[31mFAILED\033[0m (unexpected success)"

@@ -60,12 +60,12 @@ BoxedList* getSysPath();
 
 extern "C" {
 extern BoxedClass* type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls, *instancemethod_cls,
-    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls;
+    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
 }
 extern "C" {
 extern const ObjectFlavor type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor, function_flavor, none_flavor,
     instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor, tuple_flavor, file_flavor,
-    xrange_flavor;
+    xrange_flavor, member_flavor;
 }
 extern "C" { extern const ObjectFlavor user_flavor; }
 
@@ -87,7 +87,7 @@ extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createClass(std::string* name, BoxedModule* parent_module);
+extern "C" Box* createUserClass(std::string* name, BoxedModule* parent_module);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -95,92 +95,6 @@ extern "C" Box* createSlice(Box* start, Box* stop, Box* step);
 extern "C" Box* createTuple(int64_t nelts, Box** elts);
 extern "C" void printFloat(double d);
 
-
-class BoxedInt : public Box {
-public:
-    int64_t n;
-
-    BoxedInt(int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, int_cls), n(n) {}
-};
-
-class BoxedFloat : public Box {
-public:
-    double d;
-
-    BoxedFloat(double d) __attribute__((visibility("default"))) : Box(&float_flavor, float_cls), d(d) {}
-};
-
-class BoxedBool : public Box {
-public:
-    bool b;
-
-    BoxedBool(bool b) __attribute__((visibility("default"))) : Box(&bool_flavor, bool_cls), b(b) {}
-};
-
-class BoxedString : public Box {
-public:
-    const std::string s;
-
-    BoxedString(const std::string&& s) __attribute__((visibility("default")))
-    : Box(&str_flavor, str_cls), s(std::move(s)) {}
-    BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(&str_flavor, str_cls), s(s) {}
-};
-
-class BoxedInstanceMethod : public Box {
-public:
-    Box* obj, *func;
-
-    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
-    : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
-};
-
-class BoxedList : public Box {
-public:
-    class ElementArray : public GCObject {
-    public:
-        Box* elts[0];
-
-        ElementArray() : GCObject(&untracked_kind) {}
-
-        void* operator new(size_t size, int capacity) {
-            return rt_alloc(capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
-        }
-    };
-
-    int64_t size, capacity;
-    ElementArray* elts;
-
-    BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
-
-    void ensure(int space);
-};
-
-class BoxedTuple : public Box {
-public:
-    const std::vector<Box*> elts;
-
-    BoxedTuple(std::vector<Box*>& elts) __attribute__((visibility("default")))
-    : Box(&tuple_flavor, tuple_cls), elts(elts) {}
-};
-
-class BoxedFile : public Box {
-public:
-    FILE* f;
-    bool closed;
-    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(&file_flavor, file_cls), f(f), closed(false) {}
-};
-
-struct PyHasher {
-    size_t operator()(Box*) const;
-};
-
-struct PyEq {
-    bool operator()(Box*, Box*) const;
-};
-
-struct PyLt {
-    bool operator()(Box*, Box*) const;
-};
 
 class ConservativeWrapper : public GCObject {
 public:
@@ -240,6 +154,100 @@ public:
     }
 
     template <class U> void destroy(U* p) { p->~U(); }
+
+    bool operator==(const StlCompatAllocator<T>& rhs) const { return true; }
+    bool operator!=(const StlCompatAllocator<T>& rhs) const { return false; }
+};
+
+
+class BoxedInt : public Box {
+public:
+    int64_t n;
+
+    BoxedInt(int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, int_cls), n(n) {}
+};
+
+class BoxedFloat : public Box {
+public:
+    double d;
+
+    BoxedFloat(double d) __attribute__((visibility("default"))) : Box(&float_flavor, float_cls), d(d) {}
+};
+
+class BoxedBool : public Box {
+public:
+    bool b;
+
+    BoxedBool(bool b) __attribute__((visibility("default"))) : Box(&bool_flavor, bool_cls), b(b) {}
+};
+
+class BoxedString : public Box {
+public:
+    // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
+    const std::string s;
+
+    BoxedString(const std::string&& s) __attribute__((visibility("default")))
+    : Box(&str_flavor, str_cls), s(std::move(s)) {}
+    BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(&str_flavor, str_cls), s(s) {}
+};
+
+class BoxedInstanceMethod : public Box {
+public:
+    Box* obj, *func;
+
+    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
+    : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
+};
+
+class BoxedList : public Box {
+public:
+    class ElementArray : public GCObject {
+    public:
+        Box* elts[0];
+
+        ElementArray() : GCObject(&untracked_kind) {}
+
+        void* operator new(size_t size, int capacity) {
+            return rt_alloc(capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+        }
+    };
+
+    int64_t size, capacity;
+    ElementArray* elts;
+
+    BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
+
+    void ensure(int space);
+};
+
+class BoxedTuple : public Box {
+public:
+    typedef std::vector<Box*, StlCompatAllocator<Box*> > GCVector;
+    const GCVector elts;
+
+    BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >& elts) __attribute__((visibility("default")))
+    : Box(&tuple_flavor, tuple_cls), elts(elts) {}
+    BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >&& elts) __attribute__((visibility("default")))
+    : Box(&tuple_flavor, tuple_cls), elts(std::move(elts)) {}
+};
+
+class BoxedFile : public Box {
+public:
+    FILE* f;
+    bool closed;
+    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(&file_flavor, file_cls), f(f), closed(false) {}
+};
+
+struct PyHasher {
+    size_t operator()(Box*) const;
+};
+
+struct PyEq {
+    bool operator()(Box*, Box*) const;
+};
+
+struct PyLt {
+    bool operator()(Box*, Box*) const;
 };
 
 class BoxedDict : public Box {
@@ -264,11 +272,22 @@ public:
     std::string name();
 };
 
-class BoxedSlice : public HCBox {
+class BoxedSlice : public Box {
 public:
     Box* start, *stop, *step;
     BoxedSlice(Box* lower, Box* upper, Box* step)
-        : HCBox(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
+        : Box(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
+};
+
+class BoxedMemberDescriptor : public Box {
+public:
+    enum MemberType {
+        OBJECT,
+    } type;
+
+    int offset;
+
+    BoxedMemberDescriptor(MemberType type, int offset) : Box(&member_flavor, member_cls), type(type), offset(offset) {}
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);

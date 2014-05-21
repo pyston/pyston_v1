@@ -328,7 +328,7 @@ Box* exceptionRepr(Box* b) {
 }
 
 static BoxedClass* makeBuiltinException(const char* name) {
-    BoxedClass* cls = new BoxedClass(true, NULL);
+    BoxedClass* cls = new BoxedClass(true, false);
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
@@ -346,7 +346,7 @@ void setupBuiltins() {
 
     builtins_module->setattr("None", None, NULL, NULL);
 
-    notimplemented_cls = new BoxedClass(false, NULL);
+    notimplemented_cls = new BoxedClass(false, false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(boxRTFunction((void*)notimplementedRepr, NULL, 1, false)));

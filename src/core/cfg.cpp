@@ -22,9 +22,14 @@
 #include "core/ast.h"
 #include "core/cfg.h"
 
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
+
 namespace pyston {
 
 void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
+    assert(successors.size() <= 1);
+
     if (!allow_backedge) {
         assert(this->idx >= 0);
         ASSERT(successor->idx == -1 || successor->idx > this->idx, "edge from %d to %d", this->idx, successor->idx);
@@ -301,6 +306,11 @@ private:
             // Probably better to create an AST_Callattr type, and solidify the
             // idea that a callattr is a single expression.
             rtn->func = remapAttribute(ast_cast<AST_Attribute>(node->func));
+        } else if (node->func->type == AST_TYPE::ClsAttribute) {
+            // TODO this is a cludge to make sure that "callattrs" stick together.
+            // Probably better to create an AST_Callattr type, and solidify the
+            // idea that a callattr is a single expression.
+            rtn->func = remapClsAttribute(ast_cast<AST_ClsAttribute>(node->func));
         } else {
             rtn->func = remapExpr(node->func);
         }
@@ -317,6 +327,14 @@ private:
         rtn->starargs = remapExpr(node->starargs);
         rtn->kwargs = remapExpr(node->kwargs);
 
+        return rtn;
+    }
+
+    AST_expr* remapClsAttribute(AST_ClsAttribute* node) {
+        AST_ClsAttribute* rtn = new AST_ClsAttribute();
+
+        rtn->attr = node->attr;
+        rtn->value = remapExpr(node->value);
         return rtn;
     }
 
@@ -461,7 +479,7 @@ private:
             push_back(j);
 
             curblock = test_block;
-            AST_expr* test_call = makeCall(hasnext_attr);
+            AST_expr* test_call = remapExpr(makeCall(hasnext_attr));
 
             CFGBlock* body_block = cfg->addBlock();
             body_block->info = "listcomp_body";
@@ -623,6 +641,9 @@ private:
             case AST_TYPE::Call:
                 rtn = remapCall(ast_cast<AST_Call>(node));
                 break;
+            case AST_TYPE::ClsAttribute:
+                rtn = remapClsAttribute(ast_cast<AST_ClsAttribute>(node));
+                break;
             case AST_TYPE::Compare:
                 rtn = remapCompare(ast_cast<AST_Compare>(node));
                 break;
@@ -645,7 +666,8 @@ private:
                 rtn = remapListComp(ast_cast<AST_ListComp>(node));
                 break;
             case AST_TYPE::Name:
-                return node;
+                rtn = node;
+                break;
             case AST_TYPE::Num:
                 return node;
             case AST_TYPE::Repr:
@@ -669,7 +691,7 @@ private:
                 RELEASE_ASSERT(0, "%d", node->type);
         }
 
-        if (wrap_with_assign && rtn->type != AST_TYPE::Name) {
+        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id[0] != '#')) {
             std::string name = nodeName(node);
             push_back(makeAssign(name, rtn));
             return makeName(name, AST_TYPE::Load);
@@ -709,7 +731,7 @@ public:
 
         if (type == AST_TYPE::Branch) {
             AST_TYPE::AST_TYPE test_type = ast_cast<AST_Branch>(node)->test->type;
-            assert(test_type == AST_TYPE::Name || test_type == AST_TYPE::Num);
+            ASSERT(test_type == AST_TYPE::Name || test_type == AST_TYPE::Num, "%d", test_type);
             curblock->push_back(node);
             return;
         }
@@ -1147,15 +1169,15 @@ public:
         curblock = test_block;
 
         AST_expr* test_call = makeCall(hasnext_attr);
-        AST_Branch* test_br = makeBranch(test_call);
-        push_back(test_br);
+        AST_Branch* test_br = makeBranch(remapExpr(test_call));
 
+        push_back(test_br);
         CFGBlock* test_true = cfg->addBlock();
         CFGBlock* test_false = cfg->addBlock();
         test_br->iftrue = test_true;
         test_br->iffalse = test_false;
-        test_block->connectTo(test_true);
-        test_block->connectTo(test_false);
+        curblock->connectTo(test_true);
+        curblock->connectTo(test_false);
 
         CFGBlock* loop_block = cfg->addBlock();
         CFGBlock* end_block = cfg->addDeferredBlock();
@@ -1187,7 +1209,7 @@ public:
 
         if (curblock) {
             AST_expr* end_call = makeCall(hasnext_attr);
-            AST_Branch* end_br = makeBranch(end_call);
+            AST_Branch* end_br = makeBranch(remapExpr(end_call));
             push_back(end_br);
 
             CFGBlock* end_true = cfg->addBlock();
@@ -1487,6 +1509,11 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
 
+    if (VERBOSITY("cfg") >= 2) {
+        printf("Before cfg checking and transformations:\n");
+        rtn->print();
+    }
+
 #ifndef NDEBUG
     ////
     // Check some properties expected by later stages:
@@ -1501,6 +1528,13 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         for (CFGBlock* b2 : b->successors) {
             ASSERT(b2->idx != -1, "Forgot to place a block!");
         }
+
+        ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
+        if (b->successors.size() == 0)
+            assert(b->body.back()->type == AST_TYPE::Return || b->body.back()->type == AST_TYPE::Raise);
+
+        if (b->predecessors.size() == 0)
+            assert(b == rtn->getStartingBlock());
     }
 
     // We need to generate the CFG in a way that doesn't have any critical edges,
@@ -1577,8 +1611,11 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
         }
     }
 
-    if (VERBOSITY())
+    if (VERBOSITY("cfg") >= 2) {
+        printf("Final cfg:\n");
         rtn->print();
+    }
+
 
     return rtn;
 }

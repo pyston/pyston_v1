@@ -27,13 +27,8 @@
 namespace pyston {
 
 extern "C" Box* createTuple(int64_t nelts, Box** elts) {
-    std::vector<Box*> velts(elts, elts + nelts);
-    return new BoxedTuple(velts);
-}
-
-void tuple_dtor(BoxedTuple* t) {
-    typedef std::vector<Box*> T;
-    (&t->elts)->~T();
+    BoxedTuple::GCVector velts(elts, elts + nelts);
+    return new BoxedTuple(std::move(velts));
 }
 
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {

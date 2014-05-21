@@ -841,7 +841,7 @@ public:
     virtual bool isFitBy(BoxedClass* c) { return c == cls; }
 
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
-        if (cls->is_constant && !cls->hasattrs) {
+        if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL)
                 return UNDEF;
@@ -862,7 +862,7 @@ public:
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) {
         // printf("%s.getattr %s\n", debugName().c_str(), attr->c_str());
-        if (cls->is_constant && !cls->hasattrs) {
+        if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
@@ -928,7 +928,7 @@ public:
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                        const std::string* attr, bool clsonly,
                                        const std::vector<CompilerVariable*>& args) {
-        if (cls->is_constant && !cls->hasattrs) {
+        if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL) {
                 llvm::CallSite call

@@ -144,7 +144,7 @@ void initGlobalFuncs(GlobalState& g) {
 
     GET(boxCLFunction);
     GET(unboxCLFunction);
-    GET(createClass);
+    GET(createUserClass);
     GET(boxInt);
     GET(unboxInt);
     GET(boxFloat);

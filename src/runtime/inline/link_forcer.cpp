@@ -59,7 +59,7 @@ void force() {
     FORCE(createDict);
     FORCE(createList);
     FORCE(createSlice);
-    FORCE(createClass);
+    FORCE(createUserClass);
 
     FORCE(getattr);
     FORCE(setattr);

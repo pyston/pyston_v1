@@ -36,6 +36,10 @@ namespace pyston {
 
 bool IN_SHUTDOWN = false;
 
+#define SLICE_START_OFFSET ((char*)&(((BoxedSlice*)0x01)->start) - (char*)0x1)
+#define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
+#define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
+
 BoxIterator& BoxIterator::operator++() {
     static std::string hasnext_str("__hasnext__");
     static std::string next_str("next");
@@ -154,16 +158,23 @@ extern "C" void listGCHandler(GCVisitor* v, void* p) {
     sc.log(size);
 }
 
+extern "C" void sliceGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedSlice* sl = static_cast<BoxedSlice*>(p);
+    assert(sl->cls == slice_cls);
+
+    v->visit(sl->start);
+    v->visit(sl->stop);
+    v->visit(sl->step);
+}
+
 // This probably belongs in tuple.cpp?
 extern "C" void tupleGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
     BoxedTuple* t = (BoxedTuple*)p;
-    int size = t->elts.size();
-    if (size) {
-        v->visitRange(const_cast<void**>((void const* const*)&t->elts[0]),
-                      const_cast<void**>((void const* const*)&t->elts[size]));
-    }
+    v->visitPotentialRange((void* const*)&t->elts, (void* const*)(&t->elts + 1));
 }
 
 // This probably belongs in dict.cpp?
@@ -196,7 +207,7 @@ extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
 
 extern "C" {
 BoxedClass* type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *instancemethod_cls,
-    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls;
+    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls;
 
 const ObjectFlavor type_flavor(&typeGCHandler, NULL);
 const ObjectFlavor none_flavor(&boxGCHandler, NULL);
@@ -207,23 +218,21 @@ const ObjectFlavor str_flavor(&boxGCHandler, NULL);
 const ObjectFlavor function_flavor(&hcBoxGCHandler, NULL);
 const ObjectFlavor instancemethod_flavor(&instancemethodGCHandler, NULL);
 const ObjectFlavor list_flavor(&listGCHandler, NULL);
-const ObjectFlavor slice_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor slice_flavor(&sliceGCHandler, NULL);
 const ObjectFlavor module_flavor(&hcBoxGCHandler, NULL);
 const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
 const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
 const ObjectFlavor user_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor member_flavor(&boxGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
 const AllocationKind hc_kind(&hcGCHandler, NULL);
 const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 }
 
-void instancemethod_dtor(BoxedInstanceMethod* b) {
-}
-
-extern "C" Box* createClass(std::string* name, BoxedModule* parent_module) {
-    BoxedClass* rtn = new BoxedClass(true, NULL);
+extern "C" Box* createUserClass(std::string* name, BoxedModule* parent_module) {
+    BoxedClass* rtn = new BoxedClass(true, true);
     rtn->giveAttr("__name__", boxString(*name));
 
     Box* modname = parent_module->getattr("__name__", NULL, NULL);
@@ -282,14 +291,7 @@ Box* range_obj = NULL;
 }
 
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
-    static const std::string start_str("start");
-    static const std::string stop_str("stop");
-    static const std::string step_str("step");
-
     BoxedSlice* rtn = new BoxedSlice(start, stop, step);
-    rtn->setattr(start_str, start, NULL, NULL);
-    rtn->setattr(stop_str, stop, NULL, NULL);
-    rtn->setattr(step_str, step, NULL, NULL);
     return rtn;
 }
 
@@ -363,11 +365,6 @@ Box* moduleRepr(BoxedModule* m) {
     return boxString(os.str());
 }
 
-void str_dtor(BoxedString* s) {
-    typedef std::string T;
-    (&s->s)->~T();
-}
-
 CLFunction* unboxRTFunction(Box* b) {
     assert(b->cls == function_cls);
     return static_cast<BoxedFunction*>(b)->f;
@@ -377,30 +374,31 @@ bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     HiddenClass::getRoot();
 
-    type_cls = new BoxedClass(true, NULL);
+    type_cls = new BoxedClass(true, false);
     type_cls->cls = type_cls;
 
-    none_cls = new BoxedClass(false, NULL);
+    none_cls = new BoxedClass(false, false);
     None = new Box(&none_flavor, none_cls);
     gc::registerStaticRootObj(None);
 
-    module_cls = new BoxedClass(true, NULL);
+    module_cls = new BoxedClass(true, false);
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    bool_cls = new BoxedClass(false, NULL);
-    int_cls = new BoxedClass(false, NULL);
-    float_cls = new BoxedClass(false, NULL);
-    str_cls = new BoxedClass(false, (BoxedClass::Dtor)str_dtor);
-    function_cls = new BoxedClass(true, NULL);
-    instancemethod_cls = new BoxedClass(false, (BoxedClass::Dtor)instancemethod_dtor);
-    list_cls = new BoxedClass(false, (BoxedClass::Dtor)list_dtor);
-    slice_cls = new BoxedClass(true, NULL);
-    dict_cls = new BoxedClass(false, (BoxedClass::Dtor)dict_dtor);
-    tuple_cls = new BoxedClass(false, (BoxedClass::Dtor)tuple_dtor);
-    file_cls = new BoxedClass(false, (BoxedClass::Dtor)file_dtor);
-    set_cls = new BoxedClass(false, NULL);
+    bool_cls = new BoxedClass(false, false);
+    int_cls = new BoxedClass(false, false);
+    float_cls = new BoxedClass(false, false);
+    str_cls = new BoxedClass(false, false);
+    function_cls = new BoxedClass(true, false);
+    instancemethod_cls = new BoxedClass(false, false);
+    list_cls = new BoxedClass(false, false);
+    slice_cls = new BoxedClass(false, false);
+    dict_cls = new BoxedClass(false, false);
+    tuple_cls = new BoxedClass(false, false);
+    file_cls = new BoxedClass(false, false);
+    set_cls = new BoxedClass(false, false);
+    member_cls = new BoxedClass(false, false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -431,6 +429,9 @@ void setupRuntime() {
     module_cls->setattr("__str__", module_cls->peekattr("__repr__"), NULL, NULL);
     module_cls->freeze();
 
+    member_cls->giveAttr("__name__", boxStrConstant("member"));
+    member_cls->freeze();
+
     setupBool();
     setupInt();
     setupFloat();
@@ -458,6 +459,9 @@ void setupRuntime() {
     slice_cls->giveAttr("__new__", new BoxedFunction(slice_new));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, NULL, 1, true)));
     slice_cls->setattr("__str__", slice_cls->peekattr("__repr__"), NULL, NULL);
+    slice_cls->giveAttr("start", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_START_OFFSET));
+    slice_cls->giveAttr("stop", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STOP_OFFSET));
+    slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STEP_OFFSET));
     slice_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules

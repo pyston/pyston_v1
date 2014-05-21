@@ -135,7 +135,7 @@ template <class T> static void readMiscVector(std::vector<T*>& vec, BufferedRead
 static int readColOffset(BufferedReader* reader) {
     int rtn = reader->readULL();
     // offsets out of this range are almost certainly parse bugs:
-    ASSERT(rtn >= 0 && rtn < 100000, "%d", rtn);
+    ASSERT(rtn >= -1 && rtn < 100000, "%d", rtn);
     return rtn;
 }
 

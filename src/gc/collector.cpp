@@ -54,9 +54,9 @@ void TraceStackGCVisitor::visit(void* p) {
     _visit(p);
 }
 
-void TraceStackGCVisitor::visitRange(void** start, void** end) {
+void TraceStackGCVisitor::visitRange(void* const* start, void* const* end) {
 #ifndef NDEBUG
-    void** cur = start;
+    void* const* cur = start;
     while (cur < end) {
         assert(isValid(*cur));
         cur++;
@@ -72,7 +72,7 @@ void TraceStackGCVisitor::visitPotential(void* p) {
     }
 }
 
-void TraceStackGCVisitor::visitPotentialRange(void** start, void** end) {
+void TraceStackGCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     while (start < end) {
         visitPotential(*start);
         start++;
