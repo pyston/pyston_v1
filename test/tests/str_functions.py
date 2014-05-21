@@ -28,3 +28,10 @@ for pattern in ["hello", "o w", "nope"]:
 print ord("\a")
 for c in "hello world":
     print repr(c), ord(c)
+
+for c in "hello world":
+    print c, "hello world".count(c)
+
+for i in xrange(1, 10):
+    for j in xrange(1, 4):
+        print ("a"*i).count("a"*j)

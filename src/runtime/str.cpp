@@ -500,6 +500,31 @@ Box* strIter(BoxedString* self) {
     return new BoxedStringIterator(self);
 }
 
+int64_t strCount2Unboxed(BoxedString* self, Box* elt) {
+    assert(self->cls == str_cls);
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    const std::string& s = self->s;
+    const std::string& pattern = static_cast<BoxedString*>(elt)->s;
+
+    int found = 0;
+    size_t start = 0;
+    while (start < s.size()) {
+        size_t next = s.find(pattern, start);
+        if (next == std::string::npos)
+            break;
+
+        found++;
+        start = next + pattern.size();
+    }
+    return found;
+}
+
+Box* strCount2(BoxedString* self, Box* elt) {
+    return boxInt(strCount2Unboxed(self, elt));
+}
 
 void setupStr() {
     str_iterator_cls = new BoxedClass(false, false);
@@ -537,6 +562,10 @@ void setupStr() {
     addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
     str_cls->giveAttr("split", new BoxedFunction(strSplit));
     str_cls->giveAttr("rsplit", str_cls->peekattr("split"));
+
+    CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2, false);
+    addRTFunction(count, (void*)strCount2, BOXED_INT, 2, false);
+    str_cls->giveAttr("count", new BoxedFunction(count));
 
     CLFunction* __new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)strNew2, NULL, 2, false);
