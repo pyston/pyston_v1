@@ -23,3 +23,7 @@ except KeyError, e:
     print e.message
     print "ok"
 print sorted(d.items())
+
+print d.get(4)
+print d.get(4, 5)
+print d.get(3, 5)

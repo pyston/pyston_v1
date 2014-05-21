@@ -123,6 +123,21 @@ extern "C" Box* max2(Box* o0, Box* o1) {
     return o0;
 }
 
+extern "C" Box* sum2(Box* container, Box* initial) {
+    if (initial->cls == str_cls)
+        raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
+
+    Box* cur = initial;
+    for (Box* e : container->pyElements()) {
+        cur = binop(cur, e, AST_TYPE::Add);
+    }
+    return cur;
+}
+
+extern "C" Box* sum1(Box* container) {
+    return sum2(container, boxInt(0));
+}
+
 extern "C" Box* open2(Box* arg1, Box* arg2) {
     if (arg1->cls != str_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
@@ -405,6 +420,10 @@ void setupBuiltins() {
     addRTFunction(max_func, (void*)max2, NULL, 2, false);
     max_obj = new BoxedFunction(max_func);
     builtins_module->giveAttr("max", max_obj);
+
+    CLFunction* sum_func = boxRTFunction((void*)sum1, NULL, 1, false);
+    addRTFunction(sum_func, (void*)sum2, NULL, 2, false);
+    builtins_module->giveAttr("sum", new BoxedFunction(sum_func));
 
     chr_obj = new BoxedFunction(boxRTFunction((void*)chr, NULL, 1, false));
     builtins_module->giveAttr("chr", chr_obj);
