@@ -341,6 +341,18 @@ Box* listRemove(BoxedList* self, Box* elt) {
     raiseExcHelper(ValueError, "list.remove(x): x not in list");
 }
 
+Box* listReverse(BoxedList* self) {
+    assert(self->cls == list_cls);
+    if (self->size > 0) {
+        for (int i = 0, j = self->size - 1; i < j; i++, j--) {
+            Box* e = self->elts->elts[i];
+            self->elts->elts[i] = self->elts->elts[j];
+            self->elts->elts[j] = e;
+        }
+    }
+
+    return None;
+}
 
 BoxedClass* list_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
@@ -415,7 +427,7 @@ void setupList() {
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2, false)));
     list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2, false)));
-
+    list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1, false)));
     list_cls->freeze();
 
 

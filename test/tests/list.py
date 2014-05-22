@@ -43,3 +43,6 @@ except ValueError, e:
     print e
     print "ok"
 print l
+
+l.reverse()
+print l
