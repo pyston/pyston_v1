@@ -219,6 +219,8 @@ public:
     BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
 
     void ensure(int space);
+    void shrink();
+    static const int INITIAL_CAPACITY;
 };
 
 class BoxedTuple : public Box {

@@ -372,6 +372,18 @@ void AST_Continue::accept_stmt(StmtVisitor* v) {
     v->visit_continue(this);
 }
 
+void AST_Delete::accept(ASTVisitor* v) {
+    bool skip = v->visit_delete(this);
+    if (skip)
+        return;
+
+    visitVector(this->targets, v);
+}
+
+void AST_Delete::accept_stmt(StmtVisitor* v) {
+    v->visit_delete(this);
+}
+
 void AST_Dict::accept(ASTVisitor* v) {
     bool skip = v->visit_dict(this);
     if (skip)
@@ -1059,6 +1071,16 @@ bool PrintVisitor::visit_continue(AST_Continue* node) {
     return true;
 }
 
+bool PrintVisitor::visit_delete(AST_Delete* node) {
+    printf("del ");
+    for (int i = 0; i < node->targets.size(); i++) {
+        if (i > 0)
+            printf(", ");
+        node->targets[i]->accept(this);
+    }
+    return true;
+}
+
 bool PrintVisitor::visit_dict(AST_Dict* node) {
     printf("{");
     for (int i = 0; i < node->keys.size(); i++) {
@@ -1594,6 +1616,10 @@ public:
         return false;
     }
     virtual bool visit_continue(AST_Continue* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_delete(AST_Delete* node) {
         output->push_back(node);
         return false;
     }

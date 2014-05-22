@@ -205,6 +205,49 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     }
 }
 
+extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
+    int64_t n = slice->n;
+    if (n < 0)
+        n = self->size + n;
+
+    if (n < 0 || n >= self->size) {
+        raiseExcHelper(IndexError, "list index out of range");
+    }
+    memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
+    self->size--;
+    return None;
+}
+
+extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
+    i64 start, stop, step;
+    parseSlice(slice, self->size, &start, &stop, &step);
+    RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
+
+    assert(0 <= start && start < self->size);
+    ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
+    assert(start <= stop);
+
+    int remaining_elts = self->size - stop;
+
+    memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
+    self->size -= (stop - start);
+    return None;
+}
+
+extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
+    Box* rtn;
+
+    if (slice->cls == int_cls) {
+        rtn = listDelitemInt(self, static_cast<BoxedInt*>(slice));
+    } else if (slice->cls == slice_cls) {
+        rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));
+    } else {
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
+    }
+    self->shrink();
+    return rtn;
+}
+
 extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {
         raiseExcHelper(TypeError, "an integer is required");
@@ -411,6 +454,12 @@ void setupList() {
                   false);
     addRTFunction(setitem, (void*)listSetitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL, NULL }, false);
     list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
+
+    CLFunction* delitem = createRTFunction();
+    addRTFunction(delitem, (void*)listDelitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT }, false);
+    addRTFunction(delitem, (void*)listDelitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, false);
+    addRTFunction(delitem, (void*)listDelitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL }, false);
+    list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
 
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NULL, 3, false)));
     list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NULL, 2, false)));

@@ -183,6 +183,7 @@ public:
 
     virtual bool visit_assert(AST_Assert* node) { return true; }
     virtual bool visit_branch(AST_Branch* node) { return true; }
+    virtual bool visit_delete(AST_Delete* node) { return true; }
     virtual bool visit_expr(AST_Expr* node) { return true; }
     virtual bool visit_global(AST_Global* node) { return true; }
     virtual bool visit_invoke(AST_Invoke* node) { return false; }
