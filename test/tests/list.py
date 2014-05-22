@@ -44,5 +44,19 @@ except ValueError, e:
     print "ok"
 print l
 
-l.reverse()
-print l
+for i in xrange(5):
+    l = range(i)
+    l.reverse()
+    print l
+
+# growing and shrinking a list:
+l = []
+for i in xrange(100):
+    l.append(i)
+while l:
+    del l[0]
+    print l
+for i in xrange(100):
+    l.append(i)
+while l:
+    del l[0]

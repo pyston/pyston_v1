@@ -386,12 +386,10 @@ Box* listRemove(BoxedList* self, Box* elt) {
 
 Box* listReverse(BoxedList* self) {
     assert(self->cls == list_cls);
-    if (self->size > 0) {
-        for (int i = 0, j = self->size - 1; i < j; i++, j--) {
-            Box* e = self->elts->elts[i];
-            self->elts->elts[i] = self->elts->elts[j];
-            self->elts->elts[j] = e;
-        }
+    for (int i = 0, j = self->size - 1; i < j; i++, j--) {
+        Box* e = self->elts->elts[i];
+        self->elts->elts[i] = self->elts->elts[j];
+        self->elts->elts[j] = e;
     }
 
     return None;

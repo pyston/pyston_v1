@@ -444,7 +444,7 @@ private:
     virtual void visit_delete(AST_Delete* node) {
         for (AST_expr* target : node->targets) {
             RELEASE_ASSERT(target->type == AST_TYPE::Subscript, "");
-            getType(target);
+            getType(ast_cast<AST_Subscript>(target)->value);
         }
     }
 

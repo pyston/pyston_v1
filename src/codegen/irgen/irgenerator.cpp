@@ -1351,12 +1351,6 @@ private:
                 case AST_TYPE::Subscript:
                     _doDelitem(static_cast<AST_Subscript*>(target), exc_info);
                     break;
-                case AST_TYPE::Attribute:
-                // delete an attribute
-                case AST_TYPE::Name:
-                    // delete a instance
-                    RELEASE_ASSERT(target->type == AST_TYPE::Subscript, "");
-                    break;
                 default:
                     ASSERT(0, "UnSupported del target: %d", target->type);
                     abort();

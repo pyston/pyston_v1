@@ -950,10 +950,6 @@ public:
                     target = astsubs;
                     break;
                 }
-
-                case AST_TYPE::Name:
-                case AST_TYPE::Attribute:
-                    RELEASE_ASSERT(t->type == AST_TYPE::Subscript, "");
                 default:
                     RELEASE_ASSERT(0, "UnSupported del target: %d", t->type);
             }
