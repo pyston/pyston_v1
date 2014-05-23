@@ -49,6 +49,13 @@ for i in xrange(5):
     l.reverse()
     print l
 
+# list index
+list_index = [1, 2, 3, 4, 5]
+for i in xrange(1, 6):
+    assert list_index.index(i) == i-1
+assert list_index.index(3) == 2
+assert [1, '2'].index('2') == 1
+
 # growing and shrinking a list:
 l = []
 for i in xrange(100):
