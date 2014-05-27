@@ -25,13 +25,24 @@
 #include "runtime/set.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
+#include "runtime/list.h"
 namespace pyston {
 
 extern "C" Box* trap() {
     raise(SIGTRAP);
 
     return None;
+}
+
+extern "C" Box * dir(Box* x) {
+    BoxedList * result = new BoxedList();
+    if(x->cls->hasattrs) {
+        HCBox * hcb = static_cast<HCBox*>(x);
+        for(auto const & kv : hcb->hcls->attr_offsets) {
+            listAppend(result, boxString(kv.first));
+        }
+    }
+    return result;
 }
 
 extern "C" Box* abs_(Box* x) {
@@ -507,6 +518,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
 
+    builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, false)));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("int", int_cls);
