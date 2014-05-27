@@ -364,6 +364,19 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Dict;
 };
 
+class AST_DictComp : public AST_expr {
+public:
+    std::vector<AST_comprehension*> generators;
+    AST_expr* key, *value;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_DictComp() : AST_expr(AST_TYPE::DictComp) {}
+
+    const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::DictComp;
+};
+
 class AST_Delete : public AST_stmt {
 public:
     std::vector<AST_expr*> targets;
@@ -875,6 +888,7 @@ public:
     virtual bool visit_continue(AST_Continue* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
@@ -935,6 +949,7 @@ public:
     virtual bool visit_continue(AST_Continue* node) { return false; }
     virtual bool visit_delete(AST_Delete* node) { return false; }
     virtual bool visit_dict(AST_Dict* node) { return false; }
+    virtual bool visit_dictcomp(AST_DictComp* node) { return false; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
@@ -985,6 +1000,7 @@ public:
     virtual void* visit_clsattribute(AST_ClsAttribute* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_compare(AST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
@@ -1061,6 +1077,7 @@ public:
     virtual bool visit_continue(AST_Continue* node);
     virtual bool visit_delete(AST_Delete* node);
     virtual bool visit_dict(AST_Dict* node);
+    virtual bool visit_dictcomp(AST_DictComp* node);
     virtual bool visit_excepthandler(AST_ExceptHandler* node);
     virtual bool visit_expr(AST_Expr* node);
     virtual bool visit_for(AST_For* node);
