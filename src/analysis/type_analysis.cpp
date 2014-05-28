@@ -202,8 +202,7 @@ private:
         CompilerType* right = getType(node->right);
 
         // TODO this isn't the exact behavior
-        std::string name = getOpName(node->op_type);
-        name = "__i" + name.substr(2);
+        std::string name = getInplaceOpName(node->op_type);
         CompilerType* attr_type = left->getattrType(&name, true);
 
         if (attr_type == UNDEF)
@@ -230,7 +229,7 @@ private:
         CompilerType* right = getType(node->right);
 
         // TODO this isn't the exact behavior
-        std::string name = getOpName(node->op_type);
+        const std::string& name = getOpName(node->op_type);
         CompilerType* attr_type = left->getattrType(&name, true);
 
         if (attr_type == UNDEF)
@@ -304,7 +303,7 @@ private:
             return BOOL;
         }
 
-        std::string name = getOpName(node->ops[0]);
+        const std::string& name = getOpName(node->ops[0]);
         CompilerType* attr_type = left->getattrType(&name, true);
 
         if (attr_type == UNDEF)
@@ -409,7 +408,7 @@ private:
         CompilerType* operand = getType(node->operand);
 
         // TODO this isn't the exact behavior
-        std::string name = getOpName(node->op_type);
+        const std::string& name = getOpName(node->op_type);
         CompilerType* attr_type = operand->getattrType(&name, true);
         std::vector<CompilerType*> arg_types;
         return attr_type->callType(arg_types);

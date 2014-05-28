@@ -1114,6 +1114,10 @@ template <class T, class R> void findNodes(const R& roots, std::vector<T*>& outp
 }
 
 llvm::StringRef getOpSymbol(int op_type);
+const std::string& getOpName(int op_type);
+std::string getReverseOpName(int op_type);
+std::string getInplaceOpName(int op_type);
+std::string getInplaceOpSymbol(int op_type);
 };
 
 #endif

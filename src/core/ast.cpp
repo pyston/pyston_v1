@@ -90,60 +90,66 @@ std::string getInplaceOpSymbol(int op_type) {
     return std::string(getOpSymbol(op_type)) + '=';
 }
 
-std::string getOpName(int op_type) {
+const static std::string strAdd("__add__"), strBitAnd("__and__"), strBitOr("__or__"), strBitXor("__xor__"),
+    strDiv("__div__"), strTrueDiv("__truediv__"), strEq("__eq__"), strFloorDiv("__floordiv__"), strLShift("__lshift__"),
+    strLt("__lt__"), strLtE("__le__"), strGt("__gt__"), strGtE("__ge__"), strIn("__contains__"),
+    strInvert("__invert__"), strMod("__mod__"), strMult("__mul__"), strNot("__nonzero__"), strNotEq("__ne__"),
+    strPow("__pow__"), strRShift("__rshift__"), strSub("__sub__"), strUAdd("__pos__"), strUSub("__neg__");
+
+const std::string& getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
     assert(op_type != AST_TYPE::IsNot);
 
     switch (op_type) {
         case AST_TYPE::Add:
-            return "__add__";
+            return strAdd;
         case AST_TYPE::BitAnd:
-            return "__and__";
+            return strBitAnd;
         case AST_TYPE::BitOr:
-            return "__or__";
+            return strBitOr;
         case AST_TYPE::BitXor:
-            return "__xor__";
+            return strBitXor;
         case AST_TYPE::Div:
             if (FUTURE_DIVISION)
-                return "__truediv__";
+                return strTrueDiv;
             else
-                return "__div__";
+                return strDiv;
         case AST_TYPE::Eq:
-            return "__eq__";
+            return strEq;
         case AST_TYPE::FloorDiv:
-            return "__floordiv__";
+            return strFloorDiv;
         case AST_TYPE::LShift:
-            return "__lshift__";
+            return strLShift;
         case AST_TYPE::Lt:
-            return "__lt__";
+            return strLt;
         case AST_TYPE::LtE:
-            return "__le__";
+            return strLtE;
         case AST_TYPE::Gt:
-            return "__gt__";
+            return strGt;
         case AST_TYPE::GtE:
-            return "__ge__";
+            return strGtE;
         case AST_TYPE::In:
-            return "__contains__";
+            return strIn;
         case AST_TYPE::Invert:
-            return "__invert__";
+            return strInvert;
         case AST_TYPE::Mod:
-            return "__mod__";
+            return strMod;
         case AST_TYPE::Mult:
-            return "__mul__";
+            return strMult;
         case AST_TYPE::Not:
-            return "__nonzero__";
+            return strNot;
         case AST_TYPE::NotEq:
-            return "__ne__";
+            return strNotEq;
         case AST_TYPE::Pow:
-            return "__pow__";
+            return strPow;
         case AST_TYPE::RShift:
-            return "__rshift__";
+            return strRShift;
         case AST_TYPE::Sub:
-            return "__sub__";
+            return strSub;
         case AST_TYPE::UAdd:
-            return "__pos__";
+            return strUAdd;
         case AST_TYPE::USub:
-            return "__neg__";
+            return strUSub;
         default:
             fprintf(stderr, "Unknown op type (" __FILE__ ":" STRINGIFY(__LINE__) "): %d\n", op_type);
             abort();
@@ -151,7 +157,7 @@ std::string getOpName(int op_type) {
 }
 
 std::string getInplaceOpName(int op_type) {
-    std::string normal_name = getOpName(op_type);
+    const std::string& normal_name = getOpName(op_type);
     return "__i" + normal_name.substr(2);
 }
 
@@ -172,7 +178,7 @@ std::string getReverseOpName(int op_type) {
     if (op_type == AST_TYPE::Eq)
         return getOpName(AST_TYPE::Eq);
 
-    std::string normal_name = getOpName(op_type);
+    const std::string& normal_name = getOpName(op_type);
     return "__r" + normal_name.substr(2);
 }
 

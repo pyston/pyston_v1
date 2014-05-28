@@ -1740,7 +1740,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
 
 
-    std::string op_name = getOpName(op_type);
+    const std::string& op_name = getOpName(op_type);
     Box* lrtn;
     if (rewrite_args) {
         CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
@@ -1938,7 +1938,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         rewrite_args->rhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
     }
 
-    std::string op_name = getOpName(op_type);
+    const std::string& op_name = getOpName(op_type);
 
     Box* lrtn;
     if (rewrite_args) {
@@ -2049,7 +2049,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
     static StatCounter slowpath_unaryop("slowpath_unaryop");
     slowpath_unaryop.log();
 
-    std::string op_name = getOpName(op_type);
+    const std::string& op_name = getOpName(op_type);
 
     Box* attr_func = getclsattr_internal(operand, op_name, NULL, NULL);
 
