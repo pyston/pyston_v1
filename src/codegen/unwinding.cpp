@@ -117,7 +117,6 @@ public:
             uint64_t addr, size;
             if (name == ".eh_frame") {
                 assert(!found_eh_frame);
-                found_eh_frame = true;
                 if (I->getAddress(eh_frame_addr))
                     continue;
                 if (I->getSize(eh_frame_size))
@@ -125,9 +124,9 @@ public:
 
                 if (VERBOSITY())
                     printf("eh_frame: %lx %lx\n", eh_frame_addr, eh_frame_size);
+                found_eh_frame = true;
             } else if (name == ".text") {
                 assert(!found_text);
-                found_text = true;
                 if (I->getAddress(text_addr))
                     continue;
                 if (I->getSize(text_size))
@@ -135,6 +134,7 @@ public:
 
                 if (VERBOSITY())
                     printf("text: %lx %lx\n", text_addr, text_size);
+                found_text = true;
             }
         }
 

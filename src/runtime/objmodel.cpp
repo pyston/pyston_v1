@@ -319,11 +319,15 @@ HiddenClass* HiddenClass::getRoot() {
 
 HCBox::HCBox(const ObjectFlavor* flavor, BoxedClass* cls)
     : Box(flavor, cls), hcls(HiddenClass::getRoot()), attr_list(NULL) {
-    assert(!cls || flavor->isUserDefined() == isUserDefined(cls));
 
-    // first part of this check is to handle if we're building "type" itself, since when
-    // it's constructed its type (which should be "type") is NULL.
-    assert((cls == NULL && type_cls == NULL) || cls->hasattrs);
+    // the only way cls should be NULL is if we're creating the type_cls
+    // object itself:
+    if (cls == NULL) {
+        assert(type_cls == NULL);
+    } else {
+        assert(flavor->isUserDefined() == isUserDefined(cls));
+        assert(cls->hasattrs);
+    }
 }
 
 
