@@ -366,6 +366,21 @@ Box* listCount(BoxedList* self, Box* elt) {
     return new BoxedInt(count);
 }
 
+Box* listIndex(BoxedList* self, Box* elt) {
+    int size = self->size;
+
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+        if (b)
+            return new BoxedInt(i);
+    }
+
+    BoxedString* tostr = static_cast<BoxedString*>(repr(elt));
+    raiseExcHelper(ValueError, "%s is not in list", tostr->s.c_str());
+}
+
 Box* listRemove(BoxedList* self, Box* elt) {
     assert(self->cls == list_cls);
 
@@ -473,6 +488,7 @@ void setupList() {
     list_cls->giveAttr("__new__", new BoxedFunction(new_));
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2, false)));
+    list_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)listIndex, NULL, 2, false)));
     list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2, false)));
     list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1, false)));
     list_cls->freeze();
