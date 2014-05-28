@@ -129,7 +129,7 @@ extern "C" Box* sum2(Box* container, Box* initial) {
 
     Box* cur = initial;
     for (Box* e : container->pyElements()) {
-        cur = binop(cur, e, AST_TYPE::Add);
+        cur = binopInternal(cur, e, AST_TYPE::Add, false, NULL);
     }
     return cur;
 }

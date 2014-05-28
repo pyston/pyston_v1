@@ -22,6 +22,7 @@ Some directories are distributed under different licenses, and contain
 separate LICENSE files:
 - libunwind_patches
 - llvm_patches
+- clang_patches
 
 Regardless of any separate LICENSE files, all code in this repository
 falls under the following disclaimer:

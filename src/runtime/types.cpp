@@ -44,9 +44,9 @@ BoxIterator& BoxIterator::operator++() {
     static std::string hasnext_str("__hasnext__");
     static std::string next_str("next");
 
-    Box* hasnext = callattr(iter, &hasnext_str, true, 0, NULL, NULL, NULL, NULL);
+    Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, 0, NULL, NULL, NULL, NULL);
     if (nonzero(hasnext)) {
-        value = callattr(iter, &next_str, true, 0, NULL, NULL, NULL, NULL);
+        value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, 0, NULL, NULL, NULL, NULL);
     } else {
         iter = nullptr;
         value = nullptr;

@@ -1,5 +1,5 @@
 From b1b7a1de4895a5d821592f0221c3ae0b14200ff1 Mon Sep 17 00:00:00 2001
-From: Kevin Modzelewski <kevmod@gmail.com>
+From: Kevin Modzelewski <kmod@dropbox.com>
 Date: Tue, 27 May 2014 17:03:25 -0700
 Subject: [PATCH] Rename one of scan-builds internal environment variables to not conflict
 

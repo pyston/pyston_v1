@@ -173,19 +173,12 @@ static Box* (*typeCallInternal2)(CallRewriteArgs* rewrite_args, int64_t nargs, B
 static Box* (*typeCallInternal3)(CallRewriteArgs* rewrite_args, int64_t nargs, Box*, Box*, Box*)
     = (Box * (*)(CallRewriteArgs*, int64_t, Box*, Box*, Box*))typeCallInternal;
 
-enum LookupScope {
-    CLASS_ONLY = 1,
-    INST_ONLY = 2,
-    CLASS_OR_INST = 3,
-};
 bool checkClass(LookupScope scope) {
     return (scope & CLASS_ONLY) != 0;
 }
 bool checkInst(LookupScope scope) {
     return (scope & INST_ONLY) != 0;
 }
-extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
-                                 int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
 static Box* (*callattrInternal0)(Box*, const std::string*, LookupScope, CallRewriteArgs*, int64_t)
     = (Box * (*)(Box*, const std::string*, LookupScope, CallRewriteArgs*, int64_t))callattrInternal;
 static Box* (*callattrInternal1)(Box*, const std::string*, LookupScope, CallRewriteArgs*, int64_t, Box*)
@@ -1719,9 +1712,9 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         r_rhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
     }
 
-    std::string iop_name = getInplaceOpName(op_type);
     Box* irtn = NULL;
     if (inplace) {
+        std::string iop_name = getInplaceOpName(op_type);
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
             srewrite_args.arg1 = rewrite_args->rhs;
@@ -1792,6 +1785,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
     if (VERBOSITY()) {
         if (inplace) {
+            std::string iop_name = getInplaceOpName(op_type);
             if (irtn)
                 fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(),
                         iop_name.c_str());

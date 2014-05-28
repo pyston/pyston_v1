@@ -70,6 +70,18 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 
+class BinopRewriteArgs;
+extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
+
+class CallRewriteArgs;
+enum LookupScope {
+    CLASS_ONLY = 1,
+    INST_ONLY = 2,
+    CLASS_OR_INST = 3,
+};
+extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
+                                 int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,
