@@ -26,3 +26,5 @@ class C(object):
         return self
 
 print sum([C(1), C(2), C(3)], C(4)).n
+
+print zip([1, 2, 3, 0], ["one", "two", "three"])

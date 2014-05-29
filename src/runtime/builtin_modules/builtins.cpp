@@ -310,6 +310,22 @@ Box* map2(Box* f, Box* container) {
     return rtn;
 }
 
+Box* zip2(Box* container1, Box* container2) {
+    BoxedList* rtn = new BoxedList();
+
+    llvm::iterator_range<BoxIterator> range1 = container1->pyElements();
+    llvm::iterator_range<BoxIterator> range2 = container2->pyElements();
+
+    BoxIterator it1 = range1.begin();
+    BoxIterator it2 = range2.begin();
+
+    for (; it1 != range1.end() && it2 != range2.end(); ++it1, ++it2) {
+        BoxedTuple::GCVector elts{ *it1, *it2 };
+        listAppendInternal(rtn, new BoxedTuple(std::move(elts)));
+    }
+    return rtn;
+}
+
 extern "C" const ObjectFlavor notimplemented_flavor(&boxGCHandler, NULL);
 BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
@@ -459,6 +475,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
+    builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
 
     builtins_module->setattr("str", str_cls, NULL, NULL);
     builtins_module->setattr("int", int_cls, NULL, NULL);
