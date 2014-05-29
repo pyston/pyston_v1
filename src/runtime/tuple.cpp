@@ -19,6 +19,8 @@
 #include "core/stats.h"
 #include "core/types.h"
 
+#include "codegen/compvars.h"
+
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -174,6 +176,19 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
     return False;
 }
 
+Box* tupleHash(BoxedTuple* self) {
+    assert(self->cls == tuple_cls);
+
+    int64_t rtn = 3527539;
+    for (Box* e : self->elts) {
+        BoxedInt* h = hash(e);
+        assert(h->cls == int_cls);
+        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
+    }
+
+    return boxInt(rtn);
+}
+
 void setupTuple() {
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
@@ -187,6 +202,7 @@ void setupTuple() {
     tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, NULL, 2, false)));
     tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, NULL, 2, false)));
 
+    tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1, false)));
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, NULL, 1, false)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, NULL, 1, false)));
     tuple_cls->setattr("__str__", tuple_cls->peekattr("__repr__"), NULL, NULL);
