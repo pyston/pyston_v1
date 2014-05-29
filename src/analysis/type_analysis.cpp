@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "analysis/type_analysis.h"
+
+#include "analysis/fpc.h"
+#include "analysis/scoping_analysis.h"
+#include "codegen/type_recording.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/options.h"
+#include "runtime/types.h"
+
 #include <cstdio>
 #include <deque>
 #include <unordered_set>
-
-#include "core/options.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-
-#include "codegen/type_recording.h"
-
-#include "analysis/scoping_analysis.h"
-#include "analysis/type_analysis.h"
-
-#include "runtime/types.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -54,6 +52,8 @@ static ConcreteCompilerType* unboxedType(ConcreteCompilerType* t) {
         return INT;
     if (t == BOXED_FLOAT)
         return FLOAT;
+    if (t == BOXED_BOOL)
+        return BOOL;
     return t;
 }
 
@@ -202,8 +202,7 @@ private:
         CompilerType* right = getType(node->right);
 
         // TODO this isn't the exact behavior
-        std::string name = getOpName(node->op_type);
-        name = "__i" + name.substr(2);
+        std::string name = getInplaceOpName(node->op_type);
         CompilerType* attr_type = left->getattrType(&name, true);
 
         if (attr_type == UNDEF)
@@ -230,7 +229,7 @@ private:
         CompilerType* right = getType(node->right);
 
         // TODO this isn't the exact behavior
-        std::string name = getOpName(node->op_type);
+        const std::string& name = getOpName(node->op_type);
         CompilerType* attr_type = left->getattrType(&name, true);
 
         if (attr_type == UNDEF)
@@ -304,7 +303,7 @@ private:
             return BOOL;
         }
 
-        std::string name = getOpName(node->ops[0]);
+        const std::string& name = getOpName(node->ops[0]);
         CompilerType* attr_type = left->getattrType(&name, true);
 
         if (attr_type == UNDEF)
@@ -409,7 +408,7 @@ private:
         CompilerType* operand = getType(node->operand);
 
         // TODO this isn't the exact behavior
-        std::string name = getOpName(node->op_type);
+        const std::string& name = getOpName(node->op_type);
         CompilerType* attr_type = operand->getattrType(&name, true);
         std::vector<CompilerType*> arg_types;
         return attr_type->callType(arg_types);
@@ -439,6 +438,13 @@ private:
     virtual void visit_classdef(AST_ClassDef* node) {
         CompilerType* t = typeFromClass(type_cls);
         _doSet(node->name, t);
+    }
+
+    virtual void visit_delete(AST_Delete* node) {
+        for (AST_expr* target : node->targets) {
+            RELEASE_ASSERT(target->type == AST_TYPE::Subscript, "");
+            getType(ast_cast<AST_Subscript>(target)->value);
+        }
     }
 
     virtual void visit_expr(AST_Expr* node) {
@@ -600,12 +606,16 @@ public:
         }
 
         std::unordered_set<CFGBlock*> in_queue;
-        std::deque<CFGBlock*> queue;
-        queue.push_back(cfg->getStartingBlock());
+        std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> queue;
+        queue.push(cfg->getStartingBlock());
+        in_queue.insert(cfg->getStartingBlock());
 
+        int num_evaluations = 0;
         while (queue.size()) {
-            CFGBlock* block = queue.front();
-            queue.pop_front();
+            ASSERT(queue.size() == in_queue.size(), "%ld %ld", queue.size(), in_queue.size());
+            num_evaluations++;
+            CFGBlock* block = queue.top();
+            queue.pop();
             in_queue.erase(block);
 
             TypeMap ending;
@@ -644,9 +654,14 @@ public:
                 bool first = (starting_types.count(next_block) == 0);
                 bool changed = merge(ending, starting_types[next_block]);
                 if ((first || changed) && in_queue.insert(next_block).second) {
-                    queue.push_back(next_block);
+                    queue.push(next_block);
                 }
             }
+        }
+
+        if (VERBOSITY("types")) {
+            printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
+                   1.0 * num_evaluations / cfg->blocks.size());
         }
 
         if (VERBOSITY("types") >= 2) {

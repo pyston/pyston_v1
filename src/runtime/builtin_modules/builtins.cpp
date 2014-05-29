@@ -123,6 +123,21 @@ extern "C" Box* max2(Box* o0, Box* o1) {
     return o0;
 }
 
+extern "C" Box* sum2(Box* container, Box* initial) {
+    if (initial->cls == str_cls)
+        raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
+
+    Box* cur = initial;
+    for (Box* e : container->pyElements()) {
+        cur = binopInternal(cur, e, AST_TYPE::Add, false, NULL);
+    }
+    return cur;
+}
+
+extern "C" Box* sum1(Box* container) {
+    return sum2(container, boxInt(0));
+}
+
 extern "C" Box* open2(Box* arg1, Box* arg2) {
     if (arg1->cls != str_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
@@ -159,6 +174,18 @@ extern "C" Box* chr(Box* arg) {
     RELEASE_ASSERT(n >= 0 && n < 256, "");
 
     return boxString(std::string(1, (char)n));
+}
+
+extern "C" Box* ord(Box* arg) {
+    if (arg->cls != str_cls) {
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg)->c_str());
+    }
+    const std::string& s = static_cast<BoxedString*>(arg)->s;
+
+    if (s.size() != 1)
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but string of length %d found", s.size());
+
+    return boxInt(s[0]);
 }
 
 Box* range1(Box* end) {
@@ -394,8 +421,14 @@ void setupBuiltins() {
     max_obj = new BoxedFunction(max_func);
     builtins_module->giveAttr("max", max_obj);
 
+    CLFunction* sum_func = boxRTFunction((void*)sum1, NULL, 1, false);
+    addRTFunction(sum_func, (void*)sum2, NULL, 2, false);
+    builtins_module->giveAttr("sum", new BoxedFunction(sum_func));
+
     chr_obj = new BoxedFunction(boxRTFunction((void*)chr, NULL, 1, false));
     builtins_module->giveAttr("chr", chr_obj);
+    ord_obj = new BoxedFunction(boxRTFunction((void*)ord, NULL, 1, false));
+    builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedFunction(boxRTFunction((void*)trap, NULL, 0, false));
     builtins_module->giveAttr("trap", trap_obj);
 

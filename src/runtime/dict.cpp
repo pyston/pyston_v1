@@ -16,6 +16,8 @@
 #include "core/stats.h"
 #include "core/types.h"
 
+#include "codegen/compvars.h"
+
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -101,6 +103,50 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
     return None;
 }
 
+Box* dictPop2(BoxedDict* self, Box* k) {
+    assert(self->cls == dict_cls);
+
+    auto it = self->d.find(k);
+    if (it == self->d.end()) {
+        BoxedString* s = reprOrNull(k);
+
+        if (s)
+            raiseExcHelper(KeyError, "%s", s->s.c_str());
+        else
+            raiseExcHelper(KeyError, "");
+    }
+
+    Box* rtn = it->second;
+    self->d.erase(it);
+    return rtn;
+}
+
+Box* dictPop3(BoxedDict* self, Box* k, Box* d) {
+    assert(self->cls == dict_cls);
+
+    auto it = self->d.find(k);
+    if (it == self->d.end())
+        return d;
+
+    Box* rtn = it->second;
+    self->d.erase(it);
+    return rtn;
+}
+
+Box* dictGet3(BoxedDict* self, Box* k, Box* d) {
+    assert(self->cls == dict_cls);
+
+    auto it = self->d.find(k);
+    if (it == self->d.end())
+        return d;
+
+    return it->second;
+}
+
+Box* dictGet2(BoxedDict* self, Box* k) {
+    return dictGet3(self, k, None);
+}
+
 void setupDict() {
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     // dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1, false)));
@@ -118,6 +164,14 @@ void setupDict() {
 
     dict_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)dictKeys, NULL, 1, false)));
     dict_cls->setattr("iterkeys", dict_cls->peekattr("keys"), NULL, NULL);
+
+    CLFunction* pop = boxRTFunction((void*)dictPop2, UNKNOWN, 2, false);
+    addRTFunction(pop, (void*)dictPop3, UNKNOWN, 3, false);
+    dict_cls->giveAttr("pop", new BoxedFunction(pop));
+
+    CLFunction* get = boxRTFunction((void*)dictGet2, UNKNOWN, 2, false);
+    addRTFunction(get, (void*)dictGet3, UNKNOWN, 3, false);
+    dict_cls->giveAttr("get", new BoxedFunction(get));
 
     dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2, false)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NULL, 3, false)));

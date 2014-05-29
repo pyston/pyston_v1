@@ -383,6 +383,49 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
     }
 }
 
+Box* strStrip(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& s = self->s;
+    int n = s.size();
+
+    int strip_beginning = 0;
+    while (strip_beginning < n) {
+        char c = s[strip_beginning];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v')
+            strip_beginning++;
+        else
+            break;
+    }
+
+    if (strip_beginning == n)
+        return boxStrConstant("");
+
+    int strip_end = 0;
+    while (strip_end < n) {
+        char c = s[n - strip_end - 1];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v')
+            strip_end++;
+        else
+            break;
+    }
+
+    return new BoxedString(s.substr(strip_beginning, n - strip_beginning - strip_end));
+}
+
+Box* strContains(BoxedString* self, Box* elt) {
+    assert(self->cls == str_cls);
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt)->c_str());
+
+    BoxedString* sub = static_cast<BoxedString*>(elt);
+
+    size_t found_idx = self->s.find(sub->s);
+    if (found_idx == std::string::npos)
+        return False;
+    return True;
+}
+
 
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     if (slice->cls == int_cls) {
@@ -409,7 +452,89 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     }
 }
 
+
+// TODO it looks like strings don't have their own iterators, but instead
+// rely on the sequence iteration protocol.
+// Should probably implement that, and maybe once that's implemented get
+// rid of the striterator class?
+BoxedClass* str_iterator_cls = NULL;
+extern "C" void strIteratorGCHandler(GCVisitor* v, void* p);
+extern "C" const ObjectFlavor str_iterator_flavor(&strIteratorGCHandler, NULL);
+
+class BoxedStringIterator : public Box {
+public:
+    BoxedString* s;
+    std::string::const_iterator it, end;
+
+    BoxedStringIterator(BoxedString* s)
+        : Box(&str_iterator_flavor, str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
+
+    static bool hasnextUnboxed(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        return self->it != self->end;
+    }
+
+    static Box* hasnext(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        return boxBool(self->it != self->end);
+    }
+
+    static Box* next(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        assert(hasnextUnboxed(self));
+
+        char c = *self->it;
+        ++self->it;
+        return new BoxedString(std::string(1, c));
+    }
+};
+
+extern "C" void strIteratorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+    BoxedStringIterator* it = (BoxedStringIterator*)p;
+    v->visit(it->s);
+}
+
+Box* strIter(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return new BoxedStringIterator(self);
+}
+
+int64_t strCount2Unboxed(BoxedString* self, Box* elt) {
+    assert(self->cls == str_cls);
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    const std::string& s = self->s;
+    const std::string& pattern = static_cast<BoxedString*>(elt)->s;
+
+    int found = 0;
+    size_t start = 0;
+    while (start < s.size()) {
+        size_t next = s.find(pattern, start);
+        if (next == std::string::npos)
+            break;
+
+        found++;
+        start = next + pattern.size();
+    }
+    return found;
+}
+
+Box* strCount2(BoxedString* self, Box* elt) {
+    return boxInt(strCount2Unboxed(self, elt));
+}
+
 void setupStr() {
+    str_iterator_cls = new BoxedClass(false, false);
+    str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
+    str_iterator_cls->giveAttr("__hasnext__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, NULL, 1, false)));
+    str_iterator_cls->giveAttr("next",
+                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1, false)));
+    str_iterator_cls->freeze();
+
     str_cls->giveAttr("__name__", boxStrConstant("str"));
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, NULL, 1, false)));
@@ -419,6 +544,8 @@ void setupStr() {
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, NULL, 1, false)));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1, false)));
+    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 1, false)));
+    str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2, false)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, NULL, 2, false)));
     str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, NULL, 2, false)));
@@ -426,12 +553,19 @@ void setupStr() {
     str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, NULL, 2, false)));
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, NULL, 2, false)));
 
+    str_cls->giveAttr("__iter__",
+                      new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1, false)));
+
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
 
     CLFunction* strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
     addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
     str_cls->giveAttr("split", new BoxedFunction(strSplit));
     str_cls->giveAttr("rsplit", str_cls->peekattr("split"));
+
+    CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2, false);
+    addRTFunction(count, (void*)strCount2, BOXED_INT, 2, false);
+    str_cls->giveAttr("count", new BoxedFunction(count));
 
     CLFunction* __new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)strNew2, NULL, 2, false);

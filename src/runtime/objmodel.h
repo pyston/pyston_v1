@@ -43,6 +43,8 @@ extern "C" Box* runtimeCall(Box*, int64_t, Box*, Box*, Box*, Box**);
 extern "C" Box* callattr(Box*, std::string*, bool, int64_t, Box*, Box*, Box*, Box**);
 extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
+extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
+extern "C" BoxedString* strOrNull(Box* obj);  // similar to str, but returns NULL on exception
 extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags);
 extern "C" BoxedInt* hash(Box* obj);
 // extern "C" Box* abs_(Box* obj);
@@ -60,12 +62,25 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* getGlobal(BoxedModule* m, std::string* name);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
+extern "C" void delitem(Box* target, Box* slice);
 extern "C" Box* getclsattr(Box* obj, const char* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);
 extern "C" Box* import(const std::string* name);
 extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
+
+class BinopRewriteArgs;
+extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
+
+class CallRewriteArgs;
+enum LookupScope {
+    CLASS_ONLY = 1,
+    INST_ONLY = 2,
+    CLASS_OR_INST = 3,
+};
+extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
+                                 int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);

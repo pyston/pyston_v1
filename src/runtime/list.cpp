@@ -205,6 +205,49 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     }
 }
 
+extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
+    int64_t n = slice->n;
+    if (n < 0)
+        n = self->size + n;
+
+    if (n < 0 || n >= self->size) {
+        raiseExcHelper(IndexError, "list index out of range");
+    }
+    memmove(self->elts->elts + n, self->elts->elts + n + 1, (self->size - n - 1) * sizeof(Box*));
+    self->size--;
+    return None;
+}
+
+extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
+    i64 start, stop, step;
+    parseSlice(slice, self->size, &start, &stop, &step);
+    RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
+
+    assert(0 <= start && start < self->size);
+    ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
+    assert(start <= stop);
+
+    int remaining_elts = self->size - stop;
+
+    memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
+    self->size -= (stop - start);
+    return None;
+}
+
+extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
+    Box* rtn;
+
+    if (slice->cls == int_cls) {
+        rtn = listDelitemInt(self, static_cast<BoxedInt*>(slice));
+    } else if (slice->cls == slice_cls) {
+        rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));
+    } else {
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
+    }
+    self->shrink();
+    return rtn;
+}
+
 extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {
         raiseExcHelper(TypeError, "an integer is required");
@@ -323,6 +366,49 @@ Box* listCount(BoxedList* self, Box* elt) {
     return new BoxedInt(count);
 }
 
+Box* listIndex(BoxedList* self, Box* elt) {
+    int size = self->size;
+
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+        if (b)
+            return new BoxedInt(i);
+    }
+
+    BoxedString* tostr = static_cast<BoxedString*>(repr(elt));
+    raiseExcHelper(ValueError, "%s is not in list", tostr->s.c_str());
+}
+
+Box* listRemove(BoxedList* self, Box* elt) {
+    assert(self->cls == list_cls);
+
+    for (int i = 0; i < self->size; i++) {
+        Box* e = self->elts->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+
+        if (b) {
+            memmove(self->elts->elts + i, self->elts->elts + i + 1, (self->size - i - 1) * sizeof(Box*));
+            self->size--;
+            return None;
+        }
+    }
+
+    raiseExcHelper(ValueError, "list.remove(x): x not in list");
+}
+
+Box* listReverse(BoxedList* self) {
+    assert(self->cls == list_cls);
+    for (int i = 0, j = self->size - 1; i < j; i++, j--) {
+        Box* e = self->elts->elts[i];
+        self->elts->elts[i] = self->elts->elts[j];
+        self->elts->elts[j] = e;
+    }
+
+    return None;
+}
 
 BoxedClass* list_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
@@ -382,6 +468,12 @@ void setupList() {
     addRTFunction(setitem, (void*)listSetitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL, NULL }, false);
     list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
 
+    CLFunction* delitem = createRTFunction();
+    addRTFunction(delitem, (void*)listDelitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT }, false);
+    addRTFunction(delitem, (void*)listDelitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, false);
+    addRTFunction(delitem, (void*)listDelitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL }, false);
+    list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
+
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NULL, 3, false)));
     list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NULL, 2, false)));
 
@@ -396,7 +488,9 @@ void setupList() {
     list_cls->giveAttr("__new__", new BoxedFunction(new_));
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2, false)));
-
+    list_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)listIndex, NULL, 2, false)));
+    list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2, false)));
+    list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1, false)));
     list_cls->freeze();
 
 

@@ -20,6 +20,8 @@
 
 #include "core/cfg.h"
 
+#include <queue>
+
 namespace pyston {
 
 template <typename T> class BBAnalyzer {
@@ -34,6 +36,11 @@ public:
     virtual void processBB(Map& starting, CFGBlock* block) const = 0;
 };
 
+class CFGBlockMinIndex {
+public:
+    bool operator()(const CFGBlock* lhs, const CFGBlock* rhs) { return lhs->idx > rhs->idx; }
+};
+
 template <typename T>
 typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& analyzer, bool reverse) {
     assert(!reverse);
@@ -42,20 +49,23 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
     typedef typename BBAnalyzer<T>::AllMap AllMap;
     AllMap states;
 
-    std::vector<CFGBlock*> q;
+    std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> q;
 
     states.insert(make_pair(cfg->getStartingBlock(), Map()));
-    q.push_back(cfg->getStartingBlock());
+    q.push(cfg->getStartingBlock());
 
+    int num_evaluations = 0;
     while (q.size()) {
-        CFGBlock* block = q.back();
-        q.pop_back();
+        num_evaluations++;
+        CFGBlock* block = q.top();
+        q.pop();
 
         Map initial = states[block];
         if (VERBOSITY("analysis") >= 2)
             printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
 
         Map ending = Map(initial);
+
         analyzer.processBB(ending, block);
 
         for (int i = 0; i < block->successors.size(); i++) {
@@ -87,7 +97,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
                 }
             }
 
-            for (const auto& p : ending) {
+            for (const auto& p : next) {
                 if (ending.count(p.first))
                     continue;
 
@@ -99,12 +109,18 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
             }
 
             if (changed)
-                q.push_back(next_block);
+                q.push(next_block);
         }
 
         states.erase(block);
         states.insert(make_pair(block, ending));
     }
+
+    if (VERBOSITY("analysis")) {
+        printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
+               1.0 * num_evaluations / cfg->blocks.size());
+    }
+
 
     return states;
 }

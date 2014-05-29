@@ -25,10 +25,15 @@ class AST_Jump;
 class CFG;
 class CFGBlock;
 class ScopeInfo;
+class LivenessBBVisitor;
 
 class LivenessAnalysis {
 public:
     bool isLiveAtEnd(const std::string& name, CFGBlock* block);
+
+private:
+    typedef std::unordered_map<CFGBlock*, std::unique_ptr<LivenessBBVisitor> > LivenessCacheMap;
+    LivenessCacheMap livenessCache;
 };
 class DefinednessAnalysis {
 public:

@@ -15,3 +15,5 @@ print sorted(s2 - s1)
 print sorted(s1 ^ s2)
 print sorted(s1 & s2)
 print sorted(s1 | s2)
+
+print len(set(range(5)))

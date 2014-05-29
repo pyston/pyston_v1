@@ -385,12 +385,13 @@ CompiledFunction* resolveCLFunc(CLFunction* f, int64_t nargs, Box* arg1, Box* ar
         printf("Error: couldn't find suitable function version and no source to recompile!\n");
         printf("%ld args:", nargs);
         for (int i = 0; i < nargs; i++) {
-            Box* firstargs[] = { arg1, arg2, arg3 };
-            printf(" %s", getTypeName(firstargs[i])->c_str());
             if (i == 3) {
                 printf(" [and more]");
                 break;
             }
+
+            Box* firstargs[] = { arg1, arg2, arg3 };
+            printf(" %s", getTypeName(firstargs[i])->c_str());
         }
         printf("\n");
         for (int j = 0; j < f->versions.size(); j++) {
@@ -450,6 +451,7 @@ Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1, Box* arg2,
         } else {
             rargs = args;
         }
+        assert(rargs);
     }
 
     int nsig_args = cf->sig->arg_types.size();

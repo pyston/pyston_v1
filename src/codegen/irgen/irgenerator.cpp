@@ -572,6 +572,10 @@ private:
         boxed_left->decvref(emitter);
         boxed_right->decvref(emitter);
 
+        if (type == AST_TYPE::In || type == AST_TYPE::NotIn || type == AST_TYPE::Is || type == AST_TYPE::IsNot) {
+            return unboxVar(BOXED_BOOL, rtn, true);
+        }
+
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
@@ -935,6 +939,11 @@ private:
         if (t == BOXED_FLOAT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, v);
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(FLOAT, unboxed, true);
+            return rtn;
+        }
+        if (t == BOXED_BOOL) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
+            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(BOOL, unboxed, true);
             return rtn;
         }
         return new ConcreteCompilerVariable(t, v, grabbed);
@@ -1335,6 +1344,50 @@ private:
         cls->decvref(emitter);
     }
 
+    void doDelete(AST_Delete* node, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+        for (AST_expr* target : node->targets) {
+            switch (target->type) {
+                case AST_TYPE::Subscript:
+                    _doDelitem(static_cast<AST_Subscript*>(target), exc_info);
+                    break;
+                default:
+                    ASSERT(0, "UnSupported del target: %d", target->type);
+                    abort();
+            }
+        }
+    }
+
+    // invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
+    void _doDelitem(AST_Subscript* target, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+        CompilerVariable* tget = evalExpr(target->value, exc_info);
+        CompilerVariable* slice = evalExpr(target->slice, exc_info);
+
+        ConcreteCompilerVariable* converted_target = tget->makeConverted(emitter, tget->getBoxType());
+        ConcreteCompilerVariable* converted_slice = slice->makeConverted(emitter, slice->getBoxType());
+        tget->decvref(emitter);
+        slice->decvref(emitter);
+
+        bool do_patchpoint = ENABLE_ICDELITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
+        if (do_patchpoint) {
+            PatchpointSetupInfo* pp = patchpoints::createDelitemPatchpoint(emitter.currentFunction(),
+                                                                           getEmptyOpInfo(exc_info).getTypeRecorder());
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(converted_target->getValue());
+            llvm_args.push_back(converted_slice->getValue());
+
+            emitter.createPatchpoint(pp, (void*)pyston::delitem, llvm_args, exc_info);
+        } else {
+            emitter.getBuilder()->CreateCall2(g.funcs.delitem, converted_target->getValue(),
+                                              converted_slice->getValue());
+        }
+
+        converted_target->decvref(emitter);
+        converted_slice->decvref(emitter);
+    }
+
     CLFunction* _wrapFunction(AST_FunctionDef* node) {
         // Different compilations of the parent scope of a functiondef should lead
         // to the same CLFunction* being used:
@@ -1716,6 +1769,9 @@ private:
                 break;
             case AST_TYPE::ClassDef:
                 doClassDef(ast_cast<AST_ClassDef>(node), exc_info);
+                break;
+            case AST_TYPE::Delete:
+                doDelete(ast_cast<AST_Delete>(node), exc_info);
                 break;
             case AST_TYPE::Expr:
                 doExpr(ast_cast<AST_Expr>(node), exc_info);

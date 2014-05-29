@@ -18,6 +18,9 @@
 #include <unordered_set>
 #include <deque>
 
+#include <llvm/ADT/SetVector.h>
+#include <llvm/ADT/SmallSet.h>
+
 #include "core/common.h"
 
 #include "core/ast.h"
@@ -32,7 +35,7 @@ namespace pyston {
 
 class LivenessBBVisitor : public NoopASTVisitor {
 public:
-    typedef std::unordered_set<std::string> StrSet;
+    typedef llvm::SmallSet<std::string, 4> StrSet;
 
 private:
     StrSet _loads;
@@ -73,6 +76,14 @@ public:
         }
         return true;
     }
+    bool visit_alias(AST_alias* node) {
+        const std::string* name = &node->name;
+        if (node->asname.size())
+            name = &node->asname;
+
+        _doStore(*name);
+        return true;
+    }
 };
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
@@ -83,10 +94,11 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
     // for each query, trace forward through all possible control flow paths.
     // if we hit a store to the name, stop tracing that path
     // if we hit a load to the name, return true.
-    std::unordered_set<CFGBlock*> visited;
+    // to improve performance we cache the liveness result of every visited BB.
+    llvm::SmallPtrSet<CFGBlock*, 1> visited;
     std::deque<CFGBlock*> q;
-    for (int i = 0; i < block->successors.size(); i++) {
-        q.push_back(block->successors[i]);
+    for (CFGBlock* successor : block->successors) {
+        q.push_back(successor);
     }
 
     while (q.size()) {
@@ -94,22 +106,29 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
         q.pop_front();
         if (visited.count(thisblock))
             continue;
+
+        LivenessBBVisitor* visitor = nullptr;
+        LivenessCacheMap::iterator it = livenessCache.find(thisblock);
+        if (it != livenessCache.end()) {
+            visitor = it->second.get();
+        } else {
+            visitor = new LivenessBBVisitor; // livenessCache unique_ptr will delete it.
+            for (AST_stmt* stmt : thisblock->body) {
+                stmt->accept(visitor);
+            }
+            livenessCache.insert(std::make_pair(thisblock, std::unique_ptr<LivenessBBVisitor>(visitor)));
+        }
         visited.insert(thisblock);
 
-        LivenessBBVisitor visitor;
-        for (int i = 0; i < thisblock->body.size(); i++) {
-            thisblock->body[i]->accept(&visitor);
-        }
-
-        if (visitor.loads().count(name)) {
-            assert(!visitor.stores().count(name));
+        if (visitor->loads().count(name)) {
+            assert(!visitor->stores().count(name));
             return true;
         }
 
-        if (!visitor.stores().count(name)) {
-            assert(!visitor.loads().count(name));
-            for (int i = 0; i < thisblock->successors.size(); i++) {
-                q.push_back(thisblock->successors[i]);
+        if (!visitor->stores().count(name)) {
+            assert(!visitor->loads().count(name));
+            for (CFGBlock* successor : thisblock->successors) {
+                q.push_back(successor);
             }
         }
     }
@@ -175,6 +194,7 @@ public:
 
     virtual bool visit_assert(AST_Assert* node) { return true; }
     virtual bool visit_branch(AST_Branch* node) { return true; }
+    virtual bool visit_delete(AST_Delete* node) { return true; }
     virtual bool visit_expr(AST_Expr* node) { return true; }
     virtual bool visit_global(AST_Global* node) { return true; }
     virtual bool visit_invoke(AST_Invoke* node) { return false; }

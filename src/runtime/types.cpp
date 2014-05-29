@@ -44,9 +44,9 @@ BoxIterator& BoxIterator::operator++() {
     static std::string hasnext_str("__hasnext__");
     static std::string next_str("next");
 
-    Box* hasnext = callattr(iter, &hasnext_str, true, 0, NULL, NULL, NULL, NULL);
+    Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, 0, NULL, NULL, NULL, NULL);
     if (nonzero(hasnext)) {
-        value = callattr(iter, &next_str, true, 0, NULL, NULL, NULL, NULL);
+        value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, 0, NULL, NULL, NULL, NULL);
     } else {
         iter = nullptr;
         value = nullptr;
@@ -272,6 +272,8 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
         return boxStrConstant("<built-in function open>");
     if (v == chr_obj)
         return boxStrConstant("<built-in function chr>");
+    if (v == ord_obj)
+        return boxStrConstant("<built-in function ord>");
     return new BoxedString("function");
 }
 
@@ -286,6 +288,7 @@ Box* min_obj = NULL;
 Box* max_obj = NULL;
 Box* open_obj = NULL;
 Box* chr_obj = NULL;
+Box* ord_obj = NULL;
 Box* trap_obj = NULL;
 Box* range_obj = NULL;
 }

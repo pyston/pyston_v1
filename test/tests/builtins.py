@@ -14,3 +14,15 @@ print __builtins__
 
 print all([]), all([True]), all([False]), all([None]), all([True, False, None])
 print any([]), any([True]), any([False]), any([None]), any([True, False, None])
+
+print sum(range(5))
+print sum(range(5), 5)
+
+class C(object):
+    def __init__(self, n):
+        self.n = n
+    def __add__(self, rhs):
+        self.n = (self.n, rhs.n)
+        return self
+
+print sum([C(1), C(2), C(3)], C(4)).n

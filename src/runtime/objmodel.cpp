@@ -173,19 +173,12 @@ static Box* (*typeCallInternal2)(CallRewriteArgs* rewrite_args, int64_t nargs, B
 static Box* (*typeCallInternal3)(CallRewriteArgs* rewrite_args, int64_t nargs, Box*, Box*, Box*)
     = (Box * (*)(CallRewriteArgs*, int64_t, Box*, Box*, Box*))typeCallInternal;
 
-enum LookupScope {
-    CLASS_ONLY = 1,
-    INST_ONLY = 2,
-    CLASS_OR_INST = 3,
-};
 bool checkClass(LookupScope scope) {
     return (scope & CLASS_ONLY) != 0;
 }
 bool checkInst(LookupScope scope) {
     return (scope & INST_ONLY) != 0;
 }
-extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
-                                 int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
 static Box* (*callattrInternal0)(Box*, const std::string*, LookupScope, CallRewriteArgs*, int64_t)
     = (Box * (*)(Box*, const std::string*, LookupScope, CallRewriteArgs*, int64_t))callattrInternal;
 static Box* (*callattrInternal1)(Box*, const std::string*, LookupScope, CallRewriteArgs*, int64_t, Box*)
@@ -319,11 +312,15 @@ HiddenClass* HiddenClass::getRoot() {
 
 HCBox::HCBox(const ObjectFlavor* flavor, BoxedClass* cls)
     : Box(flavor, cls), hcls(HiddenClass::getRoot()), attr_list(NULL) {
-    assert(!cls || flavor->isUserDefined() == isUserDefined(cls));
 
-    // first part of this check is to handle if we're building "type" itself, since when
-    // it's constructed its type (which should be "type") is NULL.
-    assert((cls == NULL && type_cls == NULL) || cls->hasattrs);
+    // the only way cls should be NULL is if we're creating the type_cls
+    // object itself:
+    if (cls == NULL) {
+        assert(type_cls == NULL);
+    } else {
+        assert(flavor->isUserDefined() == isUserDefined(cls));
+        assert(cls->hasattrs);
+    }
 }
 
 
@@ -1028,6 +1025,27 @@ extern "C" Box* repr(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
+extern "C" BoxedString* reprOrNull(Box* obj) {
+    try {
+        Box* r = repr(obj);
+        assert(r->cls == str_cls); // this should be checked by repr()
+        return static_cast<BoxedString*>(r);
+    }
+    catch (Box* b) {
+        return nullptr;
+    }
+}
+
+extern "C" BoxedString* strOrNull(Box* obj) {
+    try {
+        BoxedString* r = str(obj);
+        return static_cast<BoxedString*>(r);
+    }
+    catch (Box* b) {
+        return nullptr;
+    }
+}
+
 extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
     bool false_on_noncls = (flags & 0x1);
 
@@ -1694,9 +1712,9 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         r_rhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
     }
 
-    std::string iop_name = getInplaceOpName(op_type);
     Box* irtn = NULL;
     if (inplace) {
+        std::string iop_name = getInplaceOpName(op_type);
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
             srewrite_args.arg1 = rewrite_args->rhs;
@@ -1722,7 +1740,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
 
 
-    std::string op_name = getOpName(op_type);
+    const std::string& op_name = getOpName(op_type);
     Box* lrtn;
     if (rewrite_args) {
         CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
@@ -1767,6 +1785,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
 
     if (VERBOSITY()) {
         if (inplace) {
+            std::string iop_name = getInplaceOpName(op_type);
             if (irtn)
                 fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(),
                         iop_name.c_str());
@@ -1919,7 +1938,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         rewrite_args->rhs.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)rhs->cls);
     }
 
-    std::string op_name = getOpName(op_type);
+    const std::string& op_name = getOpName(op_type);
 
     Box* lrtn;
     if (rewrite_args) {
@@ -2030,7 +2049,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
     static StatCounter slowpath_unaryop("slowpath_unaryop");
     slowpath_unaryop.log();
 
-    std::string op_name = getOpName(op_type);
+    const std::string& op_name = getOpName(op_type);
 
     Box* attr_func = getclsattr_internal(operand, op_name, NULL, NULL);
 
@@ -2112,6 +2131,40 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
 
     if (rtn == NULL) {
         raiseExcHelper(TypeError, "'%s' object does not support item assignment", getTypeName(target)->c_str());
+    }
+
+    if (rewriter.get()) {
+        rewriter->commit();
+    }
+}
+
+// del target[start:end:step]
+extern "C" void delitem(Box* target, Box* slice) {
+    static StatCounter slowpath_delitem("slowpath_delitem");
+    slowpath_delitem.log();
+    static std::string str_delitem("__delitem__");
+
+    std::unique_ptr<Rewriter> rewriter(
+        Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "delitem"));
+
+    Box* rtn;
+    RewriterVar r_rtn;
+    if (rewriter.get()) {
+        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0));
+        rewrite_args.arg1 = rewriter->getArg(1);
+
+        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, &rewrite_args, 1, slice);
+
+        if (!rewrite_args.out_success)
+            rewriter.reset(NULL);
+        else if (rtn)
+            r_rtn = rewrite_args.out_rtn;
+    } else {
+        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, NULL, 1, slice);
+    }
+
+    if (rtn == NULL) {
+        raiseExcHelper(TypeError, "'%s' object does not support item deletion", getTypeName(target)->c_str());
     }
 
     if (rewriter.get()) {

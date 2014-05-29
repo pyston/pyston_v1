@@ -313,6 +313,13 @@ check_format:
 	$(ECHO) checking formatting...
 	$(VERB) $(TOOLS_DIR)/check_format.sh $(LLVM_BIN)/clang-format
 
+.PHONY: analyze
+analyze:
+	$(MAKE) clean
+	PATH=$$PATH:$(DEPS_DIR)/llvm-trunk/tools/clang/tools/scan-view $(DEPS_DIR)/llvm-trunk/tools/clang/tools/scan-build/scan-build \
+		 --use-analyzer $(CLANG_EXE) --use-c++ $(CLANG_EXE) -V \
+		$(MAKE) pyston_dbg USE_DISTCC=0 USE_CCACHE=0
+
 .PHONY: test test_debug test_prof test_release
 test_debug: pyston_dbg ext
 	python ../tools/tester.py -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)

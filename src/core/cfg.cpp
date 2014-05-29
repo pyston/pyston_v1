@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "core/cfg.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cassert>
@@ -20,7 +22,6 @@
 #include "core/options.h"
 
 #include "core/ast.h"
-#include "core/cfg.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -116,6 +117,146 @@ private:
         return NULL;
     }
 
+    AST_expr* applyComprehensionCall(AST_DictComp * node, AST_Name* name) {
+        AST_expr* key = remapExpr(node->key);
+        AST_expr* value = remapExpr(node->value);
+        return makeCall(makeLoadAttribute(name, "__setitem__", true), key, value);
+    }
+
+    AST_expr* applyComprehensionCall(AST_ListComp * node, AST_Name* name) {
+        AST_expr* elt = remapExpr(node->elt);
+        return makeCall(makeLoadAttribute(name, "append", true), elt);
+    }
+
+    template<typename ResultASTType, typename CompType>
+    AST_expr* remapComprehension(CompType * node) {
+        std::string rtn_name = nodeName(node);
+        push_back(makeAssign(rtn_name, new ResultASTType()));
+        std::vector<CFGBlock*> exit_blocks;
+
+        // Where the current level should jump to after finishing its iteration.
+        // For the outermost comprehension, this is NULL, and it doesn't jump anywhere;
+        // for the inner comprehensions, they should jump to the next-outer comprehension
+        // when they are done iterating.
+        CFGBlock* finished_block = NULL;
+
+        for (int i = 0, n = node->generators.size(); i < n; i++) {
+            AST_comprehension* c = node->generators[i];
+            bool is_innermost = (i == n - 1);
+
+            AST_expr* remapped_iter = remapExpr(c->iter);
+            AST_expr* iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
+            AST_expr* iter_call = makeCall(iter_attr);
+            std::string iter_name = nodeName(node, "iter", i);
+            AST_stmt* iter_assign = makeAssign(iter_name, iter_call);
+            push_back(iter_assign);
+
+            // TODO bad to save these like this?
+            AST_expr* hasnext_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load), "__hasnext__", true);
+            AST_expr* next_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load), "next", true);
+
+            AST_Jump* j;
+
+            CFGBlock* test_block = cfg->addBlock();
+            test_block->info = "comprehension_test";
+            // printf("Test block for comp %d is %d\n", i, test_block->idx);
+
+            j = new AST_Jump();
+            j->target = test_block;
+            curblock->connectTo(test_block);
+            push_back(j);
+
+            curblock = test_block;
+            AST_expr* test_call = remapExpr(makeCall(hasnext_attr));
+
+            CFGBlock* body_block = cfg->addBlock();
+            body_block->info = "comprehension_body";
+            CFGBlock* exit_block = cfg->addDeferredBlock();
+            exit_block->info = "comprehension_exit";
+            exit_blocks.push_back(exit_block);
+            // printf("Body block for comp %d is %d\n", i, body_block->idx);
+
+            AST_Branch* br = new AST_Branch();
+            br->col_offset = node->col_offset;
+            br->lineno = node->lineno;
+            br->test = test_call;
+            br->iftrue = body_block;
+            br->iffalse = exit_block;
+            curblock->connectTo(body_block);
+            curblock->connectTo(exit_block);
+            push_back(br);
+
+            curblock = body_block;
+            push_back(makeAssign(c->target, makeCall(next_attr)));
+
+            for (AST_expr* if_condition : c->ifs) {
+                AST_expr* remapped = remapExpr(if_condition);
+                AST_Branch* br = new AST_Branch();
+                br->test = remapped;
+                push_back(br);
+
+                // Put this below the entire body?
+                CFGBlock* body_tramp = cfg->addBlock();
+                body_tramp->info = "comprehension_if_trampoline";
+                // printf("body_tramp for %d is %d\n", i, body_tramp->idx);
+                CFGBlock* body_continue = cfg->addBlock();
+                body_continue->info = "comprehension_if_continue";
+                // printf("body_continue for %d is %d\n", i, body_continue->idx);
+
+                br->iffalse = body_tramp;
+                curblock->connectTo(body_tramp);
+                br->iftrue = body_continue;
+                curblock->connectTo(body_continue);
+
+                curblock = body_tramp;
+                j = new AST_Jump();
+                j->target = test_block;
+                push_back(j);
+                curblock->connectTo(test_block, true);
+
+                curblock = body_continue;
+            }
+
+            CFGBlock* body_end = curblock;
+
+            assert((finished_block != NULL) == (i != 0));
+            if (finished_block) {
+                curblock = exit_block;
+                j = new AST_Jump();
+                j->target = finished_block;
+                curblock->connectTo(finished_block, true);
+                push_back(j);
+            }
+            finished_block = test_block;
+
+            curblock = body_end;
+            if (is_innermost) {
+                push_back(
+                    makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load)))
+                );
+
+                j = new AST_Jump();
+                j->target = test_block;
+                curblock->connectTo(test_block, true);
+                push_back(j);
+
+                assert(exit_blocks.size());
+                curblock = exit_blocks[0];
+            } else {
+                // continue onto the next comprehension and add to this body
+            }
+        }
+
+        // Wait until the end to place the end blocks, so that
+        // we get a nice nesting structure, that looks similar to what
+        // you'd get with a nested for loop:
+        for (int i = exit_blocks.size() - 1; i >= 0; i--) {
+            cfg->placeBlock(exit_blocks[i]);
+            // printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
+        }
+
+        return makeName(rtn_name, AST_TYPE::Load);
+    }
 
 
     AST_expr* makeNum(int n) {
@@ -172,6 +313,18 @@ private:
     AST_Call* makeCall(AST_expr* func, AST_expr* arg0) {
         AST_Call* call = new AST_Call();
         call->args.push_back(arg0);
+        call->starargs = NULL;
+        call->kwargs = NULL;
+        call->func = func;
+        call->col_offset = func->col_offset;
+        call->lineno = func->lineno;
+        return call;
+    }
+
+    AST_Call* makeCall(AST_expr* func, AST_expr* arg0, AST_expr* arg1) {
+        AST_Call* call = new AST_Call();
+        call->args.push_back(arg0);
+        call->args.push_back(arg1);
         call->starargs = NULL;
         call->kwargs = NULL;
         call->func = func;
@@ -440,136 +593,6 @@ private:
         return rtn;
     }
 
-    AST_expr* remapListComp(AST_ListComp* node) {
-        std::string rtn_name = nodeName(node);
-        push_back(makeAssign(rtn_name, new AST_List()));
-
-        std::vector<CFGBlock*> exit_blocks;
-
-        // Where the current level should jump to after finishing its iteration.
-        // For the outermost comprehension, this is NULL, and it doesn't jump anywhere;
-        // for the inner comprehensions, they should jump to the next-outer comprehension
-        // when they are done iterating.
-        CFGBlock* finished_block = NULL;
-
-        for (int i = 0, n = node->generators.size(); i < n; i++) {
-            AST_comprehension* c = node->generators[i];
-            bool is_innermost = (i == n - 1);
-
-            AST_expr* remapped_iter = remapExpr(c->iter);
-            AST_expr* iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
-            AST_expr* iter_call = makeCall(iter_attr);
-            std::string iter_name = nodeName(node, "iter", i);
-            AST_stmt* iter_assign = makeAssign(iter_name, iter_call);
-            push_back(iter_assign);
-
-            // TODO bad to save these like this?
-            AST_expr* hasnext_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load), "__hasnext__", true);
-            AST_expr* next_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load), "next", true);
-
-            AST_Jump* j;
-
-            CFGBlock* test_block = cfg->addBlock();
-            test_block->info = "listcomp_test";
-            // printf("Test block for comp %d is %d\n", i, test_block->idx);
-
-            j = new AST_Jump();
-            j->target = test_block;
-            curblock->connectTo(test_block);
-            push_back(j);
-
-            curblock = test_block;
-            AST_expr* test_call = remapExpr(makeCall(hasnext_attr));
-
-            CFGBlock* body_block = cfg->addBlock();
-            body_block->info = "listcomp_body";
-            CFGBlock* exit_block = cfg->addDeferredBlock();
-            exit_block->info = "listcomp_exit";
-            exit_blocks.push_back(exit_block);
-            // printf("Body block for comp %d is %d\n", i, body_block->idx);
-
-            AST_Branch* br = new AST_Branch();
-            br->col_offset = node->col_offset;
-            br->lineno = node->lineno;
-            br->test = test_call;
-            br->iftrue = body_block;
-            br->iffalse = exit_block;
-            curblock->connectTo(body_block);
-            curblock->connectTo(exit_block);
-            push_back(br);
-
-            curblock = body_block;
-            push_back(makeAssign(c->target, makeCall(next_attr)));
-
-            for (AST_expr* if_condition : c->ifs) {
-                AST_expr* remapped = remapExpr(if_condition);
-                AST_Branch* br = new AST_Branch();
-                br->test = remapped;
-                push_back(br);
-
-                // Put this below the entire body?
-                CFGBlock* body_tramp = cfg->addBlock();
-                body_tramp->info = "listcomp_if_trampoline";
-                // printf("body_tramp for %d is %d\n", i, body_tramp->idx);
-                CFGBlock* body_continue = cfg->addBlock();
-                body_continue->info = "listcomp_if_continue";
-                // printf("body_continue for %d is %d\n", i, body_continue->idx);
-
-                br->iffalse = body_tramp;
-                curblock->connectTo(body_tramp);
-                br->iftrue = body_continue;
-                curblock->connectTo(body_continue);
-
-                curblock = body_tramp;
-                j = new AST_Jump();
-                j->target = test_block;
-                push_back(j);
-                curblock->connectTo(test_block, true);
-
-                curblock = body_continue;
-            }
-
-            CFGBlock* body_end = curblock;
-
-            assert((finished_block != NULL) == (i != 0));
-            if (finished_block) {
-                curblock = exit_block;
-                j = new AST_Jump();
-                j->target = finished_block;
-                curblock->connectTo(finished_block, true);
-                push_back(j);
-            }
-            finished_block = test_block;
-
-            curblock = body_end;
-            if (is_innermost) {
-                AST_expr* elt = remapExpr(node->elt);
-                push_back(
-                    makeExpr(makeCall(makeLoadAttribute(makeName(rtn_name, AST_TYPE::Load), "append", true), elt)));
-
-                j = new AST_Jump();
-                j->target = test_block;
-                curblock->connectTo(test_block, true);
-                push_back(j);
-
-                assert(exit_blocks.size());
-                curblock = exit_blocks[0];
-            } else {
-                // continue onto the next comprehension and add to this body
-            }
-        }
-
-        // Wait until the end to place the end blocks, so that
-        // we get a nice nesting structure, that looks similar to what
-        // you'd get with a nested for loop:
-        for (int i = exit_blocks.size() - 1; i >= 0; i--) {
-            cfg->placeBlock(exit_blocks[i]);
-            // printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
-        }
-
-        return makeName(rtn_name, AST_TYPE::Load);
-    };
-
     AST_expr* remapRepr(AST_Repr* node) {
         AST_Repr* rtn = new AST_Repr();
         rtn->lineno = node->lineno;
@@ -650,6 +673,9 @@ private:
             case AST_TYPE::Dict:
                 rtn = remapDict(ast_cast<AST_Dict>(node));
                 break;
+            case AST_TYPE::DictComp:
+                rtn = remapComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
+                break;
             case AST_TYPE::IfExp:
                 rtn = remapIfExp(ast_cast<AST_IfExp>(node));
                 break;
@@ -663,7 +689,7 @@ private:
                 rtn = remapList(ast_cast<AST_List>(node));
                 break;
             case AST_TYPE::ListComp:
-                rtn = remapListComp(ast_cast<AST_ListComp>(node));
+                rtn = remapComprehension<AST_List>(ast_cast<AST_ListComp>(node));
                 break;
             case AST_TYPE::Name:
                 rtn = node;
@@ -933,6 +959,32 @@ public:
         return true;
     }
 
+    virtual bool visit_delete(AST_Delete* node) {
+        for (auto t : node->targets) {
+            AST_Delete* astdel = new AST_Delete();
+            astdel->lineno = node->lineno;
+            astdel->col_offset = node->col_offset;
+            AST_expr* target = NULL;
+            switch (t->type) {
+                case AST_TYPE::Subscript: {
+                    AST_Subscript* s = static_cast<AST_Subscript*>(t);
+                    AST_Subscript* astsubs = new AST_Subscript();
+                    astsubs->value = remapExpr(s->value);
+                    astsubs->slice = remapExpr(s->slice);
+                    astsubs->ctx_type = AST_TYPE::Del;
+                    target = astsubs;
+                    break;
+                }
+                default:
+                    RELEASE_ASSERT(0, "UnSupported del target: %d", t->type);
+            }
+            astdel->targets.push_back(target);
+            push_back(astdel);
+        }
+
+        return true;
+    }
+
     virtual bool visit_expr(AST_Expr* node) {
         AST_Expr* remapped = new AST_Expr();
         remapped->lineno = node->lineno;
@@ -1096,6 +1148,7 @@ public:
 
         curblock = test_block;
         AST_Branch* br = makeBranch(remapExpr(node->test));
+        CFGBlock* test_block_end = curblock;
         push_back(br);
 
         // We need a reference to this block early on so we can break to it,
@@ -1107,7 +1160,8 @@ public:
         CFGBlock* body = cfg->addBlock();
         body->info = "while_body_start";
         br->iftrue = body;
-        test_block->connectTo(body);
+
+        test_block_end->connectTo(body);
         curblock = body;
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
@@ -1123,7 +1177,7 @@ public:
         CFGBlock* orelse = cfg->addBlock();
         orelse->info = "while_orelse_start";
         br->iffalse = orelse;
-        test_block->connectTo(orelse);
+        test_block_end->connectTo(orelse);
         curblock = orelse;
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);

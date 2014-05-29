@@ -33,3 +33,37 @@ print [1, 2, 3, 4, 5]
 l = [1, 2, 1, 2, 3]
 print l.count(1)
 print l.count(42)
+
+print l.remove(1)
+print l
+try:
+    l.remove(54)
+    assert 0
+except ValueError, e:
+    print e
+    print "ok"
+print l
+
+for i in xrange(5):
+    l = range(i)
+    l.reverse()
+    print l
+
+# list index
+list_index = [1, 2, 3, 4, 5]
+for i in xrange(1, 6):
+    assert list_index.index(i) == i-1
+assert list_index.index(3) == 2
+assert [1, '2'].index('2') == 1
+
+# growing and shrinking a list:
+l = []
+for i in xrange(100):
+    l.append(i)
+while l:
+    del l[0]
+    print l
+for i in xrange(100):
+    l.append(i)
+while l:
+    del l[0]

@@ -29,15 +29,12 @@
 
 #include <vector>
 
+#include "core/ast.h"
 #include "core/common.h"
 
 namespace pyston {
 
 class AST_stmt;
-
-namespace AST_TYPE {
-enum AST_TYPE;
-}
 
 class CFG;
 class CFGBlock {

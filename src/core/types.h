@@ -227,11 +227,6 @@ CLFunction* unboxRTFunction(Box*);
 extern "C" CompiledFunction* resolveCLFunc(CLFunction* f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
 extern "C" Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
-std::string getOpName(int op_type);
-std::string getReverseOpName(int op_type);
-std::string getInplaceOpName(int op_type);
-std::string getInplaceOpSymbol(int op_type);
-
 typedef bool i1;
 typedef int64_t i64;
 

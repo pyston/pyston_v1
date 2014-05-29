@@ -119,6 +119,8 @@ public:
                 const Value* baseA, *baseB;
                 baseA = GIa->getPointerOperand();
                 baseB = GIb->getPointerOperand();
+                assert(baseA);
+                assert(baseB);
 
                 if (VERBOSITY("opt.aa") >= 2) {
                     indent();
@@ -181,6 +183,7 @@ public:
             // ASSERT(GI->getNumIndices() > 1, "%d %u", i, GI->getNumIndices());
 
             const Value* gep_base = GI->getPointerOperand();
+            assert(gep_base);
             if (VERBOSITY("opt.aa") >= 2) {
                 indent();
                 errs() << "loc " << i << " is gep, recursing\n";

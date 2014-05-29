@@ -12,7 +12,8 @@ def compact(s):
             i += 1
     return s
 
-class NotPossible(Exception):
+# TODO This should be a subclass of Exception not object:
+class NotPossible(object):
     pass
 
 P = 1000000007

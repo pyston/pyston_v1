@@ -931,9 +931,9 @@ public:
         if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
             Box* rtattr = cls->peekattr(*attr);
             if (rtattr == NULL) {
-                llvm::CallSite call
-                    = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
-                                          getStringConstantPtr(debugName() + '\0'), getStringConstantPtr(*attr + '\0'));
+                llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
                 return undefVariable();
             }
@@ -1152,6 +1152,18 @@ public:
         ASSERT(other_type == UNKNOWN || other_type == BOXED_BOOL, "%s", other_type->debugName().c_str());
         llvm::Value* boxed = emitter.getBuilder()->CreateCall(g.funcs.boxBool, var->getValue());
         return new ConcreteCompilerVariable(other_type, boxed, true);
+    }
+
+    virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
+        return BOXED_BOOL->getattrType(attr, cls_only);
+    }
+
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                                      bool cls_only) {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
+        CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
+        converted->decvref(emitter);
+        return rtn;
     }
 
     virtual ConcreteCompilerType* getBoxType() { return BOXED_BOOL; }

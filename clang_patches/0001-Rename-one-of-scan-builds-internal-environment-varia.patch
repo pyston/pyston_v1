@@ -1,0 +1,48 @@
+From b1b7a1de4895a5d821592f0221c3ae0b14200ff1 Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kmod@dropbox.com>
+Date: Tue, 27 May 2014 17:03:25 -0700
+Subject: [PATCH] Rename one of scan-builds internal environment variables to not conflict
+
+---
+ tools/scan-build/ccc-analyzer |    2 +-
+ tools/scan-build/scan-build   |    4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/tools/scan-build/ccc-analyzer b/tools/scan-build/ccc-analyzer
+index b5445e6..65f8455 100755
+--- a/tools/scan-build/ccc-analyzer
++++ b/tools/scan-build/ccc-analyzer
+@@ -43,7 +43,7 @@ if ($FindBin::Script =~ /c\+\+-analyzer/) {
+   $Compiler = $ENV{'CCC_CXX'};
+   if (!defined $Compiler || ! -x $Compiler) { $Compiler = $DefaultCXXCompiler; }
+ 
+-  $Clang = $ENV{'CLANG_CXX'};
++  $Clang = $ENV{'CCC_CLANG_CXX'};
+   if (!defined $Clang || ! -x $Clang) { $Clang = 'clang++'; }
+ 
+   $IsCXX = 1
+diff --git a/tools/scan-build/scan-build b/tools/scan-build/scan-build
+index 31dbfb4..9a3c9e8 100755
+--- a/tools/scan-build/scan-build
++++ b/tools/scan-build/scan-build
+@@ -884,7 +884,7 @@ sub AddIfNotPresent {
+ 
+ sub SetEnv {
+   my $Options = shift @_;
+-  foreach my $opt ('CC', 'CXX', 'CLANG', 'CLANG_CXX',
++  foreach my $opt ('CC', 'CXX', 'CLANG', 'CCC_CLANG_CXX',
+                     'CCC_ANALYZER_ANALYSIS', 'CCC_ANALYZER_PLUGINS',
+                     'CCC_ANALYZER_CONFIG') {
+     die "$opt is undefined\n" if (!defined $opt);
+@@ -1653,7 +1653,7 @@ my %Options = (
+   'CC' => $Cmd,
+   'CXX' => $CmdCXX,
+   'CLANG' => $Clang,
+-  'CLANG_CXX' => $ClangCXX,
++  'CCC_CLANG_CXX' => $ClangCXX,
+   'VERBOSE' => $Verbose,
+   'CCC_ANALYZER_ANALYSIS' => $CCC_ANALYZER_ANALYSIS,
+   'CCC_ANALYZER_PLUGINS' => $CCC_ANALYZER_PLUGINS,
+-- 
+1.7.4.1
+
