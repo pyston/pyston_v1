@@ -405,6 +405,23 @@ void* AST_Dict::accept_expr(ExprVisitor* v) {
     return v->visit_dict(this);
 }
 
+void AST_DictComp::accept(ASTVisitor* v) {
+    bool skip = v->visit_dictcomp(this);
+    if (skip)
+        return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    value->accept(v);
+    key->accept(v);
+}
+
+void* AST_DictComp::accept_expr(ExprVisitor* v) {
+    return v->visit_dictcomp(this);
+}
+
 void AST_ExceptHandler::accept(ASTVisitor* v) {
     bool skip = v->visit_excepthandler(this);
     if (skip)
@@ -1100,6 +1117,19 @@ bool PrintVisitor::visit_dict(AST_Dict* node) {
     return true;
 }
 
+bool PrintVisitor::visit_dictcomp(AST_DictComp* node) {
+    printf("{");
+    node->key->accept(this);
+    printf(":");
+    node->value->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
+    }
+    printf("}");
+    return true;
+}
+
 bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     printf("except");
     if (node->type) {
@@ -1630,6 +1660,10 @@ public:
         return false;
     }
     virtual bool visit_dict(AST_Dict* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_dictcomp(AST_DictComp* node) {
         output->push_back(node);
         return false;
     }
