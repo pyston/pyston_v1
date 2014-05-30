@@ -15,6 +15,7 @@
 #include "runtime/types.h"
 
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -63,7 +64,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(this)->c_str());
 }
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : HCBox(&function_flavor, function_cls), f(f) {
+extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : Box(&function_flavor, function_cls), f(f) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -74,13 +75,13 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f) : HCBox(&function_flavor,
     }
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : HCBox(&module_flavor, module_cls), fn(fn) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : Box(&module_flavor, module_cls), fn(fn) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
 }
 
 std::string BoxedModule::name() {
-    Box* name = this->peekattr("__name__");
+    Box* name = this->getattr("__name__");
     if (!name || name->cls != str_cls) {
         return "?";
     } else {
@@ -102,27 +103,26 @@ extern "C" void boxGCHandler(GCVisitor* v, void* p) {
 
     if (b->cls) {
         v->visit(b->cls);
+
+        if (b->cls->instancesHaveAttrs()) {
+            HCAttrs* attrs = b->getAttrs();
+
+            v->visit(attrs->hcls);
+            int nattrs = attrs->hcls->attr_offsets.size();
+            if (nattrs) {
+                HCAttrs::AttrList* attr_list = attrs->attr_list;
+                assert(attr_list);
+                v->visit(attr_list);
+                v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
+            }
+        }
     } else {
         assert(type_cls == NULL || p == type_cls);
     }
 }
 
-extern "C" void hcBoxGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-
-    HCBox* b = (HCBox*)p;
-    v->visit(b->hcls);
-    int nattrs = b->hcls->attr_offsets.size();
-    if (nattrs) {
-        HCBox::AttrList* attr_list = b->attr_list;
-        assert(attr_list);
-        v->visit(attr_list);
-        v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
-    }
-}
-
 extern "C" void typeGCHandler(GCVisitor* v, void* p) {
-    hcBoxGCHandler(v, p);
+    boxGCHandler(v, p);
 
     BoxedClass* b = (BoxedClass*)p;
 }
@@ -213,15 +213,15 @@ const ObjectFlavor bool_flavor(&boxGCHandler, NULL);
 const ObjectFlavor int_flavor(&boxGCHandler, NULL);
 const ObjectFlavor float_flavor(&boxGCHandler, NULL);
 const ObjectFlavor str_flavor(&boxGCHandler, NULL);
-const ObjectFlavor function_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor function_flavor(&boxGCHandler, NULL);
 const ObjectFlavor instancemethod_flavor(&instancemethodGCHandler, NULL);
 const ObjectFlavor list_flavor(&listGCHandler, NULL);
 const ObjectFlavor slice_flavor(&sliceGCHandler, NULL);
-const ObjectFlavor module_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor module_flavor(&boxGCHandler, NULL);
 const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
 const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
-const ObjectFlavor user_flavor(&hcBoxGCHandler, NULL);
+const ObjectFlavor user_flavor(&boxGCHandler, NULL);
 const ObjectFlavor member_flavor(&boxGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
@@ -230,7 +230,7 @@ const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 }
 
 extern "C" Box* createUserClass(std::string* name, BoxedModule* parent_module) {
-    BoxedClass* rtn = new BoxedClass(true, true);
+    BoxedClass* rtn = new BoxedClass(offsetof(BoxedUserObject, attrs), sizeof(BoxedUserObject), true);
     rtn->giveAttr("__name__", boxString(*name));
 
     Box* modname = parent_module->getattr("__name__", NULL, NULL);
@@ -329,14 +329,14 @@ Box* typeRepr(BoxedClass* self) {
         std::ostringstream os;
         os << "<class '";
 
-        Box* m = self->peekattr("__module__");
+        Box* m = self->getattr("__module__");
         RELEASE_ASSERT(m, "");
         if (m->cls == str_cls) {
             BoxedString* sm = static_cast<BoxedString*>(m);
             os << sm->s << '.';
         }
 
-        Box* n = self->peekattr("__name__");
+        Box* n = self->getattr("__name__");
         RELEASE_ASSERT(n, "");
         RELEASE_ASSERT(n->cls == str_cls, "should have prevented you from setting __name__ to non-string");
         BoxedString* sn = static_cast<BoxedString*>(n);
@@ -375,31 +375,31 @@ bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     HiddenClass::getRoot();
 
-    type_cls = new BoxedClass(true, false);
+    type_cls = new BoxedClass(offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
     type_cls->cls = type_cls;
 
-    none_cls = new BoxedClass(false, false);
+    none_cls = new BoxedClass(0, sizeof(Box), false);
     None = new Box(&none_flavor, none_cls);
     gc::registerStaticRootObj(None);
 
-    module_cls = new BoxedClass(true, false);
+    module_cls = new BoxedClass(offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    bool_cls = new BoxedClass(false, false);
-    int_cls = new BoxedClass(false, false);
-    float_cls = new BoxedClass(false, false);
-    str_cls = new BoxedClass(false, false);
-    function_cls = new BoxedClass(true, false);
-    instancemethod_cls = new BoxedClass(false, false);
-    list_cls = new BoxedClass(false, false);
-    slice_cls = new BoxedClass(false, false);
-    dict_cls = new BoxedClass(false, false);
-    tuple_cls = new BoxedClass(false, false);
-    file_cls = new BoxedClass(false, false);
-    set_cls = new BoxedClass(false, false);
-    member_cls = new BoxedClass(false, false);
+    bool_cls = new BoxedClass(0, sizeof(BoxedBool), false);
+    int_cls = new BoxedClass(0, sizeof(BoxedInt), false);
+    float_cls = new BoxedClass(0, sizeof(BoxedFloat), false);
+    str_cls = new BoxedClass(0, sizeof(BoxedString), false);
+    function_cls = new BoxedClass(offsetof(BoxedFunction, attrs), sizeof(BoxedFunction), false);
+    instancemethod_cls = new BoxedClass(0, sizeof(BoxedInstanceMethod), false);
+    list_cls = new BoxedClass(0, sizeof(BoxedList), false);
+    slice_cls = new BoxedClass(0, sizeof(BoxedSlice), false);
+    dict_cls = new BoxedClass(0, sizeof(BoxedDict), false);
+    tuple_cls = new BoxedClass(0, sizeof(BoxedTuple), false);
+    file_cls = new BoxedClass(0, sizeof(BoxedFile), false);
+    set_cls = new BoxedClass(0, sizeof(BoxedSet), false);
+    member_cls = new BoxedClass(0, sizeof(BoxedMemberDescriptor), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -417,17 +417,17 @@ void setupRuntime() {
     type_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)typeCall, NULL, 1, true)));
     type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNew, NULL, 2, true)));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, NULL, 1, true)));
-    type_cls->setattr("__str__", type_cls->peekattr("__repr__"), NULL, NULL);
+    type_cls->setattr("__str__", type_cls->getattr("__repr__"), NULL, NULL);
     type_cls->freeze();
 
     none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, NULL, 1, false)));
-    none_cls->setattr("__str__", none_cls->peekattr("__repr__"), NULL, NULL);
+    none_cls->setattr("__str__", none_cls->getattr("__repr__"), NULL, NULL);
     none_cls->freeze();
 
     module_cls->giveAttr("__name__", boxStrConstant("module"));
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, NULL, 1, false)));
-    module_cls->setattr("__str__", module_cls->peekattr("__repr__"), NULL, NULL);
+    module_cls->setattr("__str__", module_cls->getattr("__repr__"), NULL, NULL);
     module_cls->freeze();
 
     member_cls->giveAttr("__name__", boxStrConstant("member"));
@@ -445,7 +445,7 @@ void setupRuntime() {
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, NULL, 1, false)));
-    function_cls->setattr("__str__", function_cls->peekattr("__repr__"), NULL, NULL);
+    function_cls->setattr("__str__", function_cls->getattr("__repr__"), NULL, NULL);
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
@@ -459,7 +459,7 @@ void setupRuntime() {
     addRTFunction(slice_new, (void*)sliceNew4, NULL, 4, false);
     slice_cls->giveAttr("__new__", new BoxedFunction(slice_new));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, NULL, 1, true)));
-    slice_cls->setattr("__str__", slice_cls->peekattr("__repr__"), NULL, NULL);
+    slice_cls->setattr("__str__", slice_cls->getattr("__repr__"), NULL, NULL);
     slice_cls->giveAttr("start", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_START_OFFSET));
     slice_cls->giveAttr("stop", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STOP_OFFSET));
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STEP_OFFSET));

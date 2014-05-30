@@ -203,7 +203,7 @@ void setupTuple() {
     tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1, false)));
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, NULL, 1, false)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, NULL, 1, false)));
-    tuple_cls->setattr("__str__", tuple_cls->peekattr("__repr__"), NULL, NULL);
+    tuple_cls->setattr("__str__", tuple_cls->getattr("__repr__"), NULL, NULL);
 
     tuple_cls->freeze();
 }

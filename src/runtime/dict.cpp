@@ -152,16 +152,16 @@ void setupDict() {
     // dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, NULL, 1, false)));
     // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1, false)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, NULL, 1, false)));
-    dict_cls->setattr("__str__", dict_cls->peekattr("__repr__"), NULL, NULL);
+    dict_cls->setattr("__str__", dict_cls->getattr("__repr__"), NULL, NULL);
 
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, NULL, 1, false)));
-    dict_cls->setattr("iteritems", dict_cls->peekattr("items"), NULL, NULL);
+    dict_cls->setattr("iteritems", dict_cls->getattr("items"), NULL, NULL);
 
     dict_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)dictValues, NULL, 1, false)));
-    dict_cls->setattr("itervalues", dict_cls->peekattr("values"), NULL, NULL);
+    dict_cls->setattr("itervalues", dict_cls->getattr("values"), NULL, NULL);
 
     dict_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)dictKeys, NULL, 1, false)));
-    dict_cls->setattr("iterkeys", dict_cls->peekattr("keys"), NULL, NULL);
+    dict_cls->setattr("iterkeys", dict_cls->getattr("keys"), NULL, NULL);
 
     CLFunction* pop = boxRTFunction((void*)dictPop2, UNKNOWN, 2, false);
     addRTFunction(pop, (void*)dictPop3, UNKNOWN, 3, false);

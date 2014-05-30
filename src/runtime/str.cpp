@@ -524,7 +524,7 @@ Box* strCount2(BoxedString* self, Box* elt) {
 }
 
 void setupStr() {
-    str_iterator_cls = new BoxedClass(false, false);
+    str_iterator_cls = new BoxedClass(0, sizeof(BoxedString), false);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, NULL, 1, false)));
@@ -558,7 +558,7 @@ void setupStr() {
     CLFunction* strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
     addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
     str_cls->giveAttr("split", new BoxedFunction(strSplit));
-    str_cls->giveAttr("rsplit", str_cls->peekattr("split"));
+    str_cls->giveAttr("rsplit", str_cls->getattr("split"));
 
     CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2, false);
     addRTFunction(count, (void*)strCount2, BOXED_INT, 2, false);

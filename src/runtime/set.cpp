@@ -176,7 +176,7 @@ using namespace pyston::set;
 void setupSet() {
     set_cls->giveAttr("__name__", boxStrConstant("set"));
 
-    set_iterator_cls = new BoxedClass(false, false);
+    set_iterator_cls = new BoxedClass(0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1, false)));

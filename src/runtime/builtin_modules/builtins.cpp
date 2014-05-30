@@ -335,17 +335,22 @@ Box* exceptionNew1(BoxedClass* cls) {
     return exceptionNew2(cls, boxStrConstant(""));
 }
 
+class BoxedException : public Box {
+public:
+    HCAttrs attrs;
+    BoxedException(BoxedClass* cls) : Box(&exception_flavor, cls) {}
+};
+
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
-    HCBox* r = new HCBox(&exception_flavor, cls);
+    assert(cls->instance_size == sizeof(BoxedException));
+    Box* r = new BoxedException(cls);
     r->giveAttr("message", message);
     return r;
 }
 
 Box* exceptionStr(Box* b) {
-    HCBox* hcb = static_cast<HCBox*>(b);
-
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    Box* message = hcb->peekattr("message");
+    Box* message = b->getattr("message");
     assert(message);
     message = str(message);
     assert(message->cls == str_cls);
@@ -354,10 +359,8 @@ Box* exceptionStr(Box* b) {
 }
 
 Box* exceptionRepr(Box* b) {
-    HCBox* hcb = static_cast<HCBox*>(b);
-
     // TODO In CPython __str__ and __repr__ pull from an internalized message field, but for now do this:
-    Box* message = hcb->peekattr("message");
+    Box* message = b->getattr("message");
     assert(message);
     message = repr(message);
     assert(message->cls == str_cls);
@@ -367,7 +370,7 @@ Box* exceptionRepr(Box* b) {
 }
 
 static BoxedClass* makeBuiltinException(const char* name) {
-    BoxedClass* cls = new BoxedClass(true, false);
+    BoxedClass* cls = new BoxedClass(offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
@@ -385,7 +388,7 @@ void setupBuiltins() {
 
     builtins_module->setattr("None", None, NULL, NULL);
 
-    notimplemented_cls = new BoxedClass(false, false);
+    notimplemented_cls = new BoxedClass(0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(boxRTFunction((void*)notimplementedRepr, NULL, 1, false)));

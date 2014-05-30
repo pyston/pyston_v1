@@ -138,9 +138,8 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 
 std::string formatException(Box* b) {
     const std::string* name = getTypeName(b);
-    HCBox* hcb = static_cast<HCBox*>(b);
 
-    Box* attr = hcb->peekattr("message");
+    Box* attr = b->getattr("message");
     if (attr == nullptr)
         return *name;
 

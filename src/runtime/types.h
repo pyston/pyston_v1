@@ -260,15 +260,25 @@ public:
     BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
 };
 
-class BoxedFunction : public HCBox {
+class BoxedFunction : public Box {
 public:
+    HCAttrs attrs;
     CLFunction* f;
 
     BoxedFunction(CLFunction* f);
 };
 
-class BoxedModule : public HCBox {
+// TODO hack
+class BoxedUserObject : public Box {
 public:
+    HCAttrs attrs;
+
+    BoxedUserObject(BoxedClass* cls) : Box(&user_flavor, cls) {}
+};
+
+class BoxedModule : public Box {
+public:
+    HCAttrs attrs;
     const std::string fn; // for traceback purposes; not the same as __file__
 
     BoxedModule(const std::string& name, const std::string& fn);

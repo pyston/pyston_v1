@@ -40,12 +40,11 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
-#define BOX_NREFS_OFFSET ((char*)&(((HCBox*)0x01)->nrefs) - (char*)0x1)
-#define BOX_CLS_OFFSET ((char*)&(((HCBox*)0x01)->cls) - (char*)0x1)
-#define BOX_HCLS_OFFSET ((char*)&(((HCBox*)0x01)->hcls) - (char*)0x1)
-#define BOX_ATTRS_OFFSET ((char*)&(((HCBox*)0x01)->attr_list) - (char*)0x1)
-#define ATTRLIST_ATTRS_OFFSET ((char*)&(((HCBox::AttrList*)0x01)->attrs) - (char*)0x1)
-#define ATTRLIST_KIND_OFFSET ((char*)&(((HCBox::AttrList*)0x01)->gc_header.kind_id) - (char*)0x1)
+#define BOX_CLS_OFFSET ((char*)&(((Box*)0x01)->cls) - (char*)0x1)
+#define HCATTRS_HCLS_OFFSET ((char*)&(((HCAttrs*)0x01)->hcls) - (char*)0x1)
+#define HCATTRS_ATTRS_OFFSET ((char*)&(((HCAttrs*)0x01)->attr_list) - (char*)0x1)
+#define ATTRLIST_ATTRS_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->attrs) - (char*)0x1)
+#define ATTRLIST_KIND_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->gc_header.kind_id) - (char*)0x1)
 #define INSTANCEMETHOD_FUNC_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->func) - (char*)0x1)
 #define INSTANCEMETHOD_OBJ_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->obj) - (char*)0x1)
 #define BOOL_B_OFFSET ((char*)&(((BoxedBool*)0x01)->b) - (char*)0x1)
@@ -273,12 +272,17 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
     }
 }
 
-BoxedClass::BoxedClass(bool hasattrs, bool is_user_defined)
-    : HCBox(&type_flavor, type_cls), hasattrs(hasattrs), is_constant(false), is_user_defined(is_user_defined) {
+BoxedClass::BoxedClass(int attrs_offset, int instance_size, bool is_user_defined)
+    : Box(&type_flavor, type_cls), attrs_offset(attrs_offset), instance_size(instance_size), is_constant(false),
+      is_user_defined(is_user_defined) {
+    if (attrs_offset) {
+        assert(instance_size >= attrs_offset + sizeof(HCAttrs));
+        assert(attrs_offset % sizeof(void*) == 0);
+    }
 }
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
-    Box* b = cls->peekattr("__name__");
+    Box* b = cls->getattr("__name__");
     assert(b);
     ASSERT(b->cls == str_cls, "%p", b->cls);
     BoxedString* sb = static_cast<BoxedString*>(b);
@@ -308,8 +312,11 @@ HiddenClass* HiddenClass::getRoot() {
     return root;
 }
 
-HCBox::HCBox(const ObjectFlavor* flavor, BoxedClass* cls)
-    : Box(flavor, cls), hcls(HiddenClass::getRoot()), attr_list(NULL) {
+Box::Box(const ObjectFlavor* flavor, BoxedClass* cls) : GCObject(flavor), cls(cls) {
+    // if (TRACK_ALLOCATIONS) {
+    // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
+    // Stats::log(id);
+    //}
 
     // the only way cls should be NULL is if we're creating the type_cls
     // object itself:
@@ -317,24 +324,51 @@ HCBox::HCBox(const ObjectFlavor* flavor, BoxedClass* cls)
         assert(type_cls == NULL);
     } else {
         assert(flavor->isUserDefined() == isUserDefined(cls));
-        assert(cls->hasattrs);
     }
 }
 
 
-Box* HCBox::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2) {
+HCAttrs* Box::getAttrs() {
+    assert(cls->instancesHaveAttrs());
+
+    char* p = reinterpret_cast<char*>(this);
+    p += cls->attrs_offset;
+    return reinterpret_cast<HCAttrs*>(p);
+}
+
+Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2) {
+    // Have to guard on the memory layout of this object.
+    // Right now, guard on the specific Python-class, which in turn
+    // specifies the C structure.
+    // In the future, we could create another field (the flavor?)
+    // that also specifies the structure and can include multiple
+    // classes.
+    // Only matters if we end up getting multiple classes with the same
+    // structure (ex user class) and the same hidden classes, because
+    // otherwise the guard will fail anyway.;
     if (rewrite_args) {
         rewrite_args->out_success = true;
+        rewrite_args->obj.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+    }
+    if (rewrite_args2) {
+        rewrite_args2->out_success = true;
+        rewrite_args2->obj.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+    }
 
+    if (!cls->instancesHaveAttrs())
+        return NULL;
+
+    HCAttrs* attrs = getAttrs();
+    HiddenClass* hcls = attrs->hcls;
+
+    if (rewrite_args) {
         if (!rewrite_args->obj_hcls_guarded)
-            rewrite_args->obj.addAttrGuard(BOX_HCLS_OFFSET, (intptr_t) this->hcls);
+            rewrite_args->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
     }
 
     if (rewrite_args2) {
-        rewrite_args2->out_success = true;
-
         if (!rewrite_args2->obj_hcls_guarded)
-            rewrite_args2->obj.addAttrGuard(BOX_HCLS_OFFSET, (intptr_t) this->hcls);
+            rewrite_args2->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
     }
 
     int offset = hcls->getOffset(attr);
@@ -349,7 +383,7 @@ Box* HCBox::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, G
         // temp_reg = -3;
         int temp_reg = rewrite_args->preferred_dest_reg;
 
-        RewriterVar attrs = rewrite_args->obj.getAttr(BOX_ATTRS_OFFSET, temp_reg);
+        RewriterVar attrs = rewrite_args->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, temp_reg);
         rewrite_args->out_rtn
             = attrs.getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->preferred_dest_reg);
 
@@ -360,22 +394,35 @@ Box* HCBox::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, G
         if (!rewrite_args2->more_guards_after)
             rewrite_args2->rewriter->setDoneGuarding();
 
-        RewriterVarUsage2 attrs = rewrite_args2->obj.getAttr(BOX_ATTRS_OFFSET, RewriterVarUsage2::Kill);
+        RewriterVarUsage2 attrs
+            = rewrite_args2->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, RewriterVarUsage2::Kill);
         rewrite_args2->out_rtn = attrs.getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, RewriterVarUsage2::Kill,
                                                rewrite_args2->destination);
     }
 
-    Box* rtn = attr_list->attrs[offset];
+    Box* rtn = attrs->attr_list->attrs[offset];
     return rtn;
 }
 
-void HCBox::giveAttr(const std::string& attr, Box* val) {
-    assert(this->peekattr(attr) == NULL);
-    this->setattr(attr, val, NULL, NULL);
-}
+void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args,
+                  SetattrRewriteArgs2* rewrite_args2) {
+    assert(cls->instancesHaveAttrs());
 
-void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args,
-                    SetattrRewriteArgs2* rewrite_args2) {
+    // Have to guard on the memory layout of this object.
+    // Right now, guard on the specific Python-class, which in turn
+    // specifies the C structure.
+    // In the future, we could create another field (the flavor?)
+    // that also specifies the structure and can include multiple
+    // classes.
+    // Only matters if we end up getting multiple classes with the same
+    // structure (ex user class) and the same hidden classes, because
+    // otherwise the guard will fail anyway.;
+    if (rewrite_args)
+        rewrite_args->obj.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+    if (rewrite_args2)
+        rewrite_args2->obj.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+
+
     static const std::string none_str("None");
     static const std::string getattr_str("__getattr__");
     static const std::string getattribute_str("__getattribute__");
@@ -393,18 +440,19 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewri
         self->dependent_icgetattrs.invalidateAll();
     }
 
-    HiddenClass* hcls = this->hcls;
+    HCAttrs* attrs = getAttrs();
+    HiddenClass* hcls = attrs->hcls;
     int numattrs = hcls->attr_offsets.size();
 
     int offset = hcls->getOffset(attr);
 
     if (rewrite_args) {
-        rewrite_args->obj.addAttrGuard(BOX_HCLS_OFFSET, (intptr_t)hcls);
+        rewrite_args->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
         rewrite_args->rewriter->addDecision(offset == -1 ? 1 : 0);
     }
 
     if (rewrite_args2) {
-        rewrite_args2->obj.addAttrGuard(BOX_HCLS_OFFSET, (intptr_t)hcls);
+        rewrite_args2->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
 
         if (!rewrite_args2->more_guards_after)
             rewrite_args2->rewriter->setDoneGuarding();
@@ -413,11 +461,11 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewri
 
     if (offset >= 0) {
         assert(offset < numattrs);
-        Box* prev = this->attr_list->attrs[offset];
-        this->attr_list->attrs[offset] = val;
+        Box* prev = attrs->attr_list->attrs[offset];
+        attrs->attr_list->attrs[offset] = val;
 
         if (rewrite_args) {
-            RewriterVar r_hattrs = rewrite_args->obj.getAttr(BOX_ATTRS_OFFSET, 1);
+            RewriterVar r_hattrs = rewrite_args->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, 1);
 
             r_hattrs.setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
             rewrite_args->out_success = true;
@@ -425,8 +473,8 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewri
 
         if (rewrite_args2) {
 
-            RewriterVarUsage2 r_hattrs
-                = rewrite_args2->obj.getAttr(BOX_ATTRS_OFFSET, RewriterVarUsage2::Kill, Location::any());
+            RewriterVarUsage2 r_hattrs = rewrite_args2->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET,
+                                                                    RewriterVarUsage2::Kill, Location::any());
 
             r_hattrs.setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, std::move(rewrite_args2->attrval));
             r_hattrs.setDoneUsing();
@@ -457,10 +505,10 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewri
 
     RewriterVar r_new_array;
     RewriterVarUsage2 r_new_array2(RewriterVarUsage2::empty());
-    int new_size = sizeof(HCBox::AttrList) + sizeof(Box*) * (numattrs + 1);
+    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
     if (numattrs == 0) {
-        this->attr_list = (HCBox::AttrList*)rt_alloc(new_size);
-        this->attr_list->gc_header.kind_id = untracked_kind.kind_id;
+        attrs->attr_list = (HCAttrs::AttrList*)rt_alloc(new_size);
+        attrs->attr_list->gc_header.kind_id = untracked_kind.kind_id;
         if (rewrite_args) {
             rewrite_args->rewriter->loadConst(0, new_size);
             r_new_array = rewrite_args->rewriter->call((void*)rt_alloc);
@@ -474,15 +522,15 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewri
             r_new_array2.setAttr(ATTRLIST_KIND_OFFSET, std::move(r_flavor));
         }
     } else {
-        this->attr_list = (HCBox::AttrList*)rt_realloc(this->attr_list, new_size);
+        attrs->attr_list = (HCAttrs::AttrList*)rt_realloc(attrs->attr_list, new_size);
         if (rewrite_args) {
-            rewrite_args->obj.getAttr(BOX_ATTRS_OFFSET, 0);
+            rewrite_args->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, 0);
             rewrite_args->rewriter->loadConst(1, new_size);
             r_new_array = rewrite_args->rewriter->call((void*)rt_realloc);
         }
         if (rewrite_args2) {
-            RewriterVarUsage2 r_oldarray
-                = rewrite_args2->obj.getAttr(BOX_ATTRS_OFFSET, RewriterVarUsage2::NoKill, Location::forArg(0));
+            RewriterVarUsage2 r_oldarray = rewrite_args2->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET,
+                                                                      RewriterVarUsage2::NoKill, Location::forArg(0));
             RewriterVarUsage2 r_newsize = rewrite_args2->rewriter->loadConst(new_size, Location::forArg(1));
             r_new_array2
                 = rewrite_args2->rewriter->call(false, (void*)rt_realloc, std::move(r_oldarray), std::move(r_newsize));
@@ -491,28 +539,28 @@ void HCBox::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewri
     // Don't set the new hcls until after we do the allocation for the new attr_list;
     // that allocation can cause a collection, and we want the collector to always
     // see a consistent state between the hcls and the attr_list
-    this->hcls = new_hcls;
+    attrs->hcls = new_hcls;
 
     if (rewrite_args) {
         RewriterVar attrval = rewrite_args->rewriter->pop(0);
         RewriterVar obj = rewrite_args->rewriter->pop(2);
-        obj.setAttr(BOX_ATTRS_OFFSET, r_new_array);
+        obj.setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array);
         r_new_array.setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, attrval);
         RewriterVar hcls = rewrite_args->rewriter->loadConst(1, (intptr_t)new_hcls);
-        obj.setAttr(BOX_HCLS_OFFSET, hcls);
+        obj.setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, hcls);
         rewrite_args->out_success = true;
     }
     if (rewrite_args2) {
         r_new_array2.setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, std::move(rewrite_args2->attrval));
-        rewrite_args2->obj.setAttr(BOX_ATTRS_OFFSET, std::move(r_new_array2));
+        rewrite_args2->obj.setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, std::move(r_new_array2));
 
         RewriterVarUsage2 r_hcls = rewrite_args2->rewriter->loadConst((intptr_t)new_hcls);
-        rewrite_args2->obj.setAttr(BOX_HCLS_OFFSET, std::move(r_hcls));
+        rewrite_args2->obj.setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, std::move(r_hcls));
         rewrite_args2->obj.setDoneUsing();
 
         rewrite_args2->out_success = true;
     }
-    this->attr_list->attrs[numattrs] = val;
+    attrs->attr_list->attrs[numattrs] = val;
 }
 
 static Box* _handleClsAttr(Box* obj, Box* attr) {
@@ -700,14 +748,12 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
             rewrite_args->out_success = false;
         if (rewrite_args2)
             rewrite_args2->out_success = false;
-    } else if (obj->cls->hasattrs) {
-        HCBox* hobj = static_cast<HCBox*>(obj);
-
+    } else {
         Box* val = NULL;
         if (rewrite_args) {
             GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj);
             hrewrite_args.preferred_dest_reg = rewrite_args->preferred_dest_reg;
-            val = hobj->getattr(attr, &hrewrite_args, NULL);
+            val = obj->getattr(attr, &hrewrite_args, NULL);
 
             if (hrewrite_args.out_success) {
                 if (val)
@@ -718,7 +764,7 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
         } else if (rewrite_args2) {
             GetattrRewriteArgs2 hrewrite_args(rewrite_args2->rewriter, std::move(rewrite_args2->obj),
                                               rewrite_args2->destination, rewrite_args2->more_guards_after);
-            val = hobj->getattr(attr, NULL, &hrewrite_args);
+            val = obj->getattr(attr, NULL, &hrewrite_args);
 
             if (hrewrite_args.out_success) {
                 if (val)
@@ -729,7 +775,7 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
                 rewrite_args2 = NULL;
             }
         } else {
-            val = hobj->getattr(attr, NULL, NULL);
+            val = obj->getattr(attr, NULL, NULL);
         }
 
         if (val) {
@@ -851,7 +897,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
 
-    if (!obj->cls->hasattrs) {
+    if (!obj->cls->instancesHaveAttrs()) {
         raiseAttributeError(obj, attr);
     }
 
@@ -863,37 +909,22 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
         }
     }
 
-    HCBox* hobj = static_cast<HCBox*>(obj);
-
-#if 0
-    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, 1, "setattr"));
-
-    if (rewriter.get()) {
-        //rewriter->trap();
-        SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
-        hobj->setattr(attr, attr_val, &rewrite_args);
-        if (rewrite_args.out_success) {
-            rewriter->commit();
-        }
-#else
     std::unique_ptr<Rewriter2> rewriter(
         Rewriter2::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
     if (rewriter.get()) {
         // rewriter->trap();
         SetattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2), false);
-        hobj->setattr(attr, attr_val, NULL, &rewrite_args);
+        obj->setattr(attr, attr_val, NULL, &rewrite_args);
         if (rewrite_args.out_success) {
             rewriter->commit();
         } else {
             rewrite_args.obj.setDoneUsing();
             rewrite_args.attrval.setDoneUsing();
         }
-#endif
-}
-else {
-    hobj->setattr(attr, attr_val, NULL, NULL);
-}
+    } else {
+        obj->setattr(attr, attr_val, NULL, NULL);
+    }
 }
 
 bool isUserDefined(BoxedClass* cls) {
@@ -2170,17 +2201,16 @@ extern "C" void delitem(Box* target, Box* slice) {
     }
 }
 
-// A wrapper around the HCBox constructor
-// TODO is there a way to avoid the indirection?
-static Box* makeHCBox(ObjectFlavor* flavor, BoxedClass* cls) {
-    return new HCBox(flavor, cls);
-}
-
 // For use on __init__ return values
 static void assertInitNone(Box* obj) {
     if (obj != None) {
         raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj)->c_str());
     }
+}
+
+// Wrapping the ctor to get a defined ABI for calling from an IC:
+static Box* makeUserObject(BoxedClass* cls) {
+    return new BoxedUserObject(cls);
 }
 
 Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
@@ -2305,7 +2335,7 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
         }
     } else {
         if (isUserDefined(ccls)) {
-            made = new HCBox(&user_flavor, ccls);
+            made = new BoxedUserObject(ccls);
 
             if (rewrite_args) {
                 if (init_attr)
@@ -2319,9 +2349,8 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
                 if (nargs >= 4)
                     rewrite_args->args.push();
 
-                r_ccls.move(1);
-                rewrite_args->rewriter->loadConst(0, (intptr_t) & user_flavor);
-                r_made = rewrite_args->rewriter->call((void*)&makeHCBox);
+                r_ccls.move(0);
+                r_made = rewrite_args->rewriter->call((void*)&makeUserObject);
 
                 if (nargs >= 4)
                     rewrite_args->args = rewrite_args->rewriter->pop(3);
@@ -2335,8 +2364,6 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
                     r_init = rewrite_args->rewriter->pop(-2);
             }
         } else {
-            // Not sure what type of object to make here; maybe an HCBox? would be disastrous if it ever
-            // made the wrong one though, so just err for now:
             fprintf(stderr, "no __new__ defined for %s!\n", getNameOfClass(ccls)->c_str());
             abort();
         }

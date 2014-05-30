@@ -117,6 +117,7 @@ COMMON_CXXFLAGS += -std=c++11
 COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
+COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND

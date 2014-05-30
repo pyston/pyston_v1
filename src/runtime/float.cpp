@@ -565,7 +565,7 @@ void setupFloat() {
     float_cls->giveAttr("__name__", boxStrConstant("float"));
 
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
-    float_cls->setattr("__radd__", float_cls->peekattr("__add__"), NULL, NULL);
+    float_cls->setattr("__radd__", float_cls->getattr("__add__"), NULL, NULL);
 
     _addFunc("__div__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatDiv);
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
@@ -581,7 +581,7 @@ void setupFloat() {
     _addFunc("__mod__", BOXED_FLOAT, (void*)floatModFloat, (void*)floatModInt, (void*)floatMod);
     _addFunc("__rmod__", BOXED_FLOAT, (void*)floatRModFloat, (void*)floatRModInt, (void*)floatRMod);
     _addFunc("__mul__", BOXED_FLOAT, (void*)floatMulFloat, (void*)floatMulInt, (void*)floatMul);
-    float_cls->setattr("__rmul__", float_cls->peekattr("__mul__"), NULL, NULL);
+    float_cls->setattr("__rmul__", float_cls->getattr("__mul__"), NULL, NULL);
 
     _addFunc("__pow__", BOXED_FLOAT, (void*)floatPowFloat, (void*)floatPowInt, (void*)floatPow);
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);

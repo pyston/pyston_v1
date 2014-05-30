@@ -302,67 +302,63 @@ private:
 };
 
 
-
-extern bool TRACK_ALLOCATIONS;
-class Box : public GCObject {
-public:
-    BoxedClass* cls;
-
-    llvm::iterator_range<BoxIterator> pyElements();
-
-    constexpr Box(const ObjectFlavor* flavor, BoxedClass* c) __attribute__((visibility("default")))
-    : GCObject(flavor), cls(c) {
-        // if (TRACK_ALLOCATIONS) {
-        // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
-        // Stats::log(id);
-        //}
-    }
-};
-
-
-
 class SetattrRewriteArgs;
 class SetattrRewriteArgs2;
 class GetattrRewriteArgs;
 class GetattrRewriteArgs2;
-// I expect that most things will end up being represented by HCBox's rather than boxes,
-// but I'm not putting these into Box so that things that don't have any python-level instance
-// attributes (ex: integers) don't need to allocate the extra space.
-class HCBox : public Box {
+
+struct HCAttrs {
 public:
     struct AttrList : GCObject {
         Box* attrs[0];
     };
 
     HiddenClass* hcls;
-    // Python-level attributes:
     AttrList* attr_list;
 
-    HCBox(const ObjectFlavor* flavor, BoxedClass* cls);
+    HCAttrs() : hcls(HiddenClass::getRoot()), attr_list(nullptr) {}
+};
+
+class Box : public GCObject {
+public:
+    BoxedClass* cls;
+
+    llvm::iterator_range<BoxIterator> pyElements();
+
+    Box(const ObjectFlavor* flavor, BoxedClass* cls);
+
+    HCAttrs* getAttrs();
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args,
                  SetattrRewriteArgs2* rewrite_args2);
-    void giveAttr(const std::string& attr, Box* val);
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-    Box* peekattr(const std::string& attr) {
-        int offset = hcls->getOffset(attr);
-        if (offset == -1)
-            return NULL;
-        return attr_list->attrs[offset];
+    void giveAttr(const std::string& attr, Box* val) {
+        assert(this->getattr(attr) == NULL);
+        this->setattr(attr, val, NULL, NULL);
     }
+
+    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+    Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
 };
 
-class BoxedClass : public HCBox {
+
+
+class BoxedClass : public Box {
 public:
+    HCAttrs attrs;
+
     // If the user sets __getattribute__ or __getattr__, we will have to invalidate
     // all getattr IC entries that relied on the fact that those functions didn't exist.
     // Doing this via invalidation means that instance attr lookups don't have
     // to guard on anything about the class.
     ICInvalidator dependent_icgetattrs;
 
-    // whether or not instances of this class are subclasses of HCBox,
-    // ie they have python-level instance attributes:
-    const bool hasattrs;
+    // Offset of the HCAttrs object or 0 if there are no hcattrs.
+    // Analogous to tp_dictoffset
+    const int attrs_offset;
+    // Analogous to tp_basicsize
+    const int instance_size;
+
+    bool instancesHaveAttrs() { return attrs_offset != 0; }
 
     // Whether this class object is constant or not, ie whether or not class-level
     // attributes can be changed or added.
@@ -377,7 +373,7 @@ public:
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
-    BoxedClass(bool hasattrs, bool is_user_defined);
+    BoxedClass(int attrs_offset, int instance_size, bool is_user_defined);
     void freeze() {
         assert(!is_constant);
         is_constant = true;

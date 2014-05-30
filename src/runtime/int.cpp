@@ -533,7 +533,7 @@ void setupInt() {
     int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1, false)));
     int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1, false)));
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1, false)));
-    int_cls->setattr("__str__", int_cls->peekattr("__repr__"), NULL, NULL);
+    int_cls->setattr("__str__", int_cls->getattr("__repr__"), NULL, NULL);
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1, false)));
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2, false)));
 
