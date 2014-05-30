@@ -320,6 +320,13 @@ analyze:
 		 --use-analyzer $(CLANG_EXE) --use-c++ $(CLANG_EXE) -V \
 		$(MAKE) pyston_dbg USE_DISTCC=0 USE_CCACHE=0
 
+.PHONY: lint cpplint
+lint:
+	$(ECHO) linting...
+	$(VERB) python ../tools/lint.py
+cpplint:
+	$(VERB) python ../tools/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
+
 .PHONY: test test_debug test_prof test_release
 test_debug: pyston_dbg ext
 	python ../tools/tester.py -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
@@ -333,8 +340,9 @@ test_prof: pyston_prof ext
 	python ../tools/tester.py -P -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
-check test: ext pyston_dbg
-	$(MAKE) pyston_dbg
+check:
+	$(MAKE) lint
+	$(MAKE) ext pyston_dbg
 	# $(MAKE) run_unittests
 	$(MAKE) test_debug
 	$(MAKE) test_release
@@ -346,6 +354,7 @@ check test: ext pyston_dbg
 	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
 	$(MAKE) run_unittests
+	$(MAKE) check_format
 
 	echo "All tests passed"
 
