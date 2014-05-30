@@ -12,33 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/objmodel.h"
+
 #include <cassert>
 #include <cstdio>
-#include <stdint.h>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <stdint.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "asm_writing/icinfo.h"
+#include "asm_writing/rewriter.h"
+#include "asm_writing/rewriter2.h"
+#include "codegen/irgen/hooks.h"
+#include "codegen/parser.h"
+#include "codegen/type_recording.h"
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "codegen/parser.h"
-#include "codegen/type_recording.h"
-#include "codegen/irgen/hooks.h"
-
-#include "asm_writing/icinfo.h"
-#include "asm_writing/rewriter.h"
-#include "asm_writing/rewriter2.h"
-
 #include "runtime/capi.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
-#include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 

@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "analysis/function_analysis.h"
+
 #include <cstdio>
 #include <cstdlib>
-
-#include <unordered_set>
 #include <deque>
+#include <unordered_set>
 
-#include <llvm/ADT/SetVector.h>
-#include <llvm/ADT/SmallSet.h>
-
-#include "core/common.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-#include "core/util.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallSet.h"
 
 #include "analysis/fpc.h"
-#include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/common.h"
+#include "core/util.h"
 
 namespace pyston {
 

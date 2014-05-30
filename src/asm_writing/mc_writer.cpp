@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "asm_writing/mc_writer.h"
+
 #include <cstring>
 
+#include "core/ast.h"
 #include "core/common.h"
 #include "core/options.h"
-
-#include "core/ast.h"
-
-#include "asm_writing/mc_writer.h"
 
 namespace pyston {
 

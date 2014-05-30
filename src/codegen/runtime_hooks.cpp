@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/runtime_hooks.h"
+
 #include <cstdio>
 #include <unordered_map>
 
@@ -19,26 +21,22 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Transforms/Scalar.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/PassManager.h"
+#include "llvm/Transforms/Scalar.h"
 
-#include "core/types.h"
-
-#include "codegen/runtime_hooks.h"
 #include "codegen/codegen.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
-
-#include "runtime/int.h"
+#include "core/types.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
-#include "runtime/types.h"
-#include "runtime/objmodel.h"
-
 #include "runtime/inline/boxing.h"
+#include "runtime/int.h"
+#include "runtime/objmodel.h"
+#include "runtime/types.h"
 
 extern "C" void* __cxa_begin_catch(void*);
 extern "C" void __cxa_end_catch();

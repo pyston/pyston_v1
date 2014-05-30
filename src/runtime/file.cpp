@@ -16,11 +16,9 @@
 #include <sstream>
 
 #include "codegen/compvars.h"
-
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

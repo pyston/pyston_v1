@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/llvm_interpreter.h"
+
 #include <sstream>
 #include <unordered_map>
 
@@ -21,15 +23,12 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 
-#include "core/common.h"
-#include "core/stats.h"
-
-#include "core/util.h"
-
 #include "codegen/codegen.h"
-#include "codegen/llvm_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
+#include "core/common.h"
+#include "core/stats.h"
+#include "core/util.h"
 
 extern "C" void* __cxa_allocate_exception(size_t);
 

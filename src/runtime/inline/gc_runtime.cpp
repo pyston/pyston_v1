@@ -18,12 +18,10 @@
 #include "core/common.h"
 #include "core/options.h"
 #include "core/types.h"
-
+#include "gc/gc_alloc.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
-
-#include "gc/gc_alloc.h"
 
 #define USE_CUSTOM_ALLOC
 

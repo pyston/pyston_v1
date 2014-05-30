@@ -16,7 +16,6 @@
 #include <sys/time.h>
 
 #include "core/types.h"
-
 #include "runtime/gc_runtime.h"
 #include "runtime/types.h"
 

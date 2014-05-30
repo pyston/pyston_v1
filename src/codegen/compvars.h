@@ -15,12 +15,11 @@
 #ifndef PYSTON_CODEGEN_COMPVARS_H
 #define PYSTON_CODEGEN_COMPVARS_H
 
-#include <vector>
 #include <stdint.h>
-
-#include "core/types.h"
+#include <vector>
 
 #include "codegen/codegen.h"
+#include "core/types.h"
 
 namespace pyston {
 

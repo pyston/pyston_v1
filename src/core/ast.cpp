@@ -14,11 +14,11 @@
 
 #include "core/ast.h"
 
+#include <cassert>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
 #include <stdint.h>
-#include <cassert>
 
 #include "core/cfg.h"
 

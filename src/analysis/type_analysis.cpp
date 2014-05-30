@@ -14,6 +14,10 @@
 
 #include "analysis/type_analysis.h"
 
+#include <cstdio>
+#include <deque>
+#include <unordered_set>
+
 #include "analysis/fpc.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/type_recording.h"
@@ -21,10 +25,6 @@
 #include "core/cfg.h"
 #include "core/options.h"
 #include "runtime/types.h"
-
-#include <cstdio>
-#include <deque>
-#include <unordered_set>
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2

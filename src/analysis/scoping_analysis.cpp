@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "core/common.h"
+#include "analysis/scoping_analysis.h"
 
 #include "core/ast.h"
+#include "core/common.h"
 #include "core/util.h"
-
-#include "analysis/scoping_analysis.h"
 
 namespace pyston {
 

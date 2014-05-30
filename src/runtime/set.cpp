@@ -14,11 +14,10 @@
 
 #include "runtime/set.h"
 
-#include "runtime/objmodel.h"
+#include <sstream>
 
 #include "codegen/compvars.h"
-
-#include <sstream>
+#include "runtime/objmodel.h"
 
 namespace pyston {
 

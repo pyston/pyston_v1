@@ -15,6 +15,7 @@
 #ifndef PYSTON_CODEGEN_STACKMAPS_H
 #define PYSTON_CODEGEN_STACKMAPS_H
 
+#include <cstdint>
 #include <vector>
 
 namespace llvm {

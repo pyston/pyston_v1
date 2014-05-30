@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/type_recording.h"
+
 #include <unordered_map>
 
 #include "core/options.h"
 #include "core/types.h"
-
-#include "codegen/type_recording.h"
 
 namespace pyston {
 

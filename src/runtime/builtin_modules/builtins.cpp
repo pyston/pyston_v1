@@ -14,20 +14,16 @@
 
 #include <algorithm>
 
+#include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/types.h"
-
-#include "codegen/compvars.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/inline/xrange.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
-#include "runtime/inline/xrange.h"
-
-#include "gc/collector.h"
 
 namespace pyston {
 

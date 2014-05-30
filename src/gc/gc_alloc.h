@@ -17,8 +17,8 @@
 
 #include <cstdlib>
 
-#include "gc/heap.h"
 #include "gc/collector.h"
+#include "gc/heap.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"

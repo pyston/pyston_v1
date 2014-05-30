@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/stackmaps.h"
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -22,10 +24,8 @@
 #include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/Object/ObjectFile.h"
 
-#include "core/options.h"
-
 #include "codegen/codegen.h"
-#include "codegen/stackmaps.h"
+#include "core/options.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY() 2

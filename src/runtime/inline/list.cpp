@@ -15,8 +15,8 @@
 
 #include <cstring>
 
-#include "runtime/list.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/list.h"
 
 namespace pyston {
 

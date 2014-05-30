@@ -15,12 +15,11 @@
 #ifndef PYSTON_ANALYSIS_FPC_H
 #define PYSTON_ANALYSIS_FPC_H
 
-#include "core/common.h"
-#include "core/options.h"
+#include <queue>
 
 #include "core/cfg.h"
-
-#include <queue>
+#include "core/common.h"
+#include "core/options.h"
 
 namespace pyston {
 

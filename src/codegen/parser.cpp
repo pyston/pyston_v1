@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/parser.h"
+
 #include <cassert>
-#include <stdint.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdint.h>
 #include <sys/stat.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "core/ast.h"
 #include "core/util.h"
 
 //#undef VERBOSITY

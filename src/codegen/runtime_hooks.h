@@ -15,6 +15,10 @@
 #ifndef PYSTON_CODEGEN_RUNTIMEHOOKS_H
 #define PYSTON_CODEGEN_RUNTIMEHOOKS_H
 
+namespace llvm {
+class Value;
+}
+
 namespace pyston {
 
 struct GlobalFuncs {

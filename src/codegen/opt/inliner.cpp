@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/opt/inliner.h"
 
-#include "llvm/PassManager.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/CallSite.h"
@@ -22,19 +22,17 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 
+#include "codegen/codegen.h"
 #include "core/options.h"
 #include "core/stats.h"
-
 #include "core/util.h"
-
-#include "codegen/codegen.h"
-#include "codegen/opt/inliner.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2

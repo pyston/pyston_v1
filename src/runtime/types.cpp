@@ -12,25 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/types.h"
+
 #include <cassert>
 #include <cstdio>
-#include <stdint.h>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
+#include <stdint.h>
 
+#include "codegen/compvars.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
-#include "runtime/types.h"
-
-#include "gc/collector.h"
-
-#include "codegen/compvars.h"
 
 namespace pyston {
 

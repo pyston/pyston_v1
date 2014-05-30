@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "asm_writing/assembler.h"
+#include "asm_writing/icinfo.h"
 
 namespace pyston {
 

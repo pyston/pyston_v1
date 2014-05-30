@@ -15,8 +15,8 @@
 #ifndef PYSTON_RUNTIME_OBJMODEL_H
 #define PYSTON_RUNTIME_OBJMODEL_H
 
-#include <string>
 #include <stdint.h>
+#include <string>
 
 #include "core/types.h"
 

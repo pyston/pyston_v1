@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/patchpoints.h"
+
 #include <memory>
 #include <unordered_map>
 
+#include "asm_writing/icinfo.h"
+#include "codegen/stackmaps.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "asm_writing/icinfo.h"
-
-#include "codegen/patchpoints.h"
-#include "codegen/stackmaps.h"
 
 namespace pyston {
 

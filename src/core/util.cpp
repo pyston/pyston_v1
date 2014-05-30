@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdlib>
+#include "core/util.h"
+
 #include <cstdio>
+#include <cstdlib>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
 
 #include "core/common.h"
 #include "core/options.h"
-
-#include "core/util.h"
 
 namespace pyston {
 

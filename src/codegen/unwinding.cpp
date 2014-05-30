@@ -17,9 +17,9 @@
 #include <unistd.h>
 
 #include "llvm/DebugInfo/DIContext.h"
-#include "llvm/IR/DebugInfo.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/IR/DebugInfo.h"
 
 #include "codegen/codegen.h"
 

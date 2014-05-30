@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/codegen.h"
+
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <sys/types.h>
@@ -23,8 +25,6 @@
 #include "llvm/IR/Module.h"
 
 #include "core/util.h"
-
-#include "codegen/codegen.h"
 
 namespace pyston {
 

@@ -12,47 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/irgen.h"
+
 #include <cstdio>
-#include <stdint.h>
 #include <iostream>
 #include <sstream>
+#include <stdint.h>
 
-#include "llvm/PassManager.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Scalar.h"
 
-#include "core/options.h"
-#include "core/stats.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-#include "core/util.h"
-
+#include "analysis/function_analysis.h"
+#include "analysis/scoping_analysis.h"
+#include "analysis/type_analysis.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/gcbuilder.h"
-#include "codegen/irgen.h"
-#include "codegen/patchpoints.h"
-#include "codegen/osrentry.h"
-#include "codegen/stackmaps.h"
 #include "codegen/irgen/irgenerator.h"
 #include "codegen/irgen/util.h"
 #include "codegen/opt/escape_analysis.h"
 #include "codegen/opt/inliner.h"
 #include "codegen/opt/passes.h"
-
-#include "runtime/types.h"
+#include "codegen/osrentry.h"
+#include "codegen/patchpoints.h"
+#include "codegen/stackmaps.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/options.h"
+#include "core/stats.h"
+#include "core/util.h"
 #include "runtime/objmodel.h"
-
-#include "analysis/function_analysis.h"
-#include "analysis/scoping_analysis.h"
-#include "analysis/type_analysis.h"
+#include "runtime/types.h"
 
 namespace pyston {
 

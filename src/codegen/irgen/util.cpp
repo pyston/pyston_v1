@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/irgen/util.h"
+
 #include <sstream>
 #include <unordered_map>
 
@@ -21,12 +23,9 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
-#include "core/common.h"
-
-#include "runtime/types.h"
-
 #include "codegen/codegen.h"
-#include "codegen/irgen/util.h"
+#include "core/common.h"
+#include "runtime/types.h"
 
 namespace pyston {
 

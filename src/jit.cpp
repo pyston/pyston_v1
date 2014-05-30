@@ -12,30 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <csignal>
 #include <cassert>
-#include <stdint.h>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
-#include <unistd.h>
+#include <stdint.h>
 #include <sys/time.h>
+#include <unistd.h>
 
-#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
 
+#include "codegen/entry.h"
+#include "codegen/irgen/hooks.h"
+#include "codegen/parser.h"
+#include "core/ast.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "core/ast.h"
 #include "core/util.h"
-
-#include "codegen/entry.h"
-#include "codegen/parser.h"
-#include "codegen/irgen/hooks.h"
 
 
 #ifndef GITREV

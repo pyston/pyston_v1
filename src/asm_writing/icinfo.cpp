@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "asm_writing/icinfo.h"
+
 #include <cstring>
 #include <memory>
 
 #include "llvm/Support/Memory.h"
 
+#include "asm_writing/assembler.h"
+#include "asm_writing/mc_writer.h"
 #include "codegen/patchpoints.h"
-
 #include "core/common.h"
 #include "core/options.h"
 #include "core/types.h"
-
-#include "asm_writing/assembler.h"
-#include "asm_writing/icinfo.h"
-#include "asm_writing/mc_writer.h"
 
 namespace pyston {
 

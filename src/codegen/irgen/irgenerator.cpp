@@ -12,28 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/irgen/irgenerator.h"
 
 #include "llvm/IR/Module.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-#include "core/util.h"
-
-#include "codegen/compvars.h"
-#include "codegen/osrentry.h"
-#include "codegen/patchpoints.h"
-#include "codegen/type_recording.h"
-
-#include "codegen/irgen.h"
-#include "codegen/irgen/irgenerator.h"
-#include "codegen/irgen/util.h"
-
-#include "runtime/objmodel.h"
-#include "runtime/types.h"
 
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
 #include "analysis/type_analysis.h"
+#include "codegen/compvars.h"
+#include "codegen/irgen.h"
+#include "codegen/irgen/util.h"
+#include "codegen/osrentry.h"
+#include "codegen/patchpoints.h"
+#include "codegen/type_recording.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/util.h"
+#include "runtime/objmodel.h"
+#include "runtime/types.h"
 
 extern "C" {
 // Hack: we only need RTTI for a single type (Box*), which we know will get emmitted,

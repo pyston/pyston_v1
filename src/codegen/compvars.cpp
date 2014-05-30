@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/compvars.h"
+
 #include <cstdio>
 #include <sstream>
 
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "core/options.h"
-#include "core/types.h"
-
-#include "codegen/compvars.h"
 #include "codegen/gcbuilder.h"
-#include "codegen/patchpoints.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/util.h"
-
-#include "runtime/objmodel.h"
-#include "runtime/int.h"
+#include "codegen/patchpoints.h"
+#include "core/options.h"
+#include "core/types.h"
 #include "runtime/float.h"
+#include "runtime/int.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {

@@ -12,33 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/irgen/hooks.h"
+
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "analysis/function_analysis.h"
+#include "analysis/scoping_analysis.h"
+#include "asm_writing/icinfo.h"
+#include "codegen/codegen.h"
+#include "codegen/compvars.h"
+#include "codegen/irgen.h"
+#include "codegen/irgen/util.h"
+#include "codegen/llvm_interpreter.h"
+#include "codegen/osrentry.h"
+#include "codegen/patchpoints.h"
+#include "codegen/stackmaps.h"
+#include "core/ast.h"
+#include "core/cfg.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
 #include "core/util.h"
-
-#include "analysis/function_analysis.h"
-#include "analysis/scoping_analysis.h"
-
-#include "asm_writing/icinfo.h"
-
-#include "codegen/codegen.h"
-#include "codegen/compvars.h"
-#include "codegen/irgen.h"
-#include "codegen/llvm_interpreter.h"
-#include "codegen/osrentry.h"
-#include "codegen/stackmaps.h"
-#include "codegen/patchpoints.h"
-#include "codegen/irgen/hooks.h"
-#include "codegen/irgen/util.h"
-
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

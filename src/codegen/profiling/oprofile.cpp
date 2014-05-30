@@ -15,12 +15,11 @@
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
 
-#include <opagent.h>
-
-#include "core/common.h"
-#include "core/options.h"
+#include "opagent.h"
 
 #include "codegen/profiling/profiling.h"
+#include "core/common.h"
+#include "core/options.h"
 
 namespace pyston {
 

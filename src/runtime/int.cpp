@@ -12,25 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/int.h"
+
 #include <cmath>
 #include <sstream>
 
+#include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
-#include "runtime/int.h"
+#include "runtime/inline/boxing.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
-#include "runtime/inline/boxing.h"
-
-#include "gc/collector.h"
-
-#include "codegen/compvars.h"
 
 namespace pyston {
 

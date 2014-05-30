@@ -15,13 +15,12 @@
 #include "core/cfg.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 
-#include "core/options.h"
-
 #include "core/ast.h"
+#include "core/options.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2

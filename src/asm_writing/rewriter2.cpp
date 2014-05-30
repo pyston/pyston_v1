@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "asm_writing/rewriter2.h"
+
 #include <vector>
 
+#include "asm_writing/icinfo.h"
 #include "core/common.h"
 #include "core/stats.h"
-
-#include "asm_writing/icinfo.h"
-#include "asm_writing/rewriter2.h"
 
 namespace pyston {
 

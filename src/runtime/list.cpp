@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/list.h"
+
+#include <algorithm>
 #include <cstring>
 #include <sstream>
-#include <algorithm>
 
+#include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
-#include "runtime/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
-#include "codegen/compvars.h"
-
-#include "gc/collector.h"
 
 namespace pyston {
 

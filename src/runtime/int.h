@@ -16,7 +16,6 @@
 #define PYSTON_RUNTIME_INT_H
 
 #include "core/common.h"
-
 #include "runtime/types.h"
 
 namespace pyston {

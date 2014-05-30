@@ -17,11 +17,8 @@
 
 #include <unordered_map>
 
-//#include "llvm/IR/IRBuilder.h"
-
-#include "core/types.h"
-
 #include "codegen/runtime_hooks.h"
+#include "core/types.h"
 
 namespace llvm {
 class ExecutionEngine;

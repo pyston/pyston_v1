@@ -15,11 +15,10 @@
 #ifndef PYSTON_RUNTIME_SET_H
 #define PYSTON_RUNTIME_SET_H
 
-#include "runtime/types.h"
+#include <unordered_set>
 
 #include "core/types.h"
-
-#include <unordered_set>
+#include "runtime/types.h"
 
 namespace pyston {
 

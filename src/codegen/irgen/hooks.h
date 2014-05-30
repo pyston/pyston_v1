@@ -17,7 +17,9 @@
 
 namespace pyston {
 
+class CompiledFunction;
 class OSRExit;
+
 void* compilePartialFunc(OSRExit*);
 extern "C" char* reoptCompiledFunc(CompiledFunction*);
 

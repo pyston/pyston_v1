@@ -16,11 +16,10 @@
 #include <stdarg.h>
 #include <string.h>
 
-#include "core/types.h"
-
-#include "runtime/types.h"
-
 #include "Python.h"
+
+#include "core/types.h"
+#include "runtime/types.h"
 
 namespace pyston {
 

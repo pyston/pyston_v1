@@ -17,19 +17,16 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+
+#include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/types.h"
-
-// For STR
-#include "codegen/compvars.h"
-
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
-#include <llvm/ADT/StringRef.h>
-#include <llvm/ADT/SmallVector.h>
 
 namespace pyston {
 

@@ -15,13 +15,11 @@
 #include <cmath>
 
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/inline/boxing.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-#include "runtime/inline/boxing.h"
-
-#include "gc/collector.h"
 
 namespace pyston {
 

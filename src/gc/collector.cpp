@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "gc/collector.h"
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 
+#include "codegen/codegen.h"
 #include "core/common.h"
 #include "core/types.h"
-
-#include "codegen/codegen.h"
-
-#include "gc/collector.h"
 #include "gc/heap.h"
 #include "gc/root_finder.h"
 

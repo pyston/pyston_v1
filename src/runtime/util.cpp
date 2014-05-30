@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "core/options.h"
+#include "runtime/util.h"
 
+#include "core/options.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
-#include "runtime/util.h"
 
 namespace pyston {
 

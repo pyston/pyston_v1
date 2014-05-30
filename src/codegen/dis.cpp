@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/dis.h"
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -35,8 +37,6 @@
 #include "llvm/Target/TargetMachine.h"
 
 #include "codegen/codegen.h"
-
-#include "dis.h"
 
 namespace pyston {
 

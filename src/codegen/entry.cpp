@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/entry.h"
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -31,19 +33,15 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
-#include "core/options.h"
-#include "core/types.h"
-
-#include "core/util.h"
-
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/dis.h"
-#include "codegen/entry.h"
 #include "codegen/memmgr.h"
-#include "codegen/stackmaps.h"
 #include "codegen/profiling/profiling.h"
-
+#include "codegen/stackmaps.h"
+#include "core/options.h"
+#include "core/types.h"
+#include "core/util.h"
 #include "runtime/types.h"
 
 namespace pyston {

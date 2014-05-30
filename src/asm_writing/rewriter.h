@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "asm_writing/icinfo.h"
 #include "core/ast.h"
 
 namespace pyston {

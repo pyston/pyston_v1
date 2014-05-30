@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <unordered_set>
 #include <queue>
 #include <set>
+#include <unordered_set>
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -27,12 +27,11 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "codegen/irgen/util.h"
+#include "codegen/opt/util.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
-
-#include "codegen/irgen/util.h"
-#include "codegen/opt/util.h"
 
 using namespace llvm;
 
