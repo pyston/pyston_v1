@@ -65,7 +65,7 @@ void setupBool() {
     bool_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)boolNeg, NULL, 1, false)));
     bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, NULL, 1, false)));
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, NULL, 1, false)));
-    bool_cls->setattr("__str__", bool_cls->getattr("__repr__"), NULL, NULL);
+    bool_cls->giveAttr("__str__", bool_cls->getattr("__repr__"));
 
     CLFunction* __new__ = boxRTFunction((void*)boolNew1, NULL, 1, false);
     addRTFunction(__new__, (void*)boolNew2, NULL, 2, false);

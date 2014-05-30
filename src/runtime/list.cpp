@@ -449,7 +449,7 @@ void setupList() {
                        new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
 
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1, false)));
-    list_cls->setattr("__str__", list_cls->getattr("__repr__"), NULL, NULL);
+    list_cls->giveAttr("__str__", list_cls->getattr("__repr__"));
     list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1, false)));
 
     CLFunction* pop = boxRTFunction((void*)listPop1, NULL, 1, false);

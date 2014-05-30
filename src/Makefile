@@ -802,6 +802,7 @@ $(call make_search,oprofcg_%)
 opreportcg:
 	opreport lib-image:pyston_oprof -l -t 0.2 -a --callgraph
 
+.PHONY: watch_% watch wdbg_%
 watch_%:
 	@ ( ulimit -t 60; ulimit -d $(MAK_MEM_KB); ulimit -v $(MAK_MEM_KB); \
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
@@ -810,6 +811,7 @@ watch_%:
 		Makefile $$(find .. \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET; done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
 		# -r . ; do clear; $(MAKE) $(patsubst watch_%,%,$@); done
+watch: watch_pyston_dbg
 wdbg_%:
 	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_CMDS="--ex quit"
 

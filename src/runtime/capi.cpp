@@ -125,7 +125,7 @@ void setupCAPI() {
 
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, NULL, 1, false)));
-    capifunc_cls->setattr("__str__", capifunc_cls->getattr("__repr__"), NULL, NULL);
+    capifunc_cls->giveAttr("__str__", capifunc_cls->getattr("__repr__"));
 
     capifunc_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, NULL, 1, true)));

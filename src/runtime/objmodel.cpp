@@ -81,15 +81,6 @@ struct GetattrRewriteArgs2 {
           out_success(false), out_rtn(RewriterVarUsage2::empty()), obj_hcls_guarded(false) {}
 };
 
-struct SetattrRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar obj, attrval;
-    bool out_success;
-
-    SetattrRewriteArgs(Rewriter* rewriter, const RewriterVar& obj, const RewriterVar& attrval)
-        : rewriter(rewriter), obj(obj), attrval(attrval), out_success(false) {}
-};
-
 struct SetattrRewriteArgs2 {
     Rewriter2* rewriter;
     RewriterVarUsage2 obj, attrval;
@@ -275,9 +266,10 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
 BoxedClass::BoxedClass(int attrs_offset, int instance_size, bool is_user_defined)
     : Box(&type_flavor, type_cls), attrs_offset(attrs_offset), instance_size(instance_size), is_constant(false),
       is_user_defined(is_user_defined) {
+    assert(instance_size % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     if (attrs_offset) {
         assert(instance_size >= attrs_offset + sizeof(HCAttrs));
-        assert(attrs_offset % sizeof(void*) == 0);
+        assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     }
 }
 
@@ -404,8 +396,7 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, Get
     return rtn;
 }
 
-void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args,
-                  SetattrRewriteArgs2* rewrite_args2) {
+void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2) {
     assert(cls->instancesHaveAttrs());
 
     // Have to guard on the memory layout of this object.
@@ -417,8 +408,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     // Only matters if we end up getting multiple classes with the same
     // structure (ex user class) and the same hidden classes, because
     // otherwise the guard will fail anyway.;
-    if (rewrite_args)
-        rewrite_args->obj.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
     if (rewrite_args2)
         rewrite_args2->obj.addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
 
@@ -431,7 +420,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
 
     if ((this->cls == type_cls) && (attr == getattr_str || attr == getattribute_str)) {
         // Will have to embed the clear in the IC, so just disable the patching for now:
-        rewrite_args = NULL;
         rewrite_args2 = NULL;
 
         // TODO should put this clearing behavior somewhere else, since there are probably more
@@ -446,11 +434,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
 
     int offset = hcls->getOffset(attr);
 
-    if (rewrite_args) {
-        rewrite_args->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
-        rewrite_args->rewriter->addDecision(offset == -1 ? 1 : 0);
-    }
-
     if (rewrite_args2) {
         rewrite_args2->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
 
@@ -463,13 +446,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         assert(offset < numattrs);
         Box* prev = attrs->attr_list->attrs[offset];
         attrs->attr_list->attrs[offset] = val;
-
-        if (rewrite_args) {
-            RewriterVar r_hattrs = rewrite_args->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, 1);
-
-            r_hattrs.setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
-            rewrite_args->out_success = true;
-        }
 
         if (rewrite_args2) {
 
@@ -496,11 +472,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     }
 #endif
 
-    if (rewrite_args) {
-        rewrite_args->obj.push();
-        rewrite_args->attrval.push();
-    }
-
 
 
     RewriterVar r_new_array;
@@ -509,12 +480,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     if (numattrs == 0) {
         attrs->attr_list = (HCAttrs::AttrList*)rt_alloc(new_size);
         attrs->attr_list->gc_header.kind_id = untracked_kind.kind_id;
-        if (rewrite_args) {
-            rewrite_args->rewriter->loadConst(0, new_size);
-            r_new_array = rewrite_args->rewriter->call((void*)rt_alloc);
-            RewriterVar r_flavor = rewrite_args->rewriter->loadConst(0, (intptr_t)untracked_kind.kind_id);
-            r_new_array.setAttr(ATTRLIST_KIND_OFFSET, r_flavor);
-        }
         if (rewrite_args2) {
             RewriterVarUsage2 r_newsize = rewrite_args2->rewriter->loadConst(new_size, Location::forArg(0));
             r_new_array2 = rewrite_args2->rewriter->call(false, (void*)rt_alloc, std::move(r_newsize));
@@ -523,11 +488,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         }
     } else {
         attrs->attr_list = (HCAttrs::AttrList*)rt_realloc(attrs->attr_list, new_size);
-        if (rewrite_args) {
-            rewrite_args->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, 0);
-            rewrite_args->rewriter->loadConst(1, new_size);
-            r_new_array = rewrite_args->rewriter->call((void*)rt_realloc);
-        }
         if (rewrite_args2) {
             RewriterVarUsage2 r_oldarray = rewrite_args2->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET,
                                                                       RewriterVarUsage2::NoKill, Location::forArg(0));
@@ -541,15 +501,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     // see a consistent state between the hcls and the attr_list
     attrs->hcls = new_hcls;
 
-    if (rewrite_args) {
-        RewriterVar attrval = rewrite_args->rewriter->pop(0);
-        RewriterVar obj = rewrite_args->rewriter->pop(2);
-        obj.setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array);
-        r_new_array.setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, attrval);
-        RewriterVar hcls = rewrite_args->rewriter->loadConst(1, (intptr_t)new_hcls);
-        obj.setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, hcls);
-        rewrite_args->out_success = true;
-    }
     if (rewrite_args2) {
         r_new_array2.setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, std::move(rewrite_args2->attrval));
         rewrite_args2->obj.setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, std::move(r_new_array2));
@@ -915,7 +866,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     if (rewriter.get()) {
         // rewriter->trap();
         SetattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2), false);
-        obj->setattr(attr, attr_val, NULL, &rewrite_args);
+        obj->setattr(attr, attr_val, &rewrite_args);
         if (rewrite_args.out_success) {
             rewriter->commit();
         } else {
@@ -923,7 +874,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
             rewrite_args.attrval.setDoneUsing();
         }
     } else {
-        obj->setattr(attr, attr_val, NULL, NULL);
+        obj->setattr(attr, attr_val, NULL);
     }
 }
 

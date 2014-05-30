@@ -182,7 +182,7 @@ void setupFile() {
     file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NULL, 1, false)));
 
     file_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)fileRepr, NULL, 1, false)));
-    file_cls->setattr("__str__", file_cls->getattr("__repr__"), NULL, NULL);
+    file_cls->giveAttr("__str__", file_cls->getattr("__repr__"));
 
     file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, NULL, 1, false)));
     file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, NULL, 4, false)));

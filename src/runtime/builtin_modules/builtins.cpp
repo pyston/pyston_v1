@@ -386,7 +386,7 @@ static BoxedClass* makeBuiltinException(const char* name) {
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
-    builtins_module->setattr("None", None, NULL, NULL);
+    builtins_module->giveAttr("None", None);
 
     notimplemented_cls = new BoxedClass(0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
@@ -456,8 +456,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("sorted", new BoxedFunction(boxRTFunction((void*)sorted, NULL, 1, false)));
 
-    builtins_module->setattr("True", True, NULL, NULL);
-    builtins_module->setattr("False", False, NULL, NULL);
+    builtins_module->giveAttr("True", True);
+    builtins_module->giveAttr("False", False);
 
     CLFunction* range_clf = boxRTFunction((void*)range1, NULL, 1, false);
     addRTFunction(range_clf, (void*)range2, NULL, 2, false);
@@ -476,17 +476,17 @@ void setupBuiltins() {
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
 
-    builtins_module->setattr("str", str_cls, NULL, NULL);
-    builtins_module->setattr("int", int_cls, NULL, NULL);
-    builtins_module->setattr("float", float_cls, NULL, NULL);
-    builtins_module->setattr("list", list_cls, NULL, NULL);
-    builtins_module->setattr("slice", slice_cls, NULL, NULL);
-    builtins_module->setattr("type", type_cls, NULL, NULL);
-    builtins_module->setattr("file", file_cls, NULL, NULL);
-    builtins_module->setattr("bool", bool_cls, NULL, NULL);
-    builtins_module->setattr("dict", dict_cls, NULL, NULL);
-    builtins_module->setattr("set", set_cls, NULL, NULL);
-    builtins_module->setattr("tuple", tuple_cls, NULL, NULL);
-    builtins_module->setattr("instancemethod", instancemethod_cls, NULL, NULL);
+    builtins_module->giveAttr("str", str_cls);
+    builtins_module->giveAttr("int", int_cls);
+    builtins_module->giveAttr("float", float_cls);
+    builtins_module->giveAttr("list", list_cls);
+    builtins_module->giveAttr("slice", slice_cls);
+    builtins_module->giveAttr("type", type_cls);
+    builtins_module->giveAttr("file", file_cls);
+    builtins_module->giveAttr("bool", bool_cls);
+    builtins_module->giveAttr("dict", dict_cls);
+    builtins_module->giveAttr("set", set_cls);
+    builtins_module->giveAttr("tuple", tuple_cls);
+    builtins_module->giveAttr("instancemethod", instancemethod_cls);
 }
 }
