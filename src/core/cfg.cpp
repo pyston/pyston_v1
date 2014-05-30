@@ -116,19 +116,18 @@ private:
         return NULL;
     }
 
-    AST_expr* applyComprehensionCall(AST_DictComp * node, AST_Name* name) {
+    AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
         AST_expr* key = remapExpr(node->key);
         AST_expr* value = remapExpr(node->value);
         return makeCall(makeLoadAttribute(name, "__setitem__", true), key, value);
     }
 
-    AST_expr* applyComprehensionCall(AST_ListComp * node, AST_Name* name) {
+    AST_expr* applyComprehensionCall(AST_ListComp* node, AST_Name* name) {
         AST_expr* elt = remapExpr(node->elt);
         return makeCall(makeLoadAttribute(name, "append", true), elt);
     }
 
-    template<typename ResultASTType, typename CompType>
-    AST_expr* remapComprehension(CompType * node) {
+    template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         std::string rtn_name = nodeName(node);
         push_back(makeAssign(rtn_name, new ResultASTType()));
         std::vector<CFGBlock*> exit_blocks;
@@ -230,9 +229,7 @@ private:
 
             curblock = body_end;
             if (is_innermost) {
-                push_back(
-                    makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load)))
-                );
+                push_back(makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load))));
 
                 j = new AST_Jump();
                 j->target = test_block;
