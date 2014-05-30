@@ -1307,15 +1307,18 @@ private:
 
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
 
+        RELEASE_ASSERT(node->bases.size() == 1, "");
+
+        CompilerVariable* base = evalExpr(node->bases[0], exc_info);
+        ConcreteCompilerVariable* converted_base = base->makeConverted(emitter, base->getBoxType());
+        base->decvref(emitter);
+
         llvm::Value* classobj
-            = emitter.createCall2(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
+            = emitter.createCall3(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
+                                  converted_base->getValue(),
                                   embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr))
                   .getInstruction();
         ConcreteCompilerVariable* cls = new ConcreteCompilerVariable(typeFromClass(type_cls), classobj, true);
-
-        RELEASE_ASSERT(node->bases.size() == 1, "");
-        RELEASE_ASSERT(node->bases[0]->type == AST_TYPE::Name, "");
-        RELEASE_ASSERT(ast_cast<AST_Name>(node->bases[0])->id == "object", "");
 
         // CompilerVariable* name = makeStr(&node->name);
         // cls->setattr(emitter, "__name__", name);
@@ -1819,6 +1822,10 @@ private:
             }
             case AST_TYPE::Raise:
                 doRaise(ast_cast<AST_Raise>(node), exc_info);
+                break;
+            case AST_TYPE::Unreachable:
+                emitter.getBuilder()->CreateUnreachable();
+                endBlock(FINISHED);
                 break;
             default:
                 printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);

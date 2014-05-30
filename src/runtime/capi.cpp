@@ -120,7 +120,7 @@ BoxedModule* getTestModule() {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedClass(0, sizeof(BoxedCApiFunction), false);
+    capifunc_cls = new BoxedClass(object_cls, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
     capifunc_cls->giveAttr("__repr__",

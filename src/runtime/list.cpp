@@ -433,7 +433,7 @@ extern "C" Box* listNew2(Box* cls, Box* container) {
 }
 
 void setupList() {
-    list_iterator_cls = new BoxedClass(0, sizeof(BoxedList), false);
+    list_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedList), false);
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 

@@ -59,16 +59,14 @@ BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
 
 extern "C" {
-extern BoxedClass* type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls, *instancemethod_cls,
-    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
+extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
 }
 extern "C" {
-extern const ObjectFlavor type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor, function_flavor, none_flavor,
-    instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor, tuple_flavor, file_flavor,
-    xrange_flavor, member_flavor;
+extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor,
+    function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor,
+    tuple_flavor, file_flavor, xrange_flavor, member_flavor;
 }
-extern "C" { extern const ObjectFlavor user_flavor; }
-
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
 extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *chr_obj, *ord_obj,
@@ -88,7 +86,7 @@ extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createUserClass(std::string* name, BoxedModule* parent_module);
+extern "C" Box* createUserClass(std::string* name, Box* base, BoxedModule* parent_module);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -266,14 +264,6 @@ public:
     CLFunction* f;
 
     BoxedFunction(CLFunction* f);
-};
-
-// TODO hack
-class BoxedUserObject : public Box {
-public:
-    HCAttrs attrs;
-
-    BoxedUserObject(BoxedClass* cls) : Box(&user_flavor, cls) {}
 };
 
 class BoxedModule : public Box {

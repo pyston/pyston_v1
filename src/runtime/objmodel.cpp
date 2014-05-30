@@ -34,6 +34,8 @@
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
+#include "gc/collector.h"
+#include "gc/heap.h"
 #include "runtime/capi.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
@@ -216,6 +218,16 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
+extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
+    // TODO the class is allowed to override this using __subclasscheck__
+    while (child) {
+        if (child == parent)
+            return true;
+        child = child->base;
+    }
+    return false;
+}
+
 extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
     if (msg) {
         BoxedString* tostr = str(msg);
@@ -263,9 +275,24 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
     }
 }
 
-BoxedClass::BoxedClass(int attrs_offset, int instance_size, bool is_user_defined)
-    : Box(&type_flavor, type_cls), attrs_offset(attrs_offset), instance_size(instance_size), is_constant(false),
-      is_user_defined(is_user_defined) {
+BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bool is_user_defined)
+    : Box(&type_flavor, type_cls), base(base), attrs_offset(attrs_offset), instance_size(instance_size),
+      is_constant(false), is_user_defined(is_user_defined) {
+
+    if (!base) {
+        assert(object_cls == nullptr);
+        // we're constructing 'object'
+        // Will have to add __base__ = None later
+    } else {
+        assert(object_cls);
+        if (base->attrs_offset)
+            RELEASE_ASSERT(attrs_offset == base->attrs_offset, "");
+        assert(instance_size >= base->instance_size);
+    }
+
+    if (base && cls && str_cls)
+        giveAttr("__base__", base);
+
     assert(instance_size % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     if (attrs_offset) {
         assert(instance_size >= attrs_offset + sizeof(HCAttrs));
@@ -315,7 +342,6 @@ Box::Box(const ObjectFlavor* flavor, BoxedClass* cls) : GCObject(flavor), cls(cl
     if (cls == NULL) {
         assert(type_cls == NULL);
     } else {
-        assert(flavor->isUserDefined() == isUserDefined(cls));
     }
 }
 
@@ -396,6 +422,9 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, Get
     return rtn;
 }
 
+// TODO should centralize all of these:
+static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("__init__");
+
 void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2) {
     assert(cls->instancesHaveAttrs());
 
@@ -418,14 +447,21 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrit
 
     RELEASE_ASSERT(attr != none_str || this == builtins_module, "can't assign to None");
 
-    if ((this->cls == type_cls) && (attr == getattr_str || attr == getattribute_str)) {
-        // Will have to embed the clear in the IC, so just disable the patching for now:
-        rewrite_args2 = NULL;
-
-        // TODO should put this clearing behavior somewhere else, since there are probably more
-        // cases in which we want to do it.
+    if (isSubclass(this->cls, type_cls)) {
         BoxedClass* self = static_cast<BoxedClass*>(this);
-        self->dependent_icgetattrs.invalidateAll();
+
+        if (attr == getattr_str || attr == getattribute_str) {
+            // Will have to embed the clear in the IC, so just disable the patching for now:
+            rewrite_args2 = NULL;
+
+            // TODO should put this clearing behavior somewhere else, since there are probably more
+            // cases in which we want to do it.
+            self->dependent_icgetattrs.invalidateAll();
+        }
+
+        if (attr == "__base__" && getattr("__base__")) {
+            raiseExcHelper(TypeError, "readonly attribute");
+        }
     }
 
     HCAttrs* attrs = getAttrs();
@@ -541,14 +577,29 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
         assert(!rewrite_args->out_success);
 
         val = cls->getattr(attr, rewrite_args, NULL);
+        assert(rewrite_args->out_success);
+        if (!val and cls->base) {
+            rewrite_args->out_success = false;
+            rewrite_args->obj = rewrite_args->obj.getAttr(offsetof(BoxedClass, base), rewrite_args->preferred_dest_reg);
+            return typeLookup(cls->base, attr, rewrite_args, NULL);
+        }
         return val;
     } else if (rewrite_args2) {
         assert(!rewrite_args2->out_success);
 
         val = cls->getattr(attr, NULL, rewrite_args2);
+        assert(rewrite_args2->out_success);
+        if (!val and cls->base) {
+            rewrite_args2->out_success = false;
+            rewrite_args2->obj = rewrite_args2->obj.getAttr(offsetof(BoxedClass, base), RewriterVarUsage2::Kill);
+            return typeLookup(cls->base, attr, NULL, rewrite_args2);
+        }
         return val;
     } else {
-        return cls->getattr(attr, NULL, NULL);
+        val = cls->getattr(attr, NULL, NULL);
+        if (!val and cls->base)
+            return typeLookup(cls->base, attr, NULL, NULL);
+        return val;
     }
 }
 
@@ -1038,8 +1089,8 @@ extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
 
     BoxedClass* ccls = static_cast<BoxedClass*>(cls);
 
-    // TODO more complicated than this, but there's no inheritance yet...
-    return ccls == obj->cls;
+    // TODO the class is allowed to override this using __instancecheck__
+    return isSubclass(obj->cls, ccls);
 }
 
 extern "C" BoxedInt* hash(Box* obj) {
@@ -1136,8 +1187,36 @@ extern "C" void print(Box* obj) {
     printf("%s", strd->s.c_str());
 }
 
-extern "C" void dump(Box* obj) {
-    printf("dump: obj %p, cls %p\n", obj, obj->cls);
+extern "C" void dump(void* p) {
+    printf("\n");
+    bool is_gc = (gc::global_heap.getAllocationFromInteriorPointer(p) != NULL);
+    if (!is_gc) {
+        printf("non-gc memory\n");
+        return;
+    }
+
+    GCObjectHeader* header = gc::headerFromObject(p);
+    if (header->kind_id == hc_kind.kind_id) {
+        printf("hcls object\n");
+        return;
+    }
+
+    if (header->kind_id == untracked_kind.kind_id) {
+        printf("untracked object\n");
+        return;
+    }
+
+    if (header->kind_id == conservative_kind.kind_id) {
+        printf("untracked object\n");
+        return;
+    }
+
+    printf("Assuming it's a Box*\n");
+    Box* b = (Box*)p;
+    printf("Class: %s\n", getTypeName(b)->c_str());
+    if (isSubclass(b->cls, type_cls)) {
+        printf("Type name: %s\n", getNameOfClass(static_cast<BoxedClass*>(b))->c_str());
+    }
 }
 
 // For rewriting purposes, this function assumes that nargs will be constant.
@@ -1472,7 +1551,6 @@ extern "C" Box* callattr(Box* obj, std::string* attr, bool clsonly, int64_t narg
     return rtn;
 }
 
-static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("__init__");
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, Box* arg2, Box* arg3,
                          Box** args) {
     // the 10M upper bound isn't a hard max, just almost certainly a bug
@@ -1546,8 +1624,11 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, int64_t nargs,
             return rtn;
         }
 
-        if (cf->sig->is_vararg)
+        if (cf->sig->is_vararg) {
+            if (rewrite_args && VERBOSITY())
+                printf("Not patchpointing this varargs function\n");
             rewrite_args = NULL;
+        }
         if (cf->is_interpreted)
             rewrite_args = NULL;
 
@@ -2159,11 +2240,6 @@ static void assertInitNone(Box* obj) {
     }
 }
 
-// Wrapping the ctor to get a defined ABI for calling from an IC:
-static Box* makeUserObject(BoxedClass* cls) {
-    return new BoxedUserObject(cls);
-}
-
 Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
@@ -2200,7 +2276,7 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls);
         grewrite_args.preferred_dest_reg = -2;
-        new_attr = typeLookup(ccls, "__new__", &grewrite_args, NULL);
+        new_attr = typeLookup(ccls, _new_str, &grewrite_args, NULL);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -2211,12 +2287,13 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
             }
         }
     } else {
-        new_attr = typeLookup(ccls, "__new__", NULL, NULL);
+        new_attr = typeLookup(ccls, _new_str, NULL, NULL);
     }
+    assert(new_attr && "This should always resolve");
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls);
-        init_attr = typeLookup(ccls, "__init__", &grewrite_args, NULL);
+        init_attr = typeLookup(ccls, _init_str, &grewrite_args, NULL);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -2227,97 +2304,71 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
             }
         }
     } else {
-        init_attr = typeLookup(ccls, "__init__", NULL, NULL);
+        init_attr = typeLookup(ccls, _init_str, NULL, NULL);
     }
+    // The init_attr should always resolve as well, but doesn't yet
 
-    // Box* made = callattrInternal(ccls, &_new_str, INST_ONLY, NULL, nargs, cls, arg2, arg3, args);
     Box* made;
     RewriterVar r_made;
-    if (new_attr) {
-        if (rewrite_args) {
-            if (init_attr)
-                r_init.push();
-            if (nargs >= 1)
-                r_ccls.push();
-            if (nargs >= 2)
-                rewrite_args->arg2.push();
-            if (nargs >= 3)
-                rewrite_args->arg3.push();
-            if (nargs >= 4)
-                rewrite_args->args.push();
 
-            CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new);
-            if (nargs >= 1)
-                srewrite_args.arg1 = r_ccls;
-            if (nargs >= 2)
-                srewrite_args.arg2 = rewrite_args->arg2;
-            if (nargs >= 3)
-                srewrite_args.arg3 = rewrite_args->arg3;
-            if (nargs >= 4)
-                srewrite_args.args = rewrite_args->args;
-            srewrite_args.args_guarded = true;
-            srewrite_args.func_guarded = true;
+    if (rewrite_args) {
+        if (init_attr)
+            r_init.push();
+        if (nargs >= 1)
+            r_ccls.push();
+        if (nargs >= 2)
+            rewrite_args->arg2.push();
+        if (nargs >= 3)
+            rewrite_args->arg3.push();
+        if (nargs >= 4)
+            rewrite_args->args.push();
 
-            r_new.push();
+        CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new);
+        if (nargs >= 1)
+            srewrite_args.arg1 = r_ccls;
+        if (nargs >= 2)
+            srewrite_args.arg2 = rewrite_args->arg2;
+        if (nargs >= 3)
+            srewrite_args.arg3 = rewrite_args->arg3;
+        if (nargs >= 4)
+            srewrite_args.args = rewrite_args->args;
+        srewrite_args.args_guarded = true;
+        srewrite_args.func_guarded = true;
 
-            made = runtimeCallInternal(new_attr, &srewrite_args, nargs, cls, arg2, arg3, args);
+        r_new.push();
 
-            if (!srewrite_args.out_success)
-                rewrite_args = NULL;
-            else {
-                r_made = srewrite_args.out_rtn;
-
-                r_new = rewrite_args->rewriter->pop(0);
-                r_made = r_made.move(-1);
-
-                if (nargs >= 4)
-                    rewrite_args->args = rewrite_args->rewriter->pop(3);
-                if (nargs >= 3)
-                    rewrite_args->arg3 = rewrite_args->rewriter->pop(2);
-                if (nargs >= 2)
-                    rewrite_args->arg2 = rewrite_args->rewriter->pop(1);
-                if (nargs >= 1)
-                    r_ccls = rewrite_args->arg1 = rewrite_args->rewriter->pop(0);
-                if (init_attr)
-                    r_init = rewrite_args->rewriter->pop(-2);
+        int new_args = nargs;
+        if (nargs > 1 && new_attr == typeLookup(object_cls, _new_str, NULL, NULL)) {
+            if (init_attr == typeLookup(object_cls, _init_str, NULL, NULL)) {
+                raiseExcHelper(TypeError, "object.__new__() takes no parameters");
+            } else {
+                new_args = 1;
             }
-        } else {
-            made = runtimeCallInternal(new_attr, NULL, nargs, cls, arg2, arg3, args);
+        }
+
+        made = runtimeCallInternal(new_attr, &srewrite_args, new_args, cls, arg2, arg3, args);
+
+        if (!srewrite_args.out_success)
+            rewrite_args = NULL;
+        else {
+            r_made = srewrite_args.out_rtn;
+
+            r_new = rewrite_args->rewriter->pop(0);
+            r_made = r_made.move(-1);
+
+            if (nargs >= 4)
+                rewrite_args->args = rewrite_args->rewriter->pop(3);
+            if (nargs >= 3)
+                rewrite_args->arg3 = rewrite_args->rewriter->pop(2);
+            if (nargs >= 2)
+                rewrite_args->arg2 = rewrite_args->rewriter->pop(1);
+            if (nargs >= 1)
+                r_ccls = rewrite_args->arg1 = rewrite_args->rewriter->pop(0);
+            if (init_attr)
+                r_init = rewrite_args->rewriter->pop(-2);
         }
     } else {
-        if (isUserDefined(ccls)) {
-            made = new BoxedUserObject(ccls);
-
-            if (rewrite_args) {
-                if (init_attr)
-                    r_init.push();
-                if (nargs >= 1)
-                    r_ccls.push();
-                if (nargs >= 2)
-                    rewrite_args->arg2.push();
-                if (nargs >= 3)
-                    rewrite_args->arg3.push();
-                if (nargs >= 4)
-                    rewrite_args->args.push();
-
-                r_ccls.move(0);
-                r_made = rewrite_args->rewriter->call((void*)&makeUserObject);
-
-                if (nargs >= 4)
-                    rewrite_args->args = rewrite_args->rewriter->pop(3);
-                if (nargs >= 3)
-                    rewrite_args->arg3 = rewrite_args->rewriter->pop(2);
-                if (nargs >= 2)
-                    rewrite_args->arg2 = rewrite_args->rewriter->pop(1);
-                if (nargs >= 1)
-                    r_ccls = rewrite_args->arg1 = rewrite_args->rewriter->pop(0);
-                if (init_attr)
-                    r_init = rewrite_args->rewriter->pop(-2);
-            }
-        } else {
-            fprintf(stderr, "no __new__ defined for %s!\n", getNameOfClass(ccls)->c_str());
-            abort();
-        }
+        made = runtimeCallInternal(new_attr, NULL, nargs, cls, arg2, arg3, args);
     }
 
     assert(made);
@@ -2359,6 +2410,8 @@ Box* typeCallInternal(CallRewriteArgs* rewrite_args, int64_t nargs, Box* arg1, B
         }
         assertInitNone(initrtn);
     } else {
+        // TODO this shouldn't be reached
+        // assert(0 && "I don't think this should be reached");
         if (new_attr == NULL && nargs != 1) {
             raiseExcHelper(TypeError, "object.__new__() takes no parameters");
         }

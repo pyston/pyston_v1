@@ -369,8 +369,8 @@ Box* exceptionRepr(Box* b) {
     return boxString(*getTypeName(b) + "(" + message_s->s + ",)");
 }
 
-static BoxedClass* makeBuiltinException(const char* name) {
-    BoxedClass* cls = new BoxedClass(offsetof(BoxedException, attrs), sizeof(BoxedException), false);
+static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
+    BoxedClass* cls = new BoxedClass(base, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
@@ -388,7 +388,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("None", None);
 
-    notimplemented_cls = new BoxedClass(0, sizeof(Box), false);
+    notimplemented_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__",
                                  new BoxedFunction(boxRTFunction((void*)notimplementedRepr, NULL, 1, false)));
@@ -402,20 +402,20 @@ void setupBuiltins() {
     builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1, false)));
     builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1, false)));
 
-    Exception = makeBuiltinException("Exception");
-    AssertionError = makeBuiltinException("AssertionError");
-    AttributeError = makeBuiltinException("AttributeError");
-    TypeError = makeBuiltinException("TypeError");
-    NameError = makeBuiltinException("NameError");
-    KeyError = makeBuiltinException("KeyError");
-    IndexError = makeBuiltinException("IndexError");
-    IOError = makeBuiltinException("IOError");
-    OSError = makeBuiltinException("OSError");
-    ZeroDivisionError = makeBuiltinException("ZeroDivisionError");
-    ValueError = makeBuiltinException("ValueError");
-    UnboundLocalError = makeBuiltinException("UnboundLocalError");
-    RuntimeError = makeBuiltinException("RuntimeError");
-    ImportError = makeBuiltinException("ImportError");
+    Exception = makeBuiltinException(object_cls, "Exception");
+    AssertionError = makeBuiltinException(Exception, "AssertionError");
+    AttributeError = makeBuiltinException(Exception, "AttributeError");
+    TypeError = makeBuiltinException(Exception, "TypeError");
+    NameError = makeBuiltinException(Exception, "NameError");
+    KeyError = makeBuiltinException(Exception, "KeyError");
+    IndexError = makeBuiltinException(Exception, "IndexError");
+    IOError = makeBuiltinException(Exception, "IOError");
+    OSError = makeBuiltinException(Exception, "OSError");
+    ZeroDivisionError = makeBuiltinException(Exception, "ZeroDivisionError");
+    ValueError = makeBuiltinException(Exception, "ValueError");
+    UnboundLocalError = makeBuiltinException(Exception, "UnboundLocalError");
+    RuntimeError = makeBuiltinException(Exception, "RuntimeError");
+    ImportError = makeBuiltinException(Exception, "ImportError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, NULL, 1, false));
     builtins_module->giveAttr("repr", repr_obj);
@@ -476,6 +476,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
 
+    builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("int", int_cls);
     builtins_module->giveAttr("float", float_cls);

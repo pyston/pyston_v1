@@ -54,7 +54,6 @@ extern "C" Box* open2(Box* arg1, Box* arg2);
 extern "C" Box* compare(Box*, Box*, int);
 extern "C" BoxedInt* len(Box* obj);
 extern "C" void print(Box* obj);
-extern "C" void dump(Box* obj);
 // extern "C" Box* trap();
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
@@ -69,6 +68,7 @@ extern "C" Box* import(const std::string* name);
 extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
+extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 
 class BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
@@ -86,6 +86,9 @@ struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,
                       GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+
+Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args,
+                GetattrRewriteArgs2* rewrite_args2);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));

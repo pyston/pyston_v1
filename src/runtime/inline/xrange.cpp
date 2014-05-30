@@ -120,9 +120,9 @@ Box* xrangeIter(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = new BoxedClass(0, sizeof(BoxedXrange), false);
+    xrange_cls = new BoxedClass(object_cls, 0, sizeof(BoxedXrange), false);
     xrange_cls->giveAttr("__name__", boxStrConstant("xrange"));
-    xrange_iterator_cls = new BoxedClass(0, sizeof(BoxedXrangeIterator), false);
+    xrange_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedXrangeIterator), false);
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 
     CLFunction* xrange_clf = boxRTFunction((void*)xrange1, NULL, 2, false);

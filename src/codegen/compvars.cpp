@@ -1306,6 +1306,11 @@ public:
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
         return BOXED_TUPLE->getattrType(attr, cls_only);
     }
+
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                                       bool clsonly, const std::vector<CompilerVariable*>& args) {
+        return makeConverted(emitter, var, getConcreteType())->callattr(emitter, info, attr, clsonly, args);
+    }
 };
 
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types) {

@@ -86,8 +86,6 @@ void force() {
     FORCE(printFloat);
     FORCE(listAppendInternal);
 
-    FORCE(dump);
-
     FORCE(runtimeCall);
     FORCE(callattr);
 

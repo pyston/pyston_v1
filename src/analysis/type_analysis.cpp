@@ -510,6 +510,8 @@ private:
         }
     }
 
+    virtual void visit_unreachable(AST_Unreachable* node) {}
+
 public:
     static void propagate(CFGBlock* block, const TypeMap& starting, TypeMap& ending, ExprTypeMap& expr_types,
                           TypeSpeculations& type_speculations, TypeAnalysis::SpeculationLevel speculation,

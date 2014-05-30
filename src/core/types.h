@@ -66,11 +66,8 @@ public:
 extern "C" const AllocationKind untracked_kind, conservative_kind;
 
 class ObjectFlavor;
-extern "C" const ObjectFlavor user_flavor;
 class ObjectFlavor : public AllocationKind {
 public:
-    bool isUserDefined() const { return this == &user_flavor; }
-
     ObjectFlavor(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
     : AllocationKind(gc_handler, finalizer) {}
 };
@@ -350,6 +347,10 @@ public:
     // to guard on anything about the class.
     ICInvalidator dependent_icgetattrs;
 
+    // Only a single base supported for now.
+    // Is NULL iff this is object_cls
+    BoxedClass* const base;
+
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Analogous to tp_dictoffset
     const int attrs_offset;
@@ -371,7 +372,7 @@ public:
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
-    BoxedClass(int attrs_offset, int instance_size, bool is_user_defined);
+    BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bool is_user_defined);
     void freeze() {
         assert(!is_constant);
         is_constant = true;

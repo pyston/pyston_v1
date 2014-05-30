@@ -1310,6 +1310,10 @@ public:
         if (node->arg2)
             remapped->arg2 = remapExpr(node->arg2);
         push_back(remapped);
+
+        curblock->push_back(new AST_Unreachable());
+        curblock = NULL;
+
         return true;
     }
 
@@ -1331,10 +1335,12 @@ public:
         }
 
         CFGBlock* join_block = cfg->addDeferredBlock();
-        AST_Jump* j = new AST_Jump();
-        j->target = join_block;
-        push_back(j);
-        curblock->connectTo(join_block);
+        if (curblock) {
+            AST_Jump* j = new AST_Jump();
+            j->target = join_block;
+            push_back(j);
+            curblock->connectTo(join_block);
+        }
 
         if (exc_handler_block->predecessors.size() == 0) {
             delete exc_handler_block;
@@ -1357,11 +1363,12 @@ public:
                     is_caught_here->args.push_back(handled_type);
                     is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
 
+                    AST_Branch* br = new AST_Branch();
+                    br->test = remapExpr(is_caught_here);
+
                     CFGBlock* exc_handle = cfg->addBlock();
                     exc_next = cfg->addDeferredBlock();
 
-                    AST_Branch* br = new AST_Branch();
-                    br->test = remapExpr(is_caught_here);
                     br->iftrue = exc_handle;
                     br->iffalse = exc_next;
                     curblock->connectTo(exc_handle);
@@ -1380,10 +1387,12 @@ public:
                     subnode->accept(this);
                 }
 
-                AST_Jump* j = new AST_Jump();
-                j->target = join_block;
-                push_back(j);
-                curblock->connectTo(join_block);
+                if (curblock) {
+                    AST_Jump* j = new AST_Jump();
+                    j->target = join_block;
+                    push_back(j);
+                    curblock->connectTo(join_block);
+                }
 
                 if (exc_next) {
                     cfg->placeBlock(exc_next);
@@ -1397,12 +1406,19 @@ public:
                 AST_Raise* raise = new AST_Raise();
                 raise->arg0 = exc_obj;
                 push_back(raise);
+                curblock->push_back(new AST_Unreachable());
                 curblock = NULL;
             }
         }
 
-        cfg->placeBlock(join_block);
-        curblock = join_block;
+        if (join_block->predecessors.size() == 0) {
+            delete join_block;
+            curblock = NULL;
+        } else {
+            cfg->placeBlock(join_block);
+            curblock = join_block;
+        }
+
         return true;
     }
 
@@ -1579,9 +1595,13 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
             ASSERT(b2->idx != -1, "Forgot to place a block!");
         }
 
+        ASSERT(b->body.size(), "%d", b->idx);
         ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
-        if (b->successors.size() == 0)
-            assert(b->body.back()->type == AST_TYPE::Return || b->body.back()->type == AST_TYPE::Raise);
+        if (b->successors.size() == 0) {
+            AST_stmt* terminator = b->body.back();
+            assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
+                   || terminator->type == AST_TYPE::Unreachable);
+        }
 
         if (b->predecessors.size() == 0)
             assert(b == rtn->getStartingBlock());
