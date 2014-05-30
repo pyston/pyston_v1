@@ -33,17 +33,17 @@ except ZeroDivisionError, e:
 class MyException(Exception):
     pass
 
-def catches(e):
+def catches(e, c):
     try:
         try:
             raise e
-        except MyException:
+        except c:
             return True
     except:
         return False
-print catches(Exception())
-print catches(AttributeError())
-print catches(MyException())
+for e in [Exception(), AttributeError(), MyException()]:
+    for c in [Exception, AttributeError, MyException, TypeError]:
+        print catches(e, c)
 
 def f():
     try:

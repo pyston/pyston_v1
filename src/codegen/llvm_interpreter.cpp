@@ -30,6 +30,10 @@
 #include "core/stats.h"
 #include "core/util.h"
 
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
+//#define TIME_INTERPRETS
+
 extern "C" void* __cxa_allocate_exception(size_t);
 
 namespace pyston {
@@ -61,10 +65,6 @@ int width(llvm::Type* t, const llvm::DataLayout& dl) {
 int width(llvm::Value* v, const llvm::DataLayout& dl) {
     return width(v->getType(), dl);
 }
-
-//#undef VERBOSITY
-//#define VERBOSITY(x) 2
-//#define TIME_INTERPRETS
 
 Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
     assert(v);
@@ -636,6 +636,10 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                     }
                 }
                 catch (Box* e) {
+                    if (VERBOSITY("interpreter") >= 2) {
+                        printf("Caught exception: %p\n", e);
+                    }
+
                     if (invoke == nullptr)
                         throw;
 

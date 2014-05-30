@@ -1560,13 +1560,17 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, int64_t nargs,
     Box* orig_obj = obj;
 
     if (obj->cls != function_cls && obj->cls != instancemethod_cls) {
+        Box* rtn;
         if (rewrite_args) {
             // TODO is this ok?
             // rewrite_args->rewriter->trap();
-            return callattrInternal(obj, &_call_str, CLASS_ONLY, rewrite_args, nargs, arg1, arg2, arg3, args);
+            rtn = callattrInternal(obj, &_call_str, CLASS_ONLY, rewrite_args, nargs, arg1, arg2, arg3, args);
         } else {
-            return callattrInternal(obj, &_call_str, CLASS_ONLY, NULL, nargs, arg1, arg2, arg3, args);
+            rtn = callattrInternal(obj, &_call_str, CLASS_ONLY, NULL, nargs, arg1, arg2, arg3, args);
         }
+        if (!rtn)
+            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(obj)->c_str());
+        return rtn;
     }
 
     if (rewrite_args) {
@@ -1747,6 +1751,7 @@ extern "C" Box* runtimeCall(Box* obj, int64_t nargs, Box* arg1, Box* arg2, Box* 
     } else {
         rtn = runtimeCallInternal(obj, NULL, nargs, arg1, arg2, arg3, args);
     }
+    assert(rtn);
 
     if (rewriter.get()) {
         rewriter->commit();
