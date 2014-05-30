@@ -34,45 +34,45 @@ extern "C" Box* trap() {
     return None;
 }
 
-extern "C" Box * dir1(Box* obj) {
+extern "C" Box* dir1(Box* obj) {
     // TODO: Recursive class traversal for lookup of types and eliminating
     // duplicates afterwards
-    BoxedList * result = nullptr;
-    if(obj->cls->hasattrs) {
+    BoxedList* result = nullptr;
+    if (obj->cls->hasattrs) {
         // If __dir__ is present just call it and return what it returns
-        HCBox * hcb = static_cast<HCBox*>(obj);
-        Box * obj_dir = hcb->cls->getattr("__dir__", nullptr, nullptr);
-        if(obj_dir) {
+        HCBox* hcb = static_cast<HCBox*>(obj);
+        Box* obj_dir = hcb->cls->getattr("__dir__", nullptr, nullptr);
+        if (obj_dir) {
             return runtimeCall(obj_dir, 1, obj, nullptr, nullptr, nullptr);
         }
 
         // If __dict__ is present use its keys and add the reset below
-        Box * obj_dict = hcb->cls->getattr("__dict__", nullptr, nullptr);
-        if(obj_dict) {
+        Box* obj_dict = hcb->cls->getattr("__dict__", nullptr, nullptr);
+        if (obj_dict) {
             result = new BoxedList();
             assert(obj_dict->cls == dict_cls);
-            for(auto & kv : static_cast<BoxedDict*>(obj_dict)->d) {
+            for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
                 listAppend(result, kv.first);
             }
         }
     }
-    if(!result) {
+    if (!result) {
         result = new BoxedList();
     }
 
-    for(auto const & kv : obj->cls->hcls->attr_offsets) {
+    for (auto const& kv : obj->cls->hcls->attr_offsets) {
         listAppend(result, boxString(kv.first));
     }
-    if(obj->cls->hasattrs) {
-        HCBox * hcb = static_cast<HCBox*>(obj);
-        for(auto const & kv : hcb->hcls->attr_offsets) {
+    if (obj->cls->hasattrs) {
+        HCBox* hcb = static_cast<HCBox*>(obj);
+        for (auto const& kv : hcb->hcls->attr_offsets) {
             listAppend(result, boxString(kv.first));
         }
     }
     return result;
 }
 
-extern "C" Box * dir0() {
+extern "C" Box* dir0() {
     // TODO: This should actually return the elements in the current local
     // scope not the content of the builtins_module
     return dir1(builtins_module);
@@ -550,7 +550,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
-    CLFunction * dir_clf = boxRTFunction((void*)dir0, LIST, 0, false);
+    CLFunction* dir_clf = boxRTFunction((void*)dir0, LIST, 0, false);
     addRTFunction(dir_clf, (void*)dir1, LIST, 1, false);
     builtins_module->giveAttr("dir", new BoxedFunction(dir_clf));
     builtins_module->giveAttr("object", object_cls);
