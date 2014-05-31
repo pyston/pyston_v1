@@ -58,7 +58,11 @@ public:
             assert(gv->getLinkage() != llvm::GlobalVariable::PrivateLinkage);
             r = new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType());
         } else if (llvm::GlobalAlias* alias = llvm::dyn_cast<llvm::GlobalAlias>(v)) {
+#if LLVMREV < 209040
             llvm::Value* addressee = llvm::cast<llvm::Constant>(materializeValueFor(alias->getAliasedGlobal()));
+#else
+            llvm::Value* addressee = llvm::cast<llvm::Constant>(materializeValueFor(alias->getAliasee()));
+#endif
             assert(addressee);
             assert(alias->getType() == addressee->getType());
             r = addressee;

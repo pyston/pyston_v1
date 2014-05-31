@@ -78,8 +78,6 @@ public:
 
         llvm::error_code ec;
         for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
-            std::string SourceFileName;
-
             llvm::object::SymbolRef::Type SymType;
             if (I->getType(SymType))
                 continue;
@@ -94,8 +92,14 @@ public:
                 if (I->getSize(Size))
                     continue;
 
+#if LLVMREV < 208921
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
-                    Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo);
+                        Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo | llvm::DILineInfoSpecifier::AbsoluteFilePath);
+#else
+                llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
+                    Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
+                        llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
+#endif
                 for (int i = 0; i < lines.size(); i++) {
                     // printf("%s:%d, %s: %lx\n", lines[i].second.getFileName(), lines[i].second.getLine(),
                     // lines[i].second.getFunctionName(), lines[i].first);

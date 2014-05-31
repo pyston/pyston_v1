@@ -68,14 +68,14 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
         assert(!code);
 
         if (name == "__LLVM_StackMaps") {
-            uint64_t stackmap_offset = 0;
-            code = I->getFileOffset(stackmap_offset);
+            uint64_t stackmap_address = 0;
+            code = I->getAddress(stackmap_address);
             assert(!code);
             // code = I->getSize(stackmap_size);
             // assert(stackmap_size > 0);
             // assert(!code);
             if (VERBOSITY() >= 2)
-                printf("Found the stackmaps at stackmap_offset 0x%lx\n", stackmap_offset);
+                printf("Found the stackmaps at stackmap_address 0x%lx\n", stackmap_address);
 
             assert(cur_map == NULL);
             cur_map = new StackMap();
@@ -93,7 +93,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
                 const StackMap::Record::LiveOut* record_liveout;
                 const StackMap::StackSizeRecord* size_record;
             } ptr;
-            const int8_t* start_ptr = ptr.i8 = (const int8_t*)Obj.getData().data() + stackmap_offset;
+            const int8_t* start_ptr = ptr.i8 = (const int8_t*)stackmap_address;
 
             cur_map->header = *ptr.u32++; // header
 

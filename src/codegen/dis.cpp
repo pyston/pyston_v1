@@ -85,7 +85,11 @@ PystonJITEventListener::PystonJITEventListener() {
     assert(CE);
 
     bool verbose = false;
+#if LLVMREV < 208205
     llvm::MCStreamer* streamer = target->createAsmStreamer(*Ctx, llvm::ferrs(), verbose, true, true, IP, CE, TAB, true);
+#else
+    llvm::MCStreamer* streamer = target->createAsmStreamer(*Ctx, llvm::ferrs(), verbose, true, IP, CE, TAB, true);
+#endif
     assert(streamer);
     streamer->InitSections();
     streamer->SwitchSection(Ctx->getObjectFileInfo()->getTextSection());
@@ -178,16 +182,14 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
 
     for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
         llvm::StringRef name;
-        uint64_t addr, size, offset = 0;
+        uint64_t addr, size;
         code = I->getName(name);
         assert(!code);
         code = I->getAddress(addr);
         assert(!code);
         code = I->getSize(size);
         assert(!code);
-        code = I->getFileOffset(offset);
-        assert(!code);
-        printf("%lx %lx %lx %s\n", addr, addr + size, offset, name.data());
+        printf("%lx %lx %s\n", addr, addr + size, name.data());
 #if LLVMREV < 200442
         I = I.increment(code);
 #else

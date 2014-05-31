@@ -155,20 +155,17 @@ public:
                 continue;
 
             llvm::StringRef name;
-            uint64_t addr, size, offset;
+            uint64_t addr, size;
             code = I->getName(name);
             assert(!code);
             code = I->getAddress(addr);
             assert(!code);
             code = I->getSize(size);
             assert(!code);
-            code = I->getFileOffset(offset);
-            assert(!code);
 
             if (name == ".text")
                 continue;
 
-            // printf("%lx %lx %lx %s\n", addr, addr + size, offset, name.data());
             g.func_addr_registry.registerFunction(name.data(), (void*)addr, size, NULL);
         }
     }

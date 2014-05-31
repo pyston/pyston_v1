@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <cstddef>
 
 #include "codegen/compvars.h"
 #include "core/ast.h"
