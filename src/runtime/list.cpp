@@ -85,7 +85,7 @@ extern "C" Box* listPop2(BoxedList* self, Box* idx) {
 }
 
 extern "C" Box* listLen(BoxedList* self) {
-    return new BoxedInt(self->size);
+    return boxInt(self->size);
 }
 
 Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
@@ -361,7 +361,7 @@ Box* listCount(BoxedList* self, Box* elt) {
         if (b)
             count++;
     }
-    return new BoxedInt(count);
+    return boxInt(count);
 }
 
 Box* listIndex(BoxedList* self, Box* elt) {
@@ -372,7 +372,7 @@ Box* listIndex(BoxedList* self, Box* elt) {
         Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
         bool b = nonzero(cmp);
         if (b)
-            return new BoxedInt(i);
+            return boxInt(i);
     }
 
     BoxedString* tostr = static_cast<BoxedString*>(repr(elt));

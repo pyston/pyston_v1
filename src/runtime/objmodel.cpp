@@ -346,7 +346,7 @@ Box::Box(const ObjectFlavor* flavor, BoxedClass* cls) : GCObject(flavor), cls(cl
 }
 
 
-HCAttrs* Box::getAttrs() {
+HCAttrs* Box::getAttrsPtr() {
     assert(cls->instancesHaveAttrs());
 
     char* p = reinterpret_cast<char*>(this);
@@ -376,7 +376,7 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, Get
     if (!cls->instancesHaveAttrs())
         return NULL;
 
-    HCAttrs* attrs = getAttrs();
+    HCAttrs* attrs = getAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
 
     if (rewrite_args) {
@@ -464,7 +464,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrit
         }
     }
 
-    HCAttrs* attrs = getAttrs();
+    HCAttrs* attrs = getAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
     int numattrs = hcls->attr_offsets.size();
 

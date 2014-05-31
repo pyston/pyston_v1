@@ -323,7 +323,7 @@ public:
 
     Box(const ObjectFlavor* flavor, BoxedClass* cls);
 
-    HCAttrs* getAttrs();
+    HCAttrs* getAttrsPtr();
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2);
     void giveAttr(const std::string& attr, Box* val) {

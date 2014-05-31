@@ -105,7 +105,7 @@ extern "C" void boxGCHandler(GCVisitor* v, void* p) {
         v->visit(b->cls);
 
         if (b->cls->instancesHaveAttrs()) {
-            HCAttrs* attrs = b->getAttrs();
+            HCAttrs* attrs = b->getAttrsPtr();
 
             v->visit(attrs->hcls);
             int nattrs = attrs->hcls->attr_offsets.size();
@@ -388,10 +388,7 @@ Box* objectNew1(BoxedClass* cls) {
     void* mem = rt_alloc(cls->instance_size);
 
     Box* rtn = ::new (mem) Box(&object_flavor, cls);
-    if (cls->attrs_offset) {
-        HCAttrs* attrs = rtn->getAttrs();
-        attrs = new ((void*)attrs) HCAttrs();
-    }
+    initUserAttrs(rtn, cls);
     return rtn;
 }
 

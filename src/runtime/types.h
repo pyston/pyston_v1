@@ -163,7 +163,7 @@ class BoxedInt : public Box {
 public:
     int64_t n;
 
-    BoxedInt(int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, int_cls), n(n) {}
+    BoxedInt(BoxedClass* cls, int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, cls), n(n) {}
 };
 
 class BoxedFloat : public Box {
@@ -300,5 +300,16 @@ Box* exceptionNew2(BoxedClass* cls, Box* message);
 
 extern BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError;
+
+// cls should be obj->cls.
+// Added as parameter because it should typically be available
+inline void initUserAttrs(Box* obj, BoxedClass* cls) {
+    assert(obj->cls == cls);
+    if (cls->attrs_offset) {
+        HCAttrs* attrs = obj->getAttrsPtr();
+        attrs = new ((void*)attrs) HCAttrs();
+    }
+}
+
 }
 #endif

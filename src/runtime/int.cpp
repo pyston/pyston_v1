@@ -120,8 +120,10 @@ extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return boxInt(lhs->n + rhs_int->n);
     } else if (rhs->cls == float_cls) {
@@ -410,8 +412,12 @@ extern "C" Box* intInvert(BoxedInt* v) {
 }
 
 extern "C" Box* intPos(BoxedInt* v) {
-    assert(v->cls == int_cls);
-    return v;
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+
+    if (v->cls == int_cls)
+        return v;
+    return boxInt(v->n);
 }
 
 extern "C" Box* intNeg(BoxedInt* v) {
@@ -425,7 +431,9 @@ extern "C" Box* intNonzero(BoxedInt* v) {
 }
 
 extern "C" BoxedString* intRepr(BoxedInt* v) {
-    assert(v->cls == int_cls);
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+
     char buf[80];
     int len = snprintf(buf, 80, "%ld", v->n);
     return new BoxedString(std::string(buf, len));
@@ -437,42 +445,53 @@ extern "C" Box* intHash(BoxedInt* self) {
 }
 
 extern "C" Box* intNew1(Box* cls) {
-    assert(cls == int_cls);
-    return new BoxedInt(0);
+    if (!is_subclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    return boxInt(0);
 }
 
-extern "C" Box* intNew2(Box* cls, Box* val) {
-    assert(cls == int_cls);
+extern "C" Box* intNew2(Box* _cls, Box* val) {
+    if (!is_subclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, int_cls))
+        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(), getNameOfClass(cls)->c_str());
+
+    assert(cls->instance_size >= sizeof(BoxedInt));
+    void* mem = rt_alloc(cls->instance_size);
+    BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
+    initUserAttrs(rtn, cls);
 
     if (val->cls == int_cls) {
-        return val;
+        rtn->n = static_cast<BoxedInt*>(val)->n;
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
 
         std::istringstream ss(s->s);
         int64_t n;
         ss >> n;
-        return boxInt(n);
+        rtn->n = n;
     } else if (val->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(val)->d;
 
-        return boxInt(d);
+        rtn->n = d;
     } else {
         fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
                 getTypeName(val)->c_str());
         raiseExcHelper(TypeError, "");
     }
+    return rtn;
 }
 
-extern "C" Box* intInit1(BoxedInt* self) {
-    assert(self->cls == int_cls);
-
+extern "C" Box* intInit1(Box* self) {
+    // int.__init__ will actually let you call it with anything
     return None;
 }
 
 extern "C" Box* intInit2(BoxedInt* self, Box* val) {
-    assert(self->cls == int_cls);
-
+    // int.__init__ will actually let you call it with anything
     return None;
 }
 
@@ -483,8 +502,9 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     v_ii.push_back(BOXED_INT);
     v_if.push_back(BOXED_INT);
     v_if.push_back(BOXED_FLOAT);
-    v_iu.push_back(BOXED_INT);
-    v_iu.push_back(NULL);
+    // Only the unknown version can accept non-ints (ex if you access the function directly ex via int.__add__)
+    v_iu.push_back(UNKNOWN);
+    v_iu.push_back(UNKNOWN);
 
     CLFunction* cl = createRTFunction();
     addRTFunction(cl, int_func, BOXED_INT, v_ii, false);
@@ -548,7 +568,7 @@ void setupInt() {
     int_cls->freeze();
 
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
-        interned_ints[i] = new BoxedInt(i);
+        interned_ints[i] = new BoxedInt(int_cls, i);
         gc::registerStaticRootObj(interned_ints[i]);
     }
 }

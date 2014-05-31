@@ -42,7 +42,7 @@ def f2():
 f2()
 
 def f3():
-    class I(object):
+    class I(int):
         def foo(self):
             print self + 1
 
@@ -56,6 +56,8 @@ def f3():
     e = a + c
     print d, type(d)
     print e, type(e)
+    f = +a
+    print f, type(f)
 
     print a.foo()
 f3()
