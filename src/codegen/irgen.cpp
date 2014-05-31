@@ -839,7 +839,7 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     llvm::DIBuilder builder(*g.cur_module);
 
     std::string fn = source->parent_module->fn;
-    std::string dir = "TODO fill this in";
+    std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
     llvm::DIFile file = builder.createFile(fn, dir);

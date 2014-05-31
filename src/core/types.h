@@ -391,6 +391,7 @@ void addToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);
+void printTraceback();
 }
 
 #endif

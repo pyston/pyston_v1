@@ -105,7 +105,7 @@ PystonJITEventListener::PystonJITEventListener() {
     asm_printer->Mang = new llvm::Mangler(tmachine->getDataLayout());
 
 
-    DisAsm = target->createMCDisassembler(*STI);
+    DisAsm = target->createMCDisassembler(*STI, *Ctx);
     assert(DisAsm);
     MIA = target->createMCInstrAnalysis(MII);
     assert(MIA);
@@ -121,7 +121,7 @@ void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function& f, void
     asm_printer->MF = &MF;
     for (llvm::MachineFunction::const_iterator it = MF.begin(); it != MF.end(); it++) {
         // it->dump();
-        asm_printer->EmitBasicBlockStart(it);
+        asm_printer->EmitBasicBlockStart(*it);
         for (llvm::MachineBasicBlock::const_instr_iterator it2 = it->instr_begin(); it2 != it->instr_end(); it2++) {
             // llvm::errs() << "dump:";
             // it2->print(llvm::errs());

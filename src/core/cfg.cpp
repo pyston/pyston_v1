@@ -257,8 +257,6 @@ private:
 
     AST_expr* makeNum(int n) {
         AST_Num* node = new AST_Num();
-        node->col_offset = -1;
-        node->lineno = -1;
         node->num_type = AST_Num::INT;
         node->n_int = n;
         return node;
@@ -329,7 +327,7 @@ private:
         return call;
     }
 
-    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = -1, int col_offset = -1) {
+    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = 0, int col_offset = 0) {
         AST_Name* name = new AST_Name();
         name->id = id;
         name->col_offset = col_offset;
@@ -996,6 +994,7 @@ public:
         int i = 0;
         for (auto v : node->values) {
             AST_Print* remapped = new AST_Print();
+            remapped->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             remapped->dest = dest;
 
@@ -1572,6 +1571,7 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     // we already have to support multiple return statements in a function, but this way we can avoid
     // having to support not having a return statement:
     AST_Return* return_stmt = new AST_Return();
+    return_stmt->lineno = return_stmt->col_offset = 0;
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
 

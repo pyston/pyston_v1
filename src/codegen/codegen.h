@@ -21,6 +21,7 @@
 #include "core/types.h"
 
 namespace llvm {
+class DILineInfo;
 class ExecutionEngine;
 class JITEventListener;
 class LLVMContext;
@@ -82,6 +83,9 @@ extern GlobalState g;
 
 // in runtime_hooks.cpp:
 void initGlobalFuncs(GlobalState& g);
+
+const llvm::DILineInfo* getLineInfoFor(uint64_t addr);
+
 }
 
 #endif

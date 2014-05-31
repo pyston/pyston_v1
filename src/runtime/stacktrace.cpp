@@ -12,6 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <cstdarg>
+
+#include "llvm/DebugInfo/DIContext.h"
+
+#include "codegen/codegen.h"
+#include "core/options.h"
+#include "runtime/objmodel.h"
+#include "runtime/types.h"
+#include "runtime/util.h"
+
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
@@ -21,14 +32,6 @@
 #error "Please repatch your version of libunwind; see docs/INSTALLING.md"
 #endif
 
-
-#include "runtime/objmodel.h"
-#include "runtime/types.h"
-#include "runtime/util.h"
-
-#include "core/options.h"
-
-#include <stdarg.h>
 
 namespace pyston {
 
@@ -112,7 +115,72 @@ void raiseExc(Box* exc_obj) {
     abort();
 }
 
+static std::vector<const llvm::DILineInfo*> last_tb;
+void printTraceback() {
+    fprintf(stderr, "Traceback (most recent call last):\n");
+
+    for (auto line : last_tb) {
+        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->FileName.c_str(), line->Line, line->FunctionName.c_str());
+
+        FILE* f = fopen(line->FileName.c_str(), "r");
+        if (f) {
+            for (int i = 1; i < line->Line; i++) {
+                char* buf = NULL;
+                size_t size;
+                size_t r = getline(&buf, &size, f);
+                if (r != -1)
+                    free(buf);
+            }
+            char* buf = NULL;
+            size_t size;
+            size_t r = getline(&buf, &size, f);
+            if (r != -1) {
+                while (buf[r-1] == '\n' or buf[r-1] == '\r')
+                    r--;
+
+                char* ptr = buf;
+                while (*ptr == ' ' || *ptr == '\t') {
+                    ptr++;
+                    r--;
+                }
+
+                fprintf(stderr, "    %.*s\n", (int)r, ptr);
+                free(buf);
+            }
+        }
+    }
+}
+
+static std::vector<const llvm::DILineInfo*> getTracebackEntries() {
+    std::vector<const llvm::DILineInfo*> entries;
+
+    unw_cursor_t cursor;
+    unw_context_t uc;
+    unw_word_t ip, sp;
+
+    unw_getcontext(&uc);
+    unw_init_local(&cursor, &uc);
+
+    int code;
+    unw_proc_info_t pip;
+
+    while (unw_step(&cursor) > 0) {
+        unw_get_reg(&cursor, UNW_REG_IP, &ip);
+
+        const llvm::DILineInfo* line = getLineInfoFor((uint64_t)ip);
+        if (line) {
+            entries.push_back(line);
+        }
+    }
+    std::reverse(entries.begin(), entries.end());
+
+    return entries;
+}
+
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
+    auto entries = getTracebackEntries();
+    last_tb = std::move(entries);
+
     if (msg != NULL) {
         va_list ap;
         va_start(ap, msg);

@@ -30,10 +30,32 @@ def f2():
             self.foo(n)
             self.foo(n)
 
+        def foo(self, n):
+            print "B.foo()", n
+
     class C(B):
         def foo(self, n):
-            print n
+            print "C.foo()", n
 
-    c = C()
-    print c.wrapper(2)
+    print B().wrapper(2)
+    print C().wrapper(2)
 f2()
+
+def f3():
+    class I(object):
+        def foo(self):
+            print self + 1
+
+    a = I(1)
+    b = I(2)
+    print a, type(a)
+    print b, type(b)
+    c = a + b
+    print c, type(c)
+    d = c + a
+    e = a + c
+    print d, type(d)
+    print e, type(e)
+
+    print a.foo()
+f3()

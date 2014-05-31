@@ -71,6 +71,44 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64
     *out_len = nentries;
 }
 
+class LineTableRegistry {
+private:
+    struct LineTableRegistryEntry {
+        const uint64_t addr, size;
+        const llvm::DILineInfoTable linetable;
+        LineTableRegistryEntry(uint64_t addr, uint64_t size, llvm::DILineInfoTable linetable) :
+            addr(addr), size(size), linetable(linetable) {
+        }
+    };
+
+    std::vector<LineTableRegistryEntry> entries;
+
+public:
+    void registerLineTable(uint64_t addr, uint64_t size, llvm::DILineInfoTable linetable) {
+        entries.push_back(LineTableRegistryEntry(addr, size, linetable));
+    }
+
+    const llvm::DILineInfo* getLineInfoFor(uint64_t addr) {
+        for (const auto& entry : entries) {
+            if (addr < entry.addr || addr >= entry.addr + entry.size)
+                continue;
+
+            const auto& linetable = entry.linetable;
+            for (int i = linetable.size() - 1; i >= 0; i--) {
+                if (linetable[i].first < addr)
+                    return &linetable[i].second;
+            }
+            abort();
+        }
+        return NULL;
+    }
+};
+static LineTableRegistry line_table_registry;
+
+const llvm::DILineInfo* getLineInfoFor(uint64_t addr) {
+    return line_table_registry.getLineInfoFor(addr);
+}
+
 class TracebacksEventListener : public llvm::JITEventListener {
 public:
     void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
@@ -100,12 +138,16 @@ public:
                     Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
                         llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
 #endif
-                for (int i = 0; i < lines.size(); i++) {
-                    // printf("%s:%d, %s: %lx\n", lines[i].second.getFileName(), lines[i].second.getLine(),
-                    // lines[i].second.getFunctionName(), lines[i].first);
+                if (VERBOSITY() >= 2) {
+                    for (int i = 0; i < lines.size(); i++) {
+                         printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
+                             lines[i].second.FunctionName.c_str(), lines[i].first);
+                    }
                 }
+                line_table_registry.registerLineTable(Addr, Size, lines);
             }
         }
+        delete Context;
 
         // Currently-unused libunwind support:
         llvm::error_code code;

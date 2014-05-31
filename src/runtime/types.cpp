@@ -205,7 +205,8 @@ extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
 
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
-    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls;
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
+    *traceback_cls;
 
 const ObjectFlavor object_flavor(&boxGCHandler, NULL);
 const ObjectFlavor type_flavor(&typeGCHandler, NULL);
@@ -223,6 +224,7 @@ const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
 const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
 const ObjectFlavor member_flavor(&boxGCHandler, NULL);
+const ObjectFlavor traceback_flavor(&boxGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
 const AllocationKind hc_kind(&hcGCHandler, NULL);
@@ -444,6 +446,7 @@ void setupRuntime() {
     file_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFile), false);
     set_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     member_cls = new BoxedClass(object_cls, 0, sizeof(BoxedMemberDescriptor), false);
+    traceback_cls = new BoxedClass(object_cls, 0, sizeof(BoxedTraceback), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);

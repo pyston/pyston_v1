@@ -946,7 +946,10 @@ private:
     }
 
     CompilerVariable* evalExpr(AST_expr* node, ExcInfo exc_info) {
-        emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
+        //printf("%d expr: %d\n", node->type, node->lineno);
+        if (node->lineno) {
+            emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
+        }
 
         CompilerVariable* rtn = NULL;
         if (state != PARTIAL) {
@@ -1759,6 +1762,11 @@ private:
     }
 
     void doStmt(AST* node, ExcInfo exc_info) {
+        //printf("%d stmt: %d\n", node->type, node->lineno);
+        if (node->lineno) {
+            emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
+        }
+
         switch (node->type) {
             case AST_TYPE::Assert:
                 doAssert(ast_cast<AST_Assert>(node), exc_info);
