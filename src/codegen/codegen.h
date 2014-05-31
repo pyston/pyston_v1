@@ -84,7 +84,6 @@ extern GlobalState g;
 void initGlobalFuncs(GlobalState& g);
 
 const LineInfo* getLineInfoFor(uint64_t inst_addr);
-
 }
 
 #endif

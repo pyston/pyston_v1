@@ -946,9 +946,10 @@ private:
     }
 
     CompilerVariable* evalExpr(AST_expr* node, ExcInfo exc_info) {
-        //printf("%d expr: %d\n", node->type, node->lineno);
+        // printf("%d expr: %d\n", node->type, node->lineno);
         if (node->lineno) {
-            emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
+            emitter.getBuilder()->SetCurrentDebugLocation(
+                llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
         }
 
         CompilerVariable* rtn = NULL;
@@ -1762,9 +1763,10 @@ private:
     }
 
     void doStmt(AST* node, ExcInfo exc_info) {
-        //printf("%d stmt: %d\n", node->type, node->lineno);
+        // printf("%d stmt: %d\n", node->type, node->lineno);
         if (node->lineno) {
-            emitter.getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
+            emitter.getBuilder()->SetCurrentDebugLocation(
+                llvm::DebugLoc::get(node->lineno, 0, irstate->getFuncDbgInfo()));
         }
 
         switch (node->type) {

@@ -505,15 +505,16 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         } else if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
             // number of times a function needs to be called to be reoptimized:
-            static const int REOPT_THRESHOLDS[] = { 10,    // INTERPRETED->MINIMAL
-                                                    250,   // MINIMAL->MODERATE
-                                                    10000, // MODERATE->MAXIMAL
+            static const int REOPT_THRESHOLDS[] = {
+                10,    // INTERPRETED->MINIMAL
+                250,   // MINIMAL->MODERATE
+                10000, // MODERATE->MAXIMAL
             };
 
             assert(strcmp("opt", bb_type) == 0);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL && source->ast->type
-                                                                                        != AST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
+                && source->ast->type != AST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb
                     = llvm::BasicBlock::Create(g.context, "pre_entry", irstate->getLLVMFunction(),
                                                llvm_entry_blocks[source->cfg->getStartingBlock()]);

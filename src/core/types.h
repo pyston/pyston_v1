@@ -398,11 +398,9 @@ public:
     const int line, column;
     std::string file, func;
 
-    LineInfo(int line, int column, const std::string& file, const std::string& func) :
-        line(line), column(column), file(file), func(func) {
-    }
+    LineInfo(int line, int column, const std::string& file, const std::string& func)
+        : line(line), column(column), file(file), func(func) {}
 };
-
 }
 
 #endif

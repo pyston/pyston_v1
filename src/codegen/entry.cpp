@@ -224,7 +224,8 @@ void initCodegen() {
 
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:
-    const char* llvm_args[] = { "fake_name", "--enable-stackmap-liveness", "--enable-patchpoint-liveness",
+    const char* llvm_args[] = {
+        "fake_name", "--enable-stackmap-liveness", "--enable-patchpoint-liveness",
 
 // Enabling and debugging fast-isel:
 //"--fast-isel",
@@ -235,8 +236,8 @@ void initCodegen() {
 //"--debug-only=regalloc",
 //"--debug-only=stackmaps",
 #endif
-                                //"--print-after-all",
-                                //"--print-machineinstrs",
+        //"--print-after-all",
+        //"--print-machineinstrs",
     };
     int num_llvm_args = sizeof(llvm_args) / sizeof(llvm_args[0]);
     llvm::cl::ParseCommandLineOptions(num_llvm_args, llvm_args, "<you should never see this>\n");

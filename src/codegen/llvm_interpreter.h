@@ -29,7 +29,6 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
 
 void gatherInterpreterRootsForFrame(GCVisitor* visitor, void* frame_ptr);
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
-
 }
 
 #endif

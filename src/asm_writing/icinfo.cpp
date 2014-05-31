@@ -203,8 +203,8 @@ void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo* pp, St
     uint8_t* rtn_addr;
 
     assembler::GenericRegister return_register;
-    assert(pp->getCallingConvention() == llvm::CallingConv::C || pp->getCallingConvention()
-                                                                 == llvm::CallingConv::PreserveAll);
+    assert(pp->getCallingConvention() == llvm::CallingConv::C
+           || pp->getCallingConvention() == llvm::CallingConv::PreserveAll);
     if (pp->hasReturnValue()) {
         static const int DWARF_RAX = 0;
         // It's possible that the return value doesn't get used, in which case

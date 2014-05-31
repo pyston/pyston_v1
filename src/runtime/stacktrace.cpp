@@ -136,7 +136,7 @@ void printLastTraceback() {
             size_t size;
             size_t r = getline(&buf, &size, f);
             if (r != -1) {
-                while (buf[r-1] == '\n' or buf[r-1] == '\r')
+                while (buf[r - 1] == '\n' or buf[r - 1] == '\r')
                     r--;
 
                 char* ptr = buf;

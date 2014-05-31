@@ -255,7 +255,7 @@ const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
         llvm::DISubprogram subprog(debug_loc.getScope(g.context));
 
         // TODO better lifetime management
-        LineInfo *rtn = new LineInfo(debug_loc.getLine(), debug_loc.getCol(), subprog.getFilename(), subprog.getName());
+        LineInfo* rtn = new LineInfo(debug_loc.getLine(), debug_loc.getCol(), subprog.getFilename(), subprog.getName());
         line_infos.insert(it, std::make_pair(cur_instruction, rtn));
         return rtn;
     } else {

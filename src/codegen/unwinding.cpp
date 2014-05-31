@@ -76,9 +76,7 @@ private:
     struct LineTableRegistryEntry {
         const uint64_t addr, size;
         std::vector<std::pair<uint64_t, LineInfo> > linetable;
-        LineTableRegistryEntry(uint64_t addr, uint64_t size) :
-            addr(addr), size(size) {
-        }
+        LineTableRegistryEntry(uint64_t addr, uint64_t size) : addr(addr), size(size) {}
     };
 
     std::vector<LineTableRegistryEntry> entries;
@@ -89,7 +87,9 @@ public:
 
         auto& entry = entries.back();
         for (int i = 0; i < lines.size(); i++) {
-            entry.linetable.push_back(std::make_pair(lines[i].first, LineInfo(lines[i].second.Line, lines[i].second.Column, lines[i].second.FileName, lines[i].second.FunctionName)));
+            entry.linetable.push_back(
+                std::make_pair(lines[i].first, LineInfo(lines[i].second.Line, lines[i].second.Column,
+                                                        lines[i].second.FileName, lines[i].second.FunctionName)));
         }
     }
 
@@ -135,19 +135,20 @@ public:
                 if (I->getSize(Size))
                     continue;
 
-                // TODO this should be the Python name, not the C name:
+// TODO this should be the Python name, not the C name:
 #if LLVMREV < 208921
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
-                        Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo | llvm::DILineInfoSpecifier::AbsoluteFilePath);
+                    Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo
+                                | llvm::DILineInfoSpecifier::AbsoluteFilePath);
 #else
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
                     Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
-                        llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
+                                                          llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
 #endif
                 if (VERBOSITY() >= 2) {
                     for (int i = 0; i < lines.size(); i++) {
-                         printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
-                             lines[i].second.FunctionName.c_str(), lines[i].first);
+                        printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
+                               lines[i].second.FunctionName.c_str(), lines[i].first);
                     }
                 }
                 line_table_registry.registerLineTable(Addr, Size, lines);

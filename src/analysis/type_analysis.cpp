@@ -297,8 +297,8 @@ private:
         CompilerType* right = getType(node->comparators[0]);
 
         AST_TYPE::AST_TYPE op_type = node->ops[0];
-        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In || op_type
-                                                                                                == AST_TYPE::NotIn) {
+        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
+            || op_type == AST_TYPE::NotIn) {
             assert(node->ops.size() == 1 && "I don't think this should happen");
             return BOOL;
         }

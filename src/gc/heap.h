@@ -57,9 +57,10 @@ struct Block {
 };
 static_assert(sizeof(Block) == BLOCK_SIZE, "bad size");
 
-constexpr const size_t sizes[] = { 16,  32,  48,  64,  80,  96,  112, 128,  160,  192,  224,  256,
-                                   320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048,
-                                   // 2560, 3072, 3584, // 4096,
+constexpr const size_t sizes[] = {
+    16,  32,  48,  64,  80,  96,  112, 128,  160,  192,  224,  256,
+    320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048,
+    // 2560, 3072, 3584, // 4096,
 };
 #define NUM_BUCKETS (sizeof(sizes) / sizeof(sizes[0]))
 
