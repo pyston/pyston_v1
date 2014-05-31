@@ -17,10 +17,6 @@
 
 #include "core/types.h"
 
-namespace llvm {
-class DILineInfo;
-}
-
 namespace pyston {
 
 extern bool IN_SHUTDOWN;
@@ -64,13 +60,12 @@ BoxedList* getSysPath();
 
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
-    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls,
-    *traceback_cls;
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
 }
 extern "C" {
 extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor,
     function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor,
-    tuple_flavor, file_flavor, xrange_flavor, member_flavor, traceback_flavor;
+    tuple_flavor, file_flavor, xrange_flavor, member_flavor;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -296,15 +291,6 @@ public:
     int offset;
 
     BoxedMemberDescriptor(MemberType type, int offset) : Box(&member_flavor, member_cls), type(type), offset(offset) {}
-};
-
-class BoxedTraceback : public Box {
-public:
-    const std::vector<const llvm::DILineInfo*> entries;
-
-    BoxedTraceback(const std::vector<const llvm::DILineInfo*> &&entries) : Box(&traceback_flavor, traceback_cls),
-            entries(std::move(entries)) {
-    }
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);

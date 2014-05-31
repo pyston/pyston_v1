@@ -75,20 +75,25 @@ class LineTableRegistry {
 private:
     struct LineTableRegistryEntry {
         const uint64_t addr, size;
-        const llvm::DILineInfoTable linetable;
-        LineTableRegistryEntry(uint64_t addr, uint64_t size, llvm::DILineInfoTable linetable) :
-            addr(addr), size(size), linetable(linetable) {
+        std::vector<std::pair<uint64_t, LineInfo> > linetable;
+        LineTableRegistryEntry(uint64_t addr, uint64_t size) :
+            addr(addr), size(size) {
         }
     };
 
     std::vector<LineTableRegistryEntry> entries;
 
 public:
-    void registerLineTable(uint64_t addr, uint64_t size, llvm::DILineInfoTable linetable) {
-        entries.push_back(LineTableRegistryEntry(addr, size, linetable));
+    void registerLineTable(uint64_t addr, uint64_t size, llvm::DILineInfoTable& lines) {
+        entries.push_back(LineTableRegistryEntry(addr, size));
+
+        auto& entry = entries.back();
+        for (int i = 0; i < lines.size(); i++) {
+            entry.linetable.push_back(std::make_pair(lines[i].first, LineInfo(lines[i].second.Line, lines[i].second.Column, lines[i].second.FileName, lines[i].second.FunctionName)));
+        }
     }
 
-    const llvm::DILineInfo* getLineInfoFor(uint64_t addr) {
+    const LineInfo* getLineInfoFor(uint64_t addr) {
         for (const auto& entry : entries) {
             if (addr < entry.addr || addr >= entry.addr + entry.size)
                 continue;
@@ -105,7 +110,7 @@ public:
 };
 static LineTableRegistry line_table_registry;
 
-const llvm::DILineInfo* getLineInfoFor(uint64_t addr) {
+const LineInfo* getLineInfoFor(uint64_t addr) {
     return line_table_registry.getLineInfoFor(addr);
 }
 
@@ -130,6 +135,7 @@ public:
                 if (I->getSize(Size))
                     continue;
 
+                // TODO this should be the Python name, not the C name:
 #if LLVMREV < 208921
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
                         Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo | llvm::DILineInfoSpecifier::AbsoluteFilePath);

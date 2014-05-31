@@ -391,7 +391,18 @@ void addToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);
-void printTraceback();
+void printLastTraceback();
+
+struct LineInfo {
+public:
+    const int line, column;
+    std::string file, func;
+
+    LineInfo(int line, int column, const std::string& file, const std::string& func) :
+        line(line), column(column), file(file), func(func) {
+    }
+};
+
 }
 
 #endif

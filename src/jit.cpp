@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
             }
             catch (Box* b) {
                 std::string msg = formatException(b);
-                printTraceback();
+                printLastTraceback();
                 fprintf(stderr, "%s\n", msg.c_str());
                 exit(1);
             }
@@ -231,7 +231,7 @@ int main(int argc, char** argv) {
                 }
                 catch (Box* b) {
                     std::string msg = formatException(b);
-                    printTraceback();
+                    printLastTraceback();
                     fprintf(stderr, "%s\n", msg.c_str());
                 }
             }

@@ -18,6 +18,7 @@
 #include "llvm/DebugInfo/DIContext.h"
 
 #include "codegen/codegen.h"
+#include "codegen/llvm_interpreter.h"
 #include "core/options.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -115,16 +116,16 @@ void raiseExc(Box* exc_obj) {
     abort();
 }
 
-static std::vector<const llvm::DILineInfo*> last_tb;
-void printTraceback() {
+static std::vector<const LineInfo*> last_tb;
+void printLastTraceback() {
     fprintf(stderr, "Traceback (most recent call last):\n");
 
     for (auto line : last_tb) {
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->FileName.c_str(), line->Line, line->FunctionName.c_str());
+        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
 
-        FILE* f = fopen(line->FileName.c_str(), "r");
+        FILE* f = fopen(line->file.c_str(), "r");
         if (f) {
-            for (int i = 1; i < line->Line; i++) {
+            for (int i = 1; i < line->line; i++) {
                 char* buf = NULL;
                 size_t size;
                 size_t r = getline(&buf, &size, f);
@@ -151,12 +152,12 @@ void printTraceback() {
     }
 }
 
-static std::vector<const llvm::DILineInfo*> getTracebackEntries() {
-    std::vector<const llvm::DILineInfo*> entries;
+static std::vector<const LineInfo*> getTracebackEntries() {
+    std::vector<const LineInfo*> entries;
 
     unw_cursor_t cursor;
     unw_context_t uc;
-    unw_word_t ip, sp;
+    unw_word_t ip, bp;
 
     unw_getcontext(&uc);
     unw_init_local(&cursor, &uc);
@@ -167,9 +168,21 @@ static std::vector<const llvm::DILineInfo*> getTracebackEntries() {
     while (unw_step(&cursor) > 0) {
         unw_get_reg(&cursor, UNW_REG_IP, &ip);
 
-        const llvm::DILineInfo* line = getLineInfoFor((uint64_t)ip);
+        const LineInfo* line = getLineInfoFor((uint64_t)ip);
         if (line) {
             entries.push_back(line);
+        } else {
+            unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
+
+            unw_proc_info_t pip;
+            code = unw_get_proc_info(&cursor, &pip);
+            RELEASE_ASSERT(code == 0, "%d", code);
+
+            if (pip.start_ip == (intptr_t)interpretFunction) {
+                line = getLineInfoForInterpretedFrame((void*)bp);
+                assert(line);
+                entries.push_back(line);
+            }
         }
     }
     std::reverse(entries.begin(), entries.end());

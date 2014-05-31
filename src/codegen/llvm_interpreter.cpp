@@ -20,6 +20,7 @@
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 
@@ -206,6 +207,8 @@ static void set(SymMap& symbols, const llvm::BasicBlock::iterator& it, Val v) {
 }
 
 static std::unordered_map<void*, const SymMap*> interpreter_roots;
+static std::unordered_map<void*, llvm::Instruction*> cur_instruction_map;
+
 void gatherInterpreterRootsForFrame(GCVisitor* visitor, void* frame_ptr) {
     auto it = interpreter_roots.find(frame_ptr);
     if (it == interpreter_roots.end()) {
@@ -235,8 +238,30 @@ public:
     ~UnregisterHelper() {
         assert(interpreter_roots.count(frame_ptr));
         interpreter_roots.erase(frame_ptr);
+
+        assert(cur_instruction_map.count(frame_ptr));
+        cur_instruction_map.erase(frame_ptr);
     }
 };
+
+static std::unordered_map<llvm::Instruction*, LineInfo*> line_infos;
+const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
+    llvm::Instruction* cur_instruction = cur_instruction_map[frame_ptr];
+    assert(cur_instruction);
+
+    auto it = line_infos.find(cur_instruction);
+    if (it == line_infos.end()) {
+        const llvm::DebugLoc& debug_loc = cur_instruction->getDebugLoc();
+        llvm::DISubprogram subprog(debug_loc.getScope(g.context));
+
+        // TODO better lifetime management
+        LineInfo *rtn = new LineInfo(debug_loc.getLine(), debug_loc.getCol(), subprog.getFilename(), subprog.getName());
+        line_infos.insert(it, std::make_pair(cur_instruction, rtn));
+        return rtn;
+    } else {
+        return it->second;
+    }
+}
 
 Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(f);
@@ -291,6 +316,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     while (true) {
         for (llvm::Instruction& _inst : *curblock) {
             llvm::Instruction* inst = &_inst;
+            cur_instruction_map[frame_ptr] = inst;
 
             if (VERBOSITY("interpreter") >= 2) {
                 printf("executing in %s: ", f->getName().data());
