@@ -413,7 +413,7 @@ extern "C" Box* intInvert(BoxedInt* v) {
 
 extern "C" Box* intPos(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(v)->c_str());
 
     if (v->cls == int_cls)
         return v;
@@ -432,7 +432,7 @@ extern "C" Box* intNonzero(BoxedInt* v) {
 
 extern "C" BoxedString* intRepr(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'", getTypeName(v)->c_str());
 
     char buf[80];
     int len = snprintf(buf, 80, "%ld", v->n);
@@ -444,15 +444,15 @@ extern "C" Box* intHash(BoxedInt* self) {
     return self;
 }
 
-extern "C" Box* intNew1(Box* cls) {
-    if (!is_subclass(_cls->cls, type_cls))
+extern "C" Box* intNew1(Box* _cls) {
+    if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
     return boxInt(0);
 }
 
 extern "C" Box* intNew2(Box* _cls, Box* val) {
-    if (!is_subclass(_cls->cls, type_cls))
+    if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
