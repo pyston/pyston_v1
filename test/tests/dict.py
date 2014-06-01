@@ -9,6 +9,14 @@ for i in xrange(10):
 print sorted(d.items())
 print sorted(d.values())
 print sorted(d.keys())
+print sorted(d.iteritems())
+print sorted(d.itervalues())
+print sorted(d.iterkeys())
+
+l = []
+for i in d:
+    l.append(i)
+print sorted(l)
 
 print d.pop(5, 5)
 print sorted(d.items())

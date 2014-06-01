@@ -244,6 +244,17 @@ Box* notimplementedRepr(Box* self) {
 }
 
 Box* sorted(Box* obj) {
+    BoxedList* rtn = new BoxedList();
+    for (Box* e : obj->pyElements()) {
+        listAppendInternal(rtn, e);
+    }
+
+    std::sort<Box**, PyLt>(rtn->elts->elts, rtn->elts->elts + rtn->size, PyLt());
+
+    return rtn;
+}
+
+Box* sortedList(Box* obj) {
     RELEASE_ASSERT(obj->cls == list_cls, "");
 
     BoxedList* lobj = static_cast<BoxedList*>(obj);
@@ -455,7 +466,10 @@ void setupBuiltins() {
     Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, NULL, 2, false));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
-    builtins_module->giveAttr("sorted", new BoxedFunction(boxRTFunction((void*)sorted, NULL, 1, false)));
+    CLFunction* sorted_func = createRTFunction();
+    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST }, false);
+    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN }, false);
+    builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);
