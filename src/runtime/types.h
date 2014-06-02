@@ -253,7 +253,9 @@ struct PyLt {
 
 class BoxedDict : public Box {
 public:
-    std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > d;
+    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > DictMap;
+
+    DictMap d;
 
     BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
 };
@@ -310,6 +312,5 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
         attrs = new ((void*)attrs) HCAttrs();
     }
 }
-
 }
 #endif
