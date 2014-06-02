@@ -310,6 +310,18 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
     return rtn;
 }
 
+Box* hasattr(Box* obj, Box* _str) {
+    if (_str->cls != str_cls) {
+        raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
+    }
+
+    BoxedString* str = static_cast<BoxedString*>(_str);
+    Box* attr = getattr_internal(obj, str->s, true, true, NULL, NULL);
+
+    Box* rtn = attr ? True : False;
+    return rtn;
+}
+
 Box* map2(Box* f, Box* container) {
     Box* rtn = new BoxedList();
     for (Box* e : container->pyElements()) {
@@ -462,6 +474,10 @@ void setupBuiltins() {
     CLFunction* getattr_func = boxRTFunction((void*)getattr2, NULL, 2, false);
     addRTFunction(getattr_func, (void*)getattr3, NULL, 3, false);
     builtins_module->giveAttr("getattr", new BoxedFunction(getattr_func));
+
+    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, NULL, 2, false));    
+    builtins_module->giveAttr("hasattr", hasattr_obj);
+
 
     Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, NULL, 2, false));
     builtins_module->giveAttr("isinstance", isinstance_obj);
