@@ -20,7 +20,11 @@ print map(bool, ["hello", "", "world"])
 if "":
     print "bad"
 
-print repr(" \t\n\v\ftest \t\n\v\f".strip())
+testStr = " \t\n\v\ftest \t\n\v\f"
+print repr(testStr.strip()), repr(testStr.lstrip()), repr(testStr.rstrip())
+for c in [None, " ", "\t\f", "test"]:
+    print repr(testStr.strip(c)), repr(testStr.lstrip(c)), repr(testStr.rstrip(c))
+
 
 for pattern in ["hello", "o w", "nope"]:
     print pattern in "hello world"
