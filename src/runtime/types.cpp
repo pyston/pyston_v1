@@ -147,10 +147,12 @@ extern "C" void listGCHandler(GCVisitor* v, void* p) {
 
     BoxedList* l = (BoxedList*)p;
     int size = l->size;
-    if (size) {
+    int capacity = l->capacity;
+    assert(capacity >= size);
+    if (capacity)
         v->visit(l->elts);
+    if (size)
         v->visitRange((void**)&l->elts->elts[0], (void**)&l->elts->elts[size]);
-    }
 
     static StatCounter sc("gc_listelts_visited");
     sc.log(size);

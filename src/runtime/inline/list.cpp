@@ -65,7 +65,6 @@ void BoxedList::shrink() {
             capacity = new_capacity;
         } else if (size == 0) {
             rt_free(elts);
-            elts = NULL;
             capacity = 0;
         }
     }
