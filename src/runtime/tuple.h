@@ -21,7 +21,8 @@
 namespace pyston {
 
 extern BoxedClass* tuple_iterator_cls;
-struct BoxedTupleIterator : public Box {
+class BoxedTupleIterator : public Box {
+public:
     BoxedTuple* t;
     int pos;
     BoxedTupleIterator(BoxedTuple* t);

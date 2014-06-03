@@ -21,7 +21,8 @@
 namespace pyston {
 
 extern BoxedClass* list_iterator_cls;
-struct BoxedListIterator : public Box {
+class BoxedListIterator : public Box {
+public:
     BoxedList* l;
     int pos;
     BoxedListIterator(BoxedList* l);

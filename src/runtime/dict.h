@@ -21,7 +21,8 @@
 namespace pyston {
 
 extern BoxedClass* dict_iterator_cls;
-struct BoxedDictIterator : public Box {
+class BoxedDictIterator : public Box {
+public:
     enum IteratorType { KeyIterator, ValueIterator, ItemIterator };
 
     BoxedDict* d;
