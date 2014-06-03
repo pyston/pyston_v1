@@ -244,6 +244,17 @@ Box* notimplementedRepr(Box* self) {
 }
 
 Box* sorted(Box* obj) {
+    BoxedList* rtn = new BoxedList();
+    for (Box* e : obj->pyElements()) {
+        listAppendInternal(rtn, e);
+    }
+
+    std::sort<Box**, PyLt>(rtn->elts->elts, rtn->elts->elts + rtn->size, PyLt());
+
+    return rtn;
+}
+
+Box* sortedList(Box* obj) {
     RELEASE_ASSERT(obj->cls == list_cls, "");
 
     BoxedList* lobj = static_cast<BoxedList*>(obj);
@@ -296,6 +307,18 @@ Box* getattr3(Box* obj, Box* _str, Box* default_value) {
         return default_value;
     }
 
+    return rtn;
+}
+
+Box* hasattr(Box* obj, Box* _str) {
+    if (_str->cls != str_cls) {
+        raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
+    }
+
+    BoxedString* str = static_cast<BoxedString*>(_str);
+    Box* attr = getattr_internal(obj, str->s, true, true, NULL, NULL);
+
+    Box* rtn = attr ? True : False;
     return rtn;
 }
 
@@ -452,10 +475,17 @@ void setupBuiltins() {
     addRTFunction(getattr_func, (void*)getattr3, NULL, 3, false);
     builtins_module->giveAttr("getattr", new BoxedFunction(getattr_func));
 
+    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, NULL, 2, false));
+    builtins_module->giveAttr("hasattr", hasattr_obj);
+
+
     Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, NULL, 2, false));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
-    builtins_module->giveAttr("sorted", new BoxedFunction(boxRTFunction((void*)sorted, NULL, 1, false)));
+    CLFunction* sorted_func = createRTFunction();
+    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST }, false);
+    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN }, false);
+    builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);

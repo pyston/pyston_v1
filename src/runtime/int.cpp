@@ -121,7 +121,8 @@ extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'",
+                       getTypeName(rhs)->c_str());
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -413,7 +414,8 @@ extern "C" Box* intInvert(BoxedInt* v) {
 
 extern "C" Box* intPos(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'",
+                       getTypeName(v)->c_str());
 
     if (v->cls == int_cls)
         return v;
@@ -432,7 +434,8 @@ extern "C" Box* intNonzero(BoxedInt* v) {
 
 extern "C" BoxedString* intRepr(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'",
+                       getTypeName(v)->c_str());
 
     char buf[80];
     int len = snprintf(buf, 80, "%ld", v->n);
@@ -444,20 +447,21 @@ extern "C" Box* intHash(BoxedInt* self) {
     return self;
 }
 
-extern "C" Box* intNew1(Box* cls) {
-    if (!is_subclass(_cls->cls, type_cls))
+extern "C" Box* intNew1(Box* _cls) {
+    if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
     return boxInt(0);
 }
 
 extern "C" Box* intNew2(Box* _cls, Box* val) {
-    if (!is_subclass(_cls->cls, type_cls))
+    if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, int_cls))
-        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(), getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
 
     assert(cls->instance_size >= sizeof(BoxedInt));
     void* mem = rt_alloc(cls->instance_size);

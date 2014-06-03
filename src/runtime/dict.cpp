@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/dict.h"
+
 #include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -145,7 +148,33 @@ Box* dictGet2(BoxedDict* self, Box* k) {
     return dictGet3(self, k, None);
 }
 
+Box* dictSetdefault3(BoxedDict* self, Box* k, Box* v) {
+    assert(self->cls == dict_cls);
+
+    auto it = self->d.find(k);
+    if (it != self->d.end())
+        return it->second;
+
+    self->d.insert(it, std::make_pair(k, v));
+    return v;
+}
+
+Box* dictSetdefault2(BoxedDict* self, Box* k) {
+    return dictSetdefault3(self, k, None);
+}
+
+BoxedClass* dict_iterator_cls = NULL;
+extern "C" void dictIteratorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+    BoxedDictIterator* it = (BoxedDictIterator*)p;
+    v->visit(it->d);
+}
+
+extern "C" const ObjectFlavor dict_iterator_flavor(&dictIteratorGCHandler, NULL);
+
 void setupDict() {
+    dict_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedDict), false);
+
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     // dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1, false)));
     // dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2, false)));
@@ -154,14 +183,19 @@ void setupDict() {
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, NULL, 1, false)));
     dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
 
+    dict_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1, false)));
+
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, NULL, 1, false)));
-    dict_cls->giveAttr("iteritems", dict_cls->getattr("items"));
+    dict_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)dictIterItems,
+                                                                    typeFromClass(dict_iterator_cls), 1, false)));
 
     dict_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)dictValues, NULL, 1, false)));
-    dict_cls->giveAttr("itervalues", dict_cls->getattr("values"));
+    dict_cls->giveAttr("itervalues", new BoxedFunction(boxRTFunction((void*)dictIterValues,
+                                                                     typeFromClass(dict_iterator_cls), 1, false)));
 
     dict_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)dictKeys, NULL, 1, false)));
-    dict_cls->giveAttr("iterkeys", dict_cls->getattr("keys"));
+    dict_cls->giveAttr("iterkeys", dict_cls->getattr("__iter__"));
 
     CLFunction* pop = boxRTFunction((void*)dictPop2, UNKNOWN, 2, false);
     addRTFunction(pop, (void*)dictPop3, UNKNOWN, 3, false);
@@ -171,10 +205,26 @@ void setupDict() {
     addRTFunction(get, (void*)dictGet3, UNKNOWN, 3, false);
     dict_cls->giveAttr("get", new BoxedFunction(get));
 
+    CLFunction* setdefault = boxRTFunction((void*)dictSetdefault2, UNKNOWN, 2, false);
+    addRTFunction(setdefault, (void*)dictSetdefault3, UNKNOWN, 3, false);
+    dict_cls->giveAttr("setdefault", new BoxedFunction(setdefault));
+
     dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2, false)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NULL, 3, false)));
 
     dict_cls->freeze();
+
+    gc::registerStaticRootObj(dict_iterator_cls);
+    dict_iterator_cls->giveAttr("__name__", boxStrConstant("dictiterator"));
+
+    CLFunction* hasnext = boxRTFunction((void*)dictIterHasnextUnboxed, BOOL, 1, false);
+    addRTFunction(hasnext, (void*)dictIterHasnext, BOXED_BOOL, 1, false);
+    dict_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    dict_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)dictIterIter, typeFromClass(dict_iterator_cls), 1, false)));
+    dict_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1, false)));
+
+    dict_iterator_cls->freeze();
 }
 
 void teardownDict() {

@@ -42,6 +42,8 @@ extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
     const BoxedTuple::GCVector* elts;
     BoxedTuple::GCVector _elts;
     if (rhs->cls == tuple_cls) {
@@ -189,6 +191,8 @@ extern "C" BoxedString* strMul(BoxedString* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
     if (rhs->cls != str_cls)
         return boxBool(false);
 
@@ -197,10 +201,14 @@ extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
 }
 
 extern "C" Box* strLen(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     return boxInt(self->s.size());
 }
 
 extern "C" Box* strStr(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     return self;
 }
 
@@ -223,6 +231,8 @@ static bool _needs_escaping[256]
         true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true };
 static char _hex[17] = "0123456789abcdef"; // really only needs to be 16 but clang will complain
 extern "C" Box* strRepr(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     std::ostringstream os("");
 
     const std::string& s = self->s;
@@ -270,11 +280,15 @@ extern "C" Box* strRepr(BoxedString* self) {
 }
 
 extern "C" Box* strHash(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     std::hash<std::string> H;
     return boxInt(H(self->s));
 }
 
 extern "C" Box* strNonzero(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     return boxBool(self->s.size() != 0);
 }
 
@@ -290,6 +304,8 @@ extern "C" Box* strNew2(BoxedClass* cls, Box* obj) {
 }
 
 Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
+    assert(self->cls == str_cls);
+
     const std::string& s = self->s;
 
     assert(step != 0);
@@ -313,6 +329,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
 
 Box* strLower(BoxedString* self) {
     assert(self->cls == str_cls);
+
     std::string lowered(self->s);
     std::transform(lowered.begin(), lowered.end(), lowered.begin(), tolower);
     return boxString(std::move(lowered));
@@ -380,34 +397,55 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
     }
 }
 
-Box* strStrip(BoxedString* self) {
+Box* strStrip1(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return new BoxedString(llvm::StringRef(self->s).trim(" \t\n\r\f\v"));
+}
+
+Box* strStrip2(BoxedString* self, Box* chars) {
     assert(self->cls == str_cls);
 
-    const std::string& s = self->s;
-    int n = s.size();
-
-    int strip_beginning = 0;
-    while (strip_beginning < n) {
-        char c = s[strip_beginning];
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v')
-            strip_beginning++;
-        else
-            break;
+    if (chars->cls == str_cls) {
+        return new BoxedString(llvm::StringRef(self->s).trim(static_cast<BoxedString*>(chars)->s));
+    } else if (chars->cls == none_cls) {
+        return strStrip1(self);
+    } else {
+        raiseExcHelper(TypeError, "strip arg must be None, str or unicode");
     }
+}
 
-    if (strip_beginning == n)
-        return boxStrConstant("");
+Box* strLStrip1(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return new BoxedString(llvm::StringRef(self->s).ltrim(" \t\n\r\f\v"));
+}
 
-    int strip_end = 0;
-    while (strip_end < n) {
-        char c = s[n - strip_end - 1];
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v')
-            strip_end++;
-        else
-            break;
+Box* strLStrip2(BoxedString* self, Box* chars) {
+    assert(self->cls == str_cls);
+
+    if (chars->cls == str_cls) {
+        return new BoxedString(llvm::StringRef(self->s).ltrim(static_cast<BoxedString*>(chars)->s));
+    } else if (chars->cls == none_cls) {
+        return strLStrip1(self);
+    } else {
+        raiseExcHelper(TypeError, "lstrip arg must be None, str or unicode");
     }
+}
 
-    return new BoxedString(s.substr(strip_beginning, n - strip_beginning - strip_end));
+Box* strRStrip1(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return new BoxedString(llvm::StringRef(self->s).rtrim(" \t\n\r\f\v"));
+}
+
+Box* strRStrip2(BoxedString* self, Box* chars) {
+    assert(self->cls == str_cls);
+
+    if (chars->cls == str_cls) {
+        return new BoxedString(llvm::StringRef(self->s).rtrim(static_cast<BoxedString*>(chars)->s));
+    } else if (chars->cls == none_cls) {
+        return strRStrip1(self);
+    } else {
+        raiseExcHelper(TypeError, "rstrip arg must be None, str or unicode");
+    }
 }
 
 Box* strContains(BoxedString* self, Box* elt) {
@@ -425,6 +463,8 @@ Box* strContains(BoxedString* self, Box* elt) {
 
 
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
+    assert(self->cls == str_cls);
+
     if (slice->cls == int_cls) {
         BoxedInt* islice = static_cast<BoxedInt*>(slice);
         int64_t n = islice->n;
@@ -541,7 +581,19 @@ void setupStr() {
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, NULL, 1, false)));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1, false)));
-    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 1, false)));
+
+    CLFunction* strStrip = boxRTFunction((void*)strStrip1, STR, 1, false);
+    addRTFunction(strStrip, (void*)strStrip2, STR, 2, false);
+    str_cls->giveAttr("strip", new BoxedFunction(strStrip));
+
+    CLFunction* strLStrip = boxRTFunction((void*)strLStrip1, STR, 1, false);
+    addRTFunction(strLStrip, (void*)strLStrip2, STR, 2, false);
+    str_cls->giveAttr("lstrip", new BoxedFunction(strLStrip));
+
+    CLFunction* strRStrip = boxRTFunction((void*)strRStrip1, STR, 1, false);
+    addRTFunction(strRStrip, (void*)strRStrip2, STR, 2, false);
+    str_cls->giveAttr("rstrip", new BoxedFunction(strRStrip));
+
     str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2, false)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, NULL, 2, false)));

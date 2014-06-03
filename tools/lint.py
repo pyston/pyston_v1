@@ -1,4 +1,5 @@
 import os
+import sys
 
 def verify_include(_, dir, files):
     for bn in files:

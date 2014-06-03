@@ -1015,8 +1015,6 @@ extern "C" BoxedString* str(Box* obj) {
             str = getclsattr_internal(obj, "__repr__", NULL, NULL);
 
         if (str == NULL) {
-            ASSERT(isUserDefined(obj->cls), "%s.__str__", getTypeName(obj)->c_str());
-
             char buf[80];
             snprintf(buf, 80, "<%s object at %p>", getTypeName(obj)->c_str(), obj);
             return boxStrConstant(buf);

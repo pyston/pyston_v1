@@ -25,6 +25,7 @@ def fact(n):
     return t
 
 if __name__ == "__main__":
+    # test data is from the Google CodeJam site:
     s = """
 3
 3

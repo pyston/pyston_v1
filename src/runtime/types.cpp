@@ -147,10 +147,12 @@ extern "C" void listGCHandler(GCVisitor* v, void* p) {
 
     BoxedList* l = (BoxedList*)p;
     int size = l->size;
-    if (size) {
+    int capacity = l->capacity;
+    assert(capacity >= size);
+    if (capacity)
         v->visit(l->elts);
+    if (size)
         v->visitRange((void**)&l->elts->elts[0], (void**)&l->elts->elts[size]);
-    }
 
     static StatCounter sc("gc_listelts_visited");
     sc.log(size);
@@ -260,6 +262,10 @@ extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
 
 extern "C" BoxedString* noneRepr(Box* v) {
     return new BoxedString("None");
+}
+
+extern "C" Box* noneHash(Box* v) {
+    return boxInt(819239); // chosen randomly
 }
 
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
@@ -470,6 +476,7 @@ void setupRuntime() {
     none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, NULL, 1, false)));
     none_cls->giveAttr("__str__", none_cls->getattr("__repr__"));
+    none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, NULL, 1, false)));
     none_cls->freeze();
 
     module_cls->giveAttr("__name__", boxStrConstant("module"));

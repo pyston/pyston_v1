@@ -17,3 +17,14 @@ print sorted(s1 & s2)
 print sorted(s1 | s2)
 
 print len(set(range(5)))
+
+s = set(range(5))
+print sorted(s)
+s.add(3)
+print sorted(s)
+s.add("")
+print len(s)
+s.add(None)
+print len(s)
+
+print set([1])

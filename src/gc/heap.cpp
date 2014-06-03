@@ -26,6 +26,9 @@
 #include "valgrind.h"
 #endif
 
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
+
 namespace pyston {
 namespace gc {
 

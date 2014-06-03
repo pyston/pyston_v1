@@ -450,6 +450,8 @@ $(LLVM_BUILDS:%=llvm/%/$1): llvm/%/$1: llvm/%/$2
 )
 endef
 
+###
+# LLVM build dependency management:
 $(call add_llvm_dep,lib/TableGen,lib/Support)
 $(call add_llvm_dep,utils/TableGen,lib/TableGen)
 $(call add_llvm_dep,lib/IR,utils/TableGen)
@@ -469,9 +471,15 @@ $(call add_llvm_dep,utils,lib)
 $(foreach tool,$(LLVM_TOOLS),$(foreach build,$(LLVM_BUILDS),$(eval \
 llvm/$(build)/tools/$(tool): llvm/$(build)/lib \
 )))
-$(LLVM_BUILDS:%=llvm_%): llvm_%: llvm/%/lib llvm/%/tools/llvm-config $(LLVM_TOOLS:%=llvm/\%/tools/%)
+
+##
+# LLVM build subset specifications:
+$(LLVM_BUILDS:%=llvm_%): llvm_%: llvm/%/lib llvm/%/tools/llvm-config
 	touch $(LLVM_BUILD)/$(patsubst llvm_%,built_%,$@)
 llvm_release: llvm/release/tools llvm/release/utils
+llvm_quick: $(LLVM_TOOLS:%=llvm/quick/tools/%)
+llvm_debug: $(LLVM_TOOLS:%=llvm/debug/tools/%)
+
 llvm_quick_clean:
 	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 clean
 llvm_release_%:
