@@ -25,13 +25,54 @@
 #include "runtime/set.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
+#include "runtime/list.h"
 namespace pyston {
 
 extern "C" Box* trap() {
     raise(SIGTRAP);
 
     return None;
+}
+
+extern "C" Box* dir1(Box* obj) {
+    // TODO: Recursive class traversal for lookup of types and eliminating
+    // duplicates afterwards
+    BoxedList* result = nullptr;
+    // If __dir__ is present just call it and return what it returns
+    static std::string attr_dir = "__dir__";
+    Box* dir_result = callattrInternal(obj, &attr_dir, CLASS_ONLY, nullptr, 0, nullptr, nullptr, nullptr, nullptr);
+    if (dir_result && dir_result->cls == list_cls) {
+        return dir_result;
+    }
+
+    // If __dict__ is present use its keys and add the reset below
+    Box* obj_dict = getattr_internal(obj, "__dict__", false, true, nullptr, nullptr);
+    if (obj_dict && obj_dict->cls == dict_cls) {
+        result = new BoxedList();
+        for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
+            listAppend(result, kv.first);
+        }
+    }
+    if (!result) {
+        result = new BoxedList();
+    }
+
+    for (auto const& kv : obj->cls->hcls->attr_offsets) {
+        listAppend(result, boxString(kv.first));
+    }
+    if (obj->cls->hasattrs) {
+        HCBox* hcb = static_cast<HCBox*>(obj);
+        for (auto const& kv : hcb->hcls->attr_offsets) {
+            listAppend(result, boxString(kv.first));
+        }
+    }
+    return result;
+}
+
+extern "C" Box* dir0() {
+    // TODO: This should actually return the elements in the current local
+    // scope not the content of the builtins_module
+    return dir1(builtins_module);
 }
 
 extern "C" Box* abs_(Box* x) {
@@ -507,7 +548,9 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
-
+    CLFunction* dir_clf = boxRTFunction((void*)dir0, LIST, 0, false);
+    addRTFunction(dir_clf, (void*)dir1, LIST, 1, false);
+    builtins_module->giveAttr("dir", new BoxedFunction(dir_clf));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("int", int_cls);
