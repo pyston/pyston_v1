@@ -38,22 +38,19 @@ extern "C" Box* dir1(Box* obj) {
     // TODO: Recursive class traversal for lookup of types and eliminating
     // duplicates afterwards
     BoxedList* result = nullptr;
-    if (obj->cls->hasattrs) {
-        // If __dir__ is present just call it and return what it returns
-        HCBox* hcb = static_cast<HCBox*>(obj);
-        Box* obj_dir = hcb->cls->getattr("__dir__", nullptr, nullptr);
-        if (obj_dir) {
-            return runtimeCall(obj_dir, 1, obj, nullptr, nullptr, nullptr);
-        }
+    // If __dir__ is present just call it and return what it returns
+    static std::string attr_dir = "__dir__";
+    Box* dir_result = callattrInternal(obj, &attr_dir, CLASS_ONLY, nullptr, 0, nullptr, nullptr, nullptr, nullptr);
+    if (dir_result && dir_result->cls == list_cls) {
+        return dir_result;
+    }
 
-        // If __dict__ is present use its keys and add the reset below
-        Box* obj_dict = hcb->cls->getattr("__dict__", nullptr, nullptr);
-        if (obj_dict) {
-            result = new BoxedList();
-            assert(obj_dict->cls == dict_cls);
-            for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
-                listAppend(result, kv.first);
-            }
+    // If __dict__ is present use its keys and add the reset below
+    Box* obj_dict = getattr_internal(obj, "__dict__", false, true, nullptr, nullptr);
+    if (obj_dict && obj_dict->cls == dict_cls) {
+        result = new BoxedList();
+        for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
+            listAppend(result, kv.first);
         }
     }
     if (!result) {

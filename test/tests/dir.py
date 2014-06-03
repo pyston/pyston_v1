@@ -21,8 +21,8 @@ class TestClass(object):
 
 class TestClass2(object):
     def __init__(self):
-        self.attribute1 = None
-        self.__dict__ = {'dictAttr': True}
+        self.__dict__ = {'dictAttr': False, 'attribute1': None}
+        self.other_attribute = False
 
     def method1(self):
         pass
@@ -50,6 +50,22 @@ dir(int)
 dir(str)
 dir(set)
 
-tc = TestClass()
-for f in dir(tc):
-    print tc.__dict__[f]
+
+def test_in_dir(names, obj):
+    r = dir(obj)
+    print [n in r for n in names]
+
+test_in_dir(fake(), TestClass())
+test_in_dir(['attribute1', 'method1'], TestClass2)
+test_in_dir(['attribute1', 'method1', 'dictAttr'], TestClass2())
+test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__init__',
+             '__module__'] + fake(), TestClass)
+test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__init__',
+             '__module__', 'method1', 'dictAttr', 'attribute1'], TestClass2)
+test_in_dir(['attribute1', 'dictAttr', '__init__', '__module__', 'method1',
+             'other_attribute', '__dict__'], TestClass2())
+test_in_dir(fake(), TestClass())
+print len(fake()) == len(dir(TestClass()))
+
+for t in [str, int, list, set, dict]:
+    test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__module__'], t)
