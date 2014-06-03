@@ -176,8 +176,10 @@ class AST_arguments : public AST {
 public:
     // no lineno, col_offset attributes
     std::vector<AST_expr*> args, defaults;
-    AST_expr* kwarg;
-    std::string vararg;
+
+    // These are represented as strings, not names; not sure why.
+    // If they don't exist, the string is empty.
+    std::string kwarg, vararg;
 
     virtual void accept(ASTVisitor* v);
 

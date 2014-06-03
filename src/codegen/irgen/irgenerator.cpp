@@ -623,6 +623,10 @@ private:
     CompilerVariable* evalCall(AST_Call* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
+        assert(!node->starargs);
+        assert(!node->kwargs);
+        assert(!node->keywords.size());
+
         bool is_callattr;
         bool callattr_clsonly = false;
         std::string* attr = NULL;

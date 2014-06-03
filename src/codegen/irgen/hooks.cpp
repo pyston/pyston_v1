@@ -139,6 +139,13 @@ static CompiledFunction* _doCompile(CLFunction* f, FunctionSignature* sig, Effor
     const std::vector<AST_expr*>& arg_names = source->getArgNames();
     AST_arguments* args = source->getArgsAST();
 
+    if (args) {
+        // args object can be NULL if this is a module scope
+        assert(!args->vararg.size());
+        assert(!args->kwarg.size());
+        assert(!args->defaults.size());
+    }
+
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
         llvm::raw_string_ostream ss(s);

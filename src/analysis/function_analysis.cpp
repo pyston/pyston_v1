@@ -232,7 +232,7 @@ public:
     }
 
     virtual bool visit_arguments(AST_arguments* node) {
-        if (node->kwarg)
+        if (node->kwarg.size())
             _doSet(node->kwarg);
         if (node->vararg.size())
             _doSet(node->vararg);

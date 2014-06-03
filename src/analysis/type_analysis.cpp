@@ -267,15 +267,26 @@ private:
     }
 
     virtual void* visit_call(AST_Call* node) {
-        assert(!node->starargs);
-        assert(!node->kwargs);
-        assert(node->keywords.size() == 0);
         CompilerType* func = getType(node->func);
 
         std::vector<CompilerType*> arg_types;
         for (int i = 0; i < node->args.size(); i++) {
             arg_types.push_back(getType(node->args[i]));
         }
+
+        std::vector<std::pair<const std::string&, CompilerType*> > kw_types;
+        for (AST_keyword* kw : node->keywords) {
+            kw_types.push_back(std::make_pair<const std::string&, CompilerType*>(kw->arg, getType(kw->value)));
+        }
+
+        CompilerType* starargs = node->starargs ? getType(node->starargs) : NULL;
+        CompilerType* kwargs = node->kwargs ? getType(node->kwargs) : NULL;
+
+        if (starargs || kwargs || kw_types.size()) {
+            // Bail out for anything but simple calls, for now:
+            return UNKNOWN;
+        }
+
         CompilerType* rtn_type = func->callType(arg_types);
 
         // Should be unboxing things before getting here:
