@@ -475,7 +475,7 @@ void setupBuiltins() {
     addRTFunction(getattr_func, (void*)getattr3, NULL, 3, false);
     builtins_module->giveAttr("getattr", new BoxedFunction(getattr_func));
 
-    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, NULL, 2, false));    
+    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, NULL, 2, false));
     builtins_module->giveAttr("hasattr", hasattr_obj);
 
 

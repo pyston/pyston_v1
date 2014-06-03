@@ -187,10 +187,12 @@ void setupDict() {
         "__iter__", new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1, false)));
 
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, NULL, 1, false)));
-    dict_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1, false)));
+    dict_cls->giveAttr("iteritems", new BoxedFunction(boxRTFunction((void*)dictIterItems,
+                                                                    typeFromClass(dict_iterator_cls), 1, false)));
 
     dict_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)dictValues, NULL, 1, false)));
-    dict_cls->giveAttr("itervalues", new BoxedFunction(boxRTFunction((void*)dictIterValues, typeFromClass(dict_iterator_cls), 1, false)));
+    dict_cls->giveAttr("itervalues", new BoxedFunction(boxRTFunction((void*)dictIterValues,
+                                                                     typeFromClass(dict_iterator_cls), 1, false)));
 
     dict_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)dictKeys, NULL, 1, false)));
     dict_cls->giveAttr("iterkeys", dict_cls->getattr("__iter__"));
