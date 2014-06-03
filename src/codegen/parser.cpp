@@ -458,6 +458,20 @@ AST_keyword* read_keyword(BufferedReader* reader) {
     return rtn;
 }
 
+AST_Lambda* read_lambda(BufferedReader* reader) {
+    AST_Lambda* rtn = new AST_Lambda();
+
+    rtn->args = ast_cast<AST_arguments>(readASTMisc(reader));
+    rtn->body = readASTExpr(reader);
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+
+    // try to geenrate unique name. is this needed?
+    static int count = 0;
+    rtn->name = (llvm::Twine("lambda") + llvm::Twine(++count)).str();
+    return rtn;
+}
+
 AST_List* read_list(BufferedReader* reader) {
     AST_List* rtn = new AST_List();
 
@@ -697,6 +711,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_ifexp(reader);
         case AST_TYPE::Index:
             return read_index(reader);
+        case AST_TYPE::Lambda:
+            return read_lambda(reader);
         case AST_TYPE::List:
             return read_list(reader);
         case AST_TYPE::ListComp:

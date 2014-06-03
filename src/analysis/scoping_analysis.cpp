@@ -167,6 +167,18 @@ public:
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }
     // virtual bool visit_keyword(AST_keyword *node) { return false; }
+    virtual bool visit_lambda(AST_Lambda* node) {
+        if (node == orig_node) {
+            return false;
+        } else {
+            doWrite(node->name);
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
+            collect(node, map);
+            return true;
+        }
+    }
+
+
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
     // virtual bool visit_module(AST_Module *node) { return false; }
@@ -312,6 +324,9 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::ClassDef:
                 this->scopes[node] = new ScopeInfoBase(parent_info, usage);
                 break;
+            case AST_TYPE::Lambda:
+                this->scopes[node] = new ScopeInfoBase(parent_info, usage);
+                break;
             default:
                 RELEASE_ASSERT(0, "%d", usage->node->type);
                 break;
@@ -322,7 +337,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
 #ifndef NDEBUG
     std::vector<AST*> flattened;
-    flatten(parent_module->body, flattened, false);
+    flatten(parent_module->body, flattened, true);
     bool found = 0;
     for (AST* n : flattened) {
         if (n == node) {
@@ -354,6 +369,7 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     switch (node->type) {
         case AST_TYPE::ClassDef:
         case AST_TYPE::FunctionDef:
+        case AST_TYPE::Lambda:
             return analyzeSubtree(node);
         // this is handled in the constructor:
         // case AST_TYPE::Module:

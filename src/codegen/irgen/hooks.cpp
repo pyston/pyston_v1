@@ -47,6 +47,8 @@ const std::string SourceInfo::getName() {
     switch (ast->type) {
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->name;
+        case AST_TYPE::Lambda:
+            return ast_cast<AST_Lambda>(ast)->name;
         case AST_TYPE::Module:
             return this->parent_module->name();
         default:
@@ -59,6 +61,8 @@ AST_arguments* SourceInfo::getArgsAST() {
     switch (ast->type) {
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->args;
+        case AST_TYPE::Lambda:
+            return ast_cast<AST_Lambda>(ast)->args;
         case AST_TYPE::Module:
             return NULL;
         default:
@@ -80,6 +84,13 @@ const std::vector<AST_stmt*>& SourceInfo::getBody() {
     switch (ast->type) {
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->body;
+        case AST_TYPE::Lambda: {
+            std::vector<AST_stmt*>* vec = new std::vector<AST_stmt*>();
+            AST_Return* expr = new AST_Return();
+            expr->value = ast_cast<AST_Lambda>(ast)->body;
+            vec->push_back(expr);
+            return *vec;
+        }
         case AST_TYPE::Module:
             return ast_cast<AST_Module>(ast)->body;
         default:

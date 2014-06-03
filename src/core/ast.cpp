@@ -569,6 +569,19 @@ void AST_keyword::accept(ASTVisitor* v) {
     value->accept(v);
 }
 
+void AST_Lambda::accept(ASTVisitor* v) {
+    bool skip = v->visit_lambda(this);
+    if (skip)
+        return;
+
+    args->accept(v);
+    body->accept(v);
+}
+
+void* AST_Lambda::accept_expr(ExprVisitor* v) {
+    return v->visit_lambda(this);
+}
+
 void AST_LangPrimitive::accept(ASTVisitor* v) {
     bool skip = v->visit_langprimitive(this);
     if (skip)
@@ -1274,6 +1287,14 @@ bool PrintVisitor::visit_invoke(AST_Invoke* node) {
     return true;
 }
 
+bool PrintVisitor::visit_lambda(AST_Lambda* node) {
+    printf("lambda ");
+    node->args->accept(this);
+    printf(": ");
+    node->body->accept(this);
+    return true;
+}
+
 bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
     printf(":");
     switch (node->opcode) {
@@ -1723,6 +1744,10 @@ public:
         return false;
     }
     virtual bool visit_keyword(AST_keyword* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_lambda(AST_Lambda* node) {
         output->push_back(node);
         return false;
     }
