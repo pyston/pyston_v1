@@ -16,8 +16,8 @@
 #include <cstring>
 
 #include "runtime/gc_runtime.h"
-#include "runtime/objmodel.h"
 #include "runtime/list.h"
+#include "runtime/objmodel.h"
 
 namespace pyston {
 
@@ -53,7 +53,7 @@ Box* listiterNext(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
-    if(!(self->pos >= 0 && self->pos < self->l->size)) {
+    if (!(self->pos >= 0 && self->pos < self->l->size)) {
         raiseExcHelper(StopIteration, "");
     }
 

@@ -51,10 +51,9 @@ Box* tupleiterNext(Box* s) {
     if (!(self->pos >= 0 && self->pos < self->t->elts.size())) {
         raiseExcHelper(StopIteration, "");
     }
-    
+
     Box* rtn = self->t->elts[self->pos];
     self->pos++;
     return rtn;
 }
-
 }
