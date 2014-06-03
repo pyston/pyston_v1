@@ -57,12 +57,12 @@ extern "C" Box* dir1(Box* obj) {
         result = new BoxedList();
     }
 
-    for (auto const& kv : obj->cls->hcls->attr_offsets) {
+    for (auto const& kv : obj->cls->attrs.hcls->attr_offsets) {
         listAppend(result, boxString(kv.first));
     }
-    if (obj->cls->hasattrs) {
-        HCBox* hcb = static_cast<HCBox*>(obj);
-        for (auto const& kv : hcb->hcls->attr_offsets) {
+    if (obj->cls->instancesHaveAttrs()) {
+        HCAttrs* attrs = obj->getAttrsPtr();
+        for (auto const& kv : attrs->hcls->attr_offsets) {
             listAppend(result, boxString(kv.first));
         }
     }
