@@ -169,6 +169,13 @@ Box* setLen(BoxedSet* self) {
     return boxInt(self->s.size());
 }
 
+Box* setAdd(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls);
+    self->s.insert(v);
+    return None;
+}
+
+
 } // namespace set
 
 using namespace pyston::set;
@@ -217,6 +224,8 @@ void setupSet() {
                       new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1, false)));
 
     set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1, false)));
+
+    set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2, false)));
 
     set_cls->freeze();
 }

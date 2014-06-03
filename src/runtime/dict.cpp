@@ -148,6 +148,20 @@ Box* dictGet2(BoxedDict* self, Box* k) {
     return dictGet3(self, k, None);
 }
 
+Box* dictSetdefault3(BoxedDict* self, Box* k, Box* v) {
+    assert(self->cls == dict_cls);
+
+    auto it = self->d.find(k);
+    if (it != self->d.end())
+        return it->second;
+
+    self->d.insert(it, std::make_pair(k, v));
+    return v;
+}
+
+Box* dictSetdefault2(BoxedDict* self, Box* k) {
+    return dictSetdefault3(self, k, None);
+}
 
 BoxedClass* dict_iterator_cls = NULL;
 extern "C" void dictIteratorGCHandler(GCVisitor* v, void* p) {
@@ -188,6 +202,10 @@ void setupDict() {
     CLFunction* get = boxRTFunction((void*)dictGet2, UNKNOWN, 2, false);
     addRTFunction(get, (void*)dictGet3, UNKNOWN, 3, false);
     dict_cls->giveAttr("get", new BoxedFunction(get));
+
+    CLFunction* setdefault = boxRTFunction((void*)dictSetdefault2, UNKNOWN, 2, false);
+    addRTFunction(setdefault, (void*)dictSetdefault3, UNKNOWN, 3, false);
+    dict_cls->giveAttr("setdefault", new BoxedFunction(setdefault));
 
     dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2, false)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NULL, 3, false)));

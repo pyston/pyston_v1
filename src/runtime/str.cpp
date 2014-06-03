@@ -42,6 +42,8 @@ extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
     const BoxedTuple::GCVector* elts;
     BoxedTuple::GCVector _elts;
     if (rhs->cls == tuple_cls) {
@@ -189,6 +191,8 @@ extern "C" BoxedString* strMul(BoxedString* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
     if (rhs->cls != str_cls)
         return boxBool(false);
 
@@ -197,10 +201,14 @@ extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
 }
 
 extern "C" Box* strLen(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     return boxInt(self->s.size());
 }
 
 extern "C" Box* strStr(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     return self;
 }
 
@@ -223,6 +231,8 @@ static bool _needs_escaping[256]
         true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true };
 static char _hex[17] = "0123456789abcdef"; // really only needs to be 16 but clang will complain
 extern "C" Box* strRepr(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     std::ostringstream os("");
 
     const std::string& s = self->s;
@@ -270,11 +280,15 @@ extern "C" Box* strRepr(BoxedString* self) {
 }
 
 extern "C" Box* strHash(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     std::hash<std::string> H;
     return boxInt(H(self->s));
 }
 
 extern "C" Box* strNonzero(BoxedString* self) {
+    assert(self->cls == str_cls);
+
     return boxBool(self->s.size() != 0);
 }
 
@@ -290,6 +304,8 @@ extern "C" Box* strNew2(BoxedClass* cls, Box* obj) {
 }
 
 Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
+    assert(self->cls == str_cls);
+
     const std::string& s = self->s;
 
     assert(step != 0);
@@ -313,6 +329,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
 
 Box* strLower(BoxedString* self) {
     assert(self->cls == str_cls);
+
     std::string lowered(self->s);
     std::transform(lowered.begin(), lowered.end(), lowered.begin(), tolower);
     return boxString(std::move(lowered));
@@ -446,6 +463,8 @@ Box* strContains(BoxedString* self, Box* elt) {
 
 
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
+    assert(self->cls == str_cls);
+
     if (slice->cls == int_cls) {
         BoxedInt* islice = static_cast<BoxedInt*>(slice);
         int64_t n = islice->n;

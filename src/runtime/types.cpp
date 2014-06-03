@@ -264,6 +264,10 @@ extern "C" BoxedString* noneRepr(Box* v) {
     return new BoxedString("None");
 }
 
+extern "C" Box* noneHash(Box* v) {
+    return boxInt(819239); // chosen randomly
+}
+
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
     // TODO there has to be a better way
     if (v == repr_obj)
@@ -472,6 +476,7 @@ void setupRuntime() {
     none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, NULL, 1, false)));
     none_cls->giveAttr("__str__", none_cls->getattr("__repr__"));
+    none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, NULL, 1, false)));
     none_cls->freeze();
 
     module_cls->giveAttr("__name__", boxStrConstant("module"));
