@@ -23,17 +23,19 @@ namespace pyston {
 
 BoxedClass* set_cls, *set_iterator_cls;
 
-const ObjectFlavor set_flavor(&boxGCHandler, NULL);
-const ObjectFlavor set_iterator_flavor(&boxGCHandler, NULL);
+extern "C" void setGCHandler(GCVisitor* v, void* p);
+extern "C" void setIteratorGCHandler(GCVisitor* v, void* p);
+
+const ObjectFlavor set_flavor(&setGCHandler, NULL);
+const ObjectFlavor set_iterator_flavor(&setIteratorGCHandler, NULL);
 
 namespace set {
 
 class BoxedSetIterator : public Box {
-private:
+public:
     BoxedSet* s;
     decltype(BoxedSet::s)::iterator it;
 
-public:
     BoxedSetIterator(BoxedSet* s) : Box(&set_iterator_flavor, set_iterator_cls), s(s), it(s->s.begin()) {}
 
     bool hasNext() { return it != s->s.end(); }
@@ -44,6 +46,29 @@ public:
         return rtn;
     }
 };
+
+extern "C" void setGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedSet* s = (BoxedSet*)p;
+
+    // This feels like a cludge, but we need to find anything that
+    // the unordered_map might have allocated.
+    // Another way to handle this would be to rt_alloc the unordered_map
+    // as well, though that incurs extra memory dereferences which would
+    // be nice to avoid.
+    void** start = (void**)&s->s;
+    void** end = start + (sizeof(s->s) / 8);
+    v->visitPotentialRange(start, end);
+}
+
+extern "C" void setIteratorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedSetIterator* it = (BoxedSetIterator*)p;
+
+    v->visit(it->s);
+}
 
 Box* setiteratorHasnext(BoxedSetIterator* self) {
     assert(self->cls == set_iterator_cls);

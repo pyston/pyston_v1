@@ -26,3 +26,5 @@ s.add("")
 print len(s)
 s.add(None)
 print len(s)
+
+print set([1])
