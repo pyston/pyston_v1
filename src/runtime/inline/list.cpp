@@ -16,11 +16,17 @@
 #include <cstring>
 
 #include "runtime/gc_runtime.h"
+#include "runtime/objmodel.h"
 #include "runtime/list.h"
 
 namespace pyston {
 
 BoxedListIterator::BoxedListIterator(BoxedList* l) : Box(&list_iterator_flavor, list_iterator_cls), l(l), pos(0) {
+}
+
+
+Box* listIterIter(Box* s) {
+    return s;
 }
 
 Box* listIter(Box* s) {
@@ -47,7 +53,10 @@ Box* listiterNext(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
-    assert(self->pos >= 0 && self->pos < self->l->size);
+    if(!(self->pos >= 0 && self->pos < self->l->size)) {
+        raiseExcHelper(StopIteration, "");
+    }
+
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
     return rtn;

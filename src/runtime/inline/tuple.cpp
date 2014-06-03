@@ -15,11 +15,16 @@
 #include <cstring>
 
 #include "runtime/gc_runtime.h"
+#include "runtime/objmodel.h"
 #include "runtime/tuple.h"
 
 namespace pyston {
 
 BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : Box(&tuple_iterator_flavor, tuple_iterator_cls), t(t), pos(0) {
+}
+
+Box* tupleIterIter(Box* s) {
+    return s;
 }
 
 Box* tupleIter(Box* s) {
@@ -29,10 +34,7 @@ Box* tupleIter(Box* s) {
 }
 
 Box* tupleiterHasnext(Box* s) {
-    assert(s->cls == tuple_iterator_cls);
-    BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
-
-    return boxBool(self->pos < self->t->elts.size());
+    return boxBool(tupleiterHasnextUnboxed(s));
 }
 
 i1 tupleiterHasnextUnboxed(Box* s) {
@@ -46,7 +48,10 @@ Box* tupleiterNext(Box* s) {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 
-    assert(self->pos >= 0 && self->pos < self->t->elts.size());
+    if (!(self->pos >= 0 && self->pos < self->t->elts.size())) {
+        raiseExcHelper(StopIteration, "");
+    }
+    
     Box* rtn = self->t->elts[self->pos];
     self->pos++;
     return rtn;

@@ -29,6 +29,7 @@ struct BoxedListIterator : public Box {
 
 extern "C" const ObjectFlavor list_iterator_flavor;
 Box* listIter(Box* self);
+Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);
 Box* listiterNext(Box* self);

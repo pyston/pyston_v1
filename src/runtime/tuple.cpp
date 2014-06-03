@@ -232,6 +232,8 @@ void setupTuple() {
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1, false);
     addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL, 1, false);
     tuple_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    tuple_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)tupleIterIter, typeFromClass(tuple_iterator_cls), 1, false)));
     tuple_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)tupleiterNext, UNKNOWN, 1, false)));
 
     tuple_iterator_cls->freeze();

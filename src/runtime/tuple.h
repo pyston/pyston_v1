@@ -29,6 +29,7 @@ struct BoxedTupleIterator : public Box {
 
 extern "C" const ObjectFlavor tuple_iterator_flavor;
 Box* tupleIter(Box* self);
+Box* tupleIterIter(Box* self);
 Box* tupleiterHasnext(Box* self);
 i1 tupleiterHasnextUnboxed(Box* self);
 Box* tupleiterNext(Box* self);

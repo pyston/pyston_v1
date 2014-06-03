@@ -13,3 +13,36 @@ iter_b = b.__iter__()
 assert iter_b.next() == 2
 assert iter_b.next() == 'a'
 assert iter_b.next() == (3, 2)
+
+assert type(a) == tuple
+
+#
+
+omglist = list(a)
+assert omglist == [3, 2, 1]
+
+assert [3, 2, 1] == list(a)
+
+new_a = []
+for i in a:
+    new_a.append(i)
+
+assert [3, 2, 1] == new_a
+
+# __iter__s
+
+assert [3, 2, 1] == list(a.__iter__())
+
+new_a = []
+for i in a.__iter__():
+    new_a.append(i)
+
+assert [3, 2, 1] == new_a
+
+# StopIteration exception
+
+try:
+    iter_a.next()
+    assert False, "next() called without StopIteration"
+except StopIteration:
+    assert True
