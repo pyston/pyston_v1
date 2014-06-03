@@ -432,6 +432,54 @@ extern "C" Box* listNew2(Box* cls, Box* container) {
     return rtn;
 }
 
+Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
+    int lsz = lhs->size;
+    int rsz = rhs->size;
+
+    bool is_order
+        = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
+
+    int n = std::min(lsz, rsz);
+    for (int i = 0; i < n; i++) {
+        Box* is_eq = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], AST_TYPE::Eq, NULL);
+        bool bis_eq = nonzero(is_eq);
+
+        if (bis_eq)
+            continue;
+
+        if (op_type == AST_TYPE::Eq) {
+            return boxBool(false);
+        } else if (op_type == AST_TYPE::NotEq) {
+            return boxBool(true);
+        } else {
+            Box* r = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], op_type, NULL);
+            return r;
+        }
+    }
+
+    if (op_type == AST_TYPE::Lt)
+        return boxBool(lsz < rsz);
+    else if (op_type == AST_TYPE::LtE)
+        return boxBool(lsz <= rsz);
+    else if (op_type == AST_TYPE::Gt)
+        return boxBool(lsz > rsz);
+    else if (op_type == AST_TYPE::GtE)
+        return boxBool(lsz >= rsz);
+    else if (op_type == AST_TYPE::Eq)
+        return boxBool(lsz == rsz);
+    else if (op_type == AST_TYPE::NotEq)
+        return boxBool(lsz != rsz);
+
+    RELEASE_ASSERT(0, "%d", op_type);
+}
+
+Box* listEq(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Eq);
+}
+
 void setupList() {
     list_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedList), false);
 
@@ -447,6 +495,8 @@ void setupList() {
 
     list_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
+
+    list_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)listEq, NULL, 2, false)));
 
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1, false)));
     list_cls->giveAttr("__str__", list_cls->getattr("__repr__"));
@@ -498,6 +548,8 @@ void setupList() {
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1, false);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL, 1, false);
     list_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    list_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)listIterIter, typeFromClass(list_iterator_cls), 1, false)));
     list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1, false)));
 
     list_iterator_cls->freeze();

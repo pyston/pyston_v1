@@ -12,29 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_RUNTIME_LIST_H
-#define PYSTON_RUNTIME_LIST_H
+#ifndef PYSTON_RUNTIME_TUPLE_H
+#define PYSTON_RUNTIME_TUPLE_H
 
 #include "core/types.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-extern BoxedClass* list_iterator_cls;
-class BoxedListIterator : public Box {
+extern BoxedClass* tuple_iterator_cls;
+class BoxedTupleIterator : public Box {
 public:
-    BoxedList* l;
+    BoxedTuple* t;
     int pos;
-    BoxedListIterator(BoxedList* l);
+    BoxedTupleIterator(BoxedTuple* t);
 };
 
-extern "C" const ObjectFlavor list_iterator_flavor;
-Box* listIter(Box* self);
-Box* listIterIter(Box* self);
-Box* listiterHasnext(Box* self);
-i1 listiterHasnextUnboxed(Box* self);
-Box* listiterNext(Box* self);
-extern "C" Box* listAppend(Box* self, Box* v);
+extern "C" const ObjectFlavor tuple_iterator_flavor;
+Box* tupleIter(Box* self);
+Box* tupleIterIter(Box* self);
+Box* tupleiterHasnext(Box* self);
+i1 tupleiterHasnextUnboxed(Box* self);
+Box* tupleiterNext(Box* self);
 }
 
 #endif

@@ -1,5 +1,5 @@
-a = [3, 2, 1]
-b = [2, 'a', (3, 2)]
+a = (3, 2, 1)
+b = (2, 'a', (3, 2))
 
 # TODO: uncomment when hassattr will be implemented
 #assert hasattr(a, '__iter__')
@@ -14,23 +14,14 @@ assert iter_b.next() == 2
 assert iter_b.next() == 'a'
 assert iter_b.next() == (3, 2)
 
-assert type(a) == list
-
-# __eq__ tests
-
-assert [3, 2, 1] == [3, 2, 1]
-assert [3, 2, 1] == list(a)
-assert [3, 2, ['a']] == list([3, 2, ['a']])
-assert [3, 2, ['a', 2]] == list([3, 2, ['a', 2]])
-
-class A(object):
-    pass
-
-a_class = A()
-
-assert [3, 2, ['a', 2]] == list([3, 2, ['a', 2]])
+assert type(a) == tuple
 
 #
+
+omglist = list(a)
+assert omglist == [3, 2, 1]
+
+assert [3, 2, 1] == list(a)
 
 new_a = []
 for i in a:
@@ -55,4 +46,3 @@ try:
     assert False, "next() called without StopIteration"
 except StopIteration:
     assert True
-

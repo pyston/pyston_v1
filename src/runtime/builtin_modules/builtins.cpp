@@ -352,7 +352,7 @@ BoxedModule* builtins_module;
 
 // TODO looks like CPython and pypy put this into an "exceptions" module:
 BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError, *IOError,
-    *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError;
+    *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError, *StopIteration;
 
 const ObjectFlavor exception_flavor(&boxGCHandler, NULL);
 Box* exceptionNew1(BoxedClass* cls) {
@@ -440,6 +440,7 @@ void setupBuiltins() {
     UnboundLocalError = makeBuiltinException(Exception, "UnboundLocalError");
     RuntimeError = makeBuiltinException(Exception, "RuntimeError");
     ImportError = makeBuiltinException(Exception, "ImportError");
+    StopIteration = makeBuiltinException(Exception, "StopIteration");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, NULL, 1, false));
     builtins_module->giveAttr("repr", repr_obj);
