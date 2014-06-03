@@ -28,3 +28,6 @@ s.add(None)
 print len(s)
 
 print set([1])
+
+for i in set([1]):
+    print i

@@ -17,6 +17,7 @@
 #include <sstream>
 
 #include "codegen/compvars.h"
+#include "gc/collector.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
@@ -214,6 +215,7 @@ void setupSet() {
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1, false)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1, false)));
     set_iterator_cls->freeze();
+    gc::registerStaticRootObj(set_iterator_cls);
 
     CLFunction* new_ = boxRTFunction((void*)setNew1, SET, 1, false);
     addRTFunction(new_, (void*)setNew2, SET, 2, false);

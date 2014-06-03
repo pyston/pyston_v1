@@ -1,5 +1,5 @@
 # expected: fail
-# - crashes somewhere
+# - need to support closures
 
 import sys
 
