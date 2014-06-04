@@ -717,10 +717,12 @@ private:
     CompilerVariable* evalLambda(AST_Lambda* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping);
-        si->ast = node;
-        CLFunction* cl = new CLFunction(si);
-        CompilerVariable* func = makeFunction(emitter, cl);
+        AST_Return* expr = new AST_Return();
+        expr->value = node->body;
+
+        SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
+                                        node, { expr });
+        CompilerVariable* func = makeFunction(emitter, new CLFunction(si));
         ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
         func->decvref(emitter);
 
@@ -1414,8 +1416,8 @@ private:
 
         CLFunction*& cl = made[node];
         if (cl == NULL) {
-            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping);
-            si->ast = node;
+            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
+                                            node, node->body);
             cl = new CLFunction(si);
         }
         return cl;

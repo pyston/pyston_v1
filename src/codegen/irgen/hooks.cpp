@@ -48,7 +48,7 @@ const std::string SourceInfo::getName() {
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->name;
         case AST_TYPE::Lambda:
-            return ast_cast<AST_Lambda>(ast)->name;
+            return "<lambda>";
         case AST_TYPE::Module:
             return this->parent_module->name();
         default:
@@ -77,25 +77,6 @@ const std::vector<AST_expr*>& SourceInfo::getArgNames() {
     if (args == NULL)
         return empty;
     return args->args;
-}
-
-const std::vector<AST_stmt*>& SourceInfo::getBody() {
-    assert(ast);
-    switch (ast->type) {
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->body;
-        case AST_TYPE::Lambda: {
-            std::vector<AST_stmt*>* vec = new std::vector<AST_stmt*>();
-            AST_Return* expr = new AST_Return();
-            expr->value = ast_cast<AST_Lambda>(ast)->body;
-            vec->push_back(expr);
-            return *vec;
-        }
-        case AST_TYPE::Module:
-            return ast_cast<AST_Module>(ast)->body;
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
 }
 
 static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
@@ -176,7 +157,7 @@ static CompiledFunction* _doCompile(CLFunction* f, FunctionSignature* sig, Effor
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
         assert(source->ast);
-        source->cfg = computeCFG(source->ast->type, source->getBody());
+        source->cfg = computeCFG(source->ast->type, source->body);
         source->liveness = computeLivenessInfo(source->cfg);
         source->phis = computeRequiredPhis(args, source->cfg, source->liveness,
                                            source->scoping->getScopeInfoForNode(source->ast));
@@ -241,9 +222,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
     ScopingAnalysis* scoping = runScopingAnalysis(m);
 
-    SourceInfo* si = new SourceInfo(bm, scoping);
+    SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
     si->cfg = computeCFG(AST_TYPE::Module, m->body);
-    si->ast = m;
     si->liveness = computeLivenessInfo(si->cfg);
     si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 

@@ -167,18 +167,7 @@ public:
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }
     // virtual bool visit_keyword(AST_keyword *node) { return false; }
-    virtual bool visit_lambda(AST_Lambda* node) {
-        if (node == orig_node) {
-            return false;
-        } else {
-            doWrite(node->name);
-            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
-            collect(node, map);
-            return true;
-        }
-    }
-
-
+    virtual bool visit_lambda(AST_Lambda* node) { return false; }
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
     // virtual bool visit_module(AST_Module *node) { return false; }
@@ -318,12 +307,8 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
-            case AST_TYPE::FunctionDef:
-                this->scopes[node] = new ScopeInfoBase(parent_info, usage);
-                break;
             case AST_TYPE::ClassDef:
-                this->scopes[node] = new ScopeInfoBase(parent_info, usage);
-                break;
+            case AST_TYPE::FunctionDef:
             case AST_TYPE::Lambda:
                 this->scopes[node] = new ScopeInfoBase(parent_info, usage);
                 break;

@@ -465,10 +465,6 @@ AST_Lambda* read_lambda(BufferedReader* reader) {
     rtn->body = readASTExpr(reader);
     rtn->col_offset = readColOffset(reader);
     rtn->lineno = reader->readULL();
-
-    // try to geenrate unique name. is this needed?
-    static int count = 0;
-    rtn->name = (llvm::Twine("lambda") + llvm::Twine(++count)).str();
     return rtn;
 }
 

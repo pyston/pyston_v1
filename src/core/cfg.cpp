@@ -570,18 +570,15 @@ private:
         AST_Lambda* rtn = new AST_Lambda();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
-        //rtn->arguments = node->arguments;
 
-        rtn->arguments = new AST_arguments();
-        for (auto& e : node->arguments->args)
-            rtn->arguments->args.push_back(remapExpr(e));
-        for (auto& e : node->arguments->defaults)
-            rtn->arguments->defaults.push_back(remapExpr(e));
-        rtn->arguments->kwarg = remapExpr(node->arguments->kwarg);
-        rtn->arguments->vararg = node->arguments->vararg;
+        rtn->args = node->args;
 
-        rtn->body = remapExpr(node->body);
+        // remap default arguments
+        rtn->args->defaults.clear();
+        for (auto& e : node->args->defaults)
+         rtn->args->defaults.push_back(remapExpr(e));
 
+        rtn->body = node->body;
         return rtn;
         */
         return node;

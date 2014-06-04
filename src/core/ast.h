@@ -535,8 +535,6 @@ public:
     AST_expr* body;
     AST_arguments* args;
 
-    std::string name;
-
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
