@@ -560,12 +560,20 @@ $(TOOLS_DIR)/publicize_release: $(TOOLS_DIR)/publicize.release.o $(LLVM_RELEASE_
 PASS_SRCS := codegen/opt/aa.cpp
 PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 
-%.h.pch: CXXFLAGS := $(CXXFLAGS)
-%.release.h.pch: CXXFLAGS := $(CXXFLAGS_RELEASE)
-%.release.h.pch %.h.pch: %.h $(BUILD_SYSTEM_DEPS)
+# Need to set CXXFLAGS so that this rules doesn't inherit the '-include' rule from the
+# thing that's calling it:
+%.h.pch: CXXFLAGS:=$(CXXFLAGS)
+%.h.pch: %.h
 	$(ECHO) Compiling $@
 	$(VERB) rm -f $@-*
 	$(VERB) $(CLANG_EXE) $(CXXFLAGS) -MMD -MP -MF $<.d -x c++-header $< -o $@
+# Need to set CXXFLAGS so that this rules doesn't inherit the '-include' rule from the
+# thing that's calling it:
+%.release.h.pch: CXXFLAGS_RELEASE:=$(CXXFLAGS_RELEASE)
+%.release.h.pch: %.h
+	$(ECHO) Compiling $@
+	$(VERB) rm -f $@-*
+	$(VERB) $(CLANG_EXE) $(CXXFLAGS_RELEASE) -MMD -MP -MF $<.d -x c++-header $< -o $@
 
 CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
 $(CODEGEN_SRCS:.cpp=.o): CXXFLAGS += -include codegen/irgen.h
