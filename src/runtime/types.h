@@ -129,16 +129,14 @@ public:
     StlCompatAllocator() {}
     template <class U> StlCompatAllocator(const StlCompatAllocator<U>& other) {}
 
-    template <class U> struct rebind {
-        typedef StlCompatAllocator<U> other;
-    };
+    template <class U> struct rebind { typedef StlCompatAllocator<U> other; };
 
     pointer allocate(size_t n) {
         size_t to_allocate = n * sizeof(value_type);
         // assert(to_allocate < (1<<16));
 
         ConservativeWrapper* rtn = new (to_allocate) ConservativeWrapper(to_allocate);
-        return (pointer) & rtn->data[0];
+        return (pointer)&rtn->data[0];
     }
 
     void deallocate(pointer p, size_t n) {

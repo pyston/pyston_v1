@@ -111,7 +111,7 @@ void collectStackRoots(TraceStack* stack) {
         unw_proc_info_t pip;
         unw_get_proc_info(&cursor, &pip);
 
-        if (pip.start_ip == (uintptr_t) & __libc_start_main) {
+        if (pip.start_ip == (uintptr_t)&__libc_start_main) {
             break;
         }
 

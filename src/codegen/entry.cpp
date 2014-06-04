@@ -80,14 +80,14 @@ static llvm::Module* loadStdlib() {
         // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
         assert(STDLIB_BC_START[0] == 'B');
         assert(STDLIB_BC_START[1] == 'C');
-        intptr_t size = (intptr_t) & STDLIB_BC_SIZE;
+        intptr_t size = (intptr_t)&STDLIB_BC_SIZE;
         assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
         data = llvm::StringRef(STDLIB_BC_START, size);
     } else {
         // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
         assert(STRIPPED_STDLIB_BC_START[0] == 'B');
         assert(STRIPPED_STDLIB_BC_START[1] == 'C');
-        intptr_t size = (intptr_t) & STRIPPED_STDLIB_BC_SIZE;
+        intptr_t size = (intptr_t)&STRIPPED_STDLIB_BC_SIZE;
         assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
         data = llvm::StringRef(STRIPPED_STDLIB_BC_START, size);
     }

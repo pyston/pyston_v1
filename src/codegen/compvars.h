@@ -132,9 +132,7 @@ public:
     }
 };
 
-template <class V> class ValuedCompilerType : public _ValuedCompilerType<V> {
-public:
-};
+template <class V> class ValuedCompilerType : public _ValuedCompilerType<V> { public: };
 
 template <> class ValuedCompilerType<llvm::Value*> : public _ValuedCompilerType<llvm::Value*> {
 public:

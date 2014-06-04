@@ -182,7 +182,7 @@ Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
             // Typically this happens if we need to propagate the 'value' of an
             // maybe-defined Python variable; we won't actually read from it if
             // it's undef, since it should be guarded by an !is_defined variable.
-            return (int64_t) - 1337;
+            return (int64_t)-1337;
         case llvm::Value::ConstantPointerNullVal:
             return (int64_t)0;
         default:
@@ -328,7 +328,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
 #define SET(v) set(symbols, inst, (v))
 
             if (llvm::LandingPadInst* lpad = llvm::dyn_cast<llvm::LandingPadInst>(inst)) {
-                SET((intptr_t) & landingpad_value);
+                SET((intptr_t)&landingpad_value);
                 continue;
             } else if (llvm::ExtractValueInst* ev = llvm::dyn_cast<llvm::ExtractValueInst>(inst)) {
                 Val r = fetch(ev->getAggregateOperand(), dl, symbols);
@@ -660,8 +660,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                         prevblock = curblock;
                         curblock = invoke->getNormalDest();
                     }
-                }
-                catch (Box* e) {
+                } catch (Box* e) {
                     if (VERBOSITY("interpreter") >= 2) {
                         printf("Caught exception: %p\n", e);
                     }
