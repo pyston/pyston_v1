@@ -678,7 +678,7 @@ pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 pyston_pprof: $(OPT_OBJS) codegen/profiling/pprof.release.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
-pyston_prof: $(PROFILE_OBJS) $(LLVM_RELEASE_DEPS)
+pyston_prof: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS) -pg -o $@
 pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
