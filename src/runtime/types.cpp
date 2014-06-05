@@ -43,9 +43,9 @@ BoxIterator& BoxIterator::operator++() {
     static std::string hasnext_str("__hasnext__");
     static std::string next_str("next");
 
-    Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, 0, NULL, NULL, NULL, NULL);
+    Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     if (nonzero(hasnext)) {
-        value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, 0, NULL, NULL, NULL, NULL);
+        value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         iter = nullptr;
         value = nullptr;
@@ -56,7 +56,7 @@ BoxIterator& BoxIterator::operator++() {
 llvm::iterator_range<BoxIterator> Box::pyElements() {
     static std::string iter_str("__iter__");
 
-    Box* iter = callattr(const_cast<Box*>(this), &iter_str, true, 0, NULL, NULL, NULL, NULL);
+    Box* iter = callattr(const_cast<Box*>(this), &iter_str, true, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     if (iter) {
         return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
     }
@@ -466,8 +466,11 @@ void setupRuntime() {
     object_cls->giveAttr("__new__", new BoxedFunction(object_new));
     object_cls->freeze();
 
+    auto typeCallObj = boxRTFunction((void*)typeCall, NULL, 1, true);
+    typeCallObj->internal_callable = &typeCallInternal;
+    type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
+
     type_cls->giveAttr("__name__", boxStrConstant("type"));
-    type_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)typeCall, NULL, 1, true)));
     type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNew, NULL, 2, true)));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, NULL, 1, true)));
     type_cls->giveAttr("__str__", type_cls->getattr("__repr__"));

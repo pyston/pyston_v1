@@ -76,9 +76,9 @@ public:
                                             const std::vector<llvm::Value*>& args, ExcInfo exc_info) = 0;
 };
 
-CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                                  EffortLevel::EffortLevel effort, FunctionSignature* sig,
-                                  const std::vector<AST_expr*>& arg_names, std::string nameprefix);
+CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+                            EffortLevel::EffortLevel effort, FunctionSignature* sig,
+                            const std::vector<AST_expr*>& arg_names, std::string nameprefix);
 
 class TypeRecorder;
 class OpInfo {

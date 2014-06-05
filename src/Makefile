@@ -273,7 +273,7 @@ pyston_all: pyston_dbg pyston pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o)
 
 ALL_HEADERS := $(wildcard */*.h) $(wildcard */*/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
-	$(ECHO) Computing tags...
+	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -isystem $(GTEST_DIR)/include

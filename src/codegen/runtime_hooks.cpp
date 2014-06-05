@@ -132,6 +132,9 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.llvm_str_type_ptr = lookupFunction("boxStringPtr")->arg_begin()->getType();
 
+    auto vector_type = g.stdlib_module->getTypeByName("class.std::vector");
+    assert(vector_type);
+    g.vector_ptr = vector_type->getPointerTo();
 
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
@@ -185,23 +188,23 @@ void initGlobalFuncs(GlobalState& g) {
     GET(listAppendInternal);
 
     g.funcs.runtimeCall = getFunc((void*)runtimeCall, "runtimeCall");
-    g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64);
+    g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
     g.funcs.runtimeCall1
-        = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall2 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64,
+        = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall2 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                    g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall3 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64,
+    g.funcs.runtimeCall3 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                    g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
 
     g.funcs.callattr = getFunc((void*)callattr, "callattr");
     g.funcs.callattr0
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr, g.i1, g.i64);
+        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr, g.i1, g.i32);
     g.funcs.callattr1 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i64, g.llvm_value_type_ptr);
+                                g.i1, g.i32, g.llvm_value_type_ptr);
     g.funcs.callattr2 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i64, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.callattr3 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i64, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
 
     g.funcs.reoptCompiledFunc = addFunc((void*)reoptCompiledFunc, g.i8_ptr, g.i8_ptr);
     g.funcs.compilePartialFunc = addFunc((void*)compilePartialFunc, g.i8_ptr, g.i8_ptr);

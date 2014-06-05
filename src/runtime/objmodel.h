@@ -39,8 +39,9 @@ extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" bool nonzero(Box* obj);
-extern "C" Box* runtimeCall(Box*, int64_t, Box*, Box*, Box*, Box**);
-extern "C" Box* callattr(Box*, std::string*, bool, int64_t, Box*, Box*, Box*, Box**);
+extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
+extern "C" Box* callattr(Box*, std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
+                         const std::vector<const std::string*>*);
 extern "C" BoxedString* str(Box* obj);
 extern "C" Box* repr(Box* obj);
 extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
@@ -73,6 +74,9 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 class BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
 
+Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                      Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
+
 class CallRewriteArgs;
 enum LookupScope {
     CLASS_ONLY = 1,
@@ -80,7 +84,8 @@ enum LookupScope {
     CLASS_OR_INST = 3,
 };
 extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
-                                 int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+                                 ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
+                                 const std::vector<const std::string*>* keyword_names);
 
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);

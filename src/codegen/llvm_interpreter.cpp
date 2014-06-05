@@ -642,11 +642,17 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                                                              int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
                                                                           args[4].n, args[5].n, args[6].n);
                             break;
-                        case 0b1000000000:
+                        case 0b1000000000: // 512
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
                                                              int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n,
                                                                                    args[3].n, args[4].n, args[5].n,
                                                                                    args[6].n, args[7].n);
+                            break;
+                        case 0b10000000000: // 1024
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                                             int64_t, int64_t, int64_t)>(
+                                f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n, args[6].n,
+                                   args[7].n, args[8].n);
                             break;
                         default:
                             inst->dump();

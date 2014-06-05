@@ -881,10 +881,10 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
     return os.str();
 }
 
-CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                                  EffortLevel::EffortLevel effort, FunctionSignature* sig,
-                                  const std::vector<AST_expr*>& arg_names, std::string nameprefix) {
-    Timer _t("in compileFunction");
+CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+                            EffortLevel::EffortLevel effort, FunctionSignature* sig,
+                            const std::vector<AST_expr*>& arg_names, std::string nameprefix) {
+    Timer _t("in doCompile");
 
     if (VERBOSITY("irgen") >= 1)
         source->cfg->print();

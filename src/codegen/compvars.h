@@ -40,7 +40,8 @@ public:
     virtual ConcreteCompilerType* getBoxType() = 0;
     virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) = 0;
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) = 0;
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) = 0;
     virtual BoxedClass* guaranteedClass() = 0;
 };
 
@@ -93,12 +94,15 @@ public:
         abort();
     }
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
-                                       bool clsonly, const std::vector<CompilerVariable*>& args) {
+                                       bool clsonly, struct ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
         printf("callattr not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* value,
-                                   const std::vector<CompilerVariable*>& args) {
+    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* value, struct ArgPassSpec argspec,
+                                   const std::vector<CompilerVariable*>& args,
+                                   const std::vector<const std::string*>* keyword_names) {
         printf("call not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -122,7 +126,8 @@ public:
         printf("getattrType not defined for %s\n", debugName().c_str());
         abort();
     }
-    CompilerType* callType(std::vector<CompilerType*>& arg_types) override {
+    CompilerType* callType(struct ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                           const std::vector<const std::string*>* keyword_names) override {
         printf("callType not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -213,9 +218,11 @@ public:
         = 0;
     virtual void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) = 0;
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool clsonly,
-                                       const std::vector<CompilerVariable*>& args) = 0;
-    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, const std::vector<CompilerVariable*>& args)
-        = 0;
+                                       struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) = 0;
+    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
+                                   const std::vector<CompilerVariable*>& args,
+                                   const std::vector<const std::string*>* keyword_names) = 0;
     virtual void print(IREmitter& emitter, const OpInfo& info) = 0;
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
@@ -273,12 +280,14 @@ public:
         type->setattr(emitter, info, this, attr, v);
     }
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool clsonly,
-                                       const std::vector<CompilerVariable*>& args) {
-        return type->callattr(emitter, info, this, attr, clsonly, args);
+                                       struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
+        return type->callattr(emitter, info, this, attr, clsonly, argspec, args, keyword_names);
     }
-    CompilerVariable* call(IREmitter& emitter, const OpInfo& info,
-                           const std::vector<CompilerVariable*>& args) override {
-        return type->call(emitter, info, this, args);
+    CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
+                           const std::vector<CompilerVariable*>& args,
+                           const std::vector<const std::string*>* keyword_names) override {
+        return type->call(emitter, info, this, argspec, args, keyword_names);
     }
     void print(IREmitter& emitter, const OpInfo& info) override { type->print(emitter, info, this); }
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) override {

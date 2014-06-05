@@ -190,6 +190,17 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock) {
     return new IREmitterImpl(irstate, curblock);
 }
 
+static std::unordered_map<AST_expr*, std::vector<const std::string*>*> made_keyword_storage;
+static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
+    auto it = made_keyword_storage.find(node);
+    if (it != made_keyword_storage.end())
+        return it->second;
+
+    auto rtn = new std::vector<const std::string*>();
+    made_keyword_storage.insert(it, std::make_pair(node, rtn));
+    return rtn;
+}
+
 class IRGeneratorImpl : public IRGenerator {
 private:
     IRGenState* irstate;
@@ -623,10 +634,6 @@ private:
     CompilerVariable* evalCall(AST_Call* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        assert(!node->starargs);
-        assert(!node->kwargs);
-        assert(!node->keywords.size());
-
         bool is_callattr;
         bool callattr_clsonly = false;
         std::string* attr = NULL;
@@ -649,28 +656,48 @@ private:
         }
 
         std::vector<CompilerVariable*> args;
+        std::vector<const std::string*>* keyword_names;
+        if (node->keywords.size()) {
+            keyword_names = getKeywordNameStorage(node);
+        } else {
+            keyword_names = NULL;
+        }
+
         for (int i = 0; i < node->args.size(); i++) {
             CompilerVariable* a = evalExpr(node->args[i], exc_info);
             args.push_back(a);
         }
+
+        for (int i = 0; i < node->keywords.size(); i++) {
+            CompilerVariable* a = evalExpr(node->keywords[i]->value, exc_info);
+            args.push_back(a);
+            keyword_names->push_back(&node->keywords[i]->arg);
+        }
+
+        if (node->starargs)
+            args.push_back(evalExpr(node->starargs, exc_info));
+        if (node->kwargs)
+            args.push_back(evalExpr(node->kwargs, exc_info));
+
+        struct ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs != NULL,
+                                   node->kwargs != NULL);
+
 
         // if (VERBOSITY("irgen") >= 1)
         //_addAnnotation("before_call");
 
         CompilerVariable* rtn;
         if (is_callattr) {
-            rtn = func->callattr(emitter, getOpInfoForNode(node, exc_info), attr, callattr_clsonly, args);
+            rtn = func->callattr(emitter, getOpInfoForNode(node, exc_info), attr, callattr_clsonly, argspec, args,
+                                 keyword_names);
         } else {
-            rtn = func->call(emitter, getOpInfoForNode(node, exc_info), args);
+            rtn = func->call(emitter, getOpInfoForNode(node, exc_info), argspec, args, keyword_names);
         }
 
         func->decvref(emitter);
         for (int i = 0; i < args.size(); i++) {
             args[i]->decvref(emitter);
         }
-
-        // if (VERBOSITY("irgen") >= 1)
-        //_addAnnotation("end_of_call");
 
         return rtn;
     }
@@ -693,7 +720,7 @@ private:
                 args.push_back(key);
                 args.push_back(value);
                 // TODO could use the internal _listAppend function to avoid incref/decref'ing None
-                CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(exc_info), args);
+                CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(exc_info), ArgPassSpec(2), args, NULL);
                 rtn->decvref(emitter);
 
                 key->decvref(emitter);

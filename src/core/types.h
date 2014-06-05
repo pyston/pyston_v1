@@ -32,6 +32,31 @@ class Value;
 
 namespace pyston {
 
+struct ArgPassSpec {
+    bool has_starargs : 1;
+    bool has_kwargs : 1;
+    unsigned int num_keywords : 14;
+    unsigned int num_args : 16;
+
+    static const int MAX_ARGS = (1 << 16) - 1;
+    static const int MAX_KEYWORDS = (1 << 14) - 1;
+
+    explicit ArgPassSpec(int num_args) : has_starargs(false), has_kwargs(false), num_keywords(0), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_keywords <= MAX_KEYWORDS);
+    }
+    explicit ArgPassSpec(int num_args, int num_keywords, bool has_starargs, bool has_kwargs)
+        : has_starargs(has_starargs), has_kwargs(has_kwargs), num_keywords(num_keywords), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_keywords <= MAX_KEYWORDS);
+    }
+
+    int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
+
+    uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
+};
+static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
+
 class GCVisitor {
 public:
     virtual ~GCVisitor() {}
@@ -129,20 +154,30 @@ public:
 
 struct FunctionSignature {
     ConcreteCompilerType* rtn_type;
+    const std::vector<AST_expr*>* arg_names;
     std::vector<ConcreteCompilerType*> arg_types;
-    bool is_vararg;
+    int ndefaults;
+    bool takes_varargs, takes_kwargs;
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, bool is_vararg) : rtn_type(rtn_type), is_vararg(is_vararg) {}
+    FunctionSignature(ConcreteCompilerType* rtn_type, const std::vector<AST_expr*>* arg_names, int ndefaults,
+                      bool takes_varargs, bool takes_kwargs)
+        : rtn_type(rtn_type), arg_names(arg_names), ndefaults(ndefaults), takes_varargs(takes_varargs),
+          takes_kwargs(takes_kwargs) {}
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2,
-                      bool is_vararg)
-        : rtn_type(rtn_type), is_vararg(is_vararg) {
+    FunctionSignature(ConcreteCompilerType* rtn_type, const std::vector<AST_expr*>* arg_names,
+                      ConcreteCompilerType* arg1, ConcreteCompilerType* arg2, int ndefaults, bool takes_varargs,
+                      bool takes_kwargs)
+        : rtn_type(rtn_type), arg_names(arg_names), ndefaults(ndefaults), takes_varargs(takes_varargs),
+          takes_kwargs(takes_kwargs) {
         arg_types.push_back(arg1);
         arg_types.push_back(arg2);
     }
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg)
-        : rtn_type(rtn_type), arg_types(arg_types), is_vararg(is_vararg) {}
+    FunctionSignature(ConcreteCompilerType* rtn_type, const std::vector<AST_expr*>* arg_names,
+                      std::vector<ConcreteCompilerType*>& arg_types, int ndefaults, bool takes_varargs,
+                      bool takes_kwargs)
+        : rtn_type(rtn_type), arg_names(arg_names), arg_types(arg_types), ndefaults(ndefaults),
+          takes_varargs(takes_varargs), takes_kwargs(takes_kwargs) {}
 };
 
 struct CompiledFunction {
@@ -190,12 +225,22 @@ public:
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
         : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
 };
+
 typedef std::vector<CompiledFunction*> FunctionList;
+class CallRewriteArgs;
 struct CLFunction {
     SourceInfo* source;
     FunctionList
     versions; // any compiled versions along with their type parameters; in order from most preferred to least
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
+
+    // Functions can provide an "internal" version, which will get called instead
+    // of the normal dispatch through the functionlist.
+    // This can be used to implement functions which know how to rewrite themselves,
+    // such as typeCall.
+    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+                                     const std::vector<const std::string*>*);
+    InternalCallable internal_callable = NULL;
 
     CLFunction(SourceInfo* source) : source(source) {}
 
@@ -215,14 +260,20 @@ struct CLFunction {
 };
 
 extern "C" CLFunction* createRTFunction();
-extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
+extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs = false,
+                                     bool takes_kwargs = false);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs = false,
+                   bool takes_kwargs = false);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg);
+                   const std::vector<ConcreteCompilerType*>& arg_types, bool takes_varargs = false,
+                   bool takes_kwargs = false);
 CLFunction* unboxRTFunction(Box*);
-// extern "C" CLFunction* boxRTFunctionVariadic(const char* name, int nargs_min, int nargs_max, void* f);
-extern "C" CompiledFunction* resolveCLFunc(CLFunction* f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
-extern "C" Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+
+// Compiles a new version of the function with the given signature and adds it to the list;
+// should only be called after checking to see if the other versions would work.
+CompiledFunction* compileFunction(CLFunction* f, FunctionSignature* sig, EffortLevel::EffortLevel effort,
+                                  const OSREntryDescriptor* entry);
+EffortLevel::EffortLevel initialEffort();
 
 typedef bool i1;
 typedef int64_t i64;

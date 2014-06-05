@@ -40,7 +40,8 @@ extern "C" Box* dir1(Box* obj) {
     BoxedList* result = nullptr;
     // If __dir__ is present just call it and return what it returns
     static std::string attr_dir = "__dir__";
-    Box* dir_result = callattrInternal(obj, &attr_dir, CLASS_ONLY, nullptr, 0, nullptr, nullptr, nullptr, nullptr);
+    Box* dir_result = callattrInternal(obj, &attr_dir, CLASS_ONLY, nullptr, ArgPassSpec(0), nullptr, nullptr, nullptr,
+                                       nullptr, nullptr);
     if (dir_result && dir_result->cls == list_cls) {
         return dir_result;
     }
@@ -366,7 +367,7 @@ Box* hasattr(Box* obj, Box* _str) {
 Box* map2(Box* f, Box* container) {
     Box* rtn = new BoxedList();
     for (Box* e : container->pyElements()) {
-        listAppendInternal(rtn, runtimeCall(f, 1, e, NULL, NULL, NULL));
+        listAppendInternal(rtn, runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL));
     }
     return rtn;
 }
