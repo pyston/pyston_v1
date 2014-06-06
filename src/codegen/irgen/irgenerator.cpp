@@ -1369,6 +1369,12 @@ private:
                 CompilerVariable* func = makeFunction(emitter, cl);
                 cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
                 func->decvref(emitter);
+            } else if (type == AST_TYPE::Expr) {
+                static const std::string docstring_str("__doc__");
+                AST_Expr* docstring_expr = ast_cast<AST_Expr>(node->body[i]);
+                CompilerVariable* docstring = evalExpr(docstring_expr->value, exc_info);
+                cls->setattr(emitter, getEmptyOpInfo(exc_info), &docstring_str, docstring);
+                docstring->decvref(emitter);
             } else {
                 RELEASE_ASSERT(node->body[i]->type == AST_TYPE::Pass, "%d", type);
             }
