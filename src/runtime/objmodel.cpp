@@ -2828,7 +2828,11 @@ extern "C" Box* import(const std::string* name) {
 
         bool exists;
         llvm::error_code code = llvm::sys::fs::exists(joined_path.str(), exists);
+#if LLVMREV < 210072
         assert(code == 0);
+#else
+        assert(!code);
+#endif
         if (!exists)
             continue;
 

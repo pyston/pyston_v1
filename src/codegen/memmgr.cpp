@@ -187,7 +187,11 @@ error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGrou
         }
     }
 
+#if LLVMREV < 209952
     return error_code::success();
+#else
+    return error_code();
+#endif
 }
 
 void PystonMemoryManager::invalidateInstructionCache() {
