@@ -1531,7 +1531,7 @@ extern "C" Box* callattr(Box* obj, std::string* attr, bool clsonly, ArgPassSpec 
     assert(attr);
 
     int num_orig_args = 4 + std::min(4, npassed_args);
-    if (keyword_names)
+    if (argspec.num_keywords)
         num_orig_args++;
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, 2, "callattr"));
