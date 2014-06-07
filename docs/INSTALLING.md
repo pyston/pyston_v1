@@ -181,6 +181,7 @@ gold is highly recommended as a faster linker, and Pyston contains build-system 
 
 ```
 cd ~/pyston_deps
+sudo apt-get install bison
 wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
 tar xvf binutils-2.24.tar.gz
 mkdir binutils-2.24-build
@@ -188,8 +189,6 @@ cd binutils-2.24-build
 ../binutils-2.24/configure --enable-gold --enable-plugins --disable-werror
 make all-gold -j4
 ```
-
-If that last step fails due to complaints about YYSTYPE, try upgrading or installing bison (`sudo apt-get install bison`), removing the binutils-2.24-build directory, and configure + make again.
 
 ### perf
 The `perf` tool is the best way we've found to profile JIT'd code; you can find more details in docs/PROFILING.
@@ -200,3 +199,11 @@ sudo apt-get install linux-tools-`uname -r`
 # may need to strip off the -generic from that last one
 ```
 
+### rlwrap
+The Pyston repl (`make run`) doesn't currently support any typical terminal features; it simply reads stdin as a raw stream.  Some day we will add it, but for now you can use "rlwrap" to provide these features as a wrapper around Pyston.  Simply
+
+```
+sudo apt-get install rlwrap
+```
+
+and when you do `make run`, the Make system will invoke rlwrap.  If you want to invoke the repl manually, you can do `rlwrap ./pyston`

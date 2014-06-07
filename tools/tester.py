@@ -106,6 +106,9 @@ def run_test(fn, check_stats, run_memcheck):
     jit_args = ["-csrq"] + EXTRA_JIT_ARGS
     expected = "success"
     for l in open(fn):
+        l = l.strip()
+        if not l:
+            continue
         if not l.startswith("#"):
             break
         if l.startswith("# statcheck:"):

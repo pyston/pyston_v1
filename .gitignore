@@ -40,3 +40,5 @@ find_problem.status
 
 *.so
 *.pch
+
+compile.log

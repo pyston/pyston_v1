@@ -1,1 +1,8 @@
 set wildignore+=*.expected_cache,*.pyc,*.out,*.bc,*.d,*.o
+
+let g:pyston_top = expand('<sfile>:p:h')
+command! M execute ":make -C " . g:pyston_top . "/src -j1 COLOR=0 USE_DISTCC=0"
+command! L execute ":cfile " . g:pyston_top . "/src/compile.log"
+
+ca m M
+ca l L

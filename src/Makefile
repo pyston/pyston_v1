@@ -678,7 +678,7 @@ pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 pyston_pprof: $(OPT_OBJS) codegen/profiling/pprof.release.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
-pyston_prof: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
+pyston_prof: $(PROFILE_OBJS) $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS) -pg -o $@
 pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
@@ -709,8 +709,12 @@ endef
 RUN_DEPS := ext
 
 .PHONY: run run_release profile
-run: pyston_dbg $(RUN_DEPS)
-	./pyston_dbg $(ARGS)
+run: $(RUN_DEPS)
+	if which rlwrap >/dev/null; then\
+		rlwrap ./pyston_dbg $(ARGS) ;\
+	else \
+		./pyston_dbg $(ARGS) ;\
+	fi
 run_release: pyston $(RUN_DEPS)
 	./pyston $(ARGS)
 profile: pyston_profile $(RUN_DEPS)
@@ -822,12 +826,14 @@ opreportcg:
 watch_%:
 	@ ( ulimit -t 60; ulimit -d $(MAK_MEM_KB); ulimit -v $(MAK_MEM_KB); \
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
-		clear; $(MAKE) $$TARGET; true; \
+		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find .. \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET; done )
+		Makefile $$(find .. \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET $(WATCH_ARGS); done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
 		# -r . ; do clear; $(MAKE) $(patsubst watch_%,%,$@); done
 watch: watch_pyston_dbg
+watch_vim:
+	$(MAKE) watch WATCH_ARGS='COLOR=0 USE_DISTCC=0 -j1 2>&1 | tee compile.log'
 wdbg_%:
 	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_CMDS="--ex quit"
 
