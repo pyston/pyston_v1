@@ -447,14 +447,7 @@ extern "C" Box* intHash(BoxedInt* self) {
     return self;
 }
 
-extern "C" Box* intNew1(Box* _cls) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
-
-    return boxInt(0);
-}
-
-extern "C" Box* intNew2(Box* _cls, Box* val) {
+extern "C" Box* intNew(Box* _cls, Box* val) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
@@ -489,12 +482,7 @@ extern "C" Box* intNew2(Box* _cls, Box* val) {
     return rtn;
 }
 
-extern "C" Box* intInit1(Box* self) {
-    // int.__init__ will actually let you call it with anything
-    return None;
-}
-
-extern "C" Box* intInit2(BoxedInt* self, Box* val) {
+extern "C" Box* intInit(BoxedInt* self, Box* val, Box* args) {
     // int.__init__ will actually let you call it with anything
     return None;
 }
@@ -510,10 +498,10 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction();
-    addRTFunction(cl, int_func, BOXED_INT, v_ii, false);
-    addRTFunction(cl, float_func, BOXED_FLOAT, v_if, false);
-    addRTFunction(cl, boxed_func, NULL, v_iu, false);
+    CLFunction* cl = createRTFunction(2, 0, false, false);
+    addRTFunction(cl, int_func, BOXED_INT, v_ii);
+    addRTFunction(cl, float_func, BOXED_FLOAT, v_if);
+    addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
     int_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
@@ -523,15 +511,20 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     v_ii.push_back(BOXED_INT);
     v_ii.push_back(BOXED_INT);
     v_iu.push_back(BOXED_INT);
-    v_iu.push_back(NULL);
+    v_iu.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction();
-    addRTFunction(cl, int_func, rtn_type, v_ii, false);
-    addRTFunction(cl, boxed_func, NULL, v_iu, false);
+    CLFunction* cl = createRTFunction(2, 0, false, false);
+    addRTFunction(cl, int_func, rtn_type, v_ii);
+    addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
     int_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
 void setupInt() {
+    for (int i = 0; i < NUM_INTERNED_INTS; i++) {
+        interned_ints[i] = new BoxedInt(int_cls, i);
+        gc::registerStaticRootObj(interned_ints[i]);
+    }
+
     int_cls->giveAttr("__name__", boxStrConstant("int"));
 
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
@@ -552,29 +545,22 @@ void setupInt() {
     _addFuncIntUnknown("__lshift__", BOXED_INT, (void*)intLShiftInt, (void*)intLShift);
     _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
 
-    int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1, false)));
-    int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1, false)));
-    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1, false)));
-    int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1, false)));
-    int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1, false)));
+    int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1)));
+    int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1)));
+    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1)));
+    int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
+    int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
     int_cls->giveAttr("__str__", int_cls->getattr("__repr__"));
-    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1, false)));
-    int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2, false)));
+    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
+    int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2)));
 
-    CLFunction* __new__ = boxRTFunction((void*)intNew1, NULL, 1, false);
-    addRTFunction(__new__, (void*)intNew2, NULL, 2, false);
-    int_cls->giveAttr("__new__", new BoxedFunction(__new__));
+    int_cls->giveAttr("__new__",
+                      new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) }));
 
-    CLFunction* __init__ = boxRTFunction((void*)intInit1, NULL, 1, false);
-    addRTFunction(__init__, (void*)intInit2, NULL, 2, false);
-    int_cls->giveAttr("__init__", new BoxedFunction(__init__));
+    int_cls->giveAttr("__init__",
+                      new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
 
     int_cls->freeze();
-
-    for (int i = 0; i < NUM_INTERNED_INTS; i++) {
-        interned_ints[i] = new BoxedInt(int_cls, i);
-        gc::registerStaticRootObj(interned_ints[i]);
-    }
 }
 
 void teardownInt() {

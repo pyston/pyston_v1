@@ -293,12 +293,7 @@ extern "C" Box* strNonzero(BoxedString* self) {
     return boxBool(self->s.size() != 0);
 }
 
-extern "C" Box* strNew1(BoxedClass* cls) {
-    assert(cls == str_cls);
-    return boxStrConstant("");
-}
-
-extern "C" Box* strNew2(BoxedClass* cls, Box* obj) {
+extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
     assert(cls == str_cls);
 
     return str(obj);
@@ -354,29 +349,7 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     }
 }
 
-Box* strSplit1(BoxedString* self) {
-    assert(self->cls == str_cls);
-
-    BoxedList* rtn = new BoxedList();
-
-    std::ostringstream os("");
-    for (char c : self->s) {
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') {
-            if (os.tellp()) {
-                listAppendInternal(rtn, boxString(os.str()));
-                os.str("");
-            }
-        } else {
-            os << c;
-        }
-    }
-    if (os.tellp()) {
-        listAppendInternal(rtn, boxString(os.str()));
-    }
-    return rtn;
-}
-
-Box* strSplit2(BoxedString* self, BoxedString* sep) {
+Box* strSplit(BoxedString* self, BoxedString* sep) {
     assert(self->cls == str_cls);
 
     if (sep->cls == str_cls) {
@@ -392,58 +365,59 @@ Box* strSplit2(BoxedString* self, BoxedString* sep) {
             raiseExcHelper(ValueError, "empty separator");
         }
     } else if (sep->cls == none_cls) {
-        return strSplit1(self);
+        BoxedList* rtn = new BoxedList();
+
+        std::ostringstream os("");
+        for (char c : self->s) {
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') {
+                if (os.tellp()) {
+                    listAppendInternal(rtn, boxString(os.str()));
+                    os.str("");
+                }
+            } else {
+                os << c;
+            }
+        }
+        if (os.tellp()) {
+            listAppendInternal(rtn, boxString(os.str()));
+        }
+        return rtn;
     } else {
         raiseExcHelper(TypeError, "expected a character buffer object");
     }
 }
 
-Box* strStrip1(BoxedString* self) {
-    assert(self->cls == str_cls);
-    return new BoxedString(llvm::StringRef(self->s).trim(" \t\n\r\f\v"));
-}
-
-Box* strStrip2(BoxedString* self, Box* chars) {
+Box* strStrip(BoxedString* self, Box* chars) {
     assert(self->cls == str_cls);
 
     if (chars->cls == str_cls) {
         return new BoxedString(llvm::StringRef(self->s).trim(static_cast<BoxedString*>(chars)->s));
     } else if (chars->cls == none_cls) {
-        return strStrip1(self);
+        return new BoxedString(llvm::StringRef(self->s).trim(" \t\n\r\f\v"));
     } else {
         raiseExcHelper(TypeError, "strip arg must be None, str or unicode");
     }
 }
 
-Box* strLStrip1(BoxedString* self) {
-    assert(self->cls == str_cls);
-    return new BoxedString(llvm::StringRef(self->s).ltrim(" \t\n\r\f\v"));
-}
-
-Box* strLStrip2(BoxedString* self, Box* chars) {
+Box* strLStrip(BoxedString* self, Box* chars) {
     assert(self->cls == str_cls);
 
     if (chars->cls == str_cls) {
         return new BoxedString(llvm::StringRef(self->s).ltrim(static_cast<BoxedString*>(chars)->s));
     } else if (chars->cls == none_cls) {
-        return strLStrip1(self);
+        return new BoxedString(llvm::StringRef(self->s).ltrim(" \t\n\r\f\v"));
     } else {
         raiseExcHelper(TypeError, "lstrip arg must be None, str or unicode");
     }
 }
 
-Box* strRStrip1(BoxedString* self) {
-    assert(self->cls == str_cls);
-    return new BoxedString(llvm::StringRef(self->s).rtrim(" \t\n\r\f\v"));
-}
-
-Box* strRStrip2(BoxedString* self, Box* chars) {
+Box* strRStrip(BoxedString* self, Box* chars) {
     assert(self->cls == str_cls);
 
     if (chars->cls == str_cls) {
         return new BoxedString(llvm::StringRef(self->s).rtrim(static_cast<BoxedString*>(chars)->s));
     } else if (chars->cls == none_cls) {
-        return strRStrip1(self);
+        return new BoxedString(llvm::StringRef(self->s).rtrim(" \t\n\r\f\v"));
     } else {
         raiseExcHelper(TypeError, "rstrip arg must be None, str or unicode");
     }
@@ -569,58 +543,47 @@ void setupStr() {
     gc::registerStaticRootObj(str_iterator_cls);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
     str_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, NULL, 1, false)));
-    str_iterator_cls->giveAttr("next",
-                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1, false)));
+                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
+    str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
 
     str_cls->giveAttr("__name__", boxStrConstant("str"));
 
-    str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, NULL, 1, false)));
-    str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, NULL, 1, false)));
-    str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, NULL, 1, false)));
-    str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, NULL, 1, false)));
-    str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, NULL, 1, false)));
+    str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
+    str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));
+    str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1)));
+    str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, BOXED_INT, 1)));
+    str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
 
-    str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1, false)));
+    str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
 
-    CLFunction* strStrip = boxRTFunction((void*)strStrip1, STR, 1, false);
-    addRTFunction(strStrip, (void*)strStrip2, STR, 2, false);
-    str_cls->giveAttr("strip", new BoxedFunction(strStrip));
+    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 2, 1, false, false), { None }));
 
-    CLFunction* strLStrip = boxRTFunction((void*)strLStrip1, STR, 1, false);
-    addRTFunction(strLStrip, (void*)strLStrip2, STR, 2, false);
-    str_cls->giveAttr("lstrip", new BoxedFunction(strLStrip));
+    str_cls->giveAttr("lstrip", new BoxedFunction(boxRTFunction((void*)strLStrip, STR, 2, 1, false, false), { None }));
 
-    CLFunction* strRStrip = boxRTFunction((void*)strRStrip1, STR, 1, false);
-    addRTFunction(strRStrip, (void*)strRStrip2, STR, 2, false);
-    str_cls->giveAttr("rstrip", new BoxedFunction(strRStrip));
+    str_cls->giveAttr("rstrip", new BoxedFunction(boxRTFunction((void*)strRStrip, STR, 2, 1, false, false), { None }));
 
-    str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2, false)));
+    str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
 
-    str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, NULL, 2, false)));
-    str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, NULL, 2, false)));
-    str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, NULL, 2, false)));
-    str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, NULL, 2, false)));
-    str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, NULL, 2, false)));
+    str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
+    str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));
+    str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
+    str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2)));
+    str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
 
-    str_cls->giveAttr("__iter__",
-                      new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1, false)));
+    str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
 
-    str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, NULL, 2, false)));
+    str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2)));
 
-    CLFunction* strSplit = boxRTFunction((void*)strSplit1, LIST, 1, false);
-    addRTFunction(strSplit, (void*)strSplit2, LIST, 2, false);
-    str_cls->giveAttr("split", new BoxedFunction(strSplit));
+    str_cls->giveAttr("split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 2, 1, false, false), { None }));
     str_cls->giveAttr("rsplit", str_cls->getattr("split"));
 
-    CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2, false);
-    addRTFunction(count, (void*)strCount2, BOXED_INT, 2, false);
+    CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
+    addRTFunction(count, (void*)strCount2, BOXED_INT);
     str_cls->giveAttr("count", new BoxedFunction(count));
 
-    CLFunction* __new__ = boxRTFunction((void*)strNew1, NULL, 1, false);
-    addRTFunction(__new__, (void*)strNew2, NULL, 2, false);
-    str_cls->giveAttr("__new__", new BoxedFunction(__new__));
+    str_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false),
+                                                   { boxStrConstant("") }));
 
     str_cls->freeze();
 }

@@ -68,12 +68,17 @@ AST_arguments* SourceInfo::getArgsAST() {
 
 const std::vector<AST_expr*>& SourceInfo::getArgNames() {
     static std::vector<AST_expr*> empty;
-    assert(this);
 
     AST_arguments* args = getArgsAST();
     if (args == NULL)
         return empty;
     return args->args;
+}
+
+const std::vector<AST_expr*>* CLFunction::getArgNames() {
+    if (!source)
+        return NULL;
+    return &source->getArgNames();
 }
 
 const std::vector<AST_stmt*>& SourceInfo::getBody() {
@@ -135,10 +140,10 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-CompiledFunction* compileFunction(CLFunction* f, FunctionSignature* sig, EffortLevel::EffortLevel effort,
+CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
                                   const OSREntryDescriptor* entry) {
     Timer _t("for compileFunction()");
-    assert(sig);
+    assert(spec);
 
     ASSERT(f->versions.size() < 20, "%ld", f->versions.size());
     SourceInfo* source = f->source;
@@ -160,15 +165,15 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSignature* sig, EffortL
         llvm::raw_string_ostream ss(s);
 
         ss << "\033[34;1mJIT'ing " << name << " with signature (";
-        for (int i = 0; i < sig->arg_types.size(); i++) {
+        for (int i = 0; i < spec->arg_types.size(); i++) {
             if (i > 0)
                 ss << ", ";
-            ss << sig->arg_types[i]->debugName();
-            // sig->arg_types[i]->llvmType()->print(ss);
+            ss << spec->arg_types[i]->debugName();
+            // spec->arg_types[i]->llvmType()->print(ss);
         }
         ss << ") -> ";
-        ss << sig->rtn_type->debugName();
-        // sig->rtn_type->llvmType()->print(ss);
+        ss << spec->rtn_type->debugName();
+        // spec->rtn_type->llvmType()->print(ss);
         ss << " at effort level " << effort;
         if (entry != NULL) {
             ss << "\nDoing OSR-entry partial compile, starting with backedge to block " << entry->backedge->target->idx
@@ -187,7 +192,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSignature* sig, EffortL
                                            source->scoping->getScopeInfoForNode(source->ast));
     }
 
-    CompiledFunction* cf = doCompile(source, entry, effort, sig, arg_names, name);
+    CompiledFunction* cf = doCompile(source, entry, effort, spec, arg_names, name);
 
     compileIR(cf, effort);
     f->addVersion(cf);
@@ -244,12 +249,11 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     si->liveness = computeLivenessInfo(si->cfg);
     si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 
-    CLFunction* cl_f = new CLFunction(si);
+    CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
     EffortLevel::EffortLevel effort = initialEffort();
 
-    CompiledFunction* cf
-        = compileFunction(cl_f, new FunctionSignature(VOID, &si->getArgNames(), 0, false, false), effort, NULL);
+    CompiledFunction* cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
     assert(cf->clfunc->versions.size());
 
     _t.end();
@@ -268,7 +272,7 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel
 
     assert(cf);
     assert(cf->entry_descriptor == NULL && "We can't reopt an osr-entry compile!");
-    assert(cf->sig);
+    assert(cf->spec);
 
     CLFunction* clfunc = cf->clfunc;
     assert(clfunc);
@@ -281,13 +285,18 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel
             versions.erase(versions.begin() + i);
 
             CompiledFunction* new_cf
-                = compileFunction(clfunc, cf->sig, new_effort,
+                = compileFunction(clfunc, cf->spec, new_effort,
                                   NULL); // this pushes the new CompiledVersion to the back of the version list
 
             cf->dependent_callsites.invalidateAll();
 
             return new_cf;
         }
+    }
+
+    printf("Couldn't find a version; %ld exist:\n", versions.size());
+    for (auto cf : versions) {
+        printf("%p\n", cf);
     }
     assert(0 && "Couldn't find a version to reopt! Probably reopt'd already?");
     abort();
@@ -311,7 +320,7 @@ void* compilePartialFunc(OSRExit* exit) {
         // EffortLevel::EffortLevel new_effort = (EffortLevel::EffortLevel)(exit->parent_cf->effort + 1);
         // new_effort = EffortLevel::MAXIMAL;
         CompiledFunction* compiled
-            = compileFunction(exit->parent_cf->clfunc, exit->parent_cf->sig, new_effort, exit->entry);
+            = compileFunction(exit->parent_cf->clfunc, exit->parent_cf->spec, new_effort, exit->entry);
         assert(compiled = new_cf);
     }
 
@@ -331,55 +340,56 @@ extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
     return (char*)new_cf->code;
 }
 
-CLFunction* createRTFunction() {
-    return new CLFunction(NULL);
+CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs) {
+    return new CLFunction(num_args, num_defaults, takes_varargs, takes_kwargs, NULL);
 }
 
-extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,
-                                     bool takes_kwargs) {
-    CLFunction* cl_f = createRTFunction();
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args) {
+    return boxRTFunction(f, rtn_type, num_args, 0, false, false);
+}
 
-    addRTFunction(cl_f, f, rtn_type, nargs, takes_varargs, takes_kwargs);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, int num_defaults, bool takes_varargs,
+                          bool takes_kwargs) {
+    CLFunction* cl_f = createRTFunction(num_args, num_defaults, takes_varargs, takes_kwargs);
+
+    addRTFunction(cl_f, f, rtn_type);
     return cl_f;
 }
 
-void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs,
-                   bool takes_kwargs) {
-    std::vector<ConcreteCompilerType*> arg_types(nargs, NULL);
-    return addRTFunction(cl_f, f, rtn_type, arg_types, takes_varargs, takes_kwargs);
+void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type) {
+    std::vector<ConcreteCompilerType*> arg_types(cl_f->numReceivedArgs(), UNKNOWN);
+    return addRTFunction(cl_f, f, rtn_type, arg_types);
 }
 
 static ConcreteCompilerType* processType(ConcreteCompilerType* type) {
-    if (type == NULL)
-        return UNKNOWN;
+    assert(type);
     return type;
 }
 
 void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types, bool takes_varargs, bool takes_kwargs) {
-    FunctionSignature* sig = new FunctionSignature(processType(rtn_type), NULL, 0, takes_varargs, takes_kwargs);
+                   const std::vector<ConcreteCompilerType*>& arg_types) {
+    assert(arg_types.size() == cl_f->numReceivedArgs());
+#ifndef NDEBUG
+    for (ConcreteCompilerType* t : arg_types)
+        assert(t);
+#endif
 
-    for (int i = 0; i < arg_types.size(); i++) {
-        sig->arg_types.push_back(processType(arg_types[i]));
-    }
+    FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
 
     std::vector<llvm::Type*> llvm_arg_types;
     int npassed_args = arg_types.size();
-    if (takes_varargs)
-        npassed_args++;
-    if (takes_kwargs)
-        npassed_args++;
+    assert(npassed_args == cl_f->numReceivedArgs());
     for (int i = 0; i < npassed_args; i++) {
         if (i == 3) {
-            llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
+            llvm_arg_types.push_back(g.i8_ptr->getPointerTo());
             break;
         }
-        llvm_arg_types.push_back(g.llvm_value_type_ptr);
+        llvm_arg_types.push_back(arg_types[i]->llvmType());
     }
 
     llvm::FunctionType* ft = llvm::FunctionType::get(g.llvm_value_type_ptr, llvm_arg_types, false);
 
-    cl_f->addVersion(
-        new CompiledFunction(NULL, sig, false, f, embedConstantPtr(f, ft->getPointerTo()), EffortLevel::MAXIMAL, NULL));
+    cl_f->addVersion(new CompiledFunction(NULL, spec, false, f, embedConstantPtr(f, ft->getPointerTo()),
+                                          EffortLevel::MAXIMAL, NULL));
 }
 }

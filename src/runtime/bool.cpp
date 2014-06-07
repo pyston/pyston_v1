@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/types.h"
 #include "gc/collector.h"
@@ -45,12 +46,7 @@ extern "C" Box* boolRepr(BoxedBool* v) {
     return boxStrConstant("False");
 }
 
-extern "C" Box* boolNew1(Box* cls) {
-    assert(cls == bool_cls);
-    return False;
-}
-
-extern "C" Box* boolNew2(Box* cls, Box* val) {
+extern "C" Box* boolNew(Box* cls, Box* val) {
     assert(cls == bool_cls);
 
     bool b = nonzero(val);
@@ -60,16 +56,15 @@ extern "C" Box* boolNew2(Box* cls, Box* val) {
 void setupBool() {
     bool_cls->giveAttr("__name__", boxStrConstant("bool"));
 
-    bool_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)boolInvert, NULL, 1, false)));
-    bool_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)boolPos, NULL, 1, false)));
-    bool_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)boolNeg, NULL, 1, false)));
-    bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, NULL, 1, false)));
-    bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, NULL, 1, false)));
+    bool_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)boolInvert, BOXED_INT, 1)));
+    bool_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)boolPos, BOXED_INT, 1)));
+    bool_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)boolNeg, BOXED_INT, 1)));
+    bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
+    bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
     bool_cls->giveAttr("__str__", bool_cls->getattr("__repr__"));
 
-    CLFunction* __new__ = boxRTFunction((void*)boolNew1, NULL, 1, false);
-    addRTFunction(__new__, (void*)boolNew2, NULL, 2, false);
-    bool_cls->giveAttr("__new__", new BoxedFunction(__new__));
+    bool_cls->giveAttr("__new__",
+                       new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, 1, false, false), { None }));
 
 
     bool_cls->freeze();

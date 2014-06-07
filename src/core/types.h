@@ -152,32 +152,17 @@ public:
 
 // Codegen types:
 
-struct FunctionSignature {
+struct FunctionSpecialization {
     ConcreteCompilerType* rtn_type;
-    const std::vector<AST_expr*>* arg_names;
     std::vector<ConcreteCompilerType*> arg_types;
-    int ndefaults;
-    bool takes_varargs, takes_kwargs;
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, const std::vector<AST_expr*>* arg_names, int ndefaults,
-                      bool takes_varargs, bool takes_kwargs)
-        : rtn_type(rtn_type), arg_names(arg_names), ndefaults(ndefaults), takes_varargs(takes_varargs),
-          takes_kwargs(takes_kwargs) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {}
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, const std::vector<AST_expr*>* arg_names,
-                      ConcreteCompilerType* arg1, ConcreteCompilerType* arg2, int ndefaults, bool takes_varargs,
-                      bool takes_kwargs)
-        : rtn_type(rtn_type), arg_names(arg_names), ndefaults(ndefaults), takes_varargs(takes_varargs),
-          takes_kwargs(takes_kwargs) {
-        arg_types.push_back(arg1);
-        arg_types.push_back(arg2);
-    }
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2)
+        : rtn_type(rtn_type), arg_types({ arg1, arg2 }) {}
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, const std::vector<AST_expr*>* arg_names,
-                      std::vector<ConcreteCompilerType*>& arg_types, int ndefaults, bool takes_varargs,
-                      bool takes_kwargs)
-        : rtn_type(rtn_type), arg_names(arg_names), arg_types(arg_types), ndefaults(ndefaults),
-          takes_varargs(takes_varargs), takes_kwargs(takes_kwargs) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types)
+        : rtn_type(rtn_type), arg_types(arg_types) {}
 };
 
 struct CompiledFunction {
@@ -185,7 +170,7 @@ private:
 public:
     CLFunction* clfunc;
     llvm::Function* func; // the llvm IR object
-    FunctionSignature* sig;
+    FunctionSpecialization* spec;
     const OSREntryDescriptor* entry_descriptor;
     bool is_interpreted;
 
@@ -200,10 +185,10 @@ public:
     int64_t times_called;
     ICInvalidator dependent_callsites;
 
-    CompiledFunction(llvm::Function* func, FunctionSignature* sig, bool is_interpreted, void* code,
+    CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
                      llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
                      const OSREntryDescriptor* entry_descriptor)
-        : clfunc(NULL), func(func), sig(sig), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
+        : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
           code(code), llvm_code(llvm_code), effort(effort), times_called(0) {}
 };
 
@@ -229,6 +214,10 @@ public:
 typedef std::vector<CompiledFunction*> FunctionList;
 class CallRewriteArgs;
 struct CLFunction {
+    int num_args;
+    int num_defaults;
+    bool takes_varargs, takes_kwargs;
+
     SourceInfo* source;
     FunctionList
     versions; // any compiled versions along with their type parameters; in order from most preferred to least
@@ -242,12 +231,21 @@ struct CLFunction {
                                      const std::vector<const std::string*>*);
     InternalCallable internal_callable = NULL;
 
-    CLFunction(SourceInfo* source) : source(source) {}
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
+        : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
+          source(source) {
+        assert(num_args >= num_defaults);
+    }
+
+    int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+
+    const std::vector<AST_expr*>* getArgNames();
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
         assert((source == NULL) == (compiled->func == NULL));
-        assert(compiled->sig);
+        assert(compiled->spec);
+        assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
         assert(compiled->clfunc == NULL);
         assert(compiled->is_interpreted == (compiled->code == NULL));
         assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
@@ -259,19 +257,18 @@ struct CLFunction {
     }
 };
 
-extern "C" CLFunction* createRTFunction();
-extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs = false,
-                                     bool takes_kwargs = false);
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, int nargs, bool takes_varargs = false,
-                   bool takes_kwargs = false);
+CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
+                          bool takes_kwargs);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types, bool takes_varargs = false,
-                   bool takes_kwargs = false);
+                   const std::vector<ConcreteCompilerType*>& arg_types);
 CLFunction* unboxRTFunction(Box*);
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-CompiledFunction* compileFunction(CLFunction* f, FunctionSignature* sig, EffortLevel::EffortLevel effort,
+CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
                                   const OSREntryDescriptor* entry);
 EffortLevel::EffortLevel initialEffort();
 
@@ -280,6 +277,7 @@ typedef int64_t i64;
 
 extern "C" void* rt_alloc(size_t);
 extern "C" void rt_free(void*);
+extern "C" void* rt_realloc(void* ptr, size_t new_size);
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 

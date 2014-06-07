@@ -15,6 +15,7 @@
 #include <ctime>
 #include <sys/time.h>
 
+#include "codegen/compvars.h"
 #include "core/types.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/types.h"
@@ -33,6 +34,6 @@ Box* timeTime() {
 void setupTime() {
     time_module = createModule("time", "__builtin__");
 
-    time_module->giveAttr("time", new BoxedFunction(boxRTFunction((void*)timeTime, NULL, 0, false)));
+    time_module->giveAttr("time", new BoxedFunction(boxRTFunction((void*)timeTime, BOXED_FLOAT, 0)));
 }
 }

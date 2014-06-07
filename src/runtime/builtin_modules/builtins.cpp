@@ -34,7 +34,13 @@ extern "C" Box* trap() {
     return None;
 }
 
-extern "C" Box* dir1(Box* obj) {
+extern "C" Box* dir(Box* obj) {
+    if (obj == NULL) {
+        // TODO: This should actually return the elements in the current local
+        // scope not the content of the builtins_module
+        obj = builtins_module;
+    }
+
     // TODO: Recursive class traversal for lookup of types and eliminating
     // duplicates afterwards
     BoxedList* result = nullptr;
@@ -70,12 +76,6 @@ extern "C" Box* dir1(Box* obj) {
     return result;
 }
 
-extern "C" Box* dir0() {
-    // TODO: This should actually return the elements in the current local
-    // scope not the content of the builtins_module
-    return dir1(builtins_module);
-}
-
 extern "C" Box* abs_(Box* x) {
     if (x->cls == int_cls) {
         i64 n = static_cast<BoxedInt*>(x)->n;
@@ -106,8 +106,19 @@ extern "C" Box* any(Box* container) {
     return boxBool(false);
 }
 
-extern "C" Box* min1(Box* container) {
-    Box* minElement = nullptr;
+extern "C" Box* min(Box* arg0, BoxedTuple* args) {
+    assert(args->cls == tuple_cls);
+
+    Box* minElement;
+    Box* container;
+    if (args->elts.size() == 0) {
+        minElement = nullptr;
+        container = arg0;
+    } else {
+        minElement = arg0;
+        container = args;
+    }
+
     for (Box* e : container->pyElements()) {
         if (!minElement) {
             minElement = e;
@@ -125,17 +136,19 @@ extern "C" Box* min1(Box* container) {
     return minElement;
 }
 
-extern "C" Box* min2(Box* o0, Box* o1) {
-    Box* comp_result = compareInternal(o0, o1, AST_TYPE::Gt, NULL);
-    bool b = nonzero(comp_result);
-    if (b) {
-        return o1;
-    }
-    return o0;
-}
+extern "C" Box* max(Box* arg0, BoxedTuple* args) {
+    assert(args->cls == tuple_cls);
 
-extern "C" Box* max1(Box* container) {
-    Box* maxElement = nullptr;
+    Box* maxElement;
+    Box* container;
+    if (args->elts.size() == 0) {
+        maxElement = nullptr;
+        container = arg0;
+    } else {
+        maxElement = arg0;
+        container = args;
+    }
+
     for (Box* e : container->pyElements()) {
         if (!maxElement) {
             maxElement = e;
@@ -153,16 +166,7 @@ extern "C" Box* max1(Box* container) {
     return maxElement;
 }
 
-extern "C" Box* max2(Box* o0, Box* o1) {
-    Box* comp_result = compareInternal(o0, o1, AST_TYPE::Lt, NULL);
-    bool b = nonzero(comp_result);
-    if (b) {
-        return o1;
-    }
-    return o0;
-}
-
-extern "C" Box* sum2(Box* container, Box* initial) {
+extern "C" Box* sum(Box* container, Box* initial) {
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
 
@@ -173,11 +177,9 @@ extern "C" Box* sum2(Box* container, Box* initial) {
     return cur;
 }
 
-extern "C" Box* sum1(Box* container) {
-    return sum2(container, boxInt(0));
-}
+Box* open(Box* arg1, Box* arg2) {
+    assert(arg2);
 
-extern "C" Box* open2(Box* arg1, Box* arg2) {
     if (arg1->cls != str_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
                 getTypeName(arg1)->c_str());
@@ -196,12 +198,6 @@ extern "C" Box* open2(Box* arg1, Box* arg2) {
     RELEASE_ASSERT(f, "");
 
     return new BoxedFile(f);
-}
-
-extern "C" Box* open1(Box* arg) {
-    Box* mode = boxStrConstant("r");
-    Box* rtn = open2(arg, mode);
-    return rtn;
 }
 
 extern "C" Box* chr(Box* arg) {
@@ -227,52 +223,41 @@ extern "C" Box* ord(Box* arg) {
     return boxInt(s[0]);
 }
 
-Box* range1(Box* end) {
-    RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
+Box* range(Box* start, Box* stop, Box* step) {
+    i64 istart, istop, istep;
+    if (stop == NULL) {
+        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
 
-    BoxedList* rtn = new BoxedList();
-    i64 iend = static_cast<BoxedInt*>(end)->n;
-    rtn->ensure(iend);
-    for (i64 i = 0; i < iend; i++) {
-        Box* bi = boxInt(i);
-        listAppendInternal(rtn, bi);
+        istart = 0;
+        istop = static_cast<BoxedInt*>(start)->n;
+        istep = 1;
+    } else if (step == NULL) {
+        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
+
+        istart = static_cast<BoxedInt*>(start)->n;
+        istop = static_cast<BoxedInt*>(stop)->n;
+        istep = 1;
+    } else {
+        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(step->cls == int_cls, "%s", getTypeName(step)->c_str());
+
+        istart = static_cast<BoxedInt*>(start)->n;
+        istop = static_cast<BoxedInt*>(stop)->n;
+        istep = static_cast<BoxedInt*>(step)->n;
+        RELEASE_ASSERT(istep != 0, "step can't be 0");
     }
-    return rtn;
-}
-
-Box* range2(Box* start, Box* end) {
-    RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
-    RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
 
     BoxedList* rtn = new BoxedList();
-    i64 istart = static_cast<BoxedInt*>(start)->n;
-    i64 iend = static_cast<BoxedInt*>(end)->n;
-    if ((iend - istart) > 0)
-        rtn->ensure(iend - istart);
-    for (i64 i = istart; i < iend; i++) {
-        listAppendInternal(rtn, boxInt(i));
-    }
-    return rtn;
-}
-
-Box* range3(Box* start, Box* end, Box* step) {
-    RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
-    RELEASE_ASSERT(end->cls == int_cls, "%s", getTypeName(end)->c_str());
-    RELEASE_ASSERT(step->cls == int_cls, "%s", getTypeName(step)->c_str());
-
-    BoxedList* rtn = new BoxedList();
-    i64 istart = static_cast<BoxedInt*>(start)->n;
-    i64 iend = static_cast<BoxedInt*>(end)->n;
-    i64 istep = static_cast<BoxedInt*>(step)->n;
-    RELEASE_ASSERT(istep != 0, "step can't be 0");
-
+    rtn->ensure(std::max(0l, 1 + (istop - istart) / istep));
     if (istep > 0) {
-        for (i64 i = istart; i < iend; i += istep) {
+        for (i64 i = istart; i < istop; i += istep) {
             Box* bi = boxInt(i);
             listAppendInternal(rtn, bi);
         }
     } else {
-        for (i64 i = istart; i > iend; i += istep) {
+        for (i64 i = istart; i > istop; i += istep) {
             Box* bi = boxInt(i);
             listAppendInternal(rtn, bi);
         }
@@ -303,7 +288,7 @@ Box* sortedList(Box* obj) {
     BoxedList* rtn = new BoxedList();
 
     int size = lobj->size;
-    rtn->elts = new (size) BoxedList::ElementArray();
+    rtn->elts = new (size) GCdArray();
     rtn->size = size;
     rtn->capacity = size;
     for (int i = 0; i < size; i++) {
@@ -322,7 +307,7 @@ Box* isinstance_func(Box* obj, Box* cls) {
     return boxBool(isinstance(obj, cls, 0));
 }
 
-Box* getattr2(Box* obj, Box* _str) {
+Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
@@ -331,22 +316,11 @@ Box* getattr2(Box* obj, Box* _str) {
     Box* rtn = getattr_internal(obj, str->s, true, true, NULL, NULL);
 
     if (!rtn) {
-        raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj)->c_str(), str->s.c_str());
-    }
-
-    return rtn;
-}
-
-Box* getattr3(Box* obj, Box* _str, Box* default_value) {
-    if (_str->cls != str_cls) {
-        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
-    }
-
-    BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* rtn = getattr_internal(obj, str->s, true, true, NULL, NULL);
-
-    if (!rtn) {
-        return default_value;
+        if (default_value)
+            return default_value;
+        else
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj)->c_str(),
+                           str->s.c_str());
     }
 
     return rtn;
@@ -440,9 +414,9 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
-    cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew1, NULL, 1, false)));
-    cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, NULL, 1, false)));
-    cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, NULL, 1, false)));
+    cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew1, UNKNOWN, 1)));
+    cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1)));
+    cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1)));
     cls->freeze();
 
     builtins_module->giveAttr(name, cls);
@@ -456,8 +430,7 @@ void setupBuiltins() {
 
     notimplemented_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
-    notimplemented_cls->giveAttr("__repr__",
-                                 new BoxedFunction(boxRTFunction((void*)notimplementedRepr, NULL, 1, false)));
+    notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new Box(&notimplemented_flavor, notimplemented_cls);
     gc::registerStaticRootObj(NotImplemented);
@@ -465,8 +438,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("NotImplemented", NotImplemented);
     builtins_module->giveAttr("NotImplementedType", notimplemented_cls);
 
-    builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1, false)));
-    builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1, false)));
+    builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1)));
+    builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1)));
 
     Exception = makeBuiltinException(object_cls, "Exception");
     AssertionError = makeBuiltinException(Exception, "AssertionError");
@@ -484,74 +457,62 @@ void setupBuiltins() {
     ImportError = makeBuiltinException(Exception, "ImportError");
     StopIteration = makeBuiltinException(Exception, "StopIteration");
 
-    repr_obj = new BoxedFunction(boxRTFunction((void*)repr, NULL, 1, false));
+    repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
-    len_obj = new BoxedFunction(boxRTFunction((void*)len, NULL, 1, false));
+    len_obj = new BoxedFunction(boxRTFunction((void*)len, UNKNOWN, 1));
     builtins_module->giveAttr("len", len_obj);
-    hash_obj = new BoxedFunction(boxRTFunction((void*)hash, NULL, 1, false));
+    hash_obj = new BoxedFunction(boxRTFunction((void*)hash, UNKNOWN, 1));
     builtins_module->giveAttr("hash", hash_obj);
-    abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, NULL, 1, false));
+    abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, UNKNOWN, 1));
     builtins_module->giveAttr("abs", abs_obj);
 
-    CLFunction* min_func = boxRTFunction((void*)min1, NULL, 1, false);
-    addRTFunction(min_func, (void*)min2, NULL, 2, false);
-    min_obj = new BoxedFunction(min_func);
+    min_obj = new BoxedFunction(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("min", min_obj);
 
-    CLFunction* max_func = boxRTFunction((void*)max1, NULL, 1, false);
-    addRTFunction(max_func, (void*)max2, NULL, 2, false);
-    max_obj = new BoxedFunction(max_func);
+    max_obj = new BoxedFunction(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("max", max_obj);
 
-    CLFunction* sum_func = boxRTFunction((void*)sum1, NULL, 1, false);
-    addRTFunction(sum_func, (void*)sum2, NULL, 2, false);
-    builtins_module->giveAttr("sum", new BoxedFunction(sum_func));
+    builtins_module->giveAttr("sum",
+                              new BoxedFunction(boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
 
-    chr_obj = new BoxedFunction(boxRTFunction((void*)chr, NULL, 1, false));
+    chr_obj = new BoxedFunction(boxRTFunction((void*)chr, STR, 1));
     builtins_module->giveAttr("chr", chr_obj);
-    ord_obj = new BoxedFunction(boxRTFunction((void*)ord, NULL, 1, false));
+    ord_obj = new BoxedFunction(boxRTFunction((void*)ord, BOXED_INT, 1));
     builtins_module->giveAttr("ord", ord_obj);
-    trap_obj = new BoxedFunction(boxRTFunction((void*)trap, NULL, 0, false));
+    trap_obj = new BoxedFunction(boxRTFunction((void*)trap, UNKNOWN, 0));
     builtins_module->giveAttr("trap", trap_obj);
 
-    CLFunction* getattr_func = boxRTFunction((void*)getattr2, NULL, 2, false);
-    addRTFunction(getattr_func, (void*)getattr3, NULL, 3, false);
-    builtins_module->giveAttr("getattr", new BoxedFunction(getattr_func));
+    builtins_module->giveAttr(
+        "getattr", new BoxedFunction(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
 
-    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, NULL, 2, false));
+    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, BOXED_BOOL, 2));
     builtins_module->giveAttr("hasattr", hasattr_obj);
 
 
-    Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, NULL, 2, false));
+    Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
-    CLFunction* sorted_func = createRTFunction();
-    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST }, false);
-    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN }, false);
+    CLFunction* sorted_func = createRTFunction(1, 0, false, false);
+    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST });
+    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN });
     builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);
 
-    CLFunction* range_clf = boxRTFunction((void*)range1, NULL, 1, false);
-    addRTFunction(range_clf, (void*)range2, NULL, 2, false);
-    addRTFunction(range_clf, (void*)range3, NULL, 3, false);
-    range_obj = new BoxedFunction(range_clf);
+    range_obj = new BoxedFunction(boxRTFunction((void*)range, LIST, 3, 2, false, false), { NULL, NULL });
     builtins_module->giveAttr("range", range_obj);
 
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    CLFunction* open = boxRTFunction((void*)open1, NULL, 1, false);
-    addRTFunction(open, (void*)open2, NULL, 2, false);
-    open_obj = new BoxedFunction(open);
+    open_obj = new BoxedFunction(boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false),
+                                 { boxStrConstant("r") });
     builtins_module->giveAttr("open", open_obj);
 
-    builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2, false)));
-    builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2, false)));
-    CLFunction* dir_clf = boxRTFunction((void*)dir0, LIST, 0, false);
-    addRTFunction(dir_clf, (void*)dir1, LIST, 1, false);
-    builtins_module->giveAttr("dir", new BoxedFunction(dir_clf));
+    builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
+    builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
+    builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("int", int_cls);

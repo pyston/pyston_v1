@@ -563,7 +563,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
-            generator->unpackArguments(arg_names, cf->sig->arg_types);
+            generator->unpackArguments(arg_names, cf->spec->arg_types);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
@@ -882,7 +882,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
 }
 
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel::EffortLevel effort, FunctionSignature* sig,
+                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec,
                             const std::vector<AST_expr*>& arg_names, std::string nameprefix) {
     Timer _t("in doCompile");
 
@@ -899,7 +899,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     // Initializing the llvm-level structures:
 
     int nargs = arg_names.size();
-    ASSERT(nargs == sig->arg_types.size(), "%d %ld", nargs, sig->arg_types.size());
+    ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
     std::vector<llvm::Type*> llvm_arg_types;
     if (entry_descriptor == NULL) {
@@ -908,7 +908,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
                 llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
                 break;
             }
-            llvm_arg_types.push_back(sig->arg_types[i]->llvmType());
+            llvm_arg_types.push_back(spec->arg_types[i]->llvmType());
         }
     } else {
         int arg_num = -1;
@@ -924,20 +924,20 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         }
     }
 
-    llvm::FunctionType* ft = llvm::FunctionType::get(sig->rtn_type->llvmType(), llvm_arg_types, false /*vararg*/);
+    llvm::FunctionType* ft = llvm::FunctionType::get(spec->rtn_type->llvmType(), llvm_arg_types, false /*vararg*/);
 
     llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, g.cur_module);
     // g.func_registry.registerFunction(f, g.cur_module);
 
     CompiledFunction* cf
-        = new CompiledFunction(f, sig, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
+        = new CompiledFunction(f, spec, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
 
     llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
 
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
-    TypeAnalysis* types = doTypeAnalysis(source->cfg, arg_names, sig->arg_types, speculation_level,
+    TypeAnalysis* types = doTypeAnalysis(source->cfg, arg_names, spec->arg_types, speculation_level,
                                          source->scoping->getScopeInfoForNode(source->ast));
 
     GuardList guards;
@@ -973,7 +973,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
-        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, arg_names, sig->arg_types, TypeAnalysis::NONE,
+        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, arg_names, spec->arg_types, TypeAnalysis::NONE,
                                                    source->scoping->getScopeInfoForNode(source->ast));
         emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, arg_names, NULL, deopt_full_blocks,
                 deopt_partial_blocks);

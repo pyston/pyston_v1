@@ -196,21 +196,26 @@ public:
     : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
 };
 
+class GCdArray : public GCObject {
+public:
+    Box* elts[0];
+
+    GCdArray() : GCObject(&untracked_kind) {}
+
+    void* operator new(size_t size, int capacity) {
+        assert(size == sizeof(GCdArray));
+        return rt_alloc(capacity * sizeof(Box*) + size);
+    }
+
+    static GCdArray* realloc(GCdArray* array, int capacity) {
+        return (GCdArray*)rt_realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
+    }
+};
+
 class BoxedList : public Box {
 public:
-    class ElementArray : public GCObject {
-    public:
-        Box* elts[0];
-
-        ElementArray() : GCObject(&untracked_kind) {}
-
-        void* operator new(size_t size, int capacity) {
-            return rt_alloc(capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
-        }
-    };
-
     int64_t size, capacity;
-    ElementArray* elts;
+    GCdArray* elts;
 
     BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
 
@@ -229,6 +234,7 @@ public:
     BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >&& elts) __attribute__((visibility("default")))
     : Box(&tuple_flavor, tuple_cls), elts(std::move(elts)) {}
 };
+extern "C" BoxedTuple* EmptyTuple;
 
 class BoxedFile : public Box {
 public:
@@ -263,7 +269,11 @@ public:
     HCAttrs attrs;
     CLFunction* f;
 
+    int ndefaults;
+    GCdArray* defaults;
+
     BoxedFunction(CLFunction* f);
+    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults);
 };
 
 class BoxedModule : public Box {

@@ -502,13 +502,7 @@ std::string floatFmt(double x, int precision, char code) {
     return std::string(buf, n);
 }
 
-Box* floatNew1(BoxedClass* cls) {
-    assert(cls == float_cls);
-    // TODO intern this?
-    return boxFloat(0.0);
-}
-
-Box* floatNew2(BoxedClass* cls, Box* a) {
+Box* floatNew(BoxedClass* cls, Box* a) {
     assert(cls == float_cls);
 
     if (a->cls == float_cls) {
@@ -552,12 +546,12 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
     v_fi.push_back(BOXED_FLOAT);
     v_fi.push_back(BOXED_INT);
     v_fu.push_back(BOXED_FLOAT);
-    v_fu.push_back(NULL);
+    v_fu.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction();
-    addRTFunction(cl, float_func, rtn_type, v_ff, false);
-    addRTFunction(cl, int_func, rtn_type, v_fi, false);
-    addRTFunction(cl, boxed_func, NULL, v_fu, false);
+    CLFunction* cl = createRTFunction(2, 0, false, false);
+    addRTFunction(cl, float_func, rtn_type, v_ff);
+    addRTFunction(cl, int_func, rtn_type, v_fi);
+    addRTFunction(cl, boxed_func, UNKNOWN, v_fu);
     float_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
@@ -569,7 +563,7 @@ void setupFloat() {
 
     _addFunc("__div__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatDiv);
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
-    float_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)floatFloorDiv, NULL, 2, false)));
+    float_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)floatFloorDiv, UNKNOWN, 2)));
 
     _addFunc("__eq__", BOXED_BOOL, (void*)floatEqFloat, (void*)floatEqInt, (void*)floatEq);
     _addFunc("__ge__", BOXED_BOOL, (void*)floatGeFloat, (void*)floatGeInt, (void*)floatGe);
@@ -587,17 +581,18 @@ void setupFloat() {
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);
     _addFunc("__rsub__", BOXED_FLOAT, (void*)floatRSubFloat, (void*)floatRSubInt, (void*)floatRSub);
 
-    CLFunction* __new__ = boxRTFunction((void*)floatNew1, NULL, 1, false);
-    addRTFunction(__new__, (void*)floatNew2, NULL, 2, false);
-    float_cls->giveAttr("__new__", new BoxedFunction(__new__));
+    float_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)floatNew, UNKNOWN, 2, 1, false, false), { boxFloat(0.0) }));
 
-    float_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)floatNeg, NULL, 1, false)));
-    CLFunction* nonzero = boxRTFunction((void*)floatNonzeroUnboxed, BOOL, 1, false);
-    addRTFunction(nonzero, (void*)floatNonzero, UNKNOWN, 1, false);
+    float_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)floatNeg, BOXED_FLOAT, 1)));
+
+    CLFunction* nonzero = boxRTFunction((void*)floatNonzeroUnboxed, BOOL, 1);
+    addRTFunction(nonzero, (void*)floatNonzero, UNKNOWN);
     float_cls->giveAttr("__nonzero__", new BoxedFunction(nonzero));
-    // float_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)floatNonzero, NULL, 1, false)));
-    float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, NULL, 1, false)));
-    float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, NULL, 1, false)));
+
+    // float_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)floatNonzero, NULL, 1)));
+    float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, STR, 1)));
+    float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
     float_cls->freeze();
 }
 

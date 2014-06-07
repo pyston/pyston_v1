@@ -31,7 +31,14 @@ Box* fileRepr(BoxedFile* self) {
     RELEASE_ASSERT(0, "");
 }
 
-static Box* _fileRead(BoxedFile* self, i64 size) {
+Box* fileRead(BoxedFile* self, Box* _size) {
+    assert(self->cls == file_cls);
+    if (_size->cls != int_cls) {
+        fprintf(stderr, "TypeError: an integer is required\n");
+        raiseExcHelper(TypeError, "");
+    }
+    int64_t size = static_cast<BoxedInt*>(_size)->n;
+
     if (self->closed) {
         fprintf(stderr, "IOError: file not open for reading\n");
         raiseExcHelper(IOError, "");
@@ -59,11 +66,6 @@ static Box* _fileRead(BoxedFile* self, i64 size) {
     return boxString(os.str());
 }
 
-Box* fileRead1(BoxedFile* self) {
-    assert(self->cls == file_cls);
-    return _fileRead(self, -1);
-}
-
 Box* fileReadline1(BoxedFile* self) {
     assert(self->cls == file_cls);
 
@@ -80,15 +82,6 @@ Box* fileReadline1(BoxedFile* self) {
             break;
     }
     return boxString(os.str());
-}
-
-Box* fileRead2(BoxedFile* self, Box* size) {
-    assert(self->cls == file_cls);
-    if (size->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExcHelper(TypeError, "");
-    }
-    return _fileRead(self, static_cast<BoxedInt*>(size)->n);
 }
 
 Box* fileWrite(BoxedFile* self, Box* val) {
@@ -158,38 +151,31 @@ Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
     return fileClose(self);
 }
 
-Box* fileNew2(BoxedClass* cls, Box* s) {
+Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
     assert(cls == file_cls);
-    return open1(s);
-}
-
-Box* fileNew3(BoxedClass* cls, Box* s, Box* m) {
-    assert(cls == file_cls);
-    return open2(s, m);
+    return open(s, m);
 }
 
 void setupFile() {
     file_cls->giveAttr("__name__", boxStrConstant("file"));
 
-    CLFunction* read = boxRTFunction((void*)fileRead1, NULL, 1, false);
-    addRTFunction(read, (void*)fileRead2, NULL, 2, false);
-    file_cls->giveAttr("read", new BoxedFunction(read));
+    file_cls->giveAttr("read",
+                       new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));
 
-    CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1, false);
+    CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1);
     file_cls->giveAttr("readline", new BoxedFunction(readline));
 
-    file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NULL, 2, false)));
-    file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NULL, 1, false)));
+    file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NONE, 2)));
+    file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NONE, 1)));
 
-    file_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)fileRepr, NULL, 1, false)));
+    file_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)fileRepr, STR, 1)));
     file_cls->giveAttr("__str__", file_cls->getattr("__repr__"));
 
-    file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, NULL, 1, false)));
-    file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, NULL, 4, false)));
+    file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1)));
+    file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4)));
 
-    CLFunction* __new__ = boxRTFunction((void*)fileNew2, NULL, 2, false);
-    addRTFunction(__new__, (void*)fileNew3, NULL, 3, false);
-    file_cls->giveAttr("__new__", new BoxedFunction(__new__));
+    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 3, 1, false, false),
+                                                    { boxStrConstant("r") }));
 
     file_cls->freeze();
 }

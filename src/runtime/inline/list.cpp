@@ -69,8 +69,7 @@ void BoxedList::shrink() {
     if (capacity > size * 3) {
         int new_capacity = std::max(static_cast<int64_t>(INITIAL_CAPACITY), capacity / 2);
         if (size > 0) {
-            elts = (BoxedList::ElementArray*)rt_realloc(elts,
-                                                        new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+            elts = GCdArray::realloc(elts, new_capacity);
             capacity = new_capacity;
         } else if (size == 0) {
             rt_free(elts);
@@ -85,12 +84,11 @@ void BoxedList::ensure(int space) {
         if (capacity == 0) {
             const int INITIAL_CAPACITY = 8;
             int initial = std::max(INITIAL_CAPACITY, space);
-            elts = new (initial) BoxedList::ElementArray();
+            elts = new (initial) GCdArray();
             capacity = initial;
         } else {
             int new_capacity = std::max(capacity * 2, size + space);
-            elts = (BoxedList::ElementArray*)rt_realloc(elts,
-                                                        new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+            elts = GCdArray::realloc(elts, new_capacity);
             capacity = new_capacity;
         }
     }

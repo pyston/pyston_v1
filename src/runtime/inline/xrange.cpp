@@ -79,37 +79,34 @@ public:
 };
 extern "C" const ObjectFlavor xrange_iterator_flavor(&BoxedXrangeIterator::xrangeIteratorGCHandler, NULL);
 
-Box* xrange1(Box* cls, Box* stop) {
+Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
     assert(cls == xrange_cls);
-    RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
 
-    i64 istop = static_cast<BoxedInt*>(stop)->n;
-    return new BoxedXrange(0, istop, 1);
-}
-
-Box* xrange2(Box* cls, Box* start, Box* stop) {
-    assert(cls == xrange_cls);
-    RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
-    RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
-
-    i64 istart = static_cast<BoxedInt*>(start)->n;
-    i64 istop = static_cast<BoxedInt*>(stop)->n;
-    return new BoxedXrange(istart, istop, 1);
-}
-
-Box* xrange3(Box* cls, Box* start, Box* stop, Box** args) {
     Box* step = args[0];
 
-    assert(cls == xrange_cls);
-    RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
-    RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
-    RELEASE_ASSERT(step->cls == int_cls, "%s", getTypeName(step)->c_str());
+    if (stop == NULL) {
+        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
 
-    i64 istart = static_cast<BoxedInt*>(start)->n;
-    i64 istop = static_cast<BoxedInt*>(stop)->n;
-    i64 istep = static_cast<BoxedInt*>(step)->n;
-    RELEASE_ASSERT(istep != 0, "step can't be 0");
-    return new BoxedXrange(istart, istop, istep);
+        i64 istop = static_cast<BoxedInt*>(start)->n;
+        return new BoxedXrange(0, istop, 1);
+    } else if (step == NULL) {
+        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
+
+        i64 istart = static_cast<BoxedInt*>(start)->n;
+        i64 istop = static_cast<BoxedInt*>(stop)->n;
+        return new BoxedXrange(istart, istop, 1);
+    } else {
+        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(step->cls == int_cls, "%s", getTypeName(step)->c_str());
+
+        i64 istart = static_cast<BoxedInt*>(start)->n;
+        i64 istop = static_cast<BoxedInt*>(stop)->n;
+        i64 istep = static_cast<BoxedInt*>(step)->n;
+        RELEASE_ASSERT(istep != 0, "step can't be 0");
+        return new BoxedXrange(istart, istop, istep);
+    }
 }
 
 Box* xrangeIter(Box* self) {
@@ -125,19 +122,18 @@ void setupXrange() {
     xrange_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedXrangeIterator), false);
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 
-    CLFunction* xrange_clf = boxRTFunction((void*)xrange1, NULL, 2, false);
-    addRTFunction(xrange_clf, (void*)xrange2, NULL, 3, false);
-    addRTFunction(xrange_clf, (void*)xrange3, NULL, 4, false);
-    xrange_cls->giveAttr("__new__", new BoxedFunction(xrange_clf));
     xrange_cls->giveAttr(
-        "__iter__", new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1, false)));
+        "__new__",
+        new BoxedFunction(boxRTFunction((void*)xrange, typeFromClass(xrange_cls), 4, 2, false, false), { NULL, NULL }));
+    xrange_cls->giveAttr("__iter__",
+                         new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1)));
 
-    CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1, false);
-    addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL, 1, false);
+    CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1);
+    addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL);
     xrange_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
-    CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1, false);
-    addRTFunction(next, (void*)BoxedXrangeIterator::xrangeIteratorNext, BOXED_INT, 1, false);
+    CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1);
+    addRTFunction(next, (void*)BoxedXrangeIterator::xrangeIteratorNext, BOXED_INT);
     xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
 
     // TODO this is pretty hacky, but stuff the iterator cls into xrange to make sure it gets decref'd at the end

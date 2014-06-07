@@ -1575,297 +1575,337 @@ extern "C" Box* callattr(Box* obj, std::string* attr, bool clsonly, ArgPassSpec 
     return rtn;
 }
 
-CompiledFunction* resolveCLFunc(CLFunction* f, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
-                                const std::vector<const std::string*>* keyword_names) {
-    RELEASE_ASSERT(!argspec.has_starargs, "");
-    RELEASE_ASSERT(!argspec.has_kwargs, "");
-    RELEASE_ASSERT(argspec.num_keywords == 0, "");
-
-    int64_t nargs = argspec.totalPassed();
-
-    static StatCounter slowpath_resolveclfunc("slowpath_resolveclfunc");
-    slowpath_resolveclfunc.log();
-
-    FunctionList& versions = f->versions;
-
-    for (int i = 0; i < versions.size(); i++) {
-        CompiledFunction* cf = versions[i];
-        FunctionSignature* sig = cf->sig;
-        assert(!sig->takes_kwargs && "not handled yet");
-        if (sig->rtn_type->llvmType() != UNKNOWN->llvmType())
-            continue;
-        if ((!sig->takes_varargs && sig->arg_types.size() != nargs)
-            || (sig->takes_varargs && nargs < sig->arg_types.size()))
-            continue;
-
-        int nsig_args = sig->arg_types.size();
-
-        if (nsig_args >= 1) {
-            if (sig->arg_types[0]->isFitBy(arg1->cls)) {
-                // pass
-            } else {
-                continue;
-            }
-        }
-        if (nsig_args >= 2) {
-            if (sig->arg_types[1]->isFitBy(arg2->cls)) {
-                // pass
-            } else {
-                continue;
-            }
-        }
-        if (nsig_args >= 3) {
-            if (sig->arg_types[2]->isFitBy(arg3->cls)) {
-                // pass
-            } else {
-                continue;
-            }
-        }
-        bool bad = false;
-        for (int j = 3; j < nsig_args; j++) {
-            if (sig->arg_types[j]->isFitBy(args[j - 3]->cls)) {
-                // pass
-            } else {
-                bad = true;
-                break;
-            }
-        }
-        if (bad)
-            continue;
-
-        assert(cf);
-        assert(!cf->entry_descriptor);
-        assert(cf->is_interpreted == (cf->code == NULL));
-
-        return cf;
-    }
-
-    if (f->source == NULL) {
-        printf("Error: couldn't find suitable function version and no source to recompile!\n");
-        printf("%ld args:", nargs);
-        for (int i = 0; i < nargs; i++) {
-            if (i == 3) {
-                printf(" [and more]");
-                break;
-            }
-
-            Box* firstargs[] = { arg1, arg2, arg3 };
-            printf(" %s", getTypeName(firstargs[i])->c_str());
-        }
-        printf("\n");
-        for (int j = 0; j < f->versions.size(); j++) {
-            std::string func_name = g.func_addr_registry.getFuncNameAtAddress(f->versions[j]->code, true);
-            printf("Version %d, %s:", j, func_name.c_str());
-            FunctionSignature* sig = f->versions[j]->sig;
-            for (int i = 0; i < sig->arg_types.size(); i++) {
-                printf(" %s", sig->arg_types[i]->debugName().c_str());
-            }
-            if (sig->takes_varargs)
-                printf(" *vararg");
-            if (sig->takes_kwargs)
-                printf(" *kwarg");
-            printf("\n");
-            // printf(" @%p %s\n", f->versions[j]->code, func_name.c_str());
-        }
-        abort();
-    }
-
-    assert(f->source->getArgsAST()->vararg.size() == 0);
-    assert(f->source->getArgsAST()->kwarg.size() == 0);
-    assert(f->source->getArgsAST()->defaults.size() == 0);
-    bool takes_varargs = false;
-    bool takes_kwargs = false;
-    int ndefaults = 0;
-
-    std::vector<ConcreteCompilerType*> arg_types;
-    if (nargs >= 1) {
-        arg_types.push_back(typeFromClass(arg1->cls));
-    }
-    if (nargs >= 2) {
-        arg_types.push_back(typeFromClass(arg2->cls));
-    }
-    if (nargs >= 3) {
-        arg_types.push_back(typeFromClass(arg3->cls));
-    }
-    for (int j = 3; j < nargs; j++) {
-        arg_types.push_back(typeFromClass(args[j - 3]->cls));
-    }
-    FunctionSignature* sig
-        = new FunctionSignature(UNKNOWN, &f->source->getArgNames(), arg_types, ndefaults, takes_varargs, takes_kwargs);
-
-    EffortLevel::EffortLevel new_effort = initialEffort();
-
-    CompiledFunction* cf = compileFunction(f, sig, new_effort,
-                                           NULL); // this pushes the new CompiledVersion to the back of the version list
-    assert(cf->is_interpreted == (cf->code == NULL));
-
-    return cf;
-}
-
-Box* callCompiledFunc(CompiledFunction* cf, ArgPassSpec argspec, Box* iarg1, Box* iarg2, Box* iarg3, Box** iargs,
-                      const std::vector<const std::string*>* keyword_names) {
-    RELEASE_ASSERT(!argspec.has_starargs, "");
-    RELEASE_ASSERT(!argspec.has_kwargs, "");
-
-    int64_t npassed_args = argspec.totalPassed();
-
-    assert(cf);
-
-    // TODO these shouldn't have to be initialized, but I don't want to issue a #pragma
-    // that disables the warning for the whole file:
-    Box* oarg1 = NULL, *oarg2 = NULL, *oarg3 = NULL;
-    Box** oargs = NULL;
-
-    int num_out_args = npassed_args;
-    if (cf->sig->takes_varargs)
-        num_out_args++;
-    assert(!cf->sig->takes_kwargs);
-    if (cf->sig->takes_kwargs)
-        num_out_args++;
-    assert(!cf->sig->ndefaults);
-    num_out_args += cf->sig->ndefaults;
-
-    if (num_out_args > 3)
-        oargs = (Box**)alloca((num_out_args - 3) * sizeof(Box*));
-
-    int nsig_args = cf->sig->arg_types.size();
-
-    std::vector<bool> keywords_used(false, argspec.num_keywords);
-
-    // First, fill formal parameters from positional arguments:
-    for (int i = 0; i < std::min((int)argspec.num_args, nsig_args); i++) {
-        if (i == 0)
-            oarg1 = iarg1;
-        else if (i == 1)
-            oarg2 = iarg2;
-        else if (i == 2)
-            oarg3 = iarg3;
-        else
-            oargs[i - 3] = iargs[i - 3];
-    }
-
-    // Then, fill any remaining formal parameters from keywords:
-    if (argspec.num_args < nsig_args) {
-        const std::vector<AST_expr*>* arg_names = cf->sig->arg_names;
-        assert(arg_names);
-        assert(arg_names->size() == nsig_args);
-
-        for (int j = argspec.num_args; j < nsig_args; j++) {
-            assert((*arg_names)[j]->type == AST_TYPE::Name); // we should already have picked a good signature
-            const std::string& name = ast_cast<AST_Name>((*arg_names)[j])->id;
-
-            bool found = false;
-            for (int i = 0; i < keyword_names->size(); i++) {
-                if (keywords_used[i])
-                    continue;
-                if (*(*keyword_names)[i] == name) {
-                    found = true;
-                    keywords_used[i] = true;
-
-                    int from_arg = argspec.num_args + i;
-                    Box* arg;
-                    if (from_arg == 0)
-                        arg = iarg1;
-                    else if (from_arg == 1)
-                        arg = iarg2;
-                    else if (from_arg == 2)
-                        arg = iarg3;
-                    else
-                        arg = iargs[from_arg - 3];
-
-                    if (j == 0)
-                        oarg1 = arg;
-                    else if (j == 1)
-                        oarg2 = arg;
-                    else if (j == 2)
-                        oarg3 = arg;
-                    else
-                        oargs[j - 3] = arg;
-
-                    break;
-                }
-            }
-            assert(found); // should have been disallowed
-        }
-    }
-
-    assert(!cf->sig->takes_kwargs);
-    for (bool b : keywords_used)
-        assert(b);
-
-    if (cf->sig->takes_varargs) {
-        BoxedList* made_vararg = (BoxedList*)createList();
-        if (nsig_args == 0)
-            oarg1 = made_vararg;
-        else if (nsig_args == 1)
-            oarg2 = made_vararg;
-        else if (nsig_args == 2)
-            oarg3 = made_vararg;
-        else
-            oargs[nsig_args - 3] = made_vararg;
-
-        assert(argspec.num_args == npassed_args);
-        for (int i = nsig_args; i < npassed_args; i++) {
-            if (i == 0)
-                listAppendInternal(made_vararg, iarg1);
-            else if (i == 1)
-                listAppendInternal(made_vararg, iarg2);
-            else if (i == 2)
-                listAppendInternal(made_vararg, iarg3);
-            else
-                listAppendInternal(made_vararg, iargs[i - 3]);
-        }
-    } else {
-        assert(!cf->sig->takes_kwargs);
-        assert(nsig_args == npassed_args);
-    }
-
-    if (!cf->is_interpreted) {
-        return cf->call(oarg1, oarg2, oarg3, oargs);
-    } else {
-        return interpretFunction(cf->func, num_out_args, oarg1, oarg2, oarg3, oargs);
-    }
+static inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** args) {
+    if (idx == 0)
+        return arg1;
+    if (idx == 1)
+        return arg2;
+    if (idx == 2)
+        return arg3;
+    return args[idx - 3];
 }
 
 Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
               Box** args, const std::vector<const std::string*>* keyword_names) {
-    int npassed_args = argspec.totalPassed();
+    /*
+     * Procedure:
+     * - First match up positional arguments; any extra go to varargs.  error if too many.
+     * - Then apply keywords; any extra go to kwargs.  error if too many.
+     * - Use defaults to fill in any missing
+     * - error about missing parameters
+     */
 
-    CompiledFunction* cf = resolveCLFunc(func->f, argspec, arg1, arg2, arg3, args, keyword_names);
+    static StatCounter slowpath_resolveclfunc("slowpath_callfunc");
+    slowpath_resolveclfunc.log();
 
-    if (cf->sig->takes_varargs || cf->sig->takes_kwargs || argspec.num_keywords || argspec.has_starargs
-        || argspec.has_kwargs) {
-        if (rewrite_args && VERBOSITY())
-            printf("Not patchpointing this non-simple function call\n");
+    CLFunction* f = func->f;
+    FunctionList& versions = f->versions;
+
+    int num_output_args = f->numReceivedArgs();
+
+
+    if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs)
         rewrite_args = NULL;
+
+    // These could be handled:
+    if (argspec.num_keywords)
+        rewrite_args = NULL;
+
+    // TODO Should we guard on the CLFunction or the BoxedFunction?
+    // A single CLFunction could end up forming multiple BoxedFunctions, and we
+    // could emit assembly that handles any of them.  But doing this involves some
+    // extra indirection, and it's not clear if that's worth it, since it seems like
+    // the common case will be functions only ever getting a single set of default arguments.
+    bool guard_clfunc = false;
+    assert(!guard_clfunc && "I think there are users that expect the boxedfunction to be guarded");
+
+    RewriterVar r_defaults_array;
+    if (rewrite_args) {
+        if (!rewrite_args->func_guarded) {
+            if (guard_clfunc) {
+                rewrite_args->obj.addAttrGuard(offsetof(BoxedFunction, f), (intptr_t)f);
+            } else {
+                rewrite_args->obj.addGuard((intptr_t)func);
+            }
+        }
+        if (guard_clfunc) {
+            // Have to save the defaults array since the object itself will probably get overwritten:
+            rewrite_args->obj = rewrite_args->obj.move(-2);
+            r_defaults_array = rewrite_args->obj.getAttr(offsetof(BoxedFunction, defaults), -2);
+        }
     }
-    if (cf->is_interpreted)
-        rewrite_args = NULL;
 
     if (rewrite_args) {
-        // TODO should it be the func object or its CLFunction?
-        if (!rewrite_args->func_guarded)
-            rewrite_args->obj.addGuard((intptr_t)func);
+        int num_passed = argspec.totalPassed();
+        if (num_passed >= 1)
+            rewrite_args->arg1 = rewrite_args->arg1.move(0);
+        if (num_passed >= 2)
+            rewrite_args->arg2 = rewrite_args->arg2.move(1);
+        if (num_passed >= 3)
+            rewrite_args->arg3 = rewrite_args->arg3.move(2);
+        if (num_passed >= 4)
+            rewrite_args->args = rewrite_args->args.move(3);
 
-        rewrite_args->rewriter->addDependenceOn(cf->dependent_callsites);
+        // We might have trouble if we have more output args than input args,
+        // such as if we need more space to pass defaults.
+        if (num_output_args > 3 && num_output_args > argspec.totalPassed()) {
+            int arg_bytes_required = (num_output_args - 3) * sizeof(Box*);
 
-        if (npassed_args >= 1)
-            rewrite_args->arg1.move(0);
-        if (npassed_args >= 2)
-            rewrite_args->arg2.move(1);
-        if (npassed_args >= 3)
-            rewrite_args->arg3.move(2);
-        if (npassed_args >= 4)
-            rewrite_args->args.move(3);
-        RewriterVar r_rtn = rewrite_args->rewriter->call(cf->code);
-        rewrite_args->out_rtn = r_rtn.move(-1);
+            // Try to fit it in the scratch space
+            // TODO it should be a separate arg scratch space, esp once we switch this to rewriter2
+            if (arg_bytes_required > rewrite_args->rewriter->getScratchBytes()) {
+                // if it doesn't fit, just bail.
+                // TODO could try to rt_alloc some space maybe?
+                rewrite_args = NULL;
+            } else {
+                // Otherwise, use the scratch space for the arguments:
+                RewriterVar rbp = rewrite_args->rewriter->getRbp();
+
+                // This could just be a single LEA:
+                RewriterVar new_args = rbp.move(-1);
+                int rbp_offset = rewrite_args->rewriter->getScratchRbpOffset();
+                new_args = new_args.add(rbp_offset);
+
+                for (int i = 3; i < argspec.totalPassed(); i++) {
+                    int offset = (i - 3) * sizeof(Box*);
+                    RewriterVar old_arg = rewrite_args->args.getAttr(offset, -2);
+                    new_args.setAttr(offset, old_arg);
+                }
+                rewrite_args->args = new_args.move(3);
+            }
+        }
     }
-    Box* rtn = callCompiledFunc(cf, argspec, arg1, arg2, arg3, args, keyword_names);
 
-    if (rewrite_args)
-        rewrite_args->out_success = true;
-    return rtn;
+
+    std::vector<Box*> varargs;
+    if (argspec.has_starargs) {
+        Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
+        for (Box* e : given_varargs->pyElements()) {
+            varargs.push_back(e);
+        }
+    }
+
+    // The "output" args that we will pass to the called function:
+    Box* oarg1 = NULL, *oarg2 = NULL, *oarg3 = NULL;
+    Box** oargs = NULL;
+
+    if (num_output_args > 3)
+        oargs = (Box**)alloca((num_output_args - 3) * sizeof(Box*));
+
+    ////
+    // First, match up positional parameters to positional/varargs:
+    int positional_to_positional = std::min((int)argspec.num_args, f->num_args);
+    for (int i = 0; i < positional_to_positional; i++) {
+        getArg(i, oarg1, oarg2, oarg3, oargs) = getArg(i, arg1, arg2, arg3, args);
+
+        // we already moved the positional args into position
+    }
+
+    int varargs_to_positional = std::min((int)varargs.size(), f->num_args - positional_to_positional);
+    for (int i = 0; i < varargs_to_positional; i++) {
+        assert(!rewrite_args && "would need to be handled here");
+        getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
+    }
+
+    std::vector<bool> params_filled(argspec.num_args, false);
+    for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {
+        params_filled[i] = true;
+    }
+
+
+
+    std::vector<Box*, StlCompatAllocator<Box*> > unused_positional;
+    for (int i = positional_to_positional; i < argspec.num_args; i++) {
+        rewrite_args = NULL;
+        unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
+    }
+    for (int i = varargs_to_positional; i < varargs.size(); i++) {
+        rewrite_args = NULL;
+        unused_positional.push_back(varargs[i]);
+    }
+
+    if (f->takes_varargs) {
+        int varargs_idx = f->num_args;
+        if (rewrite_args) {
+            assert(!unused_positional.size());
+            rewrite_args->rewriter->loadConst(varargs_idx, (intptr_t)EmptyTuple);
+        }
+
+        Box* ovarargs = new BoxedTuple(std::move(unused_positional));
+        getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
+    } else if (unused_positional.size()) {
+        raiseExcHelper(TypeError, "<function>() takes at most %d argument%s (%d given)", f->num_args,
+                       (f->num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
+    }
+
+    ////
+    // Second, apply any keywords:
+
+    BoxedDict* okwargs = NULL;
+    if (f->takes_kwargs) {
+        assert(!rewrite_args && "would need to be handled here");
+        okwargs = new BoxedDict();
+        getArg(f->num_args + (f->takes_varargs ? 1 : 0), oarg1, oarg2, oarg3, oargs) = okwargs;
+    }
+
+    const std::vector<AST_expr*>* arg_names = f->getArgNames();
+    if (arg_names == nullptr && argspec.num_keywords) {
+        raiseExcHelper(TypeError, "<function>() doesn't take keyword arguments");
+    }
+
+    if (argspec.num_keywords)
+        assert(argspec.num_keywords == keyword_names->size());
+
+    for (int i = 0; i < argspec.num_keywords; i++) {
+        assert(!rewrite_args && "would need to be handled here");
+        int arg_idx = i + argspec.num_args;
+        Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
+
+        assert(arg_names);
+        bool found = false;
+        for (int j = 0; j < arg_names->size(); j++) {
+            AST_expr* e = (*arg_names)[j];
+            if (e->type != AST_TYPE::Name)
+                continue;
+
+            AST_Name* n = ast_cast<AST_Name>(e);
+            if (n->id == *(*keyword_names)[i]) {
+                if (params_filled[j]) {
+                    raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
+                                   n->id.c_str());
+                }
+
+                getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
+                params_filled[j] = true;
+
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            if (okwargs) {
+                okwargs->d[boxString(*(*keyword_names)[i])] = kw_val;
+            } else {
+                raiseExcHelper(TypeError, "<function>() got an unexpected keyword argument '%s'",
+                               (*keyword_names)[i]->c_str());
+            }
+        }
+    }
+    RELEASE_ASSERT(!argspec.has_kwargs, "need to copy the above");
+
+
+
+    // Fill with defaults:
+
+    for (int i = 0; i < f->num_args - f->num_defaults; i++) {
+        if (params_filled[i])
+            continue;
+        // TODO not right error message
+        raiseExcHelper(TypeError, "<function>() did not get a value for positional argument %d", i);
+    }
+
+    for (int i = f->num_args - f->num_defaults; i < f->num_args; i++) {
+        if (params_filled[i])
+            continue;
+
+        int default_idx = i + f->num_defaults - f->num_args;
+        Box* default_obj = func->defaults->elts[default_idx];
+
+        if (rewrite_args) {
+            int offset = offsetof(std::remove_pointer<decltype(BoxedFunction::defaults)>::type, elts)
+                         + sizeof(Box*) * default_idx;
+            if (guard_clfunc) {
+                // If we just guarded on the CLFunction, then we have to emit assembly
+                // to fetch the values from the defaults array:
+                if (i < 3) {
+                    r_defaults_array.getAttr(offset, i);
+                } else {
+                    RewriterVar r_default = r_defaults_array.getAttr(offset, -3);
+                    rewrite_args->args.setAttr((i - 3) * sizeof(Box*), r_default, false);
+                }
+            } else {
+                // If we guarded on the BoxedFunction, which has a constant set of defaults,
+                // we can embed the default arguments directly into the instructions.
+                if (i < 3) {
+                    rewrite_args->rewriter->loadConst(i, (intptr_t)default_obj);
+                } else {
+                    RewriterVar r_default = rewrite_args->rewriter->loadConst(-1, (intptr_t)default_obj);
+                    rewrite_args->args.setAttr((i - 3) * sizeof(Box*), r_default, false);
+                }
+            }
+        }
+
+        getArg(i, oarg1, oarg2, oarg3, oargs) = default_obj;
+    }
+
+
+
+    // Pick a specific version to use:
+
+    CompiledFunction* chosen_cf = NULL;
+    for (CompiledFunction* cf : f->versions) {
+        assert(cf->spec->arg_types.size() == num_output_args);
+
+        if (cf->spec->rtn_type->llvmType() != UNKNOWN->llvmType())
+            continue;
+
+        bool works = true;
+        for (int i = 0; i < num_output_args; i++) {
+            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+
+            ConcreteCompilerType* t = cf->spec->arg_types[i];
+            if ((arg && !t->isFitBy(arg->cls)) || (!arg && t != UNKNOWN)) {
+                works = false;
+                break;
+            }
+        }
+
+        if (!works)
+            continue;
+
+        chosen_cf = cf;
+        break;
+    }
+
+    if (chosen_cf == NULL) {
+        if (f->source == NULL) {
+            // TODO I don't think this should be happening any more?
+            printf("Error: couldn't find suitable function version and no source to recompile!\n");
+            abort();
+        }
+
+        std::vector<ConcreteCompilerType*> arg_types;
+        for (int i = 0; i < num_output_args; i++) {
+            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+            assert(arg); // only builtin functions can pass NULL args
+
+            arg_types.push_back(typeFromClass(arg->cls));
+        }
+        FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
+
+        EffortLevel::EffortLevel new_effort = initialEffort();
+
+        // this also pushes the new CompiledVersion to the back of the version list:
+        chosen_cf = compileFunction(f, spec, new_effort, NULL);
+    }
+
+    assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
+    if (chosen_cf->is_interpreted) {
+        return interpretFunction(chosen_cf->func, num_output_args, oarg1, oarg2, oarg3, oargs);
+    } else {
+        if (rewrite_args) {
+            rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
+
+            RewriterVar var = rewrite_args->rewriter->call((void*)chosen_cf->call);
+
+            rewrite_args->out_rtn = var;
+            rewrite_args->out_success = true;
+        }
+        return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+    }
 }
+
 
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                          Box** args, const std::vector<const std::string*>* keyword_names) {
@@ -1982,8 +2022,10 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
     slowpath_runtimecall.log();
 
     int num_orig_args = 2 + std::min(4, npassed_args);
-    if (argspec.num_keywords > 0)
+    if (argspec.num_keywords > 0) {
+        assert(argspec.num_keywords == keyword_names->size());
         num_orig_args++;
+    }
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, 2, "runtimeCall"));
     Box* rtn;

@@ -205,23 +205,23 @@ void setupTuple() {
 
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
-    tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, NULL, 2, false)));
-    tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, NULL, 2, false)));
+    tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
 
-    tuple_cls->giveAttr(
-        "__iter__", new BoxedFunction(boxRTFunction((void*)tupleIter, typeFromClass(tuple_iterator_cls), 1, false)));
+    tuple_cls->giveAttr("__iter__",
+                        new BoxedFunction(boxRTFunction((void*)tupleIter, typeFromClass(tuple_iterator_cls), 1)));
 
 
-    tuple_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)tupleLt, NULL, 2, false)));
-    tuple_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)tupleLe, NULL, 2, false)));
-    tuple_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)tupleGt, NULL, 2, false)));
-    tuple_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)tupleGe, NULL, 2, false)));
-    tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, NULL, 2, false)));
-    tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, NULL, 2, false)));
+    tuple_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)tupleLt, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)tupleLe, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)tupleGt, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)tupleGe, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, UNKNOWN, 2)));
 
-    tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1, false)));
-    tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, NULL, 1, false)));
-    tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, NULL, 1, false)));
+    tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1)));
+    tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
+    tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
     tuple_cls->giveAttr("__str__", tuple_cls->getattr("__repr__"));
 
     tuple_cls->freeze();
@@ -229,12 +229,12 @@ void setupTuple() {
     gc::registerStaticRootObj(tuple_iterator_cls);
     tuple_iterator_cls->giveAttr("__name__", boxStrConstant("tupleiterator"));
 
-    CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1, false);
-    addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL, 1, false);
+    CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);
+    addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL);
     tuple_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
-    tuple_iterator_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction(
-                                                 (void*)tupleIterIter, typeFromClass(tuple_iterator_cls), 1, false)));
-    tuple_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)tupleiterNext, UNKNOWN, 1, false)));
+    tuple_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)tupleIterIter, typeFromClass(tuple_iterator_cls), 1)));
+    tuple_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)tupleiterNext, UNKNOWN, 1)));
 
     tuple_iterator_cls->freeze();
 }

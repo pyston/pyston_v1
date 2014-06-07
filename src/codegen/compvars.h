@@ -115,6 +115,9 @@ public:
         abort();
     }
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* value, CompilerVariable* v) {
+        // Can almost do this, except for error messages + types:
+        // static const std::string attr("__getitem__");
+        // return callattr(emitter, info, value, &attr, true, ArgPassSpec(1, 0, 0, 0), {v}, NULL);
         printf("getitem not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -314,7 +317,7 @@ ConcreteCompilerVariable* makeFloat(double);
 ConcreteCompilerVariable* makeBool(bool);
 CompilerVariable* makeStr(std::string*);
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*);
-CompilerVariable* undefVariable();
+ConcreteCompilerVariable* undefVariable();
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
 
 ConcreteCompilerType* typeFromClass(BoxedClass*);

@@ -583,17 +583,17 @@ public:
         for (int i = 0; i < clf->versions.size(); i++) {
             CompiledFunction* cf = clf->versions[i];
 
-            FunctionSignature* fsig = cf->sig;
+            FunctionSpecialization* fspec = cf->spec;
 
             Sig* type_sig = new Sig();
-            type_sig->rtn_type = fsig->rtn_type;
+            type_sig->rtn_type = fspec->rtn_type;
 
             if (stripfirst) {
-                assert(fsig->arg_types.size() >= 1);
-                type_sig->arg_types.insert(type_sig->arg_types.end(), fsig->arg_types.begin() + 1,
-                                           fsig->arg_types.end());
+                assert(fspec->arg_types.size() >= 1);
+                type_sig->arg_types.insert(type_sig->arg_types.end(), fspec->arg_types.begin() + 1,
+                                           fspec->arg_types.end());
             } else {
-                type_sig->arg_types.insert(type_sig->arg_types.end(), fsig->arg_types.begin(), fsig->arg_types.end());
+                type_sig->arg_types.insert(type_sig->arg_types.end(), fspec->arg_types.begin(), fspec->arg_types.end());
             }
             sigs.push_back(type_sig);
         }
@@ -950,32 +950,10 @@ public:
         return UNKNOWN->setattr(emitter, info, var, attr, v);
     }
 
-    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        if (cls == bool_cls) {
-            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, var->getValue());
-            assert(unboxed->getType() == g.i1);
-            return new ConcreteCompilerVariable(BOOL, unboxed, true);
-        }
-
-        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        ConcreteCompilerVariable* rtn = converted->nonzero(emitter, info);
-        converted->decvref(emitter);
-        return rtn;
-    }
-
     virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         converted->print(emitter, info);
         converted->decvref(emitter);
-    }
-
-    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                      CompilerVariable* slice) {
-        return UNKNOWN->getitem(emitter, info, var, slice);
-    }
-
-    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        return UNKNOWN->len(emitter, info, var);
     }
 
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
@@ -987,102 +965,170 @@ public:
         return rtn;
     }
 
-    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
-                                       const std::vector<CompilerVariable*>& args,
-                                       const std::vector<const std::string*>* keyword_names) {
-        if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {
-            Box* rtattr = cls->getattr(*attr);
-            if (rtattr == NULL) {
+    ConcreteCompilerVariable* tryCallattrConstant(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                                  const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                                  const std::vector<CompilerVariable*>& args,
+                                                  const std::vector<const std::string*>* keyword_names,
+                                                  bool raise_on_missing = true) {
+        if (!cls->is_constant || cls->instancesHaveAttrs() || !cls->hasGenericGetattr())
+            return NULL;
+
+        Box* rtattr = cls->getattr(*attr);
+        if (rtattr == NULL) {
+            if (raise_on_missing) {
                 llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(*getNameOfClass(cls) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
                 return undefVariable();
-            }
-
-            if (rtattr->cls == function_cls) {
-                // Functions themselves can't remunge their passed arguments;
-                // that should either happen here, or we skip things that aren't a simple match
-                RELEASE_ASSERT(!argspec.has_starargs, "");
-                RELEASE_ASSERT(!argspec.has_kwargs, "");
-                RELEASE_ASSERT(argspec.num_keywords == 0, "");
-
-                CLFunction* cl = unboxRTFunction(rtattr);
-                assert(cl);
-
-                CompiledFunction* cf = NULL;
-                int nsig_args = 0;
-                bool found = false;
-                // TODO have to find the right version.. similar to resolveclfunc?
-                for (int i = 0; i < cl->versions.size(); i++) {
-                    cf = cl->versions[i];
-                    nsig_args = cf->sig->arg_types.size();
-                    if (nsig_args != args.size() + 1) {
-                        continue;
-                    }
-
-                    bool fits = true;
-                    for (int j = 1; j < nsig_args; j++) {
-                        // if (cf->sig->arg_types[j] != UNKNOWN) {
-                        // if (cf->sig->arg_types[j]->isFitBy(args[j-1]->guaranteedClass())) {
-                        if (!args[j - 1]->canConvertTo(cf->sig->arg_types[j])) {
-                            printf("Can't use version %d since arg %d (%s) doesn't fit into sig arg of %s\n", i, j,
-                                   args[j - 1]->getType()->debugName().c_str(),
-                                   cf->sig->arg_types[j]->debugName().c_str());
-                            fits = false;
-                            break;
-                        }
-                    }
-                    if (!fits)
-                        continue;
-
-                    found = true;
-                    break;
-                }
-
-                assert(found);
-                assert(nsig_args == args.size() + 1);
-                assert(!cf->is_interpreted);
-                assert(cf->code);
-
-                std::vector<llvm::Type*> arg_types;
-                for (int i = 0; i < nsig_args; i++) {
-                    // TODO support passing unboxed values as arguments
-                    assert(cf->sig->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
-
-                    arg_types.push_back(g.llvm_value_type_ptr);
-                    if (i == 3) {
-                        arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
-                        break;
-                    }
-                }
-                llvm::FunctionType* ft = llvm::FunctionType::get(cf->sig->rtn_type->llvmType(), arg_types, false);
-
-                llvm::Value* linked_function = embedConstantPtr(cf->code, ft->getPointerTo());
-
-                std::vector<CompilerVariable*> new_args;
-                new_args.push_back(var);
-                new_args.insert(new_args.end(), args.begin(), args.end());
-
-                std::vector<llvm::Value*> other_args;
-
-                ConcreteCompilerVariable* rtn = _call(emitter, info, linked_function, cf->code, other_args, argspec,
-                                                      new_args, keyword_names, cf->sig->rtn_type);
-                assert(rtn->getType() == cf->sig->rtn_type);
-
-                assert(cf->sig->rtn_type != BOXED_INT);
-                ASSERT(cf->sig->rtn_type != BOXED_BOOL, "%p", cf->code);
-                assert(cf->sig->rtn_type != BOXED_FLOAT);
-
-                return rtn;
+            } else {
+                return NULL;
             }
         }
+
+        if (rtattr->cls != function_cls)
+            return NULL;
+
+        RELEASE_ASSERT(!argspec.has_starargs, "");
+        RELEASE_ASSERT(!argspec.has_kwargs, "");
+        RELEASE_ASSERT(argspec.num_keywords == 0, "");
+
+        CLFunction* cl = unboxRTFunction(rtattr);
+        assert(cl);
+
+        if (cl->num_defaults || cl->takes_varargs || cl->takes_kwargs)
+            return NULL;
+
+        RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
+        RELEASE_ASSERT(cl->num_args == args.size() + 1, "");
+
+        CompiledFunction* cf = NULL;
+        bool found = false;
+        // TODO have to find the right version.. similar to resolveclfunc?
+        for (int i = 0; i < cl->versions.size(); i++) {
+            cf = cl->versions[i];
+            assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
+
+            bool fits = true;
+            for (int j = 1; j < cl->num_args; j++) {
+                // if (cf->sig->arg_types[j] != UNKNOWN) {
+                // if (cf->sig->arg_types[j]->isFitBy(args[j-1]->guaranteedClass())) {
+                if (!args[j - 1]->canConvertTo(cf->spec->arg_types[j])) {
+                    // printf("Can't use version %d since arg %d (%s) doesn't fit into spec arg of %s\n", i, j,
+                    // args[j - 1]->getType()->debugName().c_str(),
+                    // cf->spec->arg_types[j]->debugName().c_str());
+                    fits = false;
+                    break;
+                }
+            }
+            if (!fits)
+                continue;
+
+            found = true;
+            break;
+        }
+
+        assert(found);
+        assert(!cf->is_interpreted);
+        assert(cf->code);
+
+        std::vector<llvm::Type*> arg_types;
+        RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
+        for (int i = 0; i < cl->num_args; i++) {
+            // TODO support passing unboxed values as arguments
+            assert(cf->spec->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+
+            arg_types.push_back(g.llvm_value_type_ptr);
+            if (i == 3) {
+                arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
+                break;
+            }
+        }
+        llvm::FunctionType* ft = llvm::FunctionType::get(cf->spec->rtn_type->llvmType(), arg_types, false);
+
+        llvm::Value* linked_function = embedConstantPtr(cf->code, ft->getPointerTo());
+
+        std::vector<CompilerVariable*> new_args;
+        new_args.push_back(var);
+        new_args.insert(new_args.end(), args.begin(), args.end());
+
+        std::vector<llvm::Value*> other_args;
+
+        ConcreteCompilerVariable* rtn = _call(emitter, info, linked_function, cf->code, other_args, argspec, new_args,
+                                              keyword_names, cf->spec->rtn_type);
+        assert(rtn->getType() == cf->spec->rtn_type);
+
+        // We should provide unboxed versions of these rather than boxing then unboxing:
+        // TODO is it more efficient to unbox here, or should we leave it boxed?
+        if (cf->spec->rtn_type == BOXED_BOOL) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn->getValue());
+            return new ConcreteCompilerVariable(BOOL, unboxed, true);
+        }
+        if (cf->spec->rtn_type == BOXED_INT) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, rtn->getValue());
+            return new ConcreteCompilerVariable(INT, unboxed, true);
+        }
+        if (cf->spec->rtn_type == BOXED_FLOAT) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, rtn->getValue());
+            return new ConcreteCompilerVariable(FLOAT, unboxed, true);
+        }
+        assert(cf->spec->rtn_type != BOXED_INT);
+        ASSERT(cf->spec->rtn_type != BOXED_BOOL, "%p", cf->code);
+        assert(cf->spec->rtn_type != BOXED_FLOAT);
+
+        return rtn;
+    }
+
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, attr, clsonly, argspec, args, keyword_names);
+        if (called_constant)
+            return called_constant;
 
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
+    }
+
+    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) {
+        static const std::string attr("__getitem__");
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, false);
+        if (called_constant)
+            return called_constant;
+
+        return UNKNOWN->getitem(emitter, info, var, slice);
+    }
+
+    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
+        static const std::string attr("__len__");
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
+        if (called_constant)
+            return called_constant;
+
+        return UNKNOWN->len(emitter, info, var);
+    }
+
+    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
+        static const std::string attr("__nonzero__");
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
+        if (called_constant)
+            return called_constant;
+
+        if (cls == bool_cls) {
+            assert(0 && "should have been caught by above case");
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, var->getValue());
+            assert(unboxed->getType() == g.i1);
+            return new ConcreteCompilerVariable(BOOL, unboxed, true);
+        }
+
+        return UNKNOWN->nonzero(emitter, info, var);
     }
 
     static NormalObjectType* fromClass(BoxedClass* cls) {
@@ -1466,7 +1512,7 @@ public:
 } _UNDEF;
 CompilerType* UNDEF = &_UNDEF;
 
-CompilerVariable* undefVariable() {
+ConcreteCompilerVariable* undefVariable() {
     return new ConcreteCompilerVariable(&_UNDEF, llvm::UndefValue::get(_UNDEF.llvmType()), true);
 }
 

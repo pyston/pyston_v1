@@ -89,13 +89,11 @@ Box* setAdd2(Box* _self, Box* b) {
     return None;
 }
 
-Box* setNew1(Box* cls) {
+Box* setNew(Box* cls, Box* container) {
     assert(cls == set_cls);
-    return new BoxedSet();
-}
 
-Box* setNew2(Box* cls, Box* container) {
-    assert(cls == set_cls);
+    if (container == None)
+        return new BoxedSet();
 
     Box* rtn = new BoxedSet();
     for (Box* e : container->pyElements()) {
@@ -212,16 +210,15 @@ void setupSet() {
     set_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
     set_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1, false)));
-    set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1, false)));
+                               new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
+    set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
     set_iterator_cls->freeze();
     gc::registerStaticRootObj(set_iterator_cls);
 
-    CLFunction* new_ = boxRTFunction((void*)setNew1, SET, 1, false);
-    addRTFunction(new_, (void*)setNew2, SET, 2, false);
-    set_cls->giveAttr("__new__", new BoxedFunction(new_));
+    set_cls->giveAttr("__new__",
+                      new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));
 
-    Box* repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1, false));
+    Box* repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
     set_cls->giveAttr("__repr__", repr);
     set_cls->giveAttr("__str__", repr);
 
@@ -231,28 +228,27 @@ void setupSet() {
     v_su.push_back(SET);
     v_su.push_back(UNKNOWN);
 
-    CLFunction* or_ = createRTFunction();
-    addRTFunction(or_, (void*)setOrSet, SET, v_ss, false);
+    CLFunction* or_ = createRTFunction(2, 0, false, false);
+    addRTFunction(or_, (void*)setOrSet, SET, v_ss);
     set_cls->giveAttr("__or__", new BoxedFunction(or_));
 
-    CLFunction* sub_ = createRTFunction();
-    addRTFunction(sub_, (void*)setSubSet, SET, v_ss, false);
+    CLFunction* sub_ = createRTFunction(2, 0, false, false);
+    addRTFunction(sub_, (void*)setSubSet, SET, v_ss);
     set_cls->giveAttr("__sub__", new BoxedFunction(sub_));
 
-    CLFunction* xor_ = createRTFunction();
-    addRTFunction(xor_, (void*)setXorSet, SET, v_ss, false);
+    CLFunction* xor_ = createRTFunction(2, 0, false, false);
+    addRTFunction(xor_, (void*)setXorSet, SET, v_ss);
     set_cls->giveAttr("__xor__", new BoxedFunction(xor_));
 
-    CLFunction* and_ = createRTFunction();
-    addRTFunction(and_, (void*)setAndSet, SET, v_ss, false);
+    CLFunction* and_ = createRTFunction(2, 0, false, false);
+    addRTFunction(and_, (void*)setAndSet, SET, v_ss);
     set_cls->giveAttr("__and__", new BoxedFunction(and_));
 
-    set_cls->giveAttr("__iter__",
-                      new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1, false)));
+    set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1)));
 
-    set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1, false)));
+    set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1)));
 
-    set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2, false)));
+    set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
 
     set_cls->freeze();
 }

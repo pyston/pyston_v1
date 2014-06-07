@@ -659,6 +659,15 @@ private:
         std::vector<const std::string*>* keyword_names;
         if (node->keywords.size()) {
             keyword_names = getKeywordNameStorage(node);
+
+            // Only add the keywords to the array the first time, since
+            // the later times we will hit the cache which will have the
+            // keyword names already populated:
+            if (!keyword_names->size()) {
+                for (auto kw : node->keywords) {
+                    keyword_names->push_back(&kw->arg);
+                }
+            }
         } else {
             keyword_names = NULL;
         }
@@ -671,7 +680,6 @@ private:
         for (int i = 0; i < node->keywords.size(); i++) {
             CompilerVariable* a = evalExpr(node->keywords[i]->value, exc_info);
             args.push_back(a);
-            keyword_names->push_back(&node->keywords[i]->arg);
         }
 
         if (node->starargs)
@@ -1246,6 +1254,9 @@ private:
 
         ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
 
+        // TODO add a CompilerVariable::setattr, which can (similar to getitem)
+        // statically-resolve the function if possible, and only fall back to
+        // patchpoints if it couldn't.
         bool do_patchpoint = ENABLE_ICSETITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
         if (do_patchpoint) {
             PatchpointSetupInfo* pp = patchpoints::createSetitemPatchpoint(emitter.currentFunction(),
@@ -1431,7 +1442,8 @@ private:
         if (cl == NULL) {
             SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping);
             si->ast = node;
-            cl = new CLFunction(si);
+            cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
+                                node->args->kwarg.size(), si);
         }
         return cl;
     }

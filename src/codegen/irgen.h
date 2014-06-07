@@ -77,7 +77,7 @@ public:
 };
 
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel::EffortLevel effort, FunctionSignature* sig,
+                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec,
                             const std::vector<AST_expr*>& arg_names, std::string nameprefix);
 
 class TypeRecorder;
