@@ -91,6 +91,7 @@ public:
 // (that should be registerStaticRootPtr)
 void registerStaticRootObj(void* root_obj);
 void runCollection();
+void enableAutoCollection(bool enable);
 }
 }
 

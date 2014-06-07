@@ -36,6 +36,7 @@ namespace gc {
 
 // unsigned numAllocs = 0;
 unsigned bytesAllocatedSinceCollection = 0;
+bool autoCollectionEnabled = false;
 
 static TraceStack roots;
 void registerStaticRootObj(void* obj) {
@@ -163,6 +164,10 @@ void runCollection() {
 
     markPhase();
     sweepPhase();
+}
+
+void enableAutoCollection(bool enable) {
+    autoCollectionEnabled = enable;
 }
 
 } // namespace gc
