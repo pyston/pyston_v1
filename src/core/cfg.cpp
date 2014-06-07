@@ -145,7 +145,7 @@ private:
             AST_expr* remapped_iter = remapExpr(c->iter);
             AST_expr* iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
             AST_expr* iter_call = makeCall(iter_attr);
-            std::string iter_name = nodeName(node, "iter", i);
+            std::string iter_name = nodeName(node, "lc_iter", i);
             AST_stmt* iter_assign = makeAssign(iter_name, iter_call);
             push_back(iter_assign);
 

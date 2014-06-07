@@ -289,8 +289,9 @@ private:
 
         CompilerType* rtn_type = func->callType(ArgPassSpec(arg_types.size()), arg_types, NULL);
 
-        // Should be unboxing things before getting here:
-        ASSERT(rtn_type == unboxedType(rtn_type->getConcreteType()), "%s", rtn_type->debugName().c_str());
+        // Should be unboxing things before getting here; would like to assert, though
+        // we haven't specialized all of the stdlib.
+        // ASSERT(rtn_type == unboxedType(rtn_type->getConcreteType()), "%s", rtn_type->debugName().c_str());
         rtn_type = unboxedType(rtn_type->getConcreteType());
 
         if (speculation != TypeAnalysis::NONE) {

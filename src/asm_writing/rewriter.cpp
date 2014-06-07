@@ -27,6 +27,10 @@ using namespace pyston::assembler;
 
 Register fromArgnum(int argnum) {
     switch (argnum) {
+        case -5:
+            return RBP;
+        case -4:
+            return RSP;
         case -3:
             return R11;
         case -2:
@@ -234,6 +238,17 @@ RewriterVar RewriterVar::toBool(int dest) {
     return RewriterVar(rewriter, dest, version);
 }
 
+RewriterVar RewriterVar::add(int64_t amount) {
+    assertValid();
+
+    if (amount > 0)
+        rewriter->assembler->add(assembler::Immediate(amount), fromArgnum(this->argnum));
+    else
+        rewriter->assembler->sub(assembler::Immediate(-amount), fromArgnum(this->argnum));
+    int new_version = rewriter->mutate(this->argnum);
+    return RewriterVar(rewriter, this->argnum, new_version);
+}
+
 Rewriter* Rewriter::createRewriter(void* ic_rtn_addr, int num_orig_args, int num_temp_regs, const char* debug_name) {
     assert(num_temp_regs <= 2 && "unsupported");
 
@@ -267,7 +282,7 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_orig_args, int num_temp_regs)
 //}
 
 #ifndef NDEBUG
-    for (int i = -3; i < MAX_ARGS; i++) {
+    for (int i = -5; i < MAX_ARGS; i++) {
         versions[i] = next_version++;
     }
 #endif
@@ -297,17 +312,39 @@ RewriterVar Rewriter::getArg(int argnum) {
 #ifndef NDEBUG
     int version = versions[argnum];
     assert(version);
-    assert(version == argnum + 5);
+    assert(version == argnum + 7);
 #else
     int version = 0;
 #endif
     return RewriterVar(this, argnum, version);
 }
 
+RewriterVar Rewriter::getRsp() {
+    int argnum = -4;
+#ifndef NDEBUG
+    int version = versions[argnum];
+#else
+    int version = 0;
+#endif
+    assert(version);
+    return RewriterVar(this, argnum, version);
+}
+
+RewriterVar Rewriter::getRbp() {
+    int argnum = -5;
+#ifndef NDEBUG
+    int version = versions[argnum];
+#else
+    int version = 0;
+#endif
+    assert(version);
+    return RewriterVar(this, argnum, version);
+}
+
 #ifndef NDEBUG
 void Rewriter::checkArgsValid() {
     for (int i = 0; i < num_orig_args; i++)
-        checkVersion(i, i + 5);
+        checkVersion(i, i + 7);
 }
 
 int Rewriter::mutate(int argnum) {

@@ -1400,6 +1400,7 @@ bool PrintVisitor::visit_return(AST_Return* node) {
 }
 
 bool PrintVisitor::visit_slice(AST_Slice* node) {
+    printf("<slice>(");
     if (node->lower)
         node->lower->accept(this);
     if (node->upper || node->step)
@@ -1410,6 +1411,7 @@ bool PrintVisitor::visit_slice(AST_Slice* node) {
         putchar(':');
         node->step->accept(this);
     }
+    printf(")");
     return true;
 }
 

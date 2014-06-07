@@ -22,6 +22,14 @@
 namespace pyston {
 namespace gc {
 
+inline GCObjectHeader* headerFromObject(void* obj) {
+#ifndef NVALGRIND
+    return static_cast<GCObjectHeader*>((void*)((char*)obj + 0));
+#else
+    return static_cast<GCObjectHeader*>(obj);
+#endif
+}
+
 #define BLOCK_SIZE 4096
 #define ATOM_SIZE 16
 static_assert(BLOCK_SIZE % ATOM_SIZE == 0, "");
@@ -78,24 +86,28 @@ public:
     void* realloc(void* ptr, size_t bytes);
 
     void* alloc(size_t bytes) {
+        void* rtn;
         // assert(bytes >= 16);
         if (bytes <= 16)
-            return allocSmall(16, &heads[0], &full_heads[0]);
-        if (bytes <= 32)
-            return allocSmall(32, &heads[1], &full_heads[1]);
-
-        if (bytes > sizes[NUM_BUCKETS - 1]) {
-            return allocLarge(bytes);
-        }
-
-        for (int i = 2; i < NUM_BUCKETS; i++) {
-            if (sizes[i] >= bytes) {
-                return allocSmall(sizes[i], &heads[i], &full_heads[i]);
+            rtn = allocSmall(16, &heads[0], &full_heads[0]);
+        else if (bytes <= 32)
+            rtn = allocSmall(32, &heads[1], &full_heads[1]);
+        else if (bytes > sizes[NUM_BUCKETS - 1])
+            rtn = allocLarge(bytes);
+        else {
+            rtn = NULL;
+            for (int i = 2; i < NUM_BUCKETS; i++) {
+                if (sizes[i] >= bytes) {
+                    rtn = allocSmall(sizes[i], &heads[i], &full_heads[i]);
+                    break;
+                }
             }
         }
 
-        // unreachable
-        abort();
+        // assert(rtn);
+        GCObjectHeader* header = headerFromObject(rtn);
+        *reinterpret_cast<intptr_t*>(header) = 0;
+        return rtn;
     }
 
     void free(void* ptr);

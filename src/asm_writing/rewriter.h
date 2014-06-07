@@ -71,6 +71,7 @@ public:
     void push();
     RewriterVar cmp(AST_TYPE::AST_TYPE cmp_type, const RewriterVar& val, int dest);
     RewriterVar toBool(int dest);
+    RewriterVar add(int64_t amount);
 
     friend class Rewriter;
 };
@@ -116,6 +117,12 @@ public:
     inline void checkVersion(int argnum, int version) {}
     inline void checkArgsValid() {}
 #endif
+
+    int getFuncStackSize() { return rewrite->getFuncStackSize(); }
+    int getScratchRbpOffset() { return rewrite->getScratchRbpOffset(); }
+    int getScratchBytes() { return rewrite->getScratchBytes(); }
+    RewriterVar getRbp();
+    RewriterVar getRsp();
 
     void addDecision(int way);
 

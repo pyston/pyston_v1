@@ -121,6 +121,10 @@ static void markPhase() {
 
         setMark(header);
 
+        // is being made
+        if (header->kind_id == 0)
+            continue;
+
         ASSERT(KIND_OFFSET <= header->kind_id && header->kind_id < KIND_OFFSET + num_kinds, "%p %d", header,
                header->kind_id);
 
