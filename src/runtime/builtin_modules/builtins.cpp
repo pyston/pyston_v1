@@ -202,11 +202,12 @@ Box* open(Box* arg1, Box* arg2) {
 
 extern "C" Box* chr(Box* arg) {
     if (arg->cls != int_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg)->c_str());
-        raiseExcHelper(TypeError, "");
+        raiseExcHelper(TypeError, "an integer is required");
     }
     i64 n = static_cast<BoxedInt*>(arg)->n;
-    RELEASE_ASSERT(n >= 0 && n < 256, "");
+    if (n < 0 || n >= 256) {
+        raiseExcHelper(ValueError, "chr() arg not in range(256)");
+    }
 
     return boxString(std::string(1, (char)n));
 }
