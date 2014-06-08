@@ -559,6 +559,7 @@ void setupRuntime() {
 
     setupMath();
     setupTime();
+    setupTypes();
     setupBuiltins();
 
     setupCAPI();

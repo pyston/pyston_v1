@@ -53,6 +53,7 @@ void teardownCAPI();
 void setupSys();
 void setupMath();
 void setupTime();
+void setupTypes();
 void setupBuiltins();
 
 BoxedDict* getSysModulesDict();
