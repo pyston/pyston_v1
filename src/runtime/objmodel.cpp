@@ -1602,6 +1602,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     FunctionList& versions = f->versions;
 
     int num_output_args = f->numReceivedArgs();
+    int num_passed_args = argspec.totalPassed();
 
 
     if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs)
@@ -1621,6 +1622,8 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     RewriterVar r_defaults_array;
     if (rewrite_args) {
+        assert(rewrite_args->args_guarded && "need to guard args here");
+
         if (!rewrite_args->func_guarded) {
             if (guard_clfunc) {
                 rewrite_args->obj.addAttrGuard(offsetof(BoxedFunction, f), (intptr_t)f);
@@ -1636,14 +1639,13 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     }
 
     if (rewrite_args) {
-        int num_passed = argspec.totalPassed();
-        if (num_passed >= 1)
+        if (num_passed_args >= 1)
             rewrite_args->arg1 = rewrite_args->arg1.move(0);
-        if (num_passed >= 2)
+        if (num_passed_args >= 2)
             rewrite_args->arg2 = rewrite_args->arg2.move(1);
-        if (num_passed >= 3)
+        if (num_passed_args >= 3)
             rewrite_args->arg3 = rewrite_args->arg3.move(2);
-        if (num_passed >= 4)
+        if (num_passed_args >= 4)
             rewrite_args->args = rewrite_args->args.move(3);
 
         // We might have trouble if we have more output args than input args,
@@ -1944,6 +1946,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                 rewrite_args->args.getAttr((i - 3) * sizeof(Box*), -1)
                     .addAttrGuard(BOX_CLS_OFFSET, (intptr_t)args[i - 3]->cls);
             }
+            rewrite_args->args_guarded = true;
         }
 
         rewrite_args->rewriter->addDecision(obj->cls == function_cls ? 1 : 0);
@@ -2089,6 +2092,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs);
             srewrite_args.arg1 = rewrite_args->rhs;
+            srewrite_args.args_guarded = true;
             irtn = callattrInternal1(lhs, &iop_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
             if (!srewrite_args.out_success)
