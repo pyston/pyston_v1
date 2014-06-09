@@ -9,7 +9,6 @@ import time
 work = []
 done = []
 def run(num):
-    work.append(num)
     for i in xrange(num):
         t = work.pop()
         work.append(t - 1)
@@ -18,6 +17,8 @@ def run(num):
 print "starting!"
 
 nthreads = 2
+for i in xrange(nthreads):
+    work.append(1000000)
 for i in xrange(nthreads):
     t = start_new_thread(run, (1000000,))
 

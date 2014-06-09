@@ -30,6 +30,8 @@ static_assert(sizeof(pthread_t) <= sizeof(BoxedInt::n), "");
 BoxedModule* thread_module;
 
 static void* thread_start(void* _args) {
+    threading::GLReadRegion _glock;
+
     std::vector<Box*>* args = static_cast<std::vector<Box*>*>(_args);
     assert(args->size() == 2 || args->size() == 3);
     Box* target = (*args)[0];

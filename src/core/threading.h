@@ -18,38 +18,45 @@
 namespace pyston {
 namespace threading {
 
-#define THREADING_USE_GIL 0
-#define THREADING_SAFE_DATASTRUCTURES 0
+#define THREADING_USE_GIL 1
+#define THREADING_USE_GRWL 0
+#define THREADING_SAFE_DATASTRUCTURES THREADING_USE_GRWL
 
-void ensureSerial();
-void endEnsureSerial();
+void acquireGLRead();
+void releaseGLRead();
+void acquireGLWrite();
+void releaseGLWrite();
+// Note: promoteGL is free to drop the lock and then reacquire
+void promoteGL();
+void demoteGL();
+
+
 
 #if THREADING_USE_GIL
-inline void ensureSerial() {
+inline void acquireGLRead() {
+    acquireGLWrite();
 }
-inline void endEnsureSerial() {
+inline void releaseGLRead() {
+    releaseGLWrite();
+}
+inline void promoteGL() {
+}
+inline void demoteGL() {
 }
 #endif
 
-class SerialRegion {
-public:
-    SerialRegion() { ensureSerial(); }
-    ~SerialRegion() { endEnsureSerial(); }
+#define MAKE_REGION(name, start, end) \
+class name {\
+public:\
+    name() { start(); }\
+    ~name() { end(); }\
 };
 
-class UnSerialRegion {
-public:
-    UnSerialRegion() { endEnsureSerial(); }
-    ~UnSerialRegion() { ensureSerial(); }
-};
-
-void allowThreads();
-void endAllowThreads();
-class AllowThreadsRegion {
-public:
-    AllowThreadsRegion() { allowThreads(); }
-    ~AllowThreadsRegion() { endAllowThreads(); }
-};
+MAKE_REGION(GLReadRegion, acquireGLRead, releaseGLRead);
+MAKE_REGION(GLPromoteRegion, promoteGL, demoteGL);
+MAKE_REGION(GLReadReleaseRegion, releaseGLRead, acquireGLRead);
+MAKE_REGION(GLWriteReleaseRegion, releaseGLWrite, acquireGLWrite);
+#undef MAKE_REGION
 
 } // namespace threading
 } // namespace pyston

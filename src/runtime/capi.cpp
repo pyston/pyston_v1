@@ -19,6 +19,7 @@
 #include "Python.h"
 
 #include "codegen/compvars.h"
+#include "core/threading.h"
 #include "core/types.h"
 #include "runtime/types.h"
 
@@ -45,6 +46,8 @@ public:
     static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs) {
         assert(self->cls == capifunc_cls);
         assert(varargs->cls == tuple_cls);
+
+        threading::GLPromoteRegion _gil_lock;
 
         Box* rtn = (Box*)self->func(test_module, varargs);
         assert(rtn);

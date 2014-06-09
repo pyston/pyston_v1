@@ -17,6 +17,7 @@
 #include <sys/time.h>
 
 #include "codegen/compvars.h"
+#include "core/threading.h"
 #include "core/types.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
@@ -50,8 +51,13 @@ Box* timeSleep(Box* arg) {
     req.tv_sec = (int)(fullsecs + 0.01);
     req.tv_nsec = (int)(nanosecs * 1000000000);
 
-    int code = nanosleep(&req, NULL);
-    ASSERT(code == 0, "%d", code);
+    int code;
+    {
+        threading::GLReadReleaseRegion _allow_threads;
+        code = nanosleep(&req, NULL);
+    }
+    RELEASE_ASSERT(code == 0, "%d", code);
+
     return None;
 }
 

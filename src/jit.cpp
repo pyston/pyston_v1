@@ -32,6 +32,7 @@
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
+#include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
 
@@ -106,6 +107,8 @@ int main(int argc, char** argv) {
     }
 
     // end of argument parsing
+
+    threading::GLReadRegion _glock;
 
     _t.split("to run");
     if (fn != NULL) {
