@@ -35,10 +35,11 @@ namespace gc {
 // extern unsigned numAllocs;
 //#define ALLOCS_PER_COLLECTION 1000
 extern unsigned bytesAllocatedSinceCollection;
+extern bool autoCollectionEnabled;
 #define ALLOCBYTES_PER_COLLECTION 2000000
 
 void _collectIfNeeded(size_t bytes) {
-    if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
+    if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION && autoCollectionEnabled) {
         bytesAllocatedSinceCollection = 0;
         runCollection();
     }

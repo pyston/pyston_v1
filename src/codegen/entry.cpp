@@ -42,6 +42,7 @@
 #include "core/options.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "gc/collector.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -219,6 +220,8 @@ void initCodegen() {
     initGlobalFuncs(g);
 
     setupRuntime();
+
+    gc::enableAutoCollection(true);
 
     signal(SIGFPE, &handle_sigfpe);
 
