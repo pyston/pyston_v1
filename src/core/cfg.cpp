@@ -1654,7 +1654,10 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     // and can make the analyses more efficient.
     // The extra blocks would get merged by LLVM passes, so I'm not sure
     // how much overall improvement there is.
-    for (CFGBlock* b : rtn->blocks) {
+
+    // Must evaluate end() on every iteration because erase() will invalidate the end.
+    for (auto it = rtn->blocks.begin(); it != rtn->blocks.end(); ++it) {
+        CFGBlock* b = *it;
         while (b->successors.size() == 1) {
             CFGBlock* b2 = b->successors[0];
             if (b2->predecessors.size() != 1)
