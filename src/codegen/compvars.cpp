@@ -472,18 +472,19 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
                                         const std::string* attr, bool clsonly, ArgPassSpec argspec,
                                         const std::vector<CompilerVariable*>& args,
                                         const std::vector<const std::string*>* keyword_names) {
-    RELEASE_ASSERT(!argspec.has_starargs, "");
-    RELEASE_ASSERT(!argspec.has_kwargs, "");
-    RELEASE_ASSERT(argspec.num_keywords == 0, "");
+    bool pass_keywords = (argspec.num_keywords != 0);
+    int npassed_args = argspec.totalPassed();
 
     llvm::Value* func;
-    if (args.size() == 0)
+    if (pass_keywords)
+        func = g.funcs.callattr;
+    else if (npassed_args == 0)
         func = g.funcs.callattr0;
-    else if (args.size() == 1)
+    else if (npassed_args == 1)
         func = g.funcs.callattr1;
-    else if (args.size() == 2)
+    else if (npassed_args == 2)
         func = g.funcs.callattr2;
-    else if (args.size() == 3)
+    else if (npassed_args == 3)
         func = g.funcs.callattr3;
     else
         func = g.funcs.callattr;

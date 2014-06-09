@@ -51,9 +51,10 @@ void setupCAPI();
 void teardownCAPI();
 
 void setupSys();
+void setupBuiltins();
 void setupMath();
 void setupTime();
-void setupBuiltins();
+void setupThread();
 
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
@@ -72,7 +73,7 @@ extern "C" {
 extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *chr_obj, *ord_obj,
     *trap_obj;
 } // these are only needed for functionRepr, which is hacky
-extern "C" { extern BoxedModule* sys_module, *math_module, *time_module, *builtins_module; }
+extern "C" { extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *thread_module; }
 
 extern "C" Box* boxBool(bool);
 extern "C" Box* boxInt(i64);

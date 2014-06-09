@@ -1223,10 +1223,6 @@ extern "C" void dump(void* p) {
 extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope scope, CallRewriteArgs* rewrite_args,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<const std::string*>* keyword_names) {
-    RELEASE_ASSERT(!argspec.has_starargs, "");
-    RELEASE_ASSERT(!argspec.has_kwargs, "");
-    RELEASE_ASSERT(argspec.num_keywords == 0, "");
-
     int npassed_args = argspec.totalPassed();
 
     if (rewrite_args) {
@@ -1519,10 +1515,6 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
 extern "C" Box* callattr(Box* obj, std::string* attr, bool clsonly, ArgPassSpec argspec, Box* arg1, Box* arg2,
                          Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
-    RELEASE_ASSERT(!argspec.has_starargs, "");
-    RELEASE_ASSERT(!argspec.has_kwargs, "");
-    RELEASE_ASSERT(argspec.num_keywords == 0, "");
-
     int npassed_args = argspec.totalPassed();
 
     static StatCounter slowpath_callattr("slowpath_callattr");
@@ -1752,7 +1744,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     const std::vector<AST_expr*>* arg_names = f->getArgNames();
     if (arg_names == nullptr && argspec.num_keywords) {
-        raiseExcHelper(TypeError, "<function>() doesn't take keyword arguments");
+        raiseExcHelper(TypeError, "<function @%p>() doesn't take keyword arguments", f->versions[0]->code);
     }
 
     if (argspec.num_keywords)
@@ -2556,10 +2548,6 @@ static void assertInitNone(Box* obj) {
 
 Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
-    RELEASE_ASSERT(!argspec.has_starargs, "");
-    RELEASE_ASSERT(!argspec.has_kwargs, "");
-    RELEASE_ASSERT(argspec.num_keywords == 0, "");
-
     int npassed_args = argspec.totalPassed();
 
     static StatCounter slowpath_typecall("slowpath_typecall");
@@ -2632,6 +2620,15 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     Box* made;
     RewriterVar r_made;
 
+    auto new_argspec = argspec;
+    if (npassed_args > 1 && new_attr == typeLookup(object_cls, _new_str, NULL, NULL)) {
+        if (init_attr == typeLookup(object_cls, _init_str, NULL, NULL)) {
+            raiseExcHelper(TypeError, "object.__new__() takes no parameters");
+        } else {
+            new_argspec = ArgPassSpec(1);
+        }
+    }
+
     if (rewrite_args) {
         if (init_attr)
             r_init.push();
@@ -2658,18 +2655,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
         r_new.push();
 
-        auto new_argspec = argspec;
-        auto new_keyword_names = keyword_names;
-        if (npassed_args > 1 && new_attr == typeLookup(object_cls, _new_str, NULL, NULL)) {
-            if (init_attr == typeLookup(object_cls, _init_str, NULL, NULL)) {
-                raiseExcHelper(TypeError, "object.__new__() takes no parameters");
-            } else {
-                new_argspec = ArgPassSpec(1);
-                new_keyword_names = NULL;
-            }
-        }
-
-        made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, new_keyword_names);
+        made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
 
         if (!srewrite_args.out_success)
             rewrite_args = NULL;
@@ -2691,12 +2677,12 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
                 r_init = rewrite_args->rewriter->pop(-2);
         }
     } else {
-        made = runtimeCallInternal(new_attr, NULL, argspec, cls, arg2, arg3, args, keyword_names);
+        made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
     }
 
     assert(made);
     // If this is true, not supposed to call __init__:
-    assert(made->cls == ccls && "allowed but unsupported");
+    RELEASE_ASSERT(made->cls == ccls, "allowed but unsupported");
 
     if (init_attr) {
         Box* initrtn;

@@ -557,9 +557,10 @@ void setupRuntime() {
     // being tracked in sys.modules:
     setupSys();
 
+    setupBuiltins();
     setupMath();
     setupTime();
-    setupBuiltins();
+    setupThread();
 
     setupCAPI();
 

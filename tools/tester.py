@@ -118,7 +118,12 @@ def run_test(fn, check_stats, run_memcheck):
             l = l[len("# run_args:"):].split()
             jit_args += l
         elif l.startswith("# expected:"):
-            expected = l[len("# run_args:"):].strip()
+            expected = l[len("# expected:"):].strip()
+        elif l.startswith("# skip-if:"):
+            skip_if = l[len("# skip-if:"):].strip()
+            skip = eval(skip_if)
+            if skip:
+                return r + "    (skipped due to 'skip-if: %s')" % skip_if[:30]
 
     assert expected in ("success", "fail", "statfail"), expected
 
