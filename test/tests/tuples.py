@@ -47,6 +47,9 @@ class T(object):
         print "eq", self.n, rhs.n
         return self.n == rhs.n
 
+    def __hash__(self):
+        return hash(self.n)
+
     def __repr__(self):
         return "<T>"
 
@@ -57,6 +60,7 @@ def t(l, r):
     print l >= r
     print l == r
     print l != r
+    print "same hash: " , hash(l) == hash(r)
 
 t(T(1), T(2))
 t(T(1), T(1))

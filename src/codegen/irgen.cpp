@@ -12,47 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/irgen.h"
+
 #include <cstdio>
-#include <stdint.h>
 #include <iostream>
 #include <sstream>
+#include <stdint.h>
 
-#include "llvm/PassManager.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Scalar.h"
 
-#include "core/options.h"
-#include "core/stats.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-#include "core/util.h"
-
+#include "analysis/function_analysis.h"
+#include "analysis/scoping_analysis.h"
+#include "analysis/type_analysis.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/gcbuilder.h"
-#include "codegen/irgen.h"
-#include "codegen/patchpoints.h"
-#include "codegen/osrentry.h"
-#include "codegen/stackmaps.h"
 #include "codegen/irgen/irgenerator.h"
 #include "codegen/irgen/util.h"
 #include "codegen/opt/escape_analysis.h"
 #include "codegen/opt/inliner.h"
 #include "codegen/opt/passes.h"
-
-#include "runtime/types.h"
+#include "codegen/osrentry.h"
+#include "codegen/patchpoints.h"
+#include "codegen/stackmaps.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/options.h"
+#include "core/stats.h"
+#include "core/util.h"
 #include "runtime/objmodel.h"
-
-#include "analysis/function_analysis.h"
-#include "analysis/scoping_analysis.h"
-#include "analysis/type_analysis.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -508,15 +505,16 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         } else if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
             // number of times a function needs to be called to be reoptimized:
-            static const int REOPT_THRESHOLDS[] = { 10,    // INTERPRETED->MINIMAL
-                                                    250,   // MINIMAL->MODERATE
-                                                    10000, // MODERATE->MAXIMAL
+            static const int REOPT_THRESHOLDS[] = {
+                10,    // INTERPRETED->MINIMAL
+                250,   // MINIMAL->MODERATE
+                10000, // MODERATE->MAXIMAL
             };
 
             assert(strcmp("opt", bb_type) == 0);
 
-            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL && source->ast->type
-                                                                                        != AST_TYPE::Module) {
+            if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
+                && source->ast->type != AST_TYPE::Module) {
                 llvm::BasicBlock* preentry_bb
                     = llvm::BasicBlock::Create(g.context, "pre_entry", irstate->getLLVMFunction(),
                                                llvm_entry_blocks[source->cfg->getStartingBlock()]);
@@ -565,7 +563,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
-            generator->unpackArguments(arg_names, cf->sig->arg_types);
+            generator->unpackArguments(arg_names, cf->spec->arg_types);
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
@@ -842,7 +840,7 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     llvm::DIBuilder builder(*g.cur_module);
 
     std::string fn = source->parent_module->fn;
-    std::string dir = "TODO fill this in";
+    std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
     llvm::DIFile file = builder.createFile(fn, dir);
@@ -850,6 +848,11 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
     llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
                                                           false, true, lineno + 1, 0, true, f);
+
+    // The 'variables' field gets initialized with a tag-prefixed array, but
+    // a later verifier asserts that there is no tag.  Replace it with an empty array:
+    func_info.getVariables()->replaceAllUsesWith(builder.getOrCreateArray(llvm::ArrayRef<llvm::Value*>()));
+
     llvm::DICompileUnit compile_unit
         = builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn, dir, producer, true, "", 0);
 
@@ -878,10 +881,10 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
     return os.str();
 }
 
-CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                                  EffortLevel::EffortLevel effort, FunctionSignature* sig,
-                                  const std::vector<AST_expr*>& arg_names, std::string nameprefix) {
-    Timer _t("in compileFunction");
+CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec,
+                            const std::vector<AST_expr*>& arg_names, std::string nameprefix) {
+    Timer _t("in doCompile");
 
     if (VERBOSITY("irgen") >= 1)
         source->cfg->print();
@@ -896,7 +899,7 @@ CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* 
     // Initializing the llvm-level structures:
 
     int nargs = arg_names.size();
-    ASSERT(nargs == sig->arg_types.size(), "%d %ld", nargs, sig->arg_types.size());
+    ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
     std::vector<llvm::Type*> llvm_arg_types;
     if (entry_descriptor == NULL) {
@@ -905,7 +908,7 @@ CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* 
                 llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
                 break;
             }
-            llvm_arg_types.push_back(sig->arg_types[i]->llvmType());
+            llvm_arg_types.push_back(spec->arg_types[i]->llvmType());
         }
     } else {
         int arg_num = -1;
@@ -921,20 +924,20 @@ CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* 
         }
     }
 
-    llvm::FunctionType* ft = llvm::FunctionType::get(sig->rtn_type->llvmType(), llvm_arg_types, false /*vararg*/);
+    llvm::FunctionType* ft = llvm::FunctionType::get(spec->rtn_type->llvmType(), llvm_arg_types, false /*vararg*/);
 
     llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, g.cur_module);
     // g.func_registry.registerFunction(f, g.cur_module);
 
     CompiledFunction* cf
-        = new CompiledFunction(f, sig, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
+        = new CompiledFunction(f, spec, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
 
     llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
 
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
-    TypeAnalysis* types = doTypeAnalysis(source->cfg, arg_names, sig->arg_types, speculation_level,
+    TypeAnalysis* types = doTypeAnalysis(source->cfg, arg_names, spec->arg_types, speculation_level,
                                          source->scoping->getScopeInfoForNode(source->ast));
 
     GuardList guards;
@@ -970,7 +973,7 @@ CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* 
 
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
-        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, arg_names, sig->arg_types, TypeAnalysis::NONE,
+        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, arg_names, spec->arg_types, TypeAnalysis::NONE,
                                                    source->scoping->getScopeInfoForNode(source->ast));
         emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, arg_names, NULL, deopt_full_blocks,
                 deopt_partial_blocks);

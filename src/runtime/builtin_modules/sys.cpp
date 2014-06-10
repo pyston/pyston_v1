@@ -15,13 +15,11 @@
 #include <cmath>
 
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/inline/boxing.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-#include "runtime/inline/boxing.h"
-
-#include "gc/collector.h"
 
 namespace pyston {
 
@@ -30,7 +28,7 @@ BoxedDict* sys_modules_dict;
 
 BoxedDict* getSysModulesDict() {
     // PyPy's behavior: fetch from sys.modules each time:
-    // Box *_sys_modules = sys_module->peekattr("modules");
+    // Box *_sys_modules = sys_module->getattr("modules");
     // assert(_sys_modules);
     // assert(_sys_modules->cls == dict_cls);
     // return static_cast<BoxedDict*>(_sys_modules);
@@ -41,7 +39,7 @@ BoxedDict* getSysModulesDict() {
 
 BoxedList* getSysPath() {
     // Unlike sys.modules, CPython handles sys.path by fetching it each time:
-    Box* _sys_path = sys_module->peekattr("path");
+    Box* _sys_path = sys_module->getattr("path");
     assert(_sys_path);
 
     if (_sys_path->cls != list_cls) {
@@ -54,7 +52,7 @@ BoxedList* getSysPath() {
 }
 
 void addToSysArgv(const char* str) {
-    Box* sys_argv = sys_module->peekattr("argv");
+    Box* sys_argv = sys_module->getattr("argv");
     assert(sys_argv);
     assert(sys_argv->cls == list_cls);
     listAppendInternal(sys_argv, boxStrConstant(str));

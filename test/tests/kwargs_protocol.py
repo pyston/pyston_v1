@@ -1,0 +1,28 @@
+# expected: fail
+# - not supported yet
+
+class C(object):
+    def __len__(self):
+        print "__len__"
+        return 2
+
+    def __iter__(self):
+        print "__iter__"
+        return self
+
+    def next(self):
+        print "Next"
+        raise StopIteration()
+
+    def __getitem__(self, k):
+        print "getitem", k
+        return k
+
+    def keys(self):
+        print "keys"
+        return ["a", "c", "b"]
+
+def f(a, b, c):
+    print a, b, c
+
+f(**C())

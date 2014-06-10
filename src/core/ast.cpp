@@ -14,11 +14,11 @@
 
 #include "core/ast.h"
 
+#include <cassert>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cstdio>
 #include <stdint.h>
-#include <cassert>
 
 #include "core/cfg.h"
 
@@ -201,8 +201,6 @@ void AST_arguments::accept(ASTVisitor* v) {
 
     visitVector(defaults, v);
     visitVector(args, v);
-    if (kwarg)
-        kwarg->accept(v);
 }
 
 void AST_Assert::accept(ASTVisitor* v) {
@@ -784,6 +782,16 @@ void AST_UnaryOp::accept(ASTVisitor* v) {
 
 void* AST_UnaryOp::accept_expr(ExprVisitor* v) {
     return v->visit_unaryop(this);
+}
+
+void AST_Unreachable::accept(ASTVisitor* v) {
+    bool skip = v->visit_unreachable(this);
+    if (skip)
+        return;
+}
+
+void AST_Unreachable::accept_stmt(StmtVisitor* v) {
+    v->visit_unreachable(this);
 }
 
 void AST_While::accept(ASTVisitor* v) {
@@ -1392,6 +1400,7 @@ bool PrintVisitor::visit_return(AST_Return* node) {
 }
 
 bool PrintVisitor::visit_slice(AST_Slice* node) {
+    printf("<slice>(");
     if (node->lower)
         node->lower->accept(this);
     if (node->upper || node->step)
@@ -1402,6 +1411,7 @@ bool PrintVisitor::visit_slice(AST_Slice* node) {
         putchar(':');
         node->step->accept(this);
     }
+    printf(")");
     return true;
 }
 
@@ -1515,6 +1525,11 @@ bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
             break;
     }
     node->operand->accept(this);
+    return true;
+}
+
+bool PrintVisitor::visit_unreachable(AST_Unreachable* node) {
+    printf("<unreachable>");
     return true;
 }
 
@@ -1780,6 +1795,10 @@ public:
         return false;
     }
     virtual bool visit_unaryop(AST_UnaryOp* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_unreachable(AST_Unreachable* node) {
         output->push_back(node);
         return false;
     }

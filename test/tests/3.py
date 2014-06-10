@@ -1,4 +1,4 @@
-def double(x=1):
+def double(x):
     return x * 2
 def f2(x):
     return 0

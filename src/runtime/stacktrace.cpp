@@ -12,23 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
+#include <algorithm>
+#include <cstdarg>
 
-#ifndef LIBUNWIND_PYSTON_PATCH_VERSION
-#error "Please use a patched version of libunwind; see docs/INSTALLING.md"
-#elif LIBUNWIND_PYSTON_PATCH_VERSION != 0x01
-#error "Please repatch your version of libunwind; see docs/INSTALLING.md"
-#endif
+#include "llvm/DebugInfo/DIContext.h"
 
-
+#include "codegen/codegen.h"
+#include "codegen/llvm_interpreter.h"
+#include "core/options.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
-#include "core/options.h"
-
-#include <stdarg.h>
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
 
 namespace pyston {
 
@@ -112,7 +109,84 @@ void raiseExc(Box* exc_obj) {
     abort();
 }
 
+static std::vector<const LineInfo*> last_tb;
+void printLastTraceback() {
+    fprintf(stderr, "Traceback (most recent call last):\n");
+
+    for (auto line : last_tb) {
+        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
+
+        FILE* f = fopen(line->file.c_str(), "r");
+        if (f) {
+            for (int i = 1; i < line->line; i++) {
+                char* buf = NULL;
+                size_t size;
+                size_t r = getline(&buf, &size, f);
+                if (r != -1)
+                    free(buf);
+            }
+            char* buf = NULL;
+            size_t size;
+            size_t r = getline(&buf, &size, f);
+            if (r != -1) {
+                while (buf[r - 1] == '\n' or buf[r - 1] == '\r')
+                    r--;
+
+                char* ptr = buf;
+                while (*ptr == ' ' || *ptr == '\t') {
+                    ptr++;
+                    r--;
+                }
+
+                fprintf(stderr, "    %.*s\n", (int)r, ptr);
+                free(buf);
+            }
+        }
+    }
+}
+
+static std::vector<const LineInfo*> getTracebackEntries() {
+    std::vector<const LineInfo*> entries;
+
+    unw_cursor_t cursor;
+    unw_context_t uc;
+    unw_word_t ip, bp;
+
+    unw_getcontext(&uc);
+    unw_init_local(&cursor, &uc);
+
+    int code;
+    unw_proc_info_t pip;
+
+    while (unw_step(&cursor) > 0) {
+        unw_get_reg(&cursor, UNW_REG_IP, &ip);
+
+        const LineInfo* line = getLineInfoFor((uint64_t)ip);
+        if (line) {
+            entries.push_back(line);
+        } else {
+            unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
+
+            unw_proc_info_t pip;
+            code = unw_get_proc_info(&cursor, &pip);
+            RELEASE_ASSERT(code == 0, "%d", code);
+
+            if (pip.start_ip == (intptr_t)interpretFunction) {
+                line = getLineInfoForInterpretedFrame((void*)bp);
+                assert(line);
+                entries.push_back(line);
+            }
+        }
+    }
+    std::reverse(entries.begin(), entries.end());
+
+    return entries;
+}
+
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
+    auto entries = getTracebackEntries();
+    last_tb = std::move(entries);
+
     if (msg != NULL) {
         va_list ap;
         va_start(ap, msg);
@@ -138,9 +212,8 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 
 std::string formatException(Box* b) {
     const std::string* name = getTypeName(b);
-    HCBox* hcb = static_cast<HCBox*>(b);
 
-    Box* attr = hcb->peekattr("message");
+    Box* attr = b->getattr("message");
     if (attr == nullptr)
         return *name;
 

@@ -17,6 +17,10 @@
 
 #include <string>
 
+namespace llvm {
+class CallInst;
+}
+
 namespace pyston {
 
 bool isAllocCall(const std::string& name);

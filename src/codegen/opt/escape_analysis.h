@@ -15,7 +15,16 @@
 #ifndef PYSTON_CODEGEN_OPT_ESCAPEANALYSIS_H
 #define PYSTON_CODEGEN_OPT_ESCAPEANALYSIS_H
 
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 #include "llvm/Pass.h"
+
+namespace llvm {
+class Instruction;
+class Value;
+}
 
 namespace pyston {
 

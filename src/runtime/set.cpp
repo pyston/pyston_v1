@@ -14,27 +14,29 @@
 
 #include "runtime/set.h"
 
-#include "runtime/objmodel.h"
+#include <sstream>
 
 #include "codegen/compvars.h"
-
-#include <sstream>
+#include "gc/collector.h"
+#include "runtime/objmodel.h"
 
 namespace pyston {
 
 BoxedClass* set_cls, *set_iterator_cls;
 
-const ObjectFlavor set_flavor(&boxGCHandler, NULL);
-const ObjectFlavor set_iterator_flavor(&boxGCHandler, NULL);
+extern "C" void setGCHandler(GCVisitor* v, void* p);
+extern "C" void setIteratorGCHandler(GCVisitor* v, void* p);
+
+const ObjectFlavor set_flavor(&setGCHandler, NULL);
+const ObjectFlavor set_iterator_flavor(&setIteratorGCHandler, NULL);
 
 namespace set {
 
 class BoxedSetIterator : public Box {
-private:
+public:
     BoxedSet* s;
     decltype(BoxedSet::s)::iterator it;
 
-public:
     BoxedSetIterator(BoxedSet* s) : Box(&set_iterator_flavor, set_iterator_cls), s(s), it(s->s.begin()) {}
 
     bool hasNext() { return it != s->s.end(); }
@@ -45,6 +47,29 @@ public:
         return rtn;
     }
 };
+
+extern "C" void setGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedSet* s = (BoxedSet*)p;
+
+    // This feels like a cludge, but we need to find anything that
+    // the unordered_map might have allocated.
+    // Another way to handle this would be to rt_alloc the unordered_map
+    // as well, though that incurs extra memory dereferences which would
+    // be nice to avoid.
+    void** start = (void**)&s->s;
+    void** end = start + (sizeof(s->s) / 8);
+    v->visitPotentialRange(start, end);
+}
+
+extern "C" void setIteratorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedSetIterator* it = (BoxedSetIterator*)p;
+
+    v->visit(it->s);
+}
 
 Box* setiteratorHasnext(BoxedSetIterator* self) {
     assert(self->cls == set_iterator_cls);
@@ -64,13 +89,11 @@ Box* setAdd2(Box* _self, Box* b) {
     return None;
 }
 
-Box* setNew1(Box* cls) {
+Box* setNew(Box* cls, Box* container) {
     assert(cls == set_cls);
-    return new BoxedSet();
-}
 
-Box* setNew2(Box* cls, Box* container) {
-    assert(cls == set_cls);
+    if (container == None)
+        return new BoxedSet();
 
     Box* rtn = new BoxedSet();
     for (Box* e : container->pyElements()) {
@@ -170,6 +193,13 @@ Box* setLen(BoxedSet* self) {
     return boxInt(self->s.size());
 }
 
+Box* setAdd(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls);
+    self->s.insert(v);
+    return None;
+}
+
+
 } // namespace set
 
 using namespace pyston::set;
@@ -177,18 +207,18 @@ using namespace pyston::set;
 void setupSet() {
     set_cls->giveAttr("__name__", boxStrConstant("set"));
 
-    set_iterator_cls = new BoxedClass(false, false);
+    set_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
     set_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1, false)));
-    set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1, false)));
+                               new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
+    set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
     set_iterator_cls->freeze();
+    gc::registerStaticRootObj(set_iterator_cls);
 
-    CLFunction* new_ = boxRTFunction((void*)setNew1, SET, 1, false);
-    addRTFunction(new_, (void*)setNew2, SET, 2, false);
-    set_cls->giveAttr("__new__", new BoxedFunction(new_));
+    set_cls->giveAttr("__new__",
+                      new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));
 
-    Box* repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1, false));
+    Box* repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
     set_cls->giveAttr("__repr__", repr);
     set_cls->giveAttr("__str__", repr);
 
@@ -198,26 +228,27 @@ void setupSet() {
     v_su.push_back(SET);
     v_su.push_back(UNKNOWN);
 
-    CLFunction* or_ = createRTFunction();
-    addRTFunction(or_, (void*)setOrSet, SET, v_ss, false);
+    CLFunction* or_ = createRTFunction(2, 0, false, false);
+    addRTFunction(or_, (void*)setOrSet, SET, v_ss);
     set_cls->giveAttr("__or__", new BoxedFunction(or_));
 
-    CLFunction* sub_ = createRTFunction();
-    addRTFunction(sub_, (void*)setSubSet, SET, v_ss, false);
+    CLFunction* sub_ = createRTFunction(2, 0, false, false);
+    addRTFunction(sub_, (void*)setSubSet, SET, v_ss);
     set_cls->giveAttr("__sub__", new BoxedFunction(sub_));
 
-    CLFunction* xor_ = createRTFunction();
-    addRTFunction(xor_, (void*)setXorSet, SET, v_ss, false);
+    CLFunction* xor_ = createRTFunction(2, 0, false, false);
+    addRTFunction(xor_, (void*)setXorSet, SET, v_ss);
     set_cls->giveAttr("__xor__", new BoxedFunction(xor_));
 
-    CLFunction* and_ = createRTFunction();
-    addRTFunction(and_, (void*)setAndSet, SET, v_ss, false);
+    CLFunction* and_ = createRTFunction(2, 0, false, false);
+    addRTFunction(and_, (void*)setAndSet, SET, v_ss);
     set_cls->giveAttr("__and__", new BoxedFunction(and_));
 
-    set_cls->giveAttr("__iter__",
-                      new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1, false)));
+    set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1)));
 
-    set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1, false)));
+    set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1)));
+
+    set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
 
     set_cls->freeze();
 }

@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "analysis/function_analysis.h"
+
 #include <cstdio>
 #include <cstdlib>
-
-#include <unordered_set>
 #include <deque>
+#include <unordered_set>
 
-#include <llvm/ADT/SetVector.h>
-#include <llvm/ADT/SmallSet.h>
-
-#include "core/common.h"
-
-#include "core/ast.h"
-#include "core/cfg.h"
-#include "core/util.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallSet.h"
 
 #include "analysis/fpc.h"
-#include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
+#include "core/ast.h"
+#include "core/cfg.h"
+#include "core/common.h"
+#include "core/util.h"
 
 namespace pyston {
 
@@ -203,6 +201,7 @@ public:
     virtual bool visit_print(AST_Print* node) { return true; }
     virtual bool visit_raise(AST_Raise* node) { return true; }
     virtual bool visit_return(AST_Return* node) { return true; }
+    virtual bool visit_unreachable(AST_Unreachable* node) { return true; }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
         _doSet(node->name);
@@ -233,7 +232,7 @@ public:
     }
 
     virtual bool visit_arguments(AST_arguments* node) {
-        if (node->kwarg)
+        if (node->kwarg.size())
             _doSet(node->kwarg);
         if (node->vararg.size())
             _doSet(node->vararg);

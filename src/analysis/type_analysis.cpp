@@ -14,6 +14,10 @@
 
 #include "analysis/type_analysis.h"
 
+#include <cstdio>
+#include <deque>
+#include <unordered_set>
+
 #include "analysis/fpc.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/type_recording.h"
@@ -21,10 +25,6 @@
 #include "core/cfg.h"
 #include "core/options.h"
 #include "runtime/types.h"
-
-#include <cstdio>
-#include <deque>
-#include <unordered_set>
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -210,7 +210,7 @@ private:
 
         std::vector<CompilerType*> arg_types;
         arg_types.push_back(right);
-        CompilerType* rtn = attr_type->callType(arg_types);
+        CompilerType* rtn = attr_type->callType(ArgPassSpec(2), arg_types, NULL);
 
         if (left == right && (left == INT || left == FLOAT)) {
             ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into",
@@ -237,7 +237,7 @@ private:
 
         std::vector<CompilerType*> arg_types;
         arg_types.push_back(right);
-        CompilerType* rtn = attr_type->callType(arg_types);
+        CompilerType* rtn = attr_type->callType(ArgPassSpec(2), arg_types, NULL);
 
         if (left == right && (left == INT || left == FLOAT)) {
             ASSERT((rtn == left || rtn == UNKNOWN) && "not strictly required but probably something worth looking into",
@@ -267,19 +267,31 @@ private:
     }
 
     virtual void* visit_call(AST_Call* node) {
-        assert(!node->starargs);
-        assert(!node->kwargs);
-        assert(node->keywords.size() == 0);
         CompilerType* func = getType(node->func);
 
         std::vector<CompilerType*> arg_types;
         for (int i = 0; i < node->args.size(); i++) {
             arg_types.push_back(getType(node->args[i]));
         }
-        CompilerType* rtn_type = func->callType(arg_types);
 
-        // Should be unboxing things before getting here:
-        ASSERT(rtn_type == unboxedType(rtn_type->getConcreteType()), "%s", rtn_type->debugName().c_str());
+        std::vector<std::pair<const std::string&, CompilerType*> > kw_types;
+        for (AST_keyword* kw : node->keywords) {
+            kw_types.push_back(std::make_pair<const std::string&, CompilerType*>(kw->arg, getType(kw->value)));
+        }
+
+        CompilerType* starargs = node->starargs ? getType(node->starargs) : NULL;
+        CompilerType* kwargs = node->kwargs ? getType(node->kwargs) : NULL;
+
+        if (starargs || kwargs || kw_types.size()) {
+            // Bail out for anything but simple calls, for now:
+            return UNKNOWN;
+        }
+
+        CompilerType* rtn_type = func->callType(ArgPassSpec(arg_types.size()), arg_types, NULL);
+
+        // Should be unboxing things before getting here; would like to assert, though
+        // we haven't specialized all of the stdlib.
+        // ASSERT(rtn_type == unboxedType(rtn_type->getConcreteType()), "%s", rtn_type->debugName().c_str());
         rtn_type = unboxedType(rtn_type->getConcreteType());
 
         if (speculation != TypeAnalysis::NONE) {
@@ -297,8 +309,8 @@ private:
         CompilerType* right = getType(node->comparators[0]);
 
         AST_TYPE::AST_TYPE op_type = node->ops[0];
-        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In || op_type
-                                                                                                == AST_TYPE::NotIn) {
+        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
+            || op_type == AST_TYPE::NotIn) {
             assert(node->ops.size() == 1 && "I don't think this should happen");
             return BOOL;
         }
@@ -311,7 +323,7 @@ private:
 
         std::vector<CompilerType*> arg_types;
         arg_types.push_back(right);
-        return attr_type->callType(arg_types);
+        return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
     }
 
     virtual void* visit_dict(AST_Dict* node) {
@@ -393,7 +405,7 @@ private:
         CompilerType* getitem_type = val->getattrType(&name, true);
         std::vector<CompilerType*> args;
         args.push_back(slice);
-        return getitem_type->callType(args);
+        return getitem_type->callType(ArgPassSpec(1), args, NULL);
     }
 
     virtual void* visit_tuple(AST_Tuple* node) {
@@ -411,7 +423,7 @@ private:
         const std::string& name = getOpName(node->op_type);
         CompilerType* attr_type = operand->getattrType(&name, true);
         std::vector<CompilerType*> arg_types;
-        return attr_type->callType(arg_types);
+        return attr_type->callType(ArgPassSpec(0), arg_types, NULL);
     }
 
 
@@ -509,6 +521,8 @@ private:
                 getType(node->value);
         }
     }
+
+    virtual void visit_unreachable(AST_Unreachable* node) {}
 
 public:
     static void propagate(CFGBlock* block, const TypeMap& starting, TypeMap& ending, ExprTypeMap& expr_types,

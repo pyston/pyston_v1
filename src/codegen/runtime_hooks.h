@@ -15,6 +15,10 @@
 #ifndef PYSTON_CODEGEN_RUNTIMEHOOKS_H
 #define PYSTON_CODEGEN_RUNTIMEHOOKS_H
 
+namespace llvm {
+class Value;
+}
+
 namespace pyston {
 
 struct GlobalFuncs {
@@ -29,7 +33,6 @@ struct GlobalFuncs {
     llvm::Value* checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *assertNameDefined, *assertFail;
     llvm::Value* printFloat, *listAppendInternal;
-    llvm::Value* dump;
     llvm::Value* runtimeCall0, *runtimeCall1, *runtimeCall2, *runtimeCall3, *runtimeCall;
     llvm::Value* callattr0, *callattr1, *callattr2, *callattr3, *callattr;
     llvm::Value* reoptCompiledFunc, *compilePartialFunc;

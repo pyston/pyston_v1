@@ -16,14 +16,16 @@
 #define PYSTON_CORE_COMMON_H
 
 #include <cassert>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
-#include <csignal>
 #include <stdint.h>
 #include <string>
-#include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
+
+#define STACK_GROWS_DOWN 1
 
 #define _STRINGIFY(N) #N
 #define STRINGIFY(N) _STRINGIFY(N)

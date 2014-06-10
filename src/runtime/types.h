@@ -51,30 +51,29 @@ void setupCAPI();
 void teardownCAPI();
 
 void setupSys();
+void setupBuiltins();
 void setupMath();
 void setupTime();
-void setupBuiltins();
+void setupThread();
 
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
 
 extern "C" {
-extern BoxedClass* type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls, *instancemethod_cls,
-    *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
+extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
 }
 extern "C" {
-extern const ObjectFlavor type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor, function_flavor, none_flavor,
-    instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor, tuple_flavor, file_flavor,
-    xrange_flavor, member_flavor;
+extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor,
+    function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor,
+    tuple_flavor, file_flavor, xrange_flavor, member_flavor;
 }
-extern "C" { extern const ObjectFlavor user_flavor; }
-
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
 extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *chr_obj, *ord_obj,
     *trap_obj;
 } // these are only needed for functionRepr, which is hacky
-extern "C" { extern BoxedModule* sys_module, *math_module, *time_module, *builtins_module; }
+extern "C" { extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *thread_module; }
 
 extern "C" Box* boxBool(bool);
 extern "C" Box* boxInt(i64);
@@ -88,7 +87,7 @@ extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createUserClass(std::string* name, BoxedModule* parent_module);
+extern "C" Box* createUserClass(std::string* name, Box* base, BoxedModule* parent_module);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -131,16 +130,14 @@ public:
     StlCompatAllocator() {}
     template <class U> StlCompatAllocator(const StlCompatAllocator<U>& other) {}
 
-    template <class U> struct rebind {
-        typedef StlCompatAllocator<U> other;
-    };
+    template <class U> struct rebind { typedef StlCompatAllocator<U> other; };
 
     pointer allocate(size_t n) {
         size_t to_allocate = n * sizeof(value_type);
         // assert(to_allocate < (1<<16));
 
         ConservativeWrapper* rtn = new (to_allocate) ConservativeWrapper(to_allocate);
-        return (pointer) & rtn->data[0];
+        return (pointer)&rtn->data[0];
     }
 
     void deallocate(pointer p, size_t n) {
@@ -165,7 +162,7 @@ class BoxedInt : public Box {
 public:
     int64_t n;
 
-    BoxedInt(int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, int_cls), n(n) {}
+    BoxedInt(BoxedClass* cls, int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, cls), n(n) {}
 };
 
 class BoxedFloat : public Box {
@@ -200,21 +197,26 @@ public:
     : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
 };
 
+class GCdArray : public GCObject {
+public:
+    Box* elts[0];
+
+    GCdArray() : GCObject(&untracked_kind) {}
+
+    void* operator new(size_t size, int capacity) {
+        assert(size == sizeof(GCdArray));
+        return rt_alloc(capacity * sizeof(Box*) + size);
+    }
+
+    static GCdArray* realloc(GCdArray* array, int capacity) {
+        return (GCdArray*)rt_realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
+    }
+};
+
 class BoxedList : public Box {
 public:
-    class ElementArray : public GCObject {
-    public:
-        Box* elts[0];
-
-        ElementArray() : GCObject(&untracked_kind) {}
-
-        void* operator new(size_t size, int capacity) {
-            return rt_alloc(capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
-        }
-    };
-
     int64_t size, capacity;
-    ElementArray* elts;
+    GCdArray* elts;
 
     BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
 
@@ -233,6 +235,7 @@ public:
     BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >&& elts) __attribute__((visibility("default")))
     : Box(&tuple_flavor, tuple_cls), elts(std::move(elts)) {}
 };
+extern "C" BoxedTuple* EmptyTuple;
 
 class BoxedFile : public Box {
 public:
@@ -255,20 +258,28 @@ struct PyLt {
 
 class BoxedDict : public Box {
 public:
-    std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > d;
+    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > DictMap;
+
+    DictMap d;
 
     BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
 };
 
-class BoxedFunction : public HCBox {
+class BoxedFunction : public Box {
 public:
+    HCAttrs attrs;
     CLFunction* f;
 
+    int ndefaults;
+    GCdArray* defaults;
+
     BoxedFunction(CLFunction* f);
+    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults);
 };
 
-class BoxedModule : public HCBox {
+class BoxedModule : public Box {
 public:
+    HCAttrs attrs;
     const std::string fn; // for traceback purposes; not the same as __file__
 
     BoxedModule(const std::string& name, const std::string& fn);
@@ -299,6 +310,17 @@ Box* exceptionNew1(BoxedClass* cls);
 Box* exceptionNew2(BoxedClass* cls, Box* message);
 
 extern BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
-    *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError;
+    *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
+    *StopIteration;
+
+// cls should be obj->cls.
+// Added as parameter because it should typically be available
+inline void initUserAttrs(Box* obj, BoxedClass* cls) {
+    assert(obj->cls == cls);
+    if (cls->attrs_offset) {
+        HCAttrs* attrs = obj->getAttrsPtr();
+        attrs = new ((void*)attrs) HCAttrs();
+    }
+}
 }
 #endif

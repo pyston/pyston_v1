@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "asm_writing/mc_writer.h"
+
 #include <cstring>
 
+#include "core/ast.h"
 #include "core/common.h"
 #include "core/options.h"
-
-#include "core/ast.h"
-
-#include "asm_writing/mc_writer.h"
 
 namespace pyston {
 
@@ -39,35 +38,37 @@ const bool is_callee_save[] = {
     false, false, false, false, false, false, true, true, true, true,
 };
 
-const int DwarfRegToX86[] = { 0,  // 0
-                              2,  // 1
-                              1,  // 2 -> rcx
-                              3,  // 3 -> rbx
-                              6,  // 4
-                              7,  // 5
-                              5,  // 6
-                              4,  // 7
-                              8,  // 8 -> r8
-                              9,  // 9 -> r9
-                              10, // 10 -> r10
-                              11, // 11 -> r11
-                              12, // 12 -> r12
-                              13, // 13 -> r13
-                              14, // 14 -> r14
-                              15, // 15 -> r15
+const int DwarfRegToX86[] = {
+    0,  // 0
+    2,  // 1
+    1,  // 2 -> rcx
+    3,  // 3 -> rbx
+    6,  // 4
+    7,  // 5
+    5,  // 6
+    4,  // 7
+    8,  // 8 -> r8
+    9,  // 9 -> r9
+    10, // 10 -> r10
+    11, // 11 -> r11
+    12, // 12 -> r12
+    13, // 13 -> r13
+    14, // 14 -> r14
+    15, // 15 -> r15
 
-                              // http://www.x86-64.org/documentation/abi.pdf#page=57
-                              // 16 -> ReturnAddress RA (??)
-                              // 17-32: xmm0-xmm15
+    // http://www.x86-64.org/documentation/abi.pdf#page=57
+    // 16 -> ReturnAddress RA (??)
+    // 17-32: xmm0-xmm15
 };
 
 const int NUM_ARG_REGS = 6;
-const int arg_regs[] = { 7, // rdi
-                         6, // rsi
-                         2, // rdx
-                         1, // rcx
-                         8, // r8
-                         9, // r9
+const int arg_regs[] = {
+    7, // rdi
+    6, // rsi
+    2, // rdx
+    1, // rcx
+    8, // r8
+    9, // r9
 };
 
 const uint8_t REX_B = 1, REX_X = 2, REX_R = 4, REX_W = 8;
@@ -557,8 +558,8 @@ private:
     }
 
     virtual void _emitGuard(int argnum, int64_t value, int npops, X86::ConditionCode slowpath_condition) {
-        assert(slowpath_condition == X86::COND_EQUAL || slowpath_condition == X86::COND_NOT_EQUAL
-                                                        && "not sure if the cmp operands are in the right order");
+        assert(slowpath_condition == X86::COND_EQUAL
+               || slowpath_condition == X86::COND_NOT_EQUAL && "not sure if the cmp operands are in the right order");
 
         assert(argnum <= X86::NUM_ARG_REGS);
         int argreg = convertArgnum(argnum);
@@ -582,8 +583,8 @@ private:
 
     virtual void _emitAttrGuard(int argnum, int offset, int64_t value, int npops,
                                 X86::ConditionCode slowpath_condition) {
-        assert(slowpath_condition == X86::COND_EQUAL || slowpath_condition == X86::COND_NOT_EQUAL
-                                                        && "not sure if the cmp operands are in the right order");
+        assert(slowpath_condition == X86::COND_EQUAL
+               || slowpath_condition == X86::COND_NOT_EQUAL && "not sure if the cmp operands are in the right order");
 
         assert(argnum <= X86::NUM_ARG_REGS);
         int argreg = convertArgnum(argnum);

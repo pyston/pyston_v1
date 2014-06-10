@@ -16,17 +16,14 @@
 // This is so that the types of the functions are available to the compiler.
 
 #include "core/types.h"
-
-#include "runtime/gc_runtime.h"
-#include "runtime/int.h"
+#include "gc/heap.h"
 #include "runtime/float.h"
+#include "runtime/gc_runtime.h"
+#include "runtime/inline/boxing.h"
+#include "runtime/int.h"
 #include "runtime/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
-
-#include "runtime/inline/boxing.h"
-
-#include "gc/heap.h"
 
 namespace pyston {
 
@@ -88,8 +85,6 @@ void force() {
 
     FORCE(printFloat);
     FORCE(listAppendInternal);
-
-    FORCE(dump);
 
     FORCE(runtimeCall);
     FORCE(callattr);

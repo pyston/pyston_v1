@@ -8,4 +8,6 @@ x = repr(empty_module)
 print x[0:29]
 print x[-2:]
 
-print repr(math) # no path for built-ins, so we can just check as normal
+# cpython 2.7.5 writes "from '/usr/lib64/python2.7/lib-dynload/math.so'"
+# pyston writes "(built-in)"
+print repr(math)[0:15] + "(built-in)>"

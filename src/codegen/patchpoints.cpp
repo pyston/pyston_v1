@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/patchpoints.h"
+
 #include <memory>
 #include <unordered_map>
 
+#include "asm_writing/icinfo.h"
+#include "codegen/stackmaps.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "asm_writing/icinfo.h"
-
-#include "codegen/patchpoints.h"
-#include "codegen/stackmaps.h"
 
 namespace pyston {
 
@@ -141,15 +140,18 @@ PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRe
 }
 
 PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder, int num_args) {
-    return PatchpointSetupInfo::initialize(true, 3, 256 + 36 * num_args, parent_cf, Callsite, type_recorder);
+    // TODO These are very large, but could probably be made much smaller with IC optimizations
+    // - using rewriter2 for better code
+    // - not emitting duplicate guards
+    return PatchpointSetupInfo::initialize(true, 3, 480 + 48 * num_args, parent_cf, Callsite, type_recorder);
 }
 
 PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 1, 80, parent_cf, GetGlobal, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, GetGlobal, type_recorder);
 }
 
 PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 4, 196, parent_cf, Binexp, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 4, 320, parent_cf, Binexp, type_recorder);
 }
 
 PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {

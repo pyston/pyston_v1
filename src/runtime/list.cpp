@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/list.h"
+
+#include <algorithm>
 #include <cstring>
 #include <sstream>
-#include <algorithm>
 
+#include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
-#include "runtime/list.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-
-#include "codegen/compvars.h"
-
-#include "gc/collector.h"
 
 namespace pyston {
 
@@ -52,17 +50,17 @@ extern "C" Box* listNonzero(BoxedList* self) {
     return boxBool(self->size != 0);
 }
 
-extern "C" Box* listPop1(BoxedList* self) {
-    if (self->size == 0) {
-        raiseExcHelper(IndexError, "pop from empty list");
+extern "C" Box* listPop(BoxedList* self, Box* idx) {
+    if (idx == None) {
+        if (self->size == 0) {
+            raiseExcHelper(IndexError, "pop from empty list");
+        }
+
+        self->size--;
+        Box* rtn = self->elts->elts[self->size];
+        return rtn;
     }
 
-    self->size--;
-    Box* rtn = self->elts->elts[self->size];
-    return rtn;
-}
-
-extern "C" Box* listPop2(BoxedList* self, Box* idx) {
     if (idx->cls != int_cls) {
         raiseExcHelper(TypeError, "an integer is required");
     }
@@ -87,7 +85,7 @@ extern "C" Box* listPop2(BoxedList* self, Box* idx) {
 }
 
 extern "C" Box* listLen(BoxedList* self) {
-    return new BoxedInt(self->size);
+    return boxInt(self->size);
 }
 
 Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
@@ -363,7 +361,7 @@ Box* listCount(BoxedList* self, Box* elt) {
         if (b)
             count++;
     }
-    return new BoxedInt(count);
+    return boxInt(count);
 }
 
 Box* listIndex(BoxedList* self, Box* elt) {
@@ -374,7 +372,7 @@ Box* listIndex(BoxedList* self, Box* elt) {
         Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
         bool b = nonzero(cmp);
         if (b)
-            return new BoxedInt(i);
+            return boxInt(i);
     }
 
     BoxedString* tostr = static_cast<BoxedString*>(repr(elt));
@@ -419,13 +417,11 @@ extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
 
 extern "C" const ObjectFlavor list_iterator_flavor(&listIteratorGCHandler, NULL);
 
-extern "C" Box* listNew1(Box* cls) {
+extern "C" Box* listNew(Box* cls, Box* container) {
     assert(cls == list_cls);
-    return new BoxedList();
-}
 
-extern "C" Box* listNew2(Box* cls, Box* container) {
-    assert(cls == list_cls);
+    if (container == None)
+        return new BoxedList();
 
     BoxedList* rtn = new BoxedList();
     for (Box* e : container->pyElements()) {
@@ -434,73 +430,120 @@ extern "C" Box* listNew2(Box* cls, Box* container) {
     return rtn;
 }
 
+Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
+    int lsz = lhs->size;
+    int rsz = rhs->size;
+
+    bool is_order
+        = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
+
+    int n = std::min(lsz, rsz);
+    for (int i = 0; i < n; i++) {
+        Box* is_eq = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], AST_TYPE::Eq, NULL);
+        bool bis_eq = nonzero(is_eq);
+
+        if (bis_eq)
+            continue;
+
+        if (op_type == AST_TYPE::Eq) {
+            return boxBool(false);
+        } else if (op_type == AST_TYPE::NotEq) {
+            return boxBool(true);
+        } else {
+            Box* r = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], op_type, NULL);
+            return r;
+        }
+    }
+
+    if (op_type == AST_TYPE::Lt)
+        return boxBool(lsz < rsz);
+    else if (op_type == AST_TYPE::LtE)
+        return boxBool(lsz <= rsz);
+    else if (op_type == AST_TYPE::Gt)
+        return boxBool(lsz > rsz);
+    else if (op_type == AST_TYPE::GtE)
+        return boxBool(lsz >= rsz);
+    else if (op_type == AST_TYPE::Eq)
+        return boxBool(lsz == rsz);
+    else if (op_type == AST_TYPE::NotEq)
+        return boxBool(lsz != rsz);
+
+    RELEASE_ASSERT(0, "%d", op_type);
+}
+
+Box* listEq(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Eq);
+}
+
 void setupList() {
-    list_iterator_cls = new BoxedClass(false, false);
+    list_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedList), false);
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 
-    list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1, false)));
+    list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 
-    CLFunction* getitem = createRTFunction();
-    addRTFunction(getitem, (void*)listGetitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT }, false);
-    addRTFunction(getitem, (void*)listGetitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, false);
-    addRTFunction(getitem, (void*)listGetitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL }, false);
+    CLFunction* getitem = createRTFunction(2, 0, 0, 0);
+    addRTFunction(getitem, (void*)listGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
+    addRTFunction(getitem, (void*)listGetitemSlice, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
+    addRTFunction(getitem, (void*)listGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN });
     list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     list_cls->giveAttr("__iter__",
-                       new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1, false)));
+                       new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1)));
 
-    list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1, false)));
-    list_cls->setattr("__str__", list_cls->peekattr("__repr__"), NULL, NULL);
-    list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1, false)));
+    list_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)listEq, UNKNOWN, 2)));
 
-    CLFunction* pop = boxRTFunction((void*)listPop1, NULL, 1, false);
-    addRTFunction(pop, (void*)listPop2, NULL, 2, false);
-    list_cls->giveAttr("pop", new BoxedFunction(pop));
+    list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1)));
+    list_cls->giveAttr("__str__", list_cls->getattr("__repr__"));
+    list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1)));
 
-    list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NULL, 2, false)));
+    list_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None }));
 
-    CLFunction* setitem = createRTFunction();
-    addRTFunction(setitem, (void*)listSetitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, NULL },
-                  false);
-    addRTFunction(setitem, (void*)listSetitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE, NULL },
-                  false);
-    addRTFunction(setitem, (void*)listSetitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL, NULL }, false);
+    list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2)));
+
+    CLFunction* setitem = createRTFunction(3, 0, false, false);
+    addRTFunction(setitem, (void*)listSetitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, UNKNOWN });
+    addRTFunction(setitem, (void*)listSetitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE, UNKNOWN });
+    addRTFunction(setitem, (void*)listSetitem, NONE, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN, UNKNOWN });
     list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
 
-    CLFunction* delitem = createRTFunction();
-    addRTFunction(delitem, (void*)listDelitemInt, NULL, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT }, false);
-    addRTFunction(delitem, (void*)listDelitemSlice, NULL, std::vector<ConcreteCompilerType*>{ LIST, SLICE }, false);
-    addRTFunction(delitem, (void*)listDelitem, NULL, std::vector<ConcreteCompilerType*>{ LIST, NULL }, false);
+    CLFunction* delitem = createRTFunction(2, 0, false, false);
+    addRTFunction(delitem, (void*)listDelitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
+    addRTFunction(delitem, (void*)listDelitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
+    addRTFunction(delitem, (void*)listDelitem, NONE, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN });
     list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
 
-    list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NULL, 3, false)));
-    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NULL, 2, false)));
+    list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3)));
+    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NONE, 2)));
 
-    list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, NULL, 2, false)));
-    list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, NULL, 2, false)));
+    list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
+    list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));
 
-    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NULL, 1, false)));
-    list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2, false)));
+    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NONE, 1)));
+    list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2)));
 
-    CLFunction* new_ = boxRTFunction((void*)listNew1, NULL, 1, false);
-    addRTFunction(new_, (void*)listNew2, NULL, 2, false);
-    list_cls->giveAttr("__new__", new BoxedFunction(new_));
+    list_cls->giveAttr("__new__",
+                       new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, 1, false, false), { None }));
 
-    list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2, false)));
-    list_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)listIndex, NULL, 2, false)));
-    list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2, false)));
-    list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1, false)));
+    list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2)));
+    list_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 2)));
+    list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2)));
+    list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1)));
     list_cls->freeze();
 
 
     gc::registerStaticRootObj(list_iterator_cls);
     list_iterator_cls->giveAttr("__name__", boxStrConstant("listiterator"));
 
-    CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1, false);
-    addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL, 1, false);
+    CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
+    addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);
     list_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
-    list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1, false)));
+    list_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)listIterIter, typeFromClass(list_iterator_cls), 1)));
+    list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1)));
 
     list_iterator_cls->freeze();
 }

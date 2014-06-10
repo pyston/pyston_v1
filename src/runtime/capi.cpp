@@ -16,11 +16,12 @@
 #include <stdarg.h>
 #include <string.h>
 
-#include "core/types.h"
-
-#include "runtime/types.h"
-
 #include "Python.h"
+
+#include "codegen/compvars.h"
+#include "core/threading.h"
+#include "core/types.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
@@ -42,9 +43,11 @@ public:
         return boxStrConstant(self->name);
     }
 
-    static Box* __call__(BoxedCApiFunction* self, BoxedList* varargs) {
+    static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs) {
         assert(self->cls == capifunc_cls);
-        assert(varargs->cls == list_cls);
+        assert(varargs->cls == tuple_cls);
+
+        threading::GLPromoteRegion _gil_lock;
 
         Box* rtn = (Box*)self->func(test_module, varargs);
         assert(rtn);
@@ -79,14 +82,14 @@ extern "C" bool PyArg_ParseTuple(void* tuple, const char* fmt, ...) {
 
     assert(strcmp("O", fmt) == 0);
 
-    BoxedList* varargs = (BoxedList*)tuple;
-    assert(varargs->size == 1);
+    BoxedTuple* varargs = (BoxedTuple*)tuple;
+    assert(varargs->elts.size() == 1);
 
     va_list ap;
     va_start(ap, fmt);
 
     Box** arg0 = va_arg(ap, Box**);
-    *arg0 = varargs->elts->elts[0];
+    *arg0 = varargs->elts[0];
 
     va_end(ap);
 
@@ -121,15 +124,15 @@ BoxedModule* getTestModule() {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedClass(false, false);
+    capifunc_cls = new BoxedClass(object_cls, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
     capifunc_cls->giveAttr("__repr__",
-                           new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, NULL, 1, false)));
-    capifunc_cls->setattr("__str__", capifunc_cls->peekattr("__repr__"), NULL, NULL);
+                           new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
+    capifunc_cls->giveAttr("__str__", capifunc_cls->getattr("__repr__"));
 
-    capifunc_cls->giveAttr("__call__",
-                           new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, NULL, 1, true)));
+    capifunc_cls->giveAttr(
+        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, false)));
 
     capifunc_cls->freeze();
 }

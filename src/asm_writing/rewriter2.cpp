@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "asm_writing/rewriter2.h"
+
 #include <vector>
 
+#include "asm_writing/icinfo.h"
 #include "core/common.h"
 #include "core/stats.h"
-
-#include "asm_writing/icinfo.h"
-#include "asm_writing/rewriter2.h"
 
 namespace pyston {
 
@@ -138,7 +138,7 @@ RewriterVarUsage2 RewriterVarUsage2::getAttr(int offset, KillFlag kill, Location
     assembler::Register this_reg = var->getInReg();
     Rewriter2* rewriter = var->rewriter;
 
-    if (kill) {
+    if (kill == Kill) {
         setDoneUsing();
     }
 
@@ -176,6 +176,7 @@ void RewriterVarUsage2::setDoneUsing() {
     assertValid();
     done_using = true;
     var->decUse();
+    var = NULL;
 }
 
 RewriterVarUsage2::RewriterVarUsage2(RewriterVarUsage2&& usage) {

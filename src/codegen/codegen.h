@@ -17,11 +17,8 @@
 
 #include <unordered_map>
 
-//#include "llvm/IR/IRBuilder.h"
-
-#include "core/types.h"
-
 #include "codegen/runtime_hooks.h"
+#include "core/types.h"
 
 namespace llvm {
 class ExecutionEngine;
@@ -75,6 +72,7 @@ struct GlobalState {
     llvm::Type* llvm_clfunction_type_ptr;
     llvm::Type* llvm_module_type_ptr, *llvm_bool_type_ptr;
     llvm::Type* i1, *i8, *i8_ptr, *i32, *i64, *void_, *double_;
+    llvm::Type* vector_ptr;
 
     GlobalFuncs funcs;
 
@@ -85,6 +83,8 @@ extern GlobalState g;
 
 // in runtime_hooks.cpp:
 void initGlobalFuncs(GlobalState& g);
+
+const LineInfo* getLineInfoFor(uint64_t inst_addr);
 }
 
 #endif

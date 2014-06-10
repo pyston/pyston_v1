@@ -33,3 +33,28 @@ class C2(object):
 c = C2()
 call_f(c, 2)
 call_f(c, 2)
+
+
+
+
+n = 0
+
+def f():
+    C()
+
+def init(self):
+    pass
+
+class C(object):
+    def __new__(cls):
+        global n
+        n += 1
+
+        if n == 10:
+            C.__init__ = init
+            f()
+
+        return object.__new__(cls)
+
+for i in xrange(20):
+    f()

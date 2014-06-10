@@ -15,11 +15,11 @@
 #ifndef PYSTON_ANALYSIS_TYPEANALYSIS_H
 #define PYSTON_ANALYSIS_TYPEANALYSIS_H
 
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
-#include "core/types.h"
 #include "codegen/compvars.h"
+#include "core/types.h"
 
 namespace pyston {
 

@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/inline/boxing.h"
 
 #include "runtime/gc_runtime.h"
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
-
-#include "runtime/inline/boxing.h"
 
 namespace pyston {
 
@@ -57,7 +56,7 @@ Box* boxInt(int64_t n) {
     if (0 <= n && n < NUM_INTERNED_INTS) {
         return interned_ints[n];
     }
-    return new BoxedInt(n);
+    return new BoxedInt(int_cls, n);
 }
 
 // BoxedInt::BoxedInt(int64_t n) : Box(int_cls), n(n) {}

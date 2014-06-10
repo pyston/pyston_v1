@@ -15,6 +15,8 @@
 #ifndef PYSTON_CODEGEN_TYPERECORDING_H
 #define PYSTON_CODEGEN_TYPERECORDING_H
 
+#include <cstdint>
+
 namespace pyston {
 
 class AST;
@@ -35,7 +37,7 @@ private:
     int64_t last_count;
 
 public:
-    constexpr TypeRecorder() : last_seen(NULL), last_count(0) {}
+    constexpr TypeRecorder() : last_seen(nullptr), last_count(0) {}
 
     BoxedClass* predict();
 

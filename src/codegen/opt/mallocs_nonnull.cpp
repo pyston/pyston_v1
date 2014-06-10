@@ -17,11 +17,11 @@
 #include <set>
 
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Pass.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 

@@ -15,10 +15,9 @@
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
 
+#include "codegen/profiling/profiling.h"
 #include "core/common.h"
 #include "core/options.h"
-
-#include "codegen/profiling/profiling.h"
 
 namespace pyston {
 

@@ -16,13 +16,13 @@
 #define PYSTON_RUNTIME_LIST_H
 
 #include "core/types.h"
-
 #include "runtime/types.h"
 
 namespace pyston {
 
 extern BoxedClass* list_iterator_cls;
-struct BoxedListIterator : public Box {
+class BoxedListIterator : public Box {
+public:
     BoxedList* l;
     int pos;
     BoxedListIterator(BoxedList* l);
@@ -30,6 +30,7 @@ struct BoxedListIterator : public Box {
 
 extern "C" const ObjectFlavor list_iterator_flavor;
 Box* listIter(Box* self);
+Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);
 Box* listiterNext(Box* self);

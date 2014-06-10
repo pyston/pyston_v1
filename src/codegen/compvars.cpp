@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/compvars.h"
+
 #include <cstdio>
 #include <sstream>
 
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "core/options.h"
-#include "core/types.h"
-
-#include "codegen/compvars.h"
 #include "codegen/gcbuilder.h"
-#include "codegen/patchpoints.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/util.h"
-
-#include "runtime/objmodel.h"
-#include "runtime/int.h"
+#include "codegen/patchpoints.h"
+#include "core/options.h"
+#include "core/types.h"
 #include "runtime/float.h"
+#include "runtime/int.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -80,15 +79,19 @@ public:
         return rtn;
     }
 
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) {
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) {
         std::vector<CompilerType*> new_args(arg_types);
         new_args.insert(new_args.begin(), obj_type);
-        return function_type->callType(new_args);
+
+        ArgPassSpec new_argspec(argspec.num_args + 1u, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
+        return function_type->callType(new_argspec, new_args, keyword_names);
     }
 
     std::string debugName() {
         return "instanceMethod(" + obj_type->debugName() + " ; " + function_type->debugName() + ")";
     }
+
     virtual void drop(IREmitter& emitter, VAR* var) {
         checkVar(var);
         RawInstanceMethod* val = var->getValue();
@@ -96,14 +99,19 @@ public:
         val->func->decvref(emitter);
         delete val;
     }
+
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info,
-                                   ValuedCompilerVariable<RawInstanceMethod*>* var,
-                                   const std::vector<CompilerVariable*>& args) {
+                                   ValuedCompilerVariable<RawInstanceMethod*>* var, ArgPassSpec argspec,
+                                   const std::vector<CompilerVariable*>& args,
+                                   const std::vector<const std::string*>* keyword_names) {
         std::vector<CompilerVariable*> new_args;
         new_args.push_back(var->getValue()->obj);
         new_args.insert(new_args.end(), args.begin(), args.end());
-        return var->getValue()->func->call(emitter, info, new_args);
+
+        ArgPassSpec new_argspec(argspec.num_args + 1u, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs);
+        return var->getValue()->func->call(emitter, info, new_argspec, new_args, keyword_names);
     }
+
     virtual bool canConvertTo(ConcreteCompilerType* other_type) { return other_type == UNKNOWN; }
     virtual ConcreteCompilerType* getConcreteType() { return typeFromClass(instancemethod_cls); }
     virtual ConcreteCompilerType* getBoxType() { return getConcreteType(); }
@@ -177,10 +185,12 @@ public:
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                       const std::string* attr, bool cls_only);
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                   const std::vector<CompilerVariable*>& args);
+                                   ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                   const std::vector<const std::string*>* keyword_names);
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                       const std::string* attr, bool clsonly,
-                                       const std::vector<CompilerVariable*>& args);
+                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names);
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var);
 
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
@@ -219,7 +229,10 @@ public:
     }
 
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) { return UNKNOWN; }
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) { return UNKNOWN; }
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) {
+        return UNKNOWN;
+    }
     virtual BoxedClass* guaranteedClass() { return NULL; }
     virtual ConcreteCompilerType* getBoxType() { return this; }
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
@@ -313,8 +326,13 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 }
 
 static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, void* func_addr,
-                                       const std::vector<llvm::Value*> other_args,
-                                       const std::vector<CompilerVariable*> args, ConcreteCompilerType* rtn_type) {
+                                       const std::vector<llvm::Value*> other_args, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*> args,
+                                       const std::vector<const std::string*>* keyword_names,
+                                       ConcreteCompilerType* rtn_type) {
+    bool pass_keyword_names = (keyword_names != nullptr);
+    assert(pass_keyword_names == (argspec.num_keywords > 0));
+
     std::vector<BoxedClass*> guaranteed_classes;
     std::vector<ConcreteCompilerVariable*> converted_args;
     for (int i = 0; i < args.size(); i++) {
@@ -328,12 +346,20 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
     if (args.size() >= 1) {
         llvm_args.push_back(converted_args[0]->getValue());
+    } else if (pass_keyword_names) {
+        llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr));
     }
+
     if (args.size() >= 2) {
         llvm_args.push_back(converted_args[1]->getValue());
+    } else if (pass_keyword_names) {
+        llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr));
     }
+
     if (args.size() >= 3) {
         llvm_args.push_back(converted_args[2]->getValue());
+    } else if (pass_keyword_names) {
+        llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr));
     }
 
     llvm::Value* mallocsave = NULL;
@@ -359,6 +385,11 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
             emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
         }
         llvm_args.push_back(arg_array);
+
+        llvm_args.push_back(embedConstantPtr(keyword_names, g.vector_ptr));
+    } else if (pass_keyword_names) {
+        llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr->getPointerTo()));
+        llvm_args.push_back(embedConstantPtr(keyword_names, g.vector_ptr));
     }
 
     // f->dump();
@@ -368,6 +399,10 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     //}
 
     llvm::Value* rtn;
+
+    // func->dump();
+    // for (auto a : llvm_args)
+    // a->dump();
 
     bool do_patchpoint = ENABLE_ICCALLSITES && !info.isInterpreted()
                          && (func_addr == runtimeCall || func_addr == pyston::callattr);
@@ -406,15 +441,21 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 }
 
 CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                    const std::vector<CompilerVariable*>& args) {
+                                    ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                    const std::vector<const std::string*>* keyword_names) {
+    bool pass_keywords = (argspec.num_keywords != 0);
+    int npassed_args = argspec.totalPassed();
+
     llvm::Value* func;
-    if (args.size() == 0)
+    if (pass_keywords)
+        func = g.funcs.runtimeCall;
+    else if (npassed_args == 0)
         func = g.funcs.runtimeCall0;
-    else if (args.size() == 1)
+    else if (npassed_args == 1)
         func = g.funcs.runtimeCall1;
-    else if (args.size() == 2)
+    else if (npassed_args == 2)
         func = g.funcs.runtimeCall2;
-    else if (args.size() == 3)
+    else if (npassed_args == 3)
         func = g.funcs.runtimeCall3;
     else
         func = g.funcs.runtimeCall;
@@ -422,22 +463,28 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
 
-    llvm::Value* nargs = llvm::ConstantInt::get(g.i64, args.size(), false);
-    other_args.push_back(nargs);
-    return _call(emitter, info, func, (void*)runtimeCall, other_args, args, UNKNOWN);
+    llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
+    other_args.push_back(llvm_argspec);
+    return _call(emitter, info, func, (void*)runtimeCall, other_args, argspec, args, keyword_names, UNKNOWN);
 }
 
 CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                        const std::string* attr, bool clsonly,
-                                        const std::vector<CompilerVariable*>& args) {
+                                        const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                        const std::vector<CompilerVariable*>& args,
+                                        const std::vector<const std::string*>* keyword_names) {
+    bool pass_keywords = (argspec.num_keywords != 0);
+    int npassed_args = argspec.totalPassed();
+
     llvm::Value* func;
-    if (args.size() == 0)
+    if (pass_keywords)
+        func = g.funcs.callattr;
+    else if (npassed_args == 0)
         func = g.funcs.callattr0;
-    else if (args.size() == 1)
+    else if (npassed_args == 1)
         func = g.funcs.callattr1;
-    else if (args.size() == 2)
+    else if (npassed_args == 2)
         func = g.funcs.callattr2;
-    else if (args.size() == 3)
+    else if (npassed_args == 3)
         func = g.funcs.callattr3;
     else
         func = g.funcs.callattr;
@@ -447,9 +494,9 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     other_args.push_back(embedConstantPtr(attr, g.llvm_str_type_ptr));
     other_args.push_back(getConstantInt(clsonly, g.i1));
 
-    llvm::Value* nargs = llvm::ConstantInt::get(g.i64, args.size(), false);
-    other_args.push_back(nargs);
-    return _call(emitter, info, func, (void*)pyston::callattr, other_args, args, UNKNOWN);
+    llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
+    other_args.push_back(llvm_argspec);
+    return _call(emitter, info, func, (void*)pyston::callattr, other_args, argspec, args, keyword_names, UNKNOWN);
 }
 
 ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
@@ -501,7 +548,12 @@ public:
 
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) { return UNDEF; }
 
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) {
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) {
+        RELEASE_ASSERT(!argspec.has_starargs, "");
+        RELEASE_ASSERT(!argspec.has_kwargs, "");
+        RELEASE_ASSERT(argspec.num_keywords == 0, "");
+
         for (int i = 0; i < sigs.size(); i++) {
             Sig* sig = sigs[i];
             if (sig->arg_types.size() != arg_types.size())
@@ -532,17 +584,17 @@ public:
         for (int i = 0; i < clf->versions.size(); i++) {
             CompiledFunction* cf = clf->versions[i];
 
-            FunctionSignature* fsig = cf->sig;
+            FunctionSpecialization* fspec = cf->spec;
 
             Sig* type_sig = new Sig();
-            type_sig->rtn_type = fsig->rtn_type;
+            type_sig->rtn_type = fspec->rtn_type;
 
             if (stripfirst) {
-                assert(fsig->arg_types.size() >= 1);
-                type_sig->arg_types.insert(type_sig->arg_types.end(), fsig->arg_types.begin() + 1,
-                                           fsig->arg_types.end());
+                assert(fspec->arg_types.size() >= 1);
+                type_sig->arg_types.insert(type_sig->arg_types.end(), fspec->arg_types.begin() + 1,
+                                           fspec->arg_types.end());
             } else {
-                type_sig->arg_types.insert(type_sig->arg_types.end(), fsig->arg_types.begin(), fsig->arg_types.end());
+                type_sig->arg_types.insert(type_sig->arg_types.end(), fspec->arg_types.begin(), fspec->arg_types.end());
             }
             sigs.push_back(type_sig);
         }
@@ -613,10 +665,11 @@ public:
     }
 
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                       const std::string* attr, bool clsonly,
-                                       const std::vector<CompilerVariable*>& args) {
+                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, args);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -790,7 +843,12 @@ public:
         return rtn;
     }
 
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) {
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) {
+        RELEASE_ASSERT(!argspec.has_starargs, "");
+        RELEASE_ASSERT(!argspec.has_kwargs, "");
+        RELEASE_ASSERT(argspec.num_keywords == 0, "");
+
         bool is_well_defined = (cls == xrange_cls);
         assert(is_well_defined);
         return typeFromClass(cls);
@@ -841,8 +899,8 @@ public:
     virtual bool isFitBy(BoxedClass* c) { return c == cls; }
 
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
-        if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
-            Box* rtattr = cls->peekattr(*attr);
+        if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {
+            Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL)
                 return UNDEF;
 
@@ -857,13 +915,17 @@ public:
 
         return UNKNOWN;
     }
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) { return UNKNOWN; }
+
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) {
+        return UNKNOWN;
+    }
 
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) {
         // printf("%s.getattr %s\n", debugName().c_str(), attr->c_str());
-        if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
-            Box* rtattr = cls->peekattr(*attr);
+        if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {
+            Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(*getNameOfClass(cls) + "\0"),
@@ -889,131 +951,185 @@ public:
         return UNKNOWN->setattr(emitter, info, var, attr, v);
     }
 
-    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        if (cls == bool_cls) {
-            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, var->getValue());
-            assert(unboxed->getType() == g.i1);
-            return new ConcreteCompilerVariable(BOOL, unboxed, true);
-        }
-
-        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        ConcreteCompilerVariable* rtn = converted->nonzero(emitter, info);
-        converted->decvref(emitter);
-        return rtn;
-    }
-
     virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         converted->print(emitter, info);
         converted->decvref(emitter);
     }
 
-    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                      CompilerVariable* slice) {
-        return UNKNOWN->getitem(emitter, info, var, slice);
-    }
-
-    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        return UNKNOWN->len(emitter, info, var);
-    }
-
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                   const std::vector<CompilerVariable*>& args) {
+                                   ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                   const std::vector<const std::string*>* keyword_names) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        CompilerVariable* rtn = converted->call(emitter, info, args);
+        CompilerVariable* rtn = converted->call(emitter, info, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
 
-    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                       const std::string* attr, bool clsonly,
-                                       const std::vector<CompilerVariable*>& args) {
-        if (cls->is_constant && !cls->hasattrs && cls->hasGenericGetattr()) {
-            Box* rtattr = cls->peekattr(*attr);
-            if (rtattr == NULL) {
+    ConcreteCompilerVariable* tryCallattrConstant(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                                  const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                                  const std::vector<CompilerVariable*>& args,
+                                                  const std::vector<const std::string*>* keyword_names,
+                                                  bool raise_on_missing = true) {
+        if (!cls->is_constant || cls->instancesHaveAttrs() || !cls->hasGenericGetattr())
+            return NULL;
+
+        Box* rtattr = cls->getattr(*attr);
+        if (rtattr == NULL) {
+            if (raise_on_missing) {
                 llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(*getNameOfClass(cls) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
                 return undefVariable();
-            }
-
-            if (rtattr->cls == function_cls) {
-                CLFunction* cl = unboxRTFunction(rtattr);
-                assert(cl);
-
-                CompiledFunction* cf = NULL;
-                int nsig_args = 0;
-                bool found = false;
-                // TODO have to find the right version.. similar to resolveclfunc?
-                for (int i = 0; i < cl->versions.size(); i++) {
-                    cf = cl->versions[i];
-                    nsig_args = cf->sig->arg_types.size();
-                    if (nsig_args != args.size() + 1) {
-                        continue;
-                    }
-
-                    bool fits = true;
-                    for (int j = 1; j < nsig_args; j++) {
-                        // if (cf->sig->arg_types[j] != UNKNOWN) {
-                        // if (cf->sig->arg_types[j]->isFitBy(args[j-1]->guaranteedClass())) {
-                        if (!args[j - 1]->canConvertTo(cf->sig->arg_types[j])) {
-                            printf("Can't use version %d since arg %d (%s) doesn't fit into sig arg of %s\n", i, j,
-                                   args[j - 1]->getType()->debugName().c_str(),
-                                   cf->sig->arg_types[j]->debugName().c_str());
-                            fits = false;
-                            break;
-                        }
-                    }
-                    if (!fits)
-                        continue;
-
-                    found = true;
-                    break;
-                }
-
-                assert(found);
-                assert(nsig_args == args.size() + 1);
-                assert(!cf->is_interpreted);
-                assert(cf->code);
-
-                std::vector<llvm::Type*> arg_types;
-                for (int i = 0; i < nsig_args; i++) {
-                    // TODO support passing unboxed values as arguments
-                    assert(cf->sig->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
-
-                    arg_types.push_back(g.llvm_value_type_ptr);
-                    if (i == 3) {
-                        arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
-                        break;
-                    }
-                }
-                llvm::FunctionType* ft = llvm::FunctionType::get(cf->sig->rtn_type->llvmType(), arg_types, false);
-
-                llvm::Value* linked_function = embedConstantPtr(cf->code, ft->getPointerTo());
-
-                std::vector<CompilerVariable*> new_args;
-                new_args.push_back(var);
-                new_args.insert(new_args.end(), args.begin(), args.end());
-
-                std::vector<llvm::Value*> other_args;
-
-                ConcreteCompilerVariable* rtn
-                    = _call(emitter, info, linked_function, cf->code, other_args, new_args, cf->sig->rtn_type);
-                assert(rtn->getType() == cf->sig->rtn_type);
-
-                assert(cf->sig->rtn_type != BOXED_INT);
-                ASSERT(cf->sig->rtn_type != BOXED_BOOL, "%p", cf->code);
-                assert(cf->sig->rtn_type != BOXED_FLOAT);
-
-                return rtn;
+            } else {
+                return NULL;
             }
         }
 
+        if (rtattr->cls != function_cls)
+            return NULL;
+
+        RELEASE_ASSERT(!argspec.has_starargs, "");
+        RELEASE_ASSERT(!argspec.has_kwargs, "");
+        RELEASE_ASSERT(argspec.num_keywords == 0, "");
+
+        CLFunction* cl = unboxRTFunction(rtattr);
+        assert(cl);
+
+        if (cl->num_defaults || cl->takes_varargs || cl->takes_kwargs)
+            return NULL;
+
+        RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
+        RELEASE_ASSERT(cl->num_args == args.size() + 1, "");
+
+        CompiledFunction* cf = NULL;
+        bool found = false;
+        // TODO have to find the right version.. similar to resolveclfunc?
+        for (int i = 0; i < cl->versions.size(); i++) {
+            cf = cl->versions[i];
+            assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
+
+            bool fits = true;
+            for (int j = 1; j < cl->num_args; j++) {
+                // if (cf->sig->arg_types[j] != UNKNOWN) {
+                // if (cf->sig->arg_types[j]->isFitBy(args[j-1]->guaranteedClass())) {
+                if (!args[j - 1]->canConvertTo(cf->spec->arg_types[j])) {
+                    // printf("Can't use version %d since arg %d (%s) doesn't fit into spec arg of %s\n", i, j,
+                    // args[j - 1]->getType()->debugName().c_str(),
+                    // cf->spec->arg_types[j]->debugName().c_str());
+                    fits = false;
+                    break;
+                }
+            }
+            if (!fits)
+                continue;
+
+            found = true;
+            break;
+        }
+
+        assert(found);
+        assert(!cf->is_interpreted);
+        assert(cf->code);
+
+        std::vector<llvm::Type*> arg_types;
+        RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
+        for (int i = 0; i < cl->num_args; i++) {
+            // TODO support passing unboxed values as arguments
+            assert(cf->spec->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+
+            arg_types.push_back(g.llvm_value_type_ptr);
+            if (i == 3) {
+                arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
+                break;
+            }
+        }
+        llvm::FunctionType* ft = llvm::FunctionType::get(cf->spec->rtn_type->llvmType(), arg_types, false);
+
+        llvm::Value* linked_function = embedConstantPtr(cf->code, ft->getPointerTo());
+
+        std::vector<CompilerVariable*> new_args;
+        new_args.push_back(var);
+        new_args.insert(new_args.end(), args.begin(), args.end());
+
+        std::vector<llvm::Value*> other_args;
+
+        ConcreteCompilerVariable* rtn = _call(emitter, info, linked_function, cf->code, other_args, argspec, new_args,
+                                              keyword_names, cf->spec->rtn_type);
+        assert(rtn->getType() == cf->spec->rtn_type);
+
+        // We should provide unboxed versions of these rather than boxing then unboxing:
+        // TODO is it more efficient to unbox here, or should we leave it boxed?
+        if (cf->spec->rtn_type == BOXED_BOOL) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn->getValue());
+            return new ConcreteCompilerVariable(BOOL, unboxed, true);
+        }
+        if (cf->spec->rtn_type == BOXED_INT) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, rtn->getValue());
+            return new ConcreteCompilerVariable(INT, unboxed, true);
+        }
+        if (cf->spec->rtn_type == BOXED_FLOAT) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, rtn->getValue());
+            return new ConcreteCompilerVariable(FLOAT, unboxed, true);
+        }
+        assert(cf->spec->rtn_type != BOXED_INT);
+        ASSERT(cf->spec->rtn_type != BOXED_BOOL, "%p", cf->code);
+        assert(cf->spec->rtn_type != BOXED_FLOAT);
+
+        return rtn;
+    }
+
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, attr, clsonly, argspec, args, keyword_names);
+        if (called_constant)
+            return called_constant;
+
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, args);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
+    }
+
+    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) {
+        static const std::string attr("__getitem__");
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, false);
+        if (called_constant)
+            return called_constant;
+
+        return UNKNOWN->getitem(emitter, info, var, slice);
+    }
+
+    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
+        static const std::string attr("__len__");
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
+        if (called_constant)
+            return called_constant;
+
+        return UNKNOWN->len(emitter, info, var);
+    }
+
+    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
+        static const std::string attr("__nonzero__");
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
+        if (called_constant)
+            return called_constant;
+
+        if (cls == bool_cls) {
+            assert(0 && "should have been caught by above case");
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, var->getValue());
+            assert(unboxed->getType() == g.i1);
+            return new ConcreteCompilerVariable(BOOL, unboxed, true);
+        }
+
+        return UNKNOWN->nonzero(emitter, info, var);
     }
 
     static NormalObjectType* fromClass(BoxedClass* cls) {
@@ -1072,9 +1188,10 @@ public:
     }
 
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
-                                       bool clsonly, const std::vector<CompilerVariable*>& args) {
+                                       bool clsonly, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, args);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1307,6 +1424,13 @@ public:
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
         return BOXED_TUPLE->getattrType(attr, cls_only);
     }
+
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                                       bool clsonly, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
+        return makeConverted(emitter, var, getConcreteType())
+            ->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+    }
 };
 
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types) {
@@ -1335,8 +1459,9 @@ public:
         return llvm::Type::getInt16Ty(g.context);
     }
 
-    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* var,
-                                   const std::vector<CompilerVariable*>& args) {
+    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* var, ArgPassSpec argspec,
+                                   const std::vector<CompilerVariable*>& args,
+                                   const std::vector<const std::string*>* keyword_names) {
         return undefVariable();
     }
     virtual void drop(IREmitter& emitter, VAR* var) {}
@@ -1362,11 +1487,15 @@ public:
     }
 
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
-                                       bool clsonly, const std::vector<CompilerVariable*>& args) {
+                                       bool clsonly, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
         return undefVariable();
     }
 
-    virtual CompilerType* callType(std::vector<CompilerType*>& arg_types) { return UNDEF; }
+    virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
+                                   const std::vector<const std::string*>* keyword_names) {
+        return UNDEF;
+    }
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) {
         return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(g.i1), true);
@@ -1384,7 +1513,7 @@ public:
 } _UNDEF;
 CompilerType* UNDEF = &_UNDEF;
 
-CompilerVariable* undefVariable() {
+ConcreteCompilerVariable* undefVariable() {
     return new ConcreteCompilerVariable(&_UNDEF, llvm::UndefValue::get(_UNDEF.llvmType()), true);
 }
 

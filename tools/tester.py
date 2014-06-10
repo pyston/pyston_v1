@@ -50,7 +50,7 @@ def set_ulimits():
     resource.setrlimit(resource.RLIMIT_CPU, (TIME_LIMIT + 1, TIME_LIMIT + 1))
 
     MAX_MEM_MB = 100
-    resource.setrlimit(resource.RLIMIT_AS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
+    resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
 def get_expected_output(fn):
     sys.stdout.flush()
@@ -106,6 +106,9 @@ def run_test(fn, check_stats, run_memcheck):
     jit_args = ["-csrq"] + EXTRA_JIT_ARGS
     expected = "success"
     for l in open(fn):
+        l = l.strip()
+        if not l:
+            continue
         if not l.startswith("#"):
             break
         if l.startswith("# statcheck:"):
@@ -115,7 +118,12 @@ def run_test(fn, check_stats, run_memcheck):
             l = l[len("# run_args:"):].split()
             jit_args += l
         elif l.startswith("# expected:"):
-            expected = l[len("# run_args:"):].strip()
+            expected = l[len("# expected:"):].strip()
+        elif l.startswith("# skip-if:"):
+            skip_if = l[len("# skip-if:"):].strip()
+            skip = eval(skip_if)
+            if skip:
+                return r + "    (skipped due to 'skip-if: %s')" % skip_if[:30]
 
     assert expected in ("success", "fail", "statfail"), expected
 
@@ -274,41 +282,11 @@ def worker_thread():
                 cv.notifyAll()
             # os._exit(-1)
 
-def verify_include(_, dir, files):
-    for bn in files:
-        fn = os.path.join(dir, bn)
-
-        if not bn.endswith(".h"):
-            continue
-
-        expected_guard = "PYSTON" + fn[1:-2].replace('_', '').replace('/', '_').upper() + "_H"
-        with open(fn) as f:
-            while True:
-                l = f.readline()
-                if l.startswith('//') or not l.strip():
-                    continue
-                break
-        gotten_guard = l.split()[1]
-        assert gotten_guard == expected_guard, (fn, gotten_guard, expected_guard)
-
-def verify_license(_, dir, files):
-    for bn in files:
-        fn = os.path.join(dir, bn)
-
-        if bn.endswith(".h") or bn.endswith(".cpp"):
-            s = open(fn).read(1024)
-            assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
-            assert "Apache License, Version 2.0" in s, fn
-
 def fileSize(fn):
     return os.stat(fn).st_size
     # return len(list(open(fn)))
 
 if __name__ == "__main__":
-    os.path.walk('.', verify_include, None)
-    os.path.walk('.', verify_license, None)
-    os.path.walk('../tools', verify_license, None)
-
     run_memcheck = False
     start = 1
 
@@ -388,12 +366,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     FN_JUST_SIZE = max(20, 2 + max(map(len, tests)))
-
-    if not TEST_PYPY:
-        print "Building...",
-        sys.stdout.flush()
-        subprocess.check_call(["make", "-j4", IMAGE], stdout=open("/dev/null", 'w'), stderr=subprocess.PIPE)
-        print "done"
 
     if TEST_PYPY:
         IMAGE = '/usr/local/bin/pypy'

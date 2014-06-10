@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/runtime_hooks.h"
+
 #include <cstdio>
 #include <unordered_map>
 
@@ -19,26 +21,22 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Transforms/Scalar.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/PassManager.h"
+#include "llvm/Transforms/Scalar.h"
 
-#include "core/types.h"
-
-#include "codegen/runtime_hooks.h"
 #include "codegen/codegen.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
-
-#include "runtime/int.h"
+#include "core/types.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
-#include "runtime/types.h"
-#include "runtime/objmodel.h"
-
 #include "runtime/inline/boxing.h"
+#include "runtime/int.h"
+#include "runtime/objmodel.h"
+#include "runtime/types.h"
 
 extern "C" void* __cxa_begin_catch(void*);
 extern "C" void __cxa_end_catch();
@@ -134,6 +132,9 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.llvm_str_type_ptr = lookupFunction("boxStringPtr")->arg_begin()->getType();
 
+    auto vector_type = g.stdlib_module->getTypeByName("class.std::vector");
+    assert(vector_type);
+    g.vector_ptr = vector_type->getPointerTo();
 
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
@@ -186,26 +187,24 @@ void initGlobalFuncs(GlobalState& g) {
     GET(printFloat);
     GET(listAppendInternal);
 
-    GET(dump);
-
     g.funcs.runtimeCall = getFunc((void*)runtimeCall, "runtimeCall");
-    g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64);
+    g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
     g.funcs.runtimeCall1
-        = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall2 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64,
+        = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32, g.llvm_value_type_ptr);
+    g.funcs.runtimeCall2 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                    g.llvm_value_type_ptr, g.llvm_value_type_ptr);
-    g.funcs.runtimeCall3 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i64,
+    g.funcs.runtimeCall3 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32,
                                    g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
 
     g.funcs.callattr = getFunc((void*)callattr, "callattr");
     g.funcs.callattr0
-        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr, g.i1, g.i64);
+        = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr, g.i1, g.i32);
     g.funcs.callattr1 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i64, g.llvm_value_type_ptr);
+                                g.i1, g.i32, g.llvm_value_type_ptr);
     g.funcs.callattr2 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i64, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
     g.funcs.callattr3 = addFunc((void*)callattr, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_str_type_ptr,
-                                g.i1, g.i64, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
+                                g.i1, g.i32, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.llvm_value_type_ptr);
 
     g.funcs.reoptCompiledFunc = addFunc((void*)reoptCompiledFunc, g.i8_ptr, g.i8_ptr);
     g.funcs.compilePartialFunc = addFunc((void*)compilePartialFunc, g.i8_ptr, g.i8_ptr);

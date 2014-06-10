@@ -12,20 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstring>
-#include <cstdlib>
-#include <cstdio>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <stdint.h>
 #include <sys/mman.h>
+
+#include "core/common.h"
+#include "gc/gc_alloc.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"
 #endif
 
-#include "gc/gc_alloc.h"
-
-#include "core/common.h"
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
 
 namespace pyston {
 namespace gc {

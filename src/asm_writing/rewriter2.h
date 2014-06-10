@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "asm_writing/assembler.h"
+#include "asm_writing/icinfo.h"
 
 namespace pyston {
 
@@ -140,10 +141,6 @@ public:
     // semantically we have to pass the ownership of the use.
     RewriterVarUsage2(RewriterVarUsage2&& usage);
     RewriterVarUsage2& operator=(RewriterVarUsage2&& usage);
-    // assert(this->var == NULL)
-    // assert(this->done_using)
-    // assert(usage->var != NULL)
-    // assert(!usage->done_using)
 
     static RewriterVarUsage2 empty();
 
@@ -155,12 +152,6 @@ public:
 #endif
 
     void setDoneUsing();
-    // void setDoneUsing() {
-    // assert(!done_using);
-    // done_using = true;
-    //
-    // var->delUse();
-    //}
 
     // RewriterVarUsage2 addUse() { return var->addUse(); }
     RewriterVarUsage2 addUse();

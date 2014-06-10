@@ -7,6 +7,7 @@
 #include "core/types.h"
 #include "gc/gc_alloc.h"
 #include "runtime/types.h"
+#include "unittests.h"
 
 using namespace pyston;
 using namespace pyston::gc;

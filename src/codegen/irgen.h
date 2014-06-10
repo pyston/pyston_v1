@@ -20,10 +20,8 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IRBuilder.h"
 
-#include "core/types.h"
-
 #include "codegen/compvars.h"
-//#include "codegen/function_analysis.h"
+#include "core/types.h"
 
 namespace pyston {
 
@@ -78,9 +76,9 @@ public:
                                             const std::vector<llvm::Value*>& args, ExcInfo exc_info) = 0;
 };
 
-CompiledFunction* compileFunction(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                                  EffortLevel::EffortLevel effort, FunctionSignature* sig,
-                                  const std::vector<AST_expr*>& arg_names, std::string nameprefix);
+CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec,
+                            const std::vector<AST_expr*>& arg_names, std::string nameprefix);
 
 class TypeRecorder;
 class OpInfo {

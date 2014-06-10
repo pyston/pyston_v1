@@ -61,13 +61,14 @@ There seem to be some lingering issues with the LLVM build that haven't been ide
 
 ```
 cd ~/pyston_deps
-wget http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz
-tar xvf libunwind-1.1.tar.gz
-mkdir libunwind-1.1-install
-cd libunwind-1.1
+sudo apt-get install texlive-extra-utils autoconf
+git clone git://git.sv.gnu.org/libunwind.git libunwind-trunk
+mkdir libunwind-trunk-install
+cd libunwind-trunk
+git checkout 65ac867416
+autoreconf -i
 # disable shared libraries because we'll be installing this in a place that the loader can't find it:
-./configure --prefix=$HOME/pyston_deps/libunwind-1.1-install --enable-shared=0
-patch -p1 <~/pyston/libunwind_patches/0001-Change-the-RBP-validation-heuristic-to-allow-size-0-.patch
+./configure --prefix=$HOME/pyston_deps/libunwind-trunk-install --enable-shared=0
 make -j4
 make install
 ```
@@ -119,10 +120,10 @@ Assuming you've already built the normal version above:
 
 ```
 cd ~/pyston_deps
-cp -rv libunwind-1.1 libunwind-1.1-debug
-mkdir libunwind-1.1-debug-install
-cd libunwind-1.1-debug
-CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-1.1-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
+cp -rv libunwind-trunk libunwind-trunk-debug
+mkdir libunwind-trunk-debug-install
+cd libunwind-trunk-debug
+CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-trunk-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
 make -j4
 make install
 echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/src/Makefile.local
@@ -181,6 +182,7 @@ gold is highly recommended as a faster linker, and Pyston contains build-system 
 
 ```
 cd ~/pyston_deps
+sudo apt-get install bison
 wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
 tar xvf binutils-2.24.tar.gz
 mkdir binutils-2.24-build
@@ -188,8 +190,6 @@ cd binutils-2.24-build
 ../binutils-2.24/configure --enable-gold --enable-plugins --disable-werror
 make all-gold -j4
 ```
-
-If that last step fails due to complaints about YYSTYPE, try upgrading or installing bison (`sudo apt-get install bison`), removing the binutils-2.24-build directory, and configure + make again.
 
 ### perf
 The `perf` tool is the best way we've found to profile JIT'd code; you can find more details in docs/PROFILING.
@@ -200,3 +200,11 @@ sudo apt-get install linux-tools-`uname -r`
 # may need to strip off the -generic from that last one
 ```
 
+### rlwrap
+The Pyston repl (`make run`) doesn't currently support any typical terminal features; it simply reads stdin as a raw stream.  Some day we will add it, but for now you can use "rlwrap" to provide these features as a wrapper around Pyston.  Simply
+
+```
+sudo apt-get install rlwrap
+```
+
+and when you do `make run`, the Make system will invoke rlwrap.  If you want to invoke the repl manually, you can do `rlwrap ./pyston`

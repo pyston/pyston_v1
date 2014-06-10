@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/dis.h"
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -35,8 +37,6 @@
 #include "llvm/Target/TargetMachine.h"
 
 #include "codegen/codegen.h"
-
-#include "dis.h"
 
 namespace pyston {
 
@@ -85,7 +85,11 @@ PystonJITEventListener::PystonJITEventListener() {
     assert(CE);
 
     bool verbose = false;
+#if LLVMREV < 208205
     llvm::MCStreamer* streamer = target->createAsmStreamer(*Ctx, llvm::ferrs(), verbose, true, true, IP, CE, TAB, true);
+#else
+    llvm::MCStreamer* streamer = target->createAsmStreamer(*Ctx, llvm::ferrs(), verbose, true, IP, CE, TAB, true);
+#endif
     assert(streamer);
     streamer->InitSections();
     streamer->SwitchSection(Ctx->getObjectFileInfo()->getTextSection());
@@ -101,7 +105,7 @@ PystonJITEventListener::PystonJITEventListener() {
     asm_printer->Mang = new llvm::Mangler(tmachine->getDataLayout());
 
 
-    DisAsm = target->createMCDisassembler(*STI);
+    DisAsm = target->createMCDisassembler(*STI, *Ctx);
     assert(DisAsm);
     MIA = target->createMCInstrAnalysis(MII);
     assert(MIA);
@@ -117,7 +121,7 @@ void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function& f, void
     asm_printer->MF = &MF;
     for (llvm::MachineFunction::const_iterator it = MF.begin(); it != MF.end(); it++) {
         // it->dump();
-        asm_printer->EmitBasicBlockStart(it);
+        asm_printer->EmitBasicBlockStart(*it);
         for (llvm::MachineBasicBlock::const_instr_iterator it2 = it->instr_begin(); it2 != it->instr_end(); it2++) {
             // llvm::errs() << "dump:";
             // it2->print(llvm::errs());
@@ -178,16 +182,14 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
 
     for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
         llvm::StringRef name;
-        uint64_t addr, size, offset = 0;
+        uint64_t addr, size;
         code = I->getName(name);
         assert(!code);
         code = I->getAddress(addr);
         assert(!code);
         code = I->getSize(size);
         assert(!code);
-        code = I->getFileOffset(offset);
-        assert(!code);
-        printf("%lx %lx %lx %s\n", addr, addr + size, offset, name.data());
+        printf("%lx %lx %s\n", addr, addr + size, name.data());
 #if LLVMREV < 200442
         I = I.increment(code);
 #else

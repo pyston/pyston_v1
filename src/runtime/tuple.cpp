@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/tuple.h"
+
 #include <sstream>
 
+#include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
-
+#include "gc/collector.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -174,26 +177,70 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
     return False;
 }
 
+Box* tupleHash(BoxedTuple* self) {
+    assert(self->cls == tuple_cls);
+
+    int64_t rtn = 3527539;
+    for (Box* e : self->elts) {
+        BoxedInt* h = hash(e);
+        assert(h->cls == int_cls);
+        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
+    }
+
+    return boxInt(rtn);
+}
+
+BoxedClass* tuple_iterator_cls = NULL;
+extern "C" void tupleIteratorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+    BoxedTupleIterator* it = (BoxedTupleIterator*)p;
+    v->visit(it->t);
+}
+
+extern "C" const ObjectFlavor tuple_iterator_flavor(&tupleIteratorGCHandler, NULL);
+
+
 void setupTuple() {
+    tuple_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedTuple), false);
+
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
-    tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, NULL, 2, false)));
-    tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, NULL, 2, false)));
+    tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
 
-    tuple_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)tupleLt, NULL, 2, false)));
-    tuple_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)tupleLe, NULL, 2, false)));
-    tuple_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)tupleGt, NULL, 2, false)));
-    tuple_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)tupleGe, NULL, 2, false)));
-    tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, NULL, 2, false)));
-    tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, NULL, 2, false)));
+    tuple_cls->giveAttr("__iter__",
+                        new BoxedFunction(boxRTFunction((void*)tupleIter, typeFromClass(tuple_iterator_cls), 1)));
 
-    tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, NULL, 1, false)));
-    tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, NULL, 1, false)));
-    tuple_cls->setattr("__str__", tuple_cls->peekattr("__repr__"), NULL, NULL);
+
+    tuple_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)tupleLt, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)tupleLe, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)tupleGt, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)tupleGe, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, UNKNOWN, 2)));
+
+    tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1)));
+    tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
+    tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
+    tuple_cls->giveAttr("__str__", tuple_cls->getattr("__repr__"));
 
     tuple_cls->freeze();
+
+    gc::registerStaticRootObj(tuple_iterator_cls);
+    tuple_iterator_cls->giveAttr("__name__", boxStrConstant("tupleiterator"));
+
+    CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);
+    addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL);
+    tuple_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    tuple_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)tupleIterIter, typeFromClass(tuple_iterator_cls), 1)));
+    tuple_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)tupleiterNext, UNKNOWN, 1)));
+
+    tuple_iterator_cls->freeze();
 }
 
 void teardownTuple() {
+    // TODO do clearattrs?
+    // decref(tuple_iterator_cls);
 }
 }

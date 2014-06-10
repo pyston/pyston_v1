@@ -19,6 +19,7 @@
 
 namespace llvm {
 class Constant;
+class Function;
 class Type;
 }
 

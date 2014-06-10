@@ -12,22 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "gc/collector.h"
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 
-#include "core/common.h"
-#include "core/types.h"
-
 #include "codegen/codegen.h"
-
-#include "gc/collector.h"
+#include "core/common.h"
+#include "core/threading.h"
+#include "core/types.h"
 #include "gc/heap.h"
 #include "gc/root_finder.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"
 #endif
+
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
 
 namespace pyston {
 namespace gc {
@@ -119,6 +122,10 @@ static void markPhase() {
 
         setMark(header);
 
+        // is being made
+        if (header->kind_id == 0)
+            continue;
+
         ASSERT(KIND_OFFSET <= header->kind_id && header->kind_id < KIND_OFFSET + num_kinds, "%p %d", header,
                header->kind_id);
 
@@ -151,6 +158,8 @@ static int ncollections = 0;
 void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
+
+    threading::GLPromoteRegion _lock;
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ++ncollections);

@@ -15,12 +15,18 @@
 
 #include <cstring>
 
-#include "runtime/list.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/list.h"
+#include "runtime/objmodel.h"
 
 namespace pyston {
 
 BoxedListIterator::BoxedListIterator(BoxedList* l) : Box(&list_iterator_flavor, list_iterator_cls), l(l), pos(0) {
+}
+
+
+Box* listIterIter(Box* s) {
+    return s;
 }
 
 Box* listIter(Box* s) {
@@ -47,7 +53,10 @@ Box* listiterNext(Box* s) {
     assert(s->cls == list_iterator_cls);
     BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
 
-    assert(self->pos >= 0 && self->pos < self->l->size);
+    if (!(self->pos >= 0 && self->pos < self->l->size)) {
+        raiseExcHelper(StopIteration, "");
+    }
+
     Box* rtn = self->l->elts->elts[self->pos];
     self->pos++;
     return rtn;
@@ -60,12 +69,10 @@ void BoxedList::shrink() {
     if (capacity > size * 3) {
         int new_capacity = std::max(static_cast<int64_t>(INITIAL_CAPACITY), capacity / 2);
         if (size > 0) {
-            elts = (BoxedList::ElementArray*)rt_realloc(elts,
-                                                        new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+            elts = GCdArray::realloc(elts, new_capacity);
             capacity = new_capacity;
         } else if (size == 0) {
             rt_free(elts);
-            elts = NULL;
             capacity = 0;
         }
     }
@@ -77,12 +84,11 @@ void BoxedList::ensure(int space) {
         if (capacity == 0) {
             const int INITIAL_CAPACITY = 8;
             int initial = std::max(INITIAL_CAPACITY, space);
-            elts = new (initial) BoxedList::ElementArray();
+            elts = new (initial) GCdArray();
             capacity = initial;
         } else {
             int new_capacity = std::max(capacity * 2, size + space);
-            elts = (BoxedList::ElementArray*)rt_realloc(elts,
-                                                        new_capacity * sizeof(Box*) + sizeof(BoxedList::ElementArray));
+            elts = GCdArray::realloc(elts, new_capacity);
             capacity = new_capacity;
         }
     }

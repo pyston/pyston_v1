@@ -28,3 +28,26 @@ except ZeroDivisionError, e:
     print e.message
     print str(e), repr(e)
     print e
+
+
+class MyException(Exception):
+    pass
+
+def catches(e, c):
+    try:
+        try:
+            raise e
+        except c:
+            return True
+    except:
+        return False
+for e in [Exception(), AttributeError(), MyException()]:
+    for c in [Exception, AttributeError, MyException, TypeError]:
+        print catches(e, c)
+
+def f():
+    try:
+        raise Exception()
+    except:
+        print True
+f()

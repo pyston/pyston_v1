@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/parser.h"
+
 #include <cassert>
-#include <stdint.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdint.h>
 #include <sys/stat.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
-
-#include "core/ast.h"
 #include "core/util.h"
 
 //#undef VERBOSITY
@@ -158,9 +159,8 @@ AST_arguments* read_arguments(BufferedReader* reader) {
     readExprVector(rtn->args, reader);
     rtn->col_offset = -1;
     readExprVector(rtn->defaults, reader);
-    rtn->kwarg = readASTExpr(reader);
+    rtn->kwarg = readString(reader);
     rtn->lineno = -1;
-    // rtn->vararg = readASTExpr(reader);
     rtn->vararg = readString(reader);
     return rtn;
 }
@@ -855,7 +855,7 @@ AST_Module* parse(const char* fn) {
     return ast_cast<AST_Module>(rtn);
 }
 
-#define MAGIC_STRING "a\ncg"
+#define MAGIC_STRING "a\nch"
 #define MAGIC_STRING_LENGTH 4
 #define LENGTH_SUFFIX_LENGTH 4
 

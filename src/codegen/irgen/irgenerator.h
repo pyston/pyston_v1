@@ -18,6 +18,7 @@
 #include <map>
 
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/IR/Instructions.h"
 
 #include "core/types.h"
 
@@ -71,8 +72,8 @@ public:
     llvm::Value* getScratchSpace(int min_bytes);
 
     ConcreteCompilerType* getReturnType() {
-        assert(cf->sig);
-        return cf->sig->rtn_type;
+        assert(cf->spec);
+        return cf->spec->rtn_type;
     }
 
     SourceInfo* getSourceInfo() { return source_info; }
@@ -190,6 +191,7 @@ public:
     virtual EndingState getEndingSymbolTable() = 0;
 };
 
+class IREmitter;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,

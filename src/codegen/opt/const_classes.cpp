@@ -18,29 +18,24 @@
 #include <set>
 
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
-#include "llvm/Pass.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 
-#include "core/common.h"
-#include "core/options.h"
-
 #include "codegen/codegen.h"
 #include "codegen/irgen/util.h"
-
+#include "core/common.h"
+#include "core/options.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 using namespace llvm;
 
 namespace pyston {
-
-#define CLS_HASATTRS_OFFSET ((const char*)&(((BoxedClass*)0x01)->hasattrs) - (const char*)0x1)
-#define FLAVOR_KINDID_OFFSET ((const char*)&(((ObjectFlavor*)0x01)->kind_id) - (const char*)0x1)
 
 class ConstClassesPass : public FunctionPass {
 private:
@@ -86,7 +81,7 @@ private:
         assert(success);
         int64_t offset = ap_offset.getSExtValue();
 
-        if (offset == FLAVOR_KINDID_OFFSET) {
+        if (offset == offsetof(ObjectFlavor, kind_id)) {
             ObjectFlavor* flavor = getFlavorFromGV(cast<GlobalVariable>(gepce->getOperand(0)));
             replaceUsesWithConstant(li, flavor->kind_id);
             return true;
@@ -152,9 +147,13 @@ private:
 
                 errs() << "Found a load: " << *gep_load << '\n';
 
-                if (offset == CLS_HASATTRS_OFFSET) {
-                    errs() << "Hasattrs; replacing with " << cls->hasattrs << "\n";
-                    replaceUsesWithConstant(gep_load, cls->hasattrs);
+                if (offset == offsetof(BoxedClass, attrs_offset)) {
+                    errs() << "attrs_offset; replacing with " << cls->attrs_offset << "\n";
+                    replaceUsesWithConstant(gep_load, cls->attrs_offset);
+                    changed = true;
+                } else if (offset == offsetof(BoxedClass, instance_size)) {
+                    errs() << "instance_size; replacing with " << cls->instance_size << "\n";
+                    replaceUsesWithConstant(gep_load, cls->instance_size);
                     changed = true;
                 }
             }

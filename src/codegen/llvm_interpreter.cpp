@@ -12,24 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/llvm_interpreter.h"
+
 #include <sstream>
 #include <unordered_map>
 
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 
-#include "core/common.h"
-#include "core/stats.h"
-
-#include "core/util.h"
-
 #include "codegen/codegen.h"
-#include "codegen/llvm_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
+#include "core/common.h"
+#include "core/stats.h"
+#include "core/thread_utils.h"
+#include "core/util.h"
+
+//#undef VERBOSITY
+//#define VERBOSITY(x) 2
+//#define TIME_INTERPRETS
 
 extern "C" void* __cxa_allocate_exception(size_t);
 
@@ -62,10 +67,6 @@ int width(llvm::Type* t, const llvm::DataLayout& dl) {
 int width(llvm::Value* v, const llvm::DataLayout& dl) {
     return width(v->getType(), dl);
 }
-
-//#undef VERBOSITY
-//#define VERBOSITY(x) 2
-//#define TIME_INTERPRETS
 
 Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
     assert(v);
@@ -182,7 +183,7 @@ Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
             // Typically this happens if we need to propagate the 'value' of an
             // maybe-defined Python variable; we won't actually read from it if
             // it's undef, since it should be guarded by an !is_defined variable.
-            return (int64_t) - 1337;
+            return (int64_t)-1337;
         case llvm::Value::ConstantPointerNullVal:
             return (int64_t)0;
         default:
@@ -206,23 +207,23 @@ static void set(SymMap& symbols, const llvm::BasicBlock::iterator& it, Val v) {
     //#define SET(v) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*it)), Val(v)))
 }
 
-static std::unordered_map<void*, const SymMap*> interpreter_roots;
-void gatherInterpreterRootsForFrame(GCVisitor* visitor, void* frame_ptr) {
-    auto it = interpreter_roots.find(frame_ptr);
-    if (it == interpreter_roots.end()) {
-        printf("%p is not an interpreter frame; they are", frame_ptr);
-        for (const auto& p2 : interpreter_roots) {
-            printf(" %p", p2.first);
+static std::unordered_map<void*, llvm::Instruction*> cur_instruction_map;
+
+typedef std::vector<const SymMap*> root_stack_t;
+threading::PerThreadSet<root_stack_t> root_stack_set;
+threading::PerThread<root_stack_t> thread_local root_stack(&root_stack_set);
+
+void gatherInterpreterRoots(GCVisitor* visitor) {
+    // In theory this lock should be superfluous since we should only call this
+    // inside a sequential section, but lock it anyway:
+    threading::LockedRegion _lock(&root_stack_set.lock);
+
+    for (auto& p : root_stack_set.map) {
+        for (const SymMap* sym_map : *p.second) {
+            for (const auto& p2 : *sym_map) {
+                visitor->visitPotential(p2.second.o);
+            }
         }
-        printf("\n");
-        abort();
-    }
-
-    // printf("Gathering roots for frame %p\n", frame_ptr);
-    const SymMap* symbols = it->second;
-
-    for (const auto& p2 : *symbols) {
-        visitor->visitPotential(p2.second.o);
     }
 }
 
@@ -234,10 +235,31 @@ public:
     constexpr UnregisterHelper(void* frame_ptr) : frame_ptr(frame_ptr) {}
 
     ~UnregisterHelper() {
-        assert(interpreter_roots.count(frame_ptr));
-        interpreter_roots.erase(frame_ptr);
+        root_stack.value.pop_back();
+
+        assert(cur_instruction_map.count(frame_ptr));
+        cur_instruction_map.erase(frame_ptr);
     }
 };
+
+static std::unordered_map<llvm::Instruction*, LineInfo*> line_infos;
+const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
+    llvm::Instruction* cur_instruction = cur_instruction_map[frame_ptr];
+    assert(cur_instruction);
+
+    auto it = line_infos.find(cur_instruction);
+    if (it == line_infos.end()) {
+        const llvm::DebugLoc& debug_loc = cur_instruction->getDebugLoc();
+        llvm::DISubprogram subprog(debug_loc.getScope(g.context));
+
+        // TODO better lifetime management
+        LineInfo* rtn = new LineInfo(debug_loc.getLine(), debug_loc.getCol(), subprog.getFilename(), subprog.getName());
+        line_infos.insert(it, std::make_pair(cur_instruction, rtn));
+        return rtn;
+    } else {
+        return it->second;
+    }
+}
 
 Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(f);
@@ -258,7 +280,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     SymMap symbols;
 
     void* frame_ptr = __builtin_frame_address(0);
-    interpreter_roots[frame_ptr] = &symbols;
+    root_stack.value.push_back(&symbols);
     UnregisterHelper helper(frame_ptr);
 
     int arg_num = -1;
@@ -292,6 +314,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     while (true) {
         for (llvm::Instruction& _inst : *curblock) {
             llvm::Instruction* inst = &_inst;
+            cur_instruction_map[frame_ptr] = inst;
 
             if (VERBOSITY("interpreter") >= 2) {
                 printf("executing in %s: ", f->getName().data());
@@ -303,7 +326,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
 #define SET(v) set(symbols, inst, (v))
 
             if (llvm::LandingPadInst* lpad = llvm::dyn_cast<llvm::LandingPadInst>(inst)) {
-                SET((intptr_t) & landingpad_value);
+                SET((intptr_t)&landingpad_value);
                 continue;
             } else if (llvm::ExtractValueInst* ev = llvm::dyn_cast<llvm::ExtractValueInst>(inst)) {
                 Val r = fetch(ev->getAggregateOperand(), dl, symbols);
@@ -617,11 +640,17 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                                                              int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
                                                                           args[4].n, args[5].n, args[6].n);
                             break;
-                        case 0b1000000000:
+                        case 0b1000000000: // 512
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
                                                              int64_t, int64_t)>(f)(args[0].n, args[1].n, args[2].n,
                                                                                    args[3].n, args[4].n, args[5].n,
                                                                                    args[6].n, args[7].n);
+                            break;
+                        case 0b10000000000: // 1024
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
+                                                             int64_t, int64_t, int64_t)>(
+                                f)(args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n, args[6].n,
+                                   args[7].n, args[8].n);
                             break;
                         default:
                             inst->dump();
@@ -635,8 +664,11 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
                         prevblock = curblock;
                         curblock = invoke->getNormalDest();
                     }
-                }
-                catch (Box* e) {
+                } catch (Box* e) {
+                    if (VERBOSITY("interpreter") >= 2) {
+                        printf("Caught exception: %p\n", e);
+                    }
+
                     if (invoke == nullptr)
                         throw;
 

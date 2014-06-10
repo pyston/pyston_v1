@@ -17,21 +17,15 @@
 #include <unistd.h>
 
 #include "llvm/DebugInfo/DIContext.h"
-#include "llvm/IR/DebugInfo.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/IR/DebugInfo.h"
 
 #include "codegen/codegen.h"
 
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
-
-#ifndef LIBUNWIND_PYSTON_PATCH_VERSION
-#error "Please use a patched version of libunwind; see docs/INSTALLING.md"
-#elif LIBUNWIND_PYSTON_PATCH_VERSION != 0x01
-#error "Please repatch your version of libunwind; see docs/INSTALLING.md"
-#endif
 
 // Definition from libunwind, but standardized I suppose by the format of the .eh_frame_hdr section:
 struct uw_table_entry {
@@ -71,6 +65,49 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64
     *out_len = nentries;
 }
 
+class LineTableRegistry {
+private:
+    struct LineTableRegistryEntry {
+        const uint64_t addr, size;
+        std::vector<std::pair<uint64_t, LineInfo> > linetable;
+        LineTableRegistryEntry(uint64_t addr, uint64_t size) : addr(addr), size(size) {}
+    };
+
+    std::vector<LineTableRegistryEntry> entries;
+
+public:
+    void registerLineTable(uint64_t addr, uint64_t size, llvm::DILineInfoTable& lines) {
+        entries.push_back(LineTableRegistryEntry(addr, size));
+
+        auto& entry = entries.back();
+        for (int i = 0; i < lines.size(); i++) {
+            entry.linetable.push_back(
+                std::make_pair(lines[i].first, LineInfo(lines[i].second.Line, lines[i].second.Column,
+                                                        lines[i].second.FileName, lines[i].second.FunctionName)));
+        }
+    }
+
+    const LineInfo* getLineInfoFor(uint64_t addr) {
+        for (const auto& entry : entries) {
+            if (addr < entry.addr || addr >= entry.addr + entry.size)
+                continue;
+
+            const auto& linetable = entry.linetable;
+            for (int i = linetable.size() - 1; i >= 0; i--) {
+                if (linetable[i].first < addr)
+                    return &linetable[i].second;
+            }
+            abort();
+        }
+        return NULL;
+    }
+};
+static LineTableRegistry line_table_registry;
+
+const LineInfo* getLineInfoFor(uint64_t addr) {
+    return line_table_registry.getLineInfoFor(addr);
+}
+
 class TracebacksEventListener : public llvm::JITEventListener {
 public:
     void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
@@ -78,8 +115,6 @@ public:
 
         llvm::error_code ec;
         for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
-            std::string SourceFileName;
-
             llvm::object::SymbolRef::Type SymType;
             if (I->getType(SymType))
                 continue;
@@ -94,14 +129,26 @@ public:
                 if (I->getSize(Size))
                     continue;
 
+// TODO this should be the Python name, not the C name:
+#if LLVMREV < 208921
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
-                    Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo);
-                for (int i = 0; i < lines.size(); i++) {
-                    // printf("%s:%d, %s: %lx\n", lines[i].second.getFileName(), lines[i].second.getLine(),
-                    // lines[i].second.getFunctionName(), lines[i].first);
+                    Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo
+                                | llvm::DILineInfoSpecifier::AbsoluteFilePath);
+#else
+                llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
+                    Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
+                                                          llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
+#endif
+                if (VERBOSITY() >= 2) {
+                    for (int i = 0; i < lines.size(); i++) {
+                        printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
+                               lines[i].second.FunctionName.c_str(), lines[i].first);
+                    }
                 }
+                line_table_registry.registerLineTable(Addr, Size, lines);
             }
         }
+        delete Context;
 
         // Currently-unused libunwind support:
         llvm::error_code code;

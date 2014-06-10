@@ -15,15 +15,15 @@
 #ifndef PYSTON_CORE_AST_H
 #define PYSTON_CORE_AST_H
 
-#include "core/common.h"
-
 #include <cassert>
 #include <cstdlib>
 #include <stdint.h>
-#include <vector>
 #include <string>
+#include <vector>
 
 #include "llvm/ADT/StringRef.h"
+
+#include "core/common.h"
 
 namespace pyston {
 
@@ -124,6 +124,7 @@ enum AST_TYPE {
     AugBinOp = 203,
     Invoke = 204,
     LangPrimitive = 205,
+    Unreachable = 206,
 };
 };
 
@@ -175,8 +176,10 @@ class AST_arguments : public AST {
 public:
     // no lineno, col_offset attributes
     std::vector<AST_expr*> args, defaults;
-    AST_expr* kwarg;
-    std::string vararg;
+
+    // These are represented as strings, not names; not sure why.
+    // If they don't exist, the string is empty.
+    std::string kwarg, vararg;
 
     virtual void accept(ASTVisitor* v);
 
@@ -805,7 +808,10 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Jump() : AST_stmt(AST_TYPE::Jump) {}
+    AST_Jump() : AST_stmt(AST_TYPE::Jump) {
+        lineno = -1;
+        col_offset = -1;
+    }
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
 };
@@ -857,6 +863,15 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::LangPrimitive;
 };
 
+class AST_Unreachable : public AST_stmt {
+public:
+    virtual void accept(ASTVisitor* v);
+    virtual void accept_stmt(StmtVisitor* v);
+
+    AST_Unreachable() : AST_stmt(AST_TYPE::Unreachable) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Unreachable;
+};
 
 template <typename T> T* ast_cast(AST* node) {
     assert(node->type == T::TYPE);
@@ -919,6 +934,7 @@ public:
     virtual bool visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
 
@@ -980,6 +996,7 @@ public:
     virtual bool visit_tryfinally(AST_TryFinally* node) { return false; }
     virtual bool visit_tuple(AST_Tuple* node) { return false; }
     virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
+    virtual bool visit_unreachable(AST_Unreachable* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
 
@@ -1042,6 +1059,7 @@ public:
     virtual void visit_return(AST_Return* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_tryexcept(AST_TryExcept* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
+    virtual void visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
 
@@ -1108,6 +1126,7 @@ public:
     virtual bool visit_tryexcept(AST_TryExcept* node);
     virtual bool visit_tryfinally(AST_TryFinally* node);
     virtual bool visit_unaryop(AST_UnaryOp* node);
+    virtual bool visit_unreachable(AST_Unreachable* node);
     virtual bool visit_while(AST_While* node);
     virtual bool visit_with(AST_With* node);
 

@@ -17,9 +17,8 @@
 
 #include <unordered_set>
 
-#include "core/ast.h"
-
 #include "asm_writing/types.h"
+#include "core/ast.h"
 
 namespace pyston {
 namespace assembler {

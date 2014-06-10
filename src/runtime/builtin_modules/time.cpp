@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cmath>
 #include <ctime>
 #include <sys/time.h>
 
+#include "codegen/compvars.h"
+#include "core/threading.h"
 #include "core/types.h"
-
 #include "runtime/gc_runtime.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -31,9 +34,37 @@ Box* timeTime() {
     return boxFloat(t);
 }
 
+Box* timeSleep(Box* arg) {
+    double secs;
+    if (arg->cls == int_cls)
+        secs = static_cast<BoxedInt*>(arg)->n;
+    else if (arg->cls == float_cls)
+        secs = static_cast<BoxedFloat*>(arg)->d;
+    else {
+        raiseExcHelper(TypeError, "a float is required");
+    }
+
+    double fullsecs;
+    double nanosecs = modf(secs, &fullsecs);
+
+    struct timespec req;
+    req.tv_sec = (int)(fullsecs + 0.01);
+    req.tv_nsec = (int)(nanosecs * 1000000000);
+
+    int code;
+    {
+        threading::GLReadReleaseRegion _allow_threads;
+        code = nanosleep(&req, NULL);
+    }
+    RELEASE_ASSERT(code == 0, "%d", code);
+
+    return None;
+}
+
 void setupTime() {
     time_module = createModule("time", "__builtin__");
 
-    time_module->giveAttr("time", new BoxedFunction(boxRTFunction((void*)timeTime, NULL, 0, false)));
+    time_module->giveAttr("time", new BoxedFunction(boxRTFunction((void*)timeTime, BOXED_FLOAT, 0)));
+    time_module->giveAttr("sleep", new BoxedFunction(boxRTFunction((void*)timeSleep, NONE, 1)));
 }
 }

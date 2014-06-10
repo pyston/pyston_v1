@@ -16,7 +16,6 @@
 #define PYSTON_RUNTIME_INT_H
 
 #include "core/common.h"
-
 #include "runtime/types.h"
 
 namespace pyston {
@@ -59,7 +58,7 @@ extern "C" BoxedString* intRepr(BoxedInt* v);
 extern "C" Box* intHash(BoxedInt* self);
 extern "C" Box* intNew1(Box* cls);
 extern "C" Box* intNew2(Box* cls, Box* val);
-extern "C" Box* intInit1(BoxedInt* self);
+extern "C" Box* intInit1(Box* self);
 extern "C" Box* intInit2(BoxedInt* self, Box* val);
 
 #define NUM_INTERNED_INTS 100

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/entry.h"
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -31,19 +33,15 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
-#include "core/options.h"
-#include "core/types.h"
-
-#include "core/util.h"
-
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/dis.h"
-#include "codegen/entry.h"
 #include "codegen/memmgr.h"
-#include "codegen/stackmaps.h"
 #include "codegen/profiling/profiling.h"
-
+#include "codegen/stackmaps.h"
+#include "core/options.h"
+#include "core/types.h"
+#include "core/util.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -82,14 +80,14 @@ static llvm::Module* loadStdlib() {
         // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
         assert(STDLIB_BC_START[0] == 'B');
         assert(STDLIB_BC_START[1] == 'C');
-        intptr_t size = (intptr_t) & STDLIB_BC_SIZE;
+        intptr_t size = (intptr_t)&STDLIB_BC_SIZE;
         assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
         data = llvm::StringRef(STDLIB_BC_START, size);
     } else {
         // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
         assert(STRIPPED_STDLIB_BC_START[0] == 'B');
         assert(STRIPPED_STDLIB_BC_START[1] == 'C');
-        intptr_t size = (intptr_t) & STRIPPED_STDLIB_BC_SIZE;
+        intptr_t size = (intptr_t)&STRIPPED_STDLIB_BC_SIZE;
         assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
         data = llvm::StringRef(STRIPPED_STDLIB_BC_START, size);
     }
@@ -226,7 +224,8 @@ void initCodegen() {
 
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:
-    const char* llvm_args[] = { "fake_name", "--enable-stackmap-liveness", "--enable-patchpoint-liveness",
+    const char* llvm_args[] = {
+        "fake_name", "--enable-stackmap-liveness", "--enable-patchpoint-liveness",
 
 // Enabling and debugging fast-isel:
 //"--fast-isel",
@@ -237,8 +236,8 @@ void initCodegen() {
 //"--debug-only=regalloc",
 //"--debug-only=stackmaps",
 #endif
-                                //"--print-after-all",
-                                //"--print-machineinstrs",
+        //"--print-after-all",
+        //"--print-machineinstrs",
     };
     int num_llvm_args = sizeof(llvm_args) / sizeof(llvm_args[0]);
     llvm::cl::ParseCommandLineOptions(num_llvm_args, llvm_args, "<you should never see this>\n");

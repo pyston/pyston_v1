@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/stackmaps.h"
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -22,10 +24,8 @@
 #include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/Object/ObjectFile.h"
 
-#include "core/options.h"
-
 #include "codegen/codegen.h"
-#include "codegen/stackmaps.h"
+#include "core/options.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY() 2
@@ -68,14 +68,14 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
         assert(!code);
 
         if (name == "__LLVM_StackMaps") {
-            uint64_t stackmap_offset = 0;
-            code = I->getFileOffset(stackmap_offset);
+            uint64_t stackmap_address = 0;
+            code = I->getAddress(stackmap_address);
             assert(!code);
             // code = I->getSize(stackmap_size);
             // assert(stackmap_size > 0);
             // assert(!code);
             if (VERBOSITY() >= 2)
-                printf("Found the stackmaps at stackmap_offset 0x%lx\n", stackmap_offset);
+                printf("Found the stackmaps at stackmap_address 0x%lx\n", stackmap_address);
 
             assert(cur_map == NULL);
             cur_map = new StackMap();
@@ -93,7 +93,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
                 const StackMap::Record::LiveOut* record_liveout;
                 const StackMap::StackSizeRecord* size_record;
             } ptr;
-            const int8_t* start_ptr = ptr.i8 = (const int8_t*)Obj.getData().data() + stackmap_offset;
+            const int8_t* start_ptr = ptr.i8 = (const int8_t*)stackmap_address;
 
             cur_map->header = *ptr.u32++; // header
 

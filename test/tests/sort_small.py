@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats['slowpath_getitem'] <= 20
+# statcheck: stats.get('slowpath_getitem', 0) <= 20
 # statcheck: stats['slowpath_setitem'] <= 20
 
 def sort(l):

@@ -15,13 +15,12 @@
 #include "core/cfg.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 
-#include "core/options.h"
-
 #include "core/ast.h"
+#include "core/options.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -117,19 +116,18 @@ private:
         return NULL;
     }
 
-    AST_expr* applyComprehensionCall(AST_DictComp * node, AST_Name* name) {
+    AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
         AST_expr* key = remapExpr(node->key);
         AST_expr* value = remapExpr(node->value);
         return makeCall(makeLoadAttribute(name, "__setitem__", true), key, value);
     }
 
-    AST_expr* applyComprehensionCall(AST_ListComp * node, AST_Name* name) {
+    AST_expr* applyComprehensionCall(AST_ListComp* node, AST_Name* name) {
         AST_expr* elt = remapExpr(node->elt);
         return makeCall(makeLoadAttribute(name, "append", true), elt);
     }
 
-    template<typename ResultASTType, typename CompType>
-    AST_expr* remapComprehension(CompType * node) {
+    template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         std::string rtn_name = nodeName(node);
         push_back(makeAssign(rtn_name, new ResultASTType()));
         std::vector<CFGBlock*> exit_blocks;
@@ -147,7 +145,7 @@ private:
             AST_expr* remapped_iter = remapExpr(c->iter);
             AST_expr* iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
             AST_expr* iter_call = makeCall(iter_attr);
-            std::string iter_name = nodeName(node, "iter", i);
+            std::string iter_name = nodeName(node, "lc_iter", i);
             AST_stmt* iter_assign = makeAssign(iter_name, iter_call);
             push_back(iter_assign);
 
@@ -231,9 +229,7 @@ private:
 
             curblock = body_end;
             if (is_innermost) {
-                push_back(
-                    makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load)))
-                );
+                push_back(makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load))));
 
                 j = new AST_Jump();
                 j->target = test_block;
@@ -261,8 +257,6 @@ private:
 
     AST_expr* makeNum(int n) {
         AST_Num* node = new AST_Num();
-        node->col_offset = -1;
-        node->lineno = -1;
         node->num_type = AST_Num::INT;
         node->n_int = n;
         return node;
@@ -333,7 +327,7 @@ private:
         return call;
     }
 
-    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = -1, int col_offset = -1) {
+    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = 0, int col_offset = 0) {
         AST_Name* name = new AST_Name();
         name->id = id;
         name->col_offset = col_offset;
@@ -1000,6 +994,7 @@ public:
         int i = 0;
         for (auto v : node->values) {
             AST_Print* remapped = new AST_Print();
+            remapped->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             remapped->dest = dest;
 
@@ -1314,6 +1309,10 @@ public:
         if (node->arg2)
             remapped->arg2 = remapExpr(node->arg2);
         push_back(remapped);
+
+        curblock->push_back(new AST_Unreachable());
+        curblock = NULL;
+
         return true;
     }
 
@@ -1335,10 +1334,12 @@ public:
         }
 
         CFGBlock* join_block = cfg->addDeferredBlock();
-        AST_Jump* j = new AST_Jump();
-        j->target = join_block;
-        push_back(j);
-        curblock->connectTo(join_block);
+        if (curblock) {
+            AST_Jump* j = new AST_Jump();
+            j->target = join_block;
+            push_back(j);
+            curblock->connectTo(join_block);
+        }
 
         if (exc_handler_block->predecessors.size() == 0) {
             delete exc_handler_block;
@@ -1361,11 +1362,12 @@ public:
                     is_caught_here->args.push_back(handled_type);
                     is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
 
+                    AST_Branch* br = new AST_Branch();
+                    br->test = remapExpr(is_caught_here);
+
                     CFGBlock* exc_handle = cfg->addBlock();
                     exc_next = cfg->addDeferredBlock();
 
-                    AST_Branch* br = new AST_Branch();
-                    br->test = remapExpr(is_caught_here);
                     br->iftrue = exc_handle;
                     br->iffalse = exc_next;
                     curblock->connectTo(exc_handle);
@@ -1384,10 +1386,12 @@ public:
                     subnode->accept(this);
                 }
 
-                AST_Jump* j = new AST_Jump();
-                j->target = join_block;
-                push_back(j);
-                curblock->connectTo(join_block);
+                if (curblock) {
+                    AST_Jump* j = new AST_Jump();
+                    j->target = join_block;
+                    push_back(j);
+                    curblock->connectTo(join_block);
+                }
 
                 if (exc_next) {
                     cfg->placeBlock(exc_next);
@@ -1401,12 +1405,19 @@ public:
                 AST_Raise* raise = new AST_Raise();
                 raise->arg0 = exc_obj;
                 push_back(raise);
+                curblock->push_back(new AST_Unreachable());
                 curblock = NULL;
             }
         }
 
-        cfg->placeBlock(join_block);
-        curblock = join_block;
+        if (join_block->predecessors.size() == 0) {
+            delete join_block;
+            curblock = NULL;
+        } else {
+            cfg->placeBlock(join_block);
+            curblock = join_block;
+        }
+
         return true;
     }
 
@@ -1560,6 +1571,7 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     // we already have to support multiple return statements in a function, but this way we can avoid
     // having to support not having a return statement:
     AST_Return* return_stmt = new AST_Return();
+    return_stmt->lineno = return_stmt->col_offset = 0;
     return_stmt->value = NULL;
     visitor.push_back(return_stmt);
 
@@ -1583,9 +1595,13 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
             ASSERT(b2->idx != -1, "Forgot to place a block!");
         }
 
+        ASSERT(b->body.size(), "%d", b->idx);
         ASSERT(b->successors.size() <= 2, "%d has too many successors!", b->idx);
-        if (b->successors.size() == 0)
-            assert(b->body.back()->type == AST_TYPE::Return || b->body.back()->type == AST_TYPE::Raise);
+        if (b->successors.size() == 0) {
+            AST_stmt* terminator = b->body.back();
+            assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
+                   || terminator->type == AST_TYPE::Unreachable);
+        }
 
         if (b->predecessors.size() == 0)
             assert(b == rtn->getStartingBlock());
@@ -1638,7 +1654,10 @@ CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
     // and can make the analyses more efficient.
     // The extra blocks would get merged by LLVM passes, so I'm not sure
     // how much overall improvement there is.
-    for (CFGBlock* b : rtn->blocks) {
+
+    // Must evaluate end() on every iteration because erase() will invalidate the end.
+    for (auto it = rtn->blocks.begin(); it != rtn->blocks.end(); ++it) {
+        CFGBlock* b = *it;
         while (b->successors.size() == 1) {
             CFGBlock* b2 = b->successors[0];
             if (b2->predecessors.size() != 1)

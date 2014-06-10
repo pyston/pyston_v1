@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "asm_writing/assembler.h"
+
 #include <cstring>
 
 #include "core/common.h"
-
-#include "asm_writing/assembler.h"
 
 namespace pyston {
 namespace assembler {
@@ -73,7 +73,7 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
     // assert(r != RSP && "This breaks unwinding, please don't use.");
 
     int64_t amount = imm.val;
-    RELEASE_ASSERT(-0x80 <= amount && amount < 0x80 && "unsupported", "");
+    RELEASE_ASSERT((-1L << 31) <= amount && amount < (1L << 31) - 1, "");
     assert(0 <= opcode && opcode < 8);
 
     int rex = REX_W;
@@ -85,9 +85,15 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
     }
 
     emitRex(rex);
-    emitByte(0x83);
-    emitModRM(0b11, opcode, reg_idx);
-    emitByte(amount);
+    if (-0x80 <= amount && amount < 0x80) {
+        emitByte(0x83);
+        emitModRM(0b11, opcode, reg_idx);
+        emitByte(amount);
+    } else {
+        emitByte(0x81);
+        emitModRM(0b11, opcode, reg_idx);
+        emitInt(amount, 4);
+    }
 }
 
 

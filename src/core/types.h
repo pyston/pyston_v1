@@ -32,6 +32,31 @@ class Value;
 
 namespace pyston {
 
+struct ArgPassSpec {
+    bool has_starargs : 1;
+    bool has_kwargs : 1;
+    unsigned int num_keywords : 14;
+    unsigned int num_args : 16;
+
+    static const int MAX_ARGS = (1 << 16) - 1;
+    static const int MAX_KEYWORDS = (1 << 14) - 1;
+
+    explicit ArgPassSpec(int num_args) : has_starargs(false), has_kwargs(false), num_keywords(0), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_keywords <= MAX_KEYWORDS);
+    }
+    explicit ArgPassSpec(int num_args, int num_keywords, bool has_starargs, bool has_kwargs)
+        : has_starargs(has_starargs), has_kwargs(has_kwargs), num_keywords(num_keywords), num_args(num_args) {
+        assert(num_args <= MAX_ARGS);
+        assert(num_keywords <= MAX_KEYWORDS);
+    }
+
+    int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
+
+    uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
+};
+static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
+
 class GCVisitor {
 public:
     virtual ~GCVisitor() {}
@@ -66,11 +91,8 @@ public:
 extern "C" const AllocationKind untracked_kind, conservative_kind;
 
 class ObjectFlavor;
-extern "C" const ObjectFlavor user_flavor;
 class ObjectFlavor : public AllocationKind {
 public:
-    bool isUserDefined() const { return this == &user_flavor; }
-
     ObjectFlavor(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
     : AllocationKind(gc_handler, finalizer) {}
 };
@@ -130,22 +152,17 @@ public:
 
 // Codegen types:
 
-struct FunctionSignature {
+struct FunctionSpecialization {
     ConcreteCompilerType* rtn_type;
     std::vector<ConcreteCompilerType*> arg_types;
-    bool is_vararg;
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, bool is_vararg) : rtn_type(rtn_type), is_vararg(is_vararg) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {}
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2,
-                      bool is_vararg)
-        : rtn_type(rtn_type), is_vararg(is_vararg) {
-        arg_types.push_back(arg1);
-        arg_types.push_back(arg2);
-    }
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2)
+        : rtn_type(rtn_type), arg_types({ arg1, arg2 }) {}
 
-    FunctionSignature(ConcreteCompilerType* rtn_type, std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg)
-        : rtn_type(rtn_type), arg_types(arg_types), is_vararg(is_vararg) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types)
+        : rtn_type(rtn_type), arg_types(arg_types) {}
 };
 
 struct CompiledFunction {
@@ -153,7 +170,7 @@ private:
 public:
     CLFunction* clfunc;
     llvm::Function* func; // the llvm IR object
-    FunctionSignature* sig;
+    FunctionSpecialization* spec;
     const OSREntryDescriptor* entry_descriptor;
     bool is_interpreted;
 
@@ -168,10 +185,10 @@ public:
     int64_t times_called;
     ICInvalidator dependent_callsites;
 
-    CompiledFunction(llvm::Function* func, FunctionSignature* sig, bool is_interpreted, void* code,
+    CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
                      llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
                      const OSREntryDescriptor* entry_descriptor)
-        : clfunc(NULL), func(func), sig(sig), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
+        : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
           code(code), llvm_code(llvm_code), effort(effort), times_called(0) {}
 };
 
@@ -193,19 +210,42 @@ public:
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
         : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
 };
+
 typedef std::vector<CompiledFunction*> FunctionList;
+class CallRewriteArgs;
 struct CLFunction {
+    int num_args;
+    int num_defaults;
+    bool takes_varargs, takes_kwargs;
+
     SourceInfo* source;
     FunctionList
     versions; // any compiled versions along with their type parameters; in order from most preferred to least
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
-    CLFunction(SourceInfo* source) : source(source) {}
+    // Functions can provide an "internal" version, which will get called instead
+    // of the normal dispatch through the functionlist.
+    // This can be used to implement functions which know how to rewrite themselves,
+    // such as typeCall.
+    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+                                     const std::vector<const std::string*>*);
+    InternalCallable internal_callable = NULL;
+
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
+        : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
+          source(source) {
+        assert(num_args >= num_defaults);
+    }
+
+    int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
+
+    const std::vector<AST_expr*>* getArgNames();
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
         assert((source == NULL) == (compiled->func == NULL));
-        assert(compiled->sig);
+        assert(compiled->spec);
+        assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
         assert(compiled->clfunc == NULL);
         assert(compiled->is_interpreted == (compiled->code == NULL));
         assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
@@ -217,21 +257,27 @@ struct CLFunction {
     }
 };
 
-extern "C" CLFunction* createRTFunction();
-extern "C" CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
-void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type, int nargs, bool is_vararg);
+CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
+                          bool takes_kwargs);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs);
+void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
-                   const std::vector<ConcreteCompilerType*>& arg_types, bool is_vararg);
+                   const std::vector<ConcreteCompilerType*>& arg_types);
 CLFunction* unboxRTFunction(Box*);
-// extern "C" CLFunction* boxRTFunctionVariadic(const char* name, int nargs_min, int nargs_max, void* f);
-extern "C" CompiledFunction* resolveCLFunc(CLFunction* f, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
-extern "C" Box* callCompiledFunc(CompiledFunction* cf, int64_t nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+
+// Compiles a new version of the function with the given signature and adds it to the list;
+// should only be called after checking to see if the other versions would work.
+CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
+                                  const OSREntryDescriptor* entry);
+EffortLevel::EffortLevel initialEffort();
 
 typedef bool i1;
 typedef int64_t i64;
 
 extern "C" void* rt_alloc(size_t);
 extern "C" void rt_free(void*);
+extern "C" void* rt_realloc(void* ptr, size_t new_size);
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
@@ -302,67 +348,65 @@ private:
 };
 
 
-
-extern bool TRACK_ALLOCATIONS;
-class Box : public GCObject {
-public:
-    BoxedClass* cls;
-
-    llvm::iterator_range<BoxIterator> pyElements();
-
-    constexpr Box(const ObjectFlavor* flavor, BoxedClass* c) __attribute__((visibility("default")))
-    : GCObject(flavor), cls(c) {
-        // if (TRACK_ALLOCATIONS) {
-        // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
-        // Stats::log(id);
-        //}
-    }
-};
-
-
-
-class SetattrRewriteArgs;
 class SetattrRewriteArgs2;
 class GetattrRewriteArgs;
 class GetattrRewriteArgs2;
-// I expect that most things will end up being represented by HCBox's rather than boxes,
-// but I'm not putting these into Box so that things that don't have any python-level instance
-// attributes (ex: integers) don't need to allocate the extra space.
-class HCBox : public Box {
+
+struct HCAttrs {
 public:
     struct AttrList : GCObject {
         Box* attrs[0];
     };
 
     HiddenClass* hcls;
-    // Python-level attributes:
     AttrList* attr_list;
 
-    HCBox(const ObjectFlavor* flavor, BoxedClass* cls);
-
-    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args,
-                 SetattrRewriteArgs2* rewrite_args2);
-    void giveAttr(const std::string& attr, Box* val);
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-    Box* peekattr(const std::string& attr) {
-        int offset = hcls->getOffset(attr);
-        if (offset == -1)
-            return NULL;
-        return attr_list->attrs[offset];
-    }
+    HCAttrs() : hcls(HiddenClass::getRoot()), attr_list(nullptr) {}
 };
 
-class BoxedClass : public HCBox {
+class Box : public GCObject {
 public:
+    BoxedClass* cls;
+
+    llvm::iterator_range<BoxIterator> pyElements();
+
+    Box(const ObjectFlavor* flavor, BoxedClass* cls);
+
+    HCAttrs* getAttrsPtr();
+
+    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2);
+    void giveAttr(const std::string& attr, Box* val) {
+        assert(this->getattr(attr) == NULL);
+        this->setattr(attr, val, NULL);
+    }
+
+    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+    Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
+};
+
+
+
+class BoxedClass : public Box {
+public:
+    HCAttrs attrs;
+
     // If the user sets __getattribute__ or __getattr__, we will have to invalidate
     // all getattr IC entries that relied on the fact that those functions didn't exist.
     // Doing this via invalidation means that instance attr lookups don't have
     // to guard on anything about the class.
     ICInvalidator dependent_icgetattrs;
 
-    // whether or not instances of this class are subclasses of HCBox,
-    // ie they have python-level instance attributes:
-    const bool hasattrs;
+    // Only a single base supported for now.
+    // Is NULL iff this is object_cls
+    BoxedClass* const base;
+
+    // Offset of the HCAttrs object or 0 if there are no hcattrs.
+    // Analogous to tp_dictoffset
+    const int attrs_offset;
+    // Analogous to tp_basicsize
+    const int instance_size;
+
+    bool instancesHaveAttrs() { return attrs_offset != 0; }
 
     // Whether this class object is constant or not, ie whether or not class-level
     // attributes can be changed or added.
@@ -377,7 +421,7 @@ public:
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
-    BoxedClass(bool hasattrs, bool is_user_defined);
+    BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bool is_user_defined);
     void freeze() {
         assert(!is_constant);
         is_constant = true;
@@ -396,6 +440,16 @@ void addToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);
+void printLastTraceback();
+
+struct LineInfo {
+public:
+    const int line, column;
+    std::string file, func;
+
+    LineInfo(int line, int column, const std::string& file, const std::string& func)
+        : line(line), column(column), file(file), func(func) {}
+};
 }
 
 #endif

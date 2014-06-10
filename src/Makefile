@@ -48,6 +48,9 @@ TESTS_DIR := ../test/tests
 
 GPP := $(GCC_DIR)/bin/g++
 
+ifeq ($(V),1)
+	VERBOSE := 1
+endif
 ifeq ($(VERBOSE),1)
 	VERB :=
 	ECHO := @\#
@@ -117,6 +120,7 @@ COMMON_CXXFLAGS += -std=c++11
 COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
+COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -126,19 +130,8 @@ else
 	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.9.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.9.0-install/bin/valgrind
 endif
 
-# libunwind's include files warn on -Wextern-c-compat, so turn that off;
-# ideally would just turn it off for header files in libunwind, maybe by
-# having an internal libunwind.h that pushed/popped the diagnostic state,
-# but it doesn't seem like that important a warning so just turn it off.
-COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-1.1-install/include -Wno-extern-c-compat
-
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
-
-EXTRA_CXXFLAGS ?=
-CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
-CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
-CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
 
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64
@@ -159,6 +152,25 @@ COMMON_LDFLAGS += -Wl,-E
 # end up linking to the system libstdc++ instead.)
 COMMON_LDFLAGS += -static-libstdc++
 
+ifneq ($(USE_DEBUG_LIBUNWIND),0)
+	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-debug-install/lib
+
+	# libunwind's include files warn on -Wextern-c-compat, so turn that off;
+	# ideally would just turn it off for header files in libunwind, maybe by
+	# having an internal libunwind.h that pushed/popped the diagnostic state,
+	# but it doesn't seem like that important a warning so just turn it off.
+	COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-trunk-debug-install/include -Wno-extern-c-compat
+else
+	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-install/lib
+	COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-trunk-install/include -Wno-extern-c-compat
+endif
+
+
+EXTRA_CXXFLAGS ?=
+CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
+CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
+CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
+
 LDFLAGS := $(LLVM_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_DEBUG := $(LLVM_DEBUG_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_PROFILE = $(LLVM_PROFILE_LDFLAGS) -pg $(COMMON_LDFLAGS)
@@ -166,16 +178,6 @@ LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 # Can't add this, because there are functions in the compiler that look unused but are hooked back from the runtime:
 # LDFLAGS_RELEASE += -Wl,--gc-sections
-
-ifneq ($(USE_DEBUG_LIBUNWIND),0)
-	LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-debug-install/lib
-	LDFLAGS_DEBUG += -L$(DEPS_DIR)/libunwind-1.1-debug-install/lib
-else
-	LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-	LDFLAGS_DEBUG += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-endif
-LDFLAGS_RELEASE += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-LDFLAGS_PROFILE += -L$(DEPS_DIR)/libunwind-1.1-install/lib
 
 
 BUILD_SYSTEM_DEPS := Makefile Makefile.local $(wildcard build_system/*)
@@ -272,7 +274,7 @@ pyston_all: pyston_dbg pyston pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o)
 
 ALL_HEADERS := $(wildcard */*.h) $(wildcard */*/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
-	$(ECHO) Computing tags...
+	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -isystem $(GTEST_DIR)/include
@@ -292,7 +294,7 @@ run_unittests:: run_$1_unittests
 endef
 
 override GDB_CMDS ?=
-override GDB_CMDS := --ex "set confirm off" --ex run --ex "bt 20" $(GDB_CMDS)
+override GDB_CMDS := --ex "set confirm off" --ex "handle SIGUSR2 pass nostop noprint" --ex run --ex "bt 20" $(GDB_CMDS)
 BR ?=
 ARGS ?=
 ifneq ($(BR),)
@@ -320,6 +322,13 @@ analyze:
 		 --use-analyzer $(CLANG_EXE) --use-c++ $(CLANG_EXE) -V \
 		$(MAKE) pyston_dbg USE_DISTCC=0 USE_CCACHE=0
 
+.PHONY: lint cpplint
+lint:
+	$(ECHO) linting...
+	$(VERB) python ../tools/lint.py
+cpplint:
+	$(VERB) python ../tools/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
+
 .PHONY: test test_debug test_prof test_release
 test_debug: pyston_dbg ext
 	python ../tools/tester.py -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
@@ -333,8 +342,9 @@ test_prof: pyston_prof ext
 	python ../tools/tester.py -P -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -P -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
-check test: ext pyston_dbg
-	$(MAKE) pyston_dbg
+check:
+	$(MAKE) lint
+	$(MAKE) ext pyston_dbg
 	# $(MAKE) run_unittests
 	$(MAKE) test_debug
 	$(MAKE) test_release
@@ -346,6 +356,7 @@ check test: ext pyston_dbg
 	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
 	$(MAKE) run_unittests
+	$(MAKE) check_format
 
 	echo "All tests passed"
 
@@ -440,6 +451,8 @@ $(LLVM_BUILDS:%=llvm/%/$1): llvm/%/$1: llvm/%/$2
 )
 endef
 
+###
+# LLVM build dependency management:
 $(call add_llvm_dep,lib/TableGen,lib/Support)
 $(call add_llvm_dep,utils/TableGen,lib/TableGen)
 $(call add_llvm_dep,lib/IR,utils/TableGen)
@@ -459,9 +472,15 @@ $(call add_llvm_dep,utils,lib)
 $(foreach tool,$(LLVM_TOOLS),$(foreach build,$(LLVM_BUILDS),$(eval \
 llvm/$(build)/tools/$(tool): llvm/$(build)/lib \
 )))
-$(LLVM_BUILDS:%=llvm_%): llvm_%: llvm/%/lib llvm/%/tools/llvm-config $(LLVM_TOOLS:%=llvm/\%/tools/%)
+
+##
+# LLVM build subset specifications:
+$(LLVM_BUILDS:%=llvm_%): llvm_%: llvm/%/lib llvm/%/tools/llvm-config
 	touch $(LLVM_BUILD)/$(patsubst llvm_%,built_%,$@)
 llvm_release: llvm/release/tools llvm/release/utils
+llvm_quick: $(LLVM_TOOLS:%=llvm/quick/tools/%)
+llvm_debug: $(LLVM_TOOLS:%=llvm/debug/tools/%)
+
 llvm_quick_clean:
 	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 clean
 llvm_release_%:
@@ -542,12 +561,20 @@ $(TOOLS_DIR)/publicize_release: $(TOOLS_DIR)/publicize.release.o $(LLVM_RELEASE_
 PASS_SRCS := codegen/opt/aa.cpp
 PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 
-%.h.pch: CXXFLAGS := $(CXXFLAGS)
-%.release.h.pch: CXXFLAGS := $(CXXFLAGS_RELEASE)
-%.release.h.pch %.h.pch: %.h $(BUILD_SYSTEM_DEPS)
+# Need to set CXXFLAGS so that this rules doesn't inherit the '-include' rule from the
+# thing that's calling it:
+%.h.pch: CXXFLAGS:=$(CXXFLAGS)
+%.h.pch: %.h
 	$(ECHO) Compiling $@
 	$(VERB) rm -f $@-*
 	$(VERB) $(CLANG_EXE) $(CXXFLAGS) -MMD -MP -MF $<.d -x c++-header $< -o $@
+# Need to set CXXFLAGS so that this rules doesn't inherit the '-include' rule from the
+# thing that's calling it:
+%.release.h.pch: CXXFLAGS_RELEASE:=$(CXXFLAGS_RELEASE)
+%.release.h.pch: %.h
+	$(ECHO) Compiling $@
+	$(VERB) rm -f $@-*
+	$(VERB) $(CLANG_EXE) $(CXXFLAGS_RELEASE) -MMD -MP -MF $<.d -x c++-header $< -o $@
 
 CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
 $(CODEGEN_SRCS:.cpp=.o): CXXFLAGS += -include codegen/irgen.h
@@ -652,7 +679,7 @@ pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 pyston_pprof: $(OPT_OBJS) codegen/profiling/pprof.release.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
-pyston_prof: $(PROFILE_OBJS) $(LLVM_RELEASE_DEPS)
+pyston_prof: $(PROFILE_OBJS) $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS) -pg -o $@
 pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
@@ -683,8 +710,12 @@ endef
 RUN_DEPS := ext
 
 .PHONY: run run_release profile
-run: pyston_dbg $(RUN_DEPS)
-	./pyston_dbg $(ARGS)
+run: $(RUN_DEPS)
+	if which rlwrap >/dev/null; then\
+		rlwrap ./pyston_dbg $(ARGS) ;\
+	else \
+		./pyston_dbg $(ARGS) ;\
+	fi
 run_release: pyston $(RUN_DEPS)
 	./pyston $(ARGS)
 profile: pyston_profile $(RUN_DEPS)
@@ -792,14 +823,18 @@ $(call make_search,oprofcg_%)
 opreportcg:
 	opreport lib-image:pyston_oprof -l -t 0.2 -a --callgraph
 
+.PHONY: watch_% watch wdbg_%
 watch_%:
 	@ ( ulimit -t 60; ulimit -d $(MAK_MEM_KB); ulimit -v $(MAK_MEM_KB); \
 		TARGET=$(dir $@)$(patsubst watch_%,%,$(notdir $@)); \
-		clear; $(MAKE) $$TARGET; true; \
+		clear; $(MAKE) $$TARGET $(WATCH_ARGS); true; \
 		while inotifywait -q -e modify -e attrib -e move -e move_self -e create -e delete -e delete_self \
-		Makefile $$(find .. \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET; done )
+		Makefile $$(find .. \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) ); do clear; $(MAKE) $$TARGET $(WATCH_ARGS); done )
 		# Makefile $$(find \( -name '*.cpp' -o -name '*.h' -o -name '*.py' \) -o -type d ); do clear; $(MAKE) $(patsubst watch_%,%,$@); done )
 		# -r . ; do clear; $(MAKE) $(patsubst watch_%,%,$@); done
+watch: watch_pyston_dbg
+watch_vim:
+	$(MAKE) watch WATCH_ARGS='COLOR=0 USE_DISTCC=0 -j1 2>&1 | tee compile.log'
 wdbg_%:
 	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_CMDS="--ex quit"
 

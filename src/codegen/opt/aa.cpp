@@ -15,10 +15,13 @@
 #include <algorithm>
 
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include "codegen/opt/escape_analysis.h"
+#include "codegen/opt/util.h"
 
 #ifndef STANDALONE
 #include "core/common.h"
@@ -29,9 +32,6 @@
 #else
 #define VERBOSITY(...) 1
 #endif
-
-#include "codegen/opt/escape_analysis.h"
-#include "codegen/opt/util.h"
 
 using namespace llvm;
 

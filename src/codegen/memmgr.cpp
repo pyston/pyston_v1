@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/memmgr.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
@@ -20,10 +21,7 @@
 #include "llvm/Support/Memory.h"
 
 #include "core/common.h"
-
 #include "core/util.h"
-
-#include "codegen/memmgr.h"
 
 // This code was copy-pasted from SectionMemoryManager.cpp;
 // TODO eventually I should remove this using directive
@@ -189,7 +187,11 @@ error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGrou
         }
     }
 
+#if LLVMREV < 209952
     return error_code::success();
+#else
+    return error_code();
+#endif
 }
 
 void PystonMemoryManager::invalidateInstructionCache() {

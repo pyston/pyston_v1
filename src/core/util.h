@@ -15,10 +15,11 @@
 #ifndef PYSTON_CORE_UTIL_H
 #define PYSTON_CORE_UTIL_H
 
-#include <cstdio>
-
 #include <algorithm>
+#include <cstdio>
 #include <sys/time.h>
+
+#include "core/common.h"
 
 namespace pyston {
 

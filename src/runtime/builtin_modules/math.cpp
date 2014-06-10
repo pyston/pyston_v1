@@ -15,14 +15,12 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
+#include "codegen/compvars.h"
 #include "core/types.h"
-
 #include "runtime/gc_runtime.h"
+#include "runtime/inline/boxing.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-#include "runtime/inline/boxing.h"
-
-#include "codegen/compvars.h"
 
 namespace pyston {
 
@@ -89,12 +87,12 @@ static void _addFunc(const char* name, void* int_func, void* float_func, void* b
     assert(BOXED_INT);
     v_i.push_back(BOXED_INT);
     v_f.push_back(BOXED_FLOAT);
-    v_u.push_back(NULL);
+    v_u.push_back(UNKNOWN);
 
-    CLFunction* cl = createRTFunction();
-    addRTFunction(cl, int_func, BOXED_FLOAT, v_i, false);
-    addRTFunction(cl, float_func, BOXED_FLOAT, v_f, false);
-    addRTFunction(cl, boxed_func, NULL, v_u, false);
+    CLFunction* cl = createRTFunction(1, 0, false, false);
+    addRTFunction(cl, int_func, BOXED_FLOAT, v_i);
+    addRTFunction(cl, float_func, BOXED_FLOAT, v_f);
+    addRTFunction(cl, boxed_func, UNKNOWN, v_u);
     math_module->giveAttr(name, new BoxedFunction(cl));
 }
 
@@ -103,6 +101,6 @@ void setupMath() {
     math_module->giveAttr("pi", boxFloat(M_PI));
 
     _addFunc("sqrt", (void*)mathSqrtInt, (void*)mathSqrtFloat, (void*)mathSqrt);
-    _addFunc("tan", (void*)mathTanInt, (void*)mathTanFloat, (void*)mathSqrt);
+    _addFunc("tan", (void*)mathTanInt, (void*)mathTanFloat, (void*)mathTan);
 }
 }

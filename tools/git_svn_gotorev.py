@@ -79,6 +79,8 @@ if __name__ == "__main__":
             continue
         if patch_fn.startswith("LICENSE"):
             continue
+        if "Update-TailCallElim" in patch_fn and svn_rev >= 208017:
+            continue
 
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)
