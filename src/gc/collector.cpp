@@ -20,6 +20,7 @@
 
 #include "codegen/codegen.h"
 #include "core/common.h"
+#include "core/threading.h"
 #include "core/types.h"
 #include "gc/heap.h"
 #include "gc/root_finder.h"
@@ -157,6 +158,11 @@ static int ncollections = 0;
 void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
+
+    threading::GLPromoteRegion _lock;
+
+    std::vector<threading::ThreadState> threads = threading::getAllThreadStates();
+    assert(threads.size() == 0);
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ++ncollections);

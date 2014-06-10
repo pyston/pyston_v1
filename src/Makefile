@@ -293,7 +293,7 @@ run_unittests:: run_$1_unittests
 endef
 
 override GDB_CMDS ?=
-override GDB_CMDS := --ex "set confirm off" --ex run --ex "bt 20" $(GDB_CMDS)
+override GDB_CMDS := --ex "set confirm off" --ex "handle SIGUSR2 pass nostop noprint" --ex run --ex "bt 20" $(GDB_CMDS)
 BR ?=
 ARGS ?=
 ifneq ($(BR),)

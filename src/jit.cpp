@@ -108,6 +108,7 @@ int main(int argc, char** argv) {
 
     // end of argument parsing
 
+    threading::registerMainThread();
     threading::GLReadRegion _glock;
 
     _t.split("to run");

@@ -15,8 +15,29 @@
 #ifndef PYSTON_CORE_THREADING_H
 #define PYSTON_CORE_THREADING_H
 
+#include <cstdint>
+#include <cstring>
+#include <ucontext.h>
+#include <vector>
+
 namespace pyston {
+class Box;
+
 namespace threading {
+
+intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
+
+void registerMainThread();
+
+struct ThreadState {
+    gregset_t gregs;
+
+    ThreadState(gregset_t gregs) { memcpy(this->gregs, gregs, sizeof(gregset_t)); }
+};
+// Gets a ThreadState per thread, not including the thread calling this function.
+// For this call to make sense, the threads all should be blocked;
+// as a corollary, this thread is very much not thread safe.
+std::vector<ThreadState> getAllThreadStates();
 
 #define THREADING_USE_GIL 1
 #define THREADING_USE_GRWL 0
@@ -45,12 +66,12 @@ inline void demoteGL() {
 }
 #endif
 
-#define MAKE_REGION(name, start, end) \
-class name {\
-public:\
-    name() { start(); }\
-    ~name() { end(); }\
-};
+#define MAKE_REGION(name, start, end)                                                                                  \
+    class name {                                                                                                       \
+    public:                                                                                                            \
+        name() { start(); }                                                                                            \
+        ~name() { end(); }                                                                                             \
+    };
 
 MAKE_REGION(GLReadRegion, acquireGLRead, releaseGLRead);
 MAKE_REGION(GLPromoteRegion, promoteGL, demoteGL);

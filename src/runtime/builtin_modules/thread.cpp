@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pthread.h>
 #include <stddef.h>
 
 #include "codegen/compvars.h"
@@ -25,21 +24,11 @@ using namespace pyston::threading;
 
 namespace pyston {
 
-static_assert(sizeof(pthread_t) <= sizeof(BoxedInt::n), "");
-
 BoxedModule* thread_module;
 
-static void* thread_start(void* _args) {
-    threading::GLReadRegion _glock;
-
-    std::vector<Box*>* args = static_cast<std::vector<Box*>*>(_args);
-    assert(args->size() == 2 || args->size() == 3);
-    Box* target = (*args)[0];
-    Box* varargs = (*args)[1];
-    Box* kwargs = NULL;
-    if (args->size() > 2)
-        kwargs = (*args)[2];
-    delete args;
+static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
+    assert(target);
+    assert(varargs);
 
     try {
         runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL);
@@ -53,9 +42,7 @@ static void* thread_start(void* _args) {
 
 // TODO this should take kwargs, which defaults to empty
 Box* startNewThread(Box* target, Box* args) {
-    pthread_t thread_id;
-    int code = pthread_create(&thread_id, NULL, &thread_start, new std::vector<Box*>({ target, args }));
-    assert(code == 0);
+    intptr_t thread_id = start_thread(&thread_start, target, args, NULL);
     return boxInt(thread_id ^ 0x12345678901L);
 }
 
