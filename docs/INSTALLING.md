@@ -66,8 +66,8 @@ git clone git://git.sv.gnu.org/libunwind.git libunwind-trunk
 mkdir libunwind-trunk-install
 cd libunwind-trunk
 git checkout 65ac867416
-# disable shared libraries because we'll be installing this in a place that the loader can't find it:
 autoreconf -i
+# disable shared libraries because we'll be installing this in a place that the loader can't find it:
 ./configure --prefix=$HOME/pyston_deps/libunwind-trunk-install --enable-shared=0
 make -j4
 make install

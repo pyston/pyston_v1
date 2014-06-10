@@ -29,6 +29,7 @@
 #include "codegen/irgen/util.h"
 #include "core/common.h"
 #include "core/stats.h"
+#include "core/thread_utils.h"
 #include "core/util.h"
 
 //#undef VERBOSITY
@@ -206,25 +207,23 @@ static void set(SymMap& symbols, const llvm::BasicBlock::iterator& it, Val v) {
     //#define SET(v) symbols.insert(std::make_pair(static_cast<llvm::Value*>(&(*it)), Val(v)))
 }
 
-static std::unordered_map<void*, const SymMap*> interpreter_roots;
 static std::unordered_map<void*, llvm::Instruction*> cur_instruction_map;
 
-void gatherInterpreterRootsForFrame(GCVisitor* visitor, void* frame_ptr) {
-    auto it = interpreter_roots.find(frame_ptr);
-    if (it == interpreter_roots.end()) {
-        printf("%p is not an interpreter frame; they are", frame_ptr);
-        for (const auto& p2 : interpreter_roots) {
-            printf(" %p", p2.first);
+typedef std::vector<const SymMap*> root_stack_t;
+threading::PerThreadSet<root_stack_t> root_stack_set;
+threading::PerThread<root_stack_t> thread_local root_stack(&root_stack_set);
+
+void gatherInterpreterRoots(GCVisitor* visitor) {
+    // In theory this lock should be superfluous since we should only call this
+    // inside a sequential section, but lock it anyway:
+    threading::LockedRegion _lock(&root_stack_set.lock);
+
+    for (auto& p : root_stack_set.map) {
+        for (const SymMap* sym_map : *p.second) {
+            for (const auto& p2 : *sym_map) {
+                visitor->visitPotential(p2.second.o);
+            }
         }
-        printf("\n");
-        abort();
-    }
-
-    // printf("Gathering roots for frame %p\n", frame_ptr);
-    const SymMap* symbols = it->second;
-
-    for (const auto& p2 : *symbols) {
-        visitor->visitPotential(p2.second.o);
     }
 }
 
@@ -236,8 +235,7 @@ public:
     constexpr UnregisterHelper(void* frame_ptr) : frame_ptr(frame_ptr) {}
 
     ~UnregisterHelper() {
-        assert(interpreter_roots.count(frame_ptr));
-        interpreter_roots.erase(frame_ptr);
+        root_stack.value.pop_back();
 
         assert(cur_instruction_map.count(frame_ptr));
         cur_instruction_map.erase(frame_ptr);
@@ -282,7 +280,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     SymMap symbols;
 
     void* frame_ptr = __builtin_frame_address(0);
-    interpreter_roots[frame_ptr] = &symbols;
+    root_stack.value.push_back(&symbols);
     UnregisterHelper helper(frame_ptr);
 
     int arg_num = -1;

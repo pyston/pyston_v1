@@ -37,7 +37,10 @@ struct ThreadState {
     pid_t tid; // useful mostly for debugging
     ucontext_t ucontext;
 
-    ThreadState(pid_t tid, ucontext_t* ucontext) : tid(tid) {
+    void* stack_start, *stack_end;
+
+    ThreadState(pid_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
+        : tid(tid), stack_start(stack_start), stack_end(stack_end) {
         memcpy(&this->ucontext, ucontext, sizeof(ucontext_t));
         this->ucontext.uc_mcontext.fpregs = &this->ucontext.__fpregs_mem;
     }
@@ -46,6 +49,10 @@ struct ThreadState {
 // For this call to make sense, the threads all should be blocked;
 // as a corollary, this thread is very much not thread safe.
 std::vector<ThreadState> getAllThreadStates();
+
+// Get the stack "bottom" (first pushed data; for stacks that grow down, will
+// be the highest address).
+void* getStackBottom();
 
 #define THREADING_USE_GIL 1
 #define THREADING_USE_GRWL 0

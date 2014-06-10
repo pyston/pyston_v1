@@ -25,6 +25,8 @@
 #include <unordered_set>
 #include <vector>
 
+#define STACK_GROWS_DOWN 1
+
 #define _STRINGIFY(N) #N
 #define STRINGIFY(N) _STRINGIFY(N)
 

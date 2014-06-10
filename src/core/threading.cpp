@@ -23,6 +23,7 @@
 
 #include "core/common.h"
 #include "core/options.h"
+#include "core/thread_utils.h"
 
 extern "C" int start_thread(void* arg);
 
@@ -39,17 +40,6 @@ int tgkill(int tgid, int tid, int sig) {
     return syscall(SYS_tgkill, tgid, tid, sig);
 }
 
-class LockedRegion {
-private:
-    pthread_mutex_t* mutex;
-
-public:
-    LockedRegion(pthread_mutex_t* mutex) : mutex(mutex) { pthread_mutex_lock(mutex); }
-    ~LockedRegion() { pthread_mutex_unlock(mutex); }
-};
-
-
-
 // Certain thread examination functions won't be valid for a brief
 // period while a thread is starting up.
 // To handle this, track the number of threads in an uninitialized state,
@@ -62,9 +52,18 @@ struct ThreadStartArgs {
 };
 
 static pthread_mutex_t threading_lock = PTHREAD_MUTEX_INITIALIZER;
-static std::unordered_set<pid_t> current_threads;
+struct ThreadInfo {
+    // "bottom" in the sense of a stack, which in a down-growing stack is the highest address:
+    void* stack_bottom;
+    pthread_t pthread_id;
+};
+static std::unordered_map<pid_t, ThreadInfo> current_threads;
 
-static std::atomic<int> signals_waiting(0);
+void* getStackBottom() {
+    return current_threads[gettid()].stack_bottom;
+}
+
+static int signals_waiting(0);
 static std::vector<ThreadState> thread_states;
 std::vector<ThreadState> getAllThreadStates() {
     // TODO need to prevent new threads from starting,
@@ -89,7 +88,8 @@ std::vector<ThreadState> getAllThreadStates() {
 
     pid_t tgid = getpid();
     pid_t mytid = gettid();
-    for (pid_t tid : current_threads) {
+    for (auto& pair : current_threads) {
+        pid_t tid = pair.first;
         if (tid == mytid)
             continue;
         tgkill(tgid, tid, SIGUSR2);
@@ -119,12 +119,19 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
         printf("old rip: 0x%lx\n", context->uc_mcontext.gregs[REG_RIP]);
     }
 
-    thread_states.push_back(ThreadState(tid, context));
-    signals_waiting--; // atomic on std::atomic
+#if STACK_GROWS_DOWN
+    void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
+    void* stack_end = current_threads[tid].stack_bottom;
+#else
+    void* stack_start = current_threads[tid].stack_bottom;
+    void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
+#endif
+    assert(stack_start < stack_end);
+    thread_states.push_back(ThreadState(tid, context, stack_start, stack_end));
+    signals_waiting--;
 }
 
 static void* _thread_start(void* _arg) {
-    pid_t tid = gettid();
     ThreadStartArgs* arg = static_cast<ThreadStartArgs*>(_arg);
     auto start_func = arg->start_func;
     Box* arg1 = arg->arg1;
@@ -135,11 +142,33 @@ static void* _thread_start(void* _arg) {
     {
         LockedRegion _lock(&threading_lock);
 
-        current_threads.insert(tid);
+        pid_t tid = gettid();
+        pthread_t current_thread = pthread_self();
+
+        pthread_attr_t thread_attrs;
+        int code = pthread_getattr_np(current_thread, &thread_attrs);
+        RELEASE_ASSERT(code == 0, "");
+
+        void* stack_start;
+        size_t stack_size;
+        code = pthread_attr_getstack(&thread_attrs, &stack_start, &stack_size);
+        RELEASE_ASSERT(code == 0, "");
+
+        pthread_attr_destroy(&thread_attrs);
+
+        current_threads[tid] = ThreadInfo {
+#if STACK_GROWS_DOWN
+            .stack_bottom = static_cast<char*>(stack_start) + stack_size,
+#else
+            .stack_bottom = stack_start,
+#endif
+            .pthread_id = current_thread,
+        };
+
         num_starting_threads--;
 
         if (VERBOSITY() >= 2)
-            printf("child initialized; tid=%d\n", tid);
+            printf("child initialized; tid=%d\n", gettid());
     }
 
     threading::GLReadRegion _glock;
@@ -149,9 +178,9 @@ static void* _thread_start(void* _arg) {
     {
         LockedRegion _lock(&threading_lock);
 
-        current_threads.erase(tid);
+        current_threads.erase(gettid());
         if (VERBOSITY() >= 2)
-            printf("thread tid=%d exited\n", tid);
+            printf("thread tid=%d exited\n", gettid());
     }
 
     return rtn;
@@ -167,12 +196,56 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
 
     pthread_t thread_id;
     int code = pthread_create(&thread_id, NULL, &_thread_start, args);
-    assert(code == 0);
+    RELEASE_ASSERT(code == 0, "");
     if (VERBOSITY() >= 2)
         printf("pthread thread_id: 0x%lx\n", thread_id);
 
     static_assert(sizeof(pthread_t) <= sizeof(intptr_t), "");
     return thread_id;
+}
+
+// from https://www.sourceware.org/ml/guile/2000-07/msg00214.html
+static void* find_stack() {
+    FILE* input;
+    char* line;
+    char* s;
+    size_t len;
+    char hex[9];
+    void* start;
+    void* end;
+
+    int dummy;
+
+    input = fopen("/proc/self/maps", "r");
+    if (input == NULL)
+        return NULL;
+
+    len = 0;
+    line = NULL;
+    while (getline(&line, &len, input) != -1) {
+        s = strchr(line, '-');
+        if (s == NULL)
+            return NULL;
+        *s++ = '\0';
+
+        start = (void*)strtoul(line, NULL, 16);
+        end = (void*)strtoul(s, NULL, 16);
+
+        if ((void*)&dummy >= start && (void*)&dummy <= end) {
+            free(line);
+            fclose(input);
+
+#if STACK_GROWS_DOWN
+            return end;
+#else
+            return start;
+#endif
+        }
+    }
+
+    free(line);
+    fclose(input);
+    return NULL; /* not found =^P */
 }
 
 intptr_t call_frame_base;
@@ -184,7 +257,9 @@ void registerMainThread() {
     // call_frame_base = (intptr_t)::start_thread;
     call_frame_base = (intptr_t)_thread_start;
 
-    current_threads.insert(gettid());
+    current_threads[gettid()] = ThreadInfo{
+        .stack_bottom = find_stack(), .pthread_id = pthread_self(),
+    };
 
     struct sigaction act;
     act.sa_flags = SA_SIGINFO;
