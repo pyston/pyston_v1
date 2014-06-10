@@ -10,6 +10,7 @@
 #include "codegen/parser.h"
 #include "core/ast.h"
 #include "core/cfg.h"
+#include "unittests.h"
 
 using namespace pyston;
 

@@ -126,10 +126,11 @@ void registerMainThread() {
 
     current_threads.push_back(gettid());
 
-    struct sigaction act = {
-        .sa_flags = SA_SIGINFO, .sa_sigaction = _thread_context_dump,
-    };
+    struct sigaction act;
+    act.sa_flags = SA_SIGINFO;
+    act.sa_sigaction = _thread_context_dump;
     struct sigaction oldact;
+
     int code = sigaction(SIGUSR2, &act, &oldact);
     if (code)
         err(1, NULL);
