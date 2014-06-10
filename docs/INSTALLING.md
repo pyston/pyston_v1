@@ -61,13 +61,14 @@ There seem to be some lingering issues with the LLVM build that haven't been ide
 
 ```
 cd ~/pyston_deps
-wget http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz
-tar xvf libunwind-1.1.tar.gz
-mkdir libunwind-1.1-install
-cd libunwind-1.1
+sudo apt-get install texlive-extra-utils autoconf
+git clone git://git.sv.gnu.org/libunwind.git libunwind-trunk
+mkdir libunwind-trunk-install
+cd libunwind-trunk
+git checkout 65ac867416
 # disable shared libraries because we'll be installing this in a place that the loader can't find it:
-./configure --prefix=$HOME/pyston_deps/libunwind-1.1-install --enable-shared=0
-patch -p1 <~/pyston/libunwind_patches/0001-Change-the-RBP-validation-heuristic-to-allow-size-0-.patch
+autoreconf -i
+./configure --prefix=$HOME/pyston_deps/libunwind-trunk-install --enable-shared=0
 make -j4
 make install
 ```
@@ -119,10 +120,10 @@ Assuming you've already built the normal version above:
 
 ```
 cd ~/pyston_deps
-cp -rv libunwind-1.1 libunwind-1.1-debug
-mkdir libunwind-1.1-debug-install
-cd libunwind-1.1-debug
-CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-1.1-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
+cp -rv libunwind-trunk libunwind-trunk-debug
+mkdir libunwind-trunk-debug-install
+cd libunwind-trunk-debug
+CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-trunk-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
 make -j4
 make install
 echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/src/Makefile.local

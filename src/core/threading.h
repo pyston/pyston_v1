@@ -27,12 +27,20 @@ namespace threading {
 
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
 
+// The base of the call frame stack for a thread;
+// useful for knowing when to stop unwinding.
+extern intptr_t call_frame_base;
+
 void registerMainThread();
 
 struct ThreadState {
-    gregset_t gregs;
+    pid_t tid; // useful mostly for debugging
+    ucontext_t ucontext;
 
-    ThreadState(gregset_t gregs) { memcpy(this->gregs, gregs, sizeof(gregset_t)); }
+    ThreadState(pid_t tid, ucontext_t* ucontext) : tid(tid) {
+        memcpy(&this->ucontext, ucontext, sizeof(ucontext_t));
+        this->ucontext.uc_mcontext.fpregs = &this->ucontext.__fpregs_mem;
+    }
 };
 // Gets a ThreadState per thread, not including the thread calling this function.
 // For this call to make sense, the threads all should be blocked;

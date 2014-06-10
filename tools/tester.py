@@ -50,7 +50,7 @@ def set_ulimits():
     resource.setrlimit(resource.RLIMIT_CPU, (TIME_LIMIT + 1, TIME_LIMIT + 1))
 
     MAX_MEM_MB = 100
-    resource.setrlimit(resource.RLIMIT_AS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
+    resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
 def get_expected_output(fn):
     sys.stdout.flush()

@@ -48,6 +48,9 @@ TESTS_DIR := ../test/tests
 
 GPP := $(GCC_DIR)/bin/g++
 
+ifeq ($(V),1)
+	VERBOSE := 1
+endif
 ifeq ($(VERBOSE),1)
 	VERB :=
 	ECHO := @\#
@@ -127,19 +130,8 @@ else
 	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.9.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.9.0-install/bin/valgrind
 endif
 
-# libunwind's include files warn on -Wextern-c-compat, so turn that off;
-# ideally would just turn it off for header files in libunwind, maybe by
-# having an internal libunwind.h that pushed/popped the diagnostic state,
-# but it doesn't seem like that important a warning so just turn it off.
-COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-1.1-install/include -Wno-extern-c-compat
-
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
-
-EXTRA_CXXFLAGS ?=
-CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
-CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
-CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
 
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64
@@ -160,6 +152,25 @@ COMMON_LDFLAGS += -Wl,-E
 # end up linking to the system libstdc++ instead.)
 COMMON_LDFLAGS += -static-libstdc++
 
+ifneq ($(USE_DEBUG_LIBUNWIND),0)
+	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-debug-install/lib
+
+	# libunwind's include files warn on -Wextern-c-compat, so turn that off;
+	# ideally would just turn it off for header files in libunwind, maybe by
+	# having an internal libunwind.h that pushed/popped the diagnostic state,
+	# but it doesn't seem like that important a warning so just turn it off.
+	COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-trunk-debug-install/include -Wno-extern-c-compat
+else
+	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-install/lib
+	COMMON_CXXFLAGS += -I$(DEPS_DIR)/libunwind-trunk-install/include -Wno-extern-c-compat
+endif
+
+
+EXTRA_CXXFLAGS ?=
+CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
+CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
+CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
+
 LDFLAGS := $(LLVM_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_DEBUG := $(LLVM_DEBUG_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_PROFILE = $(LLVM_PROFILE_LDFLAGS) -pg $(COMMON_LDFLAGS)
@@ -167,16 +178,6 @@ LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 # Can't add this, because there are functions in the compiler that look unused but are hooked back from the runtime:
 # LDFLAGS_RELEASE += -Wl,--gc-sections
-
-ifneq ($(USE_DEBUG_LIBUNWIND),0)
-	LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-debug-install/lib
-	LDFLAGS_DEBUG += -L$(DEPS_DIR)/libunwind-1.1-debug-install/lib
-else
-	LDFLAGS += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-	LDFLAGS_DEBUG += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-endif
-LDFLAGS_RELEASE += -L$(DEPS_DIR)/libunwind-1.1-install/lib
-LDFLAGS_PROFILE += -L$(DEPS_DIR)/libunwind-1.1-install/lib
 
 
 BUILD_SYSTEM_DEPS := Makefile Makefile.local $(wildcard build_system/*)

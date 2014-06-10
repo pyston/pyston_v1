@@ -161,9 +161,6 @@ void runCollection() {
 
     threading::GLPromoteRegion _lock;
 
-    std::vector<threading::ThreadState> threads = threading::getAllThreadStates();
-    assert(threads.size() == 0);
-
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ++ncollections);
 

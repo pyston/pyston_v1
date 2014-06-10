@@ -27,13 +27,6 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
-#ifndef LIBUNWIND_PYSTON_PATCH_VERSION
-#error "Please use a patched version of libunwind; see docs/INSTALLING.md"
-#elif LIBUNWIND_PYSTON_PATCH_VERSION != 0x01
-#error "Please repatch your version of libunwind; see docs/INSTALLING.md"
-#endif
-
-
 namespace pyston {
 
 // from http://www.nongnu.org/libunwind/man/libunwind(3).html

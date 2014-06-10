@@ -24,6 +24,8 @@
 #include "core/common.h"
 #include "core/options.h"
 
+extern "C" int start_thread(void* arg);
+
 namespace pyston {
 namespace threading {
 
@@ -60,7 +62,7 @@ struct ThreadStartArgs {
 };
 
 static pthread_mutex_t threading_lock = PTHREAD_MUTEX_INITIALIZER;
-static std::vector<pid_t> current_threads;
+static std::unordered_set<pid_t> current_threads;
 
 static std::atomic<int> signals_waiting(0);
 static std::vector<ThreadState> thread_states;
@@ -110,30 +112,15 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
 
     ucontext_t* context = static_cast<ucontext_t*>(_context);
 
-    if (VERBOSITY()) {
-        pid_t tid = gettid();
+    pid_t tid = gettid();
+    if (VERBOSITY() >= 2) {
         printf("in thread_context_dump, tid=%d\n", tid);
         printf("%p %p %p\n", context, &context, context->uc_mcontext.fpregs);
         printf("old rip: 0x%lx\n", context->uc_mcontext.gregs[REG_RIP]);
     }
 
-    thread_states.push_back(ThreadState(context->uc_mcontext.gregs));
+    thread_states.push_back(ThreadState(tid, context));
     signals_waiting--; // atomic on std::atomic
-}
-
-void registerMainThread() {
-    LockedRegion _lock(&threading_lock);
-
-    current_threads.push_back(gettid());
-
-    struct sigaction act;
-    act.sa_flags = SA_SIGINFO;
-    act.sa_sigaction = _thread_context_dump;
-    struct sigaction oldact;
-
-    int code = sigaction(SIGUSR2, &act, &oldact);
-    if (code)
-        err(1, NULL);
 }
 
 static void* _thread_start(void* _arg) {
@@ -148,7 +135,7 @@ static void* _thread_start(void* _arg) {
     {
         LockedRegion _lock(&threading_lock);
 
-        current_threads.push_back(tid);
+        current_threads.insert(tid);
         num_starting_threads--;
 
         if (VERBOSITY() >= 2)
@@ -157,7 +144,17 @@ static void* _thread_start(void* _arg) {
 
     threading::GLReadRegion _glock;
 
-    return start_func(arg1, arg2, arg3);
+    void* rtn = start_func(arg1, arg2, arg3);
+
+    {
+        LockedRegion _lock(&threading_lock);
+
+        current_threads.erase(tid);
+        if (VERBOSITY() >= 2)
+            printf("thread tid=%d exited\n", tid);
+    }
+
+    return rtn;
 }
 
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3) {
@@ -176,6 +173,27 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
 
     static_assert(sizeof(pthread_t) <= sizeof(intptr_t), "");
     return thread_id;
+}
+
+intptr_t call_frame_base;
+void registerMainThread() {
+    LockedRegion _lock(&threading_lock);
+
+    // Would be nice if we could set this to the pthread start_thread,
+    // since _thread_start doesn't always show up in the traceback.
+    // call_frame_base = (intptr_t)::start_thread;
+    call_frame_base = (intptr_t)_thread_start;
+
+    current_threads.insert(gettid());
+
+    struct sigaction act;
+    act.sa_flags = SA_SIGINFO;
+    act.sa_sigaction = _thread_context_dump;
+    struct sigaction oldact;
+
+    int code = sigaction(SIGUSR2, &act, &oldact);
+    if (code)
+        err(1, NULL);
 }
 
 

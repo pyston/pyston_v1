@@ -1,8 +1,3 @@
-# skip-if: True
-# - Pyston is not yet thread safe.  this test sometimes works and sometimes doesn't.
-# - threads also seem to cause much greater memory usage for both CPython and Pyston and
-#   blow out the memory limits set by the tester.
-
 from thread import start_new_thread
 import time
 
@@ -25,4 +20,5 @@ for i in xrange(nthreads):
 while len(done) < nthreads:
     time.sleep(0)
 
-print work, sum(work)
+# print work
+assert sum(work) == 0

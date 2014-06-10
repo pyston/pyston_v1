@@ -27,12 +27,6 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
-#ifndef LIBUNWIND_PYSTON_PATCH_VERSION
-#error "Please use a patched version of libunwind; see docs/INSTALLING.md"
-#elif LIBUNWIND_PYSTON_PATCH_VERSION != 0x01
-#error "Please repatch your version of libunwind; see docs/INSTALLING.md"
-#endif
-
 // Definition from libunwind, but standardized I suppose by the format of the .eh_frame_hdr section:
 struct uw_table_entry {
     int32_t start_ip_offset;
