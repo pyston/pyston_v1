@@ -22,6 +22,8 @@ class Value;
 namespace pyston {
 
 struct GlobalFuncs {
+    llvm::Value* allowGLReadPreemption;
+
     llvm::Value* printf, *my_assert, *malloc, *free;
 
     llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction,

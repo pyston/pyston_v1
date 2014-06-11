@@ -30,6 +30,7 @@
 #include "codegen/irgen.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
+#include "core/threading.h"
 #include "core/types.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
@@ -142,6 +143,8 @@ void initGlobalFuncs(GlobalState& g) {
     g.funcs.my_assert = getFunc((void*)my_assert, "my_assert");
     g.funcs.malloc = addFunc((void*)malloc, g.i8_ptr, g.i64);
     g.funcs.free = addFunc((void*)free, g.void_, g.i8_ptr);
+
+    g.funcs.allowGLReadPreemption = addFunc((void*)threading::allowGLReadPreemption, g.void_);
 
     GET(boxCLFunction);
     GET(unboxCLFunction);

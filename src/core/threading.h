@@ -62,6 +62,7 @@ void acquireGLRead();
 void releaseGLRead();
 void acquireGLWrite();
 void releaseGLWrite();
+void allowGLReadPreemption();
 // Note: promoteGL is free to drop the lock and then reacquire
 void promoteGL();
 void demoteGL();

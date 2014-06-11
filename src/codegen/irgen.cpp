@@ -564,6 +564,10 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
             generator->unpackArguments(arg_names, cf->spec->arg_types);
+
+            // Function-entry safepoint:
+            // TODO might be more efficient to do post-call safepoints?
+            generator->doSafePoint();
         } else if (entry_descriptor && block == entry_descriptor->backedge->target) {
             assert(block->predecessors.size() > 1);
             assert(osr_entry_block);
@@ -650,6 +654,15 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                     (*phis)[it->first] = std::make_pair(it->second->getType(), phi);
                 }
+            }
+        }
+
+        for (CFGBlock* predecessor : block->predecessors) {
+            if (predecessor->idx > block->idx) {
+                // Loop safepoint:
+                // TODO does it matter which side of the backedge these are on?
+                generator->doSafePoint();
+                break;
             }
         }
 

@@ -189,6 +189,7 @@ public:
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0;
     virtual EndingState getEndingSymbolTable() = 0;
+    virtual void doSafePoint() = 0;
 };
 
 class IREmitter;

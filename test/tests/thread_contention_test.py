@@ -1,5 +1,4 @@
 from thread import start_new_thread
-import time
 
 work = []
 done = []
@@ -12,13 +11,14 @@ def run(num):
 print "starting!"
 
 nthreads = 2
+N = 100000
 for i in xrange(nthreads):
-    work.append(1000000)
+    work.append(N)
 for i in xrange(nthreads):
-    t = start_new_thread(run, (1000000,))
+    t = start_new_thread(run, (N,))
 
 while len(done) < nthreads:
-    time.sleep(0)
+    pass
 
 # print work
 assert sum(work) == 0

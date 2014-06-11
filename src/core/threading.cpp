@@ -147,7 +147,8 @@ static void* _thread_start(void* _arg) {
 
         pthread_attr_t thread_attrs;
         int code = pthread_getattr_np(current_thread, &thread_attrs);
-        RELEASE_ASSERT(code == 0, "");
+        if (code)
+            err(1, NULL);
 
         void* stack_start;
         size_t stack_size;
@@ -275,13 +276,35 @@ void registerMainThread() {
 #if THREADING_USE_GIL
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
+static std::atomic<int> threads_waiting_on_gil(0);
 void acquireGLWrite() {
+    threads_waiting_on_gil++;
     pthread_mutex_lock(&gil);
+    threads_waiting_on_gil--;
 }
 
 void releaseGLWrite() {
     pthread_mutex_unlock(&gil);
 }
+
+#define GIL_CHECK_INTERVAL 1000
+// Note: this doesn't need to be an atomic, since it should
+// only be accessed by the thread that holds the gil:
+int gil_check_count = 0;
+void allowGLReadPreemption() {
+    // Can read this variable with relaxed consistency; not a huge problem if
+    // we accidentally read a stale value for a little while.
+    if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
+        return;
+
+    gil_check_count++;
+    if (gil_check_count >= GIL_CHECK_INTERVAL) {
+        gil_check_count = 0;
+        releaseGLRead();
+        acquireGLRead();
+    }
+}
+
 #endif
 
 } // namespace threading
