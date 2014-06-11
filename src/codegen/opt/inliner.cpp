@@ -56,7 +56,8 @@ public:
         } else if (llvm::GlobalVariable* gv = llvm::dyn_cast<llvm::GlobalVariable>(v)) {
             // llvm::errs() << " is gv\n";
             assert(gv->getLinkage() != llvm::GlobalVariable::PrivateLinkage);
-            llvm::GlobalVariable* new_gv = llvm::cast<llvm::GlobalVariable>(new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType()));
+            llvm::GlobalVariable* new_gv = llvm::cast<llvm::GlobalVariable>(
+                new_module->getOrInsertGlobal(gv->getName(), gv->getType()->getElementType()));
             RELEASE_ASSERT(!gv->isThreadLocal(), "I don't think MCJIT supports thread-local variables yet");
             new_gv->setThreadLocalMode(gv->getThreadLocalMode());
             r = new_gv;

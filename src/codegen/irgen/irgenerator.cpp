@@ -2093,9 +2093,7 @@ public:
         }
     }
 
-    void doSafePoint() override {
-        emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption);
-    }
+    void doSafePoint() override { emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption); }
 };
 
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
