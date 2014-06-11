@@ -367,6 +367,68 @@ void allowGLReadPreemption() {
         acquireGLRead();
     }
 }
+#endif
+
+#if THREADING_USE_GRWL
+static pthread_rwlock_t grwl = PTHREAD_RWLOCK_INITIALIZER;
+
+enum class GRWLHeldState {
+    N,
+    R,
+    W,
+};
+static __thread GRWLHeldState grwl_state = GRWLHeldState::N;
+
+static std::atomic<int> writers_waiting(0);
+
+void acquireGLRead() {
+    assert(grwl_state == GRWLHeldState::N);
+    pthread_rwlock_rdlock(&grwl);
+    grwl_state = GRWLHeldState::R;
+}
+
+void releaseGLRead() {
+    assert(grwl_state == GRWLHeldState::R);
+    pthread_rwlock_unlock(&grwl);
+    grwl_state = GRWLHeldState::N;
+}
+
+void acquireGLWrite() {
+    assert(grwl_state == GRWLHeldState::N);
+
+    writers_waiting++;
+    pthread_rwlock_wrlock(&grwl);
+    writers_waiting--;
+
+    grwl_state = GRWLHeldState::W;
+}
+
+void releaseGLWrite() {
+    assert(grwl_state == GRWLHeldState::W);
+    pthread_rwlock_unlock(&grwl);
+    grwl_state = GRWLHeldState::N;
+}
+
+void promoteGL() {
+    // Note: this is *not* the same semantics as normal promoting, on purpose.
+    releaseGLRead();
+    acquireGLWrite();
+}
+
+void demoteGL() {
+    releaseGLWrite();
+    acquireGLRead();
+}
+
+void allowGLReadPreemption() {
+    assert(grwl_state == GRWLHeldState::R);
+
+    if (!writers_waiting.load(std::memory_order_relaxed))
+        return;
+
+    pthread_rwlock_unlock(&grwl);
+    pthread_rwlock_rdlock(&grwl);
+}
 
 #endif
 
