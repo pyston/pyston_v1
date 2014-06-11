@@ -46,11 +46,6 @@ int tgkill(int tgid, int tid, int sig) {
 // and wait until they start up.
 int num_starting_threads(0);
 
-struct ThreadStartArgs {
-    void* (*start_func)(Box*, Box*, Box*);
-    Box* arg1, *arg2, *arg3;
-};
-
 static pthread_mutex_t threading_lock = PTHREAD_MUTEX_INITIALIZER;
 struct ThreadInfo {
     // "bottom" in the sense of a stack, which in a down-growing stack is the highest address:
@@ -59,12 +54,33 @@ struct ThreadInfo {
 };
 static std::unordered_map<pid_t, ThreadInfo> current_threads;
 
+struct ThreadStateInternal {
+    bool valid;
+    ucontext_t ucontext;
+
+    ThreadStateInternal() : valid(false) {}
+};
+static std::unordered_map<pid_t, ThreadStateInternal> saved_thread_states;
+
 void* getStackBottom() {
     return current_threads[gettid()].stack_bottom;
 }
 
 static int signals_waiting(0);
 static std::vector<ThreadState> thread_states;
+
+static void pushThreadState(pid_t tid, ucontext_t* context) {
+#if STACK_GROWS_DOWN
+    void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
+    void* stack_end = current_threads[tid].stack_bottom;
+#else
+    void* stack_start = current_threads[tid].stack_bottom;
+    void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
+#endif
+    assert(stack_start < stack_end);
+    thread_states.push_back(ThreadState(tid, context, stack_start, stack_end));
+}
+
 std::vector<ThreadState> getAllThreadStates() {
     // TODO need to prevent new threads from starting,
     // though I suppose that will have been taken care of
@@ -86,10 +102,26 @@ std::vector<ThreadState> getAllThreadStates() {
     signals_waiting = (current_threads.size() - 1);
     thread_states.clear();
 
+    // Current strategy:
+    // Let the other threads decide whether they want to cooperate and save their state before we get here.
+    // If they did save their state (as indicated by saved_thread_states[tid].valid), then we use that.
+    // Otherwise, we send them a signal and use the signal handler to look at their thread state.
+
     pid_t tgid = getpid();
     pid_t mytid = gettid();
     for (auto& pair : current_threads) {
         pid_t tid = pair.first;
+
+        // TODO I'm pretty skeptical about this... are we really guaranteed that this is still valid?
+        // ex what if an object pointer got pushed onto the stack, below where we thought the stack
+        // ended.  We might be able to handle that case by examining the entire stack region, but are
+        // there other issues as well?
+        if (saved_thread_states[tid].valid) {
+            pushThreadState(tid, &saved_thread_states[tid].ucontext);
+            signals_waiting--;
+            continue;
+        }
+
         if (tid == mytid)
             continue;
         tgkill(tgid, tid, SIGUSR2);
@@ -119,17 +151,14 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
         printf("old rip: 0x%lx\n", context->uc_mcontext.gregs[REG_RIP]);
     }
 
-#if STACK_GROWS_DOWN
-    void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
-    void* stack_end = current_threads[tid].stack_bottom;
-#else
-    void* stack_start = current_threads[tid].stack_bottom;
-    void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
-#endif
-    assert(stack_start < stack_end);
-    thread_states.push_back(ThreadState(tid, context, stack_start, stack_end));
+    pushThreadState(tid, context);
     signals_waiting--;
 }
+
+struct ThreadStartArgs {
+    void* (*start_func)(Box*, Box*, Box*);
+    Box* arg1, *arg2, *arg3;
+};
 
 static void* _thread_start(void* _arg) {
     ThreadStartArgs* arg = static_cast<ThreadStartArgs*>(_arg);
@@ -165,6 +194,7 @@ static void* _thread_start(void* _arg) {
 #endif
             .pthread_id = current_thread,
         };
+        saved_thread_states[tid] = ThreadStateInternal();
 
         num_starting_threads--;
 
@@ -180,6 +210,7 @@ static void* _thread_start(void* _arg) {
         LockedRegion _lock(&threading_lock);
 
         current_threads.erase(gettid());
+        saved_thread_states.erase(gettid());
         if (VERBOSITY() >= 2)
             printf("thread tid=%d exited\n", gettid());
     }
@@ -270,6 +301,38 @@ void registerMainThread() {
     int code = sigaction(SIGUSR2, &act, &oldact);
     if (code)
         err(1, NULL);
+}
+
+
+// For the "AllowThreads" regions, let's save the thread state at the beginning of the region.
+// This means that the thread won't get interrupted by the signals we would otherwise need to
+// send to get the GC roots.
+// It adds some perf overhead I suppose, though I haven't measured it.
+// It also means that you're not allowed to do that much inside an AllowThreads region...
+// TODO maybe we should let the client decide which way to handle it
+GLAllowThreadsReadRegion::GLAllowThreadsReadRegion() {
+    // I don't think it matters whether the GL release happens before or after the state
+    // saving; do it before, then, to reduce the amount we hold the GL:
+    releaseGLRead();
+
+    {
+        LockedRegion _lock(&threading_lock);
+
+        ThreadStateInternal& state = saved_thread_states[gettid()];
+        assert(!state.valid);
+        getcontext(&state.ucontext);
+        state.valid = true;
+    }
+}
+
+GLAllowThreadsReadRegion::~GLAllowThreadsReadRegion() {
+    {
+        LockedRegion _lock(&threading_lock);
+        saved_thread_states[gettid()].valid = false;
+    }
+
+
+    acquireGLRead();
 }
 
 
