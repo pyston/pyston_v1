@@ -32,6 +32,7 @@ enum PatchpointType {
     GetGlobal,
     Getattr,
     Setattr,
+    Delattr,
     Getitem,
     Setitem,
     Delitem,
@@ -91,6 +92,7 @@ PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, TypeR
 PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
 PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
 PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
+PatchpointSetupInfo* createDelattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
 PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
 PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
 PatchpointSetupInfo* createDelitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);

@@ -98,6 +98,17 @@ struct SetattrRewriteArgs2 {
           out_success(false) {}
 };
 
+struct DelattrRewriteArgs2 {
+    Rewriter2* rewriter;
+    RewriterVarUsage2 obj;
+    bool more_guards_after;
+
+    bool out_success;
+
+    DelattrRewriteArgs2(Rewriter2* rewriter, RewriterVarUsage2&& obj, bool more_guards_after)
+        : rewriter(rewriter), obj(std::move(obj)), more_guards_after(more_guards_after), out_success(false) {}
+};
+
 struct LenRewriteArgs {
     Rewriter* rewriter;
     RewriterVar obj;
@@ -2543,6 +2554,81 @@ extern "C" void delitem(Box* target, Box* slice) {
 
     if (rewriter.get()) {
         rewriter->commit();
+    }
+}
+
+void Box::delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args) {
+    setattr(attr, NULL, NULL);
+}
+
+extern "C" void delattr_internal(Box* obj, const char* attr, bool allow_custom, DelattrRewriteArgs2* rewrite_args) {
+    static const std::string delattr_str("__delattr__");
+    static const std::string delete_str("__delete__");
+
+    // custom __delattr__
+    if (allow_custom) {
+        Box* delAttr = typeLookup(obj->cls, delattr_str, NULL, NULL);
+        if (delAttr != NULL) {
+            Box* boxstr = boxString(attr);
+            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
+            return;
+        }
+    }
+
+    // first check if attr is in the instance's __dict__
+    Box* attrVal = getattr_internal(obj, attr, false, false, NULL, NULL);
+    if (attrVal != NULL) {
+        obj->delattr(attr, NULL);
+    } else {
+        Box* clsAttr = getattr_internal(obj, attr, true, false, NULL, NULL);
+        if (clsAttr == NULL) {
+            raiseAttributeError(obj, attr);
+            return;
+        }
+        Box* delAttr = getattr_internal(clsAttr, delete_str, false, true, NULL, NULL);
+
+        if (delAttr == NULL) {
+            raiseExcHelper(AttributeError, attr);
+            return;
+        }
+
+        Box* boxstr = boxString(attr);
+        Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), attrVal, obj);
+    }
+}
+
+// del target.attr
+extern "C" void delattr(Box* obj, const char* attr) {
+    assert(strcmp(attr, "__class__") != 0);
+
+    static StatCounter slowpath_setattr("slowpath_delattr");
+    slowpath_setattr.log();
+
+    if (obj->cls == type_cls) {
+        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
+        if (!isUserDefined(cobj)) {
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n",
+                           getNameOfClass(cobj)->c_str());
+        }
+    } else {
+        if (!isUserDefined(obj->cls)) {
+            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj)->c_str(), attr);
+        }
+    }
+
+    std::unique_ptr<Rewriter2> rewriter(
+        Rewriter2::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delattr"));
+
+    if (rewriter.get()) {
+        DelattrRewriteArgs2 rewrite_args(rewriter.get(), rewriter->getArg(0), true);
+        delattr_internal(obj, attr, true, &rewrite_args);
+        if (rewrite_args.out_success) {
+            rewriter->commit();
+        } else {
+            rewrite_args.obj.setDoneUsing();
+        }
+    } else {
+        delattr_internal(obj, attr, true, NULL);
     }
 }
 
