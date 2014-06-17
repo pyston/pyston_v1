@@ -110,6 +110,8 @@ extern "C" void listAppendInternal(Box* s, Box* v) {
 
 
 extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
+    // Lock must be held!
+
     assert(s->cls == list_cls);
     BoxedList* self = static_cast<BoxedList*>(s);
 
@@ -126,6 +128,8 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
 extern "C" Box* listAppend(Box* s, Box* v) {
     assert(s->cls == list_cls);
     BoxedList* self = static_cast<BoxedList*>(s);
+
+    LOCK_REGION(self->lock.asWrite());
 
     listAppendInternal(self, v);
 

@@ -16,24 +16,109 @@
 #define PYSTON_CORE_THREADUTILS_H
 
 #include <pthread.h>
+#include <unordered_map>
 
 namespace pyston {
 namespace threading {
 
-class LockedRegion {
+template <typename T> class _LockedRegion {
 private:
-    pthread_mutex_t* mutex;
+    T* const mutex;
 
 public:
-    LockedRegion(pthread_mutex_t* mutex) : mutex(mutex) { pthread_mutex_lock(mutex); }
-    ~LockedRegion() { pthread_mutex_unlock(mutex); }
+    _LockedRegion(T* mutex) : mutex(mutex) { mutex->lock(); }
+    ~_LockedRegion() { mutex->unlock(); }
 };
 
+template <typename T> _LockedRegion<T> _makeLockedRegion(T* mutex) {
+    return _LockedRegion<T>(mutex);
+}
+template <typename T> _LockedRegion<T> _makeLockedRegion(T& mutex) {
+    return _LockedRegion<T>(&mutex);
+}
+#define LOCK_REGION(lock) auto CAT(_lock_, __LINE__) = pyston::threading::_makeLockedRegion(lock)
+
+class NopLock {
+public:
+    void lock() {}
+    void unlock() {}
+
+    NopLock* asRead() { return this; }
+    NopLock* asWrite() { return this; }
+};
+
+class PthreadFastMutex {
+private:
+    pthread_mutex_t mutex = PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP;
+
+public:
+    void lock() { pthread_mutex_lock(&mutex); }
+    void unlock() { pthread_mutex_unlock(&mutex); }
+
+    PthreadFastMutex* asRead() { return this; }
+    PthreadFastMutex* asWrite() { return this; }
+};
+
+class PthreadMutex {
+private:
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+public:
+    void lock() { pthread_mutex_lock(&mutex); }
+    void unlock() { pthread_mutex_unlock(&mutex); }
+
+    PthreadMutex* asRead() { return this; }
+    PthreadMutex* asWrite() { return this; }
+};
+
+class PthreadRWLock {
+private:
+    pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
+
+public:
+    class PthreadRWLockRead {
+    private:
+        pthread_rwlock_t rwlock;
+        PthreadRWLockRead() = delete;
+
+    public:
+        void lock() { pthread_rwlock_rdlock(&rwlock); }
+        void unlock() { pthread_rwlock_unlock(&rwlock); }
+    };
+
+    class PthreadRWLockWrite {
+    private:
+        pthread_rwlock_t rwlock;
+        PthreadRWLockWrite() = delete;
+
+    public:
+        void lock() { pthread_rwlock_wrlock(&rwlock); }
+        void unlock() { pthread_rwlock_unlock(&rwlock); }
+    };
+
+    PthreadRWLockRead* asRead() { return reinterpret_cast<PthreadRWLockRead*>(this); }
+
+    PthreadRWLockWrite* asWrite() { return reinterpret_cast<PthreadRWLockWrite*>(this); }
+};
+
+class PthreadSpinLock {
+private:
+    pthread_spinlock_t spinlock;
+
+public:
+    PthreadSpinLock() { pthread_spin_init(&spinlock, false); }
+
+    void lock() { pthread_spin_lock(&spinlock); }
+    void unlock() { pthread_spin_unlock(&spinlock); }
+
+    PthreadSpinLock* asRead() { return this; }
+    PthreadSpinLock* asWrite() { return this; }
+};
 
 
 template <typename T> class PerThreadSet {
 public:
-    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    PthreadFastMutex lock;
     std::unordered_map<pthread_t, T*> map;
 };
 
@@ -46,13 +131,13 @@ public:
     T value;
 
     PerThread(PerThreadSet<T>* set) : set(set), self(pthread_self()) {
-        LockedRegion _lock(&set->lock);
+        LOCK_REGION(&set->lock);
 
         set->map[self] = &value;
     }
 
     ~PerThread() {
-        LockedRegion _lock(&set->lock);
+        LOCK_REGION(&set->lock);
 
         assert(set->map.count(self) == 1);
         set->map.erase(self);

@@ -22,6 +22,7 @@
 #include "core/common.h"
 #include "core/threading.h"
 #include "core/types.h"
+#include "core/util.h"
 #include "gc/heap.h"
 #include "gc/root_finder.h"
 
@@ -34,9 +35,6 @@
 
 namespace pyston {
 namespace gc {
-
-// unsigned numAllocs = 0;
-unsigned bytesAllocatedSinceCollection = 0;
 
 static TraceStack roots;
 void registerStaticRootObj(void* obj) {
@@ -159,10 +157,13 @@ void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
 
-    threading::GLPromoteRegion _lock;
-
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ++ncollections);
+
+    threading::GLPromoteRegion _lock;
+
+    Timer _t("collecting", /*min_usec=*/10000);
+
 
     // if (ncollections == 754) {
     // raise(SIGTRAP);
@@ -170,6 +171,12 @@ void runCollection() {
 
     markPhase();
     sweepPhase();
+    if (VERBOSITY("gc") >= 2)
+        printf("Collection #%d done\n", ++ncollections);
+
+    long us = _t.end();
+    static StatCounter sc_us("gc_collections_us");
+    sc_us.log(us);
 }
 
 } // namespace gc

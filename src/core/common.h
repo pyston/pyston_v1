@@ -29,6 +29,8 @@
 
 #define _STRINGIFY(N) #N
 #define STRINGIFY(N) _STRINGIFY(N)
+#define _CAT(A, B) A##B
+#define CAT(A, B) _CAT(A, B)
 
 // GCC and clang handle always_inline very differently;
 // we mostly only care about it for the stdlib, so just remove the attributes

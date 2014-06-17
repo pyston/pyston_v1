@@ -46,7 +46,7 @@ int tgkill(int tgid, int tid, int sig) {
 // and wait until they start up.
 int num_starting_threads(0);
 
-static pthread_mutex_t threading_lock = PTHREAD_MUTEX_INITIALIZER;
+PthreadFastMutex threading_lock;
 struct ThreadInfo {
     // "bottom" in the sense of a stack, which in a down-growing stack is the highest address:
     void* stack_bottom;
@@ -86,14 +86,14 @@ std::vector<ThreadState> getAllThreadStates() {
     // though I suppose that will have been taken care of
     // by the caller of this function.
 
-    LockedRegion _lock(&threading_lock);
+    LOCK_REGION(&threading_lock);
 
     while (true) {
         // TODO shouldn't busy-wait:
         if (num_starting_threads) {
-            pthread_mutex_unlock(&threading_lock);
+            threading_lock.unlock();
             sleep(0);
-            pthread_mutex_lock(&threading_lock);
+            threading_lock.lock();
         } else {
             break;
         }
@@ -129,9 +129,9 @@ std::vector<ThreadState> getAllThreadStates() {
 
     // TODO shouldn't busy-wait:
     while (signals_waiting) {
-        pthread_mutex_unlock(&threading_lock);
+        threading_lock.unlock();
         sleep(0);
-        pthread_mutex_lock(&threading_lock);
+        threading_lock.lock();
     }
 
     assert(num_starting_threads == 0);
@@ -140,7 +140,7 @@ std::vector<ThreadState> getAllThreadStates() {
 }
 
 static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
-    LockedRegion _lock(&threading_lock);
+    LOCK_REGION(&threading_lock);
 
     ucontext_t* context = static_cast<ucontext_t*>(_context);
 
@@ -169,7 +169,7 @@ static void* _thread_start(void* _arg) {
     delete arg;
 
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
 
         pid_t tid = gettid();
         pthread_t current_thread = pthread_self();
@@ -207,7 +207,7 @@ static void* _thread_start(void* _arg) {
     void* rtn = start_func(arg1, arg2, arg3);
 
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
 
         current_threads.erase(gettid());
         saved_thread_states.erase(gettid());
@@ -220,7 +220,7 @@ static void* _thread_start(void* _arg) {
 
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3) {
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
         num_starting_threads++;
     }
 
@@ -282,7 +282,7 @@ static void* find_stack() {
 
 intptr_t call_frame_base;
 void registerMainThread() {
-    LockedRegion _lock(&threading_lock);
+    LOCK_REGION(&threading_lock);
 
     // Would be nice if we could set this to the pthread start_thread,
     // since _thread_start doesn't always show up in the traceback.
@@ -316,7 +316,7 @@ GLAllowThreadsReadRegion::GLAllowThreadsReadRegion() {
     releaseGLRead();
 
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
 
         ThreadStateInternal& state = saved_thread_states[gettid()];
         assert(!state.valid);
@@ -327,7 +327,7 @@ GLAllowThreadsReadRegion::GLAllowThreadsReadRegion() {
 
 GLAllowThreadsReadRegion::~GLAllowThreadsReadRegion() {
     {
-        LockedRegion _lock(&threading_lock);
+        LOCK_REGION(&threading_lock);
         saved_thread_states[gettid()].valid = false;
     }
 
@@ -337,6 +337,10 @@ GLAllowThreadsReadRegion::~GLAllowThreadsReadRegion() {
 
 
 #if THREADING_USE_GIL
+#if THREADING_USE_GRWL
+#error "Can't turn on both the GIL and the GRWL!"
+#endif
+
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
 static std::atomic<int> threads_waiting_on_gil(0);
@@ -367,9 +371,7 @@ void allowGLReadPreemption() {
         acquireGLRead();
     }
 }
-#endif
-
-#if THREADING_USE_GRWL
+#elif THREADING_USE_GRWL
 static pthread_rwlock_t grwl = PTHREAD_RWLOCK_INITIALIZER;
 
 enum class GRWLHeldState {
@@ -420,16 +422,23 @@ void demoteGL() {
     acquireGLRead();
 }
 
+static __thread int gl_check_count = 0;
 void allowGLReadPreemption() {
     assert(grwl_state == GRWLHeldState::R);
 
-    if (!writers_waiting.load(std::memory_order_relaxed))
+    gl_check_count++;
+    if (gl_check_count < 1000)
+        return;
+    gl_check_count = 0;
+
+    if (__builtin_expect(!writers_waiting.load(std::memory_order_relaxed), 1))
         return;
 
     pthread_rwlock_unlock(&grwl);
+    // printf("waiters!\n");
+    sleep(0);
     pthread_rwlock_rdlock(&grwl);
 }
-
 #endif
 
 } // namespace threading

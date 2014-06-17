@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include "core/threading.h"
 #include "core/types.h"
 
 namespace pyston {
@@ -217,6 +218,8 @@ class BoxedList : public Box {
 public:
     int64_t size, capacity;
     GCdArray* elts;
+
+    DS_DEFINE_MUTEX(lock);
 
     BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
 

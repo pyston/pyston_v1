@@ -1577,6 +1577,60 @@ static inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** ar
     return args[idx - 3];
 }
 
+static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
+                                     Box** oargs) {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
+    CompiledFunction* chosen_cf = NULL;
+    for (CompiledFunction* cf : f->versions) {
+        assert(cf->spec->arg_types.size() == num_output_args);
+
+        if (cf->spec->rtn_type->llvmType() != UNKNOWN->llvmType())
+            continue;
+
+        bool works = true;
+        for (int i = 0; i < num_output_args; i++) {
+            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+
+            ConcreteCompilerType* t = cf->spec->arg_types[i];
+            if ((arg && !t->isFitBy(arg->cls)) || (!arg && t != UNKNOWN)) {
+                works = false;
+                break;
+            }
+        }
+
+        if (!works)
+            continue;
+
+        chosen_cf = cf;
+        break;
+    }
+
+    if (chosen_cf == NULL) {
+        if (f->source == NULL) {
+            // TODO I don't think this should be happening any more?
+            printf("Error: couldn't find suitable function version and no source to recompile!\n");
+            abort();
+        }
+
+        std::vector<ConcreteCompilerType*> arg_types;
+        for (int i = 0; i < num_output_args; i++) {
+            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+            assert(arg); // only builtin functions can pass NULL args
+
+            arg_types.push_back(typeFromClass(arg->cls));
+        }
+        FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
+
+        EffortLevel::EffortLevel new_effort = initialEffort();
+
+        // this also pushes the new CompiledVersion to the back of the version list:
+        chosen_cf = compileFunction(f, spec, new_effort, NULL);
+    }
+
+    return chosen_cf;
+}
+
 Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
               Box** args, const std::vector<const std::string*>* keyword_names) {
     /*
@@ -1835,54 +1889,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
 
 
-    // Pick a specific version to use:
-
-    CompiledFunction* chosen_cf = NULL;
-    for (CompiledFunction* cf : f->versions) {
-        assert(cf->spec->arg_types.size() == num_output_args);
-
-        if (cf->spec->rtn_type->llvmType() != UNKNOWN->llvmType())
-            continue;
-
-        bool works = true;
-        for (int i = 0; i < num_output_args; i++) {
-            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-
-            ConcreteCompilerType* t = cf->spec->arg_types[i];
-            if ((arg && !t->isFitBy(arg->cls)) || (!arg && t != UNKNOWN)) {
-                works = false;
-                break;
-            }
-        }
-
-        if (!works)
-            continue;
-
-        chosen_cf = cf;
-        break;
-    }
-
-    if (chosen_cf == NULL) {
-        if (f->source == NULL) {
-            // TODO I don't think this should be happening any more?
-            printf("Error: couldn't find suitable function version and no source to recompile!\n");
-            abort();
-        }
-
-        std::vector<ConcreteCompilerType*> arg_types;
-        for (int i = 0; i < num_output_args; i++) {
-            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-            assert(arg); // only builtin functions can pass NULL args
-
-            arg_types.push_back(typeFromClass(arg->cls));
-        }
-        FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-        EffortLevel::EffortLevel new_effort = initialEffort();
-
-        // this also pushes the new CompiledVersion to the back of the version list:
-        chosen_cf = compileFunction(f, spec, new_effort, NULL);
-    }
+    CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {

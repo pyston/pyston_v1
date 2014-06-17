@@ -216,7 +216,7 @@ threading::PerThread<root_stack_t> thread_local root_stack(&root_stack_set);
 void gatherInterpreterRoots(GCVisitor* visitor) {
     // In theory this lock should be superfluous since we should only call this
     // inside a sequential section, but lock it anyway:
-    threading::LockedRegion _lock(&root_stack_set.lock);
+    LOCK_REGION(&root_stack_set.lock);
 
     for (auto& p : root_stack_set.map) {
         for (const SymMap* sym_map : *p.second) {

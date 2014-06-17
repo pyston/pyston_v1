@@ -18,6 +18,7 @@
 #include <cstdint>
 
 #include "core/common.h"
+#include "core/threading.h"
 
 namespace pyston {
 namespace gc {
@@ -81,6 +82,9 @@ private:
 
     void* allocSmall(size_t rounded_size, Block** head, Block** full_head);
     void* allocLarge(size_t bytes);
+
+    // DS_DEFINE_MUTEX(lock);
+    DS_DEFINE_SPINLOCK(lock);
 
 public:
     void* realloc(void* ptr, size_t bytes);

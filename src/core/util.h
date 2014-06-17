@@ -28,18 +28,21 @@ private:
     static int level;
     timeval start_time;
     const char* desc;
-    int min_usec;
+    long min_usec;
     bool ended;
 
 public:
-    Timer(const char* desc, int min_usec = -1);
+    Timer(const char* desc);
+    Timer(const char* desc, long min_usec);
     ~Timer();
 
-    void restart(const char* newdesc, int min_usec = -1);
+    void restart(const char* newdesc, long new_min_usec);
+    void restart(const char* newdesc);
+
     long end();
-    long split(const char* newdesc, int min_usec = -1) {
+    long split(const char* newdesc) {
         long rtn = end();
-        restart(newdesc, min_usec);
+        restart(newdesc);
         return rtn;
     }
 };

@@ -710,11 +710,17 @@ endef
 RUN_DEPS := ext
 
 .PHONY: run run_release profile
-run: $(RUN_DEPS)
+run: pyston_dbg $(RUN_DEPS)
 	if which rlwrap >/dev/null; then\
 		rlwrap ./pyston_dbg $(ARGS) ;\
 	else \
 		./pyston_dbg $(ARGS) ;\
+	fi
+dbg: pyston_dbg $(RUN_DEPS)
+	if which rlwrap >/dev/null; then\
+		rlwrap zsh -c 'ulimit -v $(MAX_DBG_MEM_KB); $(GDB) $(GDB_CMDS) --args ./pyston_dbg $(ARGS)' ; \
+	else \
+		zsh -c 'ulimit -v $(MAX_DBG_MEM_KB); $(GDB) $(GDB_CMDS) --args ./pyston_dbg $(ARGS)' ; \
 	fi
 run_release: pyston $(RUN_DEPS)
 	./pyston $(ARGS)
@@ -785,7 +791,7 @@ $(call make_search,pprof_%)
 
 perf_%: %.py pyston
 	perf record -g -- ./pyston -q -p $(ARGS) $<
-	perf report -v -g flat,1000 | bash $(TOOLS_DIR)/cumulate.sh | less -S
+	perf report -v -n -g flat,1000 | bash $(TOOLS_DIR)/cumulate.sh | less -S
 $(call make_search,perf_%)
 perf_dbg_%: %.py pyston_dbg
 	perf record -g -- ./pyston_dbg -q -p $(ARGS) $<

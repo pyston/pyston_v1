@@ -140,6 +140,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
+// The codegen_lock needs to be held in W mode before calling this function:
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
                                   const OSREntryDescriptor* entry) {
     Timer _t("for compileFunction()");
@@ -239,6 +240,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 }
 
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
     Timer _t("for compileModule()");
 
     ScopingAnalysis* scoping = runScopingAnalysis(m);
@@ -268,6 +271,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 /// The cf must be an active version in its parents CLFunction; the given
 /// version will be replaced by the new version, which will be returned.
 static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel new_effort) {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
     assert(cf->clfunc->versions.size());
 
     assert(cf);
@@ -304,6 +309,8 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel
 
 static StatCounter stat_osrexits("OSR exits");
 void* compilePartialFunc(OSRExit* exit) {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
     assert(exit);
     assert(exit->parent_cf);
     assert(exit->parent_cf->effort < EffortLevel::MAXIMAL);

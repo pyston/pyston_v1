@@ -15,6 +15,10 @@
 #ifndef PYSTON_CODEGEN_RUNTIMEHOOKS_H
 #define PYSTON_CODEGEN_RUNTIMEHOOKS_H
 
+// This file doesn't actually need to include core/types.h, but including it works around this clang bug:
+// http://lists.cs.uiuc.edu/pipermail/cfe-dev/2014-June/037519.html
+#include "core/types.h"
+
 namespace llvm {
 class Value;
 }

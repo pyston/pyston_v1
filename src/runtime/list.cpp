@@ -32,6 +32,8 @@
 namespace pyston {
 
 extern "C" Box* listRepr(BoxedList* self) {
+    LOCK_REGION(self->lock.asRead());
+
     // TODO highly inefficient with all the string copying
     std::ostringstream os;
     os << '[';
@@ -51,6 +53,8 @@ extern "C" Box* listNonzero(BoxedList* self) {
 }
 
 extern "C" Box* listPop(BoxedList* self, Box* idx) {
+    LOCK_REGION(self->lock.asWrite());
+
     if (idx == None) {
         if (self->size == 0) {
             raiseExcHelper(IndexError, "pop from empty list");
@@ -115,6 +119,8 @@ Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
 }
 
 extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
+    LOCK_REGION(self->lock.asRead());
+
     assert(self->cls == list_cls);
     assert(slice->cls == int_cls);
     int64_t n = slice->n;
@@ -129,6 +135,8 @@ extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
 }
 
 extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
+    LOCK_REGION(self->lock.asRead());
+
     assert(self->cls == list_cls);
     assert(slice->cls == slice_cls);
     i64 start, stop, step;
@@ -149,6 +157,9 @@ extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
 
 
 extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
+    // I think r lock is ok here, since we don't change the list structure:
+    LOCK_REGION(self->lock.asRead());
+
     assert(self->cls == list_cls);
     assert(slice->cls == int_cls);
     int64_t n = slice->n;
@@ -164,6 +175,8 @@ extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
 }
 
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
+    LOCK_REGION(self->lock.asWrite());
+
     assert(self->cls == list_cls);
     assert(slice->cls == slice_cls);
     i64 start, stop, step;
@@ -204,6 +217,8 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
 }
 
 extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
+    LOCK_REGION(self->lock.asWrite());
+
     int64_t n = slice->n;
     if (n < 0)
         n = self->size + n;
@@ -217,6 +232,8 @@ extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
 }
 
 extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
+    LOCK_REGION(self->lock.asWrite());
+
     i64 start, stop, step;
     parseSlice(slice, self->size, &start, &stop, &step);
     RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
@@ -233,6 +250,8 @@ extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
 }
 
 extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
+    LOCK_REGION(self->lock.asWrite());
+
     Box* rtn;
 
     if (slice->cls == int_cls) {
@@ -250,6 +269,8 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
     if (idx->cls != int_cls) {
         raiseExcHelper(TypeError, "an integer is required");
     }
+
+    LOCK_REGION(self->lock.asWrite());
 
     int64_t n = static_cast<BoxedInt*>(idx)->n;
     if (n < 0)
@@ -277,6 +298,8 @@ Box* listMul(BoxedList* self, Box* rhs) {
         raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs)->c_str());
     }
 
+    LOCK_REGION(self->lock.asRead());
+
     int n = static_cast<BoxedInt*>(rhs)->n;
     int s = self->size;
 
@@ -300,6 +323,8 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
         raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs)->c_str());
     }
 
+    LOCK_REGION(self->lock.asWrite());
+
     BoxedList* rhs = static_cast<BoxedList*>(_rhs);
 
     int s1 = self->size;
@@ -316,6 +341,8 @@ Box* listAdd(BoxedList* self, Box* _rhs) {
         raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs)->c_str());
     }
 
+    LOCK_REGION(self->lock.asRead());
+
     BoxedList* rhs = static_cast<BoxedList*>(_rhs);
 
     BoxedList* rtn = new BoxedList();
@@ -331,6 +358,8 @@ Box* listAdd(BoxedList* self, Box* _rhs) {
 }
 
 Box* listSort1(BoxedList* self) {
+    LOCK_REGION(self->lock.asWrite());
+
     assert(self->cls == list_cls);
 
     std::sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
@@ -339,6 +368,8 @@ Box* listSort1(BoxedList* self) {
 }
 
 Box* listContains(BoxedList* self, Box* elt) {
+    LOCK_REGION(self->lock.asRead());
+
     int size = self->size;
     for (int i = 0; i < size; i++) {
         Box* e = self->elts->elts[i];
@@ -351,6 +382,8 @@ Box* listContains(BoxedList* self, Box* elt) {
 }
 
 Box* listCount(BoxedList* self, Box* elt) {
+    LOCK_REGION(self->lock.asRead());
+
     int size = self->size;
     int count = 0;
 
@@ -365,6 +398,8 @@ Box* listCount(BoxedList* self, Box* elt) {
 }
 
 Box* listIndex(BoxedList* self, Box* elt) {
+    LOCK_REGION(self->lock.asRead());
+
     int size = self->size;
 
     for (int i = 0; i < size; i++) {
@@ -380,6 +415,8 @@ Box* listIndex(BoxedList* self, Box* elt) {
 }
 
 Box* listRemove(BoxedList* self, Box* elt) {
+    LOCK_REGION(self->lock.asWrite());
+
     assert(self->cls == list_cls);
 
     for (int i = 0; i < self->size; i++) {
@@ -398,6 +435,8 @@ Box* listRemove(BoxedList* self, Box* elt) {
 }
 
 Box* listReverse(BoxedList* self) {
+    LOCK_REGION(self->lock.asWrite());
+
     assert(self->cls == list_cls);
     for (int i = 0, j = self->size - 1; i < j; i++, j--) {
         Box* e = self->elts->elts[i];
@@ -475,6 +514,9 @@ Box* listEq(BoxedList* self, Box* rhs) {
     if (rhs->cls != list_cls) {
         return NotImplemented;
     }
+
+    LOCK_REGION(self->lock.asRead());
+
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Eq);
 }
 

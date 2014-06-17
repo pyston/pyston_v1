@@ -28,6 +28,8 @@
 
 namespace pyston {
 
+DS_DEFINE_RWLOCK(codegen_rwlock);
+
 void FunctionAddressRegistry::registerFunction(const std::string& name, void* addr, int length,
                                                llvm::Function* llvm_func) {
     assert(addr);

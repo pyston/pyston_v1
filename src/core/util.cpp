@@ -26,18 +26,26 @@
 namespace pyston {
 
 int Timer::level = 0;
-Timer::Timer(const char* desc, int min_usec) : min_usec(min_usec), ended(true) {
+
+Timer::Timer(const char* desc) : min_usec(-1), ended(true) {
+    restart(desc);
+}
+Timer::Timer(const char* desc, long min_usec) : min_usec(min_usec), ended(true) {
     restart(desc);
 }
 
-void Timer::restart(const char* newdesc, int min_usec) {
+void Timer::restart(const char* newdesc) {
     assert(ended);
 
     desc = newdesc;
-    this->min_usec = min_usec;
     gettimeofday(&start_time, NULL);
     Timer::level++;
     ended = false;
+}
+
+void Timer::restart(const char* newdesc, long new_min_usec) {
+    this->min_usec = new_min_usec;
+    restart(newdesc);
 }
 
 long Timer::end() {

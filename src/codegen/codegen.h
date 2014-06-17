@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "codegen/runtime_hooks.h"
+#include "core/threading.h"
 #include "core/types.h"
 
 namespace llvm {
@@ -85,6 +86,8 @@ extern GlobalState g;
 void initGlobalFuncs(GlobalState& g);
 
 const LineInfo* getLineInfoFor(uint64_t inst_addr);
+
+DS_DECLARE_RWLOCK(codegen_rwlock);
 }
 
 #endif
