@@ -290,7 +290,7 @@ if __name__ == "__main__":
     run_memcheck = False
     start = 1
 
-    opts, patterns = getopt.getopt(sys.argv[1:], "j:a:t:mRPk")
+    opts, patterns = getopt.getopt(sys.argv[1:], "j:a:t:mR:k")
     for (t, v) in opts:
         if t == '-m':
             run_memcheck = True
@@ -298,9 +298,7 @@ if __name__ == "__main__":
             NUM_THREADS = int(v)
             assert NUM_THREADS > 0
         elif t == '-R':
-            IMAGE = "pyston"
-        elif t == '-P':
-            IMAGE = "pyston_prof"
+            IMAGE = v
         elif t == '-k':
             KEEP_GOING = True
         elif t == '-a':

@@ -97,6 +97,8 @@ void BoxedList::ensure(int space) {
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 extern "C" void listAppendInternal(Box* s, Box* v) {
+    // Lock must be held!
+
     assert(s->cls == list_cls);
     BoxedList* self = static_cast<BoxedList*>(s);
 

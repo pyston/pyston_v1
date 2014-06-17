@@ -57,8 +57,10 @@ std::vector<ThreadState> getAllThreadStates();
 // be the highest address).
 void* getStackBottom();
 
+#ifndef THREADING_USE_GIL
 #define THREADING_USE_GIL 1
 #define THREADING_USE_GRWL 0
+#endif
 #define THREADING_SAFE_DATASTRUCTURES THREADING_USE_GRWL
 
 #if THREADING_SAFE_DATASTRUCTURES

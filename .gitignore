@@ -15,6 +15,7 @@ pyston_debug
 pyston_prof
 pyston_profile
 pyston_release
+pyston_grwl
 *.cache
 tests/t.py
 tests/t2.py

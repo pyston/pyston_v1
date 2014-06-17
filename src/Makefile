@@ -167,7 +167,7 @@ endif
 
 
 EXTRA_CXXFLAGS ?=
-CXXFLAGS := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
+CXXFLAGS_DBG := $(LLVM_CXXFLAGS) $(COMMON_CXXFLAGS) -O0 -DBINARY_SUFFIX= -DBINARY_STRIPPED_SUFFIX=_stripped $(EXTRA_CXXFLAGS)
 CXXFLAGS_PROFILE = $(LLVM_PROFILE_CXXFLAGS) $(COMMON_CXXFLAGS) -pg -O3 -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= -fno-function-sections $(EXTRA_CXXFLAGS)
 CXXFLAGS_RELEASE := $(LLVM_RELEASE_CXXFLAGS) $(COMMON_CXXFLAGS) -O3 -fstrict-aliasing -enable-tbaa -DNDEBUG -DNVALGRIND -DBINARY_SUFFIX=_release -DBINARY_STRIPPED_SUFFIX= $(EXTRA_CXXFLAGS)
 
@@ -191,7 +191,7 @@ ifeq ($(COLOR),1)
 else
 	CLANG_EXTRA_FLAGS += -fno-color-diagnostics
 endif
-CLANGFLAGS := $(CXXFLAGS) $(CLANG_EXTRA_FLAGS)
+CLANGFLAGS := $(CXXFLAGS_DBG) $(CLANG_EXTRA_FLAGS)
 CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
 # Extra flags to enable soon:
@@ -212,7 +212,7 @@ CLANG_CXX := $(CLANG_EXE)
 ifneq ($(USE_CLANG),0)
 	CXX := $(CLANG_CXX)
 
-	CXXFLAGS := $(CLANGFLAGS)
+	CXXFLAGS_DBG := $(CLANGFLAGS)
 	CXXFLAGS_RELEASE := $(CLANGFLAGS_RELEASE)
 
 	BUILD_SYSTEM_DEPS := $(BUILD_SYSTEM_DEPS) $(CLANG_DEPS)
@@ -277,7 +277,6 @@ tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
 
-$(UNITTEST_SRCS:.cpp=.o): CXXFLAGS := $(CXXFLAGS) -isystem $(GTEST_DIR)/include
 NON_ENTRY_OBJS := $(filter-out jit.o,$(OBJS))
 
 define add_unittest
@@ -329,24 +328,12 @@ lint:
 cpplint:
 	$(VERB) python ../tools/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
 
-.PHONY: test test_debug test_prof test_release
-test_debug: pyston_dbg ext
-	python ../tools/tester.py -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
-test_release: pyston ext
-	python ../tools/tester.py -R -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -R -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -R -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
-test_prof: pyston_prof ext
-	python ../tools/tester.py -P -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -P -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -P -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
+.PHONY: check quick_check
 check:
 	$(MAKE) lint
 	$(MAKE) ext pyston_dbg
 	# $(MAKE) run_unittests
-	$(MAKE) test_debug
+	$(MAKE) test_dbg
 	$(MAKE) test_release
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
 	# $(MAKE) test_prof
@@ -558,69 +545,66 @@ $(TOOLS_DIR)/publicize_release: $(TOOLS_DIR)/publicize.release.o $(LLVM_RELEASE_
 ## END OF TOOLS
 
 
+CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
+
+# args: suffix (ex: ".release"), CXXFLAGS
+define make_compile_config
+$(eval \
+$$(NONSTDLIB_SRCS:.cpp=$1.o): CXXFLAGS:=$2
+$$(SRCS:.cpp=$1.o.bc): CXXFLAGS:=$2
+
+## Need to set CXXFLAGS so that this rule doesn't inherit the '-include' rule from the
+## thing that's calling it:
+%$1.h.pch: CXXFLAGS:=$(2)
+%$1.h.pch: %.h $$(BUILD_SYSTEM_DEPS)
+	$$(ECHO) Compiling $$@
+	$$(VERB) rm -f $$@-*
+	$$(VERB) $$(CLANG_EXE) $$(CXXFLAGS) -MMD -MP -MF $$<.d -x c++-header $$< -o $$@
+$$(CODEGEN_SRCS:.cpp=$1.o): CXXFLAGS += -include codegen/irgen$1.h
+$$(CODEGEN_SRCS:.cpp=$1.o): codegen/irgen$1.h.pch
+
+$$(NONSTDLIB_SRCS:.cpp=$1.o): %$1.o: %.cpp $$(BUILD_SYSTEM_DEPS)
+	$$(ECHO) Compiling $$@
+	$$(VERB) $$(CXX) $$(CXXFLAGS) -MMD -MP -MF $$(patsubst %.o,%.d,$$@) $$< -c -o $$@
+
+# For STDLIB sources, first compile to bitcode:
+$$(STDLIB_SRCS:.cpp=$1.o.bc): %$1.o.bc: %.cpp $$(BUILD_SYSTEM_DEPS) $$(CLANG_DEPS)
+	$$(ECHO) Compiling $$@
+	$$(VERB) $$(CLANG_CXX) $$(CXXFLAGS) $$(CLANG_EXTRA_FLAGS) -MMD -MP -MF $$(patsubst %.bc,%.d,$$@) $$< -c -o $$@ -emit-llvm -g
+
+stdlib$1.unopt.bc: $$(STDLIB_SRCS:.cpp=$1.o.pub.bc)
+	$$(ECHO) Linking $$@
+	$$(VERB) $$(LLVM_BIN)/llvm-link $$^ -o $$@
+
+)
+endef
+
 PASS_SRCS := codegen/opt/aa.cpp
 PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 
-# Need to set CXXFLAGS so that this rules doesn't inherit the '-include' rule from the
-# thing that's calling it:
-%.h.pch: CXXFLAGS:=$(CXXFLAGS)
-%.h.pch: %.h
-	$(ECHO) Compiling $@
-	$(VERB) rm -f $@-*
-	$(VERB) $(CLANG_EXE) $(CXXFLAGS) -MMD -MP -MF $<.d -x c++-header $< -o $@
-# Need to set CXXFLAGS so that this rules doesn't inherit the '-include' rule from the
-# thing that's calling it:
-%.release.h.pch: CXXFLAGS_RELEASE:=$(CXXFLAGS_RELEASE)
-%.release.h.pch: %.h
-	$(ECHO) Compiling $@
-	$(VERB) rm -f $@-*
-	$(VERB) $(CLANG_EXE) $(CXXFLAGS_RELEASE) -MMD -MP -MF $<.d -x c++-header $< -o $@
+$(call make_compile_config,,$(CXXFLAGS_DBG))
+$(call make_compile_config,.release,$(CXXFLAGS_RELEASE))
+$(call make_compile_config,.grwl,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl)
 
-CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
-$(CODEGEN_SRCS:.cpp=.o): CXXFLAGS += -include codegen/irgen.h
-$(CODEGEN_SRCS:.cpp=.o): codegen/irgen.h.pch
-$(CODEGEN_SRCS:.cpp=.release.o): CXXFLAGS_RELEASE += -include codegen/irgen.release.h
-$(CODEGEN_SRCS:.cpp=.release.o): codegen/irgen.release.h.pch
+$(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
 
-# For NONSTDLIB sources, just compile like normal:
-# TODO could use the same target but with target-specific variables?
-$(NONSTDLIB_SRCS:.cpp=.o): %.o: %.cpp $(BUILD_SYSTEM_DEPS)
-	$(ECHO) Compiling $@
-	$(VERB) $(CXX) $(CXXFLAGS) -MMD -MP -MF $(patsubst %.o,%.d,$@) $< -c -o $@
 $(PASS_SRCS:.cpp=.standalone.o): %.standalone.o: %.cpp $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling $@
-	$(VERB) $(CXX) $(CXXFLAGS) -DSTANDALONE -MMD -MP -MF $(patsubst %.o,%.d,$@) $< -c -o $@
+	$(VERB) $(CXX) $(CXXFLAGS_DBG) -DSTANDALONE -MMD -MP -MF $(patsubst %.o,%.d,$@) $< -c -o $@
 $(NONSTDLIB_SRCS:.cpp=.prof.o): %.prof.o: %.cpp $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling $@
 	$(VERB) $(CXX_PROFILE) $(CXXFLAGS_PROFILE) -MMD -MP -MF $(patsubst %.o,%.d,$@) $< -c -o $@
-$(NONSTDLIB_SRCS:.cpp=.release.o): %.release.o: %.cpp $(BUILD_SYSTEM_DEPS)
-	$(ECHO) Compiling $@
-	$(VERB) $(CXX) $(CXXFLAGS_RELEASE) -MMD -MP -MF $(patsubst %.o,%.d,$@) $< -c -o $@
-
-# For STDLIB sources, first compile to bitcode:
-$(STDLIB_SRCS:.cpp=.o.bc): %.o.bc: %.cpp $(BUILD_SYSTEM_DEPS) $(CLANG_DEPS)
-	$(ECHO) Compiling $@
-	$(VERB) $(CLANG_CXX) $(CLANGFLAGS) -MMD -MP -MF $(patsubst %.bc,%.d,$@) $< -c -o $@ -emit-llvm -g
-$(STDLIB_SRCS:.cpp=.release.o.bc): %.release.o.bc: %.cpp $(BUILD_SYSTEM_DEPS) $(CLANG_DEPS)
-	$(ECHO) Compiling $@
-	$(VERB) $(CLANG_CXX) $(CLANGFLAGS_RELEASE) -MMD -MP -MF $(patsubst %.bc,%.d,$@) $< -c -o $@ -emit-llvm -g
 
 # Then, publicize symbols:
-%.release.o.pub.bc: %.release.o.bc $(TOOLS_DIR)/publicize
-	$(ECHO) Publicizing $<
-	$(VERB) # $(TOOLS_DIR)/publicize_release $< -o $@
-	$(VERB) $(TOOLS_DIR)/publicize $< -o $@
 %.pub.bc: %.bc $(TOOLS_DIR)/publicize
 	$(ECHO) Publicizing $<
 	$(VERB) $(TOOLS_DIR)/publicize $< -o $@
 
-# Then, 1) compile the publicized bitcode into normal .o files
-$(STDLIB_SRCS:.cpp=.o): %.o: %.o.pub.bc $(BUILD_SYSTEM_DEPS)
-	$(ECHO) Compiling bitcode to $@
-	$(VERB) $(LLVM_BIN)/clang $(CLANGFLAGS) -c $< -o $@
-$(STDLIB_SRCS:.cpp=.release.o): %.release.o: %.release.o.pub.bc $(BUILD_SYSTEM_DEPS)
+# Then, compile the publicized bitcode into normal .o files
+%.o: %.o.pub.bc $(BUILD_SYSTEM_DEPS) $(CLANG_DEPS)
 	$(ECHO) Compiling bitcode to $@
 	$(VERB) $(LLVM_BIN)/clang $(CLANGFLAGS) -O3 -c $< -o $@
+
 
 
 passes.so: $(PASS_OBJS) $(BUILD_SYSTEM_DEPS)
@@ -630,26 +614,22 @@ test_opt: passes.so
 test_dbg_opt: passes.so
 	$(GDB) --args $(LLVM_BUILD)/Release+Asserts/bin/opt -O3 -load passes.so test.ll -S -o test.opt.ll $(ARGS)
 
-# And also link it all into what we're going to embed:
-stdlib.unopt.bc: $(STDLIB_SRCS:.cpp=.o.pub.bc)
-	$(ECHO) Linking $@
-	$(VERB) $(LLVM_BIN)/llvm-link $^ -o $@
-stdlib.release.unopt.bc: $(STDLIB_SRCS:.cpp=.release.o.pub.bc)
-	$(ECHO) Linking $@
-	$(VERB) $(LLVM_BIN)/llvm-link $^ -o $@
 
 # Optimize and/or strip it:
 stdlib.bc: OPT_OPTIONS=-O3
 stdlib.release.bc: OPT_OPTIONS=-O3 -strip-debug
+.PRECIOUS: %.bc %.stripped.bc
 %.bc: %.unopt.bc
-	$(ECHO) Optimizing $< -> $@
+	$(ECHO) Optimizing $< -\> $@
 	$(VERB) $(LLVM_BIN)/opt $(OPT_OPTIONS) $< -o $@
 %.stripped.bc: %.bc
-	$(ECHO) Stripping $< -> $@
+	$(ECHO) Stripping $< -\> $@
 	$(VERB) $(LLVM_BIN)/opt -strip-debug $< -o $@
 
 # Then do "ld -b binary" to create a .o file for embedding into the executable
-$(STDLIB_OBJS) $(STDLIB_RELEASE_OBJS): %.o: % $(BUILD_SYSTEM_DEPS)
+# $(STDLIB_OBJS) $(STDLIB_RELEASE_OBJS): %.o: % $(BUILD_SYSTEM_DEPS)
+stdli%.bc.o: stdli%.bc $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Embedding $<
 	$(VERB) ld -r -b binary $< -o $@
 
 # Optionally, disassemble the bitcode files:
@@ -662,17 +642,21 @@ $(STDLIB_OBJS) $(STDLIB_RELEASE_OBJS): %.o: % $(BUILD_SYSTEM_DEPS)
 %.cache: %.bc mcjitcache
 	./mcjitcache -p $< -o $@
 
+# args: output suffx (ex: _release), objects to link, LDFLAGS, other deps
+define link
+$(eval \
+pyston$1: $2 $4
+	$$(ECHO) Linking $$@
+	$$(VERB) $$(CXX) $2 $3 -o $$@
+)
+endef
+
 
 # Finally, link it all together:
-pyston_dbg: $(OBJS) $(LLVM_DEPS)
-	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OBJS) $(LDFLAGS) -o $@
-pyston_debug: $(OBJS) $(LLVM_DEBUG_DEPS)
-	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OBJS) $(LDFLAGS_DEBUG) -o $@
-pyston: $(OPT_OBJS) $(LLVM_RELEASE_DEPS)
-	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OPT_OBJS) $(LDFLAGS_RELEASE) -o $@
+$(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
+$(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
+$(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
+$(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/oprofile.o $(LDFLAGS_RELEASE) -lopagent -o $@
@@ -709,64 +693,74 @@ endef
 
 RUN_DEPS := ext
 
-.PHONY: run run_release profile
-run: pyston_dbg $(RUN_DEPS)
+define make_target
+$(eval \
+.PHONY: test$1
+test$1: pyston$1 ext
+	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
+	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
+	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
+
+.PHONY: run$1 dbg$1
+run$1: pyston$1 $$(RUN_DEPS)
 	if which rlwrap >/dev/null; then\
-		rlwrap ./pyston_dbg $(ARGS) ;\
+		rlwrap ./pyston$1 $$(ARGS) ;\
 	else \
-		./pyston_dbg $(ARGS) ;\
+		./pyston$1 $$(ARGS) ;\
 	fi
-dbg: pyston_dbg $(RUN_DEPS)
+dbg$1: pyston$1 $$(RUN_DEPS)
 	if which rlwrap >/dev/null; then\
-		rlwrap zsh -c 'ulimit -v $(MAX_DBG_MEM_KB); $(GDB) $(GDB_CMDS) --args ./pyston_dbg $(ARGS)' ; \
+		rlwrap zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)' ; \
 	else \
-		zsh -c 'ulimit -v $(MAX_DBG_MEM_KB); $(GDB) $(GDB_CMDS) --args ./pyston_dbg $(ARGS)' ; \
+		zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)' ; \
 	fi
-run_release: pyston $(RUN_DEPS)
-	./pyston $(ARGS)
-profile: pyston_profile $(RUN_DEPS)
-	time ./pyston_profile $(ARGS)
-	gprof ./pyston_profile gmon.out > $(patsubst %,%.out,$@)
+run$1_%: %.py pyston$1 $$(RUN_DEPS)
+	$(VERB) zsh -c 'ulimit -v $$(MAX_MEM_KB); ulimit -d $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
+$$(call make_search,run$1_%)
+dbg$1_%: %.py pyston$1 $$(RUN_DEPS)
+	$(VERB) zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
+$$(call make_search,dbg$1_%)
 
-.PHONY: run_% run_release_% debug_% dbg_% dbg_release_% memcheck_% memcheck_release_% memcheck_debug_% memleaks_%
-run_%: %.py pyston_dbg $(RUN_DEPS)
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./pyston_dbg $(ARGS) $<'
-$(call make_search,run_%)
-run_release_%: %.py pyston $(RUN_DEPS)
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./pyston $(ARGS) $<'
-$(call make_search,run_release_%)
+ifneq ($$(ENABLE_VALGRIND),0)
+memcheck$1_%: %.py pyston$1 $$(RUN_DEPS)
+	$$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston$1 $$(ARGS) $$<
+$$(call make_search,memcheck$1_%)
+memcheck_gdb$1_%: %.py pyston$1 $$(RUN_DEPS)
+	set +e; $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
+	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.9.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
+$$(call make_search,memcheck_gdb$1_%)
+memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
+	$$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
+$$(call make_search,memleaks$1_%)
+endif
 
-dbg_release_%: %.py pyston $(RUN_DEPS)
-	$(GDB) $(GDB_CMDS) --args ./pyston $(ARGS) $<
-$(call make_search,dbg_release_%)
-dbg_%: %.py pyston_dbg $(RUN_DEPS)
-	zsh -c 'ulimit -v $(MAX_DBG_MEM_KB); $(GDB) $(GDB_CMDS) --args ./pyston_dbg $(ARGS) $<'
-$(call make_search,dbg_%)
-debug_%: %.py pyston_debug $(RUN_DEPS)
-	$(GDB) $(GDB_CMDS) --args ./pyston_debug $(ARGS) $<
-$(call make_search,debug_%)
+.PHONY: perf$1_%
+perf$1_%: %.py pyston$1
+	perf record -g -- ./pyston$1 -q -p $$(ARGS) $$<
+	perf report -v -n -g flat,1000 | bash $$(TOOLS_DIR)/cumulate.sh | less -S
+$$(call make_search,perf$1_%)
 
-ifneq ($(ENABLE_VALGRIND),0)
-memcheck_%: %.py pyston_dbg $(RUN_DEPS)
-	$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston_dbg $(ARGS) $<
-$(call make_search,memcheck_%)
-memcheck_gdb_%: %.py pyston_dbg $(RUN_DEPS)
-	set +e; $(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston_dbg $(ARGS) $< & export PID=$$! ; \
-	$(GDB) --ex "set confirm off" --ex "target remote | $(DEPS_DIR)/valgrind-3.9.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston_dbg; kill -9 $$PID
-$(call make_search,memcheck_%)
+)
+endef
+
+.PHONY: run run_% dbg_% debug_% perf_%
+run: run_dbg
+run_%: run_dbg_%
+	@true
+dbg_%: dbg_dbg_%
+	@true
+debug_%: dbg_debug_%
+	@true
+perf_%: perf_release_%
+	@true
+
+$(call make_target,_dbg)
+$(call make_target,_release)
+$(call make_target,_grwl)
+
 # "kill valgrind":
 kv:
 	ps aux | awk '/[v]algrind/ {print $$2}' | xargs kill -9; true
-memcheck_release_%: %.py pyston $(RUN_DEPS)
-	$(VALGRIND) --tool=memcheck --leak-check=no ./pyston $(ARGS) $<
-$(call make_search,memcheck_release_%)
-memcheck_debug_%: %.py pyston_debug $(RUN_DEPS)
-	$(VALGRIND) --tool=memcheck --leak-check=no ./pyston_debug $(ARGS) $<
-$(call make_search,memcheck_debug_%)
-memleaks_%: %.py pyston_dbg $(RUN_DEPS)
-	$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston_dbg $(ARGS) $<
-$(call make_search,memleaks_%)
-endif
 
 # gprof-based profiling:
 .PHONY: prof_% profile_%
@@ -788,15 +782,6 @@ pprof_%: %.py pyston_pprof
 	pprof --text $@_processed.out
 	# rm -f pprof.out pprof.raw pprof.jit
 $(call make_search,pprof_%)
-
-perf_%: %.py pyston
-	perf record -g -- ./pyston -q -p $(ARGS) $<
-	perf report -v -n -g flat,1000 | bash $(TOOLS_DIR)/cumulate.sh | less -S
-$(call make_search,perf_%)
-perf_dbg_%: %.py pyston_dbg
-	perf record -g -- ./pyston_dbg -q -p $(ARGS) $<
-	perf report -v -g flat,1000 | bash $(TOOLS_DIR)/cumulate.sh | less -S
-$(call make_search,perf_dbg_%)
 
 # oprofile-based profiling:
 .PHONY: oprof_% oprof_collect_% opreport
