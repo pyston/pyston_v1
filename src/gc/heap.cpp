@@ -115,8 +115,6 @@ void* Heap::allocLarge(size_t size) {
 }
 
 static Block* alloc_block(uint64_t size, Block** prev) {
-    // TODO use mmap
-
     Block* rtn = (Block*)small_arena.doMmap(sizeof(Block));
     assert(rtn);
     rtn->size = size;
@@ -379,12 +377,11 @@ void* Heap::getAllocationFromInteriorPointer(void* ptr) {
     return &b->atoms[atom_idx];
 }
 
-static long freeChain(Block* head) {
-    long bytes_freed = 0;
-    while (head) {
-        int num_objects = head->numObjects();
-        int first_obj = head->minObjIndex();
-        int atoms_per_obj = head->atomsPerObj();
+static Block** freeChain(Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
 
         for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
             int atom_idx = obj_idx * atoms_per_obj;
@@ -392,10 +389,10 @@ static long freeChain(Block* head) {
             int bitmap_bit = atom_idx % 64;
             uint64_t mask = 1L << bitmap_bit;
 
-            if (head->isfree[bitmap_idx] & mask)
+            if (b->isfree[bitmap_idx] & mask)
                 continue;
 
-            void* p = &head->atoms[atom_idx];
+            void* p = &b->atoms[atom_idx];
             GCObjectHeader* header = headerFromObject(p);
 
             if (isMarked(header)) {
@@ -404,32 +401,29 @@ static long freeChain(Block* head) {
                 if (VERBOSITY() >= 2)
                     printf("Freeing %p\n", p);
                 // assert(p != (void*)0x127000d960); // the main module
-                bytes_freed += head->size;
-                head->isfree[bitmap_idx] |= mask;
+                b->isfree[bitmap_idx] |= mask;
             }
         }
 
-        head = head->next;
+        head = &b->next;
     }
-    return bytes_freed;
+    return head;
 }
 
 void Heap::freeUnmarked() {
-    long bytes_freed = 0;
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        bytes_freed += freeChain(heads[bidx]);
-        bytes_freed += freeChain(full_heads[bidx]);
+        Block** chain_end = freeChain(&heads[bidx]);
+        freeChain(&full_heads[bidx]);
 
         while (Block* b = full_heads[bidx]) {
-            // these should be added at the end...
             removeFromLL(b);
-            insertIntoLL(&heads[bidx], b);
+            insertIntoLL(chain_end, b);
         }
     }
 
-    thread_caches.forEachValue([&bytes_freed](ThreadBlockCache* cache) {
+    thread_caches.forEachValue([](ThreadBlockCache* cache) {
         for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-            bytes_freed += freeChain(cache->cache_heads[bidx]);
+            freeChain(&cache->cache_heads[bidx]);
         }
     });
 
@@ -442,7 +436,6 @@ void Heap::freeUnmarked() {
         } else {
             if (VERBOSITY() >= 2)
                 printf("Freeing %p\n", p);
-            bytes_freed += cur->mmap_size();
 
             *cur->prev = cur->next;
             if (cur->next)
@@ -456,10 +449,6 @@ void Heap::freeUnmarked() {
 
         cur = cur->next;
     }
-
-    if (VERBOSITY("gc") >= 2)
-        if (bytes_freed)
-            printf("Freed %ld bytes\n", bytes_freed);
 }
-}
-}
+} // namespace gc
+} // namespace pyston
