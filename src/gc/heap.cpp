@@ -147,8 +147,20 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     return rtn;
 }
 
+Heap::ThreadBlockCache::~ThreadBlockCache() {
+    LOCK_REGION(heap->lock);
+
+    for (int i = 0; i < NUM_BUCKETS; i++) {
+        if (cache_heads[i] == NULL)
+            continue;
+        assert(0);
+    }
+}
+
 void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
     _collectIfNeeded(rounded_size);
+
+    ThreadBlockCache* cache = thread_caches.get();
 
     LOCK_REGION(lock);
 

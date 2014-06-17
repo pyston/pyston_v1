@@ -211,20 +211,15 @@ static std::unordered_map<void*, llvm::Instruction*> cur_instruction_map;
 
 typedef std::vector<const SymMap*> root_stack_t;
 threading::PerThreadSet<root_stack_t> root_stack_set;
-threading::PerThread<root_stack_t> thread_local root_stack(&root_stack_set);
 
 void gatherInterpreterRoots(GCVisitor* visitor) {
-    // In theory this lock should be superfluous since we should only call this
-    // inside a sequential section, but lock it anyway:
-    LOCK_REGION(&root_stack_set.lock);
-
-    for (auto& p : root_stack_set.map) {
-        for (const SymMap* sym_map : *p.second) {
+    root_stack_set.forEachValue(std::function<void(root_stack_t*, GCVisitor*)>([](root_stack_t* v, GCVisitor* visitor) {
+        for (const SymMap* sym_map : *v) {
             for (const auto& p2 : *sym_map) {
                 visitor->visitPotential(p2.second.o);
             }
         }
-    }
+    }), visitor);
 }
 
 class UnregisterHelper {
@@ -235,7 +230,7 @@ public:
     constexpr UnregisterHelper(void* frame_ptr) : frame_ptr(frame_ptr) {}
 
     ~UnregisterHelper() {
-        root_stack.value.pop_back();
+        root_stack_set.get()->pop_back();
 
         assert(cur_instruction_map.count(frame_ptr));
         cur_instruction_map.erase(frame_ptr);
@@ -280,7 +275,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     SymMap symbols;
 
     void* frame_ptr = __builtin_frame_address(0);
-    root_stack.value.push_back(&symbols);
+    root_stack_set.get()->push_back(&symbols);
     UnregisterHelper helper(frame_ptr);
 
     int arg_num = -1;

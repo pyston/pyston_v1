@@ -15,6 +15,7 @@
 #ifndef PYSTON_CORE_THREADUTILS_H
 #define PYSTON_CORE_THREADUTILS_H
 
+#include <functional>
 #include <pthread.h>
 #include <unordered_map>
 
@@ -120,31 +121,89 @@ public:
 };
 
 
-template <typename T> class PerThreadSet {
-public:
-    PthreadFastMutex lock;
-    std::unordered_map<pthread_t, T*> map;
+namespace impl {
+// From http://stackoverflow.com/questions/7858817/unpacking-a-tuple-to-call-a-matching-function-pointer
+template<int ...>
+struct seq { };
+
+template<int N, int ...S>
+struct gens : gens<N-1, N-1, S...> { };
+
+template<int ...S>
+struct gens<0, S...> {
+    typedef seq<S...> type;
 };
+}
 
-template <typename T> class PerThread {
+template <typename T, typename... CtorArgs> class PerThreadSet {
 private:
-    PerThreadSet<T>* set;
-    pthread_t self;
+    pthread_key_t pthread_key;
+    PthreadFastMutex lock;
 
-public:
-    T value;
+    struct Storage {
+        PerThreadSet<T, CtorArgs...> *self;
+        T val;
+    };
 
-    PerThread(PerThreadSet<T>* set) : set(set), self(pthread_self()) {
-        LOCK_REGION(&set->lock);
+    std::unordered_map<pthread_t, Storage*> map;
+    std::tuple<CtorArgs...> ctor_args;
 
-        set->map[self] = &value;
+    static void dtor(void* val) {
+        Storage* s = static_cast<Storage*>(val);
+        assert(s);
+
+        auto* self = s->self;
+        LOCK_REGION(&self->lock);
+
+        // I assume this destructor gets called on the same thread
+        // that this data is bound to:
+        assert(self->map.count(pthread_self()));
+        self->map.erase(pthread_self());
+
+        delete s;
     }
 
-    ~PerThread() {
-        LOCK_REGION(&set->lock);
+    template <int ...S>
+    Storage* make(impl::seq<S...>) {
+        return new Storage {.self=this, .val=T(std::get<S>(ctor_args)...) };
+    }
 
-        assert(set->map.count(self) == 1);
-        set->map.erase(self);
+public:
+    PerThreadSet(CtorArgs... ctor_args) : ctor_args(std::forward<CtorArgs>(ctor_args)...) {
+        int code = pthread_key_create(&pthread_key, &dtor);
+    }
+
+    void forEachValue(std::function<void(T*)> f) {
+        LOCK_REGION(&lock);
+
+        for (auto& p : map) {
+            f(&p.second->val);
+        }
+    }
+
+    template <typename... Arguments>
+    void forEachValue(std::function<void(T*, Arguments...)> f, Arguments... args) {
+        LOCK_REGION(&lock);
+
+        for (auto& p : map) {
+            f(&p.second->val, std::forward<Arguments>(args)...);
+        }
+    }
+
+    T* get() {
+        // Is there even much benefit to using pthread_getspecific here, as opposed to looking
+        // it up in the map?  I suppose it avoids locking
+        Storage* s = static_cast<Storage*>(pthread_getspecific(pthread_key));
+        if (!s) {
+            s = make(typename impl::gens<sizeof...(CtorArgs)>::type());
+
+            LOCK_REGION(&lock);
+            int code = pthread_setspecific(pthread_key, s);
+            assert(code == 0);
+
+            map[pthread_self()] = s;
+        }
+        return &s->val;
     }
 };
 
