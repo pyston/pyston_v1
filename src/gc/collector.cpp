@@ -109,10 +109,8 @@ static void markPhase() {
     while (void* p = stack.pop()) {
         assert(((intptr_t)p) % 8 == 0);
         GCObjectHeader* header = headerFromObject(p);
-        // printf("%p\n", p);
 
         if (isMarked(header)) {
-            // printf("Already marked, skipping\n");
             continue;
         }
 
@@ -173,7 +171,7 @@ void runCollection() {
     markPhase();
     sweepPhase();
     if (VERBOSITY("gc") >= 2)
-        printf("Collection #%d done\n", ++ncollections);
+        printf("Collection #%d done\n\n", ncollections);
 
     long us = _t.end();
     static StatCounter sc_us("gc_collections_us");

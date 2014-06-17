@@ -20,6 +20,7 @@
 #include <sys/mman.h>
 
 #include "core/common.h"
+#include "core/util.h"
 #include "gc/gc_alloc.h"
 
 #ifndef NVALGRIND
@@ -147,98 +148,124 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     return rtn;
 }
 
+static void insertIntoLL(Block** next_pointer, Block* next) {
+    assert(next_pointer);
+    assert(next);
+    assert(!next->next);
+    assert(!next->prev);
+
+    next->next = *next_pointer;
+    if (next->next)
+        next->next->prev = &next->next;
+    *next_pointer = next;
+    next->prev = next_pointer;
+}
+
+static void removeFromLL(Block* b) {
+    if (b->next)
+        b->next->prev = b->prev;
+    *b->prev = b->next;
+
+    b->next = NULL;
+    b->prev = NULL;
+}
+
 Heap::ThreadBlockCache::~ThreadBlockCache() {
     LOCK_REGION(heap->lock);
 
     for (int i = 0; i < NUM_BUCKETS; i++) {
-        if (cache_heads[i] == NULL)
+        Block* b = cache_heads[i];
+        if (b == NULL)
             continue;
-        assert(0);
+
+        removeFromLL(b);
+        // This should have been the only block in the list.
+        // Well, we could cache multiple blocks if we want, and maybe we should,
+        // but for now this routine only supports caching a single one, and would
+        // need to get updated:
+        assert(cache_heads[i] == NULL);
+
+        insertIntoLL(&heap->heads[i], b);
     }
 }
 
-void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
+static void* allocFromBlock(Block* b) {
+    int i = 0;
+    uint64_t mask = 0;
+    for (; i < BITFIELD_ELTS; i++) {
+        mask = b->isfree[i];
+        if (mask != 0L) {
+            break;
+        }
+    }
+
+    if (i == BITFIELD_ELTS) {
+        return NULL;
+    }
+
+    int first = __builtin_ctzll(mask);
+    assert(first < 64);
+    assert(b->isfree[i] & (1L << first));
+    b->isfree[i] ^= (1L << first);
+    // printf("Marking %d:%d: %p=%lx\n", i, first, &b->isfree[i], b->isfree[i]);
+
+    int idx = first + i * 64;
+
+    void* rtn = &b->atoms[idx];
+    return rtn;
+}
+
+static Block* claimBlock(size_t rounded_size, Block** free_head) {
+    Block* free_block = *free_head;
+    if (free_block) {
+        removeFromLL(free_block);
+        return free_block;
+    }
+
+    return alloc_block(rounded_size, NULL);
+}
+
+void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
     _collectIfNeeded(rounded_size);
+
+    Block** free_head = &heads[bucket_idx];
+    Block** full_head = &full_heads[bucket_idx];
 
     ThreadBlockCache* cache = thread_caches.get();
 
-    LOCK_REGION(lock);
+    Block** cache_head = &cache->cache_heads[bucket_idx];
 
-    Block* cur = *prev;
-    assert(!cur || prev == cur->prev);
-    int scanned = 0;
+    static StatCounter sc_total("gc_total");
+    sc_total.log();
 
-    // printf("alloc(%ld)\n", rounded_size);
-
-    // Block **full_prev = full_head;
     while (true) {
-        // printf("cur = %p, prev = %p\n", cur, prev);
-        if (cur == NULL) {
-            Block* next = alloc_block(rounded_size, &cur->next);
-            // printf("allocated new block %p\n", next);
-            *prev = next;
-            next->prev = prev;
-            prev = &cur->next;
+        Block* cache_block = *cache_head;
+        if (cache_block) {
+            void* rtn = allocFromBlock(cache_block);
+            if (rtn)
+                return rtn;
 
-            next->next = *full_head;
-            *full_head = NULL;
-            prev = full_head;
-
-            cur = next;
+            removeFromLL(cache_block);
         }
 
-        int i = 0;
-        uint64_t mask = 0;
-        for (; i < BITFIELD_ELTS; i++) {
-            mask = cur->isfree[i];
-            if (mask != 0L) {
-                break;
-            }
+        static StatCounter sc_fallback("gc_nocache");
+        sc_fallback.log();
+
+        LOCK_REGION(lock);
+
+        if (cache_block) {
+            insertIntoLL(full_head, cache_block);
         }
 
-        if (i == BITFIELD_ELTS) {
-            scanned++;
-            // printf("moving on\n");
+        assert(*cache_head == NULL);
 
-            Block* t = *prev = cur->next;
-            cur->next = NULL;
-            if (t)
-                t->prev = prev;
+        // should probably be called allocBlock:
+        Block* myblock = claimBlock(rounded_size, &heads[bucket_idx]);
+        assert(myblock);
+        assert(!myblock->next);
+        assert(!myblock->prev);
 
-            cur->prev = full_head;
-            cur->next = *full_head;
-            *full_head = cur;
-
-            cur = t;
-
-            scanned++;
-            continue;
-        }
-
-        // printf("scanned %d\n", scanned);
-        int first = __builtin_ctzll(mask);
-        assert(first < 64);
-        // printf("mask: %lx, first: %d\n", mask, first);
-        cur->isfree[i] ^= (1L << first);
-
-        int idx = first + i * 64;
-
-        // printf("Using index %d\n", idx);
-
-        void* rtn = &cur->atoms[idx];
-
-#ifndef NDEBUG
-        Block* b = Block::forPointer(rtn);
-        assert(b == cur);
-        int offset = (char*)rtn - (char*)b;
-        assert(offset % rounded_size == 0);
-#endif
-
-#ifndef NVALGRIND
-// VALGRIND_MEMPOOL_ALLOC(cur, rtn, rounded_size);
-#endif
-
-        return rtn;
+        insertIntoLL(cache_head, myblock);
     }
 }
 
@@ -392,7 +419,19 @@ void Heap::freeUnmarked() {
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
         bytes_freed += freeChain(heads[bidx]);
         bytes_freed += freeChain(full_heads[bidx]);
+
+        while (Block* b = full_heads[bidx]) {
+            // these should be added at the end...
+            removeFromLL(b);
+            insertIntoLL(&heads[bidx], b);
+        }
     }
+
+    thread_caches.forEachValue([&bytes_freed](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            bytes_freed += freeChain(cache->cache_heads[bidx]);
+        }
+    });
 
     LargeObj* cur = large_head;
     while (cur) {

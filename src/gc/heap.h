@@ -80,7 +80,7 @@ private:
     Block* full_heads[NUM_BUCKETS];
     LargeObj* large_head = NULL;
 
-    void* allocSmall(size_t rounded_size, Block** head, Block** full_head);
+    void* allocSmall(size_t rounded_size, int bucket_idx);
     void* allocLarge(size_t bytes);
 
     // DS_DEFINE_MUTEX(lock);
@@ -106,16 +106,16 @@ public:
         void* rtn;
         // assert(bytes >= 16);
         if (bytes <= 16)
-            rtn = allocSmall(16, &heads[0], &full_heads[0]);
+            rtn = allocSmall(16, 0);
         else if (bytes <= 32)
-            rtn = allocSmall(32, &heads[1], &full_heads[1]);
+            rtn = allocSmall(32, 1);
         else if (bytes > sizes[NUM_BUCKETS - 1])
             rtn = allocLarge(bytes);
         else {
             rtn = NULL;
             for (int i = 2; i < NUM_BUCKETS; i++) {
                 if (sizes[i] >= bytes) {
-                    rtn = allocSmall(sizes[i], &heads[i], &full_heads[i]);
+                    rtn = allocSmall(sizes[i], i);
                     break;
                 }
             }
@@ -129,7 +129,9 @@ public:
 
     void free(void* ptr);
 
+    // not thread safe:
     void* getAllocationFromInteriorPointer(void* ptr);
+    // not thread safe:
     void freeUnmarked();
 };
 
