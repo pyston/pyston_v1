@@ -90,9 +90,7 @@ private:
         Heap* heap;
         Block* cache_heads[NUM_BUCKETS];
 
-        ThreadBlockCache(Heap* heap) : heap(heap) {
-            memset(cache_heads, 0, sizeof(cache_heads));
-        }
+        ThreadBlockCache(Heap* heap) : heap(heap) { memset(cache_heads, 0, sizeof(cache_heads)); }
         ~ThreadBlockCache();
     };
     friend class ThreadBlockCache;
@@ -100,8 +98,7 @@ private:
     threading::PerThreadSet<ThreadBlockCache, Heap*> thread_caches;
 
 public:
-    Heap() : thread_caches(this) {
-    }
+    Heap() : thread_caches(this) {}
 
     void* realloc(void* ptr, size_t bytes);
 

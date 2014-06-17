@@ -214,12 +214,13 @@ threading::PerThreadSet<root_stack_t> root_stack_set;
 
 void gatherInterpreterRoots(GCVisitor* visitor) {
     root_stack_set.forEachValue(std::function<void(root_stack_t*, GCVisitor*)>([](root_stack_t* v, GCVisitor* visitor) {
-        for (const SymMap* sym_map : *v) {
-            for (const auto& p2 : *sym_map) {
-                visitor->visitPotential(p2.second.o);
-            }
-        }
-    }), visitor);
+                                    for (const SymMap* sym_map : *v) {
+                                        for (const auto& p2 : *sym_map) {
+                                            visitor->visitPotential(p2.second.o);
+                                        }
+                                    }
+                                }),
+                                visitor);
 }
 
 class UnregisterHelper {

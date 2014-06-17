@@ -56,7 +56,6 @@ public:
 
     void log(int count = 1) { Stats::log(id, count); }
 };
-
 }
 
 #endif

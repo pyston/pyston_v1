@@ -123,16 +123,11 @@ public:
 
 namespace impl {
 // From http://stackoverflow.com/questions/7858817/unpacking-a-tuple-to-call-a-matching-function-pointer
-template<int ...>
-struct seq { };
+template <int...> struct seq {};
 
-template<int N, int ...S>
-struct gens : gens<N-1, N-1, S...> { };
+template <int N, int... S> struct gens : gens<N - 1, N - 1, S...> {};
 
-template<int ...S>
-struct gens<0, S...> {
-    typedef seq<S...> type;
-};
+template <int... S> struct gens<0, S...> { typedef seq<S...> type; };
 }
 
 template <typename T, typename... CtorArgs> class PerThreadSet {
@@ -141,7 +136,7 @@ private:
     PthreadFastMutex lock;
 
     struct Storage {
-        PerThreadSet<T, CtorArgs...> *self;
+        PerThreadSet<T, CtorArgs...>* self;
         T val;
     };
 
@@ -163,9 +158,8 @@ private:
         delete s;
     }
 
-    template <int ...S>
-    Storage* make(impl::seq<S...>) {
-        return new Storage {.self=this, .val=T(std::get<S>(ctor_args)...) };
+    template <int... S> Storage* make(impl::seq<S...>) {
+        return new Storage{ .self = this, .val = T(std::get<S>(ctor_args)...) };
     }
 
 public:
@@ -181,8 +175,7 @@ public:
         }
     }
 
-    template <typename... Arguments>
-    void forEachValue(std::function<void(T*, Arguments...)> f, Arguments... args) {
+    template <typename... Arguments> void forEachValue(std::function<void(T*, Arguments...)> f, Arguments... args) {
         LOCK_REGION(&lock);
 
         for (auto& p : map) {
