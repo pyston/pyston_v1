@@ -87,6 +87,9 @@ int main(int argc, char** argv) {
 
     const char* fn = NULL;
 
+    threading::registerMainThread();
+    threading::GLReadRegion _glock;
+
     {
         Timer _t("for initCodegen");
         initCodegen();
@@ -107,9 +110,6 @@ int main(int argc, char** argv) {
     }
 
     // end of argument parsing
-
-    threading::registerMainThread();
-    threading::GLReadRegion _glock;
 
     _t.split("to run");
     if (fn != NULL) {

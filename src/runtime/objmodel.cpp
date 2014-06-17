@@ -300,6 +300,9 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bo
         assert(instance_size >= attrs_offset + sizeof(HCAttrs));
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     }
+
+    if (!is_user_defined)
+        gc::registerStaticRootObj(this);
 }
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {

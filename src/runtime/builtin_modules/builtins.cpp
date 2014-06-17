@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <err.h>
 
 #include "codegen/compvars.h"
 #include "core/ast.h"
@@ -195,7 +196,8 @@ Box* open(Box* arg1, Box* arg2) {
     const std::string& mode = static_cast<BoxedString*>(arg2)->s;
 
     FILE* f = fopen(fn.c_str(), mode.c_str());
-    RELEASE_ASSERT(f, "");
+    if (!f)
+        raiseExcHelper(IOError, "%s: '%s' '%s'", strerror(errno), fn.c_str());
 
     return new BoxedFile(f);
 }

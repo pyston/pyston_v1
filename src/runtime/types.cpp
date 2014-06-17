@@ -110,8 +110,8 @@ extern "C" void functionGCHandler(GCVisitor* v, void* p) {
         assert(f->defaults);
         v->visit(f->defaults);
         // do a conservative scan since there can be NULLs in there:
-        v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults[0]),
-                               reinterpret_cast<void* const*>(&f->defaults[f->ndefaults]));
+        v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults->elts[0]),
+                               reinterpret_cast<void* const*>(&f->defaults->elts[f->ndefaults]));
     }
 }
 
@@ -443,7 +443,7 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
 
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
-    HiddenClass::getRoot();
+    gc::registerStaticRootObj(HiddenClass::getRoot());
 
     object_cls = new BoxedClass(NULL, 0, sizeof(Box), false);
     type_cls = new BoxedClass(object_cls, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
