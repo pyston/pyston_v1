@@ -333,10 +333,10 @@ check:
 	$(MAKE) lint
 	$(MAKE) ext pyston_dbg
 	# $(MAKE) run_unittests
-	$(MAKE) test_dbg
-	$(MAKE) test_release
+	$(MAKE) check_dbg
+	$(MAKE) check_release
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
-	# $(MAKE) test_prof
+	# $(MAKE) check_prof
 	$(MAKE) pyston_prof
 	$(call checksha,./pyston_prof -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
@@ -585,6 +585,7 @@ PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 $(call make_compile_config,,$(CXXFLAGS_DBG))
 $(call make_compile_config,.release,$(CXXFLAGS_RELEASE))
 $(call make_compile_config,.grwl,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl)
+$(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_nosync)
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
 
@@ -657,6 +658,7 @@ $(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
 $(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
+$(call link,_nosync,stdlib.nosync.bc.o $(SRCS:.cpp=.nosync.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/oprofile.o $(LDFLAGS_RELEASE) -lopagent -o $@
@@ -695,8 +697,8 @@ RUN_DEPS := ext
 
 define make_target
 $(eval \
-.PHONY: test$1
-test$1: pyston$1 ext
+.PHONY: test$1 check$1
+check$1 test$1: pyston$1 ext
 	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
@@ -757,6 +759,7 @@ perf_%: perf_release_%
 $(call make_target,_dbg)
 $(call make_target,_release)
 $(call make_target,_grwl)
+$(call make_target,_nosync)
 
 # "kill valgrind":
 kv:

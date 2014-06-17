@@ -4,6 +4,7 @@ tools/mcjitcache
 tools/mcjitcache_release
 tools/publicize
 tools/publicize_release
+
 pyston
 pyston_opt
 pyston_noasserts
@@ -16,6 +17,8 @@ pyston_prof
 pyston_profile
 pyston_release
 pyston_grwl
+pyston_nosync
+
 *.cache
 tests/t.py
 tests/t2.py

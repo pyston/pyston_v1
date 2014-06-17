@@ -427,7 +427,7 @@ void allowGLReadPreemption() {
     assert(grwl_state == GRWLHeldState::R);
 
     gl_check_count++;
-    if (gl_check_count < 1000)
+    if (gl_check_count < 10)
         return;
     gl_check_count = 0;
 

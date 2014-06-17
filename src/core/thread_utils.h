@@ -18,8 +18,12 @@
 #include <pthread.h>
 #include <unordered_map>
 
+#include "core/common.h"
+
 namespace pyston {
 namespace threading {
+
+pid_t gettid();
 
 template <typename T> class _LockedRegion {
 private:
