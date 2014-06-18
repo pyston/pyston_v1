@@ -1396,11 +1396,19 @@ private:
                 case AST_TYPE::Subscript:
                     _doDelitem(static_cast<AST_Subscript*>(target), exc_info);
                     break;
+                case AST_TYPE::Attribute:
+                    _doDelAttr(static_cast<AST_Attribute*>(target), exc_info);
+                    break;
                 default:
                     ASSERT(0, "UnSupported del target: %d", target->type);
                     abort();
             }
         }
+    }
+
+    void _doDelAttr(AST_Attribute* node, ExcInfo exc_info) {
+        CompilerVariable* value = evalExpr(node->value, exc_info);
+        value->delattr(emitter, getEmptyOpInfo(exc_info), &node->attr);
     }
 
     // invoke delitem in objmodel.cpp, which will invoke the listDelitem of list

@@ -218,6 +218,27 @@ public:
         converted->decvref(emitter);
     }
 
+    void delattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr) {
+        llvm::Constant* ptr = getStringConstantPtr(*attr + '\0');
+        // g.funcs.setattr->dump();
+        // var->getValue()->dump(); llvm::errs() << '\n';
+        // ptr->dump(); llvm::errs() << '\n';
+        // converted->getValue()->dump(); llvm::errs() << '\n';
+        bool do_patchpoint = ENABLE_ICDELATTRS && !info.isInterpreted();
+        if (do_patchpoint) {
+            PatchpointSetupInfo* pp
+                = patchpoints::createDelattrPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(var->getValue());
+            llvm_args.push_back(ptr);
+
+            emitter.createPatchpoint(pp, (void*)pyston::delattr, llvm_args, info.exc_info);
+        } else {
+            emitter.createCall2(info.exc_info, g.funcs.delattr, var->getValue(), ptr);
+        }
+    }
+
     virtual llvm::Value* makeClassCheck(IREmitter& emitter, ConcreteCompilerVariable* var, BoxedClass* cls) {
         assert(var->getValue()->getType() == g.llvm_value_type_ptr);
         // TODO this is brittle: directly embeds the position of the class object:
@@ -689,6 +710,12 @@ public:
         call.setDoesNotReturn();
     }
 
+    virtual void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr) {
+        llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
+            g.funcs.raiseAttributeErrorStr, getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
+        call->setDoesNotReturn();
+    }
+
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                                     ConcreteCompilerType* other_type) {
         if (other_type == this) {
@@ -796,6 +823,12 @@ public:
         llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
                                                   getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
         call.setDoesNotReturn();
+    }
+
+    virtual void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr) {
+        llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
+            g.funcs.raiseAttributeErrorStr, getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
+        call->setDoesNotReturn();
     }
 
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
@@ -949,6 +982,10 @@ public:
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
                  CompilerVariable* v) {
         return UNKNOWN->setattr(emitter, info, var, attr, v);
+    }
+
+    void delattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr) {
+        return UNKNOWN->delattr(emitter, info, var, attr);
     }
 
     virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
