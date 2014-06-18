@@ -33,17 +33,28 @@
 namespace pyston {
 namespace gc {
 
-// extern unsigned numAllocs;
-//#define ALLOCS_PER_COLLECTION 1000
-unsigned bytesAllocatedSinceCollection;
+static unsigned bytesAllocatedSinceCollection;
+static __thread unsigned thread_bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 2000000
 
 void _collectIfNeeded(size_t bytes) {
     if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-        bytesAllocatedSinceCollection = 0;
-        runCollection();
+        //bytesAllocatedSinceCollection = 0;
+        //threading::GLPromoteRegion _lock;
+        //runCollection();
+
+        threading::GLPromoteRegion _lock;
+        if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
+            runCollection();
+            bytesAllocatedSinceCollection = 0;
+        }
     }
-    bytesAllocatedSinceCollection += bytes;
+
+    thread_bytesAllocatedSinceCollection += bytes;
+    if (thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4) {
+        bytesAllocatedSinceCollection += thread_bytesAllocatedSinceCollection;
+        thread_bytesAllocatedSinceCollection = 0;
+    }
 }
 
 
@@ -233,8 +244,12 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
 
     Block** cache_head = &cache->cache_heads[bucket_idx];
 
-    static StatCounter sc_total("gc_total");
-    sc_total.log();
+    //static __thread int gc_allocs = 0;
+    //if (++gc_allocs == 128) {
+        //static StatCounter sc_total("gc_allocs");
+        //sc_total.log(128);
+        //gc_allocs = 0;
+    //}
 
     while (true) {
         Block* cache_block = *cache_head;
@@ -246,8 +261,9 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
             removeFromLL(cache_block);
         }
 
-        static StatCounter sc_fallback("gc_nocache");
-        sc_fallback.log();
+        // Not very useful to count the cache misses if we don't count the total attempts:
+        //static StatCounter sc_fallback("gc_allocs_cachemiss");
+        //sc_fallback.log();
 
         LOCK_REGION(lock);
 
@@ -262,6 +278,8 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
         assert(myblock);
         assert(!myblock->next);
         assert(!myblock->prev);
+
+        //printf("%d claimed new block %p with %d objects\n", threading::gettid(), myblock, myblock->numObjects());
 
         insertIntoLL(cache_head, myblock);
     }

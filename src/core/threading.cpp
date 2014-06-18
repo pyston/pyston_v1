@@ -23,7 +23,9 @@
 
 #include "core/common.h"
 #include "core/options.h"
+#include "core/stats.h"
 #include "core/thread_utils.h"
+#include "core/util.h"
 
 extern "C" int start_thread(void* arg);
 
@@ -372,7 +374,7 @@ void allowGLReadPreemption() {
     }
 }
 #elif THREADING_USE_GRWL
-static pthread_rwlock_t grwl = PTHREAD_RWLOCK_INITIALIZER;
+static pthread_rwlock_t grwl = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
 
 enum class GRWLHeldState {
     N,
@@ -412,9 +414,15 @@ void releaseGLWrite() {
 }
 
 void promoteGL() {
+    Timer _t2("promoting", /*min_usec=*/10000);
+
     // Note: this is *not* the same semantics as normal promoting, on purpose.
     releaseGLRead();
     acquireGLWrite();
+
+    long promote_us = _t2.end();
+    static thread_local StatPerThreadCounter sc_promoting_us("grwl_promoting_us");
+    sc_promoting_us.log(promote_us);
 }
 
 void demoteGL() {
@@ -426,18 +434,24 @@ static __thread int gl_check_count = 0;
 void allowGLReadPreemption() {
     assert(grwl_state == GRWLHeldState::R);
 
-    gl_check_count++;
-    if (gl_check_count < 10)
-        return;
-    gl_check_count = 0;
+    //gl_check_count++;
+    //if (gl_check_count < 10)
+        //return;
+    //gl_check_count = 0;
 
     if (__builtin_expect(!writers_waiting.load(std::memory_order_relaxed), 1))
         return;
 
+    Timer _t2("preempted", /*min_usec=*/10000);
     pthread_rwlock_unlock(&grwl);
-    // printf("waiters!\n");
-    sleep(0);
+    // The GRWL is a writer-prefered rwlock, so this next statement will block even
+    // if the lock is in read mode:
     pthread_rwlock_rdlock(&grwl);
+
+    long preempt_us = _t2.end();
+    static thread_local StatPerThreadCounter sc_preempting_us("grwl_preempt_us");
+    sc_preempting_us.log(preempt_us);
+
 }
 #endif
 

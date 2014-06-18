@@ -155,16 +155,10 @@ void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
 
+    ncollections++;
+
     if (VERBOSITY("gc") >= 2)
-        printf("Collection #%d\n", ++ncollections);
-
-    // Timer _t2("promoting", /*min_usec=*/10000);
-
-    threading::GLPromoteRegion _lock;
-
-    // long promote_us = _t2.end();
-    // static thread_local StatPerThreadCounter sc_promoting_us("gc_promoting_us");
-    // sc_promoting_us.log(promote_us);
+        printf("Collection #%d\n", ncollections);
 
     Timer _t("collecting", /*min_usec=*/10000);
 

@@ -585,6 +585,7 @@ PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 $(call make_compile_config,,$(CXXFLAGS_DBG))
 $(call make_compile_config,.release,$(CXXFLAGS_RELEASE))
 $(call make_compile_config,.grwl,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl)
+$(call make_compile_config,.grwl_dbg,$(CXXFLAGS_DBG) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl_dbg -UBINARY_STRIPPED_SUFFIX -DBINARY_STRIPPED_SUFFIX=)
 $(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_nosync)
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
@@ -658,6 +659,7 @@ $(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
 $(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
+$(call link,_grwl_dbg,stdlib.grwl_dbg.bc.o $(SRCS:.cpp=.grwl_dbg.o),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_nosync,stdlib.nosync.bc.o $(SRCS:.cpp=.nosync.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
@@ -734,6 +736,9 @@ $$(call make_search,memcheck_gdb$1_%)
 memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
 	$$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
 $$(call make_search,memleaks$1_%)
+cachegrind$1_%: %.py pyston$1 $$(RUN_DEPS)
+	$$(VALGRIND) --tool=cachegrind ./pyston$1 $$(ARGS) $$<
+$$(call make_search,cachegrind$1_%)
 endif
 
 .PHONY: perf$1_%
@@ -759,6 +764,7 @@ perf_%: perf_release_%
 $(call make_target,_dbg)
 $(call make_target,_release)
 $(call make_target,_grwl)
+$(call make_target,_grwl_dbg)
 $(call make_target,_nosync)
 
 # "kill valgrind":

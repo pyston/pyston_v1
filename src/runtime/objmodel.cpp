@@ -855,9 +855,11 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     slowpath_getattr.log();
 
     if (VERBOSITY() >= 2) {
+#if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
         int id = Stats::getStatId(per_name_stat_name);
         Stats::log(id);
+#endif
     }
 
     std::unique_ptr<Rewriter2> rewriter(
@@ -2772,9 +2774,11 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
     static StatCounter nopatch_getglobal("nopatch_getglobal");
 
     if (VERBOSITY() >= 2) {
+#if !DISABLE_STATS
         std::string per_name_stat_name = "getglobal__" + *name;
         int id = Stats::getStatId(per_name_stat_name);
         Stats::log(id);
+#endif
     }
 
     { /* anonymous scope to make sure destructors get run before we err out */
