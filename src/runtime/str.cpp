@@ -237,10 +237,14 @@ extern "C" Box* strRepr(BoxedString* self) {
     std::ostringstream os("");
 
     const std::string& s = self->s;
-    os << '\'';
+    char quote = '\'';
+    if (s.find('\'', 0) != std::string::npos && s.find('\"', 0) == std::string::npos) {
+        quote = '\"';
+    }
+    os << quote;
     for (int i = 0; i < s.size(); i++) {
         char c = s[i];
-        if (!_needs_escaping[c & 0xff]) {
+        if ((c == '\'' && quote == '\"') || !_needs_escaping[c & 0xff]) {
             os << c;
         } else {
             char special = 0;
@@ -275,7 +279,7 @@ extern "C" Box* strRepr(BoxedString* self) {
             }
         }
     }
-    os << '\'';
+    os << quote;
 
     return boxString(os.str());
 }
