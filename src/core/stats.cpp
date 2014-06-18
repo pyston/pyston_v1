@@ -22,7 +22,6 @@ namespace pyston {
 
 #if !DISABLE_STATS
 std::vector<long>* Stats::counts;
-std::vector<std::atomic<long> >* Stats::threadsafe_counts;
 std::unordered_map<int, std::string>* Stats::names;
 StatCounter::StatCounter(const std::string& name) : id(Stats::getStatId(name)) {
 }
@@ -39,8 +38,6 @@ int Stats::getStatId(const std::string& name) {
     Stats::names = &names;
     static std::vector<long> counts;
     Stats::counts = &counts;
-    static std::vector<std::atomic<long> > threadsafe_counts;
-    Stats::threadsafe_counts = &threadsafe_counts;
     static std::unordered_map<std::string, int> made;
 
     if (made.count(name))
@@ -50,7 +47,6 @@ int Stats::getStatId(const std::string& name) {
     names[rtn] = name;
     made[name] = rtn;
     counts.push_back(0);
-    threadsafe_counts.emplace_back(0);
     return rtn;
 }
 
@@ -65,7 +61,7 @@ void Stats::dump() {
     std::sort(pairs.begin(), pairs.end());
 
     for (int i = 0; i < pairs.size(); i++) {
-        printf("%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second] + (*threadsafe_counts)[pairs[i].second]);
+        printf("%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
     }
 }
 
