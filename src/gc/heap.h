@@ -88,9 +88,13 @@ private:
 
     struct ThreadBlockCache {
         Heap* heap;
-        Block* cache_heads[NUM_BUCKETS];
+        Block* cache_free_heads[NUM_BUCKETS];
+        Block* cache_full_heads[NUM_BUCKETS];
 
-        ThreadBlockCache(Heap* heap) : heap(heap) { memset(cache_heads, 0, sizeof(cache_heads)); }
+        ThreadBlockCache(Heap* heap) : heap(heap) {
+            memset(cache_free_heads, 0, sizeof(cache_free_heads));
+            memset(cache_full_heads, 0, sizeof(cache_full_heads));
+        }
         ~ThreadBlockCache();
     };
     friend class ThreadBlockCache;

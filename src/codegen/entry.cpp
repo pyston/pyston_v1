@@ -202,6 +202,12 @@ void initCodegen() {
     g.jit_listeners.push_back(stackmap_listener);
     g.engine->RegisterJITEventListener(stackmap_listener);
 
+#if ENABLE_INTEL_JIT_EVENTS
+    llvm::JITEventListener* intel_listener = llvm::JITEventListener::createIntelJITEventListener();
+    g.jit_listeners.push_back(intel_listener);
+    g.engine->RegisterJITEventListener(intel_listener);
+#endif
+
     llvm::JITEventListener* registry_listener = makeRegistryListener();
     g.jit_listeners.push_back(registry_listener);
     g.engine->RegisterJITEventListener(registry_listener);

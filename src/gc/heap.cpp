@@ -137,6 +137,8 @@ static Block* alloc_block(uint64_t size, Block** prev) {
 // VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
 #endif
 
+    //printf("Allocated new block %p\n", rtn);
+
     // Don't think I need to do this:
     memset(rtn->isfree, 0, sizeof(Block::isfree));
 
@@ -183,18 +185,15 @@ Heap::ThreadBlockCache::~ThreadBlockCache() {
     LOCK_REGION(heap->lock);
 
     for (int i = 0; i < NUM_BUCKETS; i++) {
-        Block* b = cache_heads[i];
-        if (b == NULL)
-            continue;
+        while (Block* b = cache_free_heads[i]) {
+            removeFromLL(b);
+            insertIntoLL(&heap->heads[i], b);
+        }
 
-        removeFromLL(b);
-        // This should have been the only block in the list.
-        // Well, we could cache multiple blocks if we want, and maybe we should,
-        // but for now this routine only supports caching a single one, and would
-        // need to get updated:
-        assert(cache_heads[i] == NULL);
-
-        insertIntoLL(&heap->heads[i], b);
+        while (Block* b = cache_full_heads[i]) {
+            removeFromLL(b);
+            insertIntoLL(&heap->full_heads[i], b);
+        }
     }
 }
 
@@ -242,7 +241,7 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
 
     ThreadBlockCache* cache = thread_caches.get();
 
-    Block** cache_head = &cache->cache_heads[bucket_idx];
+    Block** cache_head = &cache->cache_free_heads[bucket_idx];
 
     //static __thread int gc_allocs = 0;
     //if (++gc_allocs == 128) {
@@ -252,13 +251,13 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
     //}
 
     while (true) {
-        Block* cache_block = *cache_head;
-        if (cache_block) {
+        while (Block* cache_block = *cache_head) {
             void* rtn = allocFromBlock(cache_block);
             if (rtn)
                 return rtn;
 
             removeFromLL(cache_block);
+            insertIntoLL(&cache->cache_full_heads[bucket_idx], cache_block);
         }
 
         // Not very useful to count the cache misses if we don't count the total attempts:
@@ -266,10 +265,6 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
         //sc_fallback.log();
 
         LOCK_REGION(lock);
-
-        if (cache_block) {
-            insertIntoLL(full_head, cache_block);
-        }
 
         assert(*cache_head == NULL);
 
@@ -416,8 +411,6 @@ static Block** freeChain(Block** head) {
             if (isMarked(header)) {
                 clearMark(header);
             } else {
-                if (VERBOSITY() >= 2)
-                    printf("Freeing %p\n", p);
                 // assert(p != (void*)0x127000d960); // the main module
                 b->isfree[bitmap_idx] |= mask;
             }
@@ -429,6 +422,39 @@ static Block** freeChain(Block** head) {
 }
 
 void Heap::freeUnmarked() {
+    Timer _t("looking at the thread caches");
+    thread_caches.forEachValue([this](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block *h = cache->cache_free_heads[bidx];
+            // Try to limit the amount of unused memory a thread can hold onto;
+            // currently pretty dumb, just limit the number of blocks in the free-list
+            // to 50.  (blocks in the full list don't need to be limited, since we're sure
+            // that the thread had just actively used those.)
+            // Eventually may want to come up with some scrounging system.
+            // TODO does this thread locality even help at all?
+            for (int i = 0; i < 50; i++) {
+                if (h)
+                    h = h->next;
+                else
+                    break;
+            }
+            if (h) {
+                removeFromLL(h);
+                insertIntoLL(&heads[bidx], h);
+            }
+
+            Block** chain_end = freeChain(&cache->cache_free_heads[bidx]);
+            freeChain(&cache->cache_full_heads[bidx]);
+
+            while (Block* b = cache->cache_full_heads[bidx]) {
+                removeFromLL(b);
+                insertIntoLL(chain_end, b);
+            }
+
+        }
+    });
+    _t.end();
+
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
         Block** chain_end = freeChain(&heads[bidx]);
         freeChain(&full_heads[bidx]);
@@ -438,12 +464,6 @@ void Heap::freeUnmarked() {
             insertIntoLL(chain_end, b);
         }
     }
-
-    thread_caches.forEachValue([](ThreadBlockCache* cache) {
-        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-            freeChain(&cache->cache_heads[bidx]);
-        }
-    });
 
     LargeObj* cur = large_head;
     while (cur) {

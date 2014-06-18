@@ -33,6 +33,8 @@ COLOR := 1
 
 VERBOSE := 0
 
+ENABLE_INTEL_JIT_EVENTS := 0
+
 # Setting this to 1 will set the Makefile to use binaries from the trunk
 # directory, even if USE_TEST_LLVM is set to 1.
 # This is useful if clang isn't installed into the test directory, ex due
@@ -78,6 +80,10 @@ else
 endif
 
 LLVM_LINK_LIBS := core mcjit native bitreader ipo irreader jit debuginfo instrumentation
+ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
+LLVM_LINK_LIBS += inteljitevents
+endif
+
 LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
 LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
 LLVM_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Asserts/lib/*)
@@ -121,6 +127,7 @@ COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
+COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -424,10 +431,14 @@ llvm_configure:
 	rm -f $(LLVM_BUILD)/Makefile.config
 	$(MAKE) $(LLVM_CONFIGURATION)
 
+LLVM_CONFIGURE_LINE := CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
+LLVM_CONFIGURE_LINE += --with-intel-jitevents
+endif
 $(LLVM_CONFIGURATION): $(LLVM_SRC)/configure | $(LLVM_SRC)/_patched
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
-	CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+	$(LLVM_CONFIGURE_LINE)
 	# CXX=ccache\ g++ ./configure --enable-targets=host
 	# CXX='env CCACHE_PREFIX=distcc ccache g++' ./configure --enable-targets=host
 
