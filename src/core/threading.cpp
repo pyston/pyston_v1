@@ -434,10 +434,10 @@ static __thread int gl_check_count = 0;
 void allowGLReadPreemption() {
     assert(grwl_state == GRWLHeldState::R);
 
-    //gl_check_count++;
-    //if (gl_check_count < 10)
-        //return;
-    //gl_check_count = 0;
+    // gl_check_count++;
+    // if (gl_check_count < 10)
+    // return;
+    // gl_check_count = 0;
 
     if (__builtin_expect(!writers_waiting.load(std::memory_order_relaxed), 1))
         return;
@@ -451,7 +451,6 @@ void allowGLReadPreemption() {
     long preempt_us = _t2.end();
     static thread_local StatPerThreadCounter sc_preempting_us("grwl_preempt_us");
     sc_preempting_us.log(preempt_us);
-
 }
 #endif
 

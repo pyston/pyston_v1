@@ -39,9 +39,9 @@ static __thread unsigned thread_bytesAllocatedSinceCollection;
 
 void _collectIfNeeded(size_t bytes) {
     if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-        //bytesAllocatedSinceCollection = 0;
-        //threading::GLPromoteRegion _lock;
-        //runCollection();
+        // bytesAllocatedSinceCollection = 0;
+        // threading::GLPromoteRegion _lock;
+        // runCollection();
 
         threading::GLPromoteRegion _lock;
         if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
@@ -137,7 +137,7 @@ static Block* alloc_block(uint64_t size, Block** prev) {
 // VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
 #endif
 
-    //printf("Allocated new block %p\n", rtn);
+    // printf("Allocated new block %p\n", rtn);
 
     // Don't think I need to do this:
     memset(rtn->isfree, 0, sizeof(Block::isfree));
@@ -243,11 +243,11 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
 
     Block** cache_head = &cache->cache_free_heads[bucket_idx];
 
-    //static __thread int gc_allocs = 0;
-    //if (++gc_allocs == 128) {
-        //static StatCounter sc_total("gc_allocs");
-        //sc_total.log(128);
-        //gc_allocs = 0;
+    // static __thread int gc_allocs = 0;
+    // if (++gc_allocs == 128) {
+    // static StatCounter sc_total("gc_allocs");
+    // sc_total.log(128);
+    // gc_allocs = 0;
     //}
 
     while (true) {
@@ -261,8 +261,8 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
         }
 
         // Not very useful to count the cache misses if we don't count the total attempts:
-        //static StatCounter sc_fallback("gc_allocs_cachemiss");
-        //sc_fallback.log();
+        // static StatCounter sc_fallback("gc_allocs_cachemiss");
+        // sc_fallback.log();
 
         LOCK_REGION(lock);
 
@@ -274,7 +274,7 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
         assert(!myblock->next);
         assert(!myblock->prev);
 
-        //printf("%d claimed new block %p with %d objects\n", threading::gettid(), myblock, myblock->numObjects());
+        // printf("%d claimed new block %p with %d objects\n", threading::gettid(), myblock, myblock->numObjects());
 
         insertIntoLL(cache_head, myblock);
     }
@@ -425,7 +425,7 @@ void Heap::freeUnmarked() {
     Timer _t("looking at the thread caches");
     thread_caches.forEachValue([this](ThreadBlockCache* cache) {
         for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-            Block *h = cache->cache_free_heads[bidx];
+            Block* h = cache->cache_free_heads[bidx];
             // Try to limit the amount of unused memory a thread can hold onto;
             // currently pretty dumb, just limit the number of blocks in the free-list
             // to 50.  (blocks in the full list don't need to be limited, since we're sure
@@ -450,7 +450,6 @@ void Heap::freeUnmarked() {
                 removeFromLL(b);
                 insertIntoLL(chain_end, b);
             }
-
         }
     });
     _t.end();

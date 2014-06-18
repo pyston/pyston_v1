@@ -70,5 +70,4 @@ void Stats::dump() {
 }
 
 #endif
-
 }

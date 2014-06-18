@@ -38,7 +38,9 @@ public:
     static int getStatId(const std::string& name);
 
     static void log(int id, int count = 1) { (*counts)[id] += count; }
-    static void threadsafe_log(int id, int count = 1) { (*threadsafe_counts)[id].fetch_add(count, std::memory_order_relaxed); }
+    static void threadsafe_log(int id, int count = 1) {
+        (*threadsafe_counts)[id].fetch_add(count, std::memory_order_relaxed);
+    }
 
     static void dump();
 };
@@ -67,20 +69,17 @@ public:
 
 #else
 struct Stats {
-    static void dump() {
-        printf("(Stats disabled)\n");
-    }
+    static void dump() { printf("(Stats disabled)\n"); }
 };
 struct StatCounter {
     StatCounter(const char* name) {}
-    void log(int count=1) {};
+    void log(int count = 1) {};
 };
 struct StatPerThreadCounter {
     StatPerThreadCounter(const char* name) {}
-    void log(int count=1) {};
+    void log(int count = 1) {};
 };
 #endif
-
 }
 
 #endif
