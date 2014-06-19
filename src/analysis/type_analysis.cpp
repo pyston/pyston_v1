@@ -303,27 +303,29 @@ private:
     }
 
     virtual void* visit_compare(AST_Compare* node) {
-        RELEASE_ASSERT(node->ops.size() == 1, "unimplemented");
+        if (node->ops.size() == 1) {
+            CompilerType* left = getType(node->left);
+            CompilerType* right = getType(node->comparators[0]);
 
-        CompilerType* left = getType(node->left);
-        CompilerType* right = getType(node->comparators[0]);
+            AST_TYPE::AST_TYPE op_type = node->ops[0];
+            if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
+                || op_type == AST_TYPE::NotIn) {
+                assert(node->ops.size() == 1 && "I don't think this should happen");
+                return BOOL;
+            }
 
-        AST_TYPE::AST_TYPE op_type = node->ops[0];
-        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
-            || op_type == AST_TYPE::NotIn) {
-            assert(node->ops.size() == 1 && "I don't think this should happen");
-            return BOOL;
+            const std::string& name = getOpName(node->ops[0]);
+            CompilerType* attr_type = left->getattrType(&name, true);
+
+            if (attr_type == UNDEF)
+                attr_type = UNKNOWN;
+
+            std::vector<CompilerType*> arg_types;
+            arg_types.push_back(right);
+            return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
+        } else {
+            return UNKNOWN;
         }
-
-        const std::string& name = getOpName(node->ops[0]);
-        CompilerType* attr_type = left->getattrType(&name, true);
-
-        if (attr_type == UNDEF)
-            attr_type = UNKNOWN;
-
-        std::vector<CompilerType*> arg_types;
-        arg_types.push_back(right);
-        return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
     }
 
     virtual void* visit_dict(AST_Dict* node) {
