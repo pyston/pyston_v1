@@ -262,7 +262,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     _t.end();
 
     if (cf->is_interpreted)
-        interpretFunction(cf->func, 0, NULL, NULL, NULL, NULL);
+        interpretFunction(cf->func, 0, NULL, NULL, NULL, NULL, NULL);
     else
         ((void (*)())cf->code)();
 }

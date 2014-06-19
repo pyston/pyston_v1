@@ -65,7 +65,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(&function_flavor, function_cls), f(f), ndefaults(0), defaults(NULL) {
+    : Box(&function_flavor, function_cls), f(f), closure(NULL), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -78,13 +78,15 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
     assert(f->num_defaults == ndefaults);
 }
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults)
-    : Box(&function_flavor, function_cls), f(f), ndefaults(0), defaults(NULL) {
-    // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
-    // and a GC can happen within this constructor:
-    this->defaults = new (defaults.size()) GCdArray();
-    memcpy(this->defaults->elts, defaults.begin(), defaults.size() * sizeof(Box*));
-    this->ndefaults = defaults.size();
+extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure)
+    : Box(&function_flavor, function_cls), f(f), closure(closure), ndefaults(0), defaults(NULL) {
+    if (defaults.size()) {
+        // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
+        // and a GC can happen within this constructor:
+        this->defaults = new (defaults.size()) GCdArray();
+        memcpy(this->defaults->elts, defaults.begin(), defaults.size() * sizeof(Box*));
+        this->ndefaults = defaults.size();
+    }
 
     if (f->source) {
         assert(f->source->ast);
@@ -103,6 +105,9 @@ extern "C" void functionGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
     BoxedFunction* f = (BoxedFunction*)p;
+
+    if (f->closure)
+        v->visit(f->closure);
 
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunction constructor
@@ -130,8 +135,11 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f) {
-    return new BoxedFunction(f);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure) {
+    if (closure)
+        assert(closure->cls == closure_cls);
+
+    return new BoxedFunction(f, {}, closure);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -245,9 +253,18 @@ extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
     v->visitPotentialRange(start, start + (size / sizeof(void*)));
 }
 
+extern "C" void closureGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedClosure* c = (BoxedClosure*)v;
+    if (c->parent)
+        v->visit(c->parent);
+}
+
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
-    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls;
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
+    *closure_cls;
 
 const ObjectFlavor object_flavor(&boxGCHandler, NULL);
 const ObjectFlavor type_flavor(&typeGCHandler, NULL);
@@ -265,6 +282,7 @@ const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
 const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
 const ObjectFlavor member_flavor(&boxGCHandler, NULL);
+const ObjectFlavor closure_flavor(&closureGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
 const AllocationKind hc_kind(&hcGCHandler, NULL);
@@ -354,6 +372,12 @@ Box* range_obj = NULL;
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     BoxedSlice* rtn = new BoxedSlice(start, stop, step);
     return rtn;
+}
+
+extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure) {
+    if (parent_closure)
+        assert(parent_closure->cls == closure_cls);
+    return new BoxedClosure(parent_closure);
 }
 
 extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
@@ -483,6 +507,7 @@ void setupRuntime() {
     file_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFile), false);
     set_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     member_cls = new BoxedClass(object_cls, 0, sizeof(BoxedMemberDescriptor), false);
+    closure_cls = new BoxedClass(object_cls, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -523,6 +548,9 @@ void setupRuntime() {
 
     member_cls->giveAttr("__name__", boxStrConstant("member"));
     member_cls->freeze();
+
+    closure_cls->giveAttr("__name__", boxStrConstant("closure"));
+    closure_cls->freeze();
 
     setupBool();
     setupInt();

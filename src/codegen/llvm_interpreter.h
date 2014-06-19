@@ -25,7 +25,7 @@ class Box;
 class GCVisitor;
 class LineInfo;
 
-Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* arg3, Box** args);
+Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
 void gatherInterpreterRoots(GCVisitor* visitor);
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);

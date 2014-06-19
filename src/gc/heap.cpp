@@ -422,7 +422,6 @@ static Block** freeChain(Block** head) {
 }
 
 void Heap::freeUnmarked() {
-    Timer _t("looking at the thread caches");
     thread_caches.forEachValue([this](ThreadBlockCache* cache) {
         for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
             Block* h = cache->cache_free_heads[bidx];
@@ -452,7 +451,6 @@ void Heap::freeUnmarked() {
             }
         }
     });
-    _t.end();
 
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
         Block** chain_end = freeChain(&heads[bidx]);

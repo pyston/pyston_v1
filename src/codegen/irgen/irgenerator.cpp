@@ -201,6 +201,9 @@ static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
     return rtn;
 }
 
+static const std::string CREATED_CLOSURE_NAME = "!created_closure";
+static const std::string PASSED_CLOSURE_NAME = "!passed_closure";
+
 class IRGeneratorImpl : public IRGenerator {
 private:
     IRGenState* irstate;
@@ -790,7 +793,9 @@ private:
     CompilerVariable* evalName(AST_Name* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
-        if (irstate->getScopeInfo()->refersToGlobal(node->id)) {
+        auto scope_info = irstate->getScopeInfo();
+
+        if (scope_info->refersToGlobal(node->id)) {
             if (1) {
                 // Method 1: calls into the runtime getGlobal(), which handles things like falling back to builtins
                 // or raising the correct error message.
@@ -825,6 +830,13 @@ private:
                 mod->decvref(emitter);
                 return attr;
             }
+        } else if (scope_info->refersToClosure(node->id)) {
+            assert(scope_info->takesClosure());
+
+            CompilerVariable* closure = _getFake(PASSED_CLOSURE_NAME, false);
+            assert(closure);
+
+            return closure->getattr(emitter, getEmptyOpInfo(exc_info), &node->id, false);
         } else {
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
@@ -836,7 +848,7 @@ private:
             }
 
             std::string defined_name = _getFakeName("is_defined", node->id.c_str());
-            ConcreteCompilerVariable* is_defined = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+            ConcreteCompilerVariable* is_defined = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
             if (is_defined) {
                 emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined->getValue(),
                                     getStringConstantPtr(node->id + '\0'));
@@ -1203,18 +1215,29 @@ private:
         symbol_table.erase(name);
         return rtn;
     }
+
     CompilerVariable* _getFake(std::string name, bool allow_missing = false) {
         assert(name[0] == '!');
         CompilerVariable* rtn = symbol_table[name];
         if (!allow_missing)
             assert(rtn != NULL);
+        return rtn;
+    }
+    CompilerVariable* _popFake(std::string name, bool allow_missing = false) {
+        CompilerVariable* rtn = _getFake(name, allow_missing);
         symbol_table.erase(name);
         return rtn;
     }
 
     void _doSet(const std::string& name, CompilerVariable* val, ExcInfo exc_info) {
         assert(name != "None");
-        if (irstate->getScopeInfo()->refersToGlobal(name)) {
+
+        auto scope_info = irstate->getScopeInfo();
+        assert(!scope_info->refersToClosure(name));
+
+        if (scope_info->refersToGlobal(name)) {
+            assert(!scope_info->saveInClosure(name));
+
             // TODO do something special here so that it knows to only emit a monomorphic inline cache?
             ConcreteCompilerVariable* module = new ConcreteCompilerVariable(
                 MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
@@ -1231,7 +1254,14 @@ private:
             // Clear out the is_defined name since it is now definitely defined:
             assert(!startswith(name, "!is_defined"));
             std::string defined_name = _getFakeName("is_defined", name.c_str());
-            _getFake(defined_name, true);
+            _popFake(defined_name, true);
+
+            if (scope_info->saveInClosure(name)) {
+                CompilerVariable* closure = _getFake(CREATED_CLOSURE_NAME, false);
+                assert(closure);
+
+                closure->setattr(emitter, getEmptyOpInfo(ExcInfo::none()), &name, val);
+            }
         }
     }
 
@@ -1351,7 +1381,10 @@ private:
         if (state == PARTIAL)
             return;
 
+        assert(node->type == AST_TYPE::ClassDef);
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
+        assert(scope_info);
+        assert(!scope_info->takesClosure());
 
         RELEASE_ASSERT(node->bases.size() == 1, "");
 
@@ -1376,8 +1409,11 @@ private:
                 continue;
             } else if (type == AST_TYPE::FunctionDef) {
                 AST_FunctionDef* fdef = ast_cast<AST_FunctionDef>(node->body[i]);
+                ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(fdef);
+
                 CLFunction* cl = this->_wrapFunction(fdef);
-                CompilerVariable* func = makeFunction(emitter, cl);
+                assert(!scope_info->takesClosure());
+                CompilerVariable* func = makeFunction(emitter, cl, NULL);
                 cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
                 func->decvref(emitter);
             } else {
@@ -1448,12 +1484,22 @@ private:
         return cl;
     }
 
-    void doFunction(AST_FunctionDef* node, ExcInfo exc_info) {
+    void doFunctionDef(AST_FunctionDef* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
 
+        assert(!node->args->defaults.size());
+
         CLFunction* cl = this->_wrapFunction(node);
-        CompilerVariable* func = makeFunction(emitter, cl);
+
+        CompilerVariable* created_closure = NULL;
+        ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
+        if (scope_info->takesClosure()) {
+            created_closure = _getFake(CREATED_CLOSURE_NAME, false);
+            assert(created_closure);
+        }
+
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure);
 
         // llvm::Type* boxCLFuncArgType = g.funcs.boxCLFunction->arg_begin()->getType();
         // llvm::Value *boxed = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(cl,
@@ -1829,7 +1875,7 @@ private:
                 doExpr(ast_cast<AST_Expr>(node), exc_info);
                 break;
             case AST_TYPE::FunctionDef:
-                doFunction(ast_cast<AST_FunctionDef>(node), exc_info);
+                doFunctionDef(ast_cast<AST_FunctionDef>(node), exc_info);
                 break;
             // case AST_TYPE::If:
             // doIf(ast_cast<AST_If>(node));
@@ -1892,6 +1938,10 @@ private:
         var->decvref(emitter);
     }
 
+    bool allowableFakeEndingSymbol(const std::string& name) {
+        return startswith(name, "!is_defined") || name == PASSED_CLOSURE_NAME || name == CREATED_CLOSURE_NAME;
+    }
+
     void endBlock(State new_state) {
         assert(state == RUNNING);
 
@@ -1901,7 +1951,7 @@ private:
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
         for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
-            if (startswith(it->first, "!is_defined")) {
+            if (allowableFakeEndingSymbol(it->first)) {
                 ++it;
                 continue;
             }
@@ -1950,7 +2000,7 @@ private:
                 // printf("defined on this path; ");
 
                 ConcreteCompilerVariable* is_defined
-                    = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+                    = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
 
                 if (source->phis->isPotentiallyUndefinedAfter(*it, myblock)) {
                     // printf("is potentially undefined later, so marking it defined\n");
@@ -1996,6 +2046,8 @@ public:
         }
 
         if (myblock->successors.size() == 0) {
+            st->erase(CREATED_CLOSURE_NAME);
+            st->erase(PASSED_CLOSURE_NAME);
             assert(st->size() == 0); // shouldn't have anything live if there are no successors!
             return EndingState(st, phi_st, curblock);
         } else if (myblock->successors.size() > 1) {
@@ -2015,14 +2067,18 @@ public:
         }
 
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
-            if (startswith(it->first, "!is_defined") || source->phis->isRequiredAfter(it->first, myblock)) {
-                assert(it->second->isGrabbed());
+            if (allowableFakeEndingSymbol(it->first) || source->phis->isRequiredAfter(it->first, myblock)) {
+                ASSERT(it->second->isGrabbed(), "%s", it->first.c_str());
                 assert(it->second->getVrefs() == 1);
                 // this conversion should have already happened... should refactor this.
                 ConcreteCompilerType* ending_type;
                 if (startswith(it->first, "!is_defined")) {
                     assert(it->second->getType() == BOOL);
                     ending_type = BOOL;
+                } else if (it->first == PASSED_CLOSURE_NAME) {
+                    ending_type = getPassedClosureType();
+                } else if (it->first == CREATED_CLOSURE_NAME) {
+                    ending_type = getCreatedClosureType();
                 } else {
                     ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                 }
@@ -2057,14 +2113,43 @@ public:
         }
     }
 
-    void unpackArguments(const std::vector<AST_expr*>& arg_names,
+    ConcreteCompilerType* getPassedClosureType() {
+        // TODO could know the exact closure shape
+        return CLOSURE;
+    }
+
+    ConcreteCompilerType* getCreatedClosureType() {
+        // TODO could know the exact closure shape
+        return CLOSURE;
+    }
+
+    void doFunctionEntry(const std::vector<AST_expr*>& arg_names,
                          const std::vector<ConcreteCompilerType*>& arg_types) override {
+        auto scope_info = irstate->getScopeInfo();
+
+        llvm::Value* passed_closure = NULL;
+        llvm::Function::arg_iterator AI = irstate->getLLVMFunction()->arg_begin();
+        if (scope_info->takesClosure()) {
+            passed_closure = AI;
+            _setFake(PASSED_CLOSURE_NAME, new ConcreteCompilerVariable(getPassedClosureType(), AI, true));
+            ++AI;
+        }
+
+        if (scope_info->createsClosure()) {
+            if (!passed_closure)
+                passed_closure = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
+
+            llvm::Value* new_closure = emitter.getBuilder()->CreateCall(g.funcs.createClosure, passed_closure);
+            _setFake(CREATED_CLOSURE_NAME, new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true));
+        }
+
+
         int i = 0;
         llvm::Value* argarray = NULL;
-        for (llvm::Function::arg_iterator AI = irstate->getLLVMFunction()->arg_begin();
-             AI != irstate->getLLVMFunction()->arg_end(); AI++, i++) {
+        for (; AI != irstate->getLLVMFunction()->arg_end(); ++AI, i++) {
             if (i == 3) {
                 argarray = AI;
+                assert(++AI == irstate->getLLVMFunction()->arg_end());
                 break;
             }
             loadArgument(arg_names[i], arg_types[i], AI, ExcInfo::none());

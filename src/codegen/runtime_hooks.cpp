@@ -137,6 +137,9 @@ void initGlobalFuncs(GlobalState& g) {
     assert(vector_type);
     g.vector_ptr = vector_type->getPointerTo();
 
+    g.llvm_closure_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedClosure")->getPointerTo();
+    assert(g.llvm_closure_type_ptr);
+
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
     g.funcs.printf = addFunc((void*)printf, g.i8_ptr, true);
@@ -161,6 +164,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createList);
     GET(createDict);
     GET(createSlice);
+    GET(createClosure);
 
     GET(getattr);
     GET(setattr);

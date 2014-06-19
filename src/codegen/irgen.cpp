@@ -563,7 +563,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
-            generator->unpackArguments(arg_names, cf->spec->arg_types);
+
+            generator->doFunctionEntry(arg_names, cf->spec->arg_types);
 
             // Function-entry safepoint:
             // TODO might be more efficient to do post-call safepoints?
@@ -915,6 +916,9 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
     std::vector<llvm::Type*> llvm_arg_types;
+    if (source->scoping->getScopeInfoForNode(source->ast)->takesClosure())
+        llvm_arg_types.push_back(g.llvm_closure_type_ptr);
+
     if (entry_descriptor == NULL) {
         for (int i = 0; i < nargs; i++) {
             if (i == 3) {

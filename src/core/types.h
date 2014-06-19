@@ -165,6 +165,7 @@ struct FunctionSpecialization {
         : rtn_type(rtn_type), arg_types(arg_types) {}
 };
 
+class BoxedClosure;
 struct CompiledFunction {
 private:
 public:
@@ -176,6 +177,7 @@ public:
 
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
+        Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
         void* code;
     };
     llvm::Value* llvm_code; // the llvm callable.

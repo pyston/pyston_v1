@@ -29,7 +29,7 @@ class CompilerType;
 class IREmitter;
 
 extern ConcreteCompilerType* INT, *BOXED_INT, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST, *SLICE,
-    *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET;
+    *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *CLOSURE;
 extern CompilerType* UNDEF;
 
 class CompilerType {
@@ -316,7 +316,7 @@ ConcreteCompilerVariable* makeInt(int64_t);
 ConcreteCompilerVariable* makeFloat(double);
 ConcreteCompilerVariable* makeBool(bool);
 CompilerVariable* makeStr(std::string*);
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*);
+CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure);
 ConcreteCompilerVariable* undefVariable();
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
 

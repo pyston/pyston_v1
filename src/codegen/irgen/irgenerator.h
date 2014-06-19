@@ -183,8 +183,9 @@ public:
 
     virtual ~IRGenerator() {}
 
-    virtual void unpackArguments(const std::vector<AST_expr*>& arg_names,
+    virtual void doFunctionEntry(const std::vector<AST_expr*>& arg_names,
                                  const std::vector<ConcreteCompilerType*>& arg_types) = 0;
+
     virtual void giveLocalSymbol(const std::string& name, CompilerVariable* var) = 0;
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0;

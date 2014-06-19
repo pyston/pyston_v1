@@ -518,11 +518,24 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     return new ConcreteCompilerVariable(BOOL, rtn_val, true);
 }
 
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f) {
+CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
-    llvm::Value* boxed
-        = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(f, g.llvm_clfunction_type_ptr));
+
+    llvm::Value* closure_v;
+    ConcreteCompilerVariable* converted = NULL;
+    if (closure) {
+        converted = closure->makeConverted(emitter, closure->getConcreteType());
+        closure_v = converted->getValue();
+    } else {
+        closure_v = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
+    }
+
+    llvm::Value* boxed = emitter.getBuilder()->CreateCall2(g.funcs.boxCLFunction,
+                                                           embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v);
+
+    if (converted)
+        converted->decvref(emitter);
     return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
 }
 
@@ -1146,6 +1159,30 @@ public:
 };
 std::unordered_map<BoxedClass*, NormalObjectType*> NormalObjectType::made;
 ConcreteCompilerType* STR, *BOXED_INT, *BOXED_FLOAT, *BOXED_BOOL, *NONE;
+
+class ClosureType : public ConcreteCompilerType {
+public:
+    llvm::Type* llvmType() { return g.llvm_closure_type_ptr; }
+    std::string debugName() { return "closure"; }
+
+    CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                              const std::string* attr, bool cls_only) {
+        assert(!cls_only);
+        llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(var->getValue(), g.llvm_value_type_ptr);
+        return ConcreteCompilerVariable(UNKNOWN, bitcast, true).getattr(emitter, info, attr, cls_only);
+    }
+
+    void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
+                 CompilerVariable* v) {
+        llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(var->getValue(), g.llvm_value_type_ptr);
+        ConcreteCompilerVariable(UNKNOWN, bitcast, true).setattr(emitter, info, attr, v);
+    }
+
+    virtual ConcreteCompilerType* getConcreteType() { return this; }
+    // Shouldn't call this:
+    virtual ConcreteCompilerType* getBoxType() { RELEASE_ASSERT(0, ""); }
+} _CLOSURE;
+ConcreteCompilerType* CLOSURE = &_CLOSURE;
 
 class StrConstantType : public ValuedCompilerType<std::string*> {
 public:

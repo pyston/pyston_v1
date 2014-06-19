@@ -69,6 +69,7 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
+extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 
 class BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
