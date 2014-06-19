@@ -203,14 +203,14 @@ public:
     CFG* cfg;
     LivenessAnalysis* liveness;
     PhiAnalysis* phis;
+    const std::vector<AST_stmt*> body;
 
     const std::string getName();
     AST_arguments* getArgsAST();
     const std::vector<AST_expr*>& getArgNames();
-    const std::vector<AST_stmt*>& getBody();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
-        : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body)
+        : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), phis(NULL), body(body) {}
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;

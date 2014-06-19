@@ -756,6 +756,24 @@ private:
         return evalExpr(node->value, exc_info);
     }
 
+    CompilerVariable* evalLambda(AST_Lambda* node, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+
+        AST_Return* expr = new AST_Return();
+        expr->value = node->body;
+
+        SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
+                                        node, { expr });
+        CLFunction* cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
+                                        node->args->kwarg.size(), si);
+        CompilerVariable* func = makeFunction(emitter, cl, NULL);
+        ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
+        func->decvref(emitter);
+
+        return converted;
+    }
+
+
     CompilerVariable* evalList(AST_List* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
@@ -1026,6 +1044,9 @@ private:
                     break;
                 case AST_TYPE::Index:
                     rtn = evalIndex(ast_cast<AST_Index>(node), exc_info);
+                    break;
+                case AST_TYPE::Lambda:
+                    rtn = evalLambda(ast_cast<AST_Lambda>(node), exc_info);
                     break;
                 case AST_TYPE::List:
                     rtn = evalList(ast_cast<AST_List>(node), exc_info);
@@ -1476,8 +1497,8 @@ private:
 
         CLFunction*& cl = made[node];
         if (cl == NULL) {
-            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping);
-            si->ast = node;
+            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
+                                            node, node->body);
             cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
                                 node->args->kwarg.size(), si);
         }

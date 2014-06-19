@@ -234,6 +234,19 @@ public:
         }
     }
 
+    virtual bool visit_lambda(AST_Lambda* node) {
+        assert(node == orig_node);
+
+        for (AST_expr* e : node->args->args)
+            e->accept(this);
+        if (node->args->vararg.size())
+            doWrite(node->args->vararg);
+        if (node->args->kwarg.size())
+            doWrite(node->args->kwarg);
+        node->body->accept(this);
+        return true;
+    }
+
     virtual bool visit_import(AST_Import* node) {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
@@ -328,10 +341,9 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
-            case AST_TYPE::FunctionDef:
-                this->scopes[node] = new ScopeInfoBase(parent_info, usage);
-                break;
             case AST_TYPE::ClassDef:
+            case AST_TYPE::FunctionDef:
+            case AST_TYPE::Lambda:
                 this->scopes[node] = new ScopeInfoBase(parent_info, usage);
                 break;
             default:
@@ -363,6 +375,7 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     switch (node->type) {
         case AST_TYPE::ClassDef:
         case AST_TYPE::FunctionDef:
+        case AST_TYPE::Lambda:
             return analyzeSubtree(node);
         // this is handled in the constructor:
         // case AST_TYPE::Module:

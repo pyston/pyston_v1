@@ -63,6 +63,9 @@ public:
         _doStore(node->name);
         return true;
     }
+
+    bool visit_lambda(AST_Lambda* node) { return true; }
+
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)
             _doLoad(node->id);
