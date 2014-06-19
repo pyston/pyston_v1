@@ -476,6 +476,7 @@ void setupRuntime() {
 
     none_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
     None = new Box(&none_flavor, none_cls);
+    gc::registerStaticRootObj(None);
 
     str_cls = new BoxedClass(object_cls, 0, sizeof(BoxedString), false);
 
