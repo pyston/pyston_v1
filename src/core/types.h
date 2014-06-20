@@ -215,7 +215,8 @@ public:
 
 typedef std::vector<CompiledFunction*> FunctionList;
 class CallRewriteArgs;
-struct CLFunction {
+class CLFunction {
+public:
     int num_args;
     int num_defaults;
     bool takes_varargs, takes_kwargs;
