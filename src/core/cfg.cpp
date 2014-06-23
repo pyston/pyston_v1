@@ -486,18 +486,71 @@ private:
     }
 
     AST_expr* remapCompare(AST_Compare* node) {
-        AST_Compare* rtn = new AST_Compare();
-        rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
+        // special case unchained comparisons to avoid generating a unnecessary complex cfg.
+        if (node->ops.size() == 1) {
+            AST_Compare* rtn = new AST_Compare();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
 
-        rtn->ops = node->ops;
+            rtn->ops = node->ops;
 
-        rtn->left = remapExpr(node->left);
-        for (auto elt : node->comparators) {
-            rtn->comparators.push_back(remapExpr(elt));
+            rtn->left = remapExpr(node->left);
+            for (auto elt : node->comparators) {
+                rtn->comparators.push_back(remapExpr(elt));
+            }
+            return rtn;
+        } else {
+            std::string name = nodeName(node);
+
+            CFGBlock* exit_block = cfg->addDeferredBlock();
+            AST_expr* left = remapExpr(node->left);
+
+            for (int i = 0; i < node->ops.size(); i++) {
+                AST_expr* right = remapExpr(node->comparators[i]);
+
+                AST_Compare* val = new AST_Compare;
+                val->col_offset = node->col_offset;
+                val->lineno = node->lineno;
+                val->left = left;
+                val->comparators.push_back(right);
+                val->ops.push_back(node->ops[i]);
+
+                push_back(makeAssign(name, val));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = val;
+                push_back(br);
+
+                CFGBlock* was_block = curblock;
+                CFGBlock* next_block = cfg->addBlock();
+                CFGBlock* crit_break_block = cfg->addBlock();
+                was_block->connectTo(next_block);
+                was_block->connectTo(crit_break_block);
+
+                br->iffalse = crit_break_block;
+                br->iftrue = next_block;
+
+                curblock = crit_break_block;
+                AST_Jump* j = new AST_Jump();
+                j->target = exit_block;
+                push_back(j);
+                crit_break_block->connectTo(exit_block);
+
+                curblock = next_block;
+
+                left = right;
+            }
+
+            AST_Jump* j = new AST_Jump();
+            push_back(j);
+            j->target = exit_block;
+            curblock->connectTo(exit_block);
+
+            cfg->placeBlock(exit_block);
+            curblock = exit_block;
+
+            return makeName(name, AST_TYPE::Load);
         }
-
-        return rtn;
     }
 
     AST_expr* remapDict(AST_Dict* node) {

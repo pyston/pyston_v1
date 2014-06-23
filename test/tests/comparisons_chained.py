@@ -1,7 +1,3 @@
-# expected: fail
-# - chained comparisons
-# - "in" and "not in"
-
 def f(n):
     print "f(%d)" % n
     return n
