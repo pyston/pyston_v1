@@ -845,8 +845,30 @@ public:
     }
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
-        assert(node->args->defaults.size() == 0);
-        push_back(node);
+        if (node->args->defaults.size() == 0 && node->decorator_list.size() == 0) {
+            push_back(node);
+        } else {
+            AST_FunctionDef* remapped = new AST_FunctionDef();
+
+            remapped->name = node->name;
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            remapped->args = new AST_arguments();
+            remapped->body = node->body; // hmm shouldnt have to copy this
+
+            for (auto d : node->decorator_list) {
+                remapped->decorator_list.push_back(remapExpr(d));
+            }
+
+            remapped->args->args = node->args->args;
+            remapped->args->vararg = node->args->vararg;
+            remapped->args->kwarg = node->args->kwarg;
+            for (auto d : node->args->defaults) {
+                remapped->args->defaults.push_back(remapExpr(d));
+            }
+
+            push_back(remapped);
+        }
         return true;
     }
 

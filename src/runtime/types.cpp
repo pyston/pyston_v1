@@ -135,11 +135,11 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure) {
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, {}, closure);
+    return new BoxedFunction(f, defaults, closure);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {

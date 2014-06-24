@@ -60,6 +60,9 @@ public:
         return true;
     }
     bool visit_functiondef(AST_FunctionDef* node) {
+        for (auto* d : node->args->defaults)
+            d->accept(this);
+
         _doStore(node->name);
         return true;
     }

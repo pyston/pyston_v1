@@ -65,7 +65,7 @@ struct GlobalState {
     std::vector<llvm::JITEventListener*> jit_listeners;
 
     FunctionAddressRegistry func_addr_registry;
-    llvm::Type* llvm_value_type, *llvm_value_type_ptr;
+    llvm::Type* llvm_value_type, *llvm_value_type_ptr, *llvm_value_type_ptr_ptr;
     llvm::Type* llvm_class_type, *llvm_class_type_ptr;
     llvm::Type* llvm_flavor_type, *llvm_flavor_type_ptr;
     llvm::Type* llvm_opaque_type;

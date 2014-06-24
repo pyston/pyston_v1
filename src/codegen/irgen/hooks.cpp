@@ -158,7 +158,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         // args object can be NULL if this is a module scope
         assert(!args->vararg.size());
         assert(!args->kwarg.size());
-        assert(!args->defaults.size());
     }
 
     if (VERBOSITY("irgen") >= 1) {

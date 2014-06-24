@@ -518,7 +518,8 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     return new ConcreteCompilerVariable(BOOL, rtn_val, true);
 }
 
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure) {
+CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure,
+                               const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
@@ -531,8 +532,24 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
         closure_v = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
     }
 
-    llvm::Value* boxed = emitter.getBuilder()->CreateCall2(g.funcs.boxCLFunction,
-                                                           embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v);
+    llvm::Value* scratch;
+    if (defaults.size()) {
+        scratch = emitter.getScratch(defaults.size() * sizeof(Box*));
+        scratch = emitter.getBuilder()->CreateBitCast(scratch, g.llvm_value_type_ptr_ptr);
+        int i = 0;
+        for (auto d : defaults) {
+            llvm::Value* v = d->getValue();
+            llvm::Value* p = emitter.getBuilder()->CreateConstGEP1_32(scratch, i);
+            emitter.getBuilder()->CreateStore(v, p);
+            i++;
+        }
+    } else {
+        scratch = embedConstantPtr(nullptr, g.llvm_value_type_ptr_ptr);
+    }
+
+    llvm::Value* boxed = emitter.getBuilder()->CreateCall(
+        g.funcs.boxCLFunction, std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v,
+                                                          scratch, getConstantInt(defaults.size(), g.i64) });
 
     if (converted)
         converted->decvref(emitter);

@@ -50,18 +50,15 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
             return scratch_space;
     }
 
-    // Not sure why, but LLVM wants to canonicalize an alloca into an array alloca (assuming
-    // the alloca is static); just to keep things straightforward, let's do that here:
-    llvm::Type* array_type = llvm::ArrayType::get(g.i8, min_bytes);
-
     llvm::AllocaInst* new_scratch_space;
     // If the entry block is currently empty, we have to be more careful:
     if (entry_block.begin() == entry_block.end()) {
-        new_scratch_space = new llvm::AllocaInst(array_type, getConstantInt(1, g.i64), "scratch", &entry_block);
+        new_scratch_space = new llvm::AllocaInst(g.i8, getConstantInt(min_bytes, g.i64), "scratch", &entry_block);
     } else {
-        new_scratch_space
-            = new llvm::AllocaInst(array_type, getConstantInt(1, g.i64), "scratch", entry_block.getFirstInsertionPt());
+        new_scratch_space = new llvm::AllocaInst(g.i8, getConstantInt(min_bytes, g.i64), "scratch",
+                                                 entry_block.getFirstInsertionPt());
     }
+
     assert(new_scratch_space->isStaticAlloca());
 
     if (scratch_space)
@@ -118,6 +115,10 @@ public:
     llvm::Function* getIntrinsic(llvm::Intrinsic::ID intrinsic_id) override {
         return llvm::Intrinsic::getDeclaration(g.cur_module, intrinsic_id);
     }
+
+    llvm::Value* getScratch(int num_bytes) override { return irstate->getScratchSpace(num_bytes); }
+
+    void releaseScratch(llvm::Value* scratch) override { assert(0); }
 
     CompiledFunction* currentFunction() override { return irstate->getCurFunction(); }
 
@@ -1409,11 +1410,13 @@ private:
                 continue;
             } else if (type == AST_TYPE::FunctionDef) {
                 AST_FunctionDef* fdef = ast_cast<AST_FunctionDef>(node->body[i]);
+                assert(fdef->args->defaults.size() == 0);
+                assert(fdef->decorator_list.size() == 0);
                 ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(fdef);
 
                 CLFunction* cl = this->_wrapFunction(fdef);
                 assert(!scope_info->takesClosure());
-                CompilerVariable* func = makeFunction(emitter, cl, NULL);
+                CompilerVariable* func = makeFunction(emitter, cl, NULL, {});
                 cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
                 func->decvref(emitter);
             } else {
@@ -1488,9 +1491,17 @@ private:
         if (state == PARTIAL)
             return;
 
-        assert(!node->args->defaults.size());
+        assert(!node->decorator_list.size());
 
         CLFunction* cl = this->_wrapFunction(node);
+
+        std::vector<ConcreteCompilerVariable*> defaults;
+        for (auto d : node->args->defaults) {
+            CompilerVariable* e = evalExpr(d, exc_info);
+            ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
+            e->decvref(emitter);
+            defaults.push_back(converted);
+        }
 
         CompilerVariable* created_closure = NULL;
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
@@ -1499,7 +1510,11 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure);
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, defaults);
+
+        for (auto d : defaults) {
+            d->decvref(emitter);
+        }
 
         // llvm::Type* boxCLFuncArgType = g.funcs.boxCLFunction->arg_begin()->getType();
         // llvm::Value *boxed = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(cl,
