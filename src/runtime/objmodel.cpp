@@ -1833,7 +1833,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         getArg(f->num_args + (f->takes_varargs ? 1 : 0), oarg1, oarg2, oarg3, oargs) = okwargs;
     }
 
-    const std::vector<AST_expr*>* arg_names = f->getArgNames();
+    const std::vector<AST_expr*>* arg_names = f->source ? f->source->arg_names.args : NULL;
     if (arg_names == nullptr && argspec.num_keywords) {
         raiseExcHelper(TypeError, "<function @%p>() doesn't take keyword arguments", f->versions[0]->code);
     }

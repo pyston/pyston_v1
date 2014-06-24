@@ -1479,7 +1479,8 @@ private:
 
         CLFunction*& cl = made[node];
         if (cl == NULL) {
-            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping);
+            SourceInfo* si
+                = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping, node);
             si->ast = node;
             cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
                                 node->args->kwarg.size(), si);
@@ -2138,8 +2139,10 @@ public:
         return CLOSURE;
     }
 
-    void doFunctionEntry(const std::vector<AST_expr*>& arg_names,
+    void doFunctionEntry(const SourceInfo::ArgNames& arg_names,
                          const std::vector<ConcreteCompilerType*>& arg_types) override {
+        assert(arg_names.totalParameters() == arg_types.size());
+
         auto scope_info = irstate->getScopeInfo();
 
         llvm::Value* passed_closure = NULL;
@@ -2159,27 +2162,50 @@ public:
         }
 
 
-        int i = 0;
-        llvm::Value* argarray = NULL;
-        for (; AI != irstate->getLLVMFunction()->arg_end(); ++AI, i++) {
+        std::vector<llvm::Value*> python_parameters;
+        for (int i = 0; i < arg_types.size(); i++) {
+            assert(AI != irstate->getLLVMFunction()->arg_end());
+
             if (i == 3) {
-                argarray = AI;
-                assert(++AI == irstate->getLLVMFunction()->arg_end());
+                for (int i = 3; i < arg_types.size(); i++) {
+                    llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(AI, i - 3);
+                    llvm::Value* loaded = emitter.getBuilder()->CreateLoad(ptr);
+
+                    if (arg_types[i]->llvmType() == g.i64)
+                        loaded = emitter.getBuilder()->CreatePtrToInt(loaded, arg_types[i]->llvmType());
+                    else
+                        assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+
+                    python_parameters.push_back(loaded);
+                }
+                ++AI;
                 break;
             }
-            loadArgument(arg_names[i], arg_types[i], AI, ExcInfo::none());
+
+            python_parameters.push_back(AI);
+            ++AI;
         }
 
-        for (int i = 3; i < arg_types.size(); i++) {
-            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(argarray, i - 3);
-            llvm::Value* loaded = emitter.getBuilder()->CreateLoad(ptr);
+        assert(AI == irstate->getLLVMFunction()->arg_end());
+        assert(python_parameters.size() == arg_names.totalParameters());
 
-            if (arg_types[i]->llvmType() == g.i64)
-                loaded = emitter.getBuilder()->CreatePtrToInt(loaded, arg_types[i]->llvmType());
-            else
-                assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+        if (arg_names.args) {
+            int i = 0;
+            for (; i < arg_names.args->size(); i++) {
+                loadArgument((*arg_names.args)[i], arg_types[i], python_parameters[i], ExcInfo::none());
+            }
 
-            loadArgument(arg_names[i], arg_types[i], loaded, ExcInfo::none());
+            if (arg_names.vararg->size()) {
+                loadArgument(*arg_names.vararg, arg_types[i], python_parameters[i], ExcInfo::none());
+                i++;
+            }
+
+            if (arg_names.kwarg->size()) {
+                loadArgument(*arg_names.kwarg, arg_types[i], python_parameters[i], ExcInfo::none());
+                i++;
+            }
+
+            assert(i == arg_types.size());
         }
     }
 

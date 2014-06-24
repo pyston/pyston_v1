@@ -204,13 +204,27 @@ public:
     LivenessAnalysis* liveness;
     PhiAnalysis* phis;
 
+    struct ArgNames {
+        const std::vector<AST_expr*>* args;
+        const std::string* vararg, *kwarg;
+
+        explicit ArgNames(AST* ast);
+
+        int totalParameters() const {
+            if (!args)
+                return 0;
+            return args->size() + (vararg->size() == 0 ? 0 : 1) + (kwarg->size() == 0 ? 0 : 1);
+        }
+    };
+
+    ArgNames arg_names;
+
     const std::string getName();
-    AST_arguments* getArgsAST();
-    const std::vector<AST_expr*>& getArgNames();
+    // AST_arguments* getArgsAST();
     const std::vector<AST_stmt*>& getBody();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
-        : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast)
+        : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), phis(NULL), arg_names(ast) {}
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
@@ -242,7 +256,7 @@ public:
 
     int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
 
-    const std::vector<AST_expr*>* getArgNames();
+    // const std::vector<AST_expr*>* getArgNames();
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);

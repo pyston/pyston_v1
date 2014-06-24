@@ -42,6 +42,20 @@
 namespace pyston {
 
 // TODO terrible place for these!
+SourceInfo::ArgNames::ArgNames(AST* ast) {
+    if (ast->type == AST_TYPE::Module) {
+        args = NULL;
+        kwarg = vararg = NULL;
+    } else if (ast->type == AST_TYPE::FunctionDef) {
+        AST_FunctionDef* f = ast_cast<AST_FunctionDef>(ast);
+        args = &f->args->args;
+        vararg = &f->args->vararg;
+        kwarg = &f->args->kwarg;
+    } else {
+        RELEASE_ASSERT(0, "%d", ast->type);
+    }
+}
+
 const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
@@ -52,33 +66,6 @@ const std::string SourceInfo::getName() {
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }
-}
-
-AST_arguments* SourceInfo::getArgsAST() {
-    assert(ast);
-    switch (ast->type) {
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->args;
-        case AST_TYPE::Module:
-            return NULL;
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-
-const std::vector<AST_expr*>& SourceInfo::getArgNames() {
-    static std::vector<AST_expr*> empty;
-
-    AST_arguments* args = getArgsAST();
-    if (args == NULL)
-        return empty;
-    return args->args;
-}
-
-const std::vector<AST_expr*>* CLFunction::getArgNames() {
-    if (!source)
-        return NULL;
-    return &source->getArgNames();
 }
 
 const std::vector<AST_stmt*>& SourceInfo::getBody() {
@@ -151,14 +138,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     assert(source);
 
     std::string name = source->getName();
-    const std::vector<AST_expr*>& arg_names = source->getArgNames();
-    AST_arguments* args = source->getArgsAST();
-
-    if (args) {
-        // args object can be NULL if this is a module scope
-        assert(!args->vararg.size());
-        assert(!args->kwarg.size());
-    }
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
@@ -188,11 +167,11 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         assert(source->ast);
         source->cfg = computeCFG(source->ast->type, source->getBody());
         source->liveness = computeLivenessInfo(source->cfg);
-        source->phis = computeRequiredPhis(args, source->cfg, source->liveness,
+        source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness,
                                            source->scoping->getScopeInfoForNode(source->ast));
     }
 
-    CompiledFunction* cf = doCompile(source, entry, effort, spec, arg_names, name);
+    CompiledFunction* cf = doCompile(source, entry, effort, spec, name);
 
     compileIR(cf, effort);
     f->addVersion(cf);
@@ -248,11 +227,10 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         ScopingAnalysis* scoping = runScopingAnalysis(m);
 
-        SourceInfo* si = new SourceInfo(bm, scoping);
+        SourceInfo* si = new SourceInfo(bm, scoping, m);
         si->cfg = computeCFG(AST_TYPE::Module, m->body);
-        si->ast = m;
         si->liveness = computeLivenessInfo(si->cfg);
-        si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
+        si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 

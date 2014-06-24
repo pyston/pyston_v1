@@ -602,23 +602,37 @@ public:
         return changed;
     }
 
-    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const std::vector<AST_expr*>& arg_names,
+    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
                                                const std::vector<ConcreteCompilerType*>& arg_types,
                                                SpeculationLevel speculation, ScopeInfo* scope_info) {
         AllTypeMap starting_types;
         ExprTypeMap expr_types;
         TypeSpeculations type_speculations;
 
-        assert(arg_names.size() == arg_types.size());
+        assert(arg_names.totalParameters() == arg_types.size());
 
-        {
+        if (arg_names.args) {
             TypeMap& initial_types = starting_types[cfg->getStartingBlock()];
-            for (int i = 0; i < arg_names.size(); i++) {
-                AST_expr* arg = arg_names[i];
+            int i = 0;
+
+            for (; i < arg_names.args->size(); i++) {
+                AST_expr* arg = (*arg_names.args)[i];
                 assert(arg->type == AST_TYPE::Name);
                 AST_Name* arg_name = ast_cast<AST_Name>(arg);
                 initial_types[arg_name->id] = unboxedType(arg_types[i]);
             }
+
+            if (arg_names.vararg->size()) {
+                initial_types[*arg_names.vararg] = unboxedType(arg_types[i]);
+                i++;
+            }
+
+            if (arg_names.kwarg->size()) {
+                initial_types[*arg_names.kwarg] = unboxedType(arg_types[i]);
+                i++;
+            }
+
+            assert(i == arg_types.size());
         }
 
         std::unordered_set<CFGBlock*> in_queue;
@@ -698,7 +712,7 @@ public:
 
 
 // public entry point:
-TypeAnalysis* doTypeAnalysis(CFG* cfg, const std::vector<AST_expr*>& arg_names,
+TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
                              const std::vector<ConcreteCompilerType*>& arg_types,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
     // return new NullTypeAnalysis();

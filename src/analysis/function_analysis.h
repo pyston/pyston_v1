@@ -19,6 +19,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "core/types.h"
+
 namespace pyston {
 
 class AST_arguments;
@@ -51,7 +53,7 @@ private:
     ScopeInfo* scope_info;
 
 public:
-    DefinednessAnalysis(AST_arguments* args, CFG* cfg, ScopeInfo* scope_info);
+    DefinednessAnalysis(const SourceInfo::ArgNames& args, CFG* cfg, ScopeInfo* scope_info);
 
     DefinitionLevel isDefinedAt(const std::string& name, CFGBlock* block);
     const RequiredSet& getDefinedNamesAt(CFGBlock* block);
@@ -66,7 +68,7 @@ private:
     std::unordered_map<CFGBlock*, const RequiredSet> required_phis;
 
 public:
-    PhiAnalysis(AST_arguments*, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info);
+    PhiAnalysis(const SourceInfo::ArgNames&, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
     bool isRequired(const std::string& name, CFGBlock* block);
     bool isRequiredAfter(const std::string& name, CFGBlock* block);
@@ -76,7 +78,7 @@ public:
 };
 
 LivenessAnalysis* computeLivenessInfo(CFG*);
-PhiAnalysis* computeRequiredPhis(AST_arguments*, CFG*, LivenessAnalysis*, ScopeInfo* scope_Info);
+PhiAnalysis* computeRequiredPhis(const SourceInfo::ArgNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_Info);
 }
 
 #endif
