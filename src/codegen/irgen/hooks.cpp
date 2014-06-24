@@ -240,26 +240,28 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 }
 
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
-    LOCK_REGION(codegen_rwlock.asWrite());
+    CompiledFunction* cf;
 
-    Timer _t("for compileModule()");
+    { // scope for limiting the locked region:
+        LOCK_REGION(codegen_rwlock.asWrite());
 
-    ScopingAnalysis* scoping = runScopingAnalysis(m);
+        Timer _t("for compileModule()");
 
-    SourceInfo* si = new SourceInfo(bm, scoping);
-    si->cfg = computeCFG(AST_TYPE::Module, m->body);
-    si->ast = m;
-    si->liveness = computeLivenessInfo(si->cfg);
-    si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
+        ScopingAnalysis* scoping = runScopingAnalysis(m);
 
-    CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+        SourceInfo* si = new SourceInfo(bm, scoping);
+        si->cfg = computeCFG(AST_TYPE::Module, m->body);
+        si->ast = m;
+        si->liveness = computeLivenessInfo(si->cfg);
+        si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 
-    EffortLevel::EffortLevel effort = initialEffort();
+        CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
-    CompiledFunction* cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
-    assert(cf->clfunc->versions.size());
+        EffortLevel::EffortLevel effort = initialEffort();
 
-    _t.end();
+        cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
+        assert(cf->clfunc->versions.size());
+    }
 
     if (cf->is_interpreted)
         interpretFunction(cf->func, 0, NULL, NULL, NULL, NULL, NULL);
