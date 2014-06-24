@@ -845,6 +845,7 @@ public:
     }
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
+        assert(node->args->defaults.size() == 0);
         push_back(node);
         return true;
     }

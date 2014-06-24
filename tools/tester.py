@@ -290,7 +290,7 @@ if __name__ == "__main__":
     run_memcheck = False
     start = 1
 
-    opts, patterns = getopt.getopt(sys.argv[1:], "j:a:t:mR:k")
+    opts, patterns = getopt.gnu_getopt(sys.argv[1:], "j:a:t:mR:k")
     for (t, v) in opts:
         if t == '-m':
             run_memcheck = True

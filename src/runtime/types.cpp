@@ -256,7 +256,7 @@ extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
 extern "C" void closureGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
-    BoxedClosure* c = (BoxedClosure*)v;
+    BoxedClosure* c = (BoxedClosure*)p;
     if (c->parent)
         v->visit(c->parent);
 }
