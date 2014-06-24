@@ -563,9 +563,13 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
     if (attr->cls == member_cls) {
         BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(attr);
         switch (member_desc->type) {
-            case BoxedMemberDescriptor::OBJECT:
+            case BoxedMemberDescriptor::OBJECT: {
                 assert(member_desc->offset % sizeof(Box*) == 0);
-                return reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+                Box* rtn = reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+                // be careful about returning NULLs; I'm not sure what the correct behavior is here:
+                RELEASE_ASSERT(rtn, "");
+                return rtn;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
         }
