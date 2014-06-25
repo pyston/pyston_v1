@@ -1,5 +1,3 @@
-# expected: fail
-
 class C(object):
     def __init__(self, n):
         self.n = n
@@ -17,4 +15,5 @@ def f(n):
     return C(n)
 
 # f(3) shouldn't get called:
-f(1) <= f(2) < f(1) < f(3)
+print f(1) <= f(2) < f(1) < f(3)
+print f(5) > f(3) < f(4) < f(5)
