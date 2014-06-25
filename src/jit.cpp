@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <readline/history.h>
+#include <readline/readline.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -194,15 +196,14 @@ int main(int argc, char** argv) {
         BoxedModule* main = createModule("__main__", "<stdin>");
 
         while (repl) {
-            printf(">> ");
-            fflush(stdout);
+            char* line = readline(">> ");
 
-            char* line = NULL;
-            size_t size;
-            int read;
-            if ((read = getline(&line, &size, stdin)) == -1) {
+            if (!line) {
                 repl = false;
             } else {
+                add_history(line);
+                int size = strlen(line);
+
                 Timer _t("repl");
 
                 char buf[] = "pystontmp_XXXXXX";
@@ -210,11 +211,11 @@ int main(int argc, char** argv) {
                 assert(tmpdir);
                 std::string tmp = std::string(tmpdir) + "/in.py";
                 if (VERBOSITY() >= 1) {
-                    printf("writing %d bytes to %s\n", read, tmp.c_str());
+                    printf("writing %d bytes to %s\n", size, tmp.c_str());
                 }
 
                 FILE* f = fopen(tmp.c_str(), "w");
-                fwrite(line, 1, read, f);
+                fwrite(line, 1, size, f);
                 fclose(f);
 
                 AST_Module* m = parse(tmp.c_str());

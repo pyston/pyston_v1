@@ -141,7 +141,7 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
-COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64
+COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
@@ -718,17 +718,9 @@ check$1 test$1: pyston$1 ext
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
-	if which rlwrap >/dev/null; then\
-		rlwrap ./pyston$1 $$(ARGS) ;\
-	else \
-		./pyston$1 $$(ARGS) ;\
-	fi
+	./pyston$1 $$(ARGS)
 dbg$1: pyston$1 $$(RUN_DEPS)
-	if which rlwrap >/dev/null; then\
-		rlwrap zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)' ; \
-	else \
-		zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)' ; \
-	fi
+	zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
 run$1_%: %.py pyston$1 $$(RUN_DEPS)
 	$(VERB) zsh -c 'ulimit -v $$(MAX_MEM_KB); ulimit -d $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,run$1_%)
