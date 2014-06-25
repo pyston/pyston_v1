@@ -559,7 +559,7 @@ void setupList() {
     list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
 
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3)));
-    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, NONE, 2)));
+    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2)));
 
     list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));

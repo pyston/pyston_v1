@@ -197,9 +197,16 @@ private:
         return rtn;
     }
 
+    bool hasFixedBinops(CompilerType* type) {
+        // This is non-exhaustive:
+        return type == STR || type == INT || type == FLOAT || type == LIST || type == DICT;
+    }
+
     virtual void* visit_augbinop(AST_AugBinOp* node) {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
+        if (!hasFixedBinops(left) || !hasFixedBinops(right))
+            return UNKNOWN;
 
         // TODO this isn't the exact behavior
         std::string name = getInplaceOpName(node->op_type);
@@ -227,6 +234,8 @@ private:
     virtual void* visit_binop(AST_BinOp* node) {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
+        if (!hasFixedBinops(left) || !hasFixedBinops(right))
+            return UNKNOWN;
 
         // TODO this isn't the exact behavior
         const std::string& name = getOpName(node->op_type);
