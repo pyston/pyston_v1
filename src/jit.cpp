@@ -16,11 +16,11 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
