@@ -168,11 +168,11 @@ std::string getReverseOpName(int op_type) {
     if (op_type == AST_TYPE::Lt)
         return getOpName(AST_TYPE::Gt);
     if (op_type == AST_TYPE::LtE)
-        return getOpName(AST_TYPE::Gt);
+        return getOpName(AST_TYPE::GtE);
     if (op_type == AST_TYPE::Gt)
         return getOpName(AST_TYPE::Lt);
     if (op_type == AST_TYPE::GtE)
-        return getOpName(AST_TYPE::Lt);
+        return getOpName(AST_TYPE::LtE);
     if (op_type == AST_TYPE::NotEq)
         return getOpName(AST_TYPE::NotEq);
     if (op_type == AST_TYPE::Eq)
