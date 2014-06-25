@@ -166,11 +166,11 @@ std::string getInplaceOpName(int op_type) {
 // Calling it "reverse" because that's what I'm assuming the 'r' stands for in ex __radd__
 std::string getReverseOpName(int op_type) {
     if (op_type == AST_TYPE::Lt)
-        return getOpName(AST_TYPE::GtE);
+        return getOpName(AST_TYPE::Gt);
     if (op_type == AST_TYPE::LtE)
         return getOpName(AST_TYPE::Gt);
     if (op_type == AST_TYPE::Gt)
-        return getOpName(AST_TYPE::LtE);
+        return getOpName(AST_TYPE::Lt);
     if (op_type == AST_TYPE::GtE)
         return getOpName(AST_TYPE::Lt);
     if (op_type == AST_TYPE::NotEq)
