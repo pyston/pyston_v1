@@ -518,7 +518,7 @@ private:
                 push_back(makeAssign(name, val));
 
                 AST_Branch* br = new AST_Branch();
-                br->test = val;
+                br->test = makeName(name, AST_TYPE::Load);
                 push_back(br);
 
                 CFGBlock* was_block = curblock;
