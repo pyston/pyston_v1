@@ -1404,10 +1404,29 @@ private:
         // cls->setattr(emitter, "__name__", name);
         // name->decvref(emitter);
 
+        bool had_docstring = false;
+        static std::string doc_str("__doc__");
+
         for (int i = 0, n = node->body.size(); i < n; i++) {
             AST_TYPE::AST_TYPE type = node->body[i]->type;
             if (type == AST_TYPE::Pass) {
                 continue;
+            } else if (type == AST_TYPE::Expr) {
+                AST_Expr* expr = ast_cast<AST_Expr>(node->body[i]);
+
+                if (expr->value->type == AST_TYPE::Str) {
+                    if (i == 0) {
+                        had_docstring = true;
+                        CompilerVariable* str = evalExpr(expr->value, exc_info);
+                        cls->setattr(emitter, getEmptyOpInfo(exc_info), &doc_str, str);
+                    }
+                } else {
+                    fprintf(stderr, "Currently don't support non-noop expressions in classes:\n");
+                    printf("On line %d: ", expr->lineno);
+                    print_ast(expr);
+                    printf("\n");
+                    abort();
+                }
             } else if (type == AST_TYPE::FunctionDef) {
                 AST_FunctionDef* fdef = ast_cast<AST_FunctionDef>(node->body[i]);
                 assert(fdef->args->defaults.size() == 0);
@@ -1422,6 +1441,10 @@ private:
             } else {
                 RELEASE_ASSERT(node->body[i]->type == AST_TYPE::Pass, "%d", type);
             }
+        }
+
+        if (!had_docstring) {
+            cls->setattr(emitter, getEmptyOpInfo(exc_info), &doc_str, getNone());
         }
 
         _doSet(node->name, cls, exc_info);

@@ -2944,7 +2944,7 @@ extern "C" Box* import(const std::string* name) {
             continue;
 
         if (VERBOSITY() >= 1)
-            printf("Beginning import of %s...\n", fn.c_str());
+            printf("Importing %s from %s\n", name->c_str(), fn.c_str());
 
         // TODO duplication with jit.cpp:
         BoxedModule* module = createModule(*name, fn);
