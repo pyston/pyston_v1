@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 set -eu
 failed=0
-for fn in $(find -name '*.cpp' -o -name '*.h'); do
+for fn in $(find . -name '*.cpp' -o -name '*.h'); do
     $1 -style=file -output-replacements-xml $fn | grep -q "replacement offset" && { echo $fn "failed clang-format check"; failed=1; }
 done
 
