@@ -2,6 +2,11 @@ Pyston currently only supports installing from source; the following instruction
 
 The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `src/Makefile`.
 
+
+### Prerequisites
+GNU make is required to build pyston.
+
+
 Start off by making the relevant directories:
 
 ```
