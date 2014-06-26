@@ -286,7 +286,7 @@ public:
 class BoxedModule : public Box {
 public:
     HCAttrs attrs;
-    const std::string fn; // for traceback purposes; not the same as __file__
+    std::string fn; // for traceback purposes; not the same as __file__
 
     BoxedModule(const std::string& name, const std::string& fn);
     std::string name();

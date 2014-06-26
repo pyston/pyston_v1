@@ -37,6 +37,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 
 #ifndef GITREV
@@ -114,8 +115,9 @@ int main(int argc, char** argv) {
     // end of argument parsing
 
     _t.split("to run");
+    BoxedModule* main_module = NULL;
     if (fn != NULL) {
-        BoxedModule* main = createModule("__main__", fn);
+        main_module = createModule("__main__", fn);
 
         llvm::SmallString<128> path;
 
@@ -148,7 +150,7 @@ int main(int argc, char** argv) {
             }
 
             try {
-                compileAndRunModule(m, main);
+                compileAndRunModule(m, main_module);
             } catch (Box* b) {
                 std::string msg = formatException(b);
                 printLastTraceback();
@@ -159,7 +161,11 @@ int main(int argc, char** argv) {
     }
 
     if (repl && BENCH) {
-        BoxedModule* main = createModule("__main__", "<bench>");
+        if (!main_module) {
+            main_module = createModule("__main__", "<bench>");
+        } else {
+            main_module->fn = "<bench>";
+        }
 
         timeval start, end;
         gettimeofday(&start, NULL);
@@ -170,7 +176,7 @@ int main(int argc, char** argv) {
             run++;
 
             AST_Module* m = new AST_Module();
-            compileAndRunModule(m, main);
+            compileAndRunModule(m, main_module);
 
             if (run >= MAX_RUNS) {
                 printf("Quitting after %d iterations\n", run);
@@ -193,7 +199,11 @@ int main(int argc, char** argv) {
         printf("Pyston v0.1 (rev " STRINGIFY(GITREV) ")");
         printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
-        BoxedModule* main = createModule("__main__", "<stdin>");
+        if (!main_module) {
+            main_module = createModule("__main__", "<stdin>");
+        } else {
+            main_module->fn = "<stdin>";
+        }
 
         while (repl) {
             char* line = readline(">> ");
@@ -240,7 +250,7 @@ int main(int argc, char** argv) {
                 }
 
                 try {
-                    compileAndRunModule(m, main);
+                    compileAndRunModule(m, main_module);
                 } catch (Box* b) {
                     std::string msg = formatException(b);
                     printLastTraceback();
