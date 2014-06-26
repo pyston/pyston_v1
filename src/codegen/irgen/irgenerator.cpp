@@ -1407,6 +1407,8 @@ private:
         bool had_docstring = false;
         static std::string doc_str("__doc__");
 
+        // TODO: rather than special-casing all the different types and implementing a small irgenerator,
+        // do the full thing and run through an irgenerator for real.
         for (int i = 0, n = node->body.size(); i < n; i++) {
             AST_TYPE::AST_TYPE type = node->body[i]->type;
             if (type == AST_TYPE::Pass) {
@@ -1438,8 +1440,23 @@ private:
                 CompilerVariable* func = makeFunction(emitter, cl, NULL, {});
                 cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
                 func->decvref(emitter);
+            } else if (type == AST_TYPE::Assign) {
+                AST_Assign* asgn = ast_cast<AST_Assign>(node->body[i]);
+                RELEASE_ASSERT(asgn->targets.size() == 1, "");
+
+                RELEASE_ASSERT(asgn->targets[0]->type == AST_TYPE::Name, "");
+                AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
+                RELEASE_ASSERT(target->id != "__metaclass__", "");
+
+                RELEASE_ASSERT(asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str, "%d",
+                               asgn->lineno);
+
+                CompilerVariable* val = evalExpr(asgn->value, exc_info);
+                cls->setattr(emitter, getEmptyOpInfo(exc_info), &target->id, val);
+            } else if (type == AST_TYPE::Pass) {
+                // do nothing
             } else {
-                RELEASE_ASSERT(node->body[i]->type == AST_TYPE::Pass, "%d", type);
+                RELEASE_ASSERT(0, "%d", type);
             }
         }
 
