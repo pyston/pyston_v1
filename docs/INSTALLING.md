@@ -212,19 +212,11 @@ sudo apt-get install linux-tools-`uname -r`
 # may need to strip off the -generic from that last one
 ```
 
-### rlwrap
-The Pyston repl (`make run`) doesn't currently support any typical terminal features; it simply reads stdin as a raw stream.  Some day we will add it, but for now you can use "rlwrap" to provide these features as a wrapper around Pyston.  Simply
-
-```
-sudo apt-get install rlwrap
-```
-
-and when you do `make run`, the Make system will invoke rlwrap.  If you want to invoke the repl manually, you can do `rlwrap ./pyston`
-
 ### ninja-based LLVM build
 
 Ninja is supposed to be faster than make; I've only tried it very briefly, and it does seem to be faster when modifying LLVM files.  May or may not be worth using; thought I'd jot down my notes though:
 
+You may or may not need a more-recent version of ninja than your package manager provides:
 ```
 cd ~/pyston_deps
 git clone https://github.com/martine/ninja.git
