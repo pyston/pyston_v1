@@ -112,6 +112,16 @@ int main(int argc, char** argv) {
         addToSysArgv("");
     }
 
+    std::string self_path = llvm::sys::fs::getMainExecutable(argv[0], (void*)main);
+    assert(self_path.size());
+
+    llvm::SmallString<128> stdlib_dir(self_path);
+    llvm::sys::path::remove_filename(stdlib_dir); // executable name
+    llvm::sys::path::remove_filename(stdlib_dir); // "src/" dir
+    llvm::sys::path::append(stdlib_dir, "lib_python");
+    llvm::sys::path::append(stdlib_dir, "2.7");
+    appendToSysPath(stdlib_dir.c_str());
+
     // end of argument parsing
 
     _t.split("to run");
@@ -130,7 +140,7 @@ int main(int argc, char** argv) {
 
         llvm::sys::path::append(path, fn);
         llvm::sys::path::remove_filename(path);
-        addToSysPath(path.str());
+        prependToSysPath(path.str());
 
         int num_iterations = 1;
         if (BENCH)

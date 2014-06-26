@@ -58,9 +58,15 @@ void addToSysArgv(const char* str) {
     listAppendInternal(sys_argv, boxStrConstant(str));
 }
 
-void addToSysPath(const std::string& path) {
+void appendToSysPath(const std::string& path) {
     BoxedList* sys_path = getSysPath();
     listAppendInternal(sys_path, boxStringPtr(&path));
+}
+
+void prependToSysPath(const std::string& path) {
+    BoxedList* sys_path = getSysPath();
+    static std::string attr = "insert";
+    callattr(sys_path, &attr, false, ArgPassSpec(2), boxInt(0), new BoxedString(path), NULL, NULL, NULL);
 }
 
 void setupSys() {

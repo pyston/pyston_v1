@@ -453,7 +453,8 @@ BoxedModule* createModule(const std::string& name, const std::string& fn);
 std::string getPythonFuncAt(void* ip, void* sp);
 
 // TODO where to put this
-void addToSysPath(const std::string& path);
+void appendToSysPath(const std::string& path);
+void prependToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);
