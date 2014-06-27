@@ -1668,18 +1668,12 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
         // It'd be ok to add __doc__ to the dict multiple times, since the last one would win
         if (written_names.count("__doc__") == 0) {
-            bool found_docstr = false;
             if (body.size() && body[0]->type == AST_TYPE::Expr) {
                 AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
                 if (first_expr->value->type == AST_TYPE::Str) {
-                    found_docstr = true;
                     rtn_dict->keys.push_back(new AST_Str("__doc__"));
                     rtn_dict->values.push_back(first_expr->value);
                 }
-            }
-            if (!found_docstr) {
-                rtn_dict->keys.push_back(new AST_Str("__doc__"));
-                rtn_dict->values.push_back(makeName("None", AST_TYPE::Load));
             }
         }
 

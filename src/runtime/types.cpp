@@ -313,6 +313,10 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) 
         made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
     }
 
+    if (made->getattr("__doc__") == NULL) {
+        made->giveAttr("__doc__", None);
+    }
+
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
     made->setattr("__name__", boxString(*name), NULL);
 
