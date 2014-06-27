@@ -43,7 +43,7 @@ namespace pyston {
 
 // TODO terrible place for these!
 SourceInfo::ArgNames::ArgNames(AST* ast) {
-    if (ast->type == AST_TYPE::Module) {
+    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef) {
         args = NULL;
         kwarg = vararg = NULL;
     } else if (ast->type == AST_TYPE::FunctionDef) {
@@ -59,6 +59,8 @@ SourceInfo::ArgNames::ArgNames(AST* ast) {
 const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
+        case AST_TYPE::ClassDef:
+            return ast_cast<AST_ClassDef>(ast)->name;
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->name;
         case AST_TYPE::Module:
@@ -71,6 +73,8 @@ const std::string SourceInfo::getName() {
 const std::vector<AST_stmt*>& SourceInfo::getBody() {
     assert(ast);
     switch (ast->type) {
+        case AST_TYPE::ClassDef:
+            return ast_cast<AST_ClassDef>(ast)->body;
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->body;
         case AST_TYPE::Module:
@@ -165,7 +169,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
         assert(source->ast);
-        source->cfg = computeCFG(source->ast->type, source->getBody());
+        source->cfg = computeCFG(source, source->getBody());
         source->liveness = computeLivenessInfo(source->cfg);
         source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness,
                                            source->scoping->getScopeInfoForNode(source->ast));
@@ -228,7 +232,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ScopingAnalysis* scoping = runScopingAnalysis(m);
 
         SourceInfo* si = new SourceInfo(bm, scoping, m);
-        si->cfg = computeCFG(AST_TYPE::Module, m->body);
+        si->cfg = computeCFG(si, m->body);
         si->liveness = computeLivenessInfo(si->cfg);
         si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 

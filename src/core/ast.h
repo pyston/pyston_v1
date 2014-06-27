@@ -688,6 +688,8 @@ public:
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Str() : AST_expr(AST_TYPE::Str) {}
+    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), s(s) {}
+    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), s(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };

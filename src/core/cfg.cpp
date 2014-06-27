@@ -19,8 +19,11 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "analysis/scoping_analysis.h"
 #include "core/ast.h"
 #include "core/options.h"
+#include "core/types.h"
+#include "runtime/types.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -47,6 +50,15 @@ void CFGBlock::unconnectFrom(CFGBlock* successor) {
     successors.erase(std::remove(successors.begin(), successors.end(), successor), successors.end());
     successor->predecessors.erase(std::remove(successor->predecessors.begin(), successor->predecessors.end(), this),
                                   successor->predecessors.end());
+}
+
+static AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = 0, int col_offset = 0) {
+    AST_Name* name = new AST_Name();
+    name->id = id;
+    name->col_offset = col_offset;
+    name->lineno = lineno;
+    name->ctx_type = ctx_type;
+    return name;
 }
 
 class CFGVisitor : public ASTVisitor {
@@ -325,15 +337,6 @@ private:
         call->col_offset = func->col_offset;
         call->lineno = func->lineno;
         return call;
-    }
-
-    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = 0, int col_offset = 0) {
-        AST_Name* name = new AST_Name();
-        name->id = id;
-        name->col_offset = col_offset;
-        name->lineno = lineno;
-        name->ctx_type = ctx_type;
-        return name;
     }
 
     AST_stmt* makeAssign(AST_expr* target, AST_expr* val) {
@@ -1636,20 +1639,71 @@ void CFG::print() {
     delete pv;
 }
 
-CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body) {
+CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     CFG* rtn = new CFG();
-    CFGVisitor visitor(root_type, rtn);
+    CFGVisitor visitor(source->ast->type, rtn);
+
+    // In a classdef, the "__module__" attribute is immediately available:
+    if (source->ast->type == AST_TYPE::ClassDef) {
+        Box* module_name = source->parent_module->getattr("__name__", NULL, NULL);
+        assert(module_name->cls == str_cls);
+        AST_Assign* module_assign = new AST_Assign();
+        module_assign->targets.push_back(makeName("__module__", AST_TYPE::Store));
+        module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
+
+        visitor.push_back(module_assign);
+    }
+
     for (int i = 0; i < body.size(); i++) {
         body[i]->accept(&visitor);
     }
 
-    // Put a fake "return" statement at the end of every function just to make sure they all have one;
-    // we already have to support multiple return statements in a function, but this way we can avoid
-    // having to support not having a return statement:
-    AST_Return* return_stmt = new AST_Return();
-    return_stmt->lineno = return_stmt->col_offset = 0;
-    return_stmt->value = NULL;
-    visitor.push_back(return_stmt);
+    // The functions we create for classdefs are supposed to return a dictionary of their locals.
+    // This is the place that we add all of that:
+    if (source->ast->type == AST_TYPE::ClassDef) {
+        ScopeInfo* scope_info = source->scoping->getScopeInfoForNode(source->ast);
+
+        auto written_names = scope_info->getClassDefLocalNames();
+        AST_Dict* rtn_dict = new AST_Dict();
+
+        // It'd be ok to add __doc__ to the dict multiple times, since the last one would win
+        if (written_names.count("__doc__") == 0) {
+            bool found_docstr = false;
+            if (body.size() && body[0]->type == AST_TYPE::Expr) {
+                AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
+                if (first_expr->value->type == AST_TYPE::Str) {
+                    found_docstr = true;
+                    rtn_dict->keys.push_back(new AST_Str("__doc__"));
+                    rtn_dict->values.push_back(first_expr->value);
+                }
+            }
+            if (!found_docstr) {
+                rtn_dict->keys.push_back(new AST_Str("__doc__"));
+                rtn_dict->values.push_back(makeName("None", AST_TYPE::Load));
+            }
+        }
+
+        // Even if the user never explicitly wrote to __module__, there was an
+        // implicit write:
+        assert(written_names.count("__module__"));
+
+        for (auto s : written_names) {
+            rtn_dict->keys.push_back(new AST_Str(s));
+            rtn_dict->values.push_back(makeName(s, AST_TYPE::Load));
+        }
+
+        AST_Return* rtn = new AST_Return();
+        rtn->value = rtn_dict;
+        visitor.push_back(rtn);
+    } else {
+        // Put a fake "return" statement at the end of every function just to make sure they all have one;
+        // we already have to support multiple return statements in a function, but this way we can avoid
+        // having to support not having a return statement:
+        AST_Return* return_stmt = new AST_Return();
+        return_stmt->lineno = return_stmt->col_offset = 0;
+        return_stmt->value = NULL;
+        visitor.push_back(return_stmt);
+    }
 
     if (VERBOSITY("cfg") >= 2) {
         printf("Before cfg checking and transformations:\n");

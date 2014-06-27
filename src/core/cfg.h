@@ -93,7 +93,8 @@ public:
     void print();
 };
 
-CFG* computeCFG(AST_TYPE::AST_TYPE root_type, std::vector<AST_stmt*> body);
+class SourceInfo;
+CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
 }
 
 #endif

@@ -791,46 +791,36 @@ private:
         return v;
     }
 
+    ConcreteCompilerVariable* _getGlobal(AST_Name* node, ExcInfo exc_info) {
+        bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
+        if (do_patchpoint) {
+            PatchpointSetupInfo* pp = patchpoints::createGetGlobalPatchpoint(
+                emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+            llvm_args.push_back(embedConstantPtr(&node->id, g.llvm_str_type_ptr));
+
+            llvm::Value* uncasted
+                = emitter.createPatchpoint(pp, (void*)pyston::getGlobal, llvm_args, exc_info).getInstruction();
+            llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+        } else {
+            llvm::Value* r
+                = emitter.createCall2(exc_info, g.funcs.getGlobal,
+                                      embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
+                                      embedConstantPtr(&node->id, g.llvm_str_type_ptr)).getInstruction();
+            return new ConcreteCompilerVariable(UNKNOWN, r, true);
+        }
+    }
+
     CompilerVariable* evalName(AST_Name* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
         auto scope_info = irstate->getScopeInfo();
 
         if (scope_info->refersToGlobal(node->id)) {
-            if (1) {
-                // Method 1: calls into the runtime getGlobal(), which handles things like falling back to builtins
-                // or raising the correct error message.
-                bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
-                if (do_patchpoint) {
-                    PatchpointSetupInfo* pp = patchpoints::createGetGlobalPatchpoint(
-                        emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
-
-                    std::vector<llvm::Value*> llvm_args;
-                    llvm_args.push_back(
-                        embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
-                    llvm_args.push_back(embedConstantPtr(&node->id, g.llvm_str_type_ptr));
-
-                    llvm::Value* uncasted
-                        = emitter.createPatchpoint(pp, (void*)pyston::getGlobal, llvm_args, exc_info).getInstruction();
-                    llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-                    return new ConcreteCompilerVariable(UNKNOWN, r, true);
-                } else {
-                    llvm::Value* r
-                        = emitter.createCall2(
-                                      exc_info, g.funcs.getGlobal,
-                                      embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
-                                      embedConstantPtr(&node->id, g.llvm_str_type_ptr)).getInstruction();
-                    return new ConcreteCompilerVariable(UNKNOWN, r, true);
-                }
-            } else {
-                // Method 2 [testing-only]: (ab)uses existing getattr patchpoints and just calls module.getattr()
-                // This option exists for performance testing because method 1 does not currently use patchpoints.
-                ConcreteCompilerVariable* mod = new ConcreteCompilerVariable(
-                    MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
-                CompilerVariable* attr = mod->getattr(emitter, getOpInfoForNode(node, exc_info), &node->id, false);
-                mod->decvref(emitter);
-                return attr;
-            }
+            return _getGlobal(node, exc_info);
         } else if (scope_info->refersToClosure(node->id)) {
             assert(scope_info->takesClosure());
 
@@ -840,6 +830,11 @@ private:
             return closure->getattr(emitter, getEmptyOpInfo(exc_info), &node->id, false);
         } else {
             if (symbol_table.find(node->id) == symbol_table.end()) {
+                // classdefs have different scoping rules than functions:
+                if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
+                    return _getGlobal(node, exc_info);
+                }
+
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
                 llvm::CallSite call = emitter.createCall2(exc_info, g.funcs.assertNameDefined, getConstantInt(0, g.i1),
@@ -850,7 +845,36 @@ private:
 
             std::string defined_name = _getFakeName("is_defined", node->id.c_str());
             ConcreteCompilerVariable* is_defined = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
+
             if (is_defined) {
+                // classdefs have different scoping rules than functions:
+                if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
+                    llvm::BasicBlock* from_local
+                        = llvm::BasicBlock::Create(g.context, "from_local", irstate->getLLVMFunction());
+                    llvm::BasicBlock* from_global
+                        = llvm::BasicBlock::Create(g.context, "from_global", irstate->getLLVMFunction());
+                    llvm::BasicBlock* join = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
+
+                    emitter.getBuilder()->CreateCondBr(is_defined->getValue(), from_local, from_global);
+
+                    emitter.getBuilder()->SetInsertPoint(from_local);
+                    CompilerVariable* local = symbol_table[node->id];
+                    ConcreteCompilerVariable* converted_local = local->makeConverted(emitter, local->getBoxType());
+                    // don't decvref local here, because are manufacturing a new vref
+                    emitter.getBuilder()->CreateBr(join);
+
+                    emitter.getBuilder()->SetInsertPoint(from_global);
+                    ConcreteCompilerVariable* global = _getGlobal(node, exc_info);
+                    emitter.getBuilder()->CreateBr(join);
+
+                    emitter.getBuilder()->SetInsertPoint(join);
+                    llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2, node->id);
+                    phi->addIncoming(converted_local->getValue(), from_local);
+                    phi->addIncoming(global->getValue(), from_global);
+
+                    return new ConcreteCompilerVariable(UNKNOWN, phi, true);
+                }
+
                 emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined->getValue(),
                                     getStringConstantPtr(node->id + '\0'));
             }
@@ -1385,85 +1409,44 @@ private:
         assert(node->type == AST_TYPE::ClassDef);
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
         assert(scope_info);
-        assert(!scope_info->takesClosure());
 
         RELEASE_ASSERT(node->bases.size() == 1, "");
+        RELEASE_ASSERT(node->decorator_list.size() == 0, "");
 
         CompilerVariable* base = evalExpr(node->bases[0], exc_info);
         ConcreteCompilerVariable* converted_base = base->makeConverted(emitter, base->getBoxType());
         base->decvref(emitter);
 
+        CLFunction* cl = _wrapClassDef(node);
+
+
+        // TODO duplication with doFunctionDef:
+        CompilerVariable* created_closure = NULL;
+        if (scope_info->takesClosure()) {
+            created_closure = _getFake(CREATED_CLOSURE_NAME, false);
+            assert(created_closure);
+        }
+
+        // TODO kind of silly to create the function just to usually-delete it afterwards;
+        // one reason to do this is to pass the closure through if necessary,
+        // but since the classdef can't create its own closure, shouldn't need to explicitly
+        // create that scope to pass the closure through.
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, {});
+
+        CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(exc_info), ArgPassSpec(0), {}, NULL);
+
+        func->decvref(emitter);
+
+        ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
+        attr_dict->decvref(emitter);
+
+
         llvm::Value* classobj
             = emitter.createCall3(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
-                                  converted_base->getValue(),
-                                  embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr))
-                  .getInstruction();
-        ConcreteCompilerVariable* cls = new ConcreteCompilerVariable(typeFromClass(type_cls), classobj, true);
+                                  converted_base->getValue(), converted_attr_dict->getValue()).getInstruction();
 
-        // CompilerVariable* name = makeStr(&node->name);
-        // cls->setattr(emitter, "__name__", name);
-        // name->decvref(emitter);
-
-        bool had_docstring = false;
-        static std::string doc_str("__doc__");
-
-        // TODO: rather than special-casing all the different types and implementing a small irgenerator,
-        // do the full thing and run through an irgenerator for real.
-        for (int i = 0, n = node->body.size(); i < n; i++) {
-            AST_TYPE::AST_TYPE type = node->body[i]->type;
-            if (type == AST_TYPE::Pass) {
-                continue;
-            } else if (type == AST_TYPE::Expr) {
-                AST_Expr* expr = ast_cast<AST_Expr>(node->body[i]);
-
-                if (expr->value->type == AST_TYPE::Str) {
-                    if (i == 0) {
-                        had_docstring = true;
-                        CompilerVariable* str = evalExpr(expr->value, exc_info);
-                        cls->setattr(emitter, getEmptyOpInfo(exc_info), &doc_str, str);
-                    }
-                } else {
-                    fprintf(stderr, "Currently don't support non-noop expressions in classes:\n");
-                    printf("On line %d: ", expr->lineno);
-                    print_ast(expr);
-                    printf("\n");
-                    abort();
-                }
-            } else if (type == AST_TYPE::FunctionDef) {
-                AST_FunctionDef* fdef = ast_cast<AST_FunctionDef>(node->body[i]);
-                assert(fdef->args->defaults.size() == 0);
-                assert(fdef->decorator_list.size() == 0);
-                ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(fdef);
-
-                CLFunction* cl = this->_wrapFunction(fdef);
-                assert(!scope_info->takesClosure());
-                CompilerVariable* func = makeFunction(emitter, cl, NULL, {});
-                cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
-                func->decvref(emitter);
-            } else if (type == AST_TYPE::Assign) {
-                AST_Assign* asgn = ast_cast<AST_Assign>(node->body[i]);
-                RELEASE_ASSERT(asgn->targets.size() == 1, "");
-
-                RELEASE_ASSERT(asgn->targets[0]->type == AST_TYPE::Name, "");
-                AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
-                RELEASE_ASSERT(target->id != "__metaclass__", "");
-
-                RELEASE_ASSERT(asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str, "%d",
-                               asgn->lineno);
-
-                CompilerVariable* val = evalExpr(asgn->value, exc_info);
-                cls->setattr(emitter, getEmptyOpInfo(exc_info), &target->id, val);
-            } else if (type == AST_TYPE::Pass) {
-                // do nothing
-            } else {
-                RELEASE_ASSERT(0, "%d", type);
-            }
-        }
-
-        if (!had_docstring) {
-            cls->setattr(emitter, getEmptyOpInfo(exc_info), &doc_str, getNone());
-        }
-
+        // Note: createuserClass is free to manufacture non-class objects
+        auto cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
         _doSet(node->name, cls, exc_info);
         cls->decvref(emitter);
     }
@@ -1524,6 +1507,20 @@ private:
             si->ast = node;
             cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
                                 node->args->kwarg.size(), si);
+        }
+        return cl;
+    }
+
+    CLFunction* _wrapClassDef(AST_ClassDef* node) {
+        // TODO duplication with _wrapFunction
+        static std::unordered_map<AST_ClassDef*, CLFunction*> made;
+
+        CLFunction*& cl = made[node];
+        if (cl == NULL) {
+            SourceInfo* si
+                = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping, node);
+            si->ast = node;
+            cl = new CLFunction(0, 0, 0, 0, si);
         }
         return cl;
     }

@@ -18,6 +18,7 @@
 #include "gtest/gtest.h"
 
 #include "core/threading.h"
+#include "codegen/entry.h"
 
 namespace pyston {
 

@@ -291,10 +291,13 @@ const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 BoxedTuple* EmptyTuple;
 }
 
-extern "C" Box* createUserClass(std::string* name, Box* _base, BoxedModule* parent_module) {
+extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) {
     assert(_base);
     assert(isSubclass(_base->cls, type_cls));
     BoxedClass* base = static_cast<BoxedClass*>(_base);
+
+    ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict)->c_str());
+    BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 
     BoxedClass* made;
 
@@ -305,10 +308,14 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, BoxedModule* pare
         made = new BoxedClass(base, base->instance_size, base->instance_size + sizeof(HCAttrs), true);
     }
 
-    made->giveAttr("__name__", boxString(*name));
+    for (const auto& p : attr_dict->d) {
+        assert(p.first->cls == str_cls);
+        made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
+    }
 
-    Box* modname = parent_module->getattr("__name__", NULL, NULL);
-    made->giveAttr("__module__", modname);
+    // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
+    made->setattr("__name__", boxString(*name), NULL);
+
 
     return made;
 }
@@ -604,6 +611,8 @@ BoxedModule* createModule(const std::string& name, const std::string& fn) {
     Box* b_name = boxStringPtr(&name);
     assert(d->d.count(b_name) == 0);
     d->d[b_name] = module;
+
+    module->giveAttr("__doc__", None);
     return module;
 }
 

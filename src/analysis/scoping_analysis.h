@@ -33,6 +33,11 @@ public:
     virtual bool refersToGlobal(const std::string& name) = 0;
     virtual bool refersToClosure(const std::string name) = 0;
     virtual bool saveInClosure(const std::string name) = 0;
+
+    // Get the names set within a classdef that should be forwarded on to
+    // the metaclass constructor.
+    // An error to call this on a non-classdef node.
+    virtual const std::unordered_set<std::string>& getClassDefLocalNames() = 0;
 };
 
 class ScopingAnalysis {
