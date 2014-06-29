@@ -619,15 +619,21 @@ private:
     }
 
     AST_expr* remapLambda(AST_Lambda* node) {
+        if (node->args->defaults.empty()) {
+            return node;
+        }
+
         AST_Lambda* rtn = new AST_Lambda();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
 
-        rtn->args = node->args;
-        // remap default arguments
-        rtn->args->defaults.clear();
-        for (auto& e : node->args->defaults)
-            rtn->args->defaults.push_back(remapExpr(e));
+        rtn->args = new AST_arguments();
+        rtn->args->args = node->args->args;
+        rtn->args->vararg = node->args->vararg;
+        rtn->args->kwarg = node->args->kwarg;
+        for (auto d : node->args->defaults) {
+            rtn->args->defaults.push_back(remapExpr(d));
+        }
 
         rtn->body = node->body;
         return rtn;

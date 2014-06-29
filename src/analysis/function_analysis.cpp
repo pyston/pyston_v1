@@ -67,7 +67,11 @@ public:
         return true;
     }
 
-    bool visit_lambda(AST_Lambda* node) { return true; }
+    bool visit_lambda(AST_Lambda* node) {
+        for (auto* d : node->args->defaults)
+            d->accept(this);
+        return true;
+    }
 
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)

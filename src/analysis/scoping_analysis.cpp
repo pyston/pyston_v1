@@ -235,15 +235,21 @@ public:
     }
 
     virtual bool visit_lambda(AST_Lambda* node) {
-        assert(node == orig_node);
+        if (node == orig_node) {
+            for (AST_expr* e : node->args->args)
+                e->accept(this);
+            if (node->args->vararg.size())
+                doWrite(node->args->vararg);
+            if (node->args->kwarg.size())
+                doWrite(node->args->kwarg);
+            node->body->accept(this);
+        } else {
+            for (auto* e : node->args->defaults)
+                e->accept(this);
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
+            collect(node, map);
+        }
 
-        for (AST_expr* e : node->args->args)
-            e->accept(this);
-        if (node->args->vararg.size())
-            doWrite(node->args->vararg);
-        if (node->args->kwarg.size())
-            doWrite(node->args->kwarg);
-        node->body->accept(this);
         return true;
     }
 
@@ -293,15 +299,13 @@ static std::vector<ScopingAnalysis::ScopeNameUsage*> sortNameUsages(ScopingAnaly
 }
 
 void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
-    typedef ScopeNameUsage::StrSet StrSet;
-
     // Resolve name lookups:
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
-        for (StrSet::iterator it2 = usage->read.begin(), end2 = usage->read.end(); it2 != end2; ++it2) {
-            if (usage->forced_globals.count(*it2))
+        for (const auto& name : usage->read) {
+            if (usage->forced_globals.count(name))
                 continue;
-            if (usage->written.count(*it2))
+            if (usage->written.count(name))
                 continue;
 
             std::vector<ScopeNameUsage*> intermediate_parents;
@@ -310,15 +314,15 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             while (parent) {
                 if (parent->node->type == AST_TYPE::ClassDef) {
                     parent = parent->parent;
-                } else if (parent->forced_globals.count(*it2)) {
+                } else if (parent->forced_globals.count(name)) {
                     break;
-                } else if (parent->written.count(*it2)) {
-                    usage->got_from_closure.insert(*it2);
-                    parent->referenced_from_nested.insert(*it2);
+                } else if (parent->written.count(name)) {
+                    usage->got_from_closure.insert(name);
+                    parent->referenced_from_nested.insert(name);
 
                     for (ScopeNameUsage* iparent : intermediate_parents) {
-                        iparent->referenced_from_nested.insert(*it2);
-                        iparent->got_from_closure.insert(*it2);
+                        iparent->referenced_from_nested.insert(name);
+                        iparent->got_from_closure.insert(name);
                     }
 
                     break;

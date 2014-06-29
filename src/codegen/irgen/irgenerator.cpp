@@ -1497,16 +1497,15 @@ private:
 
         CLFunction*& cl = made[node];
         if (cl == NULL) {
-            SourceInfo* si
-                = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping, node, body);
-            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(),
-                                args->kwarg.size(), si);
+            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
+                                            node, body);
+            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(), args->kwarg.size(), si);
         }
         return cl;
     }
 
-    CompilerVariable* createFunction(AST* node, ExcInfo exc_info, AST_arguments* args, const std::vector<AST_stmt*>& body)
-    {
+    CompilerVariable* createFunction(AST* node, ExcInfo exc_info, AST_arguments* args,
+                                     const std::vector<AST_stmt*>& body) {
         CLFunction* cl = this->_wrapFunction(node, args, body);
 
         std::vector<ConcreteCompilerVariable*> defaults;

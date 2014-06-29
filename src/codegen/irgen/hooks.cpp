@@ -75,37 +75,6 @@ const std::string SourceInfo::getName() {
     }
 }
 
-/*
-const std::vector<AST_expr*>& SourceInfo::getArgNames() {
-    static std::vector<AST_expr*> empty;
-
-    AST_arguments* args = getArgsAST();
-    if (args == NULL)
-        return empty;
-    return args->args;
-}
-
-const std::vector<AST_expr*>* CLFunction::getArgNames() {
-    if (!source)
-        return NULL;
-    return &source->getArgNames();
-
-
-   //////////////
-
-const std::vector<AST_stmt*>& SourceInfo::getBody() {
-    assert(ast);
-    switch (ast->type) {
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->body;
-        case AST_TYPE::Module:
-            return ast_cast<AST_Module>(ast)->body;
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-*/
-
 EffortLevel::EffortLevel initialEffort() {
     if (FORCE_OPTIMIZE)
         return EffortLevel::MAXIMAL;
