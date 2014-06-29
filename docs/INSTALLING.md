@@ -89,6 +89,13 @@ and then repeat the correct process
 apt-get install zsh
 ```
 
+### readline
+`readline` is used for the repl.
+
+```
+sudo apt-get install readline
+```
+
 # Optional dependencies
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:

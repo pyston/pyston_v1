@@ -135,11 +135,11 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure) {
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, {}, closure);
+    return new BoxedFunction(f, defaults, closure);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -256,7 +256,7 @@ extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
 extern "C" void closureGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
-    BoxedClosure* c = (BoxedClosure*)v;
+    BoxedClosure* c = (BoxedClosure*)p;
     if (c->parent)
         v->visit(c->parent);
 }
@@ -476,6 +476,7 @@ void setupRuntime() {
 
     none_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
     None = new Box(&none_flavor, none_cls);
+    gc::registerStaticRootObj(None);
 
     str_cls = new BoxedClass(object_cls, 0, sizeof(BoxedString), false);
 

@@ -183,7 +183,7 @@ public:
 
     virtual ~IRGenerator() {}
 
-    virtual void doFunctionEntry(const std::vector<AST_expr*>& arg_names,
+    virtual void doFunctionEntry(const SourceInfo::ArgNames& arg_names,
                                  const std::vector<ConcreteCompilerType*>& arg_types) = 0;
 
     virtual void giveLocalSymbol(const std::string& name, CompilerVariable* var) = 0;

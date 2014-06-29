@@ -74,3 +74,17 @@ print (1, 2) < (1, 3)
 print (1, 4) < (1, 3)
 print [1, 2] < [1, 3]
 print {1:2} < {1:3}
+
+class Reverse(object):
+    def __init__(self, n):
+        self.n = n
+
+    def __lt__(self, rhs):
+        print "lt"
+        return self.n < rhs.n
+
+    def __le__(self, rhs):
+        print "le"
+        return self.n <= rhs.n
+
+print Reverse(4) > Reverse(3), Reverse(4) > Reverse(4)

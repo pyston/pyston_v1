@@ -42,6 +42,25 @@
 namespace pyston {
 
 // TODO terrible place for these!
+SourceInfo::ArgNames::ArgNames(AST* ast) {
+    if (ast->type == AST_TYPE::Module) {
+        args = NULL;
+        kwarg = vararg = NULL;
+    } else if (ast->type == AST_TYPE::FunctionDef) {
+        AST_FunctionDef* f = ast_cast<AST_FunctionDef>(ast);
+        args = &f->args->args;
+        vararg = &f->args->vararg;
+        kwarg = &f->args->kwarg;
+    } else if (ast->type == AST_TYPE::Lambda) {
+        AST_Lambda* l = ast_cast<AST_Lambda>(ast);
+        args = &l->args->args;
+        vararg = &l->args->vararg;
+        kwarg = &l->args->kwarg;
+    } else {
+        RELEASE_ASSERT(0, "%d", ast->type);
+    }
+}
+
 const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
@@ -56,20 +75,7 @@ const std::string SourceInfo::getName() {
     }
 }
 
-AST_arguments* SourceInfo::getArgsAST() {
-    assert(ast);
-    switch (ast->type) {
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->args;
-        case AST_TYPE::Lambda:
-            return ast_cast<AST_Lambda>(ast)->args;
-        case AST_TYPE::Module:
-            return NULL;
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-
+/*
 const std::vector<AST_expr*>& SourceInfo::getArgNames() {
     static std::vector<AST_expr*> empty;
 
@@ -83,7 +89,22 @@ const std::vector<AST_expr*>* CLFunction::getArgNames() {
     if (!source)
         return NULL;
     return &source->getArgNames();
+
+
+   //////////////
+
+const std::vector<AST_stmt*>& SourceInfo::getBody() {
+    assert(ast);
+    switch (ast->type) {
+        case AST_TYPE::FunctionDef:
+            return ast_cast<AST_FunctionDef>(ast)->body;
+        case AST_TYPE::Module:
+            return ast_cast<AST_Module>(ast)->body;
+        default:
+            RELEASE_ASSERT(0, "%d", ast->type);
+    }
 }
+*/
 
 EffortLevel::EffortLevel initialEffort() {
     if (FORCE_OPTIMIZE)
@@ -143,15 +164,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     assert(source);
 
     std::string name = source->getName();
-    const std::vector<AST_expr*>& arg_names = source->getArgNames();
-    AST_arguments* args = source->getArgsAST();
-
-    if (args) {
-        // args object can be NULL if this is a module scope
-        assert(!args->vararg.size());
-        assert(!args->kwarg.size());
-        assert(!args->defaults.size());
-    }
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
@@ -181,11 +193,11 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         assert(source->ast);
         source->cfg = computeCFG(source->ast->type, source->body);
         source->liveness = computeLivenessInfo(source->cfg);
-        source->phis = computeRequiredPhis(args, source->cfg, source->liveness,
+        source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness,
                                            source->scoping->getScopeInfoForNode(source->ast));
     }
 
-    CompiledFunction* cf = doCompile(source, entry, effort, spec, arg_names, name);
+    CompiledFunction* cf = doCompile(source, entry, effort, spec, name);
 
     compileIR(cf, effort);
     f->addVersion(cf);
@@ -232,25 +244,27 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 }
 
 void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
-    LOCK_REGION(codegen_rwlock.asWrite());
+    CompiledFunction* cf;
 
-    Timer _t("for compileModule()");
+    { // scope for limiting the locked region:
+        LOCK_REGION(codegen_rwlock.asWrite());
 
-    ScopingAnalysis* scoping = runScopingAnalysis(m);
+        Timer _t("for compileModule()");
 
-    SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
-    si->cfg = computeCFG(AST_TYPE::Module, m->body);
-    si->liveness = computeLivenessInfo(si->cfg);
-    si->phis = computeRequiredPhis(NULL, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
+        ScopingAnalysis* scoping = runScopingAnalysis(m);
 
-    CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+        SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
+        si->cfg = computeCFG(AST_TYPE::Module, m->body);
+        si->liveness = computeLivenessInfo(si->cfg);
+        si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
 
-    EffortLevel::EffortLevel effort = initialEffort();
+        CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
-    CompiledFunction* cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
-    assert(cf->clfunc->versions.size());
+        EffortLevel::EffortLevel effort = initialEffort();
 
-    _t.end();
+        cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
+        assert(cf->clfunc->versions.size());
+    }
 
     if (cf->is_interpreted)
         interpretFunction(cf->func, 0, NULL, NULL, NULL, NULL, NULL);

@@ -50,18 +50,15 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
             return scratch_space;
     }
 
-    // Not sure why, but LLVM wants to canonicalize an alloca into an array alloca (assuming
-    // the alloca is static); just to keep things straightforward, let's do that here:
-    llvm::Type* array_type = llvm::ArrayType::get(g.i8, min_bytes);
-
     llvm::AllocaInst* new_scratch_space;
     // If the entry block is currently empty, we have to be more careful:
     if (entry_block.begin() == entry_block.end()) {
-        new_scratch_space = new llvm::AllocaInst(array_type, getConstantInt(1, g.i64), "scratch", &entry_block);
+        new_scratch_space = new llvm::AllocaInst(g.i8, getConstantInt(min_bytes, g.i64), "scratch", &entry_block);
     } else {
-        new_scratch_space
-            = new llvm::AllocaInst(array_type, getConstantInt(1, g.i64), "scratch", entry_block.getFirstInsertionPt());
+        new_scratch_space = new llvm::AllocaInst(g.i8, getConstantInt(min_bytes, g.i64), "scratch",
+                                                 entry_block.getFirstInsertionPt());
     }
+
     assert(new_scratch_space->isStaticAlloca());
 
     if (scratch_space)
@@ -118,6 +115,10 @@ public:
     llvm::Function* getIntrinsic(llvm::Intrinsic::ID intrinsic_id) override {
         return llvm::Intrinsic::getDeclaration(g.cur_module, intrinsic_id);
     }
+
+    llvm::Value* getScratch(int num_bytes) override { return irstate->getScratchSpace(num_bytes); }
+
+    void releaseScratch(llvm::Value* scratch) override { assert(0); }
 
     CompiledFunction* currentFunction() override { return irstate->getCurFunction(); }
 
@@ -762,11 +763,8 @@ private:
         AST_Return* expr = new AST_Return();
         expr->value = node->body;
 
-        SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
-                                        node, { expr });
-        CLFunction* cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
-                                        node->args->kwarg.size(), si);
-        CompilerVariable* func = makeFunction(emitter, cl, NULL);
+        std::vector<AST_stmt*> body = { expr };
+        CompilerVariable* func = createFunction(node, exc_info, node->args, body);
         ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
         func->decvref(emitter);
 
@@ -1430,11 +1428,13 @@ private:
                 continue;
             } else if (type == AST_TYPE::FunctionDef) {
                 AST_FunctionDef* fdef = ast_cast<AST_FunctionDef>(node->body[i]);
+                assert(fdef->args->defaults.size() == 0);
+                assert(fdef->decorator_list.size() == 0);
                 ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(fdef);
 
-                CLFunction* cl = this->_wrapFunction(fdef);
+                CLFunction* cl = this->_wrapFunction(fdef, fdef->args, fdef->body);
                 assert(!scope_info->takesClosure());
-                CompilerVariable* func = makeFunction(emitter, cl, NULL);
+                CompilerVariable* func = makeFunction(emitter, cl, NULL, {});
                 cls->setattr(emitter, getEmptyOpInfo(exc_info), &fdef->name, func);
                 func->decvref(emitter);
             } else {
@@ -1490,28 +1490,32 @@ private:
         converted_slice->decvref(emitter);
     }
 
-    CLFunction* _wrapFunction(AST_FunctionDef* node) {
+    CLFunction* _wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
         // Different compilations of the parent scope of a functiondef should lead
         // to the same CLFunction* being used:
-        static std::unordered_map<AST_FunctionDef*, CLFunction*> made;
+        static std::unordered_map<AST*, CLFunction*> made;
 
         CLFunction*& cl = made[node];
         if (cl == NULL) {
-            SourceInfo* si = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping,
-                                            node, node->body);
-            cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
-                                node->args->kwarg.size(), si);
+            SourceInfo* si
+                = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping, node, body);
+            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(),
+                                args->kwarg.size(), si);
         }
         return cl;
     }
 
-    void doFunctionDef(AST_FunctionDef* node, ExcInfo exc_info) {
-        if (state == PARTIAL)
-            return;
+    CompilerVariable* createFunction(AST* node, ExcInfo exc_info, AST_arguments* args, const std::vector<AST_stmt*>& body)
+    {
+        CLFunction* cl = this->_wrapFunction(node, args, body);
 
-        assert(!node->args->defaults.size());
-
-        CLFunction* cl = this->_wrapFunction(node);
+        std::vector<ConcreteCompilerVariable*> defaults;
+        for (auto d : args->defaults) {
+            CompilerVariable* e = evalExpr(d, exc_info);
+            ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
+            e->decvref(emitter);
+            defaults.push_back(converted);
+        }
 
         CompilerVariable* created_closure = NULL;
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
@@ -1520,13 +1524,26 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure);
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, defaults);
+
+        for (auto d : defaults) {
+            d->decvref(emitter);
+        }
 
         // llvm::Type* boxCLFuncArgType = g.funcs.boxCLFunction->arg_begin()->getType();
         // llvm::Value *boxed = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(cl,
         // boxCLFuncArgType));
         // CompilerVariable *func = new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
+        return func;
+    }
 
+    void doFunctionDef(AST_FunctionDef* node, ExcInfo exc_info) {
+        if (state == PARTIAL)
+            return;
+
+        assert(!node->decorator_list.size());
+
+        CompilerVariable* func = createFunction(node, exc_info, node->args, node->body);
         _doSet(node->name, func, exc_info);
         func->decvref(emitter);
     }
@@ -2144,8 +2161,10 @@ public:
         return CLOSURE;
     }
 
-    void doFunctionEntry(const std::vector<AST_expr*>& arg_names,
+    void doFunctionEntry(const SourceInfo::ArgNames& arg_names,
                          const std::vector<ConcreteCompilerType*>& arg_types) override {
+        assert(arg_names.totalParameters() == arg_types.size());
+
         auto scope_info = irstate->getScopeInfo();
 
         llvm::Value* passed_closure = NULL;
@@ -2165,27 +2184,50 @@ public:
         }
 
 
-        int i = 0;
-        llvm::Value* argarray = NULL;
-        for (; AI != irstate->getLLVMFunction()->arg_end(); ++AI, i++) {
+        std::vector<llvm::Value*> python_parameters;
+        for (int i = 0; i < arg_types.size(); i++) {
+            assert(AI != irstate->getLLVMFunction()->arg_end());
+
             if (i == 3) {
-                argarray = AI;
-                assert(++AI == irstate->getLLVMFunction()->arg_end());
+                for (int i = 3; i < arg_types.size(); i++) {
+                    llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(AI, i - 3);
+                    llvm::Value* loaded = emitter.getBuilder()->CreateLoad(ptr);
+
+                    if (arg_types[i]->llvmType() == g.i64)
+                        loaded = emitter.getBuilder()->CreatePtrToInt(loaded, arg_types[i]->llvmType());
+                    else
+                        assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+
+                    python_parameters.push_back(loaded);
+                }
+                ++AI;
                 break;
             }
-            loadArgument(arg_names[i], arg_types[i], AI, ExcInfo::none());
+
+            python_parameters.push_back(AI);
+            ++AI;
         }
 
-        for (int i = 3; i < arg_types.size(); i++) {
-            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(argarray, i - 3);
-            llvm::Value* loaded = emitter.getBuilder()->CreateLoad(ptr);
+        assert(AI == irstate->getLLVMFunction()->arg_end());
+        assert(python_parameters.size() == arg_names.totalParameters());
 
-            if (arg_types[i]->llvmType() == g.i64)
-                loaded = emitter.getBuilder()->CreatePtrToInt(loaded, arg_types[i]->llvmType());
-            else
-                assert(arg_types[i]->llvmType() == g.llvm_value_type_ptr);
+        if (arg_names.args) {
+            int i = 0;
+            for (; i < arg_names.args->size(); i++) {
+                loadArgument((*arg_names.args)[i], arg_types[i], python_parameters[i], ExcInfo::none());
+            }
 
-            loadArgument(arg_names[i], arg_types[i], loaded, ExcInfo::none());
+            if (arg_names.vararg->size()) {
+                loadArgument(*arg_names.vararg, arg_types[i], python_parameters[i], ExcInfo::none());
+                i++;
+            }
+
+            if (arg_names.kwarg->size()) {
+                loadArgument(*arg_names.kwarg, arg_types[i], python_parameters[i], ExcInfo::none());
+                i++;
+            }
+
+            assert(i == arg_types.size());
         }
     }
 

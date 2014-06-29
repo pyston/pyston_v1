@@ -121,6 +121,7 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.llvm_value_type_ptr = lookupFunction("getattr")->getReturnType();
     g.llvm_value_type = g.llvm_value_type_ptr->getSequentialElementType();
+    g.llvm_value_type_ptr_ptr = g.llvm_value_type_ptr->getPointerTo();
     // g.llvm_class_type_ptr = llvm::cast<llvm::StructType>(g.llvm_value_type)->getElementType(0);
     // g.llvm_class_type = g.llvm_class_type_ptr->getSequentialElementType();
     g.llvm_class_type = g.stdlib_module->getTypeByName("class.pyston::BoxedClass");

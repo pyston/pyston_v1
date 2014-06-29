@@ -88,7 +88,7 @@ Box* boxString(const std::string& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(std::string* name, Box* base, BoxedModule* parent_module);
 extern "C" double unboxFloat(Box* b);
@@ -286,7 +286,7 @@ public:
 class BoxedModule : public Box {
 public:
     HCAttrs attrs;
-    const std::string fn; // for traceback purposes; not the same as __file__
+    std::string fn; // for traceback purposes; not the same as __file__
 
     BoxedModule(const std::string& name, const std::string& fn);
     std::string name();

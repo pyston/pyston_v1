@@ -486,18 +486,71 @@ private:
     }
 
     AST_expr* remapCompare(AST_Compare* node) {
-        AST_Compare* rtn = new AST_Compare();
-        rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
+        // special case unchained comparisons to avoid generating a unnecessary complex cfg.
+        if (node->ops.size() == 1) {
+            AST_Compare* rtn = new AST_Compare();
+            rtn->lineno = node->lineno;
+            rtn->col_offset = node->col_offset;
 
-        rtn->ops = node->ops;
+            rtn->ops = node->ops;
 
-        rtn->left = remapExpr(node->left);
-        for (auto elt : node->comparators) {
-            rtn->comparators.push_back(remapExpr(elt));
+            rtn->left = remapExpr(node->left);
+            for (auto elt : node->comparators) {
+                rtn->comparators.push_back(remapExpr(elt));
+            }
+            return rtn;
+        } else {
+            std::string name = nodeName(node);
+
+            CFGBlock* exit_block = cfg->addDeferredBlock();
+            AST_expr* left = remapExpr(node->left);
+
+            for (int i = 0; i < node->ops.size(); i++) {
+                AST_expr* right = remapExpr(node->comparators[i]);
+
+                AST_Compare* val = new AST_Compare;
+                val->col_offset = node->col_offset;
+                val->lineno = node->lineno;
+                val->left = left;
+                val->comparators.push_back(right);
+                val->ops.push_back(node->ops[i]);
+
+                push_back(makeAssign(name, val));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = makeName(name, AST_TYPE::Load);
+                push_back(br);
+
+                CFGBlock* was_block = curblock;
+                CFGBlock* next_block = cfg->addBlock();
+                CFGBlock* crit_break_block = cfg->addBlock();
+                was_block->connectTo(next_block);
+                was_block->connectTo(crit_break_block);
+
+                br->iffalse = crit_break_block;
+                br->iftrue = next_block;
+
+                curblock = crit_break_block;
+                AST_Jump* j = new AST_Jump();
+                j->target = exit_block;
+                push_back(j);
+                crit_break_block->connectTo(exit_block);
+
+                curblock = next_block;
+
+                left = right;
+            }
+
+            AST_Jump* j = new AST_Jump();
+            push_back(j);
+            j->target = exit_block;
+            curblock->connectTo(exit_block);
+
+            cfg->placeBlock(exit_block);
+            curblock = exit_block;
+
+            return makeName(name, AST_TYPE::Load);
         }
-
-        return rtn;
     }
 
     AST_expr* remapDict(AST_Dict* node) {
@@ -810,7 +863,30 @@ public:
     }
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
-        push_back(node);
+        if (node->args->defaults.size() == 0 && node->decorator_list.size() == 0) {
+            push_back(node);
+        } else {
+            AST_FunctionDef* remapped = new AST_FunctionDef();
+
+            remapped->name = node->name;
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+            remapped->args = new AST_arguments();
+            remapped->body = node->body; // hmm shouldnt have to copy this
+
+            for (auto d : node->decorator_list) {
+                remapped->decorator_list.push_back(remapExpr(d));
+            }
+
+            remapped->args->args = node->args->args;
+            remapped->args->vararg = node->args->vararg;
+            remapped->args->kwarg = node->args->kwarg;
+            for (auto d : node->args->defaults) {
+                remapped->args->defaults.push_back(remapExpr(d));
+            }
+
+            push_back(remapped);
+        }
         return true;
     }
 

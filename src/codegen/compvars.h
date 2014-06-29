@@ -316,7 +316,8 @@ ConcreteCompilerVariable* makeInt(int64_t);
 ConcreteCompilerVariable* makeFloat(double);
 ConcreteCompilerVariable* makeBool(bool);
 CompilerVariable* makeStr(std::string*);
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure);
+CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure,
+                               const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
 

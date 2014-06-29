@@ -563,9 +563,13 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
     if (attr->cls == member_cls) {
         BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(attr);
         switch (member_desc->type) {
-            case BoxedMemberDescriptor::OBJECT:
+            case BoxedMemberDescriptor::OBJECT: {
                 assert(member_desc->offset % sizeof(Box*) == 0);
-                return reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+                Box* rtn = reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+                // be careful about returning NULLs; I'm not sure what the correct behavior is here:
+                RELEASE_ASSERT(rtn, "");
+                return rtn;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
         }
@@ -1656,6 +1660,41 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     return chosen_cf;
 }
 
+static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bool>& params_filled,
+                         const std::string& kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
+                         BoxedDict* okwargs) {
+    assert(kw_val);
+
+    bool found = false;
+    for (int j = 0; j < arg_names.size(); j++) {
+        AST_expr* e = arg_names[j];
+        if (e->type != AST_TYPE::Name)
+            continue;
+
+        AST_Name* n = ast_cast<AST_Name>(e);
+        if (n->id == kw_name) {
+            if (params_filled[j]) {
+                raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
+                               kw_name.c_str());
+            }
+
+            getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
+            params_filled[j] = true;
+
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        if (okwargs) {
+            okwargs->d[boxString(kw_name)] = kw_val;
+        } else {
+            raiseExcHelper(TypeError, "<function>() got an unexpected keyword argument '%s'", kw_name.c_str());
+        }
+    }
+}
+
 Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
               Box** args, const std::vector<const std::string*>* keyword_names) {
     /*
@@ -1829,7 +1868,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         getArg(f->num_args + (f->takes_varargs ? 1 : 0), oarg1, oarg2, oarg3, oargs) = okwargs;
     }
 
-    const std::vector<AST_expr*>* arg_names = f->getArgNames();
+    const std::vector<AST_expr*>* arg_names = f->source ? f->source->arg_names.args : NULL;
     if (arg_names == nullptr && argspec.num_keywords) {
         raiseExcHelper(TypeError, "<function @%p>() doesn't take keyword arguments", f->versions[0]->code);
     }
@@ -1839,41 +1878,31 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     for (int i = 0; i < argspec.num_keywords; i++) {
         assert(!rewrite_args && "would need to be handled here");
+        assert(arg_names);
+
         int arg_idx = i + argspec.num_args;
         Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
 
+        placeKeyword(*arg_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs, okwargs);
+    }
+
+    if (argspec.has_kwargs) {
+        assert(!rewrite_args && "would need to be handled here");
         assert(arg_names);
-        bool found = false;
-        for (int j = 0; j < arg_names->size(); j++) {
-            AST_expr* e = (*arg_names)[j];
-            if (e->type != AST_TYPE::Name)
-                continue;
 
-            AST_Name* n = ast_cast<AST_Name>(e);
-            if (n->id == *(*keyword_names)[i]) {
-                if (params_filled[j]) {
-                    raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
-                                   n->id.c_str());
-                }
+        Box* kwargs
+            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
+        RELEASE_ASSERT(kwargs->cls == dict_cls, "haven't implemented this for non-dicts");
 
-                getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
-                params_filled[j] = true;
+        BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
+        for (auto& p : d_kwargs->d) {
+            if (p.first->cls != str_cls)
+                raiseExcHelper(TypeError, "<function>() keywords must be strings");
 
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            if (okwargs) {
-                okwargs->d[boxString(*(*keyword_names)[i])] = kw_val;
-            } else {
-                raiseExcHelper(TypeError, "<function>() got an unexpected keyword argument '%s'",
-                               (*keyword_names)[i]->c_str());
-            }
+            BoxedString* s = static_cast<BoxedString*>(p.first);
+            placeKeyword(*arg_names, params_filled, s->s, p.second, oarg1, oarg2, oarg3, oargs, okwargs);
         }
     }
-    RELEASE_ASSERT(!argspec.has_kwargs, "need to copy the above");
 
 
 

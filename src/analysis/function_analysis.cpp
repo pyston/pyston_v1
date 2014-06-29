@@ -60,6 +60,9 @@ public:
         return true;
     }
     bool visit_functiondef(AST_FunctionDef* node) {
+        for (auto* d : node->args->defaults)
+            d->accept(this);
+
         _doStore(node->name);
         return true;
     }
@@ -142,10 +145,10 @@ private:
     typedef DefinednessAnalysis::DefinitionLevel DefinitionLevel;
 
     CFG* cfg;
-    AST_arguments* arguments;
+    const SourceInfo::ArgNames& arg_names;
 
 public:
-    DefinednessBBAnalyzer(CFG* cfg, AST_arguments* arguments) : cfg(cfg), arguments(arguments) {}
+    DefinednessBBAnalyzer(CFG* cfg, const SourceInfo::ArgNames& arg_names) : cfg(cfg), arg_names(arg_names) {}
 
     virtual DefinitionLevel merge(DefinitionLevel from, DefinitionLevel into) const {
         assert(from != DefinednessAnalysis::Undefined);
@@ -244,15 +247,24 @@ public:
         }
         return true;
     }
+
+    friend class DefinednessBBAnalyzer;
 };
 
 void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     DefinednessVisitor visitor(starting);
+
+    if (block == cfg->getStartingBlock() && arg_names.args) {
+        for (auto e : (*arg_names.args))
+            visitor._doSet(e);
+        if (arg_names.vararg->size())
+            visitor._doSet(*arg_names.vararg);
+        if (arg_names.kwarg->size())
+            visitor._doSet(*arg_names.kwarg);
+    }
+
     for (int i = 0; i < block->body.size(); i++) {
         block->body[i]->accept(&visitor);
-    }
-    if (block == cfg->getStartingBlock() && arguments) {
-        arguments->accept(&visitor);
     }
 
     if (VERBOSITY("analysis") >= 2) {
@@ -263,9 +275,9 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     }
 }
 
-DefinednessAnalysis::DefinednessAnalysis(AST_arguments* args, CFG* cfg, ScopeInfo* scope_info)
+DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, ScopeInfo* scope_info)
     : scope_info(scope_info) {
-    results = computeFixedPoint(cfg, DefinednessBBAnalyzer(cfg, args), false);
+    results = computeFixedPoint(cfg, DefinednessBBAnalyzer(cfg, arg_names), false);
 
     for (const auto& p : results) {
         RequiredSet required;
@@ -291,8 +303,10 @@ const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAt(C
     return defined[block];
 }
 
-PhiAnalysis::PhiAnalysis(AST_arguments* args, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info)
-    : definedness(args, cfg, scope_info), liveness(liveness) {
+PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, LivenessAnalysis* liveness,
+                         ScopeInfo* scope_info)
+    : definedness(arg_names, cfg, scope_info), liveness(liveness) {
+
     for (CFGBlock* block : cfg->blocks) {
         RequiredSet required;
         if (block->predecessors.size() < 2)
@@ -351,7 +365,8 @@ LivenessAnalysis* computeLivenessInfo(CFG*) {
     return new LivenessAnalysis();
 }
 
-PhiAnalysis* computeRequiredPhis(AST_arguments* args, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info) {
+PhiAnalysis* computeRequiredPhis(const SourceInfo::ArgNames& args, CFG* cfg, LivenessAnalysis* liveness,
+                                 ScopeInfo* scope_info) {
     return new PhiAnalysis(args, cfg, liveness, scope_info);
 }
 }

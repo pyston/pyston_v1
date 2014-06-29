@@ -150,7 +150,7 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
     if (VERBOSITY() >= 2) {
         printf("in thread_context_dump, tid=%d\n", tid);
         printf("%p %p %p\n", context, &context, context->uc_mcontext.fpregs);
-        printf("old rip: 0x%lx\n", context->uc_mcontext.gregs[REG_RIP]);
+        printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
 
     pushThreadState(tid, context);

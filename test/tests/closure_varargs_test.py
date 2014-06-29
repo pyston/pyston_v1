@@ -1,6 +1,3 @@
-# expected: fail
-# - varargs, kwarg
-
 # Regression test: make sure that args and kw get properly treated as potentially-saved-in-closure
 
 def f1(*args):
