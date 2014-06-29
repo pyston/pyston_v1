@@ -14,8 +14,16 @@
 
 using namespace pyston;
 
-TEST(func_analysis, augassign) {
-    AST_Module* module = caching_parse("../test/unittests/analysis_listcomp.py");
+class AnalysisTest : public ::testing::Test {
+protected:
+    virtual void SetUp() {
+        initCodegen();
+    }
+};
+
+TEST_F(AnalysisTest, augassign) {
+    const std::string fn("../test/unittests/analysis_listcomp.py");
+    AST_Module* module = caching_parse(fn.c_str());
     assert(module);
 
     ScopingAnalysis *scoping = runScopingAnalysis(module);
@@ -27,7 +35,9 @@ TEST(func_analysis, augassign) {
     ASSERT_FALSE(scope_info->refersToGlobal("a"));
     ASSERT_FALSE(scope_info->refersToGlobal("b"));
 
-    CFG* cfg = computeCFG(func->type, func->body);
+    SourceInfo* si = new SourceInfo(createModule("__main__", fn), scoping, func);
+
+    CFG* cfg = computeCFG(si, func->body);
     LivenessAnalysis* liveness = computeLivenessInfo(cfg);
 
     //cfg->print();

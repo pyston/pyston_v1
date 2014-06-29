@@ -337,11 +337,15 @@ cpplint:
 
 .PHONY: check quick_check
 check:
+	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 	$(MAKE) lint
 	$(MAKE) ext pyston_dbg
-	# $(MAKE) run_unittests
+
 	$(MAKE) check_dbg
-	$(MAKE) check_release
+
+	$(MAKE) check_format
+	$(MAKE) run_unittests
+
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
 	# $(MAKE) check_prof
 	$(MAKE) pyston_prof
@@ -349,9 +353,7 @@ check:
 	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
-	$(MAKE) run_unittests
-	$(MAKE) check_format
-
+	$(MAKE) check_release
 	echo "All tests passed"
 
 quick_check:

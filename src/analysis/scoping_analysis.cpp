@@ -41,6 +41,8 @@ public:
     }
     virtual bool refersToClosure(const std::string name) { return false; }
     virtual bool saveInClosure(const std::string name) { return false; }
+
+    virtual const std::unordered_set<std::string>& getClassDefLocalNames() { RELEASE_ASSERT(0, ""); }
 };
 
 struct ScopingAnalysis::ScopeNameUsage {
@@ -58,7 +60,12 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet referenced_from_nested;
     StrSet got_from_closure;
 
-    ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {}
+    ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {
+        if (node->type == AST_TYPE::ClassDef) {
+            // classes have an implicit write to "__module__"
+            written.insert("__module__");
+        }
+    }
 };
 
 class ScopeInfoBase : public ScopeInfo {
@@ -100,6 +107,11 @@ public:
         if (isCompilerCreatedName(name))
             return false;
         return usage->referenced_from_nested.count(name) != 0;
+    }
+
+    virtual const std::unordered_set<std::string>& getClassDefLocalNames() {
+        RELEASE_ASSERT(usage->node->type == AST_TYPE::ClassDef, "");
+        return usage->written;
     }
 };
 
@@ -159,7 +171,7 @@ public:
     virtual bool visit_if(AST_If* node) { return false; }
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }
-    // virtual bool visit_keyword(AST_keyword *node) { return false; }
+    virtual bool visit_keyword(AST_keyword* node) { return false; }
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
     // virtual bool visit_module(AST_Module *node) { return false; }

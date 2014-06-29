@@ -461,7 +461,9 @@ private:
     }
 
     virtual void visit_classdef(AST_ClassDef* node) {
-        CompilerType* t = typeFromClass(type_cls);
+        // TODO should we speculate that classdefs will generally return a class?
+        // CompilerType* t = typeFromClass(type_cls);
+        CompilerType* t = UNKNOWN;
         _doSet(node->name, t);
     }
 
