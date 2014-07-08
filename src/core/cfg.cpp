@@ -859,6 +859,7 @@ public:
             remapped->args = new AST_arguments();
             remapped->body = node->body; // hmm shouldnt have to copy this
 
+            // Decorators are evaluated before the defaults:
             for (auto d : node->decorator_list) {
                 remapped->decorator_list.push_back(remapExpr(d));
             }

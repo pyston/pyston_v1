@@ -43,6 +43,11 @@ def wrapper():
             print X, Y # "1 1"
     print "done with classdef"
 
+    print hasattr(C, 'X')
+    print hasattr(C, 'Y')
+    print hasattr(C, 'Z')
+    print hasattr(C, 'W')
+
     return C
 
 wrapper()().f()
