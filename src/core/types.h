@@ -218,6 +218,8 @@ public:
     };
 
     ArgNames arg_names;
+    // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
+    // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
 
     const std::string getName();

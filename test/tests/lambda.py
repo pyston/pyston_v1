@@ -10,3 +10,8 @@ print t("test \tstr\ni\n ng")
 def T(y):
      return (lambda x: x < y)
 print T(10)(1), T(10)(20)
+
+# Lambda closures:
+def f(x):
+    print map(lambda y: x * y, range(10))
+f(3)

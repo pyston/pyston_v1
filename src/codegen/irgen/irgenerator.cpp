@@ -1522,7 +1522,8 @@ private:
             SourceInfo* source = irstate->getSourceInfo();
             SourceInfo* si = new SourceInfo(source->parent_module, source->scoping, node, body);
             if (args)
-                cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(), args->kwarg.size(), si);
+                cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(), args->kwarg.size(),
+                                    si);
             else
                 cl = new CLFunction(0, 0, 0, 0, si);
         }

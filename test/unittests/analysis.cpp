@@ -35,7 +35,7 @@ TEST_F(AnalysisTest, augassign) {
     ASSERT_FALSE(scope_info->refersToGlobal("a"));
     ASSERT_FALSE(scope_info->refersToGlobal("b"));
 
-    SourceInfo* si = new SourceInfo(createModule("__main__", fn), scoping, func);
+    SourceInfo* si = new SourceInfo(createModule("__main__", fn), scoping, func, func->body);
 
     CFG* cfg = computeCFG(si, func->body);
     LivenessAnalysis* liveness = computeLivenessInfo(cfg);
