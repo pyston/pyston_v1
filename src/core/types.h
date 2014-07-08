@@ -218,13 +218,13 @@ public:
     };
 
     ArgNames arg_names;
+    const std::vector<AST_stmt*> body;
 
     const std::string getName();
-    // AST_arguments* getArgsAST();
-    const std::vector<AST_stmt*>& getBody();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast)
-        : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), phis(NULL), arg_names(ast) {}
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body)
+        : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), phis(NULL), arg_names(ast),
+          body(body) {}
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;

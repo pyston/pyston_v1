@@ -757,6 +757,21 @@ private:
         return evalExpr(node->value, exc_info);
     }
 
+    CompilerVariable* evalLambda(AST_Lambda* node, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+
+        AST_Return* expr = new AST_Return();
+        expr->value = node->body;
+
+        std::vector<AST_stmt*> body = { expr };
+        CompilerVariable* func = _createFunction(node, exc_info, node->args, body);
+        ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
+        func->decvref(emitter);
+
+        return converted;
+    }
+
+
     CompilerVariable* evalList(AST_List* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
@@ -1051,6 +1066,9 @@ private:
                     break;
                 case AST_TYPE::Index:
                     rtn = evalIndex(ast_cast<AST_Index>(node), exc_info);
+                    break;
+                case AST_TYPE::Lambda:
+                    rtn = evalLambda(ast_cast<AST_Lambda>(node), exc_info);
                     break;
                 case AST_TYPE::List:
                     rtn = evalList(ast_cast<AST_List>(node), exc_info);
@@ -1417,10 +1435,9 @@ private:
         ConcreteCompilerVariable* converted_base = base->makeConverted(emitter, base->getBoxType());
         base->decvref(emitter);
 
-        CLFunction* cl = _wrapClassDef(node);
+        CLFunction* cl = _wrapFunction(node, nullptr, node->body);
 
-
-        // TODO duplication with doFunctionDef:
+        // TODO duplication with _createFunction:
         CompilerVariable* created_closure = NULL;
         if (scope_info->takesClosure()) {
             created_closure = _getFake(CREATED_CLOSURE_NAME, false);
@@ -1495,46 +1512,29 @@ private:
         converted_slice->decvref(emitter);
     }
 
-    CLFunction* _wrapFunction(AST_FunctionDef* node) {
+    CLFunction* _wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
         // Different compilations of the parent scope of a functiondef should lead
         // to the same CLFunction* being used:
-        static std::unordered_map<AST_FunctionDef*, CLFunction*> made;
+        static std::unordered_map<AST*, CLFunction*> made;
 
         CLFunction*& cl = made[node];
         if (cl == NULL) {
-            SourceInfo* si
-                = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping, node);
-            si->ast = node;
-            cl = new CLFunction(node->args->args.size(), node->args->defaults.size(), node->args->vararg.size(),
-                                node->args->kwarg.size(), si);
+            SourceInfo* source = irstate->getSourceInfo();
+            SourceInfo* si = new SourceInfo(source->parent_module, source->scoping, node, body);
+            if (args)
+                cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(), args->kwarg.size(), si);
+            else
+                cl = new CLFunction(0, 0, 0, 0, si);
         }
         return cl;
     }
 
-    CLFunction* _wrapClassDef(AST_ClassDef* node) {
-        // TODO duplication with _wrapFunction
-        static std::unordered_map<AST_ClassDef*, CLFunction*> made;
-
-        CLFunction*& cl = made[node];
-        if (cl == NULL) {
-            SourceInfo* si
-                = new SourceInfo(irstate->getSourceInfo()->parent_module, irstate->getSourceInfo()->scoping, node);
-            si->ast = node;
-            cl = new CLFunction(0, 0, 0, 0, si);
-        }
-        return cl;
-    }
-
-    void doFunctionDef(AST_FunctionDef* node, ExcInfo exc_info) {
-        if (state == PARTIAL)
-            return;
-
-        assert(!node->decorator_list.size());
-
-        CLFunction* cl = this->_wrapFunction(node);
+    CompilerVariable* _createFunction(AST* node, ExcInfo exc_info, AST_arguments* args,
+                                      const std::vector<AST_stmt*>& body) {
+        CLFunction* cl = this->_wrapFunction(node, args, body);
 
         std::vector<ConcreteCompilerVariable*> defaults;
-        for (auto d : node->args->defaults) {
+        for (auto d : args->defaults) {
             CompilerVariable* e = evalExpr(d, exc_info);
             ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
             e->decvref(emitter);
@@ -1558,7 +1558,16 @@ private:
         // llvm::Value *boxed = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(cl,
         // boxCLFuncArgType));
         // CompilerVariable *func = new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
+        return func;
+    }
 
+    void doFunctionDef(AST_FunctionDef* node, ExcInfo exc_info) {
+        if (state == PARTIAL)
+            return;
+
+        assert(!node->decorator_list.size());
+
+        CompilerVariable* func = _createFunction(node, exc_info, node->args, node->body);
         _doSet(node->name, func, exc_info);
         func->decvref(emitter);
     }

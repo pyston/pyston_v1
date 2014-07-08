@@ -621,6 +621,27 @@ private:
         return rtn;
     }
 
+    AST_expr* remapLambda(AST_Lambda* node) {
+        if (node->args->defaults.empty()) {
+            return node;
+        }
+
+        AST_Lambda* rtn = new AST_Lambda();
+        rtn->lineno = node->lineno;
+        rtn->col_offset = node->col_offset;
+
+        rtn->args = new AST_arguments();
+        rtn->args->args = node->args->args;
+        rtn->args->vararg = node->args->vararg;
+        rtn->args->kwarg = node->args->kwarg;
+        for (auto d : node->args->defaults) {
+            rtn->args->defaults.push_back(remapExpr(d));
+        }
+
+        rtn->body = node->body;
+        return rtn;
+    }
+
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
         AST_LangPrimitive* rtn = new AST_LangPrimitive(node->opcode);
         for (AST_expr* arg : node->args) {
@@ -731,6 +752,9 @@ private:
                 break;
             case AST_TYPE::Index:
                 rtn = remapIndex(ast_cast<AST_Index>(node));
+                break;
+            case AST_TYPE::Lambda:
+                rtn = remapLambda(ast_cast<AST_Lambda>(node));
                 break;
             case AST_TYPE::LangPrimitive:
                 rtn = remapLangPrimitive(ast_cast<AST_LangPrimitive>(node));
@@ -1103,7 +1127,7 @@ public:
     }
 
     virtual bool visit_return(AST_Return* node) {
-        if (root_type != AST_TYPE::FunctionDef) {
+        if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda) {
             fprintf(stderr, "SyntaxError: 'return' outside function\n");
             exit(1);
         }

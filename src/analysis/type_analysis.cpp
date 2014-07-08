@@ -351,6 +351,8 @@ private:
 
     virtual void* visit_index(AST_Index* node) { return getType(node->value); }
 
+    virtual void* visit_lambda(AST_Lambda* node) { return typeFromClass(function_cls); }
+
     virtual void* visit_langprimitive(AST_LangPrimitive* node) {
         switch (node->opcode) {
             case AST_LangPrimitive::ISINSTANCE:

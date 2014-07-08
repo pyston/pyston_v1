@@ -51,6 +51,11 @@ SourceInfo::ArgNames::ArgNames(AST* ast) {
         args = &f->args->args;
         vararg = &f->args->vararg;
         kwarg = &f->args->kwarg;
+    } else if (ast->type == AST_TYPE::Lambda) {
+        AST_Lambda* l = ast_cast<AST_Lambda>(ast);
+        args = &l->args->args;
+        vararg = &l->args->vararg;
+        kwarg = &l->args->kwarg;
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -63,22 +68,10 @@ const std::string SourceInfo::getName() {
             return ast_cast<AST_ClassDef>(ast)->name;
         case AST_TYPE::FunctionDef:
             return ast_cast<AST_FunctionDef>(ast)->name;
+        case AST_TYPE::Lambda:
+            return "<lambda>";
         case AST_TYPE::Module:
             return this->parent_module->name();
-        default:
-            RELEASE_ASSERT(0, "%d", ast->type);
-    }
-}
-
-const std::vector<AST_stmt*>& SourceInfo::getBody() {
-    assert(ast);
-    switch (ast->type) {
-        case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->body;
-        case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->body;
-        case AST_TYPE::Module:
-            return ast_cast<AST_Module>(ast)->body;
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -169,7 +162,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
         assert(source->ast);
-        source->cfg = computeCFG(source, source->getBody());
+        source->cfg = computeCFG(source, source->body);
         source->liveness = computeLivenessInfo(source->cfg);
         source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness,
                                            source->scoping->getScopeInfoForNode(source->ast));
@@ -231,7 +224,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         ScopingAnalysis* scoping = runScopingAnalysis(m);
 
-        SourceInfo* si = new SourceInfo(bm, scoping, m);
+        SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         si->cfg = computeCFG(si, m->body);
         si->liveness = computeLivenessInfo(si->cfg);
         si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));

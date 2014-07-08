@@ -532,6 +532,19 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::keyword;
 };
 
+class AST_Lambda : public AST_expr {
+public:
+    AST_arguments* args;
+    AST_expr* body;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Lambda;
+};
+
 class AST_List : public AST_expr {
 public:
     std::vector<AST_expr*> elts;
@@ -918,6 +931,7 @@ public:
     virtual bool visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_invoke(AST_Invoke* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_keyword(AST_keyword* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
@@ -980,6 +994,7 @@ public:
     virtual bool visit_index(AST_Index* node) { return false; }
     virtual bool visit_invoke(AST_Invoke* node) { return false; }
     virtual bool visit_keyword(AST_keyword* node) { return false; }
+    virtual bool visit_lambda(AST_Lambda* node) { return false; }
     virtual bool visit_langprimitive(AST_LangPrimitive* node) { return false; }
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
@@ -1022,6 +1037,7 @@ public:
     virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_langprimitive(AST_LangPrimitive* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_list(AST_List* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_listcomp(AST_ListComp* node) { RELEASE_ASSERT(0, ""); }
@@ -1110,6 +1126,7 @@ public:
     virtual bool visit_index(AST_Index* node);
     virtual bool visit_invoke(AST_Invoke* node);
     virtual bool visit_keyword(AST_keyword* node);
+    virtual bool visit_lambda(AST_Lambda* node);
     virtual bool visit_langprimitive(AST_LangPrimitive* node);
     virtual bool visit_list(AST_List* node);
     virtual bool visit_listcomp(AST_ListComp* node);
