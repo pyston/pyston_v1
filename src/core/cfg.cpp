@@ -1668,15 +1668,25 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     CFG* rtn = new CFG();
     CFGVisitor visitor(source->ast->type, rtn);
 
-    // In a classdef, the "__module__" attribute is immediately available:
     if (source->ast->type == AST_TYPE::ClassDef) {
+        // A classdef always starts with "__module__ = __name__"
         Box* module_name = source->parent_module->getattr("__name__", NULL, NULL);
         assert(module_name->cls == str_cls);
         AST_Assign* module_assign = new AST_Assign();
         module_assign->targets.push_back(makeName("__module__", AST_TYPE::Store));
         module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
-
         visitor.push_back(module_assign);
+
+        // If the first statement is just a single string, transform it to an assignment to __doc__
+        if (body.size() && body[0]->type == AST_TYPE::Expr) {
+            AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
+            if (first_expr->value->type == AST_TYPE::Str) {
+                AST_Assign* doc_assign = new AST_Assign();
+                doc_assign->targets.push_back(makeName("__doc__", AST_TYPE::Store));
+                doc_assign->value = first_expr->value;
+                visitor.push_back(doc_assign);
+            }
+        }
     }
 
     for (int i = 0; i < body.size(); i++) {
@@ -1690,17 +1700,6 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
         auto written_names = scope_info->getClassDefLocalNames();
         AST_Dict* rtn_dict = new AST_Dict();
-
-        // It'd be ok to add __doc__ to the dict multiple times, since the last one would win
-        if (written_names.count("__doc__") == 0) {
-            if (body.size() && body[0]->type == AST_TYPE::Expr) {
-                AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
-                if (first_expr->value->type == AST_TYPE::Str) {
-                    rtn_dict->keys.push_back(new AST_Str("__doc__"));
-                    rtn_dict->values.push_back(first_expr->value);
-                }
-            }
-        }
 
         // Even if the user never explicitly wrote to __module__, there was an
         // implicit write:

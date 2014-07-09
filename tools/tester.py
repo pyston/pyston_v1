@@ -189,7 +189,7 @@ def run_test(fn, check_stats, run_memcheck):
             out_fd, out_fn = tempfile.mkstemp()
             os.fdopen(exp_fd, 'w').write(expected_out)
             os.fdopen(out_fd, 'w').write(out)
-            p = subprocess.Popen(["diff", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
+            p = subprocess.Popen(["diff", "-C2", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
             diff = p.stdout.read()
             assert p.wait() in (0, 1)
             raise Exception("Failed on %s:\n%s" % (fn, diff))

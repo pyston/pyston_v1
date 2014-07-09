@@ -11,6 +11,7 @@ print C1.__doc__
 class C2(object):
     "doc1"
     "doc2"
+    print __doc__
 print C2.__doc__
 
 class C3(object):

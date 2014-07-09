@@ -62,8 +62,17 @@ struct ScopingAnalysis::ScopeNameUsage {
 
     ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {
         if (node->type == AST_TYPE::ClassDef) {
+            AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
+
             // classes have an implicit write to "__module__"
             written.insert("__module__");
+
+            if (classdef->body.size() && classdef->body[0]->type == AST_TYPE::Expr) {
+                AST_Expr* first_expr = ast_cast<AST_Expr>(classdef->body[0]);
+                if (first_expr->value->type == AST_TYPE::Str) {
+                    written.insert("__doc__");
+                }
+            }
         }
     }
 };
