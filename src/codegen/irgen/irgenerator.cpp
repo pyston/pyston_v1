@@ -1823,7 +1823,7 @@ private:
             } else {
                 llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, arg_num - 3);
 
-                if (var->getType() == INT) {
+                if (var->getType() == INT || var->getType() == BOOL) {
                     val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
                 } else if (var->getType() == FLOAT) {
                     // val = emitter.getBuilder()->CreateBitCast(val, g.llvm_value_type_ptr);
