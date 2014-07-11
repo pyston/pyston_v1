@@ -561,6 +561,7 @@ public:
     struct Sig {
         std::vector<ConcreteCompilerType*> arg_types;
         CompilerType* rtn_type;
+        int ndefaults;
     };
 
 private:
@@ -586,11 +587,11 @@ public:
 
         for (int i = 0; i < sigs.size(); i++) {
             Sig* sig = sigs[i];
-            if (sig->arg_types.size() != arg_types.size())
+            if (arg_types.size() < sig->arg_types.size() - sig->ndefaults || arg_types.size() > sig->arg_types.size())
                 continue;
 
             bool works = true;
-            for (int j = 0; j < sig->arg_types.size(); j++) {
+            for (int j = 0; j < arg_types.size(); j++) {
                 if (!arg_types[j]->canConvertTo(sig->arg_types[j])) {
                     works = false;
                     break;
@@ -618,6 +619,7 @@ public:
 
             Sig* type_sig = new Sig();
             type_sig->rtn_type = fspec->rtn_type;
+            type_sig->ndefaults = clf->num_defaults;
 
             if (stripfirst) {
                 assert(fspec->arg_types.size() >= 1);
@@ -633,14 +635,6 @@ public:
 
     static CompilerType* get(const std::vector<Sig*>& sigs) { return new AbstractFunctionType(sigs); }
 };
-
-CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types) {
-    std::vector<AbstractFunctionType::Sig*> sigs;
-    AbstractFunctionType::Sig* sig = new AbstractFunctionType::Sig();
-    sig->rtn_type = rtn_type;
-    sig->arg_types = arg_types;
-    return AbstractFunctionType::get(sigs);
-}
 
 class IntType : public ConcreteCompilerType {
 public:
@@ -1019,19 +1013,20 @@ public:
 
         if (rtattr->cls != function_cls)
             return NULL;
+        BoxedFunction* rtattr_func = static_cast<BoxedFunction*>(rtattr);
 
         RELEASE_ASSERT(!argspec.has_starargs, "");
         RELEASE_ASSERT(!argspec.has_kwargs, "");
         RELEASE_ASSERT(argspec.num_keywords == 0, "");
 
-        CLFunction* cl = unboxRTFunction(rtattr);
+        CLFunction* cl = rtattr_func->f;
         assert(cl);
 
-        if (cl->num_defaults || cl->takes_varargs || cl->takes_kwargs)
+        if (cl->takes_varargs || cl->takes_kwargs)
             return NULL;
 
         RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
-        RELEASE_ASSERT(cl->num_args == args.size() + 1, "");
+        RELEASE_ASSERT(args.size() + 1 >= cl->num_args - cl->num_defaults && args.size() + 1 <= cl->num_args, "");
 
         CompiledFunction* cf = NULL;
         bool found = false;
@@ -1041,13 +1036,8 @@ public:
             assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
 
             bool fits = true;
-            for (int j = 1; j < cl->num_args; j++) {
-                // if (cf->sig->arg_types[j] != UNKNOWN) {
-                // if (cf->sig->arg_types[j]->isFitBy(args[j-1]->guaranteedClass())) {
-                if (!args[j - 1]->canConvertTo(cf->spec->arg_types[j])) {
-                    // printf("Can't use version %d since arg %d (%s) doesn't fit into spec arg of %s\n", i, j,
-                    // args[j - 1]->getType()->debugName().c_str(),
-                    // cf->spec->arg_types[j]->debugName().c_str());
+            for (int j = 0; j < args.size(); j++) {
+                if (!args[j]->canConvertTo(cf->spec->arg_types[j + 1])) {
                     fits = false;
                     break;
                 }
@@ -1082,6 +1072,13 @@ public:
         std::vector<CompilerVariable*> new_args;
         new_args.push_back(var);
         new_args.insert(new_args.end(), args.begin(), args.end());
+
+        for (int i = args.size() + 1; i < cl->num_args; i++) {
+            // TODO should _call() be able to take llvm::Value's directly?
+            new_args.push_back(new ConcreteCompilerVariable(
+                UNKNOWN, embedConstantPtr(rtattr_func->defaults->elts[i - args.size() - 1], g.llvm_value_type_ptr),
+                true));
+        }
 
         std::vector<llvm::Value*> other_args;
 
