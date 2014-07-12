@@ -44,6 +44,7 @@ extern "C" void my_assert(bool b);
 extern "C" Box* importFrom(Box* obj, const std::string* attr);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
+extern "C" void delattr(Box* obj, const char* attr);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
 extern "C" Box* callattr(Box*, std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
@@ -92,7 +93,8 @@ enum LookupScope {
 extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<const std::string*>* keyword_names);
-
+extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
+                                 DelattrRewriteArgs2* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,

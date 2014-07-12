@@ -341,6 +341,7 @@ public:
             return -1;
         return it->second;
     }
+    HiddenClass* delAttrToMakeHC(const std::string& attr);
 };
 
 class Box;
@@ -370,6 +371,7 @@ private:
 class SetattrRewriteArgs2;
 class GetattrRewriteArgs;
 class GetattrRewriteArgs2;
+class DelattrRewriteArgs2;
 
 struct HCAttrs {
 public:
@@ -401,6 +403,7 @@ public:
 
     Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
     Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
+    void delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args);
 };
 
 
