@@ -257,7 +257,7 @@ const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
     }
 }
 
-Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(f);
 
 #ifdef TIME_INTERPRETS
@@ -280,18 +280,21 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* arg1, Box* arg2, Box* 
     UnregisterHelper helper(frame_ptr);
 
     int arg_num = -1;
+    int closure_indicator = closure ? 1 : 0;
     for (llvm::Argument& arg : f->args()) {
         arg_num++;
 
-        if (arg_num == 0)
+        if (arg_num == 0 && closure)
+            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(closure)));
+        else if (arg_num == 0 + closure_indicator)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg1)));
-        else if (arg_num == 1)
+        else if (arg_num == 1 + closure_indicator)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg2)));
-        else if (arg_num == 2)
+        else if (arg_num == 2 + closure_indicator)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg3)));
         else {
-            assert(arg_num == 3);
-            assert(f->getArgumentList().size() == 4);
+            assert(arg_num == 3 + closure_indicator);
+            assert(f->getArgumentList().size() == 4 + closure_indicator);
             assert(f->getArgumentList().back().getType() == g.llvm_value_type_ptr->getPointerTo());
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val((int64_t)args)));
             // printf("loading %%4 with %p\n", (void*)args);

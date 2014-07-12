@@ -98,6 +98,17 @@ struct SetattrRewriteArgs2 {
           out_success(false) {}
 };
 
+struct DelattrRewriteArgs2 {
+    Rewriter2* rewriter;
+    RewriterVarUsage2 obj;
+    bool more_guards_after;
+
+    bool out_success;
+
+    DelattrRewriteArgs2(Rewriter2* rewriter, RewriterVarUsage2&& obj, bool more_guards_after)
+        : rewriter(rewriter), obj(std::move(obj)), more_guards_after(more_guards_after), out_success(false) {}
+};
+
 struct LenRewriteArgs {
     Rewriter* rewriter;
     RewriterVar obj;
@@ -300,6 +311,9 @@ BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bo
         assert(instance_size >= attrs_offset + sizeof(HCAttrs));
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     }
+
+    if (!is_user_defined)
+        gc::registerStaticRootObj(this);
 }
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
@@ -327,6 +341,30 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
     rtn->attr_offsets[attr] = attr_offsets.size();
     return rtn;
 }
+
+/**
+ * del attr from current HiddenClass, pertain the orders of remaining attrs
+ */
+HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
+    int idx = getOffset(attr);
+    assert(idx >= 0);
+
+    std::vector<std::string> new_attrs(attr_offsets.size() - 1);
+    for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
+        if (it->second < idx)
+            new_attrs[it->second] = it->first;
+        else if (it->second > idx) {
+            new_attrs[it->second - 1] = it->first;
+        }
+    }
+
+    HiddenClass* cur = getRoot();
+    for (const auto& attr : new_attrs) {
+        cur = cur->getOrMakeChild(attr);
+    }
+    return cur;
+}
+
 
 HiddenClass* HiddenClass::getRoot() {
     static HiddenClass* root = new HiddenClass();
@@ -560,9 +598,13 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
     if (attr->cls == member_cls) {
         BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(attr);
         switch (member_desc->type) {
-            case BoxedMemberDescriptor::OBJECT:
+            case BoxedMemberDescriptor::OBJECT: {
                 assert(member_desc->offset % sizeof(Box*) == 0);
-                return reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+                Box* rtn = reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
+                // be careful about returning NULLs; I'm not sure what the correct behavior is here:
+                RELEASE_ASSERT(rtn, "");
+                return rtn;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
         }
@@ -792,6 +834,26 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
         }
     }
 
+
+    // TODO closures should get their own treatment, but now just piggy-back on the
+    // normal hidden-class IC logic.
+    // Can do better since we don't need to guard on the cls (always going to be closure)
+    if (obj->cls == closure_cls) {
+        BoxedClosure* closure = static_cast<BoxedClosure*>(obj);
+        if (closure->parent) {
+            if (rewrite_args) {
+                rewrite_args->obj = rewrite_args->obj.getAttr(offsetof(BoxedClosure, parent), -1);
+            }
+            if (rewrite_args2) {
+                rewrite_args2->obj
+                    = rewrite_args2->obj.getAttr(offsetof(BoxedClosure, parent), RewriterVarUsage2::Kill);
+            }
+            return getattr_internal(closure->parent, attr, false, false, rewrite_args, rewrite_args2);
+        }
+        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", attr.c_str());
+    }
+
+
     if (allow_custom) {
         // Don't need to pass icentry args, since we special-case __getattribtue__ and __getattr__ to use
         // invalidation rather than guards
@@ -852,9 +914,11 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     slowpath_getattr.log();
 
     if (VERBOSITY() >= 2) {
+#if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
         int id = Stats::getStatId(per_name_stat_name);
         Stats::log(id);
+#endif
     }
 
     std::unique_ptr<Rewriter2> rewriter(
@@ -1631,6 +1695,41 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     return chosen_cf;
 }
 
+static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bool>& params_filled,
+                         const std::string& kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
+                         BoxedDict* okwargs) {
+    assert(kw_val);
+
+    bool found = false;
+    for (int j = 0; j < arg_names.size(); j++) {
+        AST_expr* e = arg_names[j];
+        if (e->type != AST_TYPE::Name)
+            continue;
+
+        AST_Name* n = ast_cast<AST_Name>(e);
+        if (n->id == kw_name) {
+            if (params_filled[j]) {
+                raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
+                               kw_name.c_str());
+            }
+
+            getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
+            params_filled[j] = true;
+
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        if (okwargs) {
+            okwargs->d[boxString(kw_name)] = kw_val;
+        } else {
+            raiseExcHelper(TypeError, "<function>() got an unexpected keyword argument '%s'", kw_name.c_str());
+        }
+    }
+}
+
 Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
               Box** args, const std::vector<const std::string*>* keyword_names) {
     /*
@@ -1650,6 +1749,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
 
+    BoxedClosure* closure = func->closure;
 
     if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs)
         rewrite_args = NULL;
@@ -1685,14 +1785,21 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     }
 
     if (rewrite_args) {
+        int closure_indicator = closure ? 1 : 0;
+
         if (num_passed_args >= 1)
-            rewrite_args->arg1 = rewrite_args->arg1.move(0);
+            rewrite_args->arg1 = rewrite_args->arg1.move(0 + closure_indicator);
         if (num_passed_args >= 2)
-            rewrite_args->arg2 = rewrite_args->arg2.move(1);
+            rewrite_args->arg2 = rewrite_args->arg2.move(1 + closure_indicator);
         if (num_passed_args >= 3)
-            rewrite_args->arg3 = rewrite_args->arg3.move(2);
+            rewrite_args->arg3 = rewrite_args->arg3.move(2 + closure_indicator);
         if (num_passed_args >= 4)
-            rewrite_args->args = rewrite_args->args.move(3);
+            rewrite_args->args = rewrite_args->args.move(3 + closure_indicator);
+
+        // TODO this kind of embedded reference needs to be tracked by the GC somehow?
+        // Or maybe it's ok, since we've guarded on the function object?
+        if (closure)
+            rewrite_args->rewriter->loadConst(0, (intptr_t)closure);
 
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
@@ -1796,7 +1903,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         getArg(f->num_args + (f->takes_varargs ? 1 : 0), oarg1, oarg2, oarg3, oargs) = okwargs;
     }
 
-    const std::vector<AST_expr*>* arg_names = f->getArgNames();
+    const std::vector<AST_expr*>* arg_names = f->source ? f->source->arg_names.args : NULL;
     if (arg_names == nullptr && argspec.num_keywords) {
         raiseExcHelper(TypeError, "<function @%p>() doesn't take keyword arguments", f->versions[0]->code);
     }
@@ -1806,41 +1913,31 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     for (int i = 0; i < argspec.num_keywords; i++) {
         assert(!rewrite_args && "would need to be handled here");
+        assert(arg_names);
+
         int arg_idx = i + argspec.num_args;
         Box* kw_val = getArg(arg_idx, arg1, arg2, arg3, args);
 
+        placeKeyword(*arg_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs, okwargs);
+    }
+
+    if (argspec.has_kwargs) {
+        assert(!rewrite_args && "would need to be handled here");
         assert(arg_names);
-        bool found = false;
-        for (int j = 0; j < arg_names->size(); j++) {
-            AST_expr* e = (*arg_names)[j];
-            if (e->type != AST_TYPE::Name)
-                continue;
 
-            AST_Name* n = ast_cast<AST_Name>(e);
-            if (n->id == *(*keyword_names)[i]) {
-                if (params_filled[j]) {
-                    raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
-                                   n->id.c_str());
-                }
+        Box* kwargs
+            = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
+        RELEASE_ASSERT(kwargs->cls == dict_cls, "haven't implemented this for non-dicts");
 
-                getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
-                params_filled[j] = true;
+        BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
+        for (auto& p : d_kwargs->d) {
+            if (p.first->cls != str_cls)
+                raiseExcHelper(TypeError, "<function>() keywords must be strings");
 
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            if (okwargs) {
-                okwargs->d[boxString(*(*keyword_names)[i])] = kw_val;
-            } else {
-                raiseExcHelper(TypeError, "<function>() got an unexpected keyword argument '%s'",
-                               (*keyword_names)[i]->c_str());
-            }
+            BoxedString* s = static_cast<BoxedString*>(p.first);
+            placeKeyword(*arg_names, params_filled, s->s, p.second, oarg1, oarg2, oarg3, oargs, okwargs);
         }
     }
-    RELEASE_ASSERT(!argspec.has_kwargs, "need to copy the above");
 
 
 
@@ -1893,7 +1990,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return interpretFunction(chosen_cf->func, num_output_args, oarg1, oarg2, oarg3, oargs);
+        return interpretFunction(chosen_cf->func, num_output_args, func->closure, oarg1, oarg2, oarg3, oargs);
     } else {
         if (rewrite_args) {
             rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
@@ -1903,7 +2000,11 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->out_rtn = var;
             rewrite_args->out_success = true;
         }
-        return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+
+        if (closure)
+            return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
+        else
+            return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
     }
 }
 
@@ -2546,6 +2647,83 @@ extern "C" void delitem(Box* target, Box* slice) {
     }
 }
 
+void Box::delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args) {
+    // TODO need to invalidate all IC cache related to accessing attributes of this instance
+    cls->dependent_icgetattrs.invalidateAll();
+
+    HCAttrs* attrs = getAttrsPtr();
+    HiddenClass* hcls = attrs->hcls;
+    HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
+
+    int num_attrs = hcls->attr_offsets.size();
+    int offset = hcls->getOffset(attr);
+    Box** start = attrs->attr_list->attrs;
+    memcpy(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
+
+    attrs->hcls = new_hcls;
+
+    // guarantee the size of the attr_list equals the number of attrs
+    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
+    attrs->attr_list = (HCAttrs::AttrList*)rt_realloc(attrs->attr_list, new_size);
+}
+
+extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
+                                 DelattrRewriteArgs2* rewrite_args) {
+    static const std::string delattr_str("__delattr__");
+    static const std::string delete_str("__delete__");
+
+    // custom __delattr__
+    if (allow_custom) {
+        Box* delAttr = typeLookup(obj->cls, delattr_str, NULL, NULL);
+        if (delAttr != NULL) {
+            Box* boxstr = boxString(attr);
+            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
+            return;
+        }
+    }
+
+    // first check if attr is in the instance's __dict__
+    Box* attrVal = getattr_internal(obj, attr, false, false, NULL, NULL);
+    if (attrVal != NULL) {
+        obj->delattr(attr, NULL);
+    } else {
+        Box* clsAttr = getattr_internal(obj, attr, true, false, NULL, NULL);
+        if (clsAttr == NULL) {
+            raiseAttributeError(obj, attr.c_str());
+            return;
+        }
+        Box* delAttr = getattr_internal(clsAttr, delete_str, false, true, NULL, NULL);
+
+        if (delAttr == NULL) {
+            raiseExcHelper(AttributeError, attr.c_str());
+            return;
+        }
+
+        Box* boxstr = boxString(attr);
+        Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), attrVal, obj);
+    }
+}
+
+// del target.attr
+extern "C" void delattr(Box* obj, const char* attr) {
+    static StatCounter slowpath_delattr("slowpath_delattr");
+    slowpath_delattr.log();
+
+    if (obj->cls == type_cls) {
+        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
+        if (!isUserDefined(cobj)) {
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n",
+                           getNameOfClass(cobj)->c_str());
+        }
+    } else {
+        if (!isUserDefined(obj->cls)) {
+            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj)->c_str(), attr);
+        }
+    }
+
+    delattr_internal(obj, attr, true, NULL);
+}
+
 // For use on __init__ return values
 static void assertInitNone(Box* obj) {
     if (obj != None) {
@@ -2769,9 +2947,11 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
     static StatCounter nopatch_getglobal("nopatch_getglobal");
 
     if (VERBOSITY() >= 2) {
+#if !DISABLE_STATS
         std::string per_name_stat_name = "getglobal__" + *name;
         int id = Stats::getStatId(per_name_stat_name);
         Stats::log(id);
+#endif
     }
 
     { /* anonymous scope to make sure destructors get run before we err out */
@@ -2876,7 +3056,7 @@ extern "C" Box* import(const std::string* name) {
             continue;
 
         if (VERBOSITY() >= 1)
-            printf("Beginning import of %s...\n", fn.c_str());
+            printf("Importing %s from %s\n", name->c_str(), fn.c_str());
 
         // TODO duplication with jit.cpp:
         BoxedModule* module = createModule(*name, fn);

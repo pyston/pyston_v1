@@ -20,6 +20,7 @@
 #include <sys/mman.h>
 
 #include "core/common.h"
+#include "core/util.h"
 #include "gc/gc_alloc.h"
 
 #ifndef NVALGRIND
@@ -32,17 +33,28 @@
 namespace pyston {
 namespace gc {
 
-// extern unsigned numAllocs;
-//#define ALLOCS_PER_COLLECTION 1000
-unsigned bytesAllocatedSinceCollection;
+static unsigned bytesAllocatedSinceCollection;
+static __thread unsigned thread_bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 2000000
 
 void _collectIfNeeded(size_t bytes) {
     if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-        bytesAllocatedSinceCollection = 0;
-        runCollection();
+        // bytesAllocatedSinceCollection = 0;
+        // threading::GLPromoteRegion _lock;
+        // runCollection();
+
+        threading::GLPromoteRegion _lock;
+        if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
+            runCollection();
+            bytesAllocatedSinceCollection = 0;
+        }
     }
-    bytesAllocatedSinceCollection += bytes;
+
+    thread_bytesAllocatedSinceCollection += bytes;
+    if (thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4) {
+        bytesAllocatedSinceCollection += thread_bytesAllocatedSinceCollection;
+        thread_bytesAllocatedSinceCollection = 0;
+    }
 }
 
 
@@ -114,8 +126,6 @@ void* Heap::allocLarge(size_t size) {
 }
 
 static Block* alloc_block(uint64_t size, Block** prev) {
-    // TODO use mmap
-
     Block* rtn = (Block*)small_arena.doMmap(sizeof(Block));
     assert(rtn);
     rtn->size = size;
@@ -126,6 +136,8 @@ static Block* alloc_block(uint64_t size, Block** prev) {
 // Not sure if this mempool stuff is better than the malloc-like interface:
 // VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
 #endif
+
+    // printf("Allocated new block %p\n", rtn);
 
     // Don't think I need to do this:
     memset(rtn->isfree, 0, sizeof(Block::isfree));
@@ -147,98 +159,124 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     return rtn;
 }
 
+static void insertIntoLL(Block** next_pointer, Block* next) {
+    assert(next_pointer);
+    assert(next);
+    assert(!next->next);
+    assert(!next->prev);
+
+    next->next = *next_pointer;
+    if (next->next)
+        next->next->prev = &next->next;
+    *next_pointer = next;
+    next->prev = next_pointer;
+}
+
+static void removeFromLL(Block* b) {
+    if (b->next)
+        b->next->prev = b->prev;
+    *b->prev = b->next;
+
+    b->next = NULL;
+    b->prev = NULL;
+}
+
 Heap::ThreadBlockCache::~ThreadBlockCache() {
     LOCK_REGION(heap->lock);
 
     for (int i = 0; i < NUM_BUCKETS; i++) {
-        if (cache_heads[i] == NULL)
-            continue;
-        assert(0);
+        while (Block* b = cache_free_heads[i]) {
+            removeFromLL(b);
+            insertIntoLL(&heap->heads[i], b);
+        }
+
+        while (Block* b = cache_full_heads[i]) {
+            removeFromLL(b);
+            insertIntoLL(&heap->full_heads[i], b);
+        }
     }
 }
 
-void* Heap::allocSmall(size_t rounded_size, Block** prev, Block** full_head) {
+static void* allocFromBlock(Block* b) {
+    int i = 0;
+    uint64_t mask = 0;
+    for (; i < BITFIELD_ELTS; i++) {
+        mask = b->isfree[i];
+        if (mask != 0L) {
+            break;
+        }
+    }
+
+    if (i == BITFIELD_ELTS) {
+        return NULL;
+    }
+
+    int first = __builtin_ctzll(mask);
+    assert(first < 64);
+    assert(b->isfree[i] & (1L << first));
+    b->isfree[i] ^= (1L << first);
+    // printf("Marking %d:%d: %p=%lx\n", i, first, &b->isfree[i], b->isfree[i]);
+
+    int idx = first + i * 64;
+
+    void* rtn = &b->atoms[idx];
+    return rtn;
+}
+
+static Block* claimBlock(size_t rounded_size, Block** free_head) {
+    Block* free_block = *free_head;
+    if (free_block) {
+        removeFromLL(free_block);
+        return free_block;
+    }
+
+    return alloc_block(rounded_size, NULL);
+}
+
+void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
     _collectIfNeeded(rounded_size);
+
+    Block** free_head = &heads[bucket_idx];
+    Block** full_head = &full_heads[bucket_idx];
 
     ThreadBlockCache* cache = thread_caches.get();
 
-    LOCK_REGION(lock);
+    Block** cache_head = &cache->cache_free_heads[bucket_idx];
 
-    Block* cur = *prev;
-    assert(!cur || prev == cur->prev);
-    int scanned = 0;
+    // static __thread int gc_allocs = 0;
+    // if (++gc_allocs == 128) {
+    // static StatCounter sc_total("gc_allocs");
+    // sc_total.log(128);
+    // gc_allocs = 0;
+    //}
 
-    // printf("alloc(%ld)\n", rounded_size);
-
-    // Block **full_prev = full_head;
     while (true) {
-        // printf("cur = %p, prev = %p\n", cur, prev);
-        if (cur == NULL) {
-            Block* next = alloc_block(rounded_size, &cur->next);
-            // printf("allocated new block %p\n", next);
-            *prev = next;
-            next->prev = prev;
-            prev = &cur->next;
+        while (Block* cache_block = *cache_head) {
+            void* rtn = allocFromBlock(cache_block);
+            if (rtn)
+                return rtn;
 
-            next->next = *full_head;
-            *full_head = NULL;
-            prev = full_head;
-
-            cur = next;
+            removeFromLL(cache_block);
+            insertIntoLL(&cache->cache_full_heads[bucket_idx], cache_block);
         }
 
-        int i = 0;
-        uint64_t mask = 0;
-        for (; i < BITFIELD_ELTS; i++) {
-            mask = cur->isfree[i];
-            if (mask != 0L) {
-                break;
-            }
-        }
+        // Not very useful to count the cache misses if we don't count the total attempts:
+        // static StatCounter sc_fallback("gc_allocs_cachemiss");
+        // sc_fallback.log();
 
-        if (i == BITFIELD_ELTS) {
-            scanned++;
-            // printf("moving on\n");
+        LOCK_REGION(lock);
 
-            Block* t = *prev = cur->next;
-            cur->next = NULL;
-            if (t)
-                t->prev = prev;
+        assert(*cache_head == NULL);
 
-            cur->prev = full_head;
-            cur->next = *full_head;
-            *full_head = cur;
+        // should probably be called allocBlock:
+        Block* myblock = claimBlock(rounded_size, &heads[bucket_idx]);
+        assert(myblock);
+        assert(!myblock->next);
+        assert(!myblock->prev);
 
-            cur = t;
+        // printf("%d claimed new block %p with %d objects\n", threading::gettid(), myblock, myblock->numObjects());
 
-            scanned++;
-            continue;
-        }
-
-        // printf("scanned %d\n", scanned);
-        int first = __builtin_ctzll(mask);
-        assert(first < 64);
-        // printf("mask: %lx, first: %d\n", mask, first);
-        cur->isfree[i] ^= (1L << first);
-
-        int idx = first + i * 64;
-
-        // printf("Using index %d\n", idx);
-
-        void* rtn = &cur->atoms[idx];
-
-#ifndef NDEBUG
-        Block* b = Block::forPointer(rtn);
-        assert(b == cur);
-        int offset = (char*)rtn - (char*)b;
-        assert(offset % rounded_size == 0);
-#endif
-
-#ifndef NVALGRIND
-// VALGRIND_MEMPOOL_ALLOC(cur, rtn, rounded_size);
-#endif
-
-        return rtn;
+        insertIntoLL(cache_head, myblock);
     }
 }
 
@@ -352,12 +390,11 @@ void* Heap::getAllocationFromInteriorPointer(void* ptr) {
     return &b->atoms[atom_idx];
 }
 
-static long freeChain(Block* head) {
-    long bytes_freed = 0;
-    while (head) {
-        int num_objects = head->numObjects();
-        int first_obj = head->minObjIndex();
-        int atoms_per_obj = head->atomsPerObj();
+static Block** freeChain(Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
 
         for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
             int atom_idx = obj_idx * atoms_per_obj;
@@ -365,33 +402,64 @@ static long freeChain(Block* head) {
             int bitmap_bit = atom_idx % 64;
             uint64_t mask = 1L << bitmap_bit;
 
-            if (head->isfree[bitmap_idx] & mask)
+            if (b->isfree[bitmap_idx] & mask)
                 continue;
 
-            void* p = &head->atoms[atom_idx];
+            void* p = &b->atoms[atom_idx];
             GCObjectHeader* header = headerFromObject(p);
 
             if (isMarked(header)) {
                 clearMark(header);
             } else {
-                if (VERBOSITY() >= 2)
-                    printf("Freeing %p\n", p);
                 // assert(p != (void*)0x127000d960); // the main module
-                bytes_freed += head->size;
-                head->isfree[bitmap_idx] |= mask;
+                b->isfree[bitmap_idx] |= mask;
             }
         }
 
-        head = head->next;
+        head = &b->next;
     }
-    return bytes_freed;
+    return head;
 }
 
 void Heap::freeUnmarked() {
-    long bytes_freed = 0;
+    thread_caches.forEachValue([this](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            // Try to limit the amount of unused memory a thread can hold onto;
+            // currently pretty dumb, just limit the number of blocks in the free-list
+            // to 50.  (blocks in the full list don't need to be limited, since we're sure
+            // that the thread had just actively used those.)
+            // Eventually may want to come up with some scrounging system.
+            // TODO does this thread locality even help at all?
+            for (int i = 0; i < 50; i++) {
+                if (h)
+                    h = h->next;
+                else
+                    break;
+            }
+            if (h) {
+                removeFromLL(h);
+                insertIntoLL(&heads[bidx], h);
+            }
+
+            Block** chain_end = freeChain(&cache->cache_free_heads[bidx]);
+            freeChain(&cache->cache_full_heads[bidx]);
+
+            while (Block* b = cache->cache_full_heads[bidx]) {
+                removeFromLL(b);
+                insertIntoLL(chain_end, b);
+            }
+        }
+    });
+
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        bytes_freed += freeChain(heads[bidx]);
-        bytes_freed += freeChain(full_heads[bidx]);
+        Block** chain_end = freeChain(&heads[bidx]);
+        freeChain(&full_heads[bidx]);
+
+        while (Block* b = full_heads[bidx]) {
+            removeFromLL(b);
+            insertIntoLL(chain_end, b);
+        }
     }
 
     LargeObj* cur = large_head;
@@ -403,7 +471,6 @@ void Heap::freeUnmarked() {
         } else {
             if (VERBOSITY() >= 2)
                 printf("Freeing %p\n", p);
-            bytes_freed += cur->mmap_size();
 
             *cur->prev = cur->next;
             if (cur->next)
@@ -417,10 +484,6 @@ void Heap::freeUnmarked() {
 
         cur = cur->next;
     }
-
-    if (VERBOSITY("gc") >= 2)
-        if (bytes_freed)
-            printf("Freed %ld bytes\n", bytes_freed);
 }
-}
-}
+} // namespace gc
+} // namespace pyston

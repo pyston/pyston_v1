@@ -166,13 +166,13 @@ std::string getInplaceOpName(int op_type) {
 // Calling it "reverse" because that's what I'm assuming the 'r' stands for in ex __radd__
 std::string getReverseOpName(int op_type) {
     if (op_type == AST_TYPE::Lt)
-        return getOpName(AST_TYPE::GtE);
-    if (op_type == AST_TYPE::LtE)
         return getOpName(AST_TYPE::Gt);
+    if (op_type == AST_TYPE::LtE)
+        return getOpName(AST_TYPE::GtE);
     if (op_type == AST_TYPE::Gt)
-        return getOpName(AST_TYPE::LtE);
-    if (op_type == AST_TYPE::GtE)
         return getOpName(AST_TYPE::Lt);
+    if (op_type == AST_TYPE::GtE)
+        return getOpName(AST_TYPE::LtE);
     if (op_type == AST_TYPE::NotEq)
         return getOpName(AST_TYPE::NotEq);
     if (op_type == AST_TYPE::Eq)
@@ -565,6 +565,19 @@ void AST_keyword::accept(ASTVisitor* v) {
         return;
 
     value->accept(v);
+}
+
+void AST_Lambda::accept(ASTVisitor* v) {
+    bool skip = v->visit_lambda(this);
+    if (skip)
+        return;
+
+    args->accept(v);
+    body->accept(v);
+}
+
+void* AST_Lambda::accept_expr(ExprVisitor* v) {
+    return v->visit_lambda(this);
 }
 
 void AST_LangPrimitive::accept(ASTVisitor* v) {
@@ -1272,6 +1285,14 @@ bool PrintVisitor::visit_invoke(AST_Invoke* node) {
     return true;
 }
 
+bool PrintVisitor::visit_lambda(AST_Lambda* node) {
+    printf("lambda ");
+    node->args->accept(this);
+    printf(": ");
+    node->body->accept(this);
+    return true;
+}
+
 bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
     printf(":");
     switch (node->opcode) {
@@ -1725,6 +1746,10 @@ public:
     virtual bool visit_keyword(AST_keyword* node) {
         output->push_back(node);
         return false;
+    }
+    virtual bool visit_lambda(AST_Lambda* node) {
+        output->push_back(node);
+        return !expand_scopes;
     }
     virtual bool visit_langprimitive(AST_LangPrimitive* node) {
         output->push_back(node);

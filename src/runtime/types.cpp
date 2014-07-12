@@ -65,7 +65,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(&function_flavor, function_cls), f(f), ndefaults(0), defaults(NULL) {
+    : Box(&function_flavor, function_cls), f(f), closure(NULL), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -78,13 +78,15 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
     assert(f->num_defaults == ndefaults);
 }
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults)
-    : Box(&function_flavor, function_cls), f(f), ndefaults(0), defaults(NULL) {
-    // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
-    // and a GC can happen within this constructor:
-    this->defaults = new (defaults.size()) GCdArray();
-    memcpy(this->defaults->elts, defaults.begin(), defaults.size() * sizeof(Box*));
-    this->ndefaults = defaults.size();
+extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure)
+    : Box(&function_flavor, function_cls), f(f), closure(closure), ndefaults(0), defaults(NULL) {
+    if (defaults.size()) {
+        // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
+        // and a GC can happen within this constructor:
+        this->defaults = new (defaults.size()) GCdArray();
+        memcpy(this->defaults->elts, defaults.begin(), defaults.size() * sizeof(Box*));
+        this->ndefaults = defaults.size();
+    }
 
     if (f->source) {
         assert(f->source->ast);
@@ -104,14 +106,17 @@ extern "C" void functionGCHandler(GCVisitor* v, void* p) {
 
     BoxedFunction* f = (BoxedFunction*)p;
 
+    if (f->closure)
+        v->visit(f->closure);
+
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunction constructor
     if (f->ndefaults) {
         assert(f->defaults);
         v->visit(f->defaults);
         // do a conservative scan since there can be NULLs in there:
-        v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults[0]),
-                               reinterpret_cast<void* const*>(&f->defaults[f->ndefaults]));
+        v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults->elts[0]),
+                               reinterpret_cast<void* const*>(&f->defaults->elts[f->ndefaults]));
     }
 }
 
@@ -130,8 +135,11 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f) {
-    return new BoxedFunction(f);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults) {
+    if (closure)
+        assert(closure->cls == closure_cls);
+
+    return new BoxedFunction(f, defaults, closure);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -245,9 +253,18 @@ extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
     v->visitPotentialRange(start, start + (size / sizeof(void*)));
 }
 
+extern "C" void closureGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedClosure* c = (BoxedClosure*)p;
+    if (c->parent)
+        v->visit(c->parent);
+}
+
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
-    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls;
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
+    *closure_cls;
 
 const ObjectFlavor object_flavor(&boxGCHandler, NULL);
 const ObjectFlavor type_flavor(&typeGCHandler, NULL);
@@ -265,6 +282,7 @@ const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
 const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
 const ObjectFlavor member_flavor(&boxGCHandler, NULL);
+const ObjectFlavor closure_flavor(&closureGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
 const AllocationKind hc_kind(&hcGCHandler, NULL);
@@ -273,10 +291,13 @@ const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 BoxedTuple* EmptyTuple;
 }
 
-extern "C" Box* createUserClass(std::string* name, Box* _base, BoxedModule* parent_module) {
+extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) {
     assert(_base);
     assert(isSubclass(_base->cls, type_cls));
     BoxedClass* base = static_cast<BoxedClass*>(_base);
+
+    ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict)->c_str());
+    BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 
     BoxedClass* made;
 
@@ -287,10 +308,18 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, BoxedModule* pare
         made = new BoxedClass(base, base->instance_size, base->instance_size + sizeof(HCAttrs), true);
     }
 
-    made->giveAttr("__name__", boxString(*name));
+    for (const auto& p : attr_dict->d) {
+        assert(p.first->cls == str_cls);
+        made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
+    }
 
-    Box* modname = parent_module->getattr("__name__", NULL, NULL);
-    made->giveAttr("__module__", modname);
+    if (made->getattr("__doc__") == NULL) {
+        made->giveAttr("__doc__", None);
+    }
+
+    // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
+    made->setattr("__name__", boxString(*name), NULL);
+
 
     return made;
 }
@@ -354,6 +383,12 @@ Box* range_obj = NULL;
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     BoxedSlice* rtn = new BoxedSlice(start, stop, step);
     return rtn;
+}
+
+extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure) {
+    if (parent_closure)
+        assert(parent_closure->cls == closure_cls);
+    return new BoxedClosure(parent_closure);
 }
 
 extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
@@ -443,7 +478,7 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
 
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
-    HiddenClass::getRoot();
+    gc::registerStaticRootObj(HiddenClass::getRoot());
 
     object_cls = new BoxedClass(NULL, 0, sizeof(Box), false);
     type_cls = new BoxedClass(object_cls, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
@@ -452,6 +487,7 @@ void setupRuntime() {
 
     none_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
     None = new Box(&none_flavor, none_cls);
+    gc::registerStaticRootObj(None);
 
     str_cls = new BoxedClass(object_cls, 0, sizeof(BoxedString), false);
 
@@ -483,6 +519,7 @@ void setupRuntime() {
     file_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFile), false);
     set_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     member_cls = new BoxedClass(object_cls, 0, sizeof(BoxedMemberDescriptor), false);
+    closure_cls = new BoxedClass(object_cls, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -523,6 +560,9 @@ void setupRuntime() {
 
     member_cls->giveAttr("__name__", boxStrConstant("member"));
     member_cls->freeze();
+
+    closure_cls->giveAttr("__name__", boxStrConstant("closure"));
+    closure_cls->freeze();
 
     setupBool();
     setupInt();
@@ -575,6 +615,8 @@ BoxedModule* createModule(const std::string& name, const std::string& fn) {
     Box* b_name = boxStringPtr(&name);
     assert(d->d.count(b_name) == 0);
     d->d[b_name] = module;
+
+    module->giveAttr("__doc__", None);
     return module;
 }
 

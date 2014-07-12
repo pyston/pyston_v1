@@ -38,6 +38,7 @@ extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
+extern "C" void delattr(Box* obj, const char* attr);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
 extern "C" Box* callattr(Box*, std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
@@ -69,6 +70,7 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
+extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 
 class BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
@@ -93,6 +95,9 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
 
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args,
                 GetattrRewriteArgs2* rewrite_args2);
+
+extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
+                                 DelattrRewriteArgs2* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));

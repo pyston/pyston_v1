@@ -165,6 +165,7 @@ struct FunctionSpecialization {
         : rtn_type(rtn_type), arg_types(arg_types) {}
 };
 
+class BoxedClosure;
 struct CompiledFunction {
 private:
 public:
@@ -176,6 +177,7 @@ public:
 
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
+        Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
         void* code;
     };
     llvm::Value* llvm_code; // the llvm callable.
@@ -201,19 +203,39 @@ public:
     CFG* cfg;
     LivenessAnalysis* liveness;
     PhiAnalysis* phis;
+    const std::vector<AST_stmt*> body;
+
+    struct ArgNames {
+        const std::vector<AST_expr*>* args;
+        const std::string* vararg, *kwarg;
+
+        explicit ArgNames(AST* ast);
+
+        int totalParameters() const {
+            if (!args)
+                return 0;
+            return args->size() + (vararg->size() == 0 ? 0 : 1) + (kwarg->size() == 0 ? 0 : 1);
+        }
+    };
+
+    ArgNames arg_names;
+    // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
+    // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
+    const std::vector<AST_stmt*> body;
 
     const std::string getName();
     AST_arguments* getArgsAST();
     const std::vector<AST_expr*>& getArgNames();
-    const std::vector<AST_stmt*>& getBody();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping)
-        : parent_module(m), scoping(scoping), ast(NULL), cfg(NULL), liveness(NULL), phis(NULL) {}
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body)
+        : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), phis(NULL), arg_names(ast),
+          body(body) {}
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
 class CallRewriteArgs;
-struct CLFunction {
+class CLFunction {
+public:
     int num_args;
     int num_defaults;
     bool takes_varargs, takes_kwargs;
@@ -239,7 +261,7 @@ struct CLFunction {
 
     int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
 
-    const std::vector<AST_expr*>* getArgNames();
+    // const std::vector<AST_expr*>* getArgNames();
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
@@ -322,6 +344,7 @@ public:
             return -1;
         return it->second;
     }
+    HiddenClass* delAttrToMakeHC(const std::string& attr);
 };
 
 class Box;
@@ -351,6 +374,7 @@ private:
 class SetattrRewriteArgs2;
 class GetattrRewriteArgs;
 class GetattrRewriteArgs2;
+class DelattrRewriteArgs2;
 
 struct HCAttrs {
 public:
@@ -382,6 +406,7 @@ public:
 
     Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
     Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
+    void delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args);
 };
 
 
@@ -436,7 +461,8 @@ BoxedModule* createModule(const std::string& name, const std::string& fn);
 std::string getPythonFuncAt(void* ip, void* sp);
 
 // TODO where to put this
-void addToSysPath(const std::string& path);
+void appendToSysPath(const std::string& path);
+void prependToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);

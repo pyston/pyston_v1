@@ -16,6 +16,8 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -35,6 +37,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 
 #ifndef GITREV
@@ -87,6 +90,9 @@ int main(int argc, char** argv) {
 
     const char* fn = NULL;
 
+    threading::registerMainThread();
+    threading::GLReadRegion _glock;
+
     {
         Timer _t("for initCodegen");
         initCodegen();
@@ -106,14 +112,22 @@ int main(int argc, char** argv) {
         addToSysArgv("");
     }
 
+    std::string self_path = llvm::sys::fs::getMainExecutable(argv[0], (void*)main);
+    assert(self_path.size());
+
+    llvm::SmallString<128> stdlib_dir(self_path);
+    llvm::sys::path::remove_filename(stdlib_dir); // executable name
+    llvm::sys::path::remove_filename(stdlib_dir); // "src/" dir
+    llvm::sys::path::append(stdlib_dir, "lib_python");
+    llvm::sys::path::append(stdlib_dir, "2.7");
+    appendToSysPath(stdlib_dir.c_str());
+
     // end of argument parsing
 
-    threading::registerMainThread();
-    threading::GLReadRegion _glock;
-
     _t.split("to run");
+    BoxedModule* main_module = NULL;
     if (fn != NULL) {
-        BoxedModule* main = createModule("__main__", fn);
+        main_module = createModule("__main__", fn);
 
         llvm::SmallString<128> path;
 
@@ -126,7 +140,7 @@ int main(int argc, char** argv) {
 
         llvm::sys::path::append(path, fn);
         llvm::sys::path::remove_filename(path);
-        addToSysPath(path.str());
+        prependToSysPath(path.str());
 
         int num_iterations = 1;
         if (BENCH)
@@ -146,7 +160,7 @@ int main(int argc, char** argv) {
             }
 
             try {
-                compileAndRunModule(m, main);
+                compileAndRunModule(m, main_module);
             } catch (Box* b) {
                 std::string msg = formatException(b);
                 printLastTraceback();
@@ -157,7 +171,11 @@ int main(int argc, char** argv) {
     }
 
     if (repl && BENCH) {
-        BoxedModule* main = createModule("__main__", "<bench>");
+        if (!main_module) {
+            main_module = createModule("__main__", "<bench>");
+        } else {
+            main_module->fn = "<bench>";
+        }
 
         timeval start, end;
         gettimeofday(&start, NULL);
@@ -168,7 +186,7 @@ int main(int argc, char** argv) {
             run++;
 
             AST_Module* m = new AST_Module();
-            compileAndRunModule(m, main);
+            compileAndRunModule(m, main_module);
 
             if (run >= MAX_RUNS) {
                 printf("Quitting after %d iterations\n", run);
@@ -191,18 +209,21 @@ int main(int argc, char** argv) {
         printf("Pyston v0.1 (rev " STRINGIFY(GITREV) ")");
         printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
-        BoxedModule* main = createModule("__main__", "<stdin>");
+        if (!main_module) {
+            main_module = createModule("__main__", "<stdin>");
+        } else {
+            main_module->fn = "<stdin>";
+        }
 
         while (repl) {
-            printf(">> ");
-            fflush(stdout);
+            char* line = readline(">> ");
 
-            char* line = NULL;
-            size_t size;
-            int read;
-            if ((read = getline(&line, &size, stdin)) == -1) {
+            if (!line) {
                 repl = false;
             } else {
+                add_history(line);
+                int size = strlen(line);
+
                 Timer _t("repl");
 
                 char buf[] = "pystontmp_XXXXXX";
@@ -210,11 +231,11 @@ int main(int argc, char** argv) {
                 assert(tmpdir);
                 std::string tmp = std::string(tmpdir) + "/in.py";
                 if (VERBOSITY() >= 1) {
-                    printf("writing %d bytes to %s\n", read, tmp.c_str());
+                    printf("writing %d bytes to %s\n", size, tmp.c_str());
                 }
 
                 FILE* f = fopen(tmp.c_str(), "w");
-                fwrite(line, 1, read, f);
+                fwrite(line, 1, size, f);
                 fclose(f);
 
                 AST_Module* m = parse(tmp.c_str());
@@ -222,15 +243,24 @@ int main(int argc, char** argv) {
 
                 if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
                     AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
+                    AST_Call* c = new AST_Call();
+                    AST_Name* r = new AST_Name();
+                    r->id = "repr";
+                    r->ctx_type = AST_TYPE::Load;
+                    c->func = r;
+                    c->starargs = NULL;
+                    c->kwargs = NULL;
+                    c->args.push_back(e->value);
+
                     AST_Print* p = new AST_Print();
                     p->dest = NULL;
                     p->nl = true;
-                    p->values.push_back(e->value);
+                    p->values.push_back(c);
                     m->body[0] = p;
                 }
 
                 try {
-                    compileAndRunModule(m, main);
+                    compileAndRunModule(m, main_module);
                 } catch (Box* b) {
                     std::string msg = formatException(b);
                     printLastTraceback();

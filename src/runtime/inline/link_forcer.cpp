@@ -57,9 +57,11 @@ void force() {
     FORCE(createList);
     FORCE(createSlice);
     FORCE(createUserClass);
+    FORCE(createClosure);
 
     FORCE(getattr);
     FORCE(setattr);
+    FORCE(delattr);
     FORCE(print);
     FORCE(nonzero);
     FORCE(binop);

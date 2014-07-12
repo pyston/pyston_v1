@@ -2,6 +2,11 @@ Pyston currently only supports installing from source; the following instruction
 
 The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `src/Makefile`.
 
+
+### Prerequisites
+GNU make is required to build pyston.
+
+
 Start off by making the relevant directories:
 
 ```
@@ -87,6 +92,13 @@ and then repeat the correct process
 `zsh` is needed when running pyston tests.
 ```
 apt-get install zsh
+```
+
+### readline
+`readline` is used for the repl.
+
+```
+sudo apt-get install readline
 ```
 
 # Optional dependencies
@@ -200,19 +212,11 @@ sudo apt-get install linux-tools-`uname -r`
 # may need to strip off the -generic from that last one
 ```
 
-### rlwrap
-The Pyston repl (`make run`) doesn't currently support any typical terminal features; it simply reads stdin as a raw stream.  Some day we will add it, but for now you can use "rlwrap" to provide these features as a wrapper around Pyston.  Simply
-
-```
-sudo apt-get install rlwrap
-```
-
-and when you do `make run`, the Make system will invoke rlwrap.  If you want to invoke the repl manually, you can do `rlwrap ./pyston`
-
 ### ninja-based LLVM build
 
 Ninja is supposed to be faster than make; I've only tried it very briefly, and it does seem to be faster when modifying LLVM files.  May or may not be worth using; thought I'd jot down my notes though:
 
+You may or may not need a more-recent version of ninja than your package manager provides:
 ```
 cd ~/pyston_deps
 git clone https://github.com/martine/ninja.git

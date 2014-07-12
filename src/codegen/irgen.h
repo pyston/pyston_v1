@@ -65,6 +65,9 @@ public:
     virtual GCBuilder* getGC() = 0;
     virtual CompiledFunction* currentFunction() = 0;
 
+    virtual llvm::Value* getScratch(int num_bytes) = 0;
+    virtual void releaseScratch(llvm::Value*) = 0;
+
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
     virtual llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) = 0;
@@ -77,8 +80,7 @@ public:
 };
 
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec,
-                            const std::vector<AST_expr*>& arg_names, std::string nameprefix);
+                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
 
 class TypeRecorder;
 class OpInfo {

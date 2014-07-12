@@ -15,6 +15,7 @@
 #ifndef PYSTON_CORE_STATS_H
 #define PYSTON_CORE_STATS_H
 
+#include <atomic>
 #include <cstdio>
 #include <string>
 #include <unordered_map>
@@ -24,6 +25,9 @@
 
 namespace pyston {
 
+#define DISABLE_STATS 0
+
+#if !DISABLE_STATS
 struct Stats {
 private:
     static std::vector<long>* counts;
@@ -56,6 +60,20 @@ public:
 
     void log(int count = 1) { Stats::log(id, count); }
 };
+
+#else
+struct Stats {
+    static void dump() { printf("(Stats disabled)\n"); }
+};
+struct StatCounter {
+    StatCounter(const char* name) {}
+    void log(int count = 1) {};
+};
+struct StatPerThreadCounter {
+    StatPerThreadCounter(const char* name) {}
+    void log(int count = 1) {};
+};
+#endif
 }
 
 #endif

@@ -1,6 +1,3 @@
-# expected: fail
-# - arbitrary stuff in classes
-
 # You can put arbitrary stuff in class definitions, which end up being added as class attributes
 
 class C(object):
@@ -27,6 +24,7 @@ class C(object):
         pass
 
     [123]
+print C.__module__
 
 class D(object):
     x = 1

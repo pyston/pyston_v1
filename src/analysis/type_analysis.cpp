@@ -197,9 +197,16 @@ private:
         return rtn;
     }
 
+    bool hasFixedBinops(CompilerType* type) {
+        // This is non-exhaustive:
+        return type == STR || type == INT || type == FLOAT || type == LIST || type == DICT;
+    }
+
     virtual void* visit_augbinop(AST_AugBinOp* node) {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
+        if (!hasFixedBinops(left) || !hasFixedBinops(right))
+            return UNKNOWN;
 
         // TODO this isn't the exact behavior
         std::string name = getInplaceOpName(node->op_type);
@@ -227,6 +234,8 @@ private:
     virtual void* visit_binop(AST_BinOp* node) {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
+        if (!hasFixedBinops(left) || !hasFixedBinops(right))
+            return UNKNOWN;
 
         // TODO this isn't the exact behavior
         const std::string& name = getOpName(node->op_type);
@@ -303,27 +312,29 @@ private:
     }
 
     virtual void* visit_compare(AST_Compare* node) {
-        RELEASE_ASSERT(node->ops.size() == 1, "unimplemented");
+        if (node->ops.size() == 1) {
+            CompilerType* left = getType(node->left);
+            CompilerType* right = getType(node->comparators[0]);
 
-        CompilerType* left = getType(node->left);
-        CompilerType* right = getType(node->comparators[0]);
+            AST_TYPE::AST_TYPE op_type = node->ops[0];
+            if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
+                || op_type == AST_TYPE::NotIn) {
+                assert(node->ops.size() == 1 && "I don't think this should happen");
+                return BOOL;
+            }
 
-        AST_TYPE::AST_TYPE op_type = node->ops[0];
-        if (op_type == AST_TYPE::Is || op_type == AST_TYPE::IsNot || op_type == AST_TYPE::In
-            || op_type == AST_TYPE::NotIn) {
-            assert(node->ops.size() == 1 && "I don't think this should happen");
-            return BOOL;
+            const std::string& name = getOpName(node->ops[0]);
+            CompilerType* attr_type = left->getattrType(&name, true);
+
+            if (attr_type == UNDEF)
+                attr_type = UNKNOWN;
+
+            std::vector<CompilerType*> arg_types;
+            arg_types.push_back(right);
+            return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
+        } else {
+            return UNKNOWN;
         }
-
-        const std::string& name = getOpName(node->ops[0]);
-        CompilerType* attr_type = left->getattrType(&name, true);
-
-        if (attr_type == UNDEF)
-            attr_type = UNKNOWN;
-
-        std::vector<CompilerType*> arg_types;
-        arg_types.push_back(right);
-        return attr_type->callType(ArgPassSpec(2), arg_types, NULL);
     }
 
     virtual void* visit_dict(AST_Dict* node) {
@@ -339,6 +350,8 @@ private:
     }
 
     virtual void* visit_index(AST_Index* node) { return getType(node->value); }
+
+    virtual void* visit_lambda(AST_Lambda* node) { return typeFromClass(function_cls); }
 
     virtual void* visit_langprimitive(AST_LangPrimitive* node) {
         switch (node->opcode) {
@@ -448,14 +461,24 @@ private:
     }
 
     virtual void visit_classdef(AST_ClassDef* node) {
-        CompilerType* t = typeFromClass(type_cls);
+        // TODO should we speculate that classdefs will generally return a class?
+        // CompilerType* t = typeFromClass(type_cls);
+        CompilerType* t = UNKNOWN;
         _doSet(node->name, t);
     }
 
     virtual void visit_delete(AST_Delete* node) {
         for (AST_expr* target : node->targets) {
-            RELEASE_ASSERT(target->type == AST_TYPE::Subscript, "");
-            getType(ast_cast<AST_Subscript>(target)->value);
+            switch (target->type) {
+                case AST_TYPE::Subscript:
+                    getType(ast_cast<AST_Subscript>(target)->value);
+                    break;
+                case AST_TYPE::Attribute:
+                    getType(ast_cast<AST_Attribute>(target)->value);
+                    break;
+                default:
+                    RELEASE_ASSERT(0, "");
+            }
         }
     }
 
@@ -600,23 +623,37 @@ public:
         return changed;
     }
 
-    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const std::vector<AST_expr*>& arg_names,
+    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
                                                const std::vector<ConcreteCompilerType*>& arg_types,
                                                SpeculationLevel speculation, ScopeInfo* scope_info) {
         AllTypeMap starting_types;
         ExprTypeMap expr_types;
         TypeSpeculations type_speculations;
 
-        assert(arg_names.size() == arg_types.size());
+        assert(arg_names.totalParameters() == arg_types.size());
 
-        {
+        if (arg_names.args) {
             TypeMap& initial_types = starting_types[cfg->getStartingBlock()];
-            for (int i = 0; i < arg_names.size(); i++) {
-                AST_expr* arg = arg_names[i];
+            int i = 0;
+
+            for (; i < arg_names.args->size(); i++) {
+                AST_expr* arg = (*arg_names.args)[i];
                 assert(arg->type == AST_TYPE::Name);
                 AST_Name* arg_name = ast_cast<AST_Name>(arg);
                 initial_types[arg_name->id] = unboxedType(arg_types[i]);
             }
+
+            if (arg_names.vararg->size()) {
+                initial_types[*arg_names.vararg] = unboxedType(arg_types[i]);
+                i++;
+            }
+
+            if (arg_names.kwarg->size()) {
+                initial_types[*arg_names.kwarg] = unboxedType(arg_types[i]);
+                i++;
+            }
+
+            assert(i == arg_types.size());
         }
 
         std::unordered_set<CFGBlock*> in_queue;
@@ -696,7 +733,7 @@ public:
 
 
 // public entry point:
-TypeAnalysis* doTypeAnalysis(CFG* cfg, const std::vector<AST_expr*>& arg_names,
+TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
                              const std::vector<ConcreteCompilerType*>& arg_types,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
     // return new NullTypeAnalysis();

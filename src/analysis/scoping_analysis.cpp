@@ -41,6 +41,8 @@ public:
     }
     virtual bool refersToClosure(const std::string name) { return false; }
     virtual bool saveInClosure(const std::string name) { return false; }
+
+    virtual const std::unordered_set<std::string>& getClassDefLocalNames() { RELEASE_ASSERT(0, ""); }
 };
 
 struct ScopingAnalysis::ScopeNameUsage {
@@ -58,7 +60,21 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet referenced_from_nested;
     StrSet got_from_closure;
 
-    ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {}
+    ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {
+        if (node->type == AST_TYPE::ClassDef) {
+            AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
+
+            // classes have an implicit write to "__module__"
+            written.insert("__module__");
+
+            if (classdef->body.size() && classdef->body[0]->type == AST_TYPE::Expr) {
+                AST_Expr* first_expr = ast_cast<AST_Expr>(classdef->body[0]);
+                if (first_expr->value->type == AST_TYPE::Str) {
+                    written.insert("__doc__");
+                }
+            }
+        }
+    }
 };
 
 class ScopeInfoBase : public ScopeInfo {
@@ -76,15 +92,9 @@ public:
 
     virtual ScopeInfo* getParent() { return parent; }
 
-    virtual bool createsClosure() {
-        assert(0);
-        return usage->referenced_from_nested.size() > 0;
-    }
+    virtual bool createsClosure() { return usage->referenced_from_nested.size() > 0; }
 
-    virtual bool takesClosure() {
-        assert(0);
-        return false;
-    }
+    virtual bool takesClosure() { return usage->got_from_closure.size() > 0; }
 
     virtual bool refersToGlobal(const std::string& name) {
         // HAX
@@ -106,6 +116,11 @@ public:
         if (isCompilerCreatedName(name))
             return false;
         return usage->referenced_from_nested.count(name) != 0;
+    }
+
+    virtual const std::unordered_set<std::string>& getClassDefLocalNames() {
+        RELEASE_ASSERT(usage->node->type == AST_TYPE::ClassDef, "");
+        return usage->written;
     }
 };
 
@@ -143,7 +158,6 @@ public:
         return true;
     }
 
-    virtual bool visit_arguments(AST_arguments* node) { return false; }
     virtual bool visit_assert(AST_Assert* node) { return false; }
     virtual bool visit_assign(AST_Assign* node) { return false; }
     virtual bool visit_augassign(AST_AugAssign* node) { return false; }
@@ -156,6 +170,11 @@ public:
     virtual bool visit_comprehension(AST_comprehension* node) { return false; }
     // virtual bool visit_classdef(AST_ClassDef *node) { return false; }
     virtual bool visit_continue(AST_Continue* node) { return false; }
+    virtual bool visit_delete(AST_Delete* node) {
+        // TODO does delete instance have impact on this function?
+        return false;
+    }
+
     virtual bool visit_dict(AST_Dict* node) { return false; }
     virtual bool visit_dictcomp(AST_DictComp* node) { return false; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
@@ -166,7 +185,7 @@ public:
     virtual bool visit_if(AST_If* node) { return false; }
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }
-    // virtual bool visit_keyword(AST_keyword *node) { return false; }
+    virtual bool visit_keyword(AST_keyword* node) { return false; }
     virtual bool visit_list(AST_List* node) { return false; }
     virtual bool visit_listcomp(AST_ListComp* node) { return false; }
     // virtual bool visit_module(AST_Module *node) { return false; }
@@ -201,8 +220,15 @@ public:
 
     virtual bool visit_classdef(AST_ClassDef* node) {
         if (node == orig_node) {
-            return false;
+            for (AST_stmt* s : node->body)
+                s->accept(this);
+            return true;
         } else {
+            for (auto* e : node->bases)
+                e->accept(this);
+            for (auto* e : node->decorator_list)
+                e->accept(this);
+
             doWrite(node->name);
             (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
             collect(node, map);
@@ -212,13 +238,45 @@ public:
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
         if (node == orig_node) {
-            return false;
+            for (AST_expr* e : node->args->args)
+                e->accept(this);
+            if (node->args->vararg.size())
+                doWrite(node->args->vararg);
+            if (node->args->kwarg.size())
+                doWrite(node->args->kwarg);
+            for (AST_stmt* s : node->body)
+                s->accept(this);
+            return true;
         } else {
+            for (auto* e : node->args->defaults)
+                e->accept(this);
+            for (auto* e : node->decorator_list)
+                e->accept(this);
+
             doWrite(node->name);
             (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
             collect(node, map);
             return true;
         }
+    }
+
+    virtual bool visit_lambda(AST_Lambda* node) {
+        if (node == orig_node) {
+            for (AST_expr* e : node->args->args)
+                e->accept(this);
+            if (node->args->vararg.size())
+                doWrite(node->args->vararg);
+            if (node->args->kwarg.size())
+                doWrite(node->args->kwarg);
+            node->body->accept(this);
+        } else {
+            for (auto* e : node->args->defaults)
+                e->accept(this);
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
+            collect(node, map);
+        }
+
+        return true;
     }
 
     virtual bool visit_import(AST_Import* node) {
@@ -267,28 +325,35 @@ static std::vector<ScopingAnalysis::ScopeNameUsage*> sortNameUsages(ScopingAnaly
 }
 
 void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
-    typedef ScopeNameUsage::StrSet StrSet;
-
     // Resolve name lookups:
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
-        for (StrSet::iterator it2 = usage->read.begin(), end2 = usage->read.end(); it2 != end2; ++it2) {
-            if (usage->forced_globals.count(*it2))
+        for (const auto& name : usage->read) {
+            if (usage->forced_globals.count(name))
                 continue;
-            if (usage->written.count(*it2))
+            if (usage->written.count(name))
                 continue;
+
+            std::vector<ScopeNameUsage*> intermediate_parents;
 
             ScopeNameUsage* parent = usage->parent;
             while (parent) {
                 if (parent->node->type == AST_TYPE::ClassDef) {
                     parent = parent->parent;
-                } else if (parent->forced_globals.count(*it2)) {
+                } else if (parent->forced_globals.count(name)) {
                     break;
-                } else if (parent->written.count(*it2)) {
-                    usage->got_from_closure.insert(*it2);
-                    parent->referenced_from_nested.insert(*it2);
+                } else if (parent->written.count(name)) {
+                    usage->got_from_closure.insert(name);
+                    parent->referenced_from_nested.insert(name);
+
+                    for (ScopeNameUsage* iparent : intermediate_parents) {
+                        iparent->referenced_from_nested.insert(name);
+                        iparent->got_from_closure.insert(name);
+                    }
+
                     break;
                 } else {
+                    intermediate_parents.push_back(parent);
                     parent = parent->parent;
                 }
             }
@@ -306,10 +371,9 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
-            case AST_TYPE::FunctionDef:
-                this->scopes[node] = new ScopeInfoBase(parent_info, usage);
-                break;
             case AST_TYPE::ClassDef:
+            case AST_TYPE::FunctionDef:
+            case AST_TYPE::Lambda:
                 this->scopes[node] = new ScopeInfoBase(parent_info, usage);
                 break;
             default:
@@ -320,19 +384,6 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 }
 
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
-#ifndef NDEBUG
-    std::vector<AST*> flattened;
-    flatten(parent_module->body, flattened, false);
-    bool found = 0;
-    for (AST* n : flattened) {
-        if (n == node) {
-            found = true;
-            break;
-        }
-    }
-    assert(found);
-#endif
-
     NameUsageMap usages;
     usages[node] = new ScopeNameUsage(node, NULL);
     NameCollectorVisitor::collect(node, &usages);
@@ -354,6 +405,7 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     switch (node->type) {
         case AST_TYPE::ClassDef:
         case AST_TYPE::FunctionDef:
+        case AST_TYPE::Lambda:
             return analyzeSubtree(node);
         // this is handled in the constructor:
         // case AST_TYPE::Module:

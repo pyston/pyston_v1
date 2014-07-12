@@ -139,6 +139,10 @@ PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRe
     return PatchpointSetupInfo::initialize(false, 2, 128, parent_cf, Setattr, type_recorder);
 }
 
+PatchpointSetupInfo* createDelattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
+    return PatchpointSetupInfo::initialize(false, 1, 144, parent_cf, Delattr, type_recorder);
+}
+
 PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder, int num_args) {
     // TODO These are very large, but could probably be made much smaller with IC optimizations
     // - using rewriter2 for better code

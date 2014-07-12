@@ -275,8 +275,7 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
 }
 
 static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_guards, const GuardList& in_guards,
-                    TypeAnalysis* types, const std::vector<AST_expr*>& arg_names,
-                    const OSREntryDescriptor* entry_descriptor, const BlockSet& full_blocks,
+                    TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor, const BlockSet& full_blocks,
                     const BlockSet& partial_blocks) {
     SourceInfo* source = irstate->getSourceInfo();
     EffortLevel::EffortLevel effort = irstate->getEffortLevel();
@@ -563,7 +562,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
-            generator->unpackArguments(arg_names, cf->spec->arg_types);
+
+            generator->doFunctionEntry(source->arg_names, cf->spec->arg_types);
 
             // Function-entry safepoint:
             // TODO might be more efficient to do post-call safepoints?
@@ -895,8 +895,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
 }
 
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec,
-                            const std::vector<AST_expr*>& arg_names, std::string nameprefix) {
+                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix) {
     Timer _t("in doCompile");
 
     if (VERBOSITY("irgen") >= 1)
@@ -911,10 +910,13 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     ////
     // Initializing the llvm-level structures:
 
-    int nargs = arg_names.size();
+    int nargs = source->arg_names.totalParameters();
     ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
     std::vector<llvm::Type*> llvm_arg_types;
+    if (source->scoping->getScopeInfoForNode(source->ast)->takesClosure())
+        llvm_arg_types.push_back(g.llvm_closure_type_ptr);
+
     if (entry_descriptor == NULL) {
         for (int i = 0; i < nargs; i++) {
             if (i == 3) {
@@ -950,7 +952,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
-    TypeAnalysis* types = doTypeAnalysis(source->cfg, arg_names, spec->arg_types, speculation_level,
+    TypeAnalysis* types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, speculation_level,
                                          source->scoping->getScopeInfoForNode(source->ast));
 
     GuardList guards;
@@ -967,7 +969,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
     IRGenState irstate(cf, source, getGCBuilder(), dbg_funcinfo);
 
-    emitBBs(&irstate, "opt", guards, GuardList(), types, arg_names, entry_descriptor, full_blocks, partial_blocks);
+    emitBBs(&irstate, "opt", guards, GuardList(), types, entry_descriptor, full_blocks, partial_blocks);
 
     // De-opt handling:
 
@@ -986,10 +988,9 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
-        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, arg_names, spec->arg_types, TypeAnalysis::NONE,
+        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, TypeAnalysis::NONE,
                                                    source->scoping->getScopeInfoForNode(source->ast));
-        emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, arg_names, NULL, deopt_full_blocks,
-                deopt_partial_blocks);
+        emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, NULL, deopt_full_blocks, deopt_partial_blocks);
         assert(deopt_guards.isEmpty());
         deopt_guards.assertGotPatched();
 

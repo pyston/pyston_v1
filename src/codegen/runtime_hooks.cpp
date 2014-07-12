@@ -121,6 +121,7 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.llvm_value_type_ptr = lookupFunction("getattr")->getReturnType();
     g.llvm_value_type = g.llvm_value_type_ptr->getSequentialElementType();
+    g.llvm_value_type_ptr_ptr = g.llvm_value_type_ptr->getPointerTo();
     // g.llvm_class_type_ptr = llvm::cast<llvm::StructType>(g.llvm_value_type)->getElementType(0);
     // g.llvm_class_type = g.llvm_class_type_ptr->getSequentialElementType();
     g.llvm_class_type = g.stdlib_module->getTypeByName("class.pyston::BoxedClass");
@@ -136,6 +137,9 @@ void initGlobalFuncs(GlobalState& g) {
     auto vector_type = g.stdlib_module->getTypeByName("class.std::vector");
     assert(vector_type);
     g.vector_ptr = vector_type->getPointerTo();
+
+    g.llvm_closure_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedClosure")->getPointerTo();
+    assert(g.llvm_closure_type_ptr);
 
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
@@ -161,9 +165,11 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createList);
     GET(createDict);
     GET(createSlice);
+    GET(createClosure);
 
     GET(getattr);
     GET(setattr);
+    GET(delattr);
     GET(getitem);
     GET(setitem);
     GET(delitem);

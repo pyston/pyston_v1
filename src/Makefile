@@ -33,6 +33,8 @@ COLOR := 1
 
 VERBOSE := 0
 
+ENABLE_INTEL_JIT_EVENTS := 0
+
 # Setting this to 1 will set the Makefile to use binaries from the trunk
 # directory, even if USE_TEST_LLVM is set to 1.
 # This is useful if clang isn't installed into the test directory, ex due
@@ -78,6 +80,10 @@ else
 endif
 
 LLVM_LINK_LIBS := core mcjit native bitreader ipo irreader jit debuginfo instrumentation
+ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
+LLVM_LINK_LIBS += inteljitevents
+endif
+
 LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
 LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
 LLVM_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Asserts/lib/*)
@@ -121,6 +127,7 @@ COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
 COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
+COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -134,7 +141,7 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
-COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64
+COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
@@ -330,11 +337,15 @@ cpplint:
 
 .PHONY: check quick_check
 check:
+	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 	$(MAKE) lint
 	$(MAKE) ext pyston_dbg
-	# $(MAKE) run_unittests
+
 	$(MAKE) check_dbg
-	$(MAKE) check_release
+
+	$(MAKE) check_format
+	$(MAKE) run_unittests
+
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
 	# $(MAKE) check_prof
 	$(MAKE) pyston_prof
@@ -342,9 +353,7 @@ check:
 	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
-	$(MAKE) run_unittests
-	$(MAKE) check_format
-
+	$(MAKE) check_release
 	echo "All tests passed"
 
 quick_check:
@@ -424,10 +433,14 @@ llvm_configure:
 	rm -f $(LLVM_BUILD)/Makefile.config
 	$(MAKE) $(LLVM_CONFIGURATION)
 
+LLVM_CONFIGURE_LINE := CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
+LLVM_CONFIGURE_LINE += --with-intel-jitevents
+endif
 $(LLVM_CONFIGURATION): $(LLVM_SRC)/configure | $(LLVM_SRC)/_patched
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
-	CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+	$(LLVM_CONFIGURE_LINE)
 	# CXX=ccache\ g++ ./configure --enable-targets=host
 	# CXX='env CCACHE_PREFIX=distcc ccache g++' ./configure --enable-targets=host
 
@@ -585,6 +598,7 @@ PASS_OBJS := $(PASS_SRCS:.cpp=.standalone.o)
 $(call make_compile_config,,$(CXXFLAGS_DBG))
 $(call make_compile_config,.release,$(CXXFLAGS_RELEASE))
 $(call make_compile_config,.grwl,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl)
+$(call make_compile_config,.grwl_dbg,$(CXXFLAGS_DBG) -DTHREADING_USE_GRWL=1 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_grwl_dbg -UBINARY_STRIPPED_SUFFIX -DBINARY_STRIPPED_SUFFIX=)
 $(call make_compile_config,.nosync,$(CXXFLAGS_RELEASE) -DTHREADING_USE_GRWL=0 -DTHREADING_USE_GIL=0 -UBINARY_SUFFIX -DBINARY_SUFFIX=_nosync)
 
 $(UNITTEST_SRCS:.cpp=.o): CXXFLAGS += -isystem $(GTEST_DIR)/include
@@ -658,6 +672,7 @@ $(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
 $(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
+$(call link,_grwl_dbg,stdlib.grwl_dbg.bc.o $(SRCS:.cpp=.grwl_dbg.o),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_nosync,stdlib.nosync.bc.o $(SRCS:.cpp=.nosync.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
@@ -705,17 +720,9 @@ check$1 test$1: pyston$1 ext
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
-	if which rlwrap >/dev/null; then\
-		rlwrap ./pyston$1 $$(ARGS) ;\
-	else \
-		./pyston$1 $$(ARGS) ;\
-	fi
+	./pyston$1 $$(ARGS)
 dbg$1: pyston$1 $$(RUN_DEPS)
-	if which rlwrap >/dev/null; then\
-		rlwrap zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)' ; \
-	else \
-		zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)' ; \
-	fi
+	zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
 run$1_%: %.py pyston$1 $$(RUN_DEPS)
 	$(VERB) zsh -c 'ulimit -v $$(MAX_MEM_KB); ulimit -d $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,run$1_%)
@@ -734,6 +741,9 @@ $$(call make_search,memcheck_gdb$1_%)
 memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
 	$$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
 $$(call make_search,memleaks$1_%)
+cachegrind$1_%: %.py pyston$1 $$(RUN_DEPS)
+	$$(VALGRIND) --tool=cachegrind ./pyston$1 $$(ARGS) $$<
+$$(call make_search,cachegrind$1_%)
 endif
 
 .PHONY: perf$1_%
@@ -759,6 +769,7 @@ perf_%: perf_release_%
 $(call make_target,_dbg)
 $(call make_target,_release)
 $(call make_target,_grwl)
+$(call make_target,_grwl_dbg)
 $(call make_target,_nosync)
 
 # "kill valgrind":

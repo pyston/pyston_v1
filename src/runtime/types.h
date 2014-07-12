@@ -27,6 +27,7 @@ class BoxedList;
 class BoxedDict;
 class BoxedTuple;
 class BoxedFile;
+class BoxedClosure;
 
 void setupInt();
 void teardownInt();
@@ -62,12 +63,13 @@ BoxedList* getSysPath();
 
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
-    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls;
+    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls,
+    *closure_cls;
 }
 extern "C" {
 extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor,
     function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor,
-    tuple_flavor, file_flavor, xrange_flavor, member_flavor;
+    tuple_flavor, file_flavor, xrange_flavor, member_flavor, closure_flavor;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -86,9 +88,9 @@ Box* boxString(const std::string& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createUserClass(std::string* name, Box* base, BoxedModule* parent_module);
+extern "C" Box* createUserClass(std::string* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -272,18 +274,19 @@ class BoxedFunction : public Box {
 public:
     HCAttrs attrs;
     CLFunction* f;
+    BoxedClosure* closure;
 
     int ndefaults;
     GCdArray* defaults;
 
     BoxedFunction(CLFunction* f);
-    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults);
+    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL);
 };
 
 class BoxedModule : public Box {
 public:
     HCAttrs attrs;
-    const std::string fn; // for traceback purposes; not the same as __file__
+    std::string fn; // for traceback purposes; not the same as __file__
 
     BoxedModule(const std::string& name, const std::string& fn);
     std::string name();
@@ -305,6 +308,15 @@ public:
     int offset;
 
     BoxedMemberDescriptor(MemberType type, int offset) : Box(&member_flavor, member_cls), type(type), offset(offset) {}
+};
+
+// TODO is there any particular reason to make this a Box, ie a python-level object?
+class BoxedClosure : public Box {
+public:
+    HCAttrs attrs;
+    BoxedClosure* parent;
+
+    BoxedClosure(BoxedClosure* parent) : Box(&closure_flavor, closure_cls), parent(parent) {}
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);

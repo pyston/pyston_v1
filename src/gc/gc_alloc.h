@@ -29,11 +29,6 @@ namespace gc {
 
 inline void* gc_alloc(size_t bytes) __attribute__((visibility("default")));
 inline void* gc_alloc(size_t bytes) {
-// if ((++numAllocs) >= ALLOCS_PER_COLLECTION) {
-// numAllocs = 0;
-// runCollection();
-//}
-
 
 #ifndef NVALGRIND
 // Adding a redzone will confuse the allocator, so disable it for now.
@@ -65,6 +60,8 @@ inline void* gc_alloc(size_t bytes) {
 
 // if (VERBOSITY()) printf("Allocated %ld bytes at [%p, %p)\n", bytes, r, (char*)r + bytes);
 #endif
+    // printf("Allocated %p\n", r);
+
 
     return r;
 }
