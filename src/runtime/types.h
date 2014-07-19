@@ -15,6 +15,8 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include <ucontext.h>
+
 #include "core/threading.h"
 #include "core/types.h"
 
@@ -28,6 +30,7 @@ class BoxedDict;
 class BoxedTuple;
 class BoxedFile;
 class BoxedClosure;
+class BoxedGenerator;
 
 void setupInt();
 void teardownInt();
@@ -51,6 +54,7 @@ void setupFile();
 void teardownFile();
 void setupCAPI();
 void teardownCAPI();
+void setupGenerator();
 
 void setupSys();
 void setupBuiltins();
@@ -64,12 +68,12 @@ BoxedList* getSysPath();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls,
-    *closure_cls;
+    *closure_cls, *generator_cls;
 }
 extern "C" {
 extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor,
     function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor,
-    tuple_flavor, file_flavor, xrange_flavor, member_flavor, closure_flavor;
+    tuple_flavor, file_flavor, xrange_flavor, member_flavor, closure_flavor, generator_flavor;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -317,6 +321,23 @@ public:
     BoxedClosure* parent;
 
     BoxedClosure(BoxedClosure* parent) : Box(&closure_flavor, closure_cls), parent(parent) {}
+};
+
+class BoxedGenerator : public Box {
+public:
+    enum { STACK_SIZE = SIGSTKSZ * 5 };
+
+    HCAttrs attrs;
+    BoxedFunction* function;
+
+    bool entryExited;
+    Box* returnValue;
+    Box* exception;
+
+    ucontext_t context, returnContext;
+    char stack[STACK_SIZE];
+
+    BoxedGenerator(BoxedFunction* function);
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);

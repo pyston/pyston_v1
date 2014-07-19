@@ -27,7 +27,9 @@
 #include "codegen/type_recording.h"
 #include "core/ast.h"
 #include "core/cfg.h"
+#include "core/types.h"
 #include "core/util.h"
+#include "runtime/generator.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -1015,6 +1017,33 @@ private:
         }
     }
 
+    CompilerVariable* evalYield(AST_Yield* node, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+        /*
+                AST_Name genName;
+                genName.id = "!__GENERATOR__";
+                genName.ctx_type = AST_TYPE::Load;
+
+                CompilerVariable* generator = evalName(&genName, exc_info);
+                ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter,
+           generator->getBoxType());
+                generator->decvref(emitter);
+        */
+        CompilerVariable* value = node->value ? evalExpr(node->value, exc_info) : getNone();
+        ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
+        value->decvref(emitter);
+
+        llvm::Value* rtn = emitter.createCall2(exc_info, g.funcs.yield, convertedValue->getValue(),
+                                               convertedValue->getValue()).getInstruction();
+        // convertedGenerator->decvref(emitter);
+        convertedValue->decvref(emitter);
+
+        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+
+        // CompilerVariable* value = evalExpr(node->value, exc_info);
+        // return getNone();
+    }
+
     ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
         assert(state != PARTIAL);
 
@@ -1097,6 +1126,10 @@ private:
                 case AST_TYPE::UnaryOp:
                     rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node), exc_info);
                     break;
+                case AST_TYPE::Yield:
+                    rtn = evalYield(ast_cast<AST_Yield>(node), exc_info);
+                    break;
+
                 case AST_TYPE::ClsAttribute:
                     rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node), exc_info);
                     break;
@@ -1555,10 +1588,13 @@ private:
             d->decvref(emitter);
         }
 
-        // llvm::Type* boxCLFuncArgType = g.funcs.boxCLFunction->arg_begin()->getType();
-        // llvm::Value *boxed = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(cl,
-        // boxCLFuncArgType));
-        // CompilerVariable *func = new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
+        if (containsYield(node)) {
+            ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
+            CLFunction* clFunc = boxRTFunction((void*)createGenerator, UNKNOWN, 1, 1, false, false);
+            func = makeFunction(emitter, clFunc, NULL, { converted });
+            converted->decvref(emitter);
+        }
+
         return func;
     }
 
@@ -1883,7 +1919,8 @@ private:
 
         llvm::BasicBlock* target = entry_blocks[node->target];
 
-        if (ENABLE_OSR && node->target->idx < myblock->idx && irstate->getEffortLevel() < EffortLevel::MAXIMAL) {
+        if (ENABLE_OSR && node->target->idx < myblock->idx && irstate->getEffortLevel() < EffortLevel::MAXIMAL
+            && !containsYield(irstate->getSourceInfo()->ast)) {
             assert(node->target->predecessors.size() > 1);
             doOSRExit(target, node);
         } else {

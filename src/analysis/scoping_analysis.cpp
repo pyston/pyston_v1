@@ -200,6 +200,7 @@ public:
     virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
+    virtual bool visit_yield(AST_Yield* node) { return false; }
 
     virtual bool visit_branch(AST_Branch* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return false; }

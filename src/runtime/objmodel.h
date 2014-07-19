@@ -27,6 +27,7 @@ class BoxedClass;
 class BoxedInt;
 class BoxedList;
 class BoxedString;
+class BoxedGenerator;
 
 void raiseExc(Box*) __attribute__((__noreturn__));
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));

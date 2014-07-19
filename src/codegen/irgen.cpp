@@ -513,7 +513,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             assert(strcmp("opt", bb_type) == 0);
 
             if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
-                && source->ast->type != AST_TYPE::Module) {
+                && source->ast->type != AST_TYPE::Module && !containsYield(source->ast)) {
                 llvm::BasicBlock* preentry_bb
                     = llvm::BasicBlock::Create(g.context, "pre_entry", irstate->getLLVMFunction(),
                                                llvm_entry_blocks[source->cfg->getStartingBlock()]);

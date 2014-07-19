@@ -44,11 +44,23 @@ BoxIterator& BoxIterator::operator++() {
     static std::string next_str("next");
 
     Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    if (nonzero(hasnext)) {
-        value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (hasnext) {
+        if (nonzero(hasnext)) {
+            value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        } else {
+            iter = nullptr;
+            value = nullptr;
+        }
     } else {
-        iter = nullptr;
-        value = nullptr;
+        try {
+            value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        } catch (Box* e) {
+            if ((e == StopIteration) || isSubclass(e->cls, StopIteration)) {
+                iter = nullptr;
+                value = nullptr;
+            } else
+                throw;
+        }
     }
     return *this;
 }
@@ -261,10 +273,26 @@ extern "C" void closureGCHandler(GCVisitor* v, void* p) {
         v->visit(c->parent);
 }
 
+extern "C" void generatorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedGenerator* g = (BoxedGenerator*)p;
+    if (g->function)
+        v->visit(g->function);
+    if (g->returnValue)
+        v->visit(g->returnValue);
+    if (g->exception)
+        v->visit(g->exception);
+    v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
+    v->visitPotentialRange((void**)&g->returnContext,
+                           ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
+    v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
+}
+
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls;
+    *closure_cls, *generator_cls;
 
 const ObjectFlavor object_flavor(&boxGCHandler, NULL);
 const ObjectFlavor type_flavor(&typeGCHandler, NULL);
@@ -283,6 +311,7 @@ const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
 const ObjectFlavor member_flavor(&boxGCHandler, NULL);
 const ObjectFlavor closure_flavor(&closureGCHandler, NULL);
+const ObjectFlavor generator_flavor(&generatorGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
 const AllocationKind hc_kind(&hcGCHandler, NULL);
@@ -573,6 +602,7 @@ void setupRuntime() {
     setupSet();
     setupTuple();
     setupFile();
+    setupGenerator();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));

@@ -717,6 +717,14 @@ private:
         return rtn;
     }
 
+    AST_expr* remapYield(AST_Yield* node) {
+        AST_Yield* rtn = new AST_Yield();
+        rtn->lineno = node->lineno;
+        rtn->col_offset = node->col_offset;
+        rtn->value = remapExpr(node->value);
+        return rtn;
+    }
+
     AST_expr* remapExpr(AST_expr* node, bool wrap_with_assign = true) {
         if (node == NULL)
             return NULL;
@@ -786,6 +794,9 @@ private:
                 break;
             case AST_TYPE::UnaryOp:
                 rtn = remapUnaryOp(ast_cast<AST_UnaryOp>(node));
+                break;
+            case AST_TYPE::Yield:
+                rtn = remapYield(ast_cast<AST_Yield>(node));
                 break;
             default:
                 RELEASE_ASSERT(0, "%d", node->type);

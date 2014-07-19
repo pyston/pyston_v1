@@ -1,0 +1,63 @@
+def G1():
+    i = 0
+    while True:
+        yield i
+        i += i
+
+g1 = G1();
+for i in range(5):
+    print g1.next()
+
+
+
+def G2():
+    yield 1
+    yield 2
+    yield 3
+g2 = G2()
+print list(g2)
+print list(g2)
+print list(G2())
+
+
+
+def G3():
+    i = 0
+    while True:
+        got = (yield i**2)
+        print "i=", i, "got=", got
+        i += 1
+
+g3 = G3();
+g3.send(None)
+for i in range(5):
+    r = g3.send(i)
+    print "received= ", r
+
+
+
+def G4():
+    1/0
+    while True:
+        print "unreachable"
+
+try:
+    print list(G4())
+except ZeroDivisionError:
+    print "catched a ZeroDivisionError"
+    
+
+def G5():
+    i = 0
+    try:
+        while True:
+            yield i
+            i += 1
+    except:
+        print "catched a ZeroDivisionError inside G5"
+    yield 42
+
+g5 = G5()
+for i in range(5):
+    print g5.next()
+print g5.throw(ZeroDivisionError)

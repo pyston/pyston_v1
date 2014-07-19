@@ -677,6 +677,16 @@ AST_With* read_with(BufferedReader* reader) {
     return rtn;
 }
 
+AST_Yield* read_yield(BufferedReader* reader) {
+    AST_Yield* rtn = new AST_Yield();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->lineno = reader->readULL();
+    rtn->value = readASTExpr(reader);
+
+    return rtn;
+}
+
 AST_expr* readASTExpr(BufferedReader* reader) {
     uint8_t type = reader->readByte();
     if (VERBOSITY("parsing") >= 2)
@@ -728,6 +738,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_tuple(reader);
         case AST_TYPE::UnaryOp:
             return read_unaryop(reader);
+        case AST_TYPE::Yield:
+            return read_yield(reader);
         default:
             fprintf(stderr, "Unknown expr node type (parser.cpp:" STRINGIFY(__LINE__) "): %d\n", type);
             abort();

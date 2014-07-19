@@ -836,6 +836,18 @@ void AST_With::accept_stmt(StmtVisitor* v) {
     v->visit_with(this);
 }
 
+void AST_Yield::accept(ASTVisitor* v) {
+    bool skip = v->visit_yield(this);
+    if (skip)
+        return;
+
+    if (value)
+        value->accept(v);
+}
+
+void* AST_Yield::accept_expr(ExprVisitor* v) {
+    return v->visit_yield(this);
+}
 
 void AST_Branch::accept(ASTVisitor* v) {
     bool skip = v->visit_branch(this);
@@ -1602,6 +1614,13 @@ bool PrintVisitor::visit_with(AST_With* node) {
     return true;
 }
 
+bool PrintVisitor::visit_yield(AST_Yield* node) {
+    printf("yield ");
+    if (node->value)
+        node->value->accept(this);
+    return true;
+}
+
 bool PrintVisitor::visit_branch(AST_Branch* node) {
     printf("if ");
     node->test->accept(this);
@@ -1832,6 +1851,10 @@ public:
         return false;
     }
     virtual bool visit_with(AST_With* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_yield(AST_Yield* node) {
         output->push_back(node);
         return false;
     }
