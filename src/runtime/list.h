@@ -35,6 +35,7 @@ Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);
 Box* listiterNext(Box* self);
 extern "C" Box* listAppend(Box* self, Box* v);
+Box* listReverse(BoxedList* self);
 }
 
 #endif

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <cmath>
+#include <climits>
 
 #include "core/types.h"
 #include "gc/collector.h"
@@ -69,12 +70,32 @@ void prependToSysPath(const std::string& path) {
     callattr(sys_path, &attr, false, ArgPassSpec(2), boxInt(0), new BoxedString(path), NULL, NULL, NULL);
 }
 
+Box* getByteorder() {
+    /* Assumes that longs are at least 2 bytes long.
+        Should be safe! */
+    unsigned long number = 1;
+    char* s;
+    std::string value;
+
+    s = (char*)&number;
+    if (s[0] == 0)
+        value = "big";
+    else
+        value = "little";
+    return boxString(value);
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerStaticRootObj(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
     sys_module = createModule("sys", "__builtin__");
+
+    sys_module->giveAttr("maxint", boxInt(LONG_MAX));
+    sys_module->giveAttr("maxsize", boxInt(((size_t)-1) >> 1));
+
+    sys_module->giveAttr("byteorder", getByteorder());
 
     sys_module->giveAttr("modules", sys_modules_dict);
 
