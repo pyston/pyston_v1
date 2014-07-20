@@ -519,17 +519,29 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
 }
 
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure,
-                               const std::vector<ConcreteCompilerVariable*>& defaults) {
+                               CompilerVariable* generator, const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
     llvm::Value* closure_v;
-    ConcreteCompilerVariable* converted = NULL;
+    ConcreteCompilerVariable* convertedClosure = NULL;
     if (closure) {
-        converted = closure->makeConverted(emitter, closure->getConcreteType());
-        closure_v = converted->getValue();
+        convertedClosure = closure->makeConverted(emitter, closure->getConcreteType());
+        closure_v = convertedClosure->getValue();
     } else {
         closure_v = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
+    }
+
+    llvm::Value* generator_v;
+    ConcreteCompilerVariable* convertedGenerator = NULL;
+
+    if (generator && generator != (CompilerVariable*)1) {
+        convertedGenerator = generator->makeConverted(emitter, generator->getConcreteType());
+        generator_v = convertedGenerator->getValue();
+        // ugly hack to allow to pass a BoxedFunction* instead of a BoxedGenerator*
+        generator_v = emitter.getBuilder()->CreateBitCast(generator_v, g.llvm_generator_type_ptr);
+    } else {
+        generator_v = embedConstantPtr(nullptr, g.llvm_generator_type_ptr);
     }
 
     llvm::Value* scratch;
@@ -548,11 +560,14 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
     }
 
     llvm::Value* boxed = emitter.getBuilder()->CreateCall(
-        g.funcs.boxCLFunction, std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v,
-                                                          scratch, getConstantInt(defaults.size(), g.i64) });
+        g.funcs.boxCLFunction,
+        std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, generator_v, scratch,
+                                   getConstantInt(defaults.size(), g.i64) });
 
-    if (converted)
-        converted->decvref(emitter);
+    if (convertedClosure)
+        convertedClosure->decvref(emitter);
+    if (convertedGenerator)
+        convertedGenerator->decvref(emitter);
     return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
 }
 
@@ -1200,6 +1215,23 @@ public:
     virtual ConcreteCompilerType* getBoxType() { RELEASE_ASSERT(0, ""); }
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;
+
+class GeneratorType : public ConcreteCompilerType {
+public:
+    llvm::Type* llvmType() { return g.llvm_generator_type_ptr; }
+    std::string debugName() { return "generator"; }
+
+    virtual ConcreteCompilerType* getConcreteType() { return this; }
+    virtual ConcreteCompilerType* getBoxType() { return GENERATOR; }
+
+    virtual void drop(IREmitter& emitter, VAR* var) {
+        // pass
+    }
+    virtual void grab(IREmitter& emitter, VAR* var) {
+        // pass
+    }
+} _GENERATOR;
+ConcreteCompilerType* GENERATOR = &_GENERATOR;
 
 class StrConstantType : public ValuedCompilerType<std::string*> {
 public:

@@ -818,6 +818,8 @@ Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool al
         raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", attr.c_str());
     }
 
+    if (obj->cls == generator_cls) {
+    }
 
     if (allow_custom) {
         // Don't need to pass icentry args, since we special-case __getattribtue__ and __getattr__ to use
@@ -1715,6 +1717,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     int num_passed_args = argspec.totalPassed();
 
     BoxedClosure* closure = func->closure;
+    BoxedGenerator* generator = (BoxedGenerator*)func->generator;
 
     if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs)
         rewrite_args = NULL;
@@ -1751,20 +1754,25 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     if (rewrite_args) {
         int closure_indicator = closure ? 1 : 0;
+        int generator_indicator = generator ? 1 : 0;
+        int argOffset = closure_indicator + generator_indicator;
 
         if (num_passed_args >= 1)
-            rewrite_args->arg1 = rewrite_args->arg1.move(0 + closure_indicator);
+            rewrite_args->arg1 = rewrite_args->arg1.move(0 + argOffset);
         if (num_passed_args >= 2)
-            rewrite_args->arg2 = rewrite_args->arg2.move(1 + closure_indicator);
+            rewrite_args->arg2 = rewrite_args->arg2.move(1 + argOffset);
         if (num_passed_args >= 3)
-            rewrite_args->arg3 = rewrite_args->arg3.move(2 + closure_indicator);
+            rewrite_args->arg3 = rewrite_args->arg3.move(2 + argOffset);
         if (num_passed_args >= 4)
-            rewrite_args->args = rewrite_args->args.move(3 + closure_indicator);
+            rewrite_args->args = rewrite_args->args.move(3 + argOffset);
 
         // TODO this kind of embedded reference needs to be tracked by the GC somehow?
         // Or maybe it's ok, since we've guarded on the function object?
         if (closure)
             rewrite_args->rewriter->loadConst(0, (intptr_t)closure);
+
+        if (generator)
+            rewrite_args->rewriter->loadConst(0, (intptr_t)generator);
 
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
@@ -1955,7 +1963,8 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return interpretFunction(chosen_cf->func, num_output_args, func->closure, oarg1, oarg2, oarg3, oargs);
+        return interpretFunction(chosen_cf->func, num_output_args, func->closure, generator, oarg1, oarg2, oarg3,
+                                 oargs);
     } else {
         if (rewrite_args) {
             rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
@@ -1966,8 +1975,13 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->out_success = true;
         }
 
-        if (closure)
+
+        if (closure && generator)
+            return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
+        else if (closure)
             return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
+        else if (generator)
+            return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
         else
             return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
     }

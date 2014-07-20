@@ -77,7 +77,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(&function_flavor, function_cls), f(f), closure(NULL), ndefaults(0), defaults(NULL) {
+    : Box(&function_flavor, function_cls), f(f), closure(NULL), generator(nullptr), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -90,8 +90,9 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
     assert(f->num_defaults == ndefaults);
 }
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure)
-    : Box(&function_flavor, function_cls), f(f), closure(closure), ndefaults(0), defaults(NULL) {
+extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
+                                        BoxedGenerator* generator)
+    : Box(&function_flavor, function_cls), f(f), closure(closure), generator(generator), ndefaults(0), defaults(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -147,11 +148,12 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults) {
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator,
+                              std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, defaults, closure);
+    return new BoxedFunction(f, defaults, closure, generator);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {

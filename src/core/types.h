@@ -166,6 +166,7 @@ struct FunctionSpecialization {
 };
 
 class BoxedClosure;
+class BoxedGenerator;
 struct CompiledFunction {
 private:
 public:
@@ -178,6 +179,8 @@ public:
     union {
         Box* (*call)(Box*, Box*, Box*, Box**);
         Box* (*closure_call)(BoxedClosure*, Box*, Box*, Box*, Box**);
+        Box* (*closure_generator_call)(BoxedClosure*, BoxedGenerator*, Box*, Box*, Box*, Box**);
+        Box* (*generator_call)(BoxedGenerator*, Box*, Box*, Box*, Box**);
         void* code;
     };
     llvm::Value* llvm_code; // the llvm callable.

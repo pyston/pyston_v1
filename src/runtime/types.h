@@ -92,7 +92,8 @@ Box* boxString(const std::string& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults);
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator,
+                              std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(std::string* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
@@ -279,12 +280,14 @@ public:
     HCAttrs attrs;
     CLFunction* f;
     BoxedClosure* closure;
+    BoxedGenerator* generator;
 
     int ndefaults;
     GCdArray* defaults;
 
     BoxedFunction(CLFunction* f);
-    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL);
+    BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+                  BoxedGenerator* generator = nullptr);
 };
 
 class BoxedModule : public Box {
@@ -329,6 +332,7 @@ public:
 
     HCAttrs attrs;
     BoxedFunction* function;
+    Box* arg1, *arg2, *arg3, **args;
 
     bool entryExited;
     Box* returnValue;
@@ -337,7 +341,7 @@ public:
     ucontext_t context, returnContext;
     char stack[STACK_SIZE];
 
-    BoxedGenerator(BoxedFunction* function);
+    BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, void* p);
@@ -347,7 +351,7 @@ Box* exceptionNew2(BoxedClass* cls, Box* message);
 
 extern BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration;
+    *StopIteration, *GeneratorExit;
 
 // cls should be obj->cls.
 // Added as parameter because it should typically be available

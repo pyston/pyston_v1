@@ -20,6 +20,24 @@
 
 namespace pyston {
 
+class YieldVisitor : public NoopASTVisitor {
+public:
+    YieldVisitor() : containsYield(false) {}
+
+    virtual bool visit_yield(AST_Yield*) {
+        containsYield = true;
+        return true;
+    }
+
+    bool containsYield;
+};
+
+bool containsYield(AST* ast) {
+    YieldVisitor visitor;
+    ast->accept(&visitor);
+    return visitor.containsYield;
+}
+
 static bool isCompilerCreatedName(const std::string& name) {
     return name[0] == '!' || name[0] == '#';
 }
@@ -388,6 +406,9 @@ ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
 
     ScopeInfo* rtn = scopes[node];
     assert(rtn);
+
+    rtn->setTakesGenerator(containsYield(node));
+
     return rtn;
 }
 

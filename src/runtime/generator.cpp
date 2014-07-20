@@ -32,7 +32,6 @@
 
 namespace pyston {
 
-BoxedGenerator* g_gen; // HACK REMOVE ME!!!
 
 static void generatorEntry(BoxedGenerator* self) {
     assert(self->cls == generator_cls);
@@ -40,7 +39,9 @@ static void generatorEntry(BoxedGenerator* self) {
 
     try {
         // call body of the generator
-        runtimeCall(self->function, ArgPassSpec(0), 0, 0, 0, 0, 0);
+        ArgPassSpec argPassSpec(self->function->f->num_args, 0, self->function->f->takes_varargs,
+                                self->function->f->takes_kwargs);
+        runtimeCall(self->function, argPassSpec, self->arg1, self->arg2, self->arg3, self->args, 0);
     } catch (Box* e) {
         // unhandled exception: propagate the exception to the caller
         self->exception = e;
@@ -85,19 +86,29 @@ Box* generatorThrow(Box* s, BoxedClass* e) {
     return generatorSend(self, None);
 }
 
+Box* generatorClose(Box* s) {
+    assert(s->cls == generator_cls);
+    BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
+
+    // check if the generator already exited
+    if (self->entryExited)
+        return None;
+
+    return generatorThrow(self, GeneratorExit);
+}
+
 Box* generatorNext(Box* s) {
     return generatorSend(s, None);
 }
 
-extern "C" Box* yield(Box* obj, Box* value) {
-    obj = g_gen;
+extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     assert(obj->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     self->returnValue = value;
 
     swapcontext(&self->context, &self->returnContext);
 
-    // if the generator receives a exception from the caller we have throw it
+    // if the generator receives a exception from the caller we have to throw it
     if (self->exception) {
         Box* exception = self->exception;
         self->exception = nullptr;
@@ -106,15 +117,19 @@ extern "C" Box* yield(Box* obj, Box* value) {
     return self->returnValue;
 }
 
-extern "C" BoxedGenerator* createGenerator(BoxedFunction* function) {
+
+extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(function);
     assert(function->cls == function_cls);
-    return new BoxedGenerator(function);
+    return new BoxedGenerator(function, arg1, arg2, arg3, args);
 }
 
-extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function)
-    : Box(&generator_flavor, generator_cls), function(function), entryExited(false), returnValue(nullptr),
-      exception(nullptr) {
+
+extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
+    : Box(&generator_flavor, generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(args),
+      entryExited(false), returnValue(nullptr), exception(nullptr) {
+
+    function->generator = this; // HACK: this only alows one active generator
 
     giveAttr("__name__", boxString(function->f->source->getName()));
 
@@ -123,8 +138,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function)
     context.uc_stack.ss_sp = stack;
     context.uc_stack.ss_size = STACK_SIZE;
     makecontext(&context, (void (*)(void))generatorEntry, 1, this);
-
-    g_gen = this;
 }
 
 
@@ -134,6 +147,7 @@ void setupGenerator() {
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
+    generator_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)generatorClose, UNKNOWN, 1)));
     generator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)generatorNext, UNKNOWN, 1)));
     generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend, UNKNOWN, 2)));
     generator_cls->giveAttr("throw", new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 2)));

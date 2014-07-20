@@ -77,8 +77,6 @@ public:
     bool isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block);
 };
 
-bool containsYield(AST* ast);
-
 LivenessAnalysis* computeLivenessInfo(CFG*);
 PhiAnalysis* computeRequiredPhis(const SourceInfo::ArgNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_Info);
 }

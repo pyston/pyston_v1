@@ -31,25 +31,6 @@
 
 namespace pyston {
 
-class YieldVisitor : public NoopASTVisitor {
-public:
-    YieldVisitor() : containsYield(false) {}
-
-    virtual bool visit_yield(AST_Yield*) {
-        containsYield = true;
-        return true;
-    }
-
-    bool containsYield;
-};
-
-bool containsYield(AST* ast) {
-    YieldVisitor visitor;
-    ast->accept(&visitor);
-    return visitor.containsYield;
-}
-
-
 class LivenessBBVisitor : public NoopASTVisitor {
 public:
     typedef llvm::SmallSet<std::string, 4> StrSet;

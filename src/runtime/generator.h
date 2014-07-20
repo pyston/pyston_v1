@@ -25,8 +25,8 @@ extern "C" const ObjectFlavor generator_flavor;
 
 void setupGenerator();
 
-extern "C" Box* yield(Box* obj, Box* value);
-extern "C" BoxedGenerator* createGenerator(BoxedFunction* function);
+extern "C" Box* yield(BoxedGenerator* obj, Box* value);
+extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 }
 
 #endif

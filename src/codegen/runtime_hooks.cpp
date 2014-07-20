@@ -142,8 +142,8 @@ void initGlobalFuncs(GlobalState& g) {
     g.llvm_closure_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedClosure")->getPointerTo();
     assert(g.llvm_closure_type_ptr);
 
-    g.llvm_func_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedFunction")->getPointerTo();
-    assert(g.llvm_func_type_ptr);
+    g.llvm_generator_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedGenerator")->getPointerTo();
+    assert(g.llvm_generator_type_ptr);
 
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 

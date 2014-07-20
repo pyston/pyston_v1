@@ -1,5 +1,4 @@
-def G1():
-    i = 0
+def G1(i=0):
     while True:
         yield i
         i += i
@@ -21,8 +20,7 @@ print list(G2())
 
 
 
-def G3():
-    i = 0
+def G3(i=0):
     while True:
         got = (yield i**2)
         print "i=", i, "got=", got
@@ -36,13 +34,13 @@ for i in range(5):
 
 
 
-def G4():
+def G4(i=1):
     1/0
     while True:
         print "unreachable"
 
 try:
-    print list(G4())
+    print list(G4(0))
 except ZeroDivisionError:
     print "catched a ZeroDivisionError"
     
@@ -61,3 +59,11 @@ g5 = G5()
 for i in range(5):
     print g5.next()
 print g5.throw(ZeroDivisionError)
+
+def G6(a=[]):
+    for i in range(2):
+        a.append(i)
+        yield a
+print list(G6())
+print list(G6())
+
