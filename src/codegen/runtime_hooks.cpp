@@ -134,9 +134,11 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.llvm_str_type_ptr = lookupFunction("boxStringPtr")->arg_begin()->getType();
 
-    auto vector_type = g.stdlib_module->getTypeByName("class.std::vector");
-    assert(vector_type);
-    g.vector_ptr = vector_type->getPointerTo();
+    // The LLVM vector type for the arguments that we pass to runtimeCall and related functions.
+    // It will be a pointer to a type named something like class.std::vector or
+    // class.std::vector.##. We can figure out exactly what it is by looking at the last
+    // argument of runtimeCall.
+    g.vector_ptr = (--lookupFunction("runtimeCall")->getArgumentList().end())->getType();
 
     g.llvm_closure_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedClosure")->getPointerTo();
     assert(g.llvm_closure_type_ptr);
