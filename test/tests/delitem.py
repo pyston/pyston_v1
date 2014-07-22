@@ -15,3 +15,12 @@ del a[:]
 print a
 a.append(1)
 print a
+
+# Make sure that del's work correctly in sub-scopes:
+x = 1
+def f1():
+    x = range(5)
+    def f2():
+        del x[1]
+    return f2
+f1()()

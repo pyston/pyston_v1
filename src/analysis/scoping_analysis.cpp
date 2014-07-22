@@ -210,6 +210,13 @@ public:
     virtual bool visit_jump(AST_Jump* node) { return false; }
 
 
+    virtual bool visit_delete(AST_Delete* node) {
+        for (auto t : node->targets) {
+            RELEASE_ASSERT(t->type != AST_TYPE::Name, "");
+        }
+        return false;
+    }
+
     virtual bool visit_global(AST_Global* node) {
         for (int i = 0; i < node->names.size(); i++) {
             const std::string& name = node->names[i];
