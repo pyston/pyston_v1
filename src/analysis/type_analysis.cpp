@@ -384,6 +384,10 @@ private:
             return UNKNOWN;
         }
 
+        if (scope_info->refersToClosure(node->id)) {
+            return UNKNOWN;
+        }
+
         CompilerType*& t = sym_table[node->id];
         if (t == NULL) {
             // if (VERBOSITY() >= 2) {
