@@ -31,13 +31,6 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
-extern "C" {
-// Hack: we only need RTTI for a single type (Box*), which we know will get emmitted,
-// so just use the mangled name directly instead of using typeid() since that requires
-// turning on RTTI for *everything* (including llvm)
-extern void* _ZTIPN6pyston3BoxE;
-}
-
 namespace pyston {
 
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
@@ -1745,15 +1738,7 @@ private:
         ConcreteCompilerVariable* converted_arg0 = arg0->makeConverted(emitter, arg0->getBoxType());
         arg0->decvref(emitter);
 
-        llvm::Value* exc_mem
-            = emitter.getBuilder()->CreateCall(g.funcs.__cxa_allocate_exception, getConstantInt(sizeof(void*), g.i64));
-        llvm::Value* bitcasted = emitter.getBuilder()->CreateBitCast(exc_mem, g.llvm_value_type_ptr->getPointerTo());
-        emitter.getBuilder()->CreateStore(converted_arg0->getValue(), bitcasted);
-        converted_arg0->decvref(emitter);
-
-        void* type_id = &_ZTIPN6pyston3BoxE /* &typeid(Box*) */;
-        emitter.createCall(exc_info, g.funcs.__cxa_throw,
-                           { exc_mem, embedConstantPtr(type_id, g.i8_ptr), embedConstantPtr(nullptr, g.i8_ptr) });
+        emitter.createCall(exc_info, g.funcs.raise1, { converted_arg0->getValue() });
         emitter.getBuilder()->CreateUnreachable();
 
         endBlock(DEAD);

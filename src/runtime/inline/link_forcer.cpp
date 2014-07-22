@@ -90,6 +90,8 @@ void force() {
     FORCE(runtimeCall);
     FORCE(callattr);
 
+    FORCE(raise1);
+
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);
     FORCE(pow_i64_i64);

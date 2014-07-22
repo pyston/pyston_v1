@@ -28,7 +28,13 @@ class BoxedInt;
 class BoxedList;
 class BoxedString;
 
-void raiseExc(Box*) __attribute__((__noreturn__));
+// "raw" raising function that will engage the unwinding machinery
+void raiseRaw(Box*) __attribute__((__noreturn__));
+// user-level raise function that implements some python-level semantics
+extern "C" void raise1(Box*) __attribute__((__noreturn__));
+extern "C" void raise2(Box*, Box*) __attribute__((__noreturn__));
+extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
+// helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 
 extern "C" const std::string* getTypeName(Box* o);

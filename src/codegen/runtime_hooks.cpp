@@ -41,8 +41,6 @@
 
 extern "C" void* __cxa_begin_catch(void*);
 extern "C" void __cxa_end_catch();
-extern "C" void* __cxa_allocate_exception(size_t);
-extern "C" void __cxa_throw(void*, void*, void (*)(void*));
 
 namespace pyston {
 
@@ -221,8 +219,7 @@ void initGlobalFuncs(GlobalState& g) {
 
     GET(__cxa_begin_catch);
     g.funcs.__cxa_end_catch = addFunc((void*)__cxa_end_catch, g.void_);
-    g.funcs.__cxa_allocate_exception = addFunc((void*)__cxa_allocate_exception, g.i8_ptr, g.i64);
-    g.funcs.__cxa_throw = addFunc((void*)__cxa_throw, g.void_, g.i8_ptr, g.i8_ptr, g.i8_ptr);
+    GET(raise1);
 
     g.funcs.div_i64_i64 = getFunc((void*)div_i64_i64, "div_i64_i64");
     g.funcs.mod_i64_i64 = getFunc((void*)mod_i64_i64, "mod_i64_i64");

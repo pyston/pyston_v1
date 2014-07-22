@@ -1413,6 +1413,9 @@ public:
             remapped->arg2 = remapExpr(node->arg2);
         push_back(remapped);
 
+        if (!curblock)
+            return true;
+
         curblock->push_back(new AST_Unreachable());
         curblock = NULL;
 
