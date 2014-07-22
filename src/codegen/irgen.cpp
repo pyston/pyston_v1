@@ -604,12 +604,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 into_hax.insert(b2);
             }
 
-            const PhiAnalysis::RequiredSet& names = source->phis->getAllDefinedAt(block);
+            const PhiAnalysis::RequiredSet& names = source->phis->getAllRequiredFor(block);
             for (const auto& s : names) {
-                // TODO the list from getAllDefinedAt should come filtered:
-                if (!source->liveness->isLiveAtEnd(s, block->predecessors[0]))
-                    continue;
-
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = types->getTypeAtBlockStart(s, block);
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s);

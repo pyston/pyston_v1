@@ -49,14 +49,14 @@ public:
 
 private:
     std::unordered_map<CFGBlock*, std::unordered_map<std::string, DefinitionLevel> > results;
-    std::unordered_map<CFGBlock*, const RequiredSet> defined;
+    std::unordered_map<CFGBlock*, const RequiredSet> defined_at_end;
     ScopeInfo* scope_info;
 
 public:
     DefinednessAnalysis(const SourceInfo::ArgNames& args, CFG* cfg, ScopeInfo* scope_info);
 
-    DefinitionLevel isDefinedAt(const std::string& name, CFGBlock* block);
-    const RequiredSet& getDefinedNamesAt(CFGBlock* block);
+    DefinitionLevel isDefinedAtEnd(const std::string& name, CFGBlock* block);
+    const RequiredSet& getDefinedNamesAtEnd(CFGBlock* block);
 };
 class PhiAnalysis {
 public:
@@ -73,7 +73,7 @@ public:
     bool isRequired(const std::string& name, CFGBlock* block);
     bool isRequiredAfter(const std::string& name, CFGBlock* block);
     const RequiredSet& getAllRequiredAfter(CFGBlock* block);
-    const RequiredSet& getAllDefinedAt(CFGBlock* block);
+    const RequiredSet& getAllRequiredFor(CFGBlock* block);
     bool isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block);
 };
 

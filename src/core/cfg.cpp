@@ -379,6 +379,8 @@ private:
     AST_expr* remapAttribute(AST_Attribute* node) {
         AST_Attribute* rtn = new AST_Attribute();
 
+        rtn->col_offset = node->col_offset;
+        rtn->lineno = node->lineno;
         rtn->ctx_type = node->ctx_type;
         rtn->attr = node->attr;
         rtn->value = remapExpr(node->value);
@@ -483,6 +485,8 @@ private:
     AST_expr* remapClsAttribute(AST_ClsAttribute* node) {
         AST_ClsAttribute* rtn = new AST_ClsAttribute();
 
+        rtn->col_offset = node->col_offset;
+        rtn->lineno = node->lineno;
         rtn->attr = node->attr;
         rtn->value = remapExpr(node->value);
         return rtn;

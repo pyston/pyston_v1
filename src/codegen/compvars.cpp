@@ -1195,6 +1195,10 @@ public:
     virtual ConcreteCompilerType* getConcreteType() { return this; }
     // Shouldn't call this:
     virtual ConcreteCompilerType* getBoxType() { RELEASE_ASSERT(0, ""); }
+
+    void drop(IREmitter& emitter, VAR* var) override {}
+    void grab(IREmitter& emitter, VAR* var) override {}
+
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;
 
@@ -1263,6 +1267,8 @@ public:
 
         if (rtn == NULL) {
             rtn = new VAR(this, var->getValue(), var->isGrabbed());
+            while (rtn->getVrefs() < var->getVrefs())
+                rtn->incvref();
         }
         return rtn;
     }

@@ -731,7 +731,7 @@ private:
                 std::vector<CompilerVariable*> args;
                 args.push_back(key);
                 args.push_back(value);
-                // TODO could use the internal _listAppend function to avoid incref/decref'ing None
+                // TODO should use callattr
                 CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(exc_info), ArgPassSpec(2), args, NULL);
                 rtn->decvref(emitter);
 
@@ -1245,30 +1245,29 @@ private:
         snprintf(buf, 40, "!%s_%s", prefix, token);
         return std::string(buf);
     }
+
     void _setFake(std::string name, CompilerVariable* val) {
         assert(name[0] == '!');
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = val;
     }
-    CompilerVariable* _clearFake(std::string name) {
-        assert(name[0] == '!');
-        CompilerVariable* rtn = symbol_table[name];
-        assert(rtn == NULL);
-        symbol_table.erase(name);
-        return rtn;
-    }
 
     CompilerVariable* _getFake(std::string name, bool allow_missing = false) {
         assert(name[0] == '!');
-        CompilerVariable* rtn = symbol_table[name];
-        if (!allow_missing)
-            assert(rtn != NULL);
-        return rtn;
+        auto it = symbol_table.find(name);
+        if (it == symbol_table.end()) {
+            assert(allow_missing);
+            return NULL;
+        }
+        return it->second;
     }
+
     CompilerVariable* _popFake(std::string name, bool allow_missing = false) {
         CompilerVariable* rtn = _getFake(name, allow_missing);
         symbol_table.erase(name);
+        if (!allow_missing)
+            assert(rtn != NULL);
         return rtn;
     }
 
@@ -1670,6 +1669,11 @@ private:
         rtn->ensureGrabbed(emitter);
         val->decvref(emitter);
 
+        for (auto& p : symbol_table) {
+            p.second->decvref(emitter);
+        }
+        symbol_table.clear();
+
         endBlock(DEAD);
 
         ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
@@ -1747,18 +1751,6 @@ private:
         std::vector<ConcreteCompilerVariable*> converted_args;
 
         SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
-        /*
-        for (SortedSymbolTable::iterator it = sorted_symbol_table.begin(), end = sorted_symbol_table.end(); it != end; )
-        {
-            if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
-                // I think this line can never get hit: nothing can die on a backedge, since control flow can eventually
-                // reach this block again, where the symbol was live (as shown by it being in the symbol table)
-                printf("Not sending %s to osr since it will die\n", it->first.c_str());
-                it = sorted_symbol_table.erase(it);
-            } else {
-                ++it;
-            }
-        }*/
 
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
@@ -1792,11 +1784,6 @@ private:
         int arg_num = -1;
         for (const auto& p : sorted_symbol_table) {
             arg_num++;
-            // I don't think this can fail, but if it can we should filter out dead symbols before
-            // passing them on:
-            ASSERT(startswith(p.first, "!is_defined")
-                   || irstate->getSourceInfo()->liveness->isLiveAtEnd(p.first, myblock),
-                   "%d %s", myblock->idx, p.first.c_str());
 
             // This line can never get hit right now since we unnecessarily force every variable to be concrete
             // for a loop, since we generate all potential phis:
@@ -1828,6 +1815,12 @@ private:
                 } else if (var->getType() == FLOAT) {
                     // val = emitter.getBuilder()->CreateBitCast(val, g.llvm_value_type_ptr);
                     ptr = emitter.getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
+                } else if (var->getType() == UNDEF) {
+                    // TODO if there are any undef variables, we're in 'unreachable' territory.
+                    // Do we even need to generate any of this code?
+
+                    // Currently we represent 'undef's as 'i16 undef'
+                    val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
                 } else {
                     assert(val->getType() == g.llvm_value_type_ptr);
                 }
@@ -2040,11 +2033,14 @@ private:
                 ++it;
             } else {
 #ifndef NDEBUG
-                // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want here,
-                // but this is just for debugging so I guess let it happen for now:
-                ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
-                ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
-                       it->first.c_str(), ending_type->debugName().c_str(), it->second->getType()->debugName().c_str());
+                if (myblock->successors.size()) {
+                    // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want
+                    // here, but this is just for debugging so I guess let it happen for now:
+                    ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
+                    ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
+                           it->first.c_str(), ending_type->debugName().c_str(),
+                           it->second->getType()->debugName().c_str());
+                }
 #endif
 
                 ++it;
@@ -2099,19 +2095,14 @@ public:
 
         SymbolTable* st = new SymbolTable(symbol_table);
         ConcreteSymbolTable* phi_st = new ConcreteSymbolTable();
-        for (SymbolTable::iterator it = st->begin(); it != st->end(); it++) {
-            if (it->first[0] == '!') {
-                // ASSERT(startswith(it->first, _getFakeName("is_defined", "")), "left a fake variable in the real
-                // symbol table? '%s'", it->first.c_str());
-            } else {
-                ASSERT(source->liveness->isLiveAtEnd(it->first, myblock), "%s", it->first.c_str());
-            }
-        }
 
         if (myblock->successors.size() == 0) {
-            st->erase(CREATED_CLOSURE_NAME);
-            st->erase(PASSED_CLOSURE_NAME);
-            assert(st->size() == 0); // shouldn't have anything live if there are no successors!
+            for (auto& p : *st) {
+                p.second->decvref(emitter);
+            }
+            st->clear();
+            symbol_table.clear();
+
             return EndingState(st, phi_st, curblock);
         } else if (myblock->successors.size() > 1) {
             // Since there are no critical edges, all successors come directly from this node,

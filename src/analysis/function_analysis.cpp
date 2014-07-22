@@ -292,19 +292,19 @@ DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, 
             // printf("%d %s %d\n", p.first->idx, p2.first.c_str(), p2.second);
             required.insert(p2.first);
         }
-        defined.insert(make_pair(p.first, required));
+        defined_at_end.insert(make_pair(p.first, required));
     }
 }
 
-DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAt(const std::string& name, CFGBlock* block) {
+DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(const std::string& name, CFGBlock* block) {
     std::unordered_map<std::string, DefinitionLevel>& map = results[block];
     if (map.count(name) == 0)
         return Undefined;
     return map[name];
 }
 
-const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAt(CFGBlock* block) {
-    return defined[block];
+const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEnd(CFGBlock* block) {
+    return defined_at_end[block];
 }
 
 PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, LivenessAnalysis* liveness,
@@ -313,19 +313,21 @@ PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, Livene
 
     for (CFGBlock* block : cfg->blocks) {
         RequiredSet required;
-        if (block->predecessors.size() < 2)
-            continue;
 
-        const RequiredSet& defined = definedness.getDefinedNamesAt(block);
-        if (defined.size())
-            assert(block->predecessors.size());
-        for (const auto& s : defined) {
-            if (liveness->isLiveAtEnd(s, block->predecessors[0])) {
-                required.insert(s);
+        if (block->predecessors.size() > 1) {
+            for (CFGBlock* pred : block->predecessors) {
+                const RequiredSet& defined = definedness.getDefinedNamesAtEnd(pred);
+                for (const auto& s : defined) {
+                    if (required.count(s) == 0 && liveness->isLiveAtEnd(s, pred)) {
+                        // printf("%d-%d %s\n", pred->idx, block->idx, s.c_str());
+
+                        required.insert(s);
+                    }
+                }
             }
         }
 
-        required_phis.insert(make_pair(block, required));
+        required_phis.insert(make_pair(block, std::move(required)));
     }
 }
 
@@ -336,8 +338,8 @@ const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredAfter(CFGBlock* block
     return required_phis[block->successors[0]];
 }
 
-const PhiAnalysis::RequiredSet& PhiAnalysis::getAllDefinedAt(CFGBlock* block) {
-    return definedness.getDefinedNamesAt(block);
+const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) {
+    return required_phis[block];
 }
 
 bool PhiAnalysis::isRequired(const std::string& name, CFGBlock* block) {
@@ -358,11 +360,16 @@ bool PhiAnalysis::isRequiredAfter(const std::string& name, CFGBlock* block) {
 
 bool PhiAnalysis::isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block) {
     assert(!startswith(name, "!"));
-    assert(block->successors.size() > 0);
-    DefinednessAnalysis::DefinitionLevel dlevel = definedness.isDefinedAt(name, block->successors[0]);
-    ASSERT(dlevel != DefinednessAnalysis::Undefined, "%s %d", name.c_str(), block->idx);
 
-    return dlevel == DefinednessAnalysis::PotentiallyDefined;
+    if (block->successors.size() != 1)
+        return false;
+
+    for (CFGBlock* pred : block->successors[0]->predecessors) {
+        DefinednessAnalysis::DefinitionLevel dlevel = definedness.isDefinedAtEnd(name, pred);
+        if (dlevel != DefinednessAnalysis::Defined)
+            return true;
+    }
+    return false;
 }
 
 LivenessAnalysis* computeLivenessInfo(CFG*) {
