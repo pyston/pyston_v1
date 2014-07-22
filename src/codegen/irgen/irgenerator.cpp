@@ -1368,9 +1368,25 @@ private:
         }
 
         CompilerVariable* created_closure = NULL;
-        ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
-        if (scope_info->takesClosure()) {
-            created_closure = _getFake(CREATED_CLOSURE_NAME, false);
+
+        bool takes_closure;
+        // Optimization: when compiling a module, it's nice to not have to run analyses into the
+        // entire module's source code.
+        // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
+        // but we're only using it here to figure out if that function takes a closure.
+        // Top level functions never take a closure, so we can skip the analysis.
+        if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
+            takes_closure = false;
+        else
+            takes_closure = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesClosure();
+
+        if (takes_closure) {
+            if (irstate->getScopeInfo()->createsClosure()) {
+                created_closure = _getFake(CREATED_CLOSURE_NAME, false);
+            } else {
+                assert(irstate->getScopeInfo()->passesThroughClosure());
+                created_closure = _getFake(PASSED_CLOSURE_NAME, false);
+            }
             assert(created_closure);
         }
 

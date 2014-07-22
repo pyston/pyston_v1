@@ -49,3 +49,23 @@ def f4(args):
          print a
      return inner
 print f4([1, 2, 3])()
+
+def f5():
+    x = 12039
+    def i1():
+        def i2():
+            print x
+        i2()
+    i1()
+f5()
+
+def f6():
+    x = 131
+    # Regression test:
+    # default args shouldn't mess with closure analysis
+    def inner(a=1):
+        print x
+    inner()
+
+    print (lambda a=1: x)()
+f6()

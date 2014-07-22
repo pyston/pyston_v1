@@ -29,6 +29,7 @@ public:
 
     virtual bool createsClosure() = 0;
     virtual bool takesClosure() = 0;
+    virtual bool passesThroughClosure() = 0;
 
     virtual bool refersToGlobal(const std::string& name) = 0;
     virtual bool refersToClosure(const std::string name) = 0;

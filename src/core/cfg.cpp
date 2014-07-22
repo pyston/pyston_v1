@@ -626,24 +626,13 @@ private:
     }
 
     AST_expr* remapLambda(AST_Lambda* node) {
-        if (node->args->defaults.empty()) {
-            return node;
+        // Remap in place: see note in visit_functiondef for why.
+
+        for (int i = 0; i < node->args->defaults.size(); i++) {
+            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
         }
 
-        AST_Lambda* rtn = new AST_Lambda();
-        rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
-
-        rtn->args = new AST_arguments();
-        rtn->args->args = node->args->args;
-        rtn->args->vararg = node->args->vararg;
-        rtn->args->kwarg = node->args->kwarg;
-        for (auto d : node->args->defaults) {
-            rtn->args->defaults.push_back(remapExpr(d));
-        }
-
-        rtn->body = node->body;
-        return rtn;
+        return node;
     }
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
@@ -871,36 +860,42 @@ public:
     }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
+        // Remap in place: see note in visit_functiondef for why.
+
+        // Decorators are evaluated before the defaults:
+        for (int i = 0; i < node->decorator_list.size(); i++) {
+            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
+        }
+
+        for (int i = 0; i < node->bases.size(); i++) {
+            node->bases[i] = remapExpr(node->bases[i]);
+        }
+
         push_back(node);
         return true;
     }
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
-        if (node->args->defaults.size() == 0 && node->decorator_list.size() == 0) {
-            push_back(node);
-        } else {
-            AST_FunctionDef* remapped = new AST_FunctionDef();
+        // As much as I don't like it, for now we're remapping these in place.
+        // This is because we do certain analyses pre-remapping, and associate the
+        // results with the node.  We can either do some refactoring and have a way
+        // of associating the new node with the same results, or just do the remapping
+        // in-place.
+        // Doing it in-place seems ugly, but I can't think of anything it should break,
+        // so just do that for now.
+        // TODO If we remap these (functiondefs, lambdas, classdefs) in place, we should probably
+        // remap everything in place?
 
-            remapped->name = node->name;
-            remapped->lineno = node->lineno;
-            remapped->col_offset = node->col_offset;
-            remapped->args = new AST_arguments();
-            remapped->body = node->body; // hmm shouldnt have to copy this
-
-            // Decorators are evaluated before the defaults:
-            for (auto d : node->decorator_list) {
-                remapped->decorator_list.push_back(remapExpr(d));
-            }
-
-            remapped->args->args = node->args->args;
-            remapped->args->vararg = node->args->vararg;
-            remapped->args->kwarg = node->args->kwarg;
-            for (auto d : node->args->defaults) {
-                remapped->args->defaults.push_back(remapExpr(d));
-            }
-
-            push_back(remapped);
+        // Decorators are evaluated before the defaults:
+        for (int i = 0; i < node->decorator_list.size(); i++) {
+            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
         }
+
+        for (int i = 0; i < node->args->defaults.size(); i++) {
+            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
+        }
+
+        push_back(node);
         return true;
     }
 
