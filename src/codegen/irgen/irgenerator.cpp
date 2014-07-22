@@ -1253,6 +1253,16 @@ private:
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
         assert(scope_info);
 
+        if (node->bases.size() == 0) {
+            printf("Warning: old-style class '%s' in file '%s' detected! Converting to a new-style class!\n",
+                   node->name.c_str(), irstate->getSourceInfo()->parent_module->fn.c_str());
+
+            AST_Name* base = new AST_Name();
+            base->id = "object";
+            base->ctx_type = AST_TYPE::Load;
+            node->bases.push_back(base);
+        }
+
         RELEASE_ASSERT(node->bases.size() == 1, "");
         RELEASE_ASSERT(node->decorator_list.size() == 0, "");
 
