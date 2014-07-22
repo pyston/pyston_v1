@@ -350,6 +350,53 @@ private:
                 }
                 return new ConcreteCompilerVariable(UNKNOWN, exc_obj, true);
             }
+            case AST_LangPrimitive::LOCALS: {
+                assert(node->args.size() == 0);
+
+                llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
+                ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
+
+                for (auto& p : symbol_table) {
+                    if (p.first[0] == '!')
+                        continue;
+
+                    ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(
+                        _getFake(_getFakeName("is_defined", p.first.c_str()), true));
+
+                    static const std::string setitem_str("__setitem__");
+                    if (!is_defined_var) {
+                        ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
+
+                        // TODO super dumb that it reallocates the name again
+                        CompilerVariable* _r
+                            = rtn->callattr(emitter, getEmptyOpInfo(exc_info), &setitem_str, true, ArgPassSpec(2),
+                                            { makeStr(new std::string(p.first)), converted }, NULL);
+                        converted->decvref(emitter);
+                        _r->decvref(emitter);
+                    } else {
+                        assert(is_defined_var->getType() == BOOL);
+
+                        llvm::BasicBlock* was_defined
+                            = llvm::BasicBlock::Create(g.context, "was_defined", irstate->getLLVMFunction());
+                        llvm::BasicBlock* join
+                            = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
+                        emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), was_defined, join);
+
+                        emitter.getBuilder()->SetInsertPoint(was_defined);
+                        ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
+                        // TODO super dumb that it reallocates the name again
+                        CompilerVariable* _r
+                            = rtn->callattr(emitter, getEmptyOpInfo(exc_info), &setitem_str, true, ArgPassSpec(2),
+                                            { makeStr(new std::string(p.first)), converted }, NULL);
+                        converted->decvref(emitter);
+                        _r->decvref(emitter);
+                        emitter.getBuilder()->CreateBr(join);
+                        emitter.getBuilder()->SetInsertPoint(join);
+                    }
+                }
+
+                return rtn;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
@@ -634,9 +681,10 @@ private:
             }
 
             std::string defined_name = _getFakeName("is_defined", node->id.c_str());
-            ConcreteCompilerVariable* is_defined = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
+            ConcreteCompilerVariable* is_defined_var
+                = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
-            if (is_defined) {
+            if (is_defined_var) {
                 // classdefs have different scoping rules than functions:
                 if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
                     llvm::BasicBlock* from_local
@@ -645,7 +693,7 @@ private:
                         = llvm::BasicBlock::Create(g.context, "from_global", irstate->getLLVMFunction());
                     llvm::BasicBlock* join = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
 
-                    emitter.getBuilder()->CreateCondBr(is_defined->getValue(), from_local, from_global);
+                    emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), from_local, from_global);
 
                     emitter.getBuilder()->SetInsertPoint(from_local);
                     CompilerVariable* local = symbol_table[node->id];
@@ -665,8 +713,11 @@ private:
                     return new ConcreteCompilerVariable(UNKNOWN, phi, true);
                 }
 
-                emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined->getValue(),
+                emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined_var->getValue(),
                                     getStringConstantPtr(node->id + '\0'));
+
+                // At this point we know the name must be defined (otherwise the assert would have fired):
+                _popFake(defined_name);
             }
 
             CompilerVariable* rtn = symbol_table[node->id];

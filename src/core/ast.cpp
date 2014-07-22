@@ -1302,6 +1302,9 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
         case AST_LangPrimitive::LANDINGPAD:
             printf("landingpad");
             break;
+        case AST_LangPrimitive::LOCALS:
+            printf("locals");
+            break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }

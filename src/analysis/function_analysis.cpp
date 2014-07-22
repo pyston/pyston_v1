@@ -95,6 +95,9 @@ public:
 };
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
+    if (name[0] != '#')
+        return true;
+
     if (block->successors.size() == 0)
         return false;
 

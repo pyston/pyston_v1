@@ -1702,20 +1702,10 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     if (source->ast->type == AST_TYPE::ClassDef) {
         ScopeInfo* scope_info = source->scoping->getScopeInfoForNode(source->ast);
 
-        auto written_names = scope_info->getClassDefLocalNames();
-        AST_Dict* rtn_dict = new AST_Dict();
-
-        // Even if the user never explicitly wrote to __module__, there was an
-        // implicit write:
-        assert(written_names.count("__module__"));
-
-        for (auto s : written_names) {
-            rtn_dict->keys.push_back(new AST_Str(s));
-            rtn_dict->values.push_back(makeName(s, AST_TYPE::Load));
-        }
+        AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
 
         AST_Return* rtn = new AST_Return();
-        rtn->value = rtn_dict;
+        rtn->value = locals;
         visitor.push_back(rtn);
     } else {
         // Put a fake "return" statement at the end of every function just to make sure they all have one;

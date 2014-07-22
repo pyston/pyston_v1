@@ -359,6 +359,8 @@ private:
                 return BOOL;
             case AST_LangPrimitive::LANDINGPAD:
                 return UNKNOWN;
+            case AST_LangPrimitive::LOCALS:
+                return DICT;
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

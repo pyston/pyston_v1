@@ -628,13 +628,17 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* arg1, Bo
                             r = reinterpret_cast<int64_t (*)(int64_t, double, double)>(f)(args[0].n, args[1].d,
                                                                                           args[2].d);
                             break;
-                        case 0b100000:
+                        case 0b100000: // 32
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].n);
                             break;
-                        case 0b100001:
+                        case 0b100001: // 33
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, double)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].d);
+                            break;
+                        case 0b100010: // 34
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, double, int64_t)>(f)(
+                                args[0].n, args[1].n, args[2].d, args[3].n);
                             break;
                         case 0b100110:
                             r = reinterpret_cast<int64_t (*)(int64_t, double, double, int64_t)>(f)(
@@ -644,15 +648,15 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* arg1, Bo
                             r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n,
                                                                                                args[2].d, args[3].n);
                             break;
-                        case 0b1000000:
+                        case 0b1000000: // 64
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].n, args[4].n);
                             break;
-                        case 0b10000000:
+                        case 0b10000000: // 128
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n);
                             break;
-                        case 0b100000000:
+                        case 0b100000000: // 256
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
                                                              int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
                                                                           args[4].n, args[5].n, args[6].n);
