@@ -189,7 +189,9 @@ extern "C" void hcGCHandler(GCVisitor* v, void* p) {
 extern "C" void instancemethodGCHandler(GCVisitor* v, void* p) {
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)p;
 
-    v->visit(im->obj);
+    if (im->obj) {
+        v->visit(im->obj);
+    }
     v->visit(im->func);
 }
 
@@ -314,7 +316,11 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) 
 
     for (const auto& p : attr_dict->d) {
         assert(p.first->cls == str_cls);
-        made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
+        Box* value = p.second;
+        if (value->cls == function_cls) {
+            value = boxUnboundInstanceMethod(value);
+        }
+        made->giveAttr(static_cast<BoxedString*>(p.first)->s, value);
     }
 
     if (made->getattr("__doc__") == NULL) {
@@ -333,6 +339,10 @@ extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
     num_ims.log();
 
     return new BoxedInstanceMethod(obj, func);
+}
+
+extern "C" Box* boxUnboundInstanceMethod(Box* func) {
+    return new BoxedInstanceMethod(NULL, func);
 }
 
 extern "C" BoxedString* noneRepr(Box* v) {
@@ -551,22 +561,25 @@ void setupRuntime() {
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, false);
     typeCallObj->internal_callable = &typeCallInternal;
-    type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
+    type_cls->giveAttr("__call__", boxUnboundInstanceMethod(new BoxedFunction(typeCallObj)));
 
     type_cls->giveAttr("__name__", boxStrConstant("type"));
-    type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 2)));
-    type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
+    type_cls->giveAttr("__new__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 2))));
+    type_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1))));
     type_cls->giveAttr("__str__", type_cls->getattr("__repr__"));
     type_cls->freeze();
 
     none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
-    none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
+    none_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1))));
     none_cls->giveAttr("__str__", none_cls->getattr("__repr__"));
-    none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
+    none_cls->giveAttr("__hash__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1))));
     none_cls->freeze();
 
     module_cls->giveAttr("__name__", boxStrConstant("module"));
-    module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
+    module_cls->giveAttr("__repr__",
+                         boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1))));
     module_cls->giveAttr("__str__", module_cls->getattr("__repr__"));
     module_cls->freeze();
 
@@ -587,18 +600,21 @@ void setupRuntime() {
     setupFile();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
-    function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
+    function_cls->giveAttr("__repr__",
+                           boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1))));
     function_cls->giveAttr("__str__", function_cls->getattr("__repr__"));
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
-    instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
+    instancemethod_cls->giveAttr(
+        "__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1))));
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__name__", boxStrConstant("slice"));
-    slice_cls->giveAttr("__new__",
-                        new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None }));
-    slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, STR, 1)));
+    slice_cls->giveAttr("__new__", boxUnboundInstanceMethod(new BoxedFunction(
+                                       boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None })));
+    slice_cls->giveAttr("__repr__",
+                        boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)sliceRepr, STR, 1))));
     slice_cls->giveAttr("__str__", slice_cls->getattr("__repr__"));
     slice_cls->giveAttr("start", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_START_OFFSET));
     slice_cls->giveAttr("stop", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STOP_OFFSET));

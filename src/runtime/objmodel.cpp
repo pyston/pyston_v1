@@ -595,9 +595,15 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrit
 }
 
 static Box* _handleClsAttr(Box* obj, Box* attr) {
-    if (attr->cls == function_cls) {
-        Box* rtn = boxInstanceMethod(obj, attr);
-        return rtn;
+    if (attr->cls == instancemethod_cls) {
+        BoxedInstanceMethod* instanceMethod = static_cast<BoxedInstanceMethod*>(attr);
+        // If it is an unbound instance method, we need to bind it.
+        if (instanceMethod->obj == NULL) {
+            Box* rtn = boxInstanceMethod(obj, instanceMethod->func);
+            return rtn;
+        } else {
+            return attr;
+        }
     }
     if (attr->cls == member_cls) {
         BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(attr);
@@ -979,6 +985,9 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
         if (!isUserDefined(cobj)) {
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'",
                            getNameOfClass(cobj)->c_str());
+        }
+        if (attr_val->cls == function_cls) {
+            attr_val = boxUnboundInstanceMethod(attr_val);
         }
     }
 
@@ -1407,7 +1416,14 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         return NULL;
     }
 
-    if (clsattr->cls == function_cls) {
+    if (clsattr->cls == instancemethod_cls) {
+        BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(clsattr);
+
+        // TODO we need to handle bound instancemethods as well
+        // (Just call it without re-binding.)
+        // For now, assert that it is unbound.
+        assert(im->obj == NULL);
+
         if (rewrite_args) {
             r_clsattr.addGuard((int64_t)clsattr);
         }
@@ -1432,7 +1448,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                 r_clsattr.push();
 
                 rtn = runtimeCallInternal(
-                    clsattr, &srewrite_args,
+                    im->func, &srewrite_args,
                     ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
                     obj, arg1, arg2, NULL, keyword_names);
 
@@ -1443,8 +1459,8 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                     rewrite_args->out_rtn = srewrite_args.out_rtn;
                 }
             } else {
-                rtn = runtimeCallInternal(clsattr, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                     argspec.has_starargs, argspec.has_kwargs),
+                rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
+                                                                      argspec.has_starargs, argspec.has_kwargs),
                                           obj, arg1, arg2, NULL, keyword_names);
             }
 
@@ -1519,7 +1535,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                 if (annotate)
                     rewrite_args->rewriter->annotate(0);
                 rtn = runtimeCallInternal(
-                    clsattr, &srewrite_args,
+                    im->func, &srewrite_args,
                     ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
                     obj, arg1, arg2, new_args, keyword_names);
                 if (annotate)
@@ -1538,8 +1554,8 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                 if (annotate)
                     rewrite_args->rewriter->annotate(2);
             } else {
-                rtn = runtimeCallInternal(clsattr, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
-                                                                     argspec.has_starargs, argspec.has_kwargs),
+                rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
+                                                                      argspec.has_starargs, argspec.has_kwargs),
                                           obj, arg1, arg2, new_args, keyword_names);
             }
             return rtn;
@@ -2074,7 +2090,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->obj.addAttrGuard(INSTANCEMETHOD_FUNC_OFFSET, (intptr_t)im->func);
         }
 
-        if (npassed_args <= 2) {
+        if (im->obj == NULL) {
+            return runtimeCallInternal(im->func, rewrite_args, ArgPassSpec(argspec.num_args, argspec.num_keywords,
+                                                                           argspec.has_starargs, argspec.has_kwargs),
+                                       arg1, arg2, arg3, args, keyword_names);
+
+        } else if (npassed_args <= 2) {
             Box* rtn;
             if (rewrite_args) {
                 // Kind of weird that we don't need to give this a valid RewriterVar, but it shouldn't need to access it

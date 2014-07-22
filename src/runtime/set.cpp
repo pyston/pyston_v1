@@ -221,21 +221,22 @@ void setupSet() {
 
     set_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
-    set_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
-    set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
+    set_iterator_cls->giveAttr("__hasnext__", boxUnboundInstanceMethod(new BoxedFunction(
+                                                  boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1))));
+    set_iterator_cls->giveAttr(
+        "next", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1))));
     set_iterator_cls->freeze();
     gc::registerStaticRootObj(set_iterator_cls);
 
     set_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None })));
     frozenset_cls->giveAttr("__new__", set_cls->getattr("__new__"));
 
-    Box* set_repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
+    Box* set_repr = boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1)));
     set_cls->giveAttr("__repr__", set_repr);
     set_cls->giveAttr("__str__", set_repr);
 
-    Box* frozenset_repr = new BoxedFunction(boxRTFunction((void*)frozensetRepr, STR, 1));
+    Box* frozenset_repr = boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)frozensetRepr, STR, 1)));
     frozenset_cls->giveAttr("__repr__", frozenset_repr);
     frozenset_cls->giveAttr("__str__", frozenset_repr);
 
@@ -260,7 +261,7 @@ void setupSet() {
         addRTFunction(func_obj, (void*)func, SET, v_sf);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_fs);
         addRTFunction(func_obj, (void*)func, FROZENSET, v_ff);
-        set_cls->giveAttr(name, new BoxedFunction(func_obj));
+        set_cls->giveAttr(name, boxUnboundInstanceMethod(new BoxedFunction(func_obj)));
         frozenset_cls->giveAttr(name, set_cls->getattr(name));
     };
 
@@ -269,13 +270,13 @@ void setupSet() {
     add("__xor__", (void*)setXorSet);
     add("__and__", (void*)setAndSet);
 
-    set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1)));
+    set_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1))));
     frozenset_cls->giveAttr("__iter__", set_cls->getattr("__iter__"));
 
-    set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1)));
+    set_cls->giveAttr("__len__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1))));
     frozenset_cls->giveAttr("__len__", set_cls->getattr("__len__"));
 
-    set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
+    set_cls->giveAttr("add", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2))));
 
     set_cls->freeze();
     frozenset_cls->freeze();

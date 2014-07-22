@@ -159,23 +159,26 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
 void setupFile() {
     file_cls->giveAttr("__name__", boxStrConstant("file"));
 
-    file_cls->giveAttr("read",
-                       new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));
+    file_cls->giveAttr("read", boxUnboundInstanceMethod(new BoxedFunction(
+                                   boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) })));
 
     CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1);
-    file_cls->giveAttr("readline", new BoxedFunction(readline));
+    file_cls->giveAttr("readline", boxUnboundInstanceMethod(new BoxedFunction(readline)));
 
-    file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NONE, 2)));
-    file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NONE, 1)));
+    file_cls->giveAttr("write", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)fileWrite, NONE, 2))));
+    file_cls->giveAttr("close", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)fileClose, NONE, 1))));
 
-    file_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)fileRepr, STR, 1)));
+    file_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)fileRepr, STR, 1))));
     file_cls->giveAttr("__str__", file_cls->getattr("__repr__"));
 
-    file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1)));
-    file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4)));
+    file_cls->giveAttr("__enter__", boxUnboundInstanceMethod(new BoxedFunction(
+                                        boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1))));
+    file_cls->giveAttr("__exit__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4))));
 
-    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 3, 1, false, false),
-                                                    { boxStrConstant("r") }));
+    file_cls->giveAttr("__new__",
+                       boxUnboundInstanceMethod(new BoxedFunction(
+                           boxRTFunction((void*)fileNew, UNKNOWN, 3, 1, false, false), { boxStrConstant("r") })));
 
     file_cls->freeze();
 }

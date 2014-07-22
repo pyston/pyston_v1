@@ -87,6 +87,7 @@ extern "C" Box* boxInt(i64);
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func);
+extern "C" Box* boxUnboundInstanceMethod(Box* func);
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
@@ -198,7 +199,8 @@ public:
 
 class BoxedInstanceMethod : public Box {
 public:
-    Box* obj, *func;
+    Box* obj; // NULL if unbound
+    Box* func;
 
     BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
     : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}

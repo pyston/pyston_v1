@@ -127,12 +127,12 @@ void setupCAPI() {
     capifunc_cls = new BoxedClass(object_cls, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
-    capifunc_cls->giveAttr("__repr__",
-                           new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
+    capifunc_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(
+                                           boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1))));
     capifunc_cls->giveAttr("__str__", capifunc_cls->getattr("__repr__"));
 
-    capifunc_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, false)));
+    capifunc_cls->giveAttr("__call__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction(
+                                           (void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, false))));
 
     capifunc_cls->freeze();
 }

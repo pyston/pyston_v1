@@ -418,9 +418,10 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
-    cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew1, UNKNOWN, 1)));
-    cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1)));
-    cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1)));
+    cls->giveAttr("__new__",
+                  boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)exceptionNew1, UNKNOWN, 1))));
+    cls->giveAttr("__str__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1))));
+    cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1))));
     cls->freeze();
 
     builtins_module->giveAttr(name, cls);

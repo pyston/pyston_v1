@@ -525,56 +525,67 @@ void setupList() {
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 
-    list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
+    list_cls->giveAttr("__len__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1))));
 
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
     addRTFunction(getitem, (void*)listGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     addRTFunction(getitem, (void*)listGetitemSlice, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
     addRTFunction(getitem, (void*)listGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN });
-    list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
+    list_cls->giveAttr("__getitem__", boxUnboundInstanceMethod(new BoxedFunction(getitem)));
 
-    list_cls->giveAttr("__iter__",
-                       new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1)));
+    list_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(
+                                       boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1))));
 
-    list_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)listEq, UNKNOWN, 2)));
+    list_cls->giveAttr("__eq__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listEq, UNKNOWN, 2))));
 
-    list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1)));
+    list_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1))));
     list_cls->giveAttr("__str__", list_cls->getattr("__repr__"));
-    list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1)));
+    list_cls->giveAttr("__nonzero__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1))));
 
-    list_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None }));
+    list_cls->giveAttr("pop", boxUnboundInstanceMethod(new BoxedFunction(
+                                  boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None })));
 
-    list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2)));
-    list_cls->giveAttr("extend", new BoxedFunction(boxRTFunction((void*)listIAdd, NONE, 2)));
+    list_cls->giveAttr("append", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2))));
+    list_cls->giveAttr("extend", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listIAdd, NONE, 2))));
 
     CLFunction* setitem = createRTFunction(3, 0, false, false);
     addRTFunction(setitem, (void*)listSetitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, UNKNOWN });
     addRTFunction(setitem, (void*)listSetitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE, UNKNOWN });
     addRTFunction(setitem, (void*)listSetitem, NONE, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN, UNKNOWN });
-    list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
+    list_cls->giveAttr("__setitem__", boxUnboundInstanceMethod(new BoxedFunction(setitem)));
 
     CLFunction* delitem = createRTFunction(2, 0, false, false);
     addRTFunction(delitem, (void*)listDelitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     addRTFunction(delitem, (void*)listDelitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
     addRTFunction(delitem, (void*)listDelitem, NONE, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN });
-    list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
+    list_cls->giveAttr("__delitem__", boxUnboundInstanceMethod(new BoxedFunction(delitem)));
 
-    list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3)));
-    list_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2)));
+    list_cls->giveAttr("insert",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3))));
+    list_cls->giveAttr("__mul__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listMul, LIST, 2))));
 
-    list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
-    list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));
+    list_cls->giveAttr("__iadd__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2))));
+    list_cls->giveAttr("__add__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2))));
 
-    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NONE, 1)));
-    list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2)));
+    list_cls->giveAttr("sort", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listSort1, NONE, 1))));
+    list_cls->giveAttr("__contains__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2))));
 
-    list_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)listNew, UNKNOWN, 2, 1, false, false), { None }));
+    list_cls->giveAttr("__new__", boxUnboundInstanceMethod(new BoxedFunction(
+                                      boxRTFunction((void*)listNew, UNKNOWN, 2, 1, false, false), { None })));
 
-    list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2)));
-    list_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 2)));
-    list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2)));
-    list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1)));
+    list_cls->giveAttr("count",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2))));
+    list_cls->giveAttr("index",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 2))));
+    list_cls->giveAttr("remove",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2))));
+    list_cls->giveAttr("reverse",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1))));
     list_cls->freeze();
 
 
@@ -583,10 +594,11 @@ void setupList() {
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);
-    list_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    list_iterator_cls->giveAttr("__hasnext__", boxUnboundInstanceMethod(new BoxedFunction(hasnext)));
+    list_iterator_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction(
+                                                (void*)listIterIter, typeFromClass(list_iterator_cls), 1))));
     list_iterator_cls->giveAttr(
-        "__iter__", new BoxedFunction(boxRTFunction((void*)listIterIter, typeFromClass(list_iterator_cls), 1)));
-    list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1)));
+        "next", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1))));
 
     list_iterator_cls->freeze();
 }
