@@ -99,7 +99,15 @@ void unwindExc(Box* exc_obj) {
     abort();
 }
 
-void raiseRaw(Box* exc_obj) {
+static std::vector<const LineInfo*> getTracebackEntries();
+static std::vector<const LineInfo*> last_tb;
+
+void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
+void raiseExc(Box* exc_obj) {
+    auto entries = getTracebackEntries();
+    last_tb = std::move(entries);
+
+
     // Using libgcc:
     throw exc_obj;
 
@@ -109,7 +117,6 @@ void raiseRaw(Box* exc_obj) {
     abort();
 }
 
-static std::vector<const LineInfo*> last_tb;
 void printLastTraceback() {
     fprintf(stderr, "Traceback (most recent call last):\n");
 
@@ -188,7 +195,7 @@ void raise1(Box* b) {
         BoxedClass* c = static_cast<BoxedClass*>(b);
         if (isSubclass(c, Exception)) {
             auto exc_obj = exceptionNew1(c);
-            raiseRaw(exc_obj);
+            raiseExc(exc_obj);
         } else {
             raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
                            getTypeName(b)->c_str());
@@ -197,13 +204,10 @@ void raise1(Box* b) {
 
     // TODO: should only allow throwing of old-style classes or things derived
     // from BaseException:
-    raiseRaw(b);
+    raiseExc(b);
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
-    auto entries = getTracebackEntries();
-    last_tb = std::move(entries);
-
     if (msg != NULL) {
         va_list ap;
         va_start(ap, msg);
@@ -220,10 +224,10 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 
         BoxedString* message = boxStrConstant(buf);
         Box* exc_obj = exceptionNew2(cls, message);
-        raiseRaw(exc_obj);
+        raiseExc(exc_obj);
     } else {
         Box* exc_obj = exceptionNew1(cls);
-        raiseRaw(exc_obj);
+        raiseExc(exc_obj);
     }
 }
 

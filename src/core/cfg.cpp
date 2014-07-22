@@ -637,6 +637,9 @@ private:
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
         AST_LangPrimitive* rtn = new AST_LangPrimitive(node->opcode);
+        rtn->col_offset = node->col_offset;
+        rtn->lineno = node->lineno;
+
         for (AST_expr* arg : node->args) {
             rtn->args.push_back(remapExpr(arg));
         }
@@ -841,6 +844,8 @@ public:
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
         invoke->exc_dest = exc_dest;
+        invoke->col_offset = node->col_offset;
+        invoke->lineno = node->lineno;
 
         curblock->push_back(invoke);
         curblock->connectTo(normal_dest);
@@ -1015,11 +1020,15 @@ public:
                 s_target->value = remapExpr(s->value);
                 s_target->slice = remapExpr(s->slice);
                 s_target->ctx_type = AST_TYPE::Store;
+                s_target->col_offset = s->col_offset;
+                s_target->lineno = s->lineno;
                 remapped_target = s_target;
 
                 AST_Subscript* s_lhs = new AST_Subscript();
                 s_lhs->value = s_target->value;
                 s_lhs->slice = s_target->slice;
+                s_lhs->col_offset = s->col_offset;
+                s_lhs->lineno = s->lineno;
                 s_lhs->ctx_type = AST_TYPE::Load;
                 remapped_lhs = remapExpr(s_lhs);
 
@@ -1033,12 +1042,16 @@ public:
                 a_target->value = remapExpr(a->value);
                 a_target->attr = a->attr;
                 a_target->ctx_type = AST_TYPE::Store;
+                a_target->col_offset = a->col_offset;
+                a_target->lineno = a->lineno;
                 remapped_target = a_target;
 
                 AST_Attribute* a_lhs = new AST_Attribute();
                 a_lhs->value = a_target->value;
                 a_lhs->attr = a->attr;
                 a_lhs->ctx_type = AST_TYPE::Load;
+                a_lhs->col_offset = a->col_offset;
+                a_lhs->lineno = a->lineno;
                 remapped_lhs = remapExpr(a_lhs);
 
                 break;
@@ -1051,6 +1064,8 @@ public:
         binop->op_type = node->op_type;
         binop->left = remapped_lhs;
         binop->right = remapExpr(node->value);
+        binop->col_offset = node->col_offset;
+        binop->lineno = node->lineno;
         AST_stmt* assign = makeAssign(remapped_target, binop);
         push_back(assign);
         return true;
@@ -1097,6 +1112,7 @@ public:
         int i = 0;
         for (auto v : node->values) {
             AST_Print* remapped = new AST_Print();
+            remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             remapped->dest = dest;
@@ -1116,6 +1132,8 @@ public:
             assert(node->nl);
 
             AST_Print* final = new AST_Print();
+            final->col_offset = node->col_offset;
+            final->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             final->dest = dest;
             final->nl = node->nl;
@@ -1405,6 +1423,9 @@ public:
 
     bool visit_raise(AST_Raise* node) override {
         AST_Raise* remapped = new AST_Raise();
+        remapped->col_offset = node->col_offset;
+        remapped->lineno = node->lineno;
+
         if (node->arg0)
             remapped->arg0 = remapExpr(node->arg0);
         if (node->arg1)

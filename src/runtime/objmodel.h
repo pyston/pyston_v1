@@ -28,8 +28,6 @@ class BoxedInt;
 class BoxedList;
 class BoxedString;
 
-// "raw" raising function that will engage the unwinding machinery
-void raiseRaw(Box*) __attribute__((__noreturn__));
 // user-level raise function that implements some python-level semantics
 extern "C" void raise1(Box*) __attribute__((__noreturn__));
 extern "C" void raise2(Box*, Box*) __attribute__((__noreturn__));
