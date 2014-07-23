@@ -599,9 +599,10 @@ void setupRuntime() {
 
     setupBuiltins();
     setupMath();
-    setupErrno();
     setupTime();
     setupThread();
+    setupErrno();
+    setupPosix();
 
     setupCAPI();
 

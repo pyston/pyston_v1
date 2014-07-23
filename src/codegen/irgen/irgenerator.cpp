@@ -1730,15 +1730,21 @@ private:
     }
 
     void doRaise(AST_Raise* node, ExcInfo exc_info) {
-        RELEASE_ASSERT(node->arg0 != NULL, "");
+        std::vector<llvm::Value*> args;
+        llvm::Value* raise_func = g.funcs.raise0;
+
+        if (node->arg0) {
+            raise_func = g.funcs.raise1;
+
+            CompilerVariable* arg0 = evalExpr(node->arg0, exc_info);
+            ConcreteCompilerVariable* converted_arg0 = arg0->makeConverted(emitter, arg0->getBoxType());
+            arg0->decvref(emitter);
+            args.push_back(converted_arg0->getValue());
+        }
         RELEASE_ASSERT(node->arg1 == NULL, "");
         RELEASE_ASSERT(node->arg2 == NULL, "");
 
-        CompilerVariable* arg0 = evalExpr(node->arg0, exc_info);
-        ConcreteCompilerVariable* converted_arg0 = arg0->makeConverted(emitter, arg0->getBoxType());
-        arg0->decvref(emitter);
-
-        emitter.createCall(exc_info, g.funcs.raise1, { converted_arg0->getValue() });
+        emitter.createCall(exc_info, raise_func, args);
         emitter.getBuilder()->CreateUnreachable();
 
         endBlock(DEAD);

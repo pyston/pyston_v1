@@ -20,6 +20,7 @@
 #include "codegen/codegen.h"
 #include "codegen/llvm_interpreter.h"
 #include "core/options.h"
+#include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -100,21 +101,25 @@ void unwindExc(Box* exc_obj) {
 }
 
 static std::vector<const LineInfo*> getTracebackEntries();
+static gc::StaticRootHandle last_exc;
 static std::vector<const LineInfo*> last_tb;
 
-void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
-void raiseExc(Box* exc_obj) {
-    auto entries = getTracebackEntries();
-    last_tb = std::move(entries);
-
-
+void raiseRaw(Box* exc_obj) __attribute__((__noreturn__));
+void raiseRaw(Box* exc_obj) {
     // Using libgcc:
     throw exc_obj;
 
     // Using libunwind
     // unwindExc(exc_obj);
+}
 
-    abort();
+void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
+void raiseExc(Box* exc_obj) {
+    auto entries = getTracebackEntries();
+    last_tb = std::move(entries);
+    last_exc = exc_obj;
+
+    raiseRaw(exc_obj);
 }
 
 void printLastTraceback() {
@@ -188,6 +193,10 @@ static std::vector<const LineInfo*> getTracebackEntries() {
     std::reverse(entries.begin(), entries.end());
 
     return entries;
+}
+
+void raise0() {
+    raiseRaw(last_exc);
 }
 
 void raise1(Box* b) {

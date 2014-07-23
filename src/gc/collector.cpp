@@ -42,6 +42,18 @@ void registerStaticRootObj(void* obj) {
     roots.push(obj);
 }
 
+static std::unordered_set<StaticRootHandle*>* getRootHandles() {
+    static std::unordered_set<StaticRootHandle*> root_handles;
+    return &root_handles;
+}
+
+StaticRootHandle::StaticRootHandle() {
+    getRootHandles()->insert(this);
+}
+StaticRootHandle::~StaticRootHandle() {
+    getRootHandles()->erase(this);
+}
+
 bool TraceStackGCVisitor::isValid(void* p) {
     return global_heap.getAllocationFromInteriorPointer(p);
 }
@@ -104,6 +116,10 @@ static void markPhase() {
     collectStackRoots(&stack);
 
     TraceStackGCVisitor visitor(&stack);
+
+    for (auto h : *getRootHandles()) {
+        visitor.visitPotential(h->value);
+    }
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {

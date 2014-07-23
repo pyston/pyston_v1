@@ -44,7 +44,7 @@ struct GlobalFuncs {
     llvm::Value* reoptCompiledFunc, *compilePartialFunc;
 
     llvm::Value* __cxa_begin_catch, *__cxa_end_catch;
-    llvm::Value* raise1;
+    llvm::Value* raise0, *raise1;
 
     llvm::Value* div_i64_i64, *mod_i64_i64, *pow_i64_i64;
     llvm::Value* div_float_float, *mod_float_float, *pow_float_float;

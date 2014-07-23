@@ -219,6 +219,7 @@ void initGlobalFuncs(GlobalState& g) {
 
     GET(__cxa_begin_catch);
     g.funcs.__cxa_end_catch = addFunc((void*)__cxa_end_catch, g.void_);
+    GET(raise0);
     GET(raise1);
 
     g.funcs.div_i64_i64 = getFunc((void*)div_i64_i64, "div_i64_i64");

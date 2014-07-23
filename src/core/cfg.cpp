@@ -1530,7 +1530,6 @@ public:
 
             if (!caught_all) {
                 AST_Raise* raise = new AST_Raise();
-                raise->arg0 = exc_obj;
                 push_back(raise);
                 curblock->push_back(new AST_Unreachable());
                 curblock = NULL;

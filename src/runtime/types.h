@@ -58,6 +58,7 @@ void setupMath();
 void setupTime();
 void setupThread();
 void setupErrno();
+void setupPosix();
 void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
