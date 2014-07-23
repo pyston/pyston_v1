@@ -185,13 +185,15 @@ def run_test(fn, check_stats, run_memcheck):
                 r += "    \033[31mFAILED\033[0m (bad output)"
                 failed.append(fn)
                 return r
-            exp_fd, exp_fn = tempfile.mkstemp()
-            out_fd, out_fn = tempfile.mkstemp()
+            exp_fd, exp_fn = tempfile.mkstemp(prefix="expected_")
+            out_fd, out_fn = tempfile.mkstemp(prefix="received_")
             os.fdopen(exp_fd, 'w').write(expected_out)
             os.fdopen(out_fd, 'w').write(out)
             p = subprocess.Popen(["diff", "-C2", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
             diff = p.stdout.read()
             assert p.wait() in (0, 1)
+            os.unlink(exp_fn)
+            os.unlink(out_fn)
             raise Exception("Failed on %s:\n%s" % (fn, diff))
     elif not TEST_PYPY and canonicalize_stderr(stderr) != canonicalize_stderr(expected_err):
         if KEEP_GOING:
