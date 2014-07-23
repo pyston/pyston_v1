@@ -76,6 +76,7 @@ void force() {
     FORCE(delitem);
     FORCE(unaryop);
     FORCE(import);
+    FORCE(importFrom);
     FORCE(repr);
     FORCE(isinstance);
     FORCE(yield);
@@ -92,6 +93,9 @@ void force() {
 
     FORCE(runtimeCall);
     FORCE(callattr);
+
+    FORCE(raise0);
+    FORCE(raise1);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);

@@ -29,7 +29,14 @@ class BoxedList;
 class BoxedString;
 class BoxedGenerator;
 
-void raiseExc(Box*) __attribute__((__noreturn__));
+// user-level raise functions that implement python-level semantics
+extern "C" void raise0() __attribute__((__noreturn__));
+extern "C" void raise1(Box*) __attribute__((__noreturn__));
+extern "C" void raise2(Box*, Box*) __attribute__((__noreturn__));
+extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
+void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
+
+// helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 
 extern "C" const std::string* getTypeName(Box* o);
@@ -37,6 +44,7 @@ extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 // TODO sort this
 extern "C" void my_assert(bool b);
+extern "C" Box* importFrom(Box* obj, const std::string* attr);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" bool nonzero(Box* obj);

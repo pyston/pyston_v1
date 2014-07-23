@@ -879,6 +879,7 @@ public:
     enum Opcodes {
         ISINSTANCE,
         LANDINGPAD,
+        LOCALS,
     } opcode;
     std::vector<AST_expr*> args;
 

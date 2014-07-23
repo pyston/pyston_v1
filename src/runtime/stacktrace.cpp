@@ -20,6 +20,7 @@
 #include "codegen/codegen.h"
 #include "codegen/llvm_interpreter.h"
 #include "core/options.h"
+#include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -99,17 +100,27 @@ void unwindExc(Box* exc_obj) {
     abort();
 }
 
-void raiseExc(Box* exc_obj) {
+static std::vector<const LineInfo*> getTracebackEntries();
+static gc::StaticRootHandle last_exc;
+static std::vector<const LineInfo*> last_tb;
+
+void raiseRaw(Box* exc_obj) __attribute__((__noreturn__));
+void raiseRaw(Box* exc_obj) {
     // Using libgcc:
     throw exc_obj;
 
     // Using libunwind
     // unwindExc(exc_obj);
-
-    abort();
 }
 
-static std::vector<const LineInfo*> last_tb;
+void raiseExc(Box* exc_obj) {
+    auto entries = getTracebackEntries();
+    last_tb = std::move(entries);
+    last_exc = exc_obj;
+
+    raiseRaw(exc_obj);
+}
+
 void printLastTraceback() {
     fprintf(stderr, "Traceback (most recent call last):\n");
 
@@ -183,10 +194,28 @@ static std::vector<const LineInfo*> getTracebackEntries() {
     return entries;
 }
 
-void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
-    auto entries = getTracebackEntries();
-    last_tb = std::move(entries);
+void raise0() {
+    raiseRaw(last_exc);
+}
 
+void raise1(Box* b) {
+    if (b->cls == type_cls) {
+        BoxedClass* c = static_cast<BoxedClass*>(b);
+        if (isSubclass(c, Exception)) {
+            auto exc_obj = exceptionNew1(c);
+            raiseExc(exc_obj);
+        } else {
+            raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
+                           getTypeName(b)->c_str());
+        }
+    }
+
+    // TODO: should only allow throwing of old-style classes or things derived
+    // from BaseException:
+    raiseExc(b);
+}
+
+void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
     if (msg != NULL) {
         va_list ap;
         va_start(ap, msg);
@@ -223,6 +252,8 @@ std::string formatException(Box* b) {
 
     assert(r->cls == str_cls);
     const std::string* msg = &r->s;
-    return *name + ": " + *msg;
+    if (msg->size())
+        return *name + ": " + *msg;
+    return *name;
 }
 }

@@ -288,6 +288,55 @@ public:
         converted_slice->decvref(emitter);
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
+
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        ConcreteCompilerVariable* converted_rhs = rhs->makeConverted(emitter, rhs->getBoxType());
+
+        llvm::Value* rtn;
+        bool do_patchpoint = ENABLE_ICBINEXPS && !info.isInterpreted();
+
+        llvm::Value* rt_func;
+        void* rt_func_addr;
+        if (exp_type == BinOp) {
+            rt_func = g.funcs.binop;
+            rt_func_addr = (void*)binop;
+        } else if (exp_type == AugBinOp) {
+            rt_func = g.funcs.augbinop;
+            rt_func_addr = (void*)augbinop;
+        } else {
+            rt_func = g.funcs.compare;
+            rt_func_addr = (void*)compare;
+        }
+
+        if (do_patchpoint) {
+            PatchpointSetupInfo* pp
+                = patchpoints::createBinexpPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+
+            std::vector<llvm::Value*> llvm_args;
+            llvm_args.push_back(var->getValue());
+            llvm_args.push_back(converted_rhs->getValue());
+            llvm_args.push_back(getConstantInt(op_type, g.i32));
+
+            llvm::Value* uncasted
+                = emitter.createPatchpoint(pp, rt_func_addr, llvm_args, info.exc_info).getInstruction();
+            rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        } else {
+            rtn = emitter.createCall3(info.exc_info, rt_func, var->getValue(), converted_rhs->getValue(),
+                                      getConstantInt(op_type, g.i32)).getInstruction();
+        }
+
+        converted_rhs->decvref(emitter);
+
+        if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn || op_type == AST_TYPE::Is
+            || op_type == AST_TYPE::IsNot) {
+            llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn);
+            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(BOOL, unboxed, true);
+            return rtn;
+        }
+
+        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+    }
 };
 
 ConcreteCompilerType* UNKNOWN = new UnknownType();
@@ -564,6 +613,7 @@ public:
     struct Sig {
         std::vector<ConcreteCompilerType*> arg_types;
         CompilerType* rtn_type;
+        int ndefaults;
     };
 
 private:
@@ -589,11 +639,11 @@ public:
 
         for (int i = 0; i < sigs.size(); i++) {
             Sig* sig = sigs[i];
-            if (sig->arg_types.size() != arg_types.size())
+            if (arg_types.size() < sig->arg_types.size() - sig->ndefaults || arg_types.size() > sig->arg_types.size())
                 continue;
 
             bool works = true;
-            for (int j = 0; j < sig->arg_types.size(); j++) {
+            for (int j = 0; j < arg_types.size(); j++) {
                 if (!arg_types[j]->canConvertTo(sig->arg_types[j])) {
                     works = false;
                     break;
@@ -621,6 +671,7 @@ public:
 
             Sig* type_sig = new Sig();
             type_sig->rtn_type = fspec->rtn_type;
+            type_sig->ndefaults = clf->num_defaults;
 
             if (stripfirst) {
                 assert(fspec->arg_types.size() >= 1);
@@ -636,14 +687,6 @@ public:
 
     static CompilerType* get(const std::vector<Sig*>& sigs) { return new AbstractFunctionType(sigs); }
 };
-
-CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types) {
-    std::vector<AbstractFunctionType::Sig*> sigs;
-    AbstractFunctionType::Sig* sig = new AbstractFunctionType::Sig();
-    sig->rtn_type = rtn_type;
-    sig->arg_types = arg_types;
-    return AbstractFunctionType::get(sigs);
-}
 
 class IntType : public ConcreteCompilerType {
 public:
@@ -755,6 +798,95 @@ public:
         return new ConcreteCompilerVariable(BOOL, cmp, true);
     }
 
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        if (rhs->getType() != INT) {
+            ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
+            CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
+            converted->decvref(emitter);
+            return rtn;
+        }
+
+        ConcreteCompilerVariable* converted_right = rhs->makeConverted(emitter, INT);
+        llvm::Value* v;
+        if (op_type == AST_TYPE::Mod) {
+            v = emitter.createCall2(info.exc_info, g.funcs.mod_i64_i64, var->getValue(), converted_right->getValue())
+                    .getInstruction();
+        } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::FloorDiv) {
+            v = emitter.createCall2(info.exc_info, g.funcs.div_i64_i64, var->getValue(), converted_right->getValue())
+                    .getInstruction();
+        } else if (op_type == AST_TYPE::Pow) {
+            v = emitter.createCall2(info.exc_info, g.funcs.pow_i64_i64, var->getValue(), converted_right->getValue())
+                    .getInstruction();
+        } else if (exp_type == BinOp || exp_type == AugBinOp) {
+            llvm::Instruction::BinaryOps binopcode;
+            switch (op_type) {
+                case AST_TYPE::Add:
+                    binopcode = llvm::Instruction::Add;
+                    break;
+                case AST_TYPE::BitAnd:
+                    binopcode = llvm::Instruction::And;
+                    break;
+                case AST_TYPE::BitOr:
+                    binopcode = llvm::Instruction::Or;
+                    break;
+                case AST_TYPE::BitXor:
+                    binopcode = llvm::Instruction::Xor;
+                    break;
+                case AST_TYPE::LShift:
+                    binopcode = llvm::Instruction::Shl;
+                    break;
+                case AST_TYPE::RShift:
+                    binopcode = llvm::Instruction::AShr;
+                    break;
+                case AST_TYPE::Mult:
+                    binopcode = llvm::Instruction::Mul;
+                    break;
+                case AST_TYPE::Sub:
+                    binopcode = llvm::Instruction::Sub;
+                    break;
+                default:
+                    ASSERT(0, "%s", getOpName(op_type).c_str());
+                    abort();
+                    break;
+            }
+            v = emitter.getBuilder()->CreateBinOp(binopcode, var->getValue(), converted_right->getValue());
+        } else {
+            assert(exp_type == Compare);
+            llvm::CmpInst::Predicate cmp_pred;
+            switch (op_type) {
+                case AST_TYPE::Eq:
+                case AST_TYPE::Is:
+                    cmp_pred = llvm::CmpInst::ICMP_EQ;
+                    break;
+                case AST_TYPE::Lt:
+                    cmp_pred = llvm::CmpInst::ICMP_SLT;
+                    break;
+                case AST_TYPE::LtE:
+                    cmp_pred = llvm::CmpInst::ICMP_SLE;
+                    break;
+                case AST_TYPE::Gt:
+                    cmp_pred = llvm::CmpInst::ICMP_SGT;
+                    break;
+                case AST_TYPE::GtE:
+                    cmp_pred = llvm::CmpInst::ICMP_SGE;
+                    break;
+                case AST_TYPE::NotEq:
+                case AST_TYPE::IsNot:
+                    cmp_pred = llvm::CmpInst::ICMP_NE;
+                    break;
+                default:
+                    ASSERT(0, "%s", getOpName(op_type).c_str());
+                    abort();
+                    break;
+            }
+            v = emitter.getBuilder()->CreateICmp(cmp_pred, var->getValue(), converted_right->getValue());
+        }
+        converted_right->decvref(emitter);
+        assert(v->getType() == g.i64 || v->getType() == g.i1);
+        return new ConcreteCompilerVariable(v->getType() == g.i64 ? INT : BOOL, v, true);
+    }
+
     virtual ConcreteCompilerType* getBoxType() { return BOXED_INT; }
 } _INT;
 ConcreteCompilerType* INT = &_INT;
@@ -849,6 +981,110 @@ public:
         llvm::Value* cmp = emitter.getBuilder()->CreateFCmpUNE(var->getValue(), llvm::ConstantFP::get(g.double_, 0));
         return new ConcreteCompilerVariable(BOOL, cmp, true);
     }
+
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        if (rhs->getType() != INT && rhs->getType() != FLOAT) {
+            ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
+            CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
+            converted->decvref(emitter);
+            return rtn;
+        }
+
+        ConcreteCompilerVariable* converted_right;
+        if (rhs->getType() == FLOAT) {
+            converted_right = rhs->makeConverted(emitter, FLOAT);
+        } else {
+            converted_right = rhs->makeConverted(emitter, INT);
+            llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(converted_right->getValue(), g.double_);
+            converted_right->decvref(emitter);
+            converted_right = new ConcreteCompilerVariable(FLOAT, conv, true);
+        }
+
+        llvm::Value* v;
+        bool succeeded = true;
+        if (op_type == AST_TYPE::Mod) {
+            v = emitter.createCall2(info.exc_info, g.funcs.mod_float_float, var->getValue(),
+                                    converted_right->getValue()).getInstruction();
+        } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::FloorDiv) {
+            v = emitter.createCall2(info.exc_info, g.funcs.div_float_float, var->getValue(),
+                                    converted_right->getValue()).getInstruction();
+        } else if (op_type == AST_TYPE::Pow) {
+            v = emitter.createCall2(info.exc_info, g.funcs.pow_float_float, var->getValue(),
+                                    converted_right->getValue()).getInstruction();
+        } else if (exp_type == BinOp || exp_type == AugBinOp) {
+            llvm::Instruction::BinaryOps binopcode;
+            switch (op_type) {
+                case AST_TYPE::Add:
+                    binopcode = llvm::Instruction::FAdd;
+                    break;
+                case AST_TYPE::Mult:
+                    binopcode = llvm::Instruction::FMul;
+                    break;
+                case AST_TYPE::Sub:
+                    binopcode = llvm::Instruction::FSub;
+                    break;
+                case AST_TYPE::BitAnd:
+                case AST_TYPE::BitOr:
+                case AST_TYPE::BitXor:
+                case AST_TYPE::LShift:
+                case AST_TYPE::RShift:
+                    succeeded = false;
+                    break;
+                default:
+                    ASSERT(0, "%s", getOpName(op_type).c_str());
+                    abort();
+                    break;
+            }
+
+            if (succeeded) {
+                v = emitter.getBuilder()->CreateBinOp(binopcode, var->getValue(), converted_right->getValue());
+            }
+        } else {
+            assert(exp_type == Compare);
+            llvm::CmpInst::Predicate cmp_pred;
+            switch (op_type) {
+                case AST_TYPE::Eq:
+                case AST_TYPE::Is:
+                    cmp_pred = llvm::CmpInst::FCMP_OEQ;
+                    break;
+                case AST_TYPE::Lt:
+                    cmp_pred = llvm::CmpInst::FCMP_OLT;
+                    break;
+                case AST_TYPE::LtE:
+                    cmp_pred = llvm::CmpInst::FCMP_OLE;
+                    break;
+                case AST_TYPE::Gt:
+                    cmp_pred = llvm::CmpInst::FCMP_OGT;
+                    break;
+                case AST_TYPE::GtE:
+                    cmp_pred = llvm::CmpInst::FCMP_OGE;
+                    break;
+                case AST_TYPE::NotEq:
+                case AST_TYPE::IsNot:
+                    cmp_pred = llvm::CmpInst::FCMP_UNE;
+                    break;
+                default:
+                    ASSERT(0, "%s", getOpName(op_type).c_str());
+                    abort();
+                    break;
+            }
+            v = emitter.getBuilder()->CreateFCmp(cmp_pred, var->getValue(), converted_right->getValue());
+        }
+        converted_right->decvref(emitter);
+
+        if (succeeded) {
+            assert(v->getType() == g.double_ || v->getType() == g.i1);
+            return new ConcreteCompilerVariable(v->getType() == g.double_ ? FLOAT : BOOL, v, true);
+        }
+
+        // TODO duplication with top of function, other functions, etc
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
+        CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     virtual ConcreteCompilerType* getBoxType() { return BOXED_FLOAT; }
 } _FLOAT;
 ConcreteCompilerType* FLOAT = &_FLOAT;
@@ -1022,19 +1258,20 @@ public:
 
         if (rtattr->cls != function_cls)
             return NULL;
+        BoxedFunction* rtattr_func = static_cast<BoxedFunction*>(rtattr);
 
         RELEASE_ASSERT(!argspec.has_starargs, "");
         RELEASE_ASSERT(!argspec.has_kwargs, "");
         RELEASE_ASSERT(argspec.num_keywords == 0, "");
 
-        CLFunction* cl = unboxRTFunction(rtattr);
+        CLFunction* cl = rtattr_func->f;
         assert(cl);
 
-        if (cl->num_defaults || cl->takes_varargs || cl->takes_kwargs)
+        if (cl->takes_varargs || cl->takes_kwargs)
             return NULL;
 
         RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
-        RELEASE_ASSERT(cl->num_args == args.size() + 1, "");
+        RELEASE_ASSERT(args.size() + 1 >= cl->num_args - cl->num_defaults && args.size() + 1 <= cl->num_args, "");
 
         CompiledFunction* cf = NULL;
         bool found = false;
@@ -1044,13 +1281,8 @@ public:
             assert(cf->spec->arg_types.size() == cl->numReceivedArgs());
 
             bool fits = true;
-            for (int j = 1; j < cl->num_args; j++) {
-                // if (cf->sig->arg_types[j] != UNKNOWN) {
-                // if (cf->sig->arg_types[j]->isFitBy(args[j-1]->guaranteedClass())) {
-                if (!args[j - 1]->canConvertTo(cf->spec->arg_types[j])) {
-                    // printf("Can't use version %d since arg %d (%s) doesn't fit into spec arg of %s\n", i, j,
-                    // args[j - 1]->getType()->debugName().c_str(),
-                    // cf->spec->arg_types[j]->debugName().c_str());
+            for (int j = 0; j < args.size(); j++) {
+                if (!args[j]->canConvertTo(cf->spec->arg_types[j + 1])) {
                     fits = false;
                     break;
                 }
@@ -1085,6 +1317,13 @@ public:
         std::vector<CompilerVariable*> new_args;
         new_args.push_back(var);
         new_args.insert(new_args.end(), args.begin(), args.end());
+
+        for (int i = args.size() + 1; i < cl->num_args; i++) {
+            // TODO should _call() be able to take llvm::Value's directly?
+            new_args.push_back(new ConcreteCompilerVariable(
+                UNKNOWN, embedConstantPtr(rtattr_func->defaults->elts[i - args.size() - 1], g.llvm_value_type_ptr),
+                true));
+        }
 
         std::vector<llvm::Value*> other_args;
 
@@ -1125,6 +1364,31 @@ public:
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
         CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
+        return rtn;
+    }
+
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        ConcreteCompilerVariable* converted_rhs = rhs->makeConverted(emitter, rhs->getBoxType());
+
+        BoxedClass* rhs_cls = converted_rhs->guaranteedClass();
+        if (rhs_cls && rhs_cls->is_constant && !rhs_cls->is_user_defined) {
+            // Ugly, but for now special-case the set of type-pairs that we know will always work
+            if (exp_type == BinOp
+                && ((cls == int_cls && rhs_cls == int_cls) || (cls == float_cls && rhs_cls == float_cls)
+                    || (cls == list_cls && rhs_cls == int_cls))) {
+
+                const std::string& left_side_name = getOpName(op_type);
+
+                ConcreteCompilerVariable* called_constant = tryCallattrConstant(
+                    emitter, info, var, &left_side_name, true, ArgPassSpec(1, 0, 0, 0), { converted_rhs }, NULL, false);
+                if (called_constant)
+                    return called_constant;
+            }
+        }
+
+        auto rtn = UNKNOWN->binexp(emitter, info, var, converted_rhs, op_type, exp_type);
+        converted_rhs->decvref(emitter);
         return rtn;
     }
 
@@ -1201,6 +1465,10 @@ public:
     virtual ConcreteCompilerType* getConcreteType() { return this; }
     // Shouldn't call this:
     virtual ConcreteCompilerType* getBoxType() { RELEASE_ASSERT(0, ""); }
+
+    void drop(IREmitter& emitter, VAR* var) override {}
+    void grab(IREmitter& emitter, VAR* var) override {}
+
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;
 
@@ -1277,6 +1545,14 @@ public:
         return rtn;
     }
 
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
+        CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) override {
         return makeBool(var->getValue()->size() != 0);
     }
@@ -1286,6 +1562,8 @@ public:
 
         if (rtn == NULL) {
             rtn = new VAR(this, var->getValue(), var->isGrabbed());
+            while (rtn->getVrefs() < var->getVrefs())
+                rtn->incvref();
         }
         return rtn;
     }
@@ -1353,6 +1631,14 @@ public:
                                       bool cls_only) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
+        CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1499,6 +1785,14 @@ public:
         return BOXED_TUPLE->getattrType(attr, cls_only);
     }
 
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
+        CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                                        bool clsonly, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
                                        const std::vector<const std::string*>* keyword_names) {
@@ -1573,6 +1867,11 @@ public:
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) {
         return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(g.i1), true);
+    }
+
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                             AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        return undefVariable();
     }
 
     virtual ConcreteCompilerType* getBoxType() { return UNKNOWN; }

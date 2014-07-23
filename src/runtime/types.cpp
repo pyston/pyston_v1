@@ -652,8 +652,12 @@ void setupRuntime() {
     setupMath();
     setupTime();
     setupThread();
+    setupErrno();
+    setupPosix();
 
     setupCAPI();
+
+    setupSysEnd();
 
     TRACK_ALLOCATIONS = true;
 }

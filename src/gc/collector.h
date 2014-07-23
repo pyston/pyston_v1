@@ -83,6 +83,19 @@ public:
 // (that should be registerStaticRootPtr)
 void registerStaticRootObj(void* root_obj);
 void runCollection();
+
+// If you want to have a static root "location" where multiple values could be stored, use this:
+class StaticRootHandle {
+public:
+    Box* value;
+
+    StaticRootHandle();
+    ~StaticRootHandle();
+
+    void operator=(Box* b) { value = b; }
+
+    operator Box*() { return value; }
+};
 }
 }
 

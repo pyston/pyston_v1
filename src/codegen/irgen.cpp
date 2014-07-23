@@ -337,13 +337,18 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             arg_num++;
             if (arg_num < 3) {
                 from_arg = func_args[arg_num];
+                assert(from_arg->getType() == p.second->llvmType());
             } else {
                 ASSERT(func_args.size() == 4, "%ld", func_args.size());
                 llvm::Value* ptr = entry_emitter->getBuilder()->CreateConstGEP1_32(func_args[3], arg_num - 3);
                 if (p.second == INT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i64->getPointerTo());
+                } else if (p.second == BOOL) {
+                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i1->getPointerTo());
                 } else if (p.second == FLOAT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
+                } else {
+                    assert(p.second->llvmType() == g.llvm_value_type_ptr);
                 }
                 from_arg = entry_emitter->getBuilder()->CreateLoad(ptr);
                 assert(from_arg->getType() == p.second->llvmType());
@@ -599,12 +604,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 into_hax.insert(b2);
             }
 
-            const PhiAnalysis::RequiredSet& names = source->phis->getAllDefinedAt(block);
+            const PhiAnalysis::RequiredSet& names = source->phis->getAllRequiredFor(block);
             for (const auto& s : names) {
-                // TODO the list from getAllDefinedAt should come filtered:
-                if (!source->liveness->isLiveAtEnd(s, block->predecessors[0]))
-                    continue;
-
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = types->getTypeAtBlockStart(s, block);
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s);

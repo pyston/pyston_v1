@@ -359,6 +359,8 @@ private:
                 return BOOL;
             case AST_LangPrimitive::LANDINGPAD:
                 return UNKNOWN;
+            case AST_LangPrimitive::LOCALS:
+                return DICT;
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
@@ -381,6 +383,10 @@ private:
                 // printf("TODO guard here and return the classobj\n");
                 // return typeOfClassobj(xrange_cls);
             }
+            return UNKNOWN;
+        }
+
+        if (scope_info->refersToClosure(node->id)) {
             return UNKNOWN;
         }
 

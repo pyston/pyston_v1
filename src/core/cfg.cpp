@@ -379,6 +379,8 @@ private:
     AST_expr* remapAttribute(AST_Attribute* node) {
         AST_Attribute* rtn = new AST_Attribute();
 
+        rtn->col_offset = node->col_offset;
+        rtn->lineno = node->lineno;
         rtn->ctx_type = node->ctx_type;
         rtn->attr = node->attr;
         rtn->value = remapExpr(node->value);
@@ -483,6 +485,8 @@ private:
     AST_expr* remapClsAttribute(AST_ClsAttribute* node) {
         AST_ClsAttribute* rtn = new AST_ClsAttribute();
 
+        rtn->col_offset = node->col_offset;
+        rtn->lineno = node->lineno;
         rtn->attr = node->attr;
         rtn->value = remapExpr(node->value);
         return rtn;
@@ -622,28 +626,20 @@ private:
     }
 
     AST_expr* remapLambda(AST_Lambda* node) {
-        if (node->args->defaults.empty()) {
-            return node;
+        // Remap in place: see note in visit_functiondef for why.
+
+        for (int i = 0; i < node->args->defaults.size(); i++) {
+            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
         }
 
-        AST_Lambda* rtn = new AST_Lambda();
-        rtn->lineno = node->lineno;
-        rtn->col_offset = node->col_offset;
-
-        rtn->args = new AST_arguments();
-        rtn->args->args = node->args->args;
-        rtn->args->vararg = node->args->vararg;
-        rtn->args->kwarg = node->args->kwarg;
-        for (auto d : node->args->defaults) {
-            rtn->args->defaults.push_back(remapExpr(d));
-        }
-
-        rtn->body = node->body;
-        return rtn;
+        return node;
     }
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
         AST_LangPrimitive* rtn = new AST_LangPrimitive(node->opcode);
+        rtn->col_offset = node->col_offset;
+        rtn->lineno = node->lineno;
+
         for (AST_expr* arg : node->args) {
             rtn->args.push_back(remapExpr(arg));
         }
@@ -859,6 +855,8 @@ public:
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
         invoke->exc_dest = exc_dest;
+        invoke->col_offset = node->col_offset;
+        invoke->lineno = node->lineno;
 
         curblock->push_back(invoke);
         curblock->connectTo(normal_dest);
@@ -878,36 +876,42 @@ public:
     }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
+        // Remap in place: see note in visit_functiondef for why.
+
+        // Decorators are evaluated before the defaults:
+        for (int i = 0; i < node->decorator_list.size(); i++) {
+            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
+        }
+
+        for (int i = 0; i < node->bases.size(); i++) {
+            node->bases[i] = remapExpr(node->bases[i]);
+        }
+
         push_back(node);
         return true;
     }
 
     virtual bool visit_functiondef(AST_FunctionDef* node) {
-        if (node->args->defaults.size() == 0 && node->decorator_list.size() == 0) {
-            push_back(node);
-        } else {
-            AST_FunctionDef* remapped = new AST_FunctionDef();
+        // As much as I don't like it, for now we're remapping these in place.
+        // This is because we do certain analyses pre-remapping, and associate the
+        // results with the node.  We can either do some refactoring and have a way
+        // of associating the new node with the same results, or just do the remapping
+        // in-place.
+        // Doing it in-place seems ugly, but I can't think of anything it should break,
+        // so just do that for now.
+        // TODO If we remap these (functiondefs, lambdas, classdefs) in place, we should probably
+        // remap everything in place?
 
-            remapped->name = node->name;
-            remapped->lineno = node->lineno;
-            remapped->col_offset = node->col_offset;
-            remapped->args = new AST_arguments();
-            remapped->body = node->body; // hmm shouldnt have to copy this
-
-            // Decorators are evaluated before the defaults:
-            for (auto d : node->decorator_list) {
-                remapped->decorator_list.push_back(remapExpr(d));
-            }
-
-            remapped->args->args = node->args->args;
-            remapped->args->vararg = node->args->vararg;
-            remapped->args->kwarg = node->args->kwarg;
-            for (auto d : node->args->defaults) {
-                remapped->args->defaults.push_back(remapExpr(d));
-            }
-
-            push_back(remapped);
+        // Decorators are evaluated before the defaults:
+        for (int i = 0; i < node->decorator_list.size(); i++) {
+            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
         }
+
+        for (int i = 0; i < node->args->defaults.size(); i++) {
+            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
+        }
+
+        push_back(node);
         return true;
     }
 
@@ -1027,11 +1031,15 @@ public:
                 s_target->value = remapExpr(s->value);
                 s_target->slice = remapExpr(s->slice);
                 s_target->ctx_type = AST_TYPE::Store;
+                s_target->col_offset = s->col_offset;
+                s_target->lineno = s->lineno;
                 remapped_target = s_target;
 
                 AST_Subscript* s_lhs = new AST_Subscript();
                 s_lhs->value = s_target->value;
                 s_lhs->slice = s_target->slice;
+                s_lhs->col_offset = s->col_offset;
+                s_lhs->lineno = s->lineno;
                 s_lhs->ctx_type = AST_TYPE::Load;
                 remapped_lhs = remapExpr(s_lhs);
 
@@ -1045,12 +1053,16 @@ public:
                 a_target->value = remapExpr(a->value);
                 a_target->attr = a->attr;
                 a_target->ctx_type = AST_TYPE::Store;
+                a_target->col_offset = a->col_offset;
+                a_target->lineno = a->lineno;
                 remapped_target = a_target;
 
                 AST_Attribute* a_lhs = new AST_Attribute();
                 a_lhs->value = a_target->value;
                 a_lhs->attr = a->attr;
                 a_lhs->ctx_type = AST_TYPE::Load;
+                a_lhs->col_offset = a->col_offset;
+                a_lhs->lineno = a->lineno;
                 remapped_lhs = remapExpr(a_lhs);
 
                 break;
@@ -1063,6 +1075,8 @@ public:
         binop->op_type = node->op_type;
         binop->left = remapped_lhs;
         binop->right = remapExpr(node->value);
+        binop->col_offset = node->col_offset;
+        binop->lineno = node->lineno;
         AST_stmt* assign = makeAssign(remapped_target, binop);
         push_back(assign);
         return true;
@@ -1109,6 +1123,7 @@ public:
         int i = 0;
         for (auto v : node->values) {
             AST_Print* remapped = new AST_Print();
+            remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             remapped->dest = dest;
@@ -1128,6 +1143,8 @@ public:
             assert(node->nl);
 
             AST_Print* final = new AST_Print();
+            final->col_offset = node->col_offset;
+            final->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
             final->dest = dest;
             final->nl = node->nl;
@@ -1417,6 +1434,9 @@ public:
 
     bool visit_raise(AST_Raise* node) override {
         AST_Raise* remapped = new AST_Raise();
+        remapped->col_offset = node->col_offset;
+        remapped->lineno = node->lineno;
+
         if (node->arg0)
             remapped->arg0 = remapExpr(node->arg0);
         if (node->arg1)
@@ -1424,6 +1444,9 @@ public:
         if (node->arg2)
             remapped->arg2 = remapExpr(node->arg2);
         push_back(remapped);
+
+        if (!curblock)
+            return true;
 
         curblock->push_back(new AST_Unreachable());
         curblock = NULL;
@@ -1518,7 +1541,6 @@ public:
 
             if (!caught_all) {
                 AST_Raise* raise = new AST_Raise();
-                raise->arg0 = exc_obj;
                 push_back(raise);
                 curblock->push_back(new AST_Unreachable());
                 curblock = NULL;
@@ -1709,20 +1731,10 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     if (source->ast->type == AST_TYPE::ClassDef) {
         ScopeInfo* scope_info = source->scoping->getScopeInfoForNode(source->ast);
 
-        auto written_names = scope_info->getClassDefLocalNames();
-        AST_Dict* rtn_dict = new AST_Dict();
-
-        // Even if the user never explicitly wrote to __module__, there was an
-        // implicit write:
-        assert(written_names.count("__module__"));
-
-        for (auto s : written_names) {
-            rtn_dict->keys.push_back(new AST_Str(s));
-            rtn_dict->values.push_back(makeName(s, AST_TYPE::Load));
-        }
+        AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
 
         AST_Return* rtn = new AST_Return();
-        rtn->value = rtn_dict;
+        rtn->value = locals;
         visitor.push_back(rtn);
     } else {
         // Put a fake "return" statement at the end of every function just to make sure they all have one;

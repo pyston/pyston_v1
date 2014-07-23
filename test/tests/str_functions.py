@@ -39,3 +39,17 @@ for c in "hello world":
 for i in xrange(1, 10):
     for j in xrange(1, 4):
         print ("a"*i).count("a"*j)
+
+def test_comparisons(a, b):
+    print "%s < %s = " % (a, b), a < b
+    print "%s <= %s = " % (a, b), a <= b
+    print "%s > %s = " % (a, b), a > b
+    print "%s >= %s = " % (a, b), a >= b
+    print "%s == %s = " % (a, b), a == b
+    print "%s != %s = " % (a, b), a != b
+test_comparisons("a", "a")
+test_comparisons("a", "A")
+test_comparisons("a", "aa")
+test_comparisons("ab", "aa")
+
+print sorted([str(i) for i in xrange(25)])

@@ -102,6 +102,12 @@ Val fetch(llvm::Value* v, const llvm::DataLayout& dl, const SymMap& symbols) {
         case llvm::Value::ConstantExprVal: {
             llvm::ConstantExpr* ce = llvm::cast<llvm::ConstantExpr>(v);
             if (ce->isCast()) {
+                if (ce->getOpcode() == llvm::Instruction::IntToPtr && ce->getOperand(0)->getType() == g.i1) {
+                    // inttoptr is specified to zero-extend
+                    Val o = fetch(ce->getOperand(0), dl, symbols);
+                    return o.n & 0x1;
+                }
+
                 assert(width(ce->getOperand(0), dl) == 8 && width(ce, dl) == 8);
 
                 Val o = fetch(ce->getOperand(0), dl, symbols);
@@ -283,7 +289,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
     int arg_num = -1;
     int closure_indicator = closure ? 1 : 0;
     int generator_indicator = generator ? 1 : 0;
-    int argOffset = closure_indicator + generator_indicator;
+    int arg_offset = closure_indicator + generator_indicator;
     for (llvm::Argument& arg : f->args()) {
         arg_num++;
 
@@ -291,15 +297,15 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(closure)));
         else if ((arg_num == 0 || (arg_num == 1 && closure)) && generator)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(generator)));
-        else if (arg_num == 0 + argOffset)
+        else if (arg_num == 0 + arg_offset)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg1)));
-        else if (arg_num == 1 + argOffset)
+        else if (arg_num == 1 + arg_offset)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg2)));
-        else if (arg_num == 2 + argOffset)
+        else if (arg_num == 2 + arg_offset)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg3)));
         else {
-            assert(arg_num == 3 + argOffset);
-            assert(f->getArgumentList().size() == 4 + argOffset);
+            assert(arg_num == 3 + arg_offset);
+            assert(f->getArgumentList().size() == 4 + arg_offset);
             assert(f->getArgumentList().back().getType() == g.llvm_value_type_ptr->getPointerTo());
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val((int64_t)args)));
             // printf("loading %%4 with %p\n", (void*)args);
@@ -309,6 +315,14 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
 
     llvm::BasicBlock* prevblock = NULL;
     llvm::BasicBlock* curblock = &f->getEntryBlock();
+
+    // The symbol table at the end of the previous BB
+    // This is important for the following case:
+    // %a = phi [0, %l1], [1, %l2]
+    // %b = phi [0, %l1], [%a, %l2]
+    // The reference to %a in the definition of %b resolves to the *previous* value of %a,
+    // not the value of %a that we just set in the phi.
+    SymMap prev_symbols;
 
     struct {
         Box* exc_obj;
@@ -521,8 +535,12 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                 SET(fetch(bc->getOperand(0), dl, symbols));
                 continue;
             } else if (llvm::IntToPtrInst* bc = llvm::dyn_cast<llvm::IntToPtrInst>(inst)) {
-                assert(width(bc->getOperand(0), dl) == 8);
-                SET(fetch(bc->getOperand(0), dl, symbols));
+                if (bc->getOperand(0)->getType() == g.i1) {
+                    SET(fetch(bc->getOperand(0), dl, symbols).n & 0xff);
+                } else {
+                    assert(width(bc->getOperand(0), dl) == 8);
+                    SET(fetch(bc->getOperand(0), dl, symbols));
+                }
                 continue;
                 //} else if (llvm::CallInst* ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
             } else if (llvm::isa<llvm::CallInst>(inst) || llvm::isa<llvm::InvokeInst>(inst)) {
@@ -615,13 +633,17 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                             r = reinterpret_cast<int64_t (*)(int64_t, double, double)>(f)(args[0].n, args[1].d,
                                                                                           args[2].d);
                             break;
-                        case 0b100000:
+                        case 0b100000: // 32
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].n);
                             break;
-                        case 0b100001:
+                        case 0b100001: // 33
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, double)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].d);
+                            break;
+                        case 0b100010: // 34
+                            r = reinterpret_cast<int64_t (*)(int64_t, int64_t, double, int64_t)>(f)(
+                                args[0].n, args[1].n, args[2].d, args[3].n);
                             break;
                         case 0b100110:
                             r = reinterpret_cast<int64_t (*)(int64_t, double, double, int64_t)>(f)(
@@ -631,15 +653,15 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                             r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n,
                                                                                                args[2].d, args[3].n);
                             break;
-                        case 0b1000000:
+                        case 0b1000000: // 64
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].n, args[4].n);
                             break;
-                        case 0b10000000:
+                        case 0b10000000: // 128
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(
                                 args[0].n, args[1].n, args[2].n, args[3].n, args[4].n, args[5].n);
                             break;
-                        case 0b100000000:
+                        case 0b100000000: // 256
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t,
                                                              int64_t)>(f)(args[0].n, args[1].n, args[2].n, args[3].n,
                                                                           args[4].n, args[5].n, args[6].n);
@@ -667,6 +689,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                     if (invoke != nullptr) {
                         prevblock = curblock;
                         curblock = invoke->getNormalDest();
+                        prev_symbols = symbols;
                     }
                 } catch (Box* e) {
                     if (VERBOSITY("interpreter") >= 2) {
@@ -678,6 +701,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
 
                     prevblock = curblock;
                     curblock = invoke->getUnwindDest();
+                    prev_symbols = symbols;
 
                     landingpad_value.exc_obj = e;
                     landingpad_value.exc_selector
@@ -700,7 +724,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                 continue;
             } else if (llvm::PHINode* phi = llvm::dyn_cast<llvm::PHINode>(inst)) {
                 assert(prevblock);
-                SET(fetch(phi->getIncomingValueForBlock(prevblock), dl, symbols));
+                SET(fetch(phi->getIncomingValueForBlock(prevblock), dl, prev_symbols));
                 continue;
             } else if (llvm::BranchInst* br = llvm::dyn_cast<llvm::BranchInst>(inst)) {
                 prevblock = curblock;
@@ -714,6 +738,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                 } else {
                     curblock = br->getSuccessor(0);
                 }
+                prev_symbols = symbols;
                 // if (VERBOSITY()) {
                 // printf("jumped to %s\n", curblock->getName().data());
                 //}

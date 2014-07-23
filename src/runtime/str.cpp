@@ -191,6 +191,46 @@ extern "C" BoxedString* strMul(BoxedString* lhs, BoxedInt* rhs) {
     return new BoxedString(buf);
 }
 
+extern "C" Box* strLt(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
+    if (rhs->cls != str_cls)
+        return NotImplemented;
+
+    BoxedString* srhs = static_cast<BoxedString*>(rhs);
+    return boxBool(lhs->s < srhs->s);
+}
+
+extern "C" Box* strLe(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
+    if (rhs->cls != str_cls)
+        return NotImplemented;
+
+    BoxedString* srhs = static_cast<BoxedString*>(rhs);
+    return boxBool(lhs->s <= srhs->s);
+}
+
+extern "C" Box* strGt(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
+    if (rhs->cls != str_cls)
+        return NotImplemented;
+
+    BoxedString* srhs = static_cast<BoxedString*>(rhs);
+    return boxBool(lhs->s > srhs->s);
+}
+
+extern "C" Box* strGe(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
+    if (rhs->cls != str_cls)
+        return NotImplemented;
+
+    BoxedString* srhs = static_cast<BoxedString*>(rhs);
+    return boxBool(lhs->s >= srhs->s);
+}
+
 extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
     assert(lhs->cls == str_cls);
 
@@ -199,6 +239,16 @@ extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
     return boxBool(lhs->s == srhs->s);
+}
+
+extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
+    assert(lhs->cls == str_cls);
+
+    if (rhs->cls != str_cls)
+        return boxBool(true);
+
+    BoxedString* srhs = static_cast<BoxedString*>(rhs);
+    return boxBool(lhs->s != srhs->s);
 }
 
 extern "C" Box* strLen(BoxedString* self) {
@@ -572,7 +622,14 @@ void setupStr() {
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));
     str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
+
+    str_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)strLt, UNKNOWN, 2)));
+    str_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)strLe, UNKNOWN, 2)));
+    str_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)strGt, UNKNOWN, 2)));
+    str_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)strGe, UNKNOWN, 2)));
     str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2)));
+    str_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)strNe, UNKNOWN, 2)));
+
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
 
     str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));

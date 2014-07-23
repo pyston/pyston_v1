@@ -1772,7 +1772,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->rewriter->loadConst(0, (intptr_t)closure);
 
         if (func->isGenerator)
-            rewrite_args->rewriter->loadConst(0, (intptr_t)0 /*generator*/);
+            rewrite_args->rewriter->loadConst(0, (intptr_t)func->isGenerator);
 
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
@@ -1963,7 +1963,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         return createGenerator(func, oarg1, oarg2, oarg3, oargs);
     }
 
-    return callCLFunc(f, rewrite_args, num_output_args, closure, NULL, oarg1, oarg2, oarg3, oargs);
+    return callCLFunc(f, rewrite_args, num_output_args, closure, (BoxedGenerator*)func->isGenerator, oarg1, oarg2, oarg3, oargs);
 }
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
@@ -2980,5 +2980,17 @@ extern "C" Box* import(const std::string* name) {
     }
 
     raiseExcHelper(ImportError, "No module named %s", name->c_str());
+}
+
+extern "C" Box* importFrom(Box* _m, const std::string* name) {
+    assert(_m->cls == module_cls);
+
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+
+    Box* r = m->getattr(*name, NULL, NULL);
+    if (r)
+        return r;
+
+    raiseExcHelper(ImportError, "cannot import name %s", name->c_str());
 }
 }

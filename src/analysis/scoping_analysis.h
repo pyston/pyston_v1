@@ -30,6 +30,7 @@ public:
 
     virtual bool createsClosure() = 0;
     virtual bool takesClosure() = 0;
+    virtual bool passesThroughClosure() = 0;
 
     virtual bool takesGenerator() { return isGeneratorValue; }
     virtual void setTakesGenerator(bool b = true) { isGeneratorValue = b; }

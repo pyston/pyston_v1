@@ -61,6 +61,8 @@ public:
 
     virtual bool takesClosure() { return false; }
 
+    bool passesThroughClosure() override { return false; }
+
     virtual bool refersToGlobal(const std::string& name) {
         if (isCompilerCreatedName(name))
             return false;
@@ -88,6 +90,7 @@ struct ScopingAnalysis::ScopeNameUsage {
     // Properties determined by looking at other scopes as well:
     StrSet referenced_from_nested;
     StrSet got_from_closure;
+    StrSet passthrough_accesses; // what names a child scope accesses a name from a parent scope
 
     ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {
         if (node->type == AST_TYPE::ClassDef) {
@@ -123,7 +126,9 @@ public:
 
     virtual bool createsClosure() { return usage->referenced_from_nested.size() > 0; }
 
-    virtual bool takesClosure() { return usage->got_from_closure.size() > 0; }
+    virtual bool takesClosure() { return usage->got_from_closure.size() > 0 || usage->passthrough_accesses.size() > 0; }
+
+    bool passesThroughClosure() override { return usage->passthrough_accesses.size() > 0 && !createsClosure(); }
 
     virtual bool refersToGlobal(const std::string& name) {
         // HAX
@@ -234,6 +239,13 @@ public:
     virtual bool visit_branch(AST_Branch* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return false; }
 
+
+    virtual bool visit_delete(AST_Delete* node) {
+        for (auto t : node->targets) {
+            RELEASE_ASSERT(t->type != AST_TYPE::Name, "");
+        }
+        return false;
+    }
 
     virtual bool visit_global(AST_Global* node) {
         for (int i = 0; i < node->names.size(); i++) {
@@ -364,6 +376,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             ScopeNameUsage* parent = usage->parent;
             while (parent) {
                 if (parent->node->type == AST_TYPE::ClassDef) {
+                    intermediate_parents.push_back(parent);
                     parent = parent->parent;
                 } else if (parent->forced_globals.count(name)) {
                     break;
@@ -372,8 +385,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
                     parent->referenced_from_nested.insert(name);
 
                     for (ScopeNameUsage* iparent : intermediate_parents) {
-                        iparent->referenced_from_nested.insert(name);
-                        iparent->got_from_closure.insert(name);
+                        iparent->passthrough_accesses.insert(name);
                     }
 
                     break;

@@ -33,13 +33,6 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
-extern "C" {
-// Hack: we only need RTTI for a single type (Box*), which we know will get emmitted,
-// so just use the mangled name directly instead of using typeid() since that requires
-// turning on RTTI for *everything* (including llvm)
-extern void* _ZTIPN6pyston3BoxE;
-}
-
 namespace pyston {
 
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
@@ -353,16 +346,58 @@ private:
                 }
                 return new ConcreteCompilerVariable(UNKNOWN, exc_obj, true);
             }
+            case AST_LangPrimitive::LOCALS: {
+                assert(node->args.size() == 0);
+
+                llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
+                ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
+
+                for (auto& p : symbol_table) {
+                    if (p.first[0] == '!')
+                        continue;
+
+                    ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(
+                        _getFake(_getFakeName("is_defined", p.first.c_str()), true));
+
+                    static const std::string setitem_str("__setitem__");
+                    if (!is_defined_var) {
+                        ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
+
+                        // TODO super dumb that it reallocates the name again
+                        CompilerVariable* _r
+                            = rtn->callattr(emitter, getEmptyOpInfo(exc_info), &setitem_str, true, ArgPassSpec(2),
+                                            { makeStr(new std::string(p.first)), converted }, NULL);
+                        converted->decvref(emitter);
+                        _r->decvref(emitter);
+                    } else {
+                        assert(is_defined_var->getType() == BOOL);
+
+                        llvm::BasicBlock* was_defined
+                            = llvm::BasicBlock::Create(g.context, "was_defined", irstate->getLLVMFunction());
+                        llvm::BasicBlock* join
+                            = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
+                        emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), was_defined, join);
+
+                        emitter.getBuilder()->SetInsertPoint(was_defined);
+                        ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
+                        // TODO super dumb that it reallocates the name again
+                        CompilerVariable* _r
+                            = rtn->callattr(emitter, getEmptyOpInfo(exc_info), &setitem_str, true, ArgPassSpec(2),
+                                            { makeStr(new std::string(p.first)), converted }, NULL);
+                        converted->decvref(emitter);
+                        _r->decvref(emitter);
+                        emitter.getBuilder()->CreateBr(join);
+                        emitter.getBuilder()->SetInsertPoint(join);
+                    }
+                }
+
+                return rtn;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
     }
 
-    enum BinExpType {
-        AugBinOp,
-        BinOp,
-        Compare,
-    };
     CompilerVariable* _evalBinExp(AST* node, CompilerVariable* left, CompilerVariable* right, AST_TYPE::AST_TYPE type,
                                   BinExpType exp_type, ExcInfo exc_info) {
         assert(state != PARTIAL);
@@ -370,227 +405,7 @@ private:
         assert(left);
         assert(right);
 
-        if (left->getType() == INT && right->getType() == INT) {
-            ConcreteCompilerVariable* converted_left = left->makeConverted(emitter, INT);
-            ConcreteCompilerVariable* converted_right = right->makeConverted(emitter, INT);
-            llvm::Value* v;
-            if (type == AST_TYPE::Mod) {
-                v = emitter.createCall2(exc_info, g.funcs.mod_i64_i64, converted_left->getValue(),
-                                        converted_right->getValue()).getInstruction();
-            } else if (type == AST_TYPE::Div || type == AST_TYPE::FloorDiv) {
-                v = emitter.createCall2(exc_info, g.funcs.div_i64_i64, converted_left->getValue(),
-                                        converted_right->getValue()).getInstruction();
-            } else if (type == AST_TYPE::Pow) {
-                v = emitter.createCall2(exc_info, g.funcs.pow_i64_i64, converted_left->getValue(),
-                                        converted_right->getValue()).getInstruction();
-            } else if (exp_type == BinOp || exp_type == AugBinOp) {
-                llvm::Instruction::BinaryOps binopcode;
-                switch (type) {
-                    case AST_TYPE::Add:
-                        binopcode = llvm::Instruction::Add;
-                        break;
-                    case AST_TYPE::BitAnd:
-                        binopcode = llvm::Instruction::And;
-                        break;
-                    case AST_TYPE::BitOr:
-                        binopcode = llvm::Instruction::Or;
-                        break;
-                    case AST_TYPE::BitXor:
-                        binopcode = llvm::Instruction::Xor;
-                        break;
-                    case AST_TYPE::LShift:
-                        binopcode = llvm::Instruction::Shl;
-                        break;
-                    case AST_TYPE::RShift:
-                        binopcode = llvm::Instruction::AShr;
-                        break;
-                    case AST_TYPE::Mult:
-                        binopcode = llvm::Instruction::Mul;
-                        break;
-                    case AST_TYPE::Sub:
-                        binopcode = llvm::Instruction::Sub;
-                        break;
-                    default:
-                        ASSERT(0, "%s", getOpName(type).c_str());
-                        abort();
-                        break;
-                }
-                v = emitter.getBuilder()->CreateBinOp(binopcode, converted_left->getValue(),
-                                                      converted_right->getValue());
-            } else {
-                assert(exp_type == Compare);
-                llvm::CmpInst::Predicate cmp_pred;
-                switch (type) {
-                    case AST_TYPE::Eq:
-                    case AST_TYPE::Is:
-                        cmp_pred = llvm::CmpInst::ICMP_EQ;
-                        break;
-                    case AST_TYPE::Lt:
-                        cmp_pred = llvm::CmpInst::ICMP_SLT;
-                        break;
-                    case AST_TYPE::LtE:
-                        cmp_pred = llvm::CmpInst::ICMP_SLE;
-                        break;
-                    case AST_TYPE::Gt:
-                        cmp_pred = llvm::CmpInst::ICMP_SGT;
-                        break;
-                    case AST_TYPE::GtE:
-                        cmp_pred = llvm::CmpInst::ICMP_SGE;
-                        break;
-                    case AST_TYPE::NotEq:
-                    case AST_TYPE::IsNot:
-                        cmp_pred = llvm::CmpInst::ICMP_NE;
-                        break;
-                    default:
-                        ASSERT(0, "%s", getOpName(type).c_str());
-                        abort();
-                        break;
-                }
-                v = emitter.getBuilder()->CreateICmp(cmp_pred, converted_left->getValue(), converted_right->getValue());
-            }
-            converted_left->decvref(emitter);
-            converted_right->decvref(emitter);
-            assert(v->getType() == g.i64 || v->getType() == g.i1);
-            return new ConcreteCompilerVariable(v->getType() == g.i64 ? INT : BOOL, v, true);
-        }
-
-        if (left->getType() == FLOAT && (right->getType() == FLOAT || right->getType() == INT)) {
-            ConcreteCompilerVariable* converted_left = left->makeConverted(emitter, FLOAT);
-
-            ConcreteCompilerVariable* converted_right;
-            if (right->getType() == FLOAT) {
-                converted_right = right->makeConverted(emitter, FLOAT);
-            } else {
-                converted_right = right->makeConverted(emitter, INT);
-                llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(converted_right->getValue(), g.double_);
-                converted_right->decvref(emitter);
-                converted_right = new ConcreteCompilerVariable(FLOAT, conv, true);
-            }
-            llvm::Value* v;
-            bool succeeded = true;
-            if (type == AST_TYPE::Mod) {
-                v = emitter.createCall2(exc_info, g.funcs.mod_float_float, converted_left->getValue(),
-                                        converted_right->getValue()).getInstruction();
-            } else if (type == AST_TYPE::Div || type == AST_TYPE::FloorDiv) {
-                v = emitter.createCall2(exc_info, g.funcs.div_float_float, converted_left->getValue(),
-                                        converted_right->getValue()).getInstruction();
-            } else if (type == AST_TYPE::Pow) {
-                v = emitter.createCall2(exc_info, g.funcs.pow_float_float, converted_left->getValue(),
-                                        converted_right->getValue()).getInstruction();
-            } else if (exp_type == BinOp || exp_type == AugBinOp) {
-                llvm::Instruction::BinaryOps binopcode;
-                switch (type) {
-                    case AST_TYPE::Add:
-                        binopcode = llvm::Instruction::FAdd;
-                        break;
-                    case AST_TYPE::Mult:
-                        binopcode = llvm::Instruction::FMul;
-                        break;
-                    case AST_TYPE::Sub:
-                        binopcode = llvm::Instruction::FSub;
-                        break;
-                    case AST_TYPE::BitAnd:
-                    case AST_TYPE::BitOr:
-                    case AST_TYPE::BitXor:
-                    case AST_TYPE::LShift:
-                    case AST_TYPE::RShift:
-                        succeeded = false;
-                        break;
-                    default:
-                        ASSERT(0, "%s", getOpName(type).c_str());
-                        abort();
-                        break;
-                }
-
-                if (succeeded) {
-                    v = emitter.getBuilder()->CreateBinOp(binopcode, converted_left->getValue(),
-                                                          converted_right->getValue());
-                }
-            } else {
-                assert(exp_type == Compare);
-                llvm::CmpInst::Predicate cmp_pred;
-                switch (type) {
-                    case AST_TYPE::Eq:
-                    case AST_TYPE::Is:
-                        cmp_pred = llvm::CmpInst::FCMP_OEQ;
-                        break;
-                    case AST_TYPE::Lt:
-                        cmp_pred = llvm::CmpInst::FCMP_OLT;
-                        break;
-                    case AST_TYPE::LtE:
-                        cmp_pred = llvm::CmpInst::FCMP_OLE;
-                        break;
-                    case AST_TYPE::Gt:
-                        cmp_pred = llvm::CmpInst::FCMP_OGT;
-                        break;
-                    case AST_TYPE::GtE:
-                        cmp_pred = llvm::CmpInst::FCMP_OGE;
-                        break;
-                    case AST_TYPE::NotEq:
-                    case AST_TYPE::IsNot:
-                        cmp_pred = llvm::CmpInst::FCMP_UNE;
-                        break;
-                    default:
-                        ASSERT(0, "%s", getOpName(type).c_str());
-                        abort();
-                        break;
-                }
-                v = emitter.getBuilder()->CreateFCmp(cmp_pred, converted_left->getValue(), converted_right->getValue());
-            }
-            converted_left->decvref(emitter);
-            converted_right->decvref(emitter);
-
-            if (succeeded) {
-                assert(v->getType() == g.double_ || v->getType() == g.i1);
-                return new ConcreteCompilerVariable(v->getType() == g.double_ ? FLOAT : BOOL, v, true);
-            }
-        }
-        // ASSERT(left->getType() == left->getBoxType() || right->getType() == right->getBoxType(), "%s %s",
-        // left->getType()->debugName().c_str(), right->getType()->debugName().c_str());
-
-        ConcreteCompilerVariable* boxed_left = left->makeConverted(emitter, left->getBoxType());
-        ConcreteCompilerVariable* boxed_right = right->makeConverted(emitter, right->getBoxType());
-
-        llvm::Value* rtn;
-        bool do_patchpoint = ENABLE_ICBINEXPS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
-
-        llvm::Value* rt_func;
-        void* rt_func_addr;
-        if (exp_type == BinOp) {
-            rt_func = g.funcs.binop;
-            rt_func_addr = (void*)binop;
-        } else if (exp_type == AugBinOp) {
-            rt_func = g.funcs.augbinop;
-            rt_func_addr = (void*)augbinop;
-        } else {
-            rt_func = g.funcs.compare;
-            rt_func_addr = (void*)compare;
-        }
-
-        if (do_patchpoint) {
-            PatchpointSetupInfo* pp = patchpoints::createBinexpPatchpoint(
-                emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
-
-            std::vector<llvm::Value*> llvm_args;
-            llvm_args.push_back(boxed_left->getValue());
-            llvm_args.push_back(boxed_right->getValue());
-            llvm_args.push_back(getConstantInt(type, g.i32));
-
-            llvm::Value* uncasted = emitter.createPatchpoint(pp, rt_func_addr, llvm_args, exc_info).getInstruction();
-            rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
-        } else {
-            rtn = emitter.createCall3(exc_info, rt_func, boxed_left->getValue(), boxed_right->getValue(),
-                                      getConstantInt(type, g.i32)).getInstruction();
-        }
-
-        boxed_left->decvref(emitter);
-        boxed_right->decvref(emitter);
-
-        if (type == AST_TYPE::In || type == AST_TYPE::NotIn || type == AST_TYPE::Is || type == AST_TYPE::IsNot) {
-            return unboxVar(BOXED_BOOL, rtn, true);
-        }
-
-        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+        return left->binexp(emitter, getOpInfoForNode(node, exc_info), right, type, exp_type);
     }
 
     CompilerVariable* evalBinOp(AST_BinOp* node, ExcInfo exc_info) {
@@ -734,7 +549,7 @@ private:
                 std::vector<CompilerVariable*> args;
                 args.push_back(key);
                 args.push_back(value);
-                // TODO could use the internal _listAppend function to avoid incref/decref'ing None
+                // TODO should use callattr
                 CompilerVariable* rtn = setitem->call(emitter, getEmptyOpInfo(exc_info), ArgPassSpec(2), args, NULL);
                 rtn->decvref(emitter);
 
@@ -862,9 +677,10 @@ private:
             }
 
             std::string defined_name = _getFakeName("is_defined", node->id.c_str());
-            ConcreteCompilerVariable* is_defined = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
+            ConcreteCompilerVariable* is_defined_var
+                = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
-            if (is_defined) {
+            if (is_defined_var) {
                 // classdefs have different scoping rules than functions:
                 if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
                     llvm::BasicBlock* from_local
@@ -873,7 +689,7 @@ private:
                         = llvm::BasicBlock::Create(g.context, "from_global", irstate->getLLVMFunction());
                     llvm::BasicBlock* join = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
 
-                    emitter.getBuilder()->CreateCondBr(is_defined->getValue(), from_local, from_global);
+                    emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), from_local, from_global);
 
                     emitter.getBuilder()->SetInsertPoint(from_local);
                     CompilerVariable* local = symbol_table[node->id];
@@ -893,8 +709,11 @@ private:
                     return new ConcreteCompilerVariable(UNKNOWN, phi, true);
                 }
 
-                emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined->getValue(),
+                emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined_var->getValue(),
                                     getStringConstantPtr(node->id + '\0'));
+
+                // At this point we know the name must be defined (otherwise the assert would have fired):
+                _popFake(defined_name);
             }
 
             CompilerVariable* rtn = symbol_table[node->id];
@@ -1271,30 +1090,29 @@ private:
         snprintf(buf, 40, "!%s_%s", prefix, token);
         return std::string(buf);
     }
+
     void _setFake(std::string name, CompilerVariable* val) {
         assert(name[0] == '!');
         CompilerVariable*& cur = symbol_table[name];
         assert(cur == NULL);
         cur = val;
     }
-    CompilerVariable* _clearFake(std::string name) {
-        assert(name[0] == '!');
-        CompilerVariable* rtn = symbol_table[name];
-        assert(rtn == NULL);
-        symbol_table.erase(name);
-        return rtn;
-    }
 
     CompilerVariable* _getFake(std::string name, bool allow_missing = false) {
         assert(name[0] == '!');
-        CompilerVariable* rtn = symbol_table[name];
-        if (!allow_missing)
-            assert(rtn != NULL);
-        return rtn;
+        auto it = symbol_table.find(name);
+        if (it == symbol_table.end()) {
+            assert(allow_missing);
+            return NULL;
+        }
+        return it->second;
     }
+
     CompilerVariable* _popFake(std::string name, bool allow_missing = false) {
         CompilerVariable* rtn = _getFake(name, allow_missing);
         symbol_table.erase(name);
+        if (!allow_missing)
+            assert(rtn != NULL);
         return rtn;
     }
 
@@ -1454,6 +1272,16 @@ private:
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
         assert(scope_info);
 
+        if (node->bases.size() == 0) {
+            printf("Warning: old-style class '%s' in file '%s' detected! Converting to a new-style class!\n",
+                   node->name.c_str(), irstate->getSourceInfo()->parent_module->fn.c_str());
+
+            AST_Name* base = new AST_Name();
+            base->id = "object";
+            base->ctx_type = AST_TYPE::Load;
+            node->bases.push_back(base);
+        }
+
         RELEASE_ASSERT(node->bases.size() == 1, "");
         RELEASE_ASSERT(node->decorator_list.size() == 0, "");
 
@@ -1569,13 +1397,33 @@ private:
         }
 
         CompilerVariable* created_closure = NULL;
-        ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
-        if (scope_info->takesClosure()) {
-            created_closure = _getFake(CREATED_CLOSURE_NAME, false);
+
+        bool takes_closure;
+        // Optimization: when compiling a module, it's nice to not have to run analyses into the
+        // entire module's source code.
+        // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
+        // but we're only using it here to figure out if that function takes a closure.
+        // Top level functions never take a closure, so we can skip the analysis.
+        if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
+            takes_closure = false;
+        else {
+            takes_closure = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesClosure();
+        }
+
+        // TODO: this lines disables the optimization mentioned above...
+        bool is_generator = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesGenerator();
+
+        if (takes_closure) {
+            if (irstate->getScopeInfo()->createsClosure()) {
+                created_closure = _getFake(CREATED_CLOSURE_NAME, false);
+            } else {
+                assert(irstate->getScopeInfo()->passesThroughClosure());
+                created_closure = _getFake(PASSED_CLOSURE_NAME, false);
+            }
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, scope_info->takesGenerator(), defaults);
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
@@ -1631,7 +1479,11 @@ private:
             const std::string& name = alias->name;
             const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
 
-            CompilerVariable* v = module->getattr(emitter, getEmptyOpInfo(exc_info), &name, false);
+            // TODO add patchpoints to this?
+            llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, module->getValue(),
+                                                 embedConstantPtr(&name, g.llvm_str_type_ptr)).getInstruction();
+
+            CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
             _doSet(asname, v, exc_info);
             v->decvref(emitter);
         }
@@ -1691,6 +1543,11 @@ private:
         ConcreteCompilerVariable* rtn = val->makeConverted(emitter, opt_rtn_type);
         rtn->ensureGrabbed(emitter);
         val->decvref(emitter);
+
+        for (auto& p : symbol_table) {
+            p.second->decvref(emitter);
+        }
+        symbol_table.clear();
 
         endBlock(DEAD);
 
@@ -1769,18 +1626,6 @@ private:
         std::vector<ConcreteCompilerVariable*> converted_args;
 
         SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
-        /*
-        for (SortedSymbolTable::iterator it = sorted_symbol_table.begin(), end = sorted_symbol_table.end(); it != end; )
-        {
-            if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
-                // I think this line can never get hit: nothing can die on a backedge, since control flow can eventually
-                // reach this block again, where the symbol was live (as shown by it being in the symbol table)
-                printf("Not sending %s to osr since it will die\n", it->first.c_str());
-                it = sorted_symbol_table.erase(it);
-            } else {
-                ++it;
-            }
-        }*/
 
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
@@ -1814,11 +1659,6 @@ private:
         int arg_num = -1;
         for (const auto& p : sorted_symbol_table) {
             arg_num++;
-            // I don't think this can fail, but if it can we should filter out dead symbols before
-            // passing them on:
-            ASSERT(startswith(p.first, "!is_defined")
-                   || irstate->getSourceInfo()->liveness->isLiveAtEnd(p.first, myblock),
-                   "%d %s", myblock->idx, p.first.c_str());
 
             // This line can never get hit right now since we unnecessarily force every variable to be concrete
             // for a loop, since we generate all potential phis:
@@ -1845,11 +1685,17 @@ private:
             } else {
                 llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(arg_array, arg_num - 3);
 
-                if (var->getType() == INT) {
+                if (var->getType() == INT || var->getType() == BOOL) {
                     val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
                 } else if (var->getType() == FLOAT) {
                     // val = emitter.getBuilder()->CreateBitCast(val, g.llvm_value_type_ptr);
                     ptr = emitter.getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
+                } else if (var->getType() == UNDEF) {
+                    // TODO if there are any undef variables, we're in 'unreachable' territory.
+                    // Do we even need to generate any of this code?
+
+                    // Currently we represent 'undef's as 'i16 undef'
+                    val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
                 } else {
                     assert(val->getType() == g.llvm_value_type_ptr);
                 }
@@ -1915,23 +1761,21 @@ private:
     }
 
     void doRaise(AST_Raise* node, ExcInfo exc_info) {
-        RELEASE_ASSERT(node->arg0 != NULL, "");
+        std::vector<llvm::Value*> args;
+        llvm::Value* raise_func = g.funcs.raise0;
+
+        if (node->arg0) {
+            raise_func = g.funcs.raise1;
+
+            CompilerVariable* arg0 = evalExpr(node->arg0, exc_info);
+            ConcreteCompilerVariable* converted_arg0 = arg0->makeConverted(emitter, arg0->getBoxType());
+            arg0->decvref(emitter);
+            args.push_back(converted_arg0->getValue());
+        }
         RELEASE_ASSERT(node->arg1 == NULL, "");
         RELEASE_ASSERT(node->arg2 == NULL, "");
 
-        CompilerVariable* arg0 = evalExpr(node->arg0, exc_info);
-        ConcreteCompilerVariable* converted_arg0 = arg0->makeConverted(emitter, arg0->getBoxType());
-        arg0->decvref(emitter);
-
-        llvm::Value* exc_mem
-            = emitter.getBuilder()->CreateCall(g.funcs.__cxa_allocate_exception, getConstantInt(sizeof(void*), g.i64));
-        llvm::Value* bitcasted = emitter.getBuilder()->CreateBitCast(exc_mem, g.llvm_value_type_ptr->getPointerTo());
-        emitter.getBuilder()->CreateStore(converted_arg0->getValue(), bitcasted);
-        converted_arg0->decvref(emitter);
-
-        void* type_id = &_ZTIPN6pyston3BoxE /* &typeid(Box*) */;
-        emitter.createCall(exc_info, g.funcs.__cxa_throw,
-                           { exc_mem, embedConstantPtr(type_id, g.i8_ptr), embedConstantPtr(nullptr, g.i8_ptr) });
+        emitter.createCall(exc_info, raise_func, args);
         emitter.getBuilder()->CreateUnreachable();
 
         endBlock(DEAD);
@@ -2064,11 +1908,14 @@ private:
                 ++it;
             } else {
 #ifndef NDEBUG
-                // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want here,
-                // but this is just for debugging so I guess let it happen for now:
-                ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
-                ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
-                       it->first.c_str(), ending_type->debugName().c_str(), it->second->getType()->debugName().c_str());
+                if (myblock->successors.size()) {
+                    // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want
+                    // here, but this is just for debugging so I guess let it happen for now:
+                    ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
+                    ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
+                           it->first.c_str(), ending_type->debugName().c_str(),
+                           it->second->getType()->debugName().c_str());
+                }
 #endif
 
                 ++it;
@@ -2123,20 +1970,13 @@ public:
 
         SymbolTable* st = new SymbolTable(symbol_table);
         ConcreteSymbolTable* phi_st = new ConcreteSymbolTable();
-        for (SymbolTable::iterator it = st->begin(); it != st->end(); it++) {
-            if (it->first[0] == '!') {
-                // ASSERT(startswith(it->first, _getFakeName("is_defined", "")), "left a fake variable in the real
-                // symbol table? '%s'", it->first.c_str());
-            } else {
-                ASSERT(source->liveness->isLiveAtEnd(it->first, myblock), "%s", it->first.c_str());
-            }
-        }
 
         if (myblock->successors.size() == 0) {
-            st->erase(CREATED_CLOSURE_NAME);
-            st->erase(PASSED_CLOSURE_NAME);
-            st->erase(PASSED_GENERATOR_NAME);
-            assert(st->size() == 0); // shouldn't have anything live if there are no successors!
+            for (auto& p : *st) {
+                p.second->decvref(emitter);
+            }
+            st->clear();
+            symbol_table.clear();
             return EndingState(st, phi_st, curblock);
         } else if (myblock->successors.size() > 1) {
             // Since there are no critical edges, all successors come directly from this node,

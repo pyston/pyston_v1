@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "codegen/codegen.h"
+#include "core/ast.h"
 #include "core/types.h"
 
 namespace pyston {
@@ -47,6 +48,12 @@ public:
 
 typedef std::unordered_map<CompilerVariable*, CompilerVariable*> DupCache;
 
+enum BinExpType {
+    AugBinOp,
+    BinOp,
+    Compare,
+};
+
 template <class V> class _ValuedCompilerType : public CompilerType {
 public:
     typedef ValuedCompilerVariable<V> VAR;
@@ -63,11 +70,11 @@ public:
         printf("getBoxType not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void drop(IREmitter& emmitter, VAR* value) {
+    virtual void drop(IREmitter& emmitter, VAR* var) {
         printf("drop not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void grab(IREmitter& emmitter, VAR* value) {
+    virtual void grab(IREmitter& emmitter, VAR* var) {
         printf("grab not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -75,53 +82,58 @@ public:
         printf("canConvertTo not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* value, ConcreteCompilerType* other_type) {
+    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) {
         printf("makeConverted not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* value) {
+    virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("nonzero not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
+    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                                       bool cls_only) {
         printf("getattr not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
+    virtual void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                          CompilerVariable* v) {
         printf("setattr not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* value, const std::string* attr,
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                                        bool clsonly, struct ArgPassSpec argspec,
                                        const std::vector<CompilerVariable*>& args,
                                        const std::vector<const std::string*>* keyword_names) {
         printf("callattr not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* value, struct ArgPassSpec argspec,
+    virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, VAR* var, struct ArgPassSpec argspec,
                                    const std::vector<CompilerVariable*>& args,
                                    const std::vector<const std::string*>* keyword_names) {
         printf("call not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* value) {
+    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("print not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* value) {
+    virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("len not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* value, CompilerVariable* v) {
+    virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* v) {
         // Can almost do this, except for error messages + types:
         // static const std::string attr("__getitem__");
-        // return callattr(emitter, info, value, &attr, true, ArgPassSpec(1, 0, 0, 0), {v}, NULL);
+        // return callattr(emitter, info, var, &attr, true, ArgPassSpec(1, 0, 0, 0), {v}, NULL);
         printf("getitem not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual llvm::Value* makeClassCheck(IREmitter& emitter, VAR* value, BoxedClass* c) {
+    virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
+                                     AST_TYPE::AST_TYPE op_type, BinExpType exp_type) {
+        printf("binexp not defined for %s\n", debugName().c_str());
+        abort();
+    }
+    virtual llvm::Value* makeClassCheck(IREmitter& emitter, VAR* var, BoxedClass* c) {
         printf("makeClassCheck not defined for %s\n", debugName().c_str());
         abort();
     }
@@ -189,7 +201,7 @@ public:
         }
     }
     void decvref(IREmitter& emitter) {
-        assert(vrefs > 0 && vrefs < (1 << 20));
+        ASSERT(vrefs > 0 && vrefs < (1 << 20), "%d", vrefs);
         // ASSERT(vrefs, "%s", getType()->debugName().c_str());
         vrefs--;
         if (vrefs == 0) {
@@ -229,6 +241,8 @@ public:
     virtual void print(IREmitter& emitter, const OpInfo& info) = 0;
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
+    virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs,
+                                     AST_TYPE::AST_TYPE op_type, BinExpType exp_type) = 0;
 };
 
 template <class V> class ValuedCompilerVariable : public CompilerVariable {
@@ -299,6 +313,12 @@ public:
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable* slice) override {
         return type->getitem(emitter, info, this, slice);
     }
+
+    CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs, AST_TYPE::AST_TYPE op_type,
+                             BinExpType exp_type) override {
+        return type->binexp(emitter, info, this, rhs, op_type, exp_type);
+    }
+
     llvm::Value* makeClassCheck(IREmitter& emitter, BoxedClass* cls) override {
         return type->makeClassCheck(emitter, this, cls);
     }

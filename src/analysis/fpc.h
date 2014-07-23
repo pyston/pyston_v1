@@ -59,7 +59,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
         CFGBlock* block = q.top();
         q.pop();
 
-        Map initial = states[block];
+        Map& initial = states[block];
         if (VERBOSITY("analysis") >= 2)
             printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
 

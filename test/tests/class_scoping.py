@@ -1,6 +1,3 @@
-# expected: fail
-# - WIP
-
 X = 0
 Y = 0
 Z = 0
@@ -37,10 +34,10 @@ def wrapper():
         # The defaults for a and b should resolve to the classdef definitions, and the default
         # for c should resolve to the wrapper() definition
         def f(self, a=X, b=Y, c=Z, d=W):
-            print a, b, c, W # "2 2 0 1"
+            print a, b, c, d # "2 2 0 1"
             # These references should skip all of the classdef directives,
             # and hit the definitions in the wrapper() function
-            print X, Y # "1 1"
+            print X, Y, Z, W # "1 1 1 1"
     print "done with classdef"
 
     print hasattr(C, 'X')
