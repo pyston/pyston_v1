@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <cmath>
 
 #include "core/types.h"
@@ -86,5 +87,17 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout));
     sys_module->giveAttr("stdin", new BoxedFile(stdin));
     sys_module->giveAttr("stderr", new BoxedFile(stderr));
+}
+
+void setupSysEnd() {
+    BoxedTuple::GCVector builtin_module_names;
+    for (auto& p : sys_modules_dict->d) {
+        builtin_module_names.push_back(p.first);
+    }
+
+    std::sort<decltype(builtin_module_names)::iterator, PyLt>(builtin_module_names.begin(), builtin_module_names.end(),
+                                                              PyLt());
+
+    sys_module->giveAttr("builtin_module_names", new BoxedTuple(std::move(builtin_module_names)));
 }
 }

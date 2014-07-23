@@ -57,6 +57,8 @@ void setupBuiltins();
 void setupMath();
 void setupTime();
 void setupThread();
+void setupErrno();
+void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();

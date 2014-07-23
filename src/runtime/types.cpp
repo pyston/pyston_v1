@@ -599,10 +599,13 @@ void setupRuntime() {
 
     setupBuiltins();
     setupMath();
+    setupErrno();
     setupTime();
     setupThread();
 
     setupCAPI();
+
+    setupSysEnd();
 
     TRACK_ALLOCATIONS = true;
 }
