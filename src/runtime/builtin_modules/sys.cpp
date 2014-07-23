@@ -87,6 +87,9 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout));
     sys_module->giveAttr("stdin", new BoxedFile(stdin));
     sys_module->giveAttr("stderr", new BoxedFile(stderr));
+
+    sys_module->giveAttr("warnoptions", new BoxedList());
+    sys_module->giveAttr("py3kwarning", False);
 }
 
 void setupSysEnd() {
