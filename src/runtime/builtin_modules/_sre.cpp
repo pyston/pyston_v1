@@ -23,11 +23,12 @@
 
 namespace pyston {
 
-BoxedModule* posix_module;
+BoxedModule* sre_module;
 
-void setupPosix() {
-    posix_module = createModule("posix", "__builtin__");
+void setupSre() {
+    sre_module = createModule("_sre", "__builtin__");
 
-    posix_module->giveAttr("error", OSError);
+    sre_module->giveAttr("MAGIC", boxInt(20031017));
+    sre_module->giveAttr("CODESIZE", boxInt(4));
 }
 }

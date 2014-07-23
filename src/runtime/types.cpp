@@ -607,6 +607,7 @@ void setupRuntime() {
     setupThread();
     setupErrno();
     setupPosix();
+    setupSre();
 
     setupCAPI();
 
