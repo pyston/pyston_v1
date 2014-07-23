@@ -13,9 +13,12 @@ def G2():
     yield 1
     yield 2
     yield 3
-g2 = G2()
-print list(g2)
-print list(g2)
+g2a = G2()
+g2b = G2()
+print g2b.next()
+print list(g2a)
+print list(g2b)
+print list(g2a)
 print list(G2())
 
 
@@ -67,3 +70,10 @@ def G6(a=[]):
 print list(G6())
 print list(G6())
 
+def G7(p):
+    a = p
+    b = 2
+    def G():
+        yield a+b
+    return G()
+print list(G7(1))

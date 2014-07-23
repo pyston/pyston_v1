@@ -77,7 +77,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(&function_flavor, function_cls), f(f), closure(NULL), generator(nullptr), ndefaults(0), defaults(NULL) {
+    : Box(&function_flavor, function_cls), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -91,8 +91,9 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                        BoxedGenerator* generator)
-    : Box(&function_flavor, function_cls), f(f), closure(closure), generator(generator), ndefaults(0), defaults(NULL) {
+                                        bool isGenerator)
+    : Box(&function_flavor, function_cls), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0),
+      defaults(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -148,12 +149,12 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
                               std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, defaults, closure, generator);
+    return new BoxedFunction(f, defaults, closure, isGenerator);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -279,12 +280,30 @@ extern "C" void generatorGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
 
     BoxedGenerator* g = (BoxedGenerator*)p;
-    if (g->function)
+
+    if (g->function) {
         v->visit(g->function);
+        if (g->function->f) {
+            int num_args = g->function->f->num_args;
+
+            if (num_args >= 1)
+                v->visit(g->arg1);
+            if (num_args >= 2)
+                v->visit(g->arg2);
+            if (num_args >= 3)
+                v->visit(g->arg3);
+            if (num_args > 3)
+                v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
+                                       reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
+        }
+    }
     if (g->returnValue)
         v->visit(g->returnValue);
     if (g->exception)
         v->visit(g->exception);
+
+
+
     v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
     v->visitPotentialRange((void**)&g->returnContext,
                            ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));

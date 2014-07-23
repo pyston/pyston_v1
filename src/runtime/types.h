@@ -92,7 +92,7 @@ Box* boxString(const std::string& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, BoxedGenerator* generator,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
                               std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(std::string* name, Box* base, Box* attr_dict);
@@ -280,14 +280,14 @@ public:
     HCAttrs attrs;
     CLFunction* f;
     BoxedClosure* closure;
-    BoxedGenerator* generator;
 
+    bool isGenerator;
     int ndefaults;
     GCdArray* defaults;
 
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  BoxedGenerator* generator = nullptr);
+                  bool isGenerator = false);
 };
 
 class BoxedModule : public Box {
@@ -332,7 +332,8 @@ public:
 
     HCAttrs attrs;
     BoxedFunction* function;
-    Box* arg1, *arg2, *arg3, **args;
+    Box* arg1, *arg2, *arg3;
+    GCdArray* args;
 
     bool entryExited;
     Box* returnValue;

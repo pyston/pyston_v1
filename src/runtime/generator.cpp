@@ -20,6 +20,7 @@
 #include <ucontext.h>
 
 #include "codegen/compvars.h"
+#include "codegen/llvm_interpreter.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
@@ -33,23 +34,24 @@
 namespace pyston {
 
 
-static void generatorEntry(BoxedGenerator* self) {
-    assert(self->cls == generator_cls);
-    assert(self->function->cls == function_cls);
+static void generatorEntry(BoxedGenerator* g) {
+    assert(g->cls == generator_cls);
+    assert(g->function->cls == function_cls);
 
     try {
         // call body of the generator
-        ArgPassSpec argPassSpec(self->function->f->num_args, 0, self->function->f->takes_varargs,
-                                self->function->f->takes_kwargs);
-        runtimeCall(self->function, argPassSpec, self->arg1, self->arg2, self->arg3, self->args, 0);
+        BoxedFunction* func = g->function;
+
+        Box** args = g->args ? &g->args->elts[0] : nullptr;
+        callCLFunc(func->f, nullptr, func->f->num_args, func->closure, g, g->arg1, g->arg2, g->arg3, args);
     } catch (Box* e) {
         // unhandled exception: propagate the exception to the caller
-        self->exception = e;
+        g->exception = e;
     }
 
     // we returned from the body of the generator. next/send/throw will notify the caller
-    self->entryExited = true;
-    swapcontext(&self->context, &self->returnContext);
+    g->entryExited = true;
+    swapcontext(&g->context, &g->returnContext);
 }
 
 Box* generatorIter(Box* s) {
@@ -126,12 +128,17 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, B
 
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
-    : Box(&generator_flavor, generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(args),
+    : Box(&generator_flavor, generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr),
       entryExited(false), returnValue(nullptr), exception(nullptr) {
 
-    function->generator = this; // HACK: this only alows one active generator
-
     giveAttr("__name__", boxString(function->f->source->getName()));
+
+    int numArgs = function->f->num_args;
+    if (numArgs > 3) {
+        numArgs -= 3;
+        this->args = new (numArgs) GCdArray();
+        memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
+    }
 
     getcontext(&context);
     context.uc_link = 0;

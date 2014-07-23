@@ -41,6 +41,7 @@
 #include "runtime/capi.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/generator.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -1717,7 +1718,6 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     int num_passed_args = argspec.totalPassed();
 
     BoxedClosure* closure = func->closure;
-    BoxedGenerator* generator = (BoxedGenerator*)func->generator;
 
     if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs)
         rewrite_args = NULL;
@@ -1754,25 +1754,25 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     if (rewrite_args) {
         int closure_indicator = closure ? 1 : 0;
-        int generator_indicator = generator ? 1 : 0;
-        int argOffset = closure_indicator + generator_indicator;
+        int generator_indicator = func->isGenerator ? 1 : 0;
+        int arg_offset = closure_indicator + generator_indicator;
 
         if (num_passed_args >= 1)
-            rewrite_args->arg1 = rewrite_args->arg1.move(0 + argOffset);
+            rewrite_args->arg1 = rewrite_args->arg1.move(0 + arg_offset);
         if (num_passed_args >= 2)
-            rewrite_args->arg2 = rewrite_args->arg2.move(1 + argOffset);
+            rewrite_args->arg2 = rewrite_args->arg2.move(1 + arg_offset);
         if (num_passed_args >= 3)
-            rewrite_args->arg3 = rewrite_args->arg3.move(2 + argOffset);
+            rewrite_args->arg3 = rewrite_args->arg3.move(2 + arg_offset);
         if (num_passed_args >= 4)
-            rewrite_args->args = rewrite_args->args.move(3 + argOffset);
+            rewrite_args->args = rewrite_args->args.move(3 + arg_offset);
 
         // TODO this kind of embedded reference needs to be tracked by the GC somehow?
         // Or maybe it's ok, since we've guarded on the function object?
         if (closure)
             rewrite_args->rewriter->loadConst(0, (intptr_t)closure);
 
-        if (generator)
-            rewrite_args->rewriter->loadConst(0, (intptr_t)generator);
+        if (func->isGenerator)
+            rewrite_args->rewriter->loadConst(0, (intptr_t)0 /*generator*/);
 
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
@@ -1957,35 +1957,43 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         getArg(i, oarg1, oarg2, oarg3, oargs) = default_obj;
     }
 
+    // special handling for generators:
+    // the call to function containing a yield should just create a new generator object.
+    if (func->isGenerator) {
+        return createGenerator(func, oarg1, oarg2, oarg3, oargs);
+    }
 
+    return callCLFunc(f, rewrite_args, num_output_args, closure, NULL, oarg1, oarg2, oarg3, oargs);
+}
 
+Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return interpretFunction(chosen_cf->func, num_output_args, func->closure, generator, oarg1, oarg2, oarg3,
-                                 oargs);
-    } else {
-        if (rewrite_args) {
-            rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
-
-            RewriterVar var = rewrite_args->rewriter->call((void*)chosen_cf->call);
-
-            rewrite_args->out_rtn = var;
-            rewrite_args->out_success = true;
-        }
-
-
-        if (closure && generator)
-            return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
-        else if (closure)
-            return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
-        else if (generator)
-            return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
-        else
-            return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+        return interpretFunction(chosen_cf->func, num_output_args, closure, generator, oarg1, oarg2, oarg3, oargs);
     }
+
+    if (rewrite_args) {
+        rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
+
+        RewriterVar var = rewrite_args->rewriter->call((void*)chosen_cf->call);
+
+        rewrite_args->out_rtn = var;
+        rewrite_args->out_success = true;
+    }
+
+    if (closure && generator)
+        return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
+    else if (closure)
+        return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
+    else if (generator)
+        return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
+    else
+        return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
 }
+
 
 
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,

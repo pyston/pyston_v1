@@ -103,5 +103,8 @@ extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__nor
 Box* typeCall(Box*, BoxedList*);
 Box* typeNew(Box*, Box*);
 bool isUserDefined(BoxedClass* cls);
+
+Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 }
 #endif

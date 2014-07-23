@@ -1474,7 +1474,7 @@ private:
         // one reason to do this is to pass the closure through if necessary,
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, 0, {});
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(exc_info), ArgPassSpec(0), {}, NULL);
 
@@ -1575,16 +1575,7 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure,
-                                              (ConcreteCompilerVariable*)scope_info->takesGenerator(), defaults);
-
-        if (scope_info->takesGenerator()) {
-            ConcreteCompilerVariable* converted = func->makeConverted(emitter, func->getBoxType());
-            CLFunction* clFunc = boxRTFunction((void*)createGenerator, UNKNOWN, args->args.size(),
-                                               args->defaults.size(), args->vararg.size(), args->kwarg.size());
-            func = makeFunction(emitter, clFunc, NULL, (CompilerVariable*)converted, defaults);
-            converted->decvref(emitter);
-        }
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, scope_info->takesGenerator(), defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
@@ -1915,7 +1906,7 @@ private:
         llvm::BasicBlock* target = entry_blocks[node->target];
 
         if (ENABLE_OSR && node->target->idx < myblock->idx && irstate->getEffortLevel() < EffortLevel::MAXIMAL
-            && !containsYield(irstate->getSourceInfo()->ast)) {
+            && !irstate->getScopeInfo()->takesGenerator()) {
             assert(node->target->predecessors.size() > 1);
             doOSRExit(target, node);
         } else {
