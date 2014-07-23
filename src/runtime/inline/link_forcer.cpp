@@ -77,6 +77,7 @@ void force() {
     FORCE(unaryop);
     FORCE(import);
     FORCE(importFrom);
+    FORCE(importStar);
     FORCE(repr);
     FORCE(isinstance);
     FORCE(yield);

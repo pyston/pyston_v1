@@ -327,6 +327,17 @@ public:
         return true;
     }
 
+    virtual bool visit_importfrom(AST_ImportFrom* node) {
+        for (int i = 0; i < node->names.size(); i++) {
+            AST_alias* alias = node->names[i];
+            if (alias->asname.size())
+                doWrite(alias->asname);
+            else
+                doWrite(alias->name);
+        }
+        return true;
+    }
+
     static void collect(AST* node, ScopingAnalysis::NameUsageMap* map) {
         assert(map);
         assert(map->count(node));

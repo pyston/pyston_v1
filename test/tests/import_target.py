@@ -14,3 +14,5 @@ def foo():
 class C(object):
     pass
 
+_x = 1
+__all__ = ['x']

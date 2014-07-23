@@ -44,7 +44,6 @@ extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 // TODO sort this
 extern "C" void my_assert(bool b);
-extern "C" Box* importFrom(Box* obj, const std::string* attr);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" bool nonzero(Box* obj);
@@ -74,6 +73,8 @@ extern "C" void delitem(Box* target, Box* slice);
 extern "C" Box* getclsattr(Box* obj, const char* attr);
 extern "C" Box* unaryop(Box* operand, int op_type);
 extern "C" Box* import(const std::string* name);
+extern "C" Box* importFrom(Box* obj, const std::string* attr);
+extern "C" void importStar(Box* from_module, BoxedModule* to_module);
 extern "C" void checkUnpackingLength(i64 expected, i64 given);
 extern "C" void assertNameDefined(bool b, const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);

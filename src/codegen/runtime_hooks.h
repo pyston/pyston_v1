@@ -34,7 +34,7 @@ struct GlobalFuncs {
         *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice,
         *createUserClass, *createClosure, *createGenerator, *insideGenerator;
     llvm::Value* getattr, *setattr, *print, *nonzero, *binop, *compare, *augbinop, *unboxedLen, *getitem, *getclsattr,
-        *getGlobal, *setitem, *delitem, *unaryop, *import, *importFrom, *repr, *isinstance, *yield;
+        *getGlobal, *setitem, *delitem, *unaryop, *import, *importFrom, *importStar, *repr, *isinstance, *yield;
 
     llvm::Value* checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *assertNameDefined, *assertFail;

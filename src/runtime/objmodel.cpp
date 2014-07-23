@@ -1963,7 +1963,8 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         return createGenerator(func, oarg1, oarg2, oarg3, oargs);
     }
 
-    return callCLFunc(f, rewrite_args, num_output_args, closure, (BoxedGenerator*)func->isGenerator, oarg1, oarg2, oarg3, oargs);
+    return callCLFunc(f, rewrite_args, num_output_args, closure, (BoxedGenerator*)func->isGenerator, oarg1, oarg2,
+                      oarg3, oargs);
 }
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
@@ -2992,5 +2993,53 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
         return r;
 
     raiseExcHelper(ImportError, "cannot import name %s", name->c_str());
+}
+
+extern "C" void importStar(Box* _from_module, BoxedModule* to_module) {
+    assert(_from_module->cls == module_cls);
+    BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
+
+    static std::string all_str("__all__");
+    static std::string getitem_str("__getitem__");
+    Box* all = from_module->getattr(all_str);
+
+    if (all) {
+        Box* all_getitem = typeLookup(all->cls, getitem_str, NULL, NULL);
+        if (!all_getitem)
+            raiseExcHelper(TypeError, "'%s' object does not support indexing", getTypeName(all)->c_str());
+
+        int idx = 0;
+        while (true) {
+            Box* attr_name;
+            try {
+                attr_name = runtimeCallInternal2(all_getitem, NULL, ArgPassSpec(2), all, boxInt(idx));
+            } catch (Box* b) {
+                if (b->cls == IndexError)
+                    break;
+                throw;
+            }
+            idx++;
+
+            if (attr_name->cls != str_cls)
+                raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name)->c_str());
+
+            BoxedString* casted_attr_name = static_cast<BoxedString*>(attr_name);
+            Box* attr_value = from_module->getattr(casted_attr_name->s);
+
+            if (!attr_value)
+                raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->s.c_str());
+
+            to_module->setattr(casted_attr_name->s, attr_value, NULL);
+        }
+        return;
+    }
+
+    HCAttrs* module_attrs = from_module->getAttrsPtr();
+    for (auto& p : module_attrs->hcls->attr_offsets) {
+        if (p.first[0] == '_')
+            continue;
+
+        to_module->setattr(p.first, module_attrs->attr_list->attrs[p.second], NULL);
+    }
 }
 }

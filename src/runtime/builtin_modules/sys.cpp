@@ -87,6 +87,12 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout));
     sys_module->giveAttr("stdin", new BoxedFile(stdin));
     sys_module->giveAttr("stderr", new BoxedFile(stderr));
+
+    sys_module->giveAttr("warnoptions", new BoxedList());
+    sys_module->giveAttr("py3kwarning", False);
+
+    sys_module->giveAttr("hexversion", boxInt(0x01000000 * PYTHON_VERSION_MAJOR + 0x010000 * PYTHON_VERSION_MINOR
+                                              + 0x0100 * PYTHON_VERSION_MICRO));
 }
 
 void setupSysEnd() {

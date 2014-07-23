@@ -1479,6 +1479,14 @@ private:
             const std::string& name = alias->name;
             const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
 
+            if (name == "*") {
+                RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
+                               "import * not supported in functions");
+                emitter.createCall2(exc_info, g.funcs.importStar, imported_v,
+                                    embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+                continue;
+            }
+
             // TODO add patchpoints to this?
             llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, module->getValue(),
                                                  embedConstantPtr(&name, g.llvm_str_type_ptr)).getInstruction();

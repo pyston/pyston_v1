@@ -87,6 +87,8 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
         this->giveAttr("__module__", modname);
     }
 
+    this->giveAttr("__doc__", None);
+
     assert(f->num_defaults == ndefaults);
 }
 
@@ -110,6 +112,8 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box
         Box* modname = f->source->parent_module->getattr("__name__", NULL, NULL);
         this->giveAttr("__module__", modname);
     }
+
+    this->giveAttr("__doc__", None);
 
     assert(f->num_defaults == ndefaults);
 }
@@ -654,6 +658,7 @@ void setupRuntime() {
     setupThread();
     setupErrno();
     setupPosix();
+    setupSre();
 
     setupCAPI();
 
