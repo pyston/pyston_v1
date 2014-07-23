@@ -895,11 +895,12 @@ static void _reparse(const char* fn, const std::string& cache_fn) {
         fwrite(buf, 1, nread, cache_fp);
     }
 
+    int code = pclose(parser);
+    assert(code == 0);
+
     fseek(cache_fp, checksum_start, SEEK_SET);
     fwrite(&bytes_written, 1, CHECKSUM_LENGTH, cache_fp);
 
-    int code = pclose(parser);
-    assert(code == 0);
     fclose(cache_fp);
 }
 
