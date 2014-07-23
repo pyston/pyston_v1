@@ -545,6 +545,7 @@ void setupList() {
     list_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None }));
 
     list_cls->giveAttr("append", new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2)));
+    list_cls->giveAttr("extend", new BoxedFunction(boxRTFunction((void*)listIAdd, NONE, 2)));
 
     CLFunction* setitem = createRTFunction(3, 0, false, false);
     addRTFunction(setitem, (void*)listSetitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, UNKNOWN });

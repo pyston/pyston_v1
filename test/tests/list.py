@@ -67,3 +67,7 @@ for i in xrange(100):
     l.append(i)
 while l:
     del l[0]
+
+l = range(5)
+l.extend(range(5))
+print l
