@@ -869,7 +869,7 @@ AST_Module* parse(const char* fn) {
 
 #define MAGIC_STRING "a\nch"
 #define MAGIC_STRING_LENGTH 4
-#define LENGTH_SUFFIX_LENGTH 4
+#define CHECKSUM_LENGTH 4
 
 static void _reparse(const char* fn, const std::string& cache_fn) {
     FILE* parser = popen(getParserCommandLine(fn).c_str(), "r");
@@ -878,7 +878,14 @@ static void _reparse(const char* fn, const std::string& cache_fn) {
 
     fwrite(MAGIC_STRING, 1, MAGIC_STRING_LENGTH, cache_fp);
 
-    int bytes_written = 0;
+    int checksum_start = ftell(cache_fp);
+
+    int bytes_written = -1;
+    // Currently just use the length as the checksum
+    static_assert(sizeof(bytes_written) >= CHECKSUM_LENGTH, "");
+    fwrite(&bytes_written, 1, CHECKSUM_LENGTH, cache_fp);
+
+    bytes_written = 0;
     char buf[80];
     while (true) {
         int nread = fread(buf, 1, 80, parser);
@@ -888,10 +895,8 @@ static void _reparse(const char* fn, const std::string& cache_fn) {
         fwrite(buf, 1, nread, cache_fp);
     }
 
-    // Ideally this should be a full checksum rather than just a length.
-    // And maybe it should be put at the beginning?
-    static_assert(sizeof(bytes_written) >= LENGTH_SUFFIX_LENGTH, "");
-    fwrite(&bytes_written, 1, LENGTH_SUFFIX_LENGTH, cache_fp);
+    fseek(cache_fp, checksum_start, SEEK_SET);
+    fwrite(&bytes_written, 1, CHECKSUM_LENGTH, cache_fp);
 
     int code = pclose(parser);
     assert(code == 0);
@@ -928,20 +933,25 @@ AST_Module* caching_parse(const char* fn) {
             char buf[MAGIC_STRING_LENGTH];
             int read = fread(buf, 1, MAGIC_STRING_LENGTH, fp);
             if (read != MAGIC_STRING_LENGTH || strncmp(buf, MAGIC_STRING, MAGIC_STRING_LENGTH) != 0) {
+                if (VERBOSITY()) {
+                    printf("Warning: corrupt or non-Pyston .pyc file found; ignoring\n");
+                }
                 good = false;
             }
         }
 
         if (good) {
             int length = 0;
-            fseek(fp, -LENGTH_SUFFIX_LENGTH, SEEK_END);
-            static_assert(sizeof(length) >= LENGTH_SUFFIX_LENGTH, "");
-            int read = fread(&length, 1, LENGTH_SUFFIX_LENGTH, fp);
             fseek(fp, MAGIC_STRING_LENGTH, SEEK_SET);
+            static_assert(sizeof(length) >= CHECKSUM_LENGTH, "");
+            int read = fread(&length, 1, CHECKSUM_LENGTH, fp);
 
-            int expected_length = MAGIC_STRING_LENGTH + LENGTH_SUFFIX_LENGTH + length;
+            int expected_total_length = MAGIC_STRING_LENGTH + CHECKSUM_LENGTH + length;
 
-            if (read != LENGTH_SUFFIX_LENGTH || expected_length != cache_stat.st_size) {
+            if (read != CHECKSUM_LENGTH || expected_total_length != cache_stat.st_size) {
+                if (VERBOSITY()) {
+                    printf("Warning: truncated .pyc file found; ignoring\n");
+                }
                 good = false;
             }
         }
@@ -962,7 +972,7 @@ AST_Module* caching_parse(const char* fn) {
     BufferedReader* reader = new BufferedReader(fp);
     AST* rtn = readASTMisc(reader);
     reader->fill();
-    assert(reader->bytesBuffered() == LENGTH_SUFFIX_LENGTH);
+    assert(reader->bytesBuffered() == 0);
     delete reader;
 
     assert(rtn->type == AST_TYPE::Module);
