@@ -1453,7 +1453,11 @@ private:
             const std::string& name = alias->name;
             const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
 
-            CompilerVariable* v = module->getattr(emitter, getEmptyOpInfo(exc_info), &name, false);
+            // TODO add patchpoints to this?
+            llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, module->getValue(),
+                                                 embedConstantPtr(&name, g.llvm_str_type_ptr)).getInstruction();
+
+            CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
             _doSet(asname, v, exc_info);
             v->decvref(emitter);
         }

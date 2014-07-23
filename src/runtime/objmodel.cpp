@@ -2959,4 +2959,16 @@ extern "C" Box* import(const std::string* name) {
 
     raiseExcHelper(ImportError, "No module named %s", name->c_str());
 }
+
+extern "C" Box* importFrom(Box* _m, const std::string* name) {
+    assert(_m->cls == module_cls);
+
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+
+    Box* r = m->getattr(*name, NULL, NULL);
+    if (r)
+        return r;
+
+    raiseExcHelper(ImportError, "cannot import name %s", name->c_str());
+}
 }

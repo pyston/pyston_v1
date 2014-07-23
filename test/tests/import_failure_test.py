@@ -1,6 +1,3 @@
-# expected: fail
-# - currently throws an AttributeError if we imported the module but the name didn't exist
-
 try:
     import non_existent_module
     assert 0, "shouldn't get here"

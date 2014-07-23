@@ -182,6 +182,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(getclsattr);
     GET(unaryop);
     GET(import);
+    GET(importFrom);
     GET(repr);
     GET(isinstance);
 

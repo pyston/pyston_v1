@@ -41,6 +41,7 @@ extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 // TODO sort this
 extern "C" void my_assert(bool b);
+extern "C" Box* importFrom(Box* obj, const std::string* attr);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" bool nonzero(Box* obj);

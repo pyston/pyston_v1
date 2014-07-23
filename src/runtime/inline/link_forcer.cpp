@@ -74,6 +74,7 @@ void force() {
     FORCE(delitem);
     FORCE(unaryop);
     FORCE(import);
+    FORCE(importFrom);
     FORCE(repr);
     FORCE(isinstance);
 
