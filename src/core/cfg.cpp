@@ -1087,6 +1087,13 @@ public:
                     target = astsubs;
                     break;
                 }
+                case AST_TYPE::Attribute: {
+                    AST_Attribute* astattr = static_cast<AST_Attribute*>(remapExpr(t, false));
+                    astattr->ctx_type = AST_TYPE::Del;
+                    target = astattr;
+                    break;
+                }
+
                 default:
                     RELEASE_ASSERT(0, "UnSupported del target: %d", t->type);
             }

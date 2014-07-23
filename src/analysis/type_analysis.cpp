@@ -475,8 +475,16 @@ private:
 
     virtual void visit_delete(AST_Delete* node) {
         for (AST_expr* target : node->targets) {
-            RELEASE_ASSERT(target->type == AST_TYPE::Subscript, "");
-            getType(ast_cast<AST_Subscript>(target)->value);
+            switch (target->type) {
+                case AST_TYPE::Subscript:
+                    getType(ast_cast<AST_Subscript>(target)->value);
+                    break;
+                case AST_TYPE::Attribute:
+                    getType(ast_cast<AST_Attribute>(target)->value);
+                    break;
+                default:
+                    RELEASE_ASSERT(0, "");
+            }
         }
     }
 
