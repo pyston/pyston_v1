@@ -2685,7 +2685,7 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
     }
 
     // first check wether the deleting attribute is a descriptor
-    Box* clsAttr = getattr_internal(obj, attr, true, false, NULL, NULL);
+    Box* clsAttr = typeLookup(obj->cls, attr, NULL, NULL);
     if (clsAttr != NULL) {
         Box* delAttr = getattr_internal(clsAttr, delete_str, false, true, NULL, NULL);
 
@@ -2703,7 +2703,8 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
     } else {
         // the exception cpthon throws is different when the class contains the attribute
         if (clsAttr != NULL) {
-            raiseExcHelper(AttributeError, attr.c_str());
+            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj)->c_str(),
+                           attr.c_str());
         } else {
             raiseAttributeError(obj, attr.c_str());
         }
@@ -2721,11 +2722,8 @@ extern "C" void delattr(Box* obj, const char* attr) {
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n",
                            getNameOfClass(cobj)->c_str());
         }
-    } else {
-        if (!isUserDefined(obj->cls)) {
-            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj)->c_str(), attr);
-        }
     }
+
 
     delattr_internal(obj, attr, true, NULL);
 }
@@ -2875,7 +2873,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     // If this is true, not supposed to call __init__:
     RELEASE_ASSERT(made->cls == ccls, "allowed but unsupported");
 
-    if (init_attr) {
+    if (init_attr && init_attr != typeLookup(object_cls, _init_str, NULL, NULL)) {
         Box* initrtn;
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init);

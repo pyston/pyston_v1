@@ -7,6 +7,13 @@ def del_builtin_attr(o):
     #print repr(e)
         print e
 
+    try:
+        del a.aaaa
+        print "error"
+    except AttributeError, e:
+    #print repr(e)
+        print e
+
 a=1    
 del_builtin_attr(a)
 a=1.0   
@@ -79,7 +86,7 @@ try:
     del a.speak
     print "del func error"
 except AttributeError, e:
-    print "del func:%s"%(e)
+    print "del func"
 
 del AttrClass.speak
 try:

@@ -468,7 +468,8 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     assert(args->cls == tuple_cls);
 
     if (args->elts.size() != 0) {
-        if (typeLookup(cls, "__init__", NULL, NULL) == NULL)
+        // TODO slow
+        if (typeLookup(cls, "__init__", NULL, NULL) == typeLookup(object_cls, "__init__", NULL, NULL))
             raiseExcHelper(TypeError, "object.__new__() takes no parameters");
     }
 
@@ -478,6 +479,10 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     Box* rtn = ::new (mem) Box(&object_flavor, cls);
     initUserAttrs(rtn, cls);
     return rtn;
+}
+
+Box* objectInit(Box* b, BoxedTuple* args) {
+    return None;
 }
 
 bool TRACK_ALLOCATIONS = false;
@@ -539,6 +544,7 @@ void setupRuntime() {
 
     object_cls->giveAttr("__name__", boxStrConstant("object"));
     object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
+    object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->freeze();
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, false);

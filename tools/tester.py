@@ -91,10 +91,11 @@ def canonicalize_stderr(stderr):
 
     substitutions = [
             ("NameError: global name '", "NameError: name '"),
+            ("AttributeError: '(\w+)' object attribute '(\w+)' is read-only", "AttributeError: \\2"),
             ]
 
     for pattern, subst_with in substitutions:
-        stderr = stderr.replace(pattern, subst_with)
+        stderr = re.sub(pattern, subst_with, stderr)
 
     return stderr
 
