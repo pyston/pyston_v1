@@ -61,3 +61,10 @@ def f3():
 
     print a.foo()
 f3()
+
+print isinstance(1, int)
+print isinstance(1, object)
+print isinstance(1, float)
+print issubclass(int, int)
+print issubclass(int, object)
+print issubclass(int, float)

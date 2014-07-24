@@ -1707,6 +1707,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         AST_Assign* module_assign = new AST_Assign();
         module_assign->targets.push_back(makeName("__module__", AST_TYPE::Store));
         module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
+        module_assign->lineno = 0;
         visitor.push_back(module_assign);
 
         // If the first statement is just a single string, transform it to an assignment to __doc__
@@ -1716,6 +1717,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                 AST_Assign* doc_assign = new AST_Assign();
                 doc_assign->targets.push_back(makeName("__doc__", AST_TYPE::Store));
                 doc_assign->value = first_expr->value;
+                doc_assign->lineno = 0;
                 visitor.push_back(doc_assign);
             }
         }

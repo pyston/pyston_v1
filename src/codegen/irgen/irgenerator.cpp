@@ -1800,8 +1800,21 @@ private:
     }
 
     void doRaise(AST_Raise* node, ExcInfo exc_info) {
-        std::vector<llvm::Value*> args;
+        // It looks like ommitting the second and third arguments are equivalent to passing None,
+        // but ommitting the first argument is *not* the same as passing None.
 
+        if (node->arg0 == NULL) {
+            assert(!node->arg1);
+            assert(!node->arg2);
+
+            emitter.createCall(exc_info, g.funcs.raise0, std::vector<llvm::Value*>());
+            emitter.getBuilder()->CreateUnreachable();
+
+            endBlock(DEAD);
+            return;
+        }
+
+        std::vector<llvm::Value*> args;
         for (auto a : { node->arg0, node->arg1, node->arg2 }) {
             if (a) {
                 CompilerVariable* v = evalExpr(a, exc_info);

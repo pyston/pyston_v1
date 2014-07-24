@@ -310,6 +310,14 @@ Box* isinstance_func(Box* obj, Box* cls) {
     return boxBool(isinstance(obj, cls, 0));
 }
 
+Box* issubclass_func(Box* child, Box* parent) {
+    RELEASE_ASSERT(child->cls == type_cls, "");
+    // TODO parent can also be a tuple of classes
+    RELEASE_ASSERT(parent->cls == type_cls, "");
+
+    return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
+}
+
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
@@ -463,6 +471,7 @@ void setupBuiltins() {
     Warning = makeBuiltinException(Exception, "Warning");
     /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
     /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
+    /*DeprecationWarning =*/makeBuiltinException(Warning, "DeprecationWarning");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
@@ -498,6 +507,9 @@ void setupBuiltins() {
 
     Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("isinstance", isinstance_obj);
+
+    Box* issubclass_obj = new BoxedFunction(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
+    builtins_module->giveAttr("issubclass", issubclass_obj);
 
     CLFunction* sorted_func = createRTFunction(1, 0, false, false);
     addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST });
