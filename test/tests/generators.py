@@ -77,3 +77,13 @@ def G7(p):
         yield a+b
     return G()
 print list(G7(1))
+
+def G8(*args):
+    for a in args:
+        yield a
+print list(G8(1, 2, 3, 4, 5))
+
+def G9(**kwargs):
+    for a in sorted(kwargs.keys()):
+        yield a, kwargs[a]
+print list(G9(a="1", b="2", c="3", d="4", e="5"))

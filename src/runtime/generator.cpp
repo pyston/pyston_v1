@@ -43,7 +43,7 @@ static void generatorEntry(BoxedGenerator* g) {
         BoxedFunction* func = g->function;
 
         Box** args = g->args ? &g->args->elts[0] : nullptr;
-        callCLFunc(func->f, nullptr, func->f->num_args, func->closure, g, g->arg1, g->arg2, g->arg3, args);
+        callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, g->arg1, g->arg2, g->arg3, args);
     } catch (Box* e) {
         // unhandled exception: propagate the exception to the caller
         g->exception = e;
