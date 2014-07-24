@@ -285,28 +285,21 @@ extern "C" void generatorGCHandler(GCVisitor* v, void* p) {
 
     BoxedGenerator* g = (BoxedGenerator*)p;
 
-    if (g->function) {
-        v->visit(g->function);
-        if (g->function->f) {
-            int num_args = g->function->f->num_args;
-
-            if (num_args >= 1)
-                v->visit(g->arg1);
-            if (num_args >= 2)
-                v->visit(g->arg2);
-            if (num_args >= 3)
-                v->visit(g->arg3);
-            if (num_args > 3)
-                v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
-                                       reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
-        }
-    }
+    v->visit(g->function);
+    int num_args = g->function->f->num_args;
+    if (num_args >= 1)
+        v->visit(g->arg1);
+    if (num_args >= 2)
+        v->visit(g->arg2);
+    if (num_args >= 3)
+        v->visit(g->arg3);
+    if (num_args > 3)
+        v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
+                               reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
     if (g->returnValue)
         v->visit(g->returnValue);
     if (g->exception)
         v->visit(g->exception);
-
-
 
     v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
     v->visitPotentialRange((void**)&g->returnContext,
