@@ -43,10 +43,7 @@ std::string ValuedCompilerType<llvm::Value*>::debugName() {
 struct RawInstanceMethod {
     CompilerVariable* obj, *func;
 
-    RawInstanceMethod(CompilerVariable* obj, CompilerVariable* func) : obj(obj), func(func) {
-        obj->incvref();
-        func->incvref();
-    }
+    RawInstanceMethod(CompilerVariable* obj, CompilerVariable* func) : obj(obj), func(func) {}
 };
 
 class InstanceMethodType : public ValuedCompilerType<RawInstanceMethod*> {
@@ -76,6 +73,8 @@ public:
     static CompilerVariable* makeIM(CompilerVariable* obj, CompilerVariable* func) {
         CompilerVariable* rtn = new ValuedCompilerVariable<RawInstanceMethod*>(
             InstanceMethodType::get(obj->getType(), func->getType()), new RawInstanceMethod(obj, func), true);
+        obj->incvref();
+        func->incvref();
         return rtn;
     }
 
@@ -141,6 +140,8 @@ public:
             RawInstanceMethod* im = var->getValue();
             RawInstanceMethod* new_im = new RawInstanceMethod(im->obj->dup(cache), im->func->dup(cache));
             rtn = new VAR(this, new_im, var->isGrabbed());
+            while (rtn->getVrefs() < var->getVrefs())
+                rtn->incvref();
         }
         return rtn;
     }
