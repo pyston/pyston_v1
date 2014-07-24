@@ -250,9 +250,12 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
     }
 }
 
-extern "C" void assertNameDefined(bool b, const char* name) {
+extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg) {
     if (!b) {
-        raiseExcHelper(UnboundLocalError, "local variable '%s' referenced before assignment", name);
+        if (local_var_msg)
+            raiseExcHelper(exc_cls, "local variable '%s' referenced before assignment", name);
+        else
+            raiseExcHelper(exc_cls, "name '%s' is not defined", name);
     }
 }
 
@@ -2659,6 +2662,7 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args) {
     // of remaining attributes
     int num_attrs = hcls->attr_offsets.size();
     int offset = hcls->getOffset(attr);
+    assert(offset >= 0);
     Box** start = attrs->attr_list->attrs;
     memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
 
@@ -2943,6 +2947,13 @@ Box* typeNew(Box* cls, Box* obj) {
 
     BoxedClass* rtn = obj->cls;
     return rtn;
+}
+
+extern "C" void delGlobal(BoxedModule* m, std::string* name) {
+    if (!m->getattr(*name)) {
+        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+    }
+    m->delattr(*name, NULL);
 }
 
 extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {

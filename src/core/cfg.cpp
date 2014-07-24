@@ -1093,9 +1093,12 @@ public:
                     target = astattr;
                     break;
                 }
-
+                case AST_TYPE::Name: {
+                    target = t;
+                    break;
+                }
                 default:
-                    RELEASE_ASSERT(0, "UnSupported del target: %d", t->type);
+                    RELEASE_ASSERT(0, "Unsupported del target: %d", t->type);
             }
             astdel->targets.push_back(target);
             push_back(astdel);

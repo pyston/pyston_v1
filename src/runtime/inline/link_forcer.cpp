@@ -71,6 +71,7 @@ void force() {
     FORCE(getitem);
     FORCE(getclsattr);
     FORCE(getGlobal);
+    FORCE(delGlobal);
     FORCE(setitem);
     FORCE(delitem);
     FORCE(unaryop);

@@ -482,8 +482,11 @@ private:
                 case AST_TYPE::Attribute:
                     getType(ast_cast<AST_Attribute>(target)->value);
                     break;
+                case AST_TYPE::Name:
+                    sym_table.erase(ast_cast<AST_Name>(target)->id);
+                    break;
                 default:
-                    RELEASE_ASSERT(0, "");
+                    RELEASE_ASSERT(0, "%d", target->type);
             }
         }
     }

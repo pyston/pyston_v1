@@ -667,8 +667,10 @@ private:
 
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
-                llvm::CallSite call = emitter.createCall2(exc_info, g.funcs.assertNameDefined, getConstantInt(0, g.i1),
-                                                          getStringConstantPtr(node->id + '\0'));
+                llvm::CallSite call = emitter.createCall(
+                    exc_info, g.funcs.assertNameDefined,
+                    { getConstantInt(0, g.i1), getStringConstantPtr(node->id + '\0'),
+                      embedConstantPtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
                 call.setDoesNotReturn();
                 return undefVariable();
             }
@@ -689,16 +691,19 @@ private:
                     emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), from_local, from_global);
 
                     emitter.getBuilder()->SetInsertPoint(from_local);
+                    curblock = from_local;
                     CompilerVariable* local = symbol_table[node->id];
                     ConcreteCompilerVariable* converted_local = local->makeConverted(emitter, local->getBoxType());
                     // don't decvref local here, because are manufacturing a new vref
                     emitter.getBuilder()->CreateBr(join);
 
                     emitter.getBuilder()->SetInsertPoint(from_global);
+                    curblock = from_global;
                     ConcreteCompilerVariable* global = _getGlobal(node, exc_info);
                     emitter.getBuilder()->CreateBr(join);
 
                     emitter.getBuilder()->SetInsertPoint(join);
+                    curblock = join;
                     llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2, node->id);
                     phi->addIncoming(converted_local->getValue(), from_local);
                     phi->addIncoming(global->getValue(), from_global);
@@ -706,8 +711,10 @@ private:
                     return new ConcreteCompilerVariable(UNKNOWN, phi, true);
                 }
 
-                emitter.createCall2(exc_info, g.funcs.assertNameDefined, is_defined_var->getValue(),
-                                    getStringConstantPtr(node->id + '\0'));
+                emitter.createCall(exc_info, g.funcs.assertNameDefined,
+                                   { is_defined_var->getValue(), getStringConstantPtr(node->id + '\0'),
+                                     embedConstantPtr(UnboundLocalError, g.llvm_class_type_ptr),
+                                     getConstantInt(true, g.i1) });
 
                 // At this point we know the name must be defined (otherwise the assert would have fired):
                 _popFake(defined_name);
@@ -1306,8 +1313,11 @@ private:
                 case AST_TYPE::Attribute:
                     _doDelAttr(static_cast<AST_Attribute*>(target), exc_info);
                     break;
+                case AST_TYPE::Name:
+                    _doDelName(static_cast<AST_Name*>(target), exc_info);
+                    break;
                 default:
-                    ASSERT(0, "UnSupported del target: %d", target->type);
+                    ASSERT(0, "Unsupported del target: %d", target->type);
                     abort();
             }
         }
@@ -1346,6 +1356,46 @@ private:
     void _doDelAttr(AST_Attribute* node, ExcInfo exc_info) {
         CompilerVariable* value = evalExpr(node->value, exc_info);
         value->delattr(emitter, getEmptyOpInfo(exc_info), &node->attr);
+    }
+
+    void _doDelName(AST_Name* target, ExcInfo exc_info) {
+        auto scope_info = irstate->getScopeInfo();
+        if (scope_info->refersToGlobal(target->id)) {
+            // Can't use delattr since the errors are different:
+            emitter.createCall2(exc_info, g.funcs.delGlobal,
+                                embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
+                                embedConstantPtr(&target->id, g.llvm_str_type_ptr));
+            return;
+        }
+
+        assert(!scope_info->refersToClosure(target->id));
+        assert(!scope_info->saveInClosure(
+            target->id)); // SyntaxError: can not delete variable 'x' referenced in nested scope
+
+        // A del of a missing name generates different error messages in a function scope vs a classdef scope
+        bool local_error_msg = (irstate->getSourceInfo()->ast->type != AST_TYPE::ClassDef);
+
+        if (symbol_table.count(target->id) == 0) {
+            llvm::CallSite call = emitter.createCall(exc_info, g.funcs.assertNameDefined,
+                                                     { getConstantInt(0, g.i1), getStringConstantPtr(target->id + '\0'),
+                                                       embedConstantPtr(NameError, g.llvm_class_type_ptr),
+                                                       getConstantInt(local_error_msg, g.i1) });
+            call.setDoesNotReturn();
+            return;
+        }
+
+        std::string defined_name = _getFakeName("is_defined", target->id.c_str());
+        ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
+
+        if (is_defined_var) {
+            emitter.createCall(exc_info, g.funcs.assertNameDefined,
+                               { is_defined_var->getValue(), getStringConstantPtr(target->id + '\0'),
+                                 embedConstantPtr(NameError, g.llvm_class_type_ptr),
+                                 getConstantInt(local_error_msg, g.i1) });
+            _popFake(defined_name);
+        }
+
+        symbol_table.erase(target->id);
     }
 
     CLFunction* _wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
