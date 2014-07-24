@@ -150,6 +150,36 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
     return boxInt(lhs->n & rhs_int->n);
 }
 
+extern "C" Box* intOrInt(BoxedInt* lhs, BoxedInt* rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxInt(lhs->n | rhs->n);
+}
+
+extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
+    assert(lhs->cls == int_cls);
+    if (rhs->cls != int_cls) {
+        return NotImplemented;
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(lhs->n | rhs_int->n);
+}
+
+extern "C" Box* intXorInt(BoxedInt* lhs, BoxedInt* rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return boxInt(lhs->n ^ rhs->n);
+}
+
+extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
+    assert(lhs->cls == int_cls);
+    if (rhs->cls != int_cls) {
+        return NotImplemented;
+    }
+    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+    return boxInt(lhs->n ^ rhs_int->n);
+}
+
 extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
@@ -529,6 +559,8 @@ void setupInt() {
 
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);
+    _addFuncIntUnknown("__or__", BOXED_INT, (void*)intOrInt, (void*)intOr);
+    _addFuncIntUnknown("__xor__", BOXED_INT, (void*)intXorInt, (void*)intXor);
     _addFuncIntFloatUnknown("__sub__", (void*)intSubInt, (void*)intSubFloat, (void*)intSub);
     _addFuncIntFloatUnknown("__div__", (void*)intDivInt, (void*)intDivFloat, (void*)intDiv);
     _addFuncIntFloatUnknown("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);

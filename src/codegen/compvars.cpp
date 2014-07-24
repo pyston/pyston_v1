@@ -1629,6 +1629,10 @@ public:
         return var;
     }
 
+    bool canConvertTo(ConcreteCompilerType* other_type) override {
+        return (other_type == UNKNOWN || other_type == BOXED_BOOL || other_type == BOOL);
+    }
+
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                                     ConcreteCompilerType* other_type) {
         if (other_type == BOOL) {
@@ -1718,24 +1722,7 @@ public:
     }
 
     virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {
-        llvm::Constant* open_paren = getStringConstantPtr("(");
-        llvm::Constant* close_paren = getStringConstantPtr(")");
-        llvm::Constant* comma = getStringConstantPtr(",");
-        llvm::Constant* comma_space = getStringConstantPtr(", ");
-
-        VEC* v = var->getValue();
-
-        emitter.getBuilder()->CreateCall(g.funcs.printf, open_paren);
-
-        for (int i = 0; i < v->size(); i++) {
-            if (i)
-                emitter.getBuilder()->CreateCall(g.funcs.printf, comma_space);
-            (*v)[i]->print(emitter, info);
-        }
-        if (v->size() == 1)
-            emitter.getBuilder()->CreateCall(g.funcs.printf, comma);
-
-        emitter.getBuilder()->CreateCall(g.funcs.printf, close_paren);
+        return makeConverted(emitter, var, getConcreteType())->print(emitter, info);
     }
 
     virtual bool canConvertTo(ConcreteCompilerType* other_type) {
