@@ -25,14 +25,14 @@ namespace pyston {
 void setupSet();
 void teardownSet();
 
-extern BoxedClass* set_cls;
-extern const ObjectFlavor set_flavor;
+extern BoxedClass* set_cls, *frozenset_cls;
+extern const ObjectFlavor set_flavor, frozenset_flavor;
 
 class BoxedSet : public Box {
 public:
     std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > s;
 
-    BoxedSet() __attribute__((visibility("default"))) : Box(&set_flavor, set_cls) {}
+    BoxedSet(BoxedClass* cls) __attribute__((visibility("default"))) : Box(&set_flavor, cls) {}
 };
 }
 

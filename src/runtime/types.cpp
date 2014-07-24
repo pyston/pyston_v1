@@ -527,6 +527,7 @@ void setupRuntime() {
     dict_cls = new BoxedClass(object_cls, 0, sizeof(BoxedDict), false);
     file_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFile), false);
     set_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
+    frozenset_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     member_cls = new BoxedClass(object_cls, 0, sizeof(BoxedMemberDescriptor), false);
     closure_cls = new BoxedClass(object_cls, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
 
@@ -540,6 +541,7 @@ void setupRuntime() {
     MODULE = typeFromClass(module_cls);
     DICT = typeFromClass(dict_cls);
     SET = typeFromClass(set_cls);
+    FROZENSET = typeFromClass(frozenset_cls);
     BOXED_TUPLE = typeFromClass(tuple_cls);
 
     object_cls->giveAttr("__name__", boxStrConstant("object"));

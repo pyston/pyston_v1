@@ -1908,6 +1908,6 @@ ConcreteCompilerVariable* undefVariable() {
 }
 
 
-ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET;
+ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET;
 
 } // namespace pyston

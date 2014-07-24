@@ -531,6 +531,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("bool", bool_cls);
     builtins_module->giveAttr("dict", dict_cls);
     builtins_module->giveAttr("set", set_cls);
+    builtins_module->giveAttr("frozenset", frozenset_cls);
     builtins_module->giveAttr("tuple", tuple_cls);
     builtins_module->giveAttr("instancemethod", instancemethod_cls);
 }

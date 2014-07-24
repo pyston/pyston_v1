@@ -31,3 +31,20 @@ print set([1])
 
 for i in set([1]):
     print i
+
+
+
+
+s = frozenset(range(5))
+print len(s)
+
+print sorted(s)
+print frozenset()
+
+print hasattr(s, "remove")
+print hasattr(s, "add")
+
+print frozenset() | frozenset()
+print set() | frozenset()
+print frozenset() | set()
+print set() | set()
