@@ -596,55 +596,67 @@ void setupStr() {
     str_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedString), false);
     gc::registerStaticRootObj(str_iterator_cls);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
-    str_iterator_cls->giveAttr("__hasnext__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
-    str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
+    str_iterator_cls->giveAttr("__hasnext__", boxUnboundInstanceMethod(new BoxedFunction(
+                                                  boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1))));
+    str_iterator_cls->giveAttr(
+        "next", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1))));
     str_iterator_cls->freeze();
 
     str_cls->giveAttr("__name__", boxStrConstant("str"));
 
-    str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
-    str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));
-    str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1)));
-    str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, BOXED_INT, 1)));
-    str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
+    str_cls->giveAttr("__len__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1))));
+    str_cls->giveAttr("__str__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strStr, STR, 1))));
+    str_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1))));
+    str_cls->giveAttr("__hash__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strHash, BOXED_INT, 1))));
+    str_cls->giveAttr("__nonzero__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1))));
 
-    str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
+    str_cls->giveAttr("lower", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strLower, STR, 1))));
 
-    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 2, 1, false, false), { None }));
+    str_cls->giveAttr("strip", boxUnboundInstanceMethod(new BoxedFunction(
+                                   boxRTFunction((void*)strStrip, STR, 2, 1, false, false), { None })));
 
-    str_cls->giveAttr("lstrip", new BoxedFunction(boxRTFunction((void*)strLStrip, STR, 2, 1, false, false), { None }));
+    str_cls->giveAttr("lstrip", boxUnboundInstanceMethod(new BoxedFunction(
+                                    boxRTFunction((void*)strLStrip, STR, 2, 1, false, false), { None })));
 
-    str_cls->giveAttr("rstrip", new BoxedFunction(boxRTFunction((void*)strRStrip, STR, 2, 1, false, false), { None }));
+    str_cls->giveAttr("rstrip", boxUnboundInstanceMethod(new BoxedFunction(
+                                    boxRTFunction((void*)strRStrip, STR, 2, 1, false, false), { None })));
 
-    str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
+    str_cls->giveAttr("__contains__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2))));
 
-    str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
-    str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));
-    str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
+    str_cls->giveAttr("__add__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2))));
+    str_cls->giveAttr("__mod__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strMod, STR, 2))));
+    str_cls->giveAttr("__mul__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2))));
 
-    str_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)strLt, UNKNOWN, 2)));
-    str_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)strLe, UNKNOWN, 2)));
-    str_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)strGt, UNKNOWN, 2)));
-    str_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)strGe, UNKNOWN, 2)));
-    str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2)));
-    str_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)strNe, UNKNOWN, 2)));
+    str_cls->giveAttr("__lt__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strLt, UNKNOWN, 2))));
+    str_cls->giveAttr("__le__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strLe, UNKNOWN, 2))));
+    str_cls->giveAttr("__gt__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strGt, UNKNOWN, 2))));
+    str_cls->giveAttr("__ge__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strGe, UNKNOWN, 2))));
+    str_cls->giveAttr("__eq__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2))));
+    str_cls->giveAttr("__ne__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strNe, UNKNOWN, 2))));
 
-    str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
+    str_cls->giveAttr("__getitem__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2))));
 
-    str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
+    str_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(
+                                      boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1))));
 
-    str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2)));
+    str_cls->giveAttr("join", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2))));
 
-    str_cls->giveAttr("split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 2, 1, false, false), { None }));
+    str_cls->giveAttr("split", boxUnboundInstanceMethod(new BoxedFunction(
+                                   boxRTFunction((void*)strSplit, LIST, 2, 1, false, false), { None })));
     str_cls->giveAttr("rsplit", str_cls->getattr("split"));
 
     CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
     addRTFunction(count, (void*)strCount2, BOXED_INT);
-    str_cls->giveAttr("count", new BoxedFunction(count));
+    str_cls->giveAttr("count", boxUnboundInstanceMethod(new BoxedFunction(count)));
 
-    str_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false),
-                                                   { boxStrConstant("") }));
+    str_cls->giveAttr(
+        "__new__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false),
+                                                              { boxStrConstant("") })));
 
     str_cls->freeze();
 }

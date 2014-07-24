@@ -56,15 +56,19 @@ extern "C" Box* boolNew(Box* cls, Box* val) {
 void setupBool() {
     bool_cls->giveAttr("__name__", boxStrConstant("bool"));
 
-    bool_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)boolInvert, BOXED_INT, 1)));
-    bool_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)boolPos, BOXED_INT, 1)));
-    bool_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)boolNeg, BOXED_INT, 1)));
-    bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
-    bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
+    bool_cls->giveAttr("__invert__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)boolInvert, BOXED_INT, 1))));
+    bool_cls->giveAttr("__pos__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)boolPos, BOXED_INT, 1))));
+    bool_cls->giveAttr("__neg__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)boolNeg, BOXED_INT, 1))));
+    bool_cls->giveAttr("__nonzero__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1))));
+    bool_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1))));
     bool_cls->giveAttr("__str__", bool_cls->getattr("__repr__"));
 
-    bool_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, 1, false, false), { None }));
+    bool_cls->giveAttr("__new__", boxUnboundInstanceMethod(new BoxedFunction(
+                                      boxRTFunction((void*)boolNew, UNKNOWN, 2, 1, false, false), { None })));
 
 
     bool_cls->freeze();

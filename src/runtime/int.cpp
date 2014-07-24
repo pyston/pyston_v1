@@ -502,7 +502,7 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     addRTFunction(cl, int_func, BOXED_INT, v_ii);
     addRTFunction(cl, float_func, BOXED_FLOAT, v_if);
     addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
-    int_cls->giveAttr(name, new BoxedFunction(cl));
+    int_cls->giveAttr(name, boxUnboundInstanceMethod(new BoxedFunction(cl)));
 }
 
 static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
@@ -516,7 +516,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     CLFunction* cl = createRTFunction(2, 0, false, false);
     addRTFunction(cl, int_func, rtn_type, v_ii);
     addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
-    int_cls->giveAttr(name, new BoxedFunction(cl));
+    int_cls->giveAttr(name, boxUnboundInstanceMethod(new BoxedFunction(cl)));
 }
 
 void setupInt() {
@@ -545,20 +545,26 @@ void setupInt() {
     _addFuncIntUnknown("__lshift__", BOXED_INT, (void*)intLShiftInt, (void*)intLShift);
     _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
 
-    int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1)));
-    int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1)));
-    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1)));
-    int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
-    int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
+    int_cls->giveAttr("__invert__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1))));
+    int_cls->giveAttr("__pos__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1))));
+    int_cls->giveAttr("__neg__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1))));
+    int_cls->giveAttr("__nonzero__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1))));
+    int_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1))));
     int_cls->giveAttr("__str__", int_cls->getattr("__repr__"));
-    int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
-    int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2)));
+    int_cls->giveAttr("__hash__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1))));
+    int_cls->giveAttr("__divmod__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2))));
 
-    int_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) }));
+    int_cls->giveAttr("__new__", boxUnboundInstanceMethod(new BoxedFunction(
+                                     boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) })));
 
-    int_cls->giveAttr("__init__",
-                      new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
+    int_cls->giveAttr("__init__", boxUnboundInstanceMethod(new BoxedFunction(
+                                      boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) })));
 
     int_cls->freeze();
 }

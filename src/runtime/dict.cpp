@@ -163,32 +163,37 @@ void setupDict() {
     // dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2)));
     // dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, NULL, 1)));
     // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1)));
-    dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
+    dict_cls->giveAttr("__repr__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1))));
     dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
 
-    dict_cls->giveAttr("__iter__",
-                       new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));
+    dict_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(
+                                       boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1))));
 
-    dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1)));
-    dict_cls->giveAttr("iteritems",
-                       new BoxedFunction(boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1)));
+    dict_cls->giveAttr("items", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1))));
+    dict_cls->giveAttr("iteritems", boxUnboundInstanceMethod(new BoxedFunction(
+                                        boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1))));
 
-    dict_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)dictValues, LIST, 1)));
-    dict_cls->giveAttr("itervalues",
-                       new BoxedFunction(boxRTFunction((void*)dictIterValues, typeFromClass(dict_iterator_cls), 1)));
+    dict_cls->giveAttr("values",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictValues, LIST, 1))));
+    dict_cls->giveAttr("itervalues", boxUnboundInstanceMethod(new BoxedFunction(
+                                         boxRTFunction((void*)dictIterValues, typeFromClass(dict_iterator_cls), 1))));
 
-    dict_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)dictKeys, LIST, 1)));
+    dict_cls->giveAttr("keys", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictKeys, LIST, 1))));
     dict_cls->giveAttr("iterkeys", dict_cls->getattr("__iter__"));
 
-    dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
+    dict_cls->giveAttr("pop", boxUnboundInstanceMethod(new BoxedFunction(
+                                  boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL })));
 
-    dict_cls->giveAttr("get", new BoxedFunction(boxRTFunction((void*)dictGet, UNKNOWN, 3, 1, false, false), { None }));
+    dict_cls->giveAttr("get", boxUnboundInstanceMethod(new BoxedFunction(
+                                  boxRTFunction((void*)dictGet, UNKNOWN, 3, 1, false, false), { None })));
 
-    dict_cls->giveAttr("setdefault",
-                       new BoxedFunction(boxRTFunction((void*)dictSetdefault, UNKNOWN, 3, 1, false, false), { None }));
+    dict_cls->giveAttr("setdefault", boxUnboundInstanceMethod(new BoxedFunction(
+                                         boxRTFunction((void*)dictSetdefault, UNKNOWN, 3, 1, false, false), { None })));
 
-    dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, UNKNOWN, 2)));
-    dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3)));
+    dict_cls->giveAttr("__getitem__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictGetitem, UNKNOWN, 2))));
+    dict_cls->giveAttr("__setitem__",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3))));
 
     dict_cls->freeze();
 
@@ -197,10 +202,11 @@ void setupDict() {
 
     CLFunction* hasnext = boxRTFunction((void*)dictIterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)dictIterHasnext, BOXED_BOOL);
-    dict_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    dict_iterator_cls->giveAttr("__hasnext__", boxUnboundInstanceMethod(new BoxedFunction(hasnext)));
+    dict_iterator_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction(
+                                                (void*)dictIterIter, typeFromClass(dict_iterator_cls), 1))));
     dict_iterator_cls->giveAttr(
-        "__iter__", new BoxedFunction(boxRTFunction((void*)dictIterIter, typeFromClass(dict_iterator_cls), 1)));
-    dict_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1)));
+        "next", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1))));
 
     dict_iterator_cls->freeze();
 }

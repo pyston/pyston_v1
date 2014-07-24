@@ -123,18 +123,18 @@ void setupXrange() {
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 
     xrange_cls->giveAttr(
-        "__new__",
-        new BoxedFunction(boxRTFunction((void*)xrange, typeFromClass(xrange_cls), 4, 2, false, false), { NULL, NULL }));
-    xrange_cls->giveAttr("__iter__",
-                         new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1)));
+        "__new__", boxUnboundInstanceMethod(new BoxedFunction(
+                       boxRTFunction((void*)xrange, typeFromClass(xrange_cls), 4, 2, false, false), { NULL, NULL })));
+    xrange_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(
+                                         boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1))));
 
     CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL);
-    xrange_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    xrange_iterator_cls->giveAttr("__hasnext__", boxUnboundInstanceMethod(new BoxedFunction(hasnext)));
 
     CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1);
     addRTFunction(next, (void*)BoxedXrangeIterator::xrangeIteratorNext, BOXED_INT);
-    xrange_iterator_cls->giveAttr("next", new BoxedFunction(next));
+    xrange_iterator_cls->giveAttr("next", boxUnboundInstanceMethod(new BoxedFunction(next)));
 
     // TODO this is pretty hacky, but stuff the iterator cls into xrange to make sure it gets decref'd at the end
     xrange_cls->giveAttr("__iterator_cls__", xrange_iterator_cls);
