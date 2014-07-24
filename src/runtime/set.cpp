@@ -205,9 +205,14 @@ Box* setLen(BoxedSet* self) {
 }
 
 Box* setAdd(BoxedSet* self, Box* v) {
-    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    assert(self->cls == set_cls);
     self->s.insert(v);
     return None;
+}
+
+Box* setContains(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    return boxBool(self->s.count(v) != 0);
 }
 
 
@@ -274,6 +279,9 @@ void setupSet() {
 
     set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1)));
     frozenset_cls->giveAttr("__len__", set_cls->getattr("__len__"));
+
+    set_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)setContains, BOXED_BOOL, 2)));
+    frozenset_cls->giveAttr("__contains__", set_cls->getattr("__contains__"));
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
 

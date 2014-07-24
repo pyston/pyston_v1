@@ -48,3 +48,7 @@ print frozenset() | frozenset()
 print set() | frozenset()
 print frozenset() | set()
 print set() | set()
+
+for i in xrange(8):
+    print i, i in set(range(2, 5))
+    print i, i in frozenset(range(2, 5))
