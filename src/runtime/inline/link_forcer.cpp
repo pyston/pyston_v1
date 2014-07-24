@@ -95,7 +95,7 @@ void force() {
     FORCE(callattr);
 
     FORCE(raise0);
-    FORCE(raise1);
+    FORCE(raise3);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);

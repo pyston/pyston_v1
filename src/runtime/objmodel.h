@@ -30,9 +30,8 @@ class BoxedString;
 
 // user-level raise functions that implement python-level semantics
 extern "C" void raise0() __attribute__((__noreturn__));
-extern "C" void raise1(Box*) __attribute__((__noreturn__));
-extern "C" void raise2(Box*, Box*) __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
+
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 

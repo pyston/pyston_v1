@@ -320,3 +320,19 @@ def f10():
         with expected_exception(ZeroDivisionError):
             raise
 f10()
+
+
+def f11():
+    print "f11"
+    # old style exception syntax"
+
+    try:
+        raise Exception, 12345
+    except Exception, e:
+        print e
+
+    try:
+        raise KeyError(), 12345
+    except TypeError, e:
+        print e
+f11()
