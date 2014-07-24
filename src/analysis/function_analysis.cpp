@@ -76,7 +76,7 @@ public:
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)
             _doLoad(node->id);
-        else if (node->ctx_type == AST_TYPE::Store)
+        else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Del)
             _doStore(node->id);
         else {
             assert(0);

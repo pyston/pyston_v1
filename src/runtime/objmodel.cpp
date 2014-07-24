@@ -99,6 +99,17 @@ struct SetattrRewriteArgs2 {
           out_success(false) {}
 };
 
+struct DelattrRewriteArgs2 {
+    Rewriter2* rewriter;
+    RewriterVarUsage2 obj;
+    bool more_guards_after;
+
+    bool out_success;
+
+    DelattrRewriteArgs2(Rewriter2* rewriter, RewriterVarUsage2&& obj, bool more_guards_after)
+        : rewriter(rewriter), obj(std::move(obj)), more_guards_after(more_guards_after), out_success(false) {}
+};
+
 struct LenRewriteArgs {
     Rewriter* rewriter;
     RewriterVar obj;
@@ -240,9 +251,12 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
     }
 }
 
-extern "C" void assertNameDefined(bool b, const char* name) {
+extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg) {
     if (!b) {
-        raiseExcHelper(UnboundLocalError, "local variable '%s' referenced before assignment", name);
+        if (local_var_msg)
+            raiseExcHelper(exc_cls, "local variable '%s' referenced before assignment", name);
+        else
+            raiseExcHelper(exc_cls, "name '%s' is not defined", name);
     }
 }
 
@@ -330,6 +344,31 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
     this->children[attr] = rtn;
     rtn->attr_offsets[attr] = attr_offsets.size();
     return rtn;
+}
+
+/**
+ * del attr from current HiddenClass, pertain the orders of remaining attrs
+ */
+HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
+    int idx = getOffset(attr);
+    assert(idx >= 0);
+
+    std::vector<std::string> new_attrs(attr_offsets.size() - 1);
+    for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
+        if (it->second < idx)
+            new_attrs[it->second] = it->first;
+        else if (it->second > idx) {
+            new_attrs[it->second - 1] = it->first;
+        }
+    }
+
+    // TODO we can first locate the parent HiddenClass of the deleted
+    // attribute and hence avoid creation of its ancestors.
+    HiddenClass* cur = getRoot();
+    for (const auto& attr : new_attrs) {
+        cur = cur->getOrMakeChild(attr);
+    }
+    return cur;
 }
 
 HiddenClass* HiddenClass::getRoot() {
@@ -2635,6 +2674,87 @@ extern "C" void delitem(Box* target, Box* slice) {
     }
 }
 
+void Box::delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args) {
+    // as soon as the hcls changes, the guard on hidden class won't pass.
+    HCAttrs* attrs = getAttrsPtr();
+    HiddenClass* hcls = attrs->hcls;
+    HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
+
+    // The order of attributes is pertained as delAttrToMakeHC constructs
+    // the new HiddenClass by invoking getOrMakeChild in the prevous order
+    // of remaining attributes
+    int num_attrs = hcls->attr_offsets.size();
+    int offset = hcls->getOffset(attr);
+    assert(offset >= 0);
+    Box** start = attrs->attr_list->attrs;
+    memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
+
+    attrs->hcls = new_hcls;
+
+    // guarantee the size of the attr_list equals the number of attrs
+    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
+    attrs->attr_list = (HCAttrs::AttrList*)rt_realloc(attrs->attr_list, new_size);
+}
+
+extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
+                                 DelattrRewriteArgs2* rewrite_args) {
+    static const std::string delattr_str("__delattr__");
+    static const std::string delete_str("__delete__");
+
+    // custom __delattr__
+    if (allow_custom) {
+        Box* delAttr = typeLookup(obj->cls, delattr_str, NULL, NULL);
+        if (delAttr != NULL) {
+            Box* boxstr = boxString(attr);
+            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
+            return;
+        }
+    }
+
+    // first check wether the deleting attribute is a descriptor
+    Box* clsAttr = typeLookup(obj->cls, attr, NULL, NULL);
+    if (clsAttr != NULL) {
+        Box* delAttr = getattr_internal(clsAttr, delete_str, false, true, NULL, NULL);
+
+        if (delAttr != NULL) {
+            Box* boxstr = boxString(attr);
+            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), clsAttr, obj);
+            return;
+        }
+    }
+
+    // check if the attribute is in the instance's __dict__
+    Box* attrVal = getattr_internal(obj, attr, false, false, NULL, NULL);
+    if (attrVal != NULL) {
+        obj->delattr(attr, NULL);
+    } else {
+        // the exception cpthon throws is different when the class contains the attribute
+        if (clsAttr != NULL) {
+            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj)->c_str(),
+                           attr.c_str());
+        } else {
+            raiseAttributeError(obj, attr.c_str());
+        }
+    }
+}
+
+// del target.attr
+extern "C" void delattr(Box* obj, const char* attr) {
+    static StatCounter slowpath_delattr("slowpath_delattr");
+    slowpath_delattr.log();
+
+    if (obj->cls == type_cls) {
+        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
+        if (!isUserDefined(cobj)) {
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n",
+                           getNameOfClass(cobj)->c_str());
+        }
+    }
+
+
+    delattr_internal(obj, attr, true, NULL);
+}
+
 // For use on __init__ return values
 static void assertInitNone(Box* obj) {
     if (obj != None) {
@@ -2780,7 +2900,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     // If this is true, not supposed to call __init__:
     RELEASE_ASSERT(made->cls == ccls, "allowed but unsupported");
 
-    if (init_attr) {
+    if (init_attr && init_attr != typeLookup(object_cls, _init_str, NULL, NULL)) {
         Box* initrtn;
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_init);
@@ -2850,6 +2970,13 @@ Box* typeNew(Box* cls, Box* obj) {
 
     BoxedClass* rtn = obj->cls;
     return rtn;
+}
+
+extern "C" void delGlobal(BoxedModule* m, std::string* name) {
+    if (!m->getattr(*name)) {
+        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+    }
+    m->delattr(*name, NULL);
 }
 
 extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {

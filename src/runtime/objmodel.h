@@ -31,8 +31,6 @@ class BoxedGenerator;
 
 // user-level raise functions that implement python-level semantics
 extern "C" void raise0() __attribute__((__noreturn__));
-extern "C" void raise1(Box*) __attribute__((__noreturn__));
-extern "C" void raise2(Box*, Box*) __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 
@@ -46,6 +44,7 @@ extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
+extern "C" void delattr(Box* obj, const char* attr);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
 extern "C" Box* callattr(Box*, std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
@@ -67,6 +66,7 @@ extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* getGlobal(BoxedModule* m, std::string* name);
+extern "C" void delGlobal(BoxedModule* m, std::string* name);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);
@@ -76,7 +76,7 @@ extern "C" Box* import(const std::string* name);
 extern "C" Box* importFrom(Box* obj, const std::string* attr);
 extern "C" void importStar(Box* from_module, BoxedModule* to_module);
 extern "C" void checkUnpackingLength(i64 expected, i64 given);
-extern "C" void assertNameDefined(bool b, const char* name);
+extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
@@ -96,7 +96,8 @@ enum LookupScope {
 extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<const std::string*>* keyword_names);
-
+extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
+                                 DelattrRewriteArgs2* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,

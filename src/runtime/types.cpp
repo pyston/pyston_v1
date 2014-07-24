@@ -518,7 +518,8 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     assert(args->cls == tuple_cls);
 
     if (args->elts.size() != 0) {
-        if (typeLookup(cls, "__init__", NULL, NULL) == NULL)
+        // TODO slow
+        if (typeLookup(cls, "__init__", NULL, NULL) == typeLookup(object_cls, "__init__", NULL, NULL))
             raiseExcHelper(TypeError, "object.__new__() takes no parameters");
     }
 
@@ -528,6 +529,10 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     Box* rtn = ::new (mem) Box(&object_flavor, cls);
     initUserAttrs(rtn, cls);
     return rtn;
+}
+
+Box* objectInit(Box* b, BoxedTuple* args) {
+    return None;
 }
 
 bool TRACK_ALLOCATIONS = false;
@@ -572,6 +577,7 @@ void setupRuntime() {
     dict_cls = new BoxedClass(object_cls, 0, sizeof(BoxedDict), false);
     file_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFile), false);
     set_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
+    frozenset_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     member_cls = new BoxedClass(object_cls, 0, sizeof(BoxedMemberDescriptor), false);
     closure_cls = new BoxedClass(object_cls, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
 
@@ -585,10 +591,12 @@ void setupRuntime() {
     MODULE = typeFromClass(module_cls);
     DICT = typeFromClass(dict_cls);
     SET = typeFromClass(set_cls);
+    FROZENSET = typeFromClass(frozenset_cls);
     BOXED_TUPLE = typeFromClass(tuple_cls);
 
     object_cls->giveAttr("__name__", boxStrConstant("object"));
     object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
+    object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->freeze();
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, false);

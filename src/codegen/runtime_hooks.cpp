@@ -174,10 +174,12 @@ void initGlobalFuncs(GlobalState& g) {
 
     GET(getattr);
     GET(setattr);
+    GET(delattr);
     GET(getitem);
     GET(setitem);
     GET(delitem);
     GET(getGlobal);
+    GET(delGlobal);
     GET(binop);
     GET(compare);
     GET(augbinop);
@@ -227,8 +229,7 @@ void initGlobalFuncs(GlobalState& g) {
 
     GET(__cxa_begin_catch);
     g.funcs.__cxa_end_catch = addFunc((void*)__cxa_end_catch, g.void_);
-    GET(raise0);
-    GET(raise1);
+    GET(raise3);
 
     g.funcs.div_i64_i64 = getFunc((void*)div_i64_i64, "div_i64_i64");
     g.funcs.mod_i64_i64 = getFunc((void*)mod_i64_i64, "mod_i64_i64");

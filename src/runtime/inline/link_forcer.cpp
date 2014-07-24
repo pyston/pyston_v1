@@ -63,6 +63,7 @@ void force() {
 
     FORCE(getattr);
     FORCE(setattr);
+    FORCE(delattr);
     FORCE(print);
     FORCE(nonzero);
     FORCE(binop);
@@ -72,6 +73,7 @@ void force() {
     FORCE(getitem);
     FORCE(getclsattr);
     FORCE(getGlobal);
+    FORCE(delGlobal);
     FORCE(setitem);
     FORCE(delitem);
     FORCE(unaryop);
@@ -96,7 +98,7 @@ void force() {
     FORCE(callattr);
 
     FORCE(raise0);
-    FORCE(raise1);
+    FORCE(raise3);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);

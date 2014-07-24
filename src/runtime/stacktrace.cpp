@@ -198,21 +198,30 @@ void raise0() {
     raiseRaw(last_exc);
 }
 
-void raise1(Box* b) {
-    if (b->cls == type_cls) {
-        BoxedClass* c = static_cast<BoxedClass*>(b);
+void raise3(Box* arg0, Box* arg1, Box* arg2) {
+    RELEASE_ASSERT(arg2 == None, "unsupported");
+
+    if (arg0->cls == type_cls) {
+        BoxedClass* c = static_cast<BoxedClass*>(arg0);
         if (isSubclass(c, Exception)) {
-            auto exc_obj = exceptionNew1(c);
+            Box* exc_obj;
+            if (arg1 != None)
+                exc_obj = exceptionNew2(c, arg1);
+            else
+                exc_obj = exceptionNew1(c);
             raiseExc(exc_obj);
         } else {
             raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
-                           getTypeName(b)->c_str());
+                           getTypeName(arg0)->c_str());
         }
     }
 
+    if (arg1 != None)
+        raiseExcHelper(TypeError, "instance exception may not have a separate value");
+
     // TODO: should only allow throwing of old-style classes or things derived
     // from BaseException:
-    raiseExc(b);
+    raiseExc(arg0);
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {

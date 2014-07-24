@@ -184,6 +184,7 @@ public:
                 break;
             case AST_TYPE::Param:
             case AST_TYPE::Store:
+            case AST_TYPE::Del:
                 doWrite(node->id);
                 break;
             default:
@@ -242,7 +243,9 @@ public:
 
     virtual bool visit_delete(AST_Delete* node) {
         for (auto t : node->targets) {
-            RELEASE_ASSERT(t->type != AST_TYPE::Name, "");
+            if (t->type == AST_TYPE::Name) {
+                doWrite(ast_cast<AST_Name>(t)->id);
+            }
         }
         return false;
     }

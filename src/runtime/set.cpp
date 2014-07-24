@@ -23,6 +23,7 @@
 namespace pyston {
 
 BoxedClass* set_cls, *set_iterator_cls;
+BoxedClass* frozenset_cls;
 
 extern "C" void setGCHandler(GCVisitor* v, void* p);
 extern "C" void setIteratorGCHandler(GCVisitor* v, void* p);
@@ -82,20 +83,22 @@ Box* setiteratorNext(BoxedSetIterator* self) {
 }
 
 Box* setAdd2(Box* _self, Box* b) {
-    assert(_self->cls == set_cls);
+    assert(_self->cls == set_cls || _self->cls == frozenset_cls);
     BoxedSet* self = static_cast<BoxedSet*>(_self);
 
     self->s.insert(b);
     return None;
 }
 
-Box* setNew(Box* cls, Box* container) {
-    assert(cls == set_cls);
+Box* setNew(Box* _cls, Box* container) {
+    assert(_cls->cls == type_cls);
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    assert(cls == set_cls || cls == frozenset_cls);
 
     if (container == None)
-        return new BoxedSet();
+        return new BoxedSet(cls);
 
-    Box* rtn = new BoxedSet();
+    Box* rtn = new BoxedSet(cls);
     for (Box* e : container->pyElements()) {
         setAdd2(rtn, e);
     }
@@ -103,12 +106,10 @@ Box* setNew(Box* cls, Box* container) {
     return rtn;
 }
 
-Box* setRepr(BoxedSet* self) {
-    assert(self->cls == set_cls);
-
+static Box* _setRepr(BoxedSet* self, const char* type_name) {
     std::ostringstream os("");
 
-    os << "set([";
+    os << type_name << "([";
     bool first = true;
     for (Box* elt : self->s) {
         if (!first) {
@@ -121,11 +122,21 @@ Box* setRepr(BoxedSet* self) {
     return boxString(os.str());
 }
 
-Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls);
-    assert(rhs->cls == set_cls);
+Box* setRepr(BoxedSet* self) {
+    assert(self->cls == set_cls);
+    return _setRepr(self, "set");
+}
 
-    BoxedSet* rtn = new BoxedSet();
+Box* frozensetRepr(BoxedSet* self) {
+    assert(self->cls == frozenset_cls);
+    return _setRepr(self, "frozenset");
+}
+
+Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
+    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
+    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
+
+    BoxedSet* rtn = new BoxedSet(lhs->cls);
 
     for (Box* elt : lhs->s) {
         rtn->s.insert(elt);
@@ -137,10 +148,10 @@ Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls);
-    assert(rhs->cls == set_cls);
+    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
+    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet();
+    BoxedSet* rtn = new BoxedSet(lhs->cls);
 
     for (Box* elt : lhs->s) {
         if (rhs->s.count(elt))
@@ -150,10 +161,10 @@ Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls);
-    assert(rhs->cls == set_cls);
+    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
+    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet();
+    BoxedSet* rtn = new BoxedSet(lhs->cls);
 
     for (Box* elt : lhs->s) {
         // TODO if len(rhs) << len(lhs), it might be more efficient
@@ -165,10 +176,10 @@ Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
-    assert(lhs->cls == set_cls);
-    assert(rhs->cls == set_cls);
+    assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
+    assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet();
+    BoxedSet* rtn = new BoxedSet(lhs->cls);
 
     for (Box* elt : lhs->s) {
         if (rhs->s.count(elt) == 0)
@@ -184,17 +195,17 @@ Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
 }
 
 Box* setIter(BoxedSet* self) {
-    assert(self->cls == set_cls);
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
     return new BoxedSetIterator(self);
 }
 
 Box* setLen(BoxedSet* self) {
-    assert(self->cls == set_cls);
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
     return boxInt(self->s.size());
 }
 
 Box* setAdd(BoxedSet* self, Box* v) {
-    assert(self->cls == set_cls);
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
     self->s.insert(v);
     return None;
 }
@@ -206,6 +217,7 @@ using namespace pyston::set;
 
 void setupSet() {
     set_cls->giveAttr("__name__", boxStrConstant("set"));
+    frozenset_cls->giveAttr("__name__", boxStrConstant("frozenset"));
 
     set_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
@@ -217,40 +229,56 @@ void setupSet() {
 
     set_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));
+    frozenset_cls->giveAttr("__new__", set_cls->getattr("__new__"));
 
-    Box* repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
-    set_cls->giveAttr("__repr__", repr);
-    set_cls->giveAttr("__str__", repr);
+    Box* set_repr = new BoxedFunction(boxRTFunction((void*)setRepr, STR, 1));
+    set_cls->giveAttr("__repr__", set_repr);
+    set_cls->giveAttr("__str__", set_repr);
 
-    std::vector<ConcreteCompilerType*> v_ss, v_su;
+    Box* frozenset_repr = new BoxedFunction(boxRTFunction((void*)frozensetRepr, STR, 1));
+    frozenset_cls->giveAttr("__repr__", frozenset_repr);
+    frozenset_cls->giveAttr("__str__", frozenset_repr);
+
+    std::vector<ConcreteCompilerType*> v_ss, v_sf, v_su, v_ff, v_fs, v_fu;
     v_ss.push_back(SET);
     v_ss.push_back(SET);
+    v_sf.push_back(SET);
+    v_sf.push_back(FROZENSET);
     v_su.push_back(SET);
     v_su.push_back(UNKNOWN);
 
-    CLFunction* or_ = createRTFunction(2, 0, false, false);
-    addRTFunction(or_, (void*)setOrSet, SET, v_ss);
-    set_cls->giveAttr("__or__", new BoxedFunction(or_));
+    v_ff.push_back(FROZENSET);
+    v_ff.push_back(FROZENSET);
+    v_fs.push_back(FROZENSET);
+    v_fs.push_back(SET);
+    v_fu.push_back(FROZENSET);
+    v_fu.push_back(UNKNOWN);
 
-    CLFunction* sub_ = createRTFunction(2, 0, false, false);
-    addRTFunction(sub_, (void*)setSubSet, SET, v_ss);
-    set_cls->giveAttr("__sub__", new BoxedFunction(sub_));
+    auto add = [&](const std::string& name, void* func) {
+        CLFunction* func_obj = createRTFunction(2, 0, false, false);
+        addRTFunction(func_obj, (void*)func, SET, v_ss);
+        addRTFunction(func_obj, (void*)func, SET, v_sf);
+        addRTFunction(func_obj, (void*)func, FROZENSET, v_fs);
+        addRTFunction(func_obj, (void*)func, FROZENSET, v_ff);
+        set_cls->giveAttr(name, new BoxedFunction(func_obj));
+        frozenset_cls->giveAttr(name, set_cls->getattr(name));
+    };
 
-    CLFunction* xor_ = createRTFunction(2, 0, false, false);
-    addRTFunction(xor_, (void*)setXorSet, SET, v_ss);
-    set_cls->giveAttr("__xor__", new BoxedFunction(xor_));
-
-    CLFunction* and_ = createRTFunction(2, 0, false, false);
-    addRTFunction(and_, (void*)setAndSet, SET, v_ss);
-    set_cls->giveAttr("__and__", new BoxedFunction(and_));
+    add("__or__", (void*)setOrSet);
+    add("__sub__", (void*)setSubSet);
+    add("__xor__", (void*)setXorSet);
+    add("__and__", (void*)setAndSet);
 
     set_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)setIter, typeFromClass(set_iterator_cls), 1)));
+    frozenset_cls->giveAttr("__iter__", set_cls->getattr("__iter__"));
 
     set_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)setLen, BOXED_INT, 1)));
+    frozenset_cls->giveAttr("__len__", set_cls->getattr("__len__"));
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
 
     set_cls->freeze();
+    frozenset_cls->freeze();
 }
 
 void teardownSet() {

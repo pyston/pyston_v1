@@ -51,3 +51,19 @@ def f():
     except:
         print True
 f()
+
+
+def f11():
+    print "f11"
+    # old style exception syntax"
+
+    try:
+        raise KeyError, 12345
+    except KeyError, e:
+        print e
+
+    try:
+        raise KeyError(), 12345
+    except TypeError, e:
+        print e
+f11()
