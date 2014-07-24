@@ -547,7 +547,8 @@ void setupList() {
     list_cls->giveAttr("pop", boxUnboundInstanceMethod(new BoxedFunction(
                                   boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None })));
 
-    list_cls->giveAttr("append", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2))));
+    list_cls->giveAttr("append",
+                       boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listAppend, NONE, 2))));
     list_cls->giveAttr("extend", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)listIAdd, NONE, 2))));
 
     CLFunction* setitem = createRTFunction(3, 0, false, false);

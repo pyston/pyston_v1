@@ -1419,10 +1419,10 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
     if (clsattr->cls == instancemethod_cls) {
         BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(clsattr);
 
-        // TODO we need to handle bound instancemethods as well
-        // (Just call it without re-binding.)
-        // For now, assert that it is unbound.
-        assert(im->obj == NULL);
+        // The instancemethod could be bound or unbound.
+        // If it is unbound (the common case), we bind the obj as the first argument.
+        // If it is bound, the first argument we pass should be the bound object, im->obj.
+        Box* obj_to_bind = (im->obj == NULL ? obj : im->obj);
 
         if (rewrite_args) {
             r_clsattr.addGuard((int64_t)clsattr);
@@ -1435,7 +1435,10 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             Box* rtn;
             if (rewrite_args) {
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_clsattr);
-                srewrite_args.arg1 = rewrite_args->obj;
+                if (im->obj == NULL)
+                    srewrite_args.arg1 = rewrite_args->obj;
+                else
+                    srewrite_args.arg1 = rewrite_args->obj.getAttr(INSTANCEMETHOD_OBJ_OFFSET, 0);
 
                 // should be no-ops:
                 if (npassed_args >= 1)
@@ -1450,7 +1453,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                 rtn = runtimeCallInternal(
                     im->func, &srewrite_args,
                     ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
-                    obj, arg1, arg2, NULL, keyword_names);
+                    obj_to_bind, arg1, arg2, NULL, keyword_names);
 
                 if (!srewrite_args.out_success) {
                     rewrite_args = NULL;
@@ -1461,7 +1464,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             } else {
                 rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
                                                                       argspec.has_starargs, argspec.has_kwargs),
-                                          obj, arg1, arg2, NULL, keyword_names);
+                                          obj_to_bind, arg1, arg2, NULL, keyword_names);
             }
 
             if (rewrite_args)
@@ -1522,7 +1525,10 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                 // args is now dead
 
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_clsattr);
-                srewrite_args.arg1 = rewrite_args->obj;
+                if (im->obj == NULL)
+                    srewrite_args.arg1 = rewrite_args->obj;
+                else
+                    srewrite_args.arg1 = rewrite_args->obj.getAttr(INSTANCEMETHOD_OBJ_OFFSET, 0);
                 if (npassed_args >= 1)
                     srewrite_args.arg2 = rewrite_args->arg1;
                 if (npassed_args >= 2)
@@ -1537,7 +1543,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
                 rtn = runtimeCallInternal(
                     im->func, &srewrite_args,
                     ArgPassSpec(argspec.num_args + 1, argspec.num_keywords, argspec.has_starargs, argspec.has_kwargs),
-                    obj, arg1, arg2, new_args, keyword_names);
+                    obj_to_bind, arg1, arg2, new_args, keyword_names);
                 if (annotate)
                     rewrite_args->rewriter->annotate(1);
 
@@ -1556,7 +1562,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             } else {
                 rtn = runtimeCallInternal(im->func, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
                                                                       argspec.has_starargs, argspec.has_kwargs),
-                                          obj, arg1, arg2, new_args, keyword_names);
+                                          obj_to_bind, arg1, arg2, new_args, keyword_names);
             }
             return rtn;
         }

@@ -638,7 +638,8 @@ void setupStr() {
     str_cls->giveAttr("__eq__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2))));
     str_cls->giveAttr("__ne__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strNe, UNKNOWN, 2))));
 
-    str_cls->giveAttr("__getitem__", boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2))));
+    str_cls->giveAttr("__getitem__",
+                      boxUnboundInstanceMethod(new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2))));
 
     str_cls->giveAttr("__iter__", boxUnboundInstanceMethod(new BoxedFunction(
                                       boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1))));
