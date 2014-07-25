@@ -914,9 +914,13 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     int nargs = source->arg_names.totalParameters();
     ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
+
     std::vector<llvm::Type*> llvm_arg_types;
     if (source->scoping->getScopeInfoForNode(source->ast)->takesClosure())
         llvm_arg_types.push_back(g.llvm_closure_type_ptr);
+
+    if (source->scoping->getScopeInfoForNode(source->ast)->takesGenerator())
+        llvm_arg_types.push_back(g.llvm_generator_type_ptr);
 
     if (entry_descriptor == NULL) {
         for (int i = 0; i < nargs; i++) {

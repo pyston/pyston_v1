@@ -445,6 +445,7 @@ private:
         return attr_type->callType(ArgPassSpec(0), arg_types, NULL);
     }
 
+    virtual void* visit_yield(AST_Yield*) { return UNKNOWN; }
 
 
     virtual void visit_assert(AST_Assert* node) {

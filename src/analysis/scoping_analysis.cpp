@@ -20,6 +20,35 @@
 
 namespace pyston {
 
+class YieldVisitor : public NoopASTVisitor {
+public:
+    YieldVisitor() : containsYield(false) {}
+
+    virtual bool visit_functiondef(AST_FunctionDef*) { return true; }
+
+    virtual bool visit_yield(AST_Yield*) {
+        containsYield = true;
+        return true;
+    }
+
+    bool containsYield;
+};
+
+bool containsYield(AST* ast) {
+    YieldVisitor visitor;
+    if (ast->type == AST_TYPE::FunctionDef) {
+        AST_FunctionDef* funcDef = static_cast<AST_FunctionDef*>(ast);
+        for (auto& e : funcDef->body) {
+            e->accept(&visitor);
+            if (visitor.containsYield)
+                return true;
+        }
+    } else {
+        ast->accept(&visitor);
+    }
+    return visitor.containsYield;
+}
+
 static bool isCompilerCreatedName(const std::string& name) {
     return name[0] == '!' || name[0] == '#';
 }
@@ -206,6 +235,7 @@ public:
     virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
+    virtual bool visit_yield(AST_Yield* node) { return false; }
 
     virtual bool visit_branch(AST_Branch* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return false; }
@@ -394,9 +424,12 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         switch (node->type) {
             case AST_TYPE::ClassDef:
             case AST_TYPE::FunctionDef:
-            case AST_TYPE::Lambda:
-                this->scopes[node] = new ScopeInfoBase(parent_info, usage);
+            case AST_TYPE::Lambda: {
+                ScopeInfoBase* scopInfo = new ScopeInfoBase(parent_info, usage);
+                scopInfo->setTakesGenerator(containsYield(node));
+                this->scopes[node] = scopInfo;
                 break;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", usage->node->type);
                 break;
@@ -413,6 +446,9 @@ ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
 
     ScopeInfo* rtn = scopes[node];
     assert(rtn);
+
+    rtn->setTakesGenerator(containsYield(node));
+
     return rtn;
 }
 

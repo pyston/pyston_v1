@@ -19,6 +19,7 @@
 #include "gc/heap.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
 #include "runtime/list.h"
@@ -58,6 +59,7 @@ void force() {
     FORCE(createSlice);
     FORCE(createUserClass);
     FORCE(createClosure);
+    FORCE(createGenerator);
 
     FORCE(getattr);
     FORCE(setattr);
@@ -80,6 +82,7 @@ void force() {
     FORCE(importStar);
     FORCE(repr);
     FORCE(isinstance);
+    FORCE(yield);
 
     FORCE(checkUnpackingLength);
     FORCE(raiseAttributeError);

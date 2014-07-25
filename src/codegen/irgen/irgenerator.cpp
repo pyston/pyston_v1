@@ -27,7 +27,9 @@
 #include "codegen/type_recording.h"
 #include "core/ast.h"
 #include "core/cfg.h"
+#include "core/types.h"
 #include "core/util.h"
+#include "runtime/generator.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -197,6 +199,7 @@ static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
 
 static const std::string CREATED_CLOSURE_NAME = "!created_closure";
 static const std::string PASSED_CLOSURE_NAME = "!passed_closure";
+static const std::string PASSED_GENERATOR_NAME = "!passed_generator";
 
 class IRGeneratorImpl : public IRGenerator {
 private:
@@ -841,6 +844,25 @@ private:
         }
     }
 
+    CompilerVariable* evalYield(AST_Yield* node, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+
+        CompilerVariable* generator = _getFake(PASSED_GENERATOR_NAME, false);
+        ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
+
+
+        CompilerVariable* value = node->value ? evalExpr(node->value, exc_info) : getNone();
+        ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
+        value->decvref(emitter);
+
+        llvm::Value* rtn = emitter.createCall2(exc_info, g.funcs.yield, convertedGenerator->getValue(),
+                                               convertedValue->getValue()).getInstruction();
+        convertedGenerator->decvref(emitter);
+        convertedValue->decvref(emitter);
+
+        return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+    }
+
     ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
         assert(state != PARTIAL);
 
@@ -923,6 +945,10 @@ private:
                 case AST_TYPE::UnaryOp:
                     rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node), exc_info);
                     break;
+                case AST_TYPE::Yield:
+                    rtn = evalYield(ast_cast<AST_Yield>(node), exc_info);
+                    break;
+
                 case AST_TYPE::ClsAttribute:
                     rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node), exc_info);
                     break;
@@ -1283,7 +1309,7 @@ private:
         // one reason to do this is to pass the closure through if necessary,
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, {});
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(exc_info), ArgPassSpec(0), {}, NULL);
 
@@ -1438,8 +1464,12 @@ private:
         // Top level functions never take a closure, so we can skip the analysis.
         if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
             takes_closure = false;
-        else
+        else {
             takes_closure = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesClosure();
+        }
+
+        // TODO: this lines disables the optimization mentioned above...
+        bool is_generator = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesGenerator();
 
         if (takes_closure) {
             if (irstate->getScopeInfo()->createsClosure()) {
@@ -1451,16 +1481,12 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, defaults);
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
         }
 
-        // llvm::Type* boxCLFuncArgType = g.funcs.boxCLFunction->arg_begin()->getType();
-        // llvm::Value *boxed = emitter.getBuilder()->CreateCall(g.funcs.boxCLFunction, embedConstantPtr(cl,
-        // boxCLFuncArgType));
-        // CompilerVariable *func = new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
         return func;
     }
 
@@ -1920,7 +1946,8 @@ private:
     }
 
     bool allowableFakeEndingSymbol(const std::string& name) {
-        return startswith(name, "!is_defined") || name == PASSED_CLOSURE_NAME || name == CREATED_CLOSURE_NAME;
+        return startswith(name, "!is_defined") || name == PASSED_CLOSURE_NAME || name == CREATED_CLOSURE_NAME
+               || name == PASSED_GENERATOR_NAME;
     }
 
     void endBlock(State new_state) {
@@ -2027,7 +2054,6 @@ public:
             }
             st->clear();
             symbol_table.clear();
-
             return EndingState(st, phi_st, curblock);
         } else if (myblock->successors.size() > 1) {
             // Since there are no critical edges, all successors come directly from this node,
@@ -2058,6 +2084,8 @@ public:
                     ending_type = getPassedClosureType();
                 } else if (it->first == CREATED_CLOSURE_NAME) {
                     ending_type = getCreatedClosureType();
+                } else if (it->first == PASSED_GENERATOR_NAME) {
+                    ending_type = GENERATOR;
                 } else {
                     ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                 }
@@ -2110,6 +2138,7 @@ public:
 
         llvm::Value* passed_closure = NULL;
         llvm::Function::arg_iterator AI = irstate->getLLVMFunction()->arg_begin();
+
         if (scope_info->takesClosure()) {
             passed_closure = AI;
             _setFake(PASSED_CLOSURE_NAME, new ConcreteCompilerVariable(getPassedClosureType(), AI, true));
@@ -2122,6 +2151,11 @@ public:
 
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall(g.funcs.createClosure, passed_closure);
             _setFake(CREATED_CLOSURE_NAME, new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true));
+        }
+
+        if (scope_info->takesGenerator()) {
+            _setFake(PASSED_GENERATOR_NAME, new ConcreteCompilerVariable(GENERATOR, AI, true));
+            ++AI;
         }
 
 

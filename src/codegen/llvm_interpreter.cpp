@@ -263,7 +263,8 @@ const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
     }
 }
 
-Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
+                       Box** args) {
     assert(f);
 
 #ifdef TIME_INTERPRETS
@@ -287,20 +288,24 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* arg1, Bo
 
     int arg_num = -1;
     int closure_indicator = closure ? 1 : 0;
+    int generator_indicator = generator ? 1 : 0;
+    int arg_offset = closure_indicator + generator_indicator;
     for (llvm::Argument& arg : f->args()) {
         arg_num++;
 
         if (arg_num == 0 && closure)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(closure)));
-        else if (arg_num == 0 + closure_indicator)
+        else if ((arg_num == 0 || (arg_num == 1 && closure)) && generator)
+            symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(generator)));
+        else if (arg_num == 0 + arg_offset)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg1)));
-        else if (arg_num == 1 + closure_indicator)
+        else if (arg_num == 1 + arg_offset)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg2)));
-        else if (arg_num == 2 + closure_indicator)
+        else if (arg_num == 2 + arg_offset)
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val(arg3)));
         else {
-            assert(arg_num == 3 + closure_indicator);
-            assert(f->getArgumentList().size() == 4 + closure_indicator);
+            assert(arg_num == 3 + arg_offset);
+            assert(f->getArgumentList().size() == 4 + arg_offset);
             assert(f->getArgumentList().back().getType() == g.llvm_value_type_ptr->getPointerTo());
             symbols.insert(std::make_pair(static_cast<llvm::Value*>(&arg), Val((int64_t)args)));
             // printf("loading %%4 with %p\n", (void*)args);

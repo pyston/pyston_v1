@@ -44,11 +44,23 @@ BoxIterator& BoxIterator::operator++() {
     static std::string next_str("next");
 
     Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    if (nonzero(hasnext)) {
-        value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (hasnext) {
+        if (nonzero(hasnext)) {
+            value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        } else {
+            iter = nullptr;
+            value = nullptr;
+        }
     } else {
-        iter = nullptr;
-        value = nullptr;
+        try {
+            value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        } catch (Box* e) {
+            if ((e == StopIteration) || isSubclass(e->cls, StopIteration)) {
+                iter = nullptr;
+                value = nullptr;
+            } else
+                throw;
+        }
     }
     return *this;
 }
@@ -65,7 +77,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(&function_flavor, function_cls), f(f), closure(NULL), ndefaults(0), defaults(NULL) {
+    : Box(&function_flavor, function_cls), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -80,8 +92,10 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
     assert(f->num_defaults == ndefaults);
 }
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure)
-    : Box(&function_flavor, function_cls), f(f), closure(closure), ndefaults(0), defaults(NULL) {
+extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
+                                        bool isGenerator)
+    : Box(&function_flavor, function_cls), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0),
+      defaults(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -139,11 +153,12 @@ std::string BoxedModule::name() {
     }
 }
 
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, std::initializer_list<Box*> defaults) {
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
+                              std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
 
-    return new BoxedFunction(f, defaults, closure);
+    return new BoxedFunction(f, defaults, closure, isGenerator);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -265,10 +280,37 @@ extern "C" void closureGCHandler(GCVisitor* v, void* p) {
         v->visit(c->parent);
 }
 
+extern "C" void generatorGCHandler(GCVisitor* v, void* p) {
+    boxGCHandler(v, p);
+
+    BoxedGenerator* g = (BoxedGenerator*)p;
+
+    v->visit(g->function);
+    int num_args = g->function->f->num_args;
+    if (num_args >= 1)
+        v->visit(g->arg1);
+    if (num_args >= 2)
+        v->visit(g->arg2);
+    if (num_args >= 3)
+        v->visit(g->arg3);
+    if (num_args > 3)
+        v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
+                               reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
+    if (g->returnValue)
+        v->visit(g->returnValue);
+    if (g->exception)
+        v->visit(g->exception);
+
+    v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
+    v->visitPotentialRange((void**)&g->returnContext,
+                           ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
+    v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
+}
+
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls;
+    *closure_cls, *generator_cls;
 
 const ObjectFlavor object_flavor(&boxGCHandler, NULL);
 const ObjectFlavor type_flavor(&typeGCHandler, NULL);
@@ -287,6 +329,7 @@ const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
 const ObjectFlavor file_flavor(&boxGCHandler, NULL);
 const ObjectFlavor member_flavor(&boxGCHandler, NULL);
 const ObjectFlavor closure_flavor(&closureGCHandler, NULL);
+const ObjectFlavor generator_flavor(&generatorGCHandler, NULL);
 
 const AllocationKind untracked_kind(NULL, NULL);
 const AllocationKind hc_kind(&hcGCHandler, NULL);
@@ -585,6 +628,7 @@ void setupRuntime() {
     setupSet();
     setupTuple();
     setupFile();
+    setupGenerator();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));

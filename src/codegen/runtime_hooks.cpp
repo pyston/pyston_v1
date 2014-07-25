@@ -34,6 +34,7 @@
 #include "core/types.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
@@ -141,6 +142,9 @@ void initGlobalFuncs(GlobalState& g) {
     g.llvm_closure_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedClosure")->getPointerTo();
     assert(g.llvm_closure_type_ptr);
 
+    g.llvm_generator_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedGenerator")->getPointerTo();
+    assert(g.llvm_generator_type_ptr);
+
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
     g.funcs.printf = addFunc((void*)printf, g.i8_ptr, true);
@@ -166,6 +170,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createDict);
     GET(createSlice);
     GET(createClosure);
+    GET(createGenerator);
 
     GET(getattr);
     GET(setattr);
@@ -188,6 +193,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(importStar);
     GET(repr);
     GET(isinstance);
+    GET(yield);
 
     GET(checkUnpackingLength);
     GET(raiseAttributeError);

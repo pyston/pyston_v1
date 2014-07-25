@@ -113,7 +113,6 @@ void raiseRaw(Box* exc_obj) {
     // unwindExc(exc_obj);
 }
 
-void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) {
     auto entries = getTracebackEntries();
     last_tb = std::move(entries);

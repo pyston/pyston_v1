@@ -24,12 +24,16 @@ class AST_Module;
 
 class ScopeInfo {
 public:
+    ScopeInfo() : isGeneratorValue(false) {}
     virtual ~ScopeInfo() {}
     virtual ScopeInfo* getParent() = 0;
 
     virtual bool createsClosure() = 0;
     virtual bool takesClosure() = 0;
     virtual bool passesThroughClosure() = 0;
+
+    virtual bool takesGenerator() { return isGeneratorValue; }
+    virtual void setTakesGenerator(bool b = true) { isGeneratorValue = b; }
 
     virtual bool refersToGlobal(const std::string& name) = 0;
     virtual bool refersToClosure(const std::string name) = 0;
@@ -39,6 +43,9 @@ public:
     // the metaclass constructor.
     // An error to call this on a non-classdef node.
     virtual const std::unordered_set<std::string>& getClassDefLocalNames() = 0;
+
+protected:
+    bool isGeneratorValue;
 };
 
 class ScopingAnalysis {
@@ -59,6 +66,8 @@ public:
 };
 
 ScopingAnalysis* runScopingAnalysis(AST_Module* m);
+
+bool containsYield(AST* ast);
 }
 
 #endif

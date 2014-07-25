@@ -589,16 +589,16 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     return new ConcreteCompilerVariable(BOOL, rtn_val, true);
 }
 
-CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure,
+CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure, bool isGenerator,
                                const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
     llvm::Value* closure_v;
-    ConcreteCompilerVariable* converted = NULL;
+    ConcreteCompilerVariable* convertedClosure = NULL;
     if (closure) {
-        converted = closure->makeConverted(emitter, closure->getConcreteType());
-        closure_v = converted->getValue();
+        convertedClosure = closure->makeConverted(emitter, closure->getConcreteType());
+        closure_v = convertedClosure->getValue();
     } else {
         closure_v = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
     }
@@ -618,12 +618,15 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
         scratch = embedConstantPtr(nullptr, g.llvm_value_type_ptr_ptr);
     }
 
-    llvm::Value* boxed = emitter.getBuilder()->CreateCall(
-        g.funcs.boxCLFunction, std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v,
-                                                          scratch, getConstantInt(defaults.size(), g.i64) });
+    llvm::Value* isGenerator_v = llvm::ConstantInt::get(g.i1, isGenerator, false);
 
-    if (converted)
-        converted->decvref(emitter);
+    llvm::Value* boxed = emitter.getBuilder()->CreateCall(
+        g.funcs.boxCLFunction,
+        std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, isGenerator_v, scratch,
+                                   getConstantInt(defaults.size(), g.i64) });
+
+    if (convertedClosure)
+        convertedClosure->decvref(emitter);
     return new ConcreteCompilerVariable(typeFromClass(function_cls), boxed, true);
 }
 
@@ -1506,6 +1509,23 @@ public:
 
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;
+
+class GeneratorType : public ConcreteCompilerType {
+public:
+    llvm::Type* llvmType() { return g.llvm_generator_type_ptr; }
+    std::string debugName() { return "generator"; }
+
+    virtual ConcreteCompilerType* getConcreteType() { return this; }
+    virtual ConcreteCompilerType* getBoxType() { return GENERATOR; }
+
+    virtual void drop(IREmitter& emitter, VAR* var) {
+        // pass
+    }
+    virtual void grab(IREmitter& emitter, VAR* var) {
+        // pass
+    }
+} _GENERATOR;
+ConcreteCompilerType* GENERATOR = &_GENERATOR;
 
 class StrConstantType : public ValuedCompilerType<std::string*> {
 public:

@@ -797,6 +797,18 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::With;
 };
 
+class AST_Yield : public AST_expr {
+public:
+    AST_expr* value;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Yield() : AST_expr(AST_TYPE::Yield) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
+};
+
 
 // AST pseudo-nodes that will get added during CFG-construction.  These don't exist in the input AST, but adding them in
 // lets us avoid creating a completely new IR for this phase
@@ -954,6 +966,7 @@ public:
     virtual bool visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
 
     virtual bool visit_branch(AST_Branch* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
@@ -1017,6 +1030,7 @@ public:
     virtual bool visit_unreachable(AST_Unreachable* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
+    virtual bool visit_yield(AST_Yield* node) { return false; }
 
     virtual bool visit_branch(AST_Branch* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return false; }
@@ -1050,6 +1064,7 @@ public:
     virtual void* visit_subscript(AST_Subscript* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
 };
 
 class StmtVisitor {
@@ -1149,6 +1164,7 @@ public:
     virtual bool visit_unreachable(AST_Unreachable* node);
     virtual bool visit_while(AST_While* node);
     virtual bool visit_with(AST_With* node);
+    virtual bool visit_yield(AST_Yield* node);
 
     virtual bool visit_branch(AST_Branch* node);
     virtual bool visit_jump(AST_Jump* node);

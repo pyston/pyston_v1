@@ -41,6 +41,7 @@
 #include "runtime/capi.h"
 #include "runtime/float.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/generator.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -1755,7 +1756,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     BoxedClosure* closure = func->closure;
 
-    if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs)
+    if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs || func->isGenerator)
         rewrite_args = NULL;
 
     // These could be handled:
@@ -1988,28 +1989,41 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         getArg(i, oarg1, oarg2, oarg3, oargs) = default_obj;
     }
 
+    // special handling for generators:
+    // the call to function containing a yield should just create a new generator object.
+    if (func->isGenerator) {
+        return createGenerator(func, oarg1, oarg2, oarg3, oargs);
+    }
 
+    return callCLFunc(f, rewrite_args, num_output_args, closure, NULL, oarg1, oarg2, oarg3, oargs);
+}
 
+Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
+                BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return interpretFunction(chosen_cf->func, num_output_args, func->closure, oarg1, oarg2, oarg3, oargs);
-    } else {
-        if (rewrite_args) {
-            rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
-
-            RewriterVar var = rewrite_args->rewriter->call((void*)chosen_cf->call);
-
-            rewrite_args->out_rtn = var;
-            rewrite_args->out_success = true;
-        }
-
-        if (closure)
-            return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
-        else
-            return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+        return interpretFunction(chosen_cf->func, num_output_args, closure, generator, oarg1, oarg2, oarg3, oargs);
     }
+
+    if (rewrite_args) {
+        rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
+
+        RewriterVar var = rewrite_args->rewriter->call((void*)chosen_cf->call);
+
+        rewrite_args->out_rtn = var;
+        rewrite_args->out_success = true;
+    }
+
+    if (closure && generator)
+        return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
+    else if (closure)
+        return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
+    else if (generator)
+        return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
+    else
+        return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
 }
 
 

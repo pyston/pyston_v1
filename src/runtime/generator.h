@@ -12,24 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_CODEGEN_LLVMINTERPRETER_H
-#define PYSTON_CODEGEN_LLVMINTERPRETER_H
+#ifndef PYSTON_RUNTIME_GENERATOR_H
+#define PYSTON_RUNTIME_GENERATOR_H
 
-namespace llvm {
-class Function;
-}
+#include "core/types.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
-class Box;
-class GCVisitor;
-class LineInfo;
+extern BoxedClass* generator_cls;
+extern "C" const ObjectFlavor generator_flavor;
 
-Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
-                       Box** args);
+void setupGenerator();
 
-void gatherInterpreterRoots(GCVisitor* visitor);
-const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
+extern "C" Box* yield(BoxedGenerator* obj, Box* value);
+extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 }
 
 #endif
