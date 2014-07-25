@@ -518,6 +518,11 @@ AST_Num* read_num(BufferedReader* reader) {
 
     if (rtn->num_type == AST_Num::INT) {
         rtn->n_int = reader->readULL(); // automatic conversion to signed
+    } else if (rtn->num_type == AST_Num::LONG) {
+        // Don't really support longs for now...
+        printf("Warning: converting long literal to int\n");
+        rtn->num_type = AST_Num::INT;
+        rtn->n_int = reader->readULL(); // automatic conversion to signed
     } else if (rtn->num_type == AST_Num::FLOAT) {
         rtn->n_float = reader->readDouble();
     } else {
@@ -591,9 +596,21 @@ AST_Slice* read_slice(BufferedReader* reader) {
 AST_Str* read_str(BufferedReader* reader) {
     AST_Str* rtn = new AST_Str();
 
+    rtn->str_type = (AST_Str::StrType)reader->readByte();
+
     rtn->col_offset = readColOffset(reader);
     rtn->lineno = reader->readULL();
-    rtn->s = readString(reader);
+
+    if (rtn->str_type == AST_Str::STR) {
+        rtn->s = readString(reader);
+    } else if (rtn->str_type == AST_Str::UNICODE) {
+        // Don't really support unicode for now...
+        printf("Warning: converting unicode literal to str\n");
+        rtn->str_type = AST_Str::STR;
+        rtn->s = readString(reader);
+    } else {
+        RELEASE_ASSERT(0, "%d", rtn->str_type);
+    }
 
     return rtn;
 }
@@ -879,7 +896,7 @@ AST_Module* parse(const char* fn) {
     return ast_cast<AST_Module>(rtn);
 }
 
-#define MAGIC_STRING "a\nch"
+#define MAGIC_STRING "a\nci"
 #define MAGIC_STRING_LENGTH 4
 #define CHECKSUM_LENGTH 4
 

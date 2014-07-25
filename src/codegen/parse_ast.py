@@ -115,11 +115,19 @@ def convert(n, f):
             f.write('\x10')
         elif isinstance(n.n, long):
             assert (-1L<<60) < n.n < (1L<<60)
-            f.write('\x10')
+            f.write('\x30')
         elif isinstance(n.n, float):
             f.write('\x20')
         else:
             raise Exception(type(n.n))
+
+    if isinstance(n, _ast.Str):
+        if isinstance(n.s, str):
+            f.write('\x10')
+        elif isinstance(n.s, unicode):
+            f.write('\x20')
+        else:
+            raise Exception(type(n.s))
 
     # print >>sys.stderr, n, sorted(n.__dict__.items())
     for k, v in sorted(n.__dict__.items()):
@@ -144,8 +152,6 @@ def convert(n, f):
         elif isinstance(v, str):
             _print_str(v, f)
         elif isinstance(v, unicode):
-            print >>sys.stderr, "Warning, converting unicode string to str!"
-            sys.stderr.flush()
             _print_str(v.encode("ascii"), f)
         elif isinstance(v, bool):
             f.write(struct.pack("B", v))
@@ -153,7 +159,6 @@ def convert(n, f):
             f.write(struct.pack(">q", v))
         elif isinstance(v, long):
             assert (-1L<<60) < v < (1L<<60)
-            print >>sys.stderr, "Warning, converting long to int!"
             f.write(struct.pack(">q", v))
         elif isinstance(v, float):
             f.write(struct.pack(">d", v))

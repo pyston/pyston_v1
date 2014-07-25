@@ -407,6 +407,8 @@ private:
                 return INT;
             case AST_Num::FLOAT:
                 return FLOAT;
+            case AST_Num::LONG:
+                RELEASE_ASSERT(0, "");
         }
         abort();
     }

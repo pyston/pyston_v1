@@ -602,6 +602,7 @@ public:
         // These values must correspond to the values in parse_ast.py
         INT = 0x10,
         FLOAT = 0x20,
+        LONG = 0x30,
     } num_type;
 
     union {
@@ -695,14 +696,19 @@ public:
 
 class AST_Str : public AST_expr {
 public:
+    enum StrType {
+        STR = 0x10,
+        UNICODE = 0x20,
+    } str_type;
+
     std::string s;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Str() : AST_expr(AST_TYPE::Str) {}
-    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), s(s) {}
-    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), s(std::move(s)) {}
+    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(s) {}
+    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };
