@@ -101,6 +101,13 @@ apt-get install zsh
 sudo apt-get install readline
 ```
 
+### gmp
+`gmp` is a multiprecision library used for implementing Python longs.  It's also a dependency of gcc, so if you installed that you should already have it:
+
+```
+sudo apt-get install libgmp3-dev
+```
+
 # Optional dependencies
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:

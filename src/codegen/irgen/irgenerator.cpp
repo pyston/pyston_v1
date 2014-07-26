@@ -737,7 +737,7 @@ private:
         else if (node->num_type == AST_Num::FLOAT)
             return makeFloat(node->n_float);
         else
-            RELEASE_ASSERT(0, "");
+            return makeLong(emitter, node->n_long);
     }
 
     CompilerVariable* evalRepr(AST_Repr* node, ExcInfo exc_info) {

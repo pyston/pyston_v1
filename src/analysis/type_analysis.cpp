@@ -408,7 +408,7 @@ private:
             case AST_Num::FLOAT:
                 return FLOAT;
             case AST_Num::LONG:
-                RELEASE_ASSERT(0, "");
+                return LONG;
         }
         abort();
     }

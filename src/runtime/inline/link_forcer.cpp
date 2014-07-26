@@ -23,6 +23,7 @@
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
 #include "runtime/list.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -60,6 +61,7 @@ void force() {
     FORCE(createUserClass);
     FORCE(createClosure);
     FORCE(createGenerator);
+    FORCE(createLong);
 
     FORCE(getattr);
     FORCE(setattr);

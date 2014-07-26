@@ -1127,6 +1127,12 @@ ConcreteCompilerVariable* makeFloat(double d) {
     return new ConcreteCompilerVariable(FLOAT, llvm::ConstantFP::get(g.double_, d), true);
 }
 
+ConcreteCompilerVariable* makeLong(IREmitter& emitter, std::string& n_long) {
+    llvm::Value* v
+        = emitter.getBuilder()->CreateCall(g.funcs.createLong, embedConstantPtr(&n_long, g.llvm_str_type_ptr));
+    return new ConcreteCompilerVariable(LONG, v, true);
+}
+
 class KnownClassobjType : public ValuedCompilerType<BoxedClass*> {
 private:
     BoxedClass* cls;
@@ -1916,6 +1922,6 @@ ConcreteCompilerVariable* undefVariable() {
 }
 
 
-ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET;
+ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET, *LONG;
 
 } // namespace pyston

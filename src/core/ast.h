@@ -609,6 +609,7 @@ public:
         int64_t n_int;
         double n_float;
     };
+    std::string n_long;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);

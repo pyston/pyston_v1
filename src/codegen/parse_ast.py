@@ -114,7 +114,6 @@ def convert(n, f):
         if isinstance(n.n, int):
             f.write('\x10')
         elif isinstance(n.n, long):
-            assert (-1L<<60) < n.n < (1L<<60)
             f.write('\x30')
         elif isinstance(n.n, float):
             f.write('\x20')
@@ -158,8 +157,7 @@ def convert(n, f):
         elif isinstance(v, int):
             f.write(struct.pack(">q", v))
         elif isinstance(v, long):
-            assert (-1L<<60) < v < (1L<<60)
-            f.write(struct.pack(">q", v))
+            _print_str(str(v), f)
         elif isinstance(v, float):
             f.write(struct.pack(">d", v))
         elif v is None or isinstance(v, _ast.AST):

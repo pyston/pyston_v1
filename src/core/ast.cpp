@@ -1376,6 +1376,8 @@ bool PrintVisitor::visit_name(AST_Name* node) {
 bool PrintVisitor::visit_num(AST_Num* node) {
     if (node->num_type == AST_Num::INT) {
         printf("%ld", node->n_int);
+    } else if (node->num_type == AST_Num::LONG) {
+        printf("%sL", node->n_long.c_str());
     } else if (node->num_type == AST_Num::FLOAT) {
         printf("%f", node->n_float);
     } else {

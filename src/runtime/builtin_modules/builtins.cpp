@@ -22,11 +22,13 @@
 #include "gc/collector.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/inline/xrange.h"
+#include "runtime/list.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
-#include "runtime/list.h"
+
 namespace pyston {
 
 extern "C" Box* trap() {
@@ -536,6 +538,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("int", int_cls);
+    builtins_module->giveAttr("long", long_cls);
     builtins_module->giveAttr("float", float_cls);
     builtins_module->giveAttr("list", list_cls);
     builtins_module->giveAttr("slice", slice_cls);

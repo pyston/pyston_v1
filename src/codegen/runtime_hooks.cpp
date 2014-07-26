@@ -37,6 +37,7 @@
 #include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -171,6 +172,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createSlice);
     GET(createClosure);
     GET(createGenerator);
+    GET(createLong);
 
     GET(getattr);
     GET(setattr);

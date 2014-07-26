@@ -28,6 +28,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/gc_runtime.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 
@@ -562,6 +563,7 @@ void setupRuntime() {
     // We could have a multi-stage setup process, but that seems overkill for now.
     bool_cls = new BoxedClass(object_cls, 0, sizeof(BoxedBool), false);
     int_cls = new BoxedClass(object_cls, 0, sizeof(BoxedInt), false);
+    long_cls = new BoxedClass(object_cls, 0, sizeof(BoxedLong), false);
     float_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFloat), false);
     function_cls = new BoxedClass(object_cls, offsetof(BoxedFunction, attrs), sizeof(BoxedFunction), false);
     instancemethod_cls = new BoxedClass(object_cls, 0, sizeof(BoxedInstanceMethod), false);
@@ -586,6 +588,7 @@ void setupRuntime() {
     SET = typeFromClass(set_cls);
     FROZENSET = typeFromClass(frozenset_cls);
     BOXED_TUPLE = typeFromClass(tuple_cls);
+    LONG = typeFromClass(long_cls);
 
     object_cls->giveAttr("__name__", boxStrConstant("object"));
     object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
@@ -621,6 +624,7 @@ void setupRuntime() {
 
     setupBool();
     setupInt();
+    setupLong();
     setupFloat();
     setupStr();
     setupList();

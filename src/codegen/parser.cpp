@@ -519,10 +519,7 @@ AST_Num* read_num(BufferedReader* reader) {
     if (rtn->num_type == AST_Num::INT) {
         rtn->n_int = reader->readULL(); // automatic conversion to signed
     } else if (rtn->num_type == AST_Num::LONG) {
-        // Don't really support longs for now...
-        printf("Warning: converting long literal to int\n");
-        rtn->num_type = AST_Num::INT;
-        rtn->n_int = reader->readULL(); // automatic conversion to signed
+        rtn->n_long = readString(reader);
     } else if (rtn->num_type == AST_Num::FLOAT) {
         rtn->n_float = reader->readDouble();
     } else {
