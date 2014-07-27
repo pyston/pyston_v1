@@ -54,6 +54,11 @@ struct ArgPassSpec {
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
     uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
+
+    void dump() {
+        printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
+               has_kwargs ? "true" : "false", num_keywords, num_args);
+    }
 };
 static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
 
@@ -233,7 +238,7 @@ public:
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
-class CallRewriteArgs;
+class CallRewriteArgs2;
 class CLFunction {
 public:
     int num_args;
@@ -249,7 +254,7 @@ public:
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
-    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs2*, ArgPassSpec, Box*, Box*, Box*, Box**,
                                      const std::vector<const std::string*>*);
     InternalCallable internal_callable = NULL;
 
@@ -372,7 +377,6 @@ private:
 
 
 class SetattrRewriteArgs2;
-class GetattrRewriteArgs;
 class GetattrRewriteArgs2;
 class DelattrRewriteArgs2;
 
@@ -404,8 +408,8 @@ public:
         this->setattr(attr, val, NULL);
     }
 
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-    Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
+    Box* getattr(const std::string& attr, GetattrRewriteArgs2* rewrite_args2);
+    Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
     void delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args);
 };
 

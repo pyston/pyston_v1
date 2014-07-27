@@ -36,7 +36,7 @@ public:
     enum LocationType : uint8_t {
         Register,
         XMMRegister,
-        // Stack,
+        Stack,
         Scratch, // stack location, relative to the scratch start
 
         // For representing constants that fit in 32-bits, that can be encoded as immediates
@@ -152,13 +152,18 @@ public:
 #endif
 
     void setDoneUsing();
+    bool isDoneUsing();
+    void ensureDoneUsing();
 
-    // RewriterVarUsage2 addUse() { return var->addUse(); }
     RewriterVarUsage2 addUse();
 
+    void addGuard(uint64_t val);
+    void addGuardNotEq(uint64_t val);
     void addAttrGuard(int offset, uint64_t val);
     RewriterVarUsage2 getAttr(int offset, KillFlag kill, Location loc = Location::any());
     void setAttr(int offset, RewriterVarUsage2 other);
+    RewriterVarUsage2 cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage2 other, Location loc = Location::any());
+    RewriterVarUsage2 toBool(KillFlag kill, Location loc = Location::any());
 
     friend class Rewriter2;
 };
@@ -173,6 +178,10 @@ private:
 
     std::unordered_set<Location> locations;
     bool isInLocation(Location l);
+
+    // Indicates that this value is a pointer to a fixed-size range in the scratch space.
+    // This is a vector of variable usages that keep the range allocated.
+    std::vector<RewriterVarUsage2> scratch_range;
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
@@ -189,7 +198,7 @@ public:
     void incUse();
     void decUse();
 
-    RewriterVar2(Rewriter2* rewriter, Location location) : rewriter(rewriter), num_uses(1) {
+    RewriterVar2(Rewriter2* rewriter, Location location) : rewriter(rewriter), num_uses(0) {
         assert(rewriter);
         locations.insert(location);
     }
@@ -239,6 +248,11 @@ private:
 
     void finishAssembly(int continue_offset) override;
 
+    std::pair<RewriterVarUsage2, int> _allocate(int n);
+
+    int ndecisions;
+    uint64_t decision_path;
+
 public:
     // This should be called exactly once for each argument
     RewriterVarUsage2 getArg(int argnum);
@@ -255,6 +269,10 @@ public:
     RewriterVarUsage2 call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage2> args);
     RewriterVarUsage2 call(bool can_call_into_python, void* func_addr, RewriterVarUsage2 arg0);
     RewriterVarUsage2 call(bool can_call_into_python, void* func_addr, RewriterVarUsage2 arg0, RewriterVarUsage2 arg1);
+    RewriterVarUsage2 allocate(int n);
+    RewriterVarUsage2 allocateAndCopy(RewriterVarUsage2 array, int n);
+    RewriterVarUsage2 allocateAndCopyPlus1(RewriterVarUsage2 first_elem, RewriterVarUsage2 rest, int n_rest);
+    void deallocateStack(int nbytes);
 
     void commit();
     void commitReturning(RewriterVarUsage2 rtn);
@@ -262,6 +280,8 @@ public:
     void addDependenceOn(ICInvalidator&);
 
     static Rewriter2* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
+
+    void addDecision(int way);
 
     friend class RewriterVar2;
     friend class RewriterVarUsage2;
