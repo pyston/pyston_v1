@@ -15,6 +15,16 @@ print
 
 
 
+@print_when_eval(lambda f: print_when_eval((f, 2), ("calling outer decorator", f)), "evaluating outer decorator")
+@print_when_eval(lambda f: print_when_eval((f, 1), ("calling inner decorator", f)), "evaluating inner decorator")
+class C(print_when_eval(object, "evaluating base")):
+    print "in classdef"
+    pass
+print
+print C
+print
+
+
 
 
 def print_args(f):

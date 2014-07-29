@@ -1290,7 +1290,11 @@ private:
         }
 
         RELEASE_ASSERT(node->bases.size() == 1, "");
-        RELEASE_ASSERT(node->decorator_list.size() == 0, "");
+
+        std::vector<CompilerVariable*> decorators;
+        for (auto d : node->decorator_list) {
+            decorators.push_back(evalExpr(d, exc_info));
+        }
 
         CompilerVariable* base = evalExpr(node->bases[0], exc_info);
         ConcreteCompilerVariable* converted_base = base->makeConverted(emitter, base->getBoxType());
@@ -1324,7 +1328,13 @@ private:
                                   converted_base->getValue(), converted_attr_dict->getValue()).getInstruction();
 
         // Note: createuserClass is free to manufacture non-class objects
-        auto cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
+        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
+
+        for (int i = decorators.size() - 1; i >= 0; i--) {
+            cls = decorators[i]->call(emitter, getOpInfoForNode(node, exc_info), ArgPassSpec(1), { cls }, NULL);
+            decorators[i]->decvref(emitter);
+        }
+
         _doSet(node->name, cls, exc_info);
         cls->decvref(emitter);
     }
@@ -1503,6 +1513,7 @@ private:
 
         for (int i = decorators.size() - 1; i >= 0; i--) {
             func = decorators[i]->call(emitter, getOpInfoForNode(node, exc_info), ArgPassSpec(1), { func }, NULL);
+            decorators[i]->decvref(emitter);
         }
 
         _doSet(node->name, func, exc_info);

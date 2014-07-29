@@ -470,6 +470,14 @@ private:
     }
 
     virtual void visit_classdef(AST_ClassDef* node) {
+        for (auto d : node->decorator_list) {
+            getType(d);
+        }
+
+        for (auto b : node->bases) {
+            getType(b);
+        }
+
         // TODO should we speculate that classdefs will generally return a class?
         // CompilerType* t = typeFromClass(type_cls);
         CompilerType* t = UNKNOWN;
@@ -501,7 +509,17 @@ private:
         }
     }
 
-    virtual void visit_functiondef(AST_FunctionDef* node) { _doSet(node->name, typeFromClass(function_cls)); }
+    virtual void visit_functiondef(AST_FunctionDef* node) {
+        for (auto d : node->decorator_list) {
+            getType(d);
+        }
+
+        for (auto d : node->args->defaults) {
+            getType(d);
+        }
+
+        _doSet(node->name, typeFromClass(function_cls));
+    }
 
     virtual void visit_global(AST_Global* node) {}
 
