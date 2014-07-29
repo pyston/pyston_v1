@@ -381,13 +381,13 @@ Box* strIsAlpha(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
     if (str.empty())
         return False;
 
-    for (const auto& i : str)
-        if (!std::isalpha(str[i]))
+    for (const auto& i : str) {
+        if (!std::isalpha(i))
             return False;
+    }
 
     return True;
 }
@@ -396,13 +396,13 @@ Box* strIsDigit(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
     if (str.empty())
         return False;
 
-    for (const auto& i : str)
-        if (!std::isdigit(str[i]))
+    for (const auto& i : str) {
+        if (!std::isdigit(i))
             return False;
+    }
 
     return True;
 }
@@ -411,13 +411,13 @@ Box* strIsAlnum(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
     if (str.empty())
         return False;
 
-    for (const auto& i : str)
-        if (!std::isalnum(str[i]))
+    for (const auto& i : str) {
+        if (!std::isalnum(i))
             return False;
+    }
 
     return True;
 }
@@ -427,28 +427,44 @@ Box* strIsLower(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
+    bool lowered = false;
+
     if (str.empty())
         return False;
 
-    for (const auto& i : str)
-        if (!std::islower(i))
+    for (const auto& i : str) {
+        if (std::isspace(i) || std::isdigit(i)) {
+            continue;
+        } else if (!std::islower(i)) {
             return False;
+        } else {
+            lowered = true;
+        }
+    }
 
-    return True;
+    return boxBool(lowered);
 }
 
 Box* strIsUpper(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
+    bool uppered = false;
+
     if (str.empty())
         return False;
 
-    for (const auto& i : str)
-        if (!std::isupper(str[i]))
+    for (const auto& i : str) {
+        if (std::isspace(i) || std::isdigit(i)) {
+            continue;
+        } else if (!std::isupper(i)) {
             return False;
+        } else {
+            uppered = true;
+        }
+    }
+
+    return boxBool(uppered);
 
     return True;
 }
@@ -457,13 +473,13 @@ Box* strIsSpace(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
     if (str.empty())
         return False;
 
-    for (const auto& i : str)
-        if (!std::isspace(str[i]))
+    for (const auto& i : str) {
+        if (!std::isspace(i))
             return False;
+    }
 
     return True;
 }
@@ -472,45 +488,36 @@ Box* strIsTitle(BoxedString* self) {
     assert(self->cls == str_cls);
 
     std::string str(self->s);
-    std::string::size_type i;
 
     if (str.empty())
         return False;
     if (str.size() == 1)
         return boxBool(std::isupper(str[0]));
 
-    bool cased = false, previous_is_cased = false;
+    bool cased = false, start_of_word = false;
 
     for (const auto& i : str) {
-        if (std::isupper(str[i])) {
-            if (previous_is_cased) {
+        if (std::isupper(i)) {
+            if (start_of_word) {
                 return False;
             }
 
-            previous_is_cased = true;
+            start_of_word = true;
             cased = true;
-        } else if (std::islower(str[i])) {
-            if (!previous_is_cased) {
+        } else if (std::islower(i)) {
+            if (!start_of_word) {
                 return False;
             }
 
-            previous_is_cased = true;
+            start_of_word = true;
             cased = true;
 
         } else {
-            previous_is_cased = false;
+            start_of_word = false;
         }
     }
 
     return boxBool(cased);
-}
-
-Box* strLower(BoxedString* self) {
-    assert(self->cls == str_cls);
-
-    std::string lowered(self->s);
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), tolower);
-    return boxString(std::move(lowered));
 }
 
 Box* strJoin(BoxedString* self, Box* rhs) {
