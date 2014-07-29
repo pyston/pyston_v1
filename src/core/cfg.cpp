@@ -197,7 +197,8 @@ private:
             push_back(br);
 
             curblock = body_block;
-            push_back(makeAssign(c->target, makeCall(next_attr)));
+            push_back(makeAssign(nodeName(next_attr), makeCall(next_attr)));
+            push_back(makeAssign(c->target, makeName(nodeName(next_attr), AST_TYPE::Load)));
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = remapExpr(if_condition);
@@ -852,6 +853,23 @@ public:
         // Add an extra exc_dest trampoline to prevent critical edges:
         CFGBlock* exc_dest = cfg->addBlock();
 
+#ifndef NDEBUG
+        if (node->type == AST_TYPE::Assign) {
+            AST_Assign* asgn = ast_cast<AST_Assign>(node);
+            if (asgn->targets[0]->type == AST_TYPE::Name) {
+                AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
+                if (target->id[0] != '#') {
+                    if (asgn->value->type != AST_TYPE::Name || ast_cast<AST_Name>(asgn->value)->id[0] != '#') {
+                        fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
+                        print_ast(node);
+                        printf("\n");
+                        abort();
+                    }
+                }
+            }
+        }
+#endif
+
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
         invoke->exc_dest = exc_dest;
@@ -1009,6 +1027,9 @@ public:
         // Even if the target is a simple name, it can be complicated, because the
         // value can change the name.  For "x += f()", have to translate to
         // "y = x; z = f(); x = y =+ z"
+        //
+        // Finally, due to possibility of exceptions, we don't want to assign directly
+        // to the final target at the same time as evaluating the augbinop
 
         AST_expr* remapped_target;
         AST_expr* remapped_lhs;
@@ -1018,9 +1039,9 @@ public:
             case AST_TYPE::Name: {
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
-                push_back(makeAssign(nodeName(node), makeName(n->id, AST_TYPE::Load)));
+                push_back(makeAssign(nodeName(n), makeName(n->id, AST_TYPE::Load)));
                 remapped_target = n;
-                remapped_lhs = makeName(nodeName(node), AST_TYPE::Load);
+                remapped_lhs = makeName(nodeName(n), AST_TYPE::Load);
                 break;
             }
             case AST_TYPE::Subscript: {
@@ -1077,8 +1098,9 @@ public:
         binop->right = remapExpr(node->value);
         binop->col_offset = node->col_offset;
         binop->lineno = node->lineno;
-        AST_stmt* assign = makeAssign(remapped_target, binop);
-        push_back(assign);
+
+        push_back(makeAssign(nodeName(node), binop));
+        push_back(makeAssign(remapped_target, makeName(nodeName(node), AST_TYPE::Load)));
         return true;
     }
 
@@ -1391,7 +1413,8 @@ public:
         pushLoop(test_block, end_block);
 
         curblock = loop_block;
-        push_back(makeAssign(node->target, makeCall(next_attr)));
+        push_back(makeAssign(nodeName(next_attr), makeCall(next_attr)));
+        push_back(makeAssign(node->target, makeName(nodeName(next_attr), AST_TYPE::Load)));
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
