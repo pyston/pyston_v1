@@ -1849,8 +1849,11 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     Box* oarg1 = NULL, *oarg2 = NULL, *oarg3 = NULL;
     Box** oargs = NULL;
 
-    if (num_output_args > 3)
-        oargs = (Box**)alloca((num_output_args - 3) * sizeof(Box*));
+    if (num_output_args > 3) {
+        int size = (num_output_args - 3) * sizeof(Box*);
+        oargs = (Box**)alloca(size);
+        memset(&oargs[0], 0, size);
+    }
 
     ////
     // First, match up positional parameters to positional/varargs:
@@ -1867,7 +1870,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
     }
 
-    std::vector<bool> params_filled(argspec.num_args, false);
+    std::vector<bool> params_filled(num_output_args, false);
     for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {
         params_filled[i] = true;
     }
