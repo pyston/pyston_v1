@@ -1494,9 +1494,17 @@ private:
         if (state == PARTIAL)
             return;
 
-        assert(!node->decorator_list.size());
+        std::vector<CompilerVariable*> decorators;
+        for (auto d : node->decorator_list) {
+            decorators.push_back(evalExpr(d, exc_info));
+        }
 
         CompilerVariable* func = _createFunction(node, exc_info, node->args, node->body);
+
+        for (int i = decorators.size() - 1; i >= 0; i--) {
+            func = decorators[i]->call(emitter, getOpInfoForNode(node, exc_info), ArgPassSpec(1), { func }, NULL);
+        }
+
         _doSet(node->name, func, exc_info);
         func->decvref(emitter);
     }

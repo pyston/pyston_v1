@@ -92,7 +92,7 @@ extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
         raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
 
-    // It's possible for division to overflow:
+// It's possible for division to overflow:
 #if PYSTON_INT_MIN < -PYSTON_INT_MAX
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 
@@ -548,7 +548,7 @@ extern "C" Box* intPos(BoxedInt* v) {
 extern "C" Box* intNeg(BoxedInt* v) {
     assert(v->cls == int_cls);
 
-    // It's possible for this to overflow:
+// It's possible for this to overflow:
 #if PYSTON_INT_MIN < -PYSTON_INT_MAX
     static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
 

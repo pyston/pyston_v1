@@ -1195,7 +1195,13 @@ bool PrintVisitor::visit_for(AST_For* node) {
 }
 
 bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
-    assert(node->decorator_list.size() == 0);
+    for (auto d : node->decorator_list) {
+        printf("@");
+        d->accept(this);
+        printf("\n");
+        printIndent();
+    }
+
     printf("def %s(", node->name.c_str());
     node->args->accept(this);
     printf(")");
