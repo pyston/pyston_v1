@@ -19,6 +19,7 @@
 #include "gc/collector.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/inline/boxing.h"
+#include "runtime/int.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -93,6 +94,8 @@ void setupSys() {
 
     sys_module->giveAttr("hexversion", boxInt(0x01000000 * PYTHON_VERSION_MAJOR + 0x010000 * PYTHON_VERSION_MINOR
                                               + 0x0100 * PYTHON_VERSION_MICRO));
+
+    sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
 }
 
 void setupSysEnd() {

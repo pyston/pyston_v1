@@ -35,6 +35,15 @@ public:
 };
 
 extern "C" Box* createLong(const std::string* s);
+extern "C" BoxedLong* boxLong(int64_t n);
+
+Box* longNeg(BoxedLong* lhs);
+
+Box* longAdd(BoxedLong* lhs, Box* rhs);
+Box* longSub(BoxedLong* lhs, Box* rhs);
+Box* longMul(BoxedLong* lhs, Box* rhs);
+Box* longDiv(BoxedLong* lhs, Box* rhs);
+Box* longPow(BoxedLong* lhs, Box* rhs);
 }
 
 #endif

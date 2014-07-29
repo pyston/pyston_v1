@@ -15,21 +15,25 @@
 #ifndef PYSTON_RUNTIME_INT_H
 #define PYSTON_RUNTIME_INT_H
 
+#include <climits>
+
 #include "core/common.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-extern "C" i64 div_i64_i64(i64 lhs, i64 rhs) ALWAYSINLINE;
-extern "C" i64 div_i64_i64(i64 lhs, i64 rhs);
-extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) ALWAYSINLINE;
+// These should probably be defined wherever we define the object-representation functions:
+static_assert(sizeof(int64_t) == sizeof(long), "");
+#define PYSTON_INT_MIN LONG_MIN
+#define PYSTON_INT_MAX LONG_MAX
+
+extern "C" Box* div_i64_i64(i64 lhs, i64 rhs);
 extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs);
 
-extern "C" i64 add_i64_i64(i64 lhs, i64 rhs) ALWAYSINLINE;
-extern "C" i64 add_i64_i64(i64 lhs, i64 rhs);
-extern "C" i64 sub_i64_i64(i64 lhs, i64 rhs);
-extern "C" i64 pow_i64_i64(i64 lhs, i64 rhs);
-extern "C" i64 mul_i64_i64(i64 lhs, i64 rhs);
+extern "C" Box* add_i64_i64(i64 lhs, i64 rhs);
+extern "C" Box* sub_i64_i64(i64 lhs, i64 rhs);
+extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs);
+extern "C" Box* mul_i64_i64(i64 lhs, i64 rhs);
 extern "C" i1 eq_i64_i64(i64 lhs, i64 rhs);
 extern "C" i1 ne_i64_i64(i64 lhs, i64 rhs);
 extern "C" i1 lt_i64_i64(i64 lhs, i64 rhs);

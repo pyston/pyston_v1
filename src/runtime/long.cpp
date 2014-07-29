@@ -42,6 +42,12 @@ extern "C" Box* createLong(const std::string* s) {
     return rtn;
 }
 
+extern "C" BoxedLong* boxLong(int64_t n) {
+    BoxedLong* rtn = new BoxedLong(long_cls);
+    mpz_init_set_si(rtn->n, n);
+    return rtn;
+}
+
 extern "C" Box* longNew(Box* _cls, Box* val) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
@@ -99,6 +105,49 @@ Box* longStr(BoxedLong* v) {
     return rtn;
 }
 
+Box* longNeg(BoxedLong* v1) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    BoxedLong* r = new BoxedLong(long_cls);
+    mpz_init(r->n);
+    mpz_neg(r->n, v1->n);
+    return r;
+}
+
+Box* longAdd(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (!isSubclass(_v2->cls, long_cls))
+        return NotImplemented;
+
+    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+    BoxedLong* r = new BoxedLong(long_cls);
+    mpz_init(r->n);
+    mpz_add(r->n, v1->n, v2->n);
+    return r;
+}
+
+Box* longSub(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (!isSubclass(_v2->cls, long_cls))
+        return NotImplemented;
+
+    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+    BoxedLong* r = new BoxedLong(long_cls);
+    mpz_init(r->n);
+    mpz_sub(r->n, v1->n, v2->n);
+    return r;
+}
+
 Box* longMul(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'long' object but received a '%s'",
@@ -115,6 +164,46 @@ Box* longMul(BoxedLong* v1, Box* _v2) {
     return r;
 }
 
+Box* longDiv(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (!isSubclass(_v2->cls, long_cls))
+        return NotImplemented;
+
+    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+    if (mpz_cmp_si(v2->n, 0) == 0)
+        raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
+
+    BoxedLong* r = new BoxedLong(long_cls);
+    mpz_init(r->n);
+    // It looks like the 'f'-family of integer functions ("floor") do the Python-style rounding
+    mpz_fdiv_q(r->n, v1->n, v2->n);
+    return r;
+}
+
+Box* longPow(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (!isSubclass(_v2->cls, long_cls))
+        return NotImplemented;
+
+    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+    RELEASE_ASSERT(mpz_sgn(v2->n) >= 0, "");
+    RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
+    uint64_t n2 = mpz_get_ui(v2->n);
+
+    BoxedLong* r = new BoxedLong(long_cls);
+    mpz_init(r->n);
+    mpz_pow_ui(r->n, v1->n, n2);
+    return r;
+}
+
 void setupLong() {
     long_cls->giveAttr("__name__", boxStrConstant("long"));
 
@@ -122,6 +211,7 @@ void setupLong() {
                        new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
+    long_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)longDiv, UNKNOWN, 2)));
 
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));

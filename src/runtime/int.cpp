@@ -25,6 +25,7 @@
 #include "gc/collector.h"
 #include "runtime/gc_runtime.h"
 #include "runtime/inline/boxing.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -33,31 +34,85 @@ namespace pyston {
 
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
+// If we don't have fast overflow-checking builtins, provide some slow variants:
+#if !__has_builtin(__builtin_saddl_overflow)
+
+#ifdef __clang__
+#error "shouldn't be defining the slow versions of these for clang"
+#endif
+
+bool __builtin_saddl_overflow(i64 lhs, i64 rhs, i64* result) {
+    __int128 r = (__int128)lhs + (__int128)rhs;
+    if (r > (__int128)PYSTON_INT_MAX)
+        return true;
+    if (r < (__int128)PYSTON_INT_MIN)
+        return true;
+    *result = (i64)r;
+    return false;
+}
+bool __builtin_ssubl_overflow(i64 lhs, i64 rhs, i64* result) {
+    __int128 r = (__int128)lhs - (__int128)rhs;
+    if (r > (__int128)PYSTON_INT_MAX)
+        return true;
+    if (r < (__int128)PYSTON_INT_MIN)
+        return true;
+    *result = (i64)r;
+    return false;
+}
+bool __builtin_smull_overflow(i64 lhs, i64 rhs, i64* result) {
+    __int128 r = (__int128)lhs * (__int128)rhs;
+    if (r > (__int128)PYSTON_INT_MAX)
+        return true;
+    if (r < (__int128)PYSTON_INT_MIN)
+        return true;
+    *result = (i64)r;
+    return false;
+}
+
+#endif
+
 // Could add this to the others, but the inliner should be smart enough
 // that this isn't needed:
-extern "C" i64 add_i64_i64(i64 lhs, i64 rhs) {
-    return lhs + rhs;
+extern "C" Box* add_i64_i64(i64 lhs, i64 rhs) {
+    i64 result;
+    if (!__builtin_saddl_overflow(lhs, rhs, &result))
+        return boxInt(result);
+    return longAdd(boxLong(lhs), boxLong(rhs));
 }
 
-extern "C" i64 sub_i64_i64(i64 lhs, i64 rhs) {
-    return lhs - rhs;
+extern "C" Box* sub_i64_i64(i64 lhs, i64 rhs) {
+    i64 result;
+    if (!__builtin_ssubl_overflow(lhs, rhs, &result))
+        return boxInt(result);
+    return longSub(boxLong(lhs), boxLong(rhs));
 }
 
-extern "C" i64 div_i64_i64(i64 lhs, i64 rhs) {
+extern "C" Box* div_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
         raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
+
+    // It's possible for division to overflow:
+#if PYSTON_INT_MIN < -PYSTON_INT_MAX
+    static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
+
+    if (lhs == PYSTON_INT_MIN && rhs == -1) {
+        return longDiv(boxLong(lhs), boxLong(rhs));
+    }
+#endif
+
     if (lhs < 0 && rhs > 0)
-        return (lhs - rhs + 1) / rhs;
+        return boxInt((lhs - rhs + 1) / rhs);
     if (lhs > 0 && rhs < 0)
-        return (lhs - rhs - 1) / rhs;
-    return lhs / rhs;
+        return boxInt((lhs - rhs - 1) / rhs);
+    return boxInt(lhs / rhs);
 }
 
 extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
     if (rhs == 0) {
         raiseExcHelper(ZeroDivisionError, "integer division or modulo by zero");
     }
+    // I don't think this can overflow:
     if (lhs < 0 && rhs > 0)
         return ((lhs + 1) % rhs) + (rhs - 1);
     if (lhs > 0 && rhs < 0)
@@ -65,21 +120,31 @@ extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
     return lhs % rhs;
 }
 
-extern "C" i64 pow_i64_i64(i64 lhs, i64 rhs) {
+extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
     // TODO overflow very possible
+    i64 orig_rhs = rhs;
     i64 rtn = 1, curpow = lhs;
     RELEASE_ASSERT(rhs >= 0, "");
+
     while (rhs) {
-        if (rhs & 1)
-            rtn *= curpow;
-        curpow *= curpow;
+        if (rhs & 1) {
+            // TODO: could potentially avoid restarting the entire computation on overflow?
+            if (__builtin_smull_overflow(rtn, curpow, &rtn))
+                return longPow(boxLong(lhs), boxLong(orig_rhs));
+        }
+        if (__builtin_smull_overflow(curpow, curpow, &curpow))
+            return longPow(boxLong(lhs), boxLong(orig_rhs));
+
         rhs >>= 1;
     }
-    return rtn;
+    return boxInt(rtn);
 }
 
-extern "C" i64 mul_i64_i64(i64 lhs, i64 rhs) {
-    return lhs * rhs;
+extern "C" Box* mul_i64_i64(i64 lhs, i64 rhs) {
+    i64 result;
+    if (!__builtin_smull_overflow(lhs, rhs, &result))
+        return boxInt(result);
+    return longMul(boxLong(lhs), boxLong(rhs));
 }
 
 extern "C" i1 eq_i64_i64(i64 lhs, i64 rhs) {
@@ -110,7 +175,7 @@ extern "C" i1 ge_i64_i64(i64 lhs, i64 rhs) {
 extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
-    return boxInt(lhs->n + rhs->n);
+    return add_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
@@ -126,7 +191,7 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-        return boxInt(lhs->n + rhs_int->n);
+        return add_i64_i64(lhs->n, rhs_int->n);
     } else if (rhs->cls == float_cls) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
         return boxFloat(lhs->n + rhs_float->d);
@@ -183,7 +248,7 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
-    return boxInt(div_i64_i64(lhs->n, rhs->n));
+    return div_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
@@ -202,6 +267,33 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
+    } else {
+        return NotImplemented;
+    }
+}
+
+extern "C" Box* intFloordivInt(BoxedInt* lhs, BoxedInt* rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == int_cls);
+    return div_i64_i64(lhs->n, rhs->n);
+}
+
+extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
+    assert(lhs->cls == int_cls);
+    assert(rhs->cls == float_cls);
+
+    if (rhs->d == 0) {
+        raiseExcHelper(ZeroDivisionError, "float divide by zero");
+    }
+    return boxFloat(floor(lhs->n / rhs->d));
+}
+
+extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
+    assert(lhs->cls == int_cls);
+    if (rhs->cls == int_cls) {
+        return intFloordivInt(lhs, static_cast<BoxedInt*>(rhs));
+    } else if (rhs->cls == float_cls) {
+        return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
     } else {
         return NotImplemented;
     }
@@ -300,6 +392,7 @@ extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
+    // TODO overflow?
     return boxInt(lhs->n << rhs->n);
 }
 
@@ -309,7 +402,7 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxInt(lhs->n << rhs_int->n);
+    return intLShiftInt(lhs, rhs_int);
 }
 
 extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
@@ -349,7 +442,7 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
-    return boxInt(lhs->n * rhs->n);
+    return mul_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat* rhs) {
@@ -362,10 +455,10 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-        return boxInt(lhs->n * rhs_int->n);
+        return intMulInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
-        return boxFloat(lhs->n * rhs_float->d);
+        return intMulFloat(lhs, rhs_float);
     } else {
         return NotImplemented;
     }
@@ -375,7 +468,7 @@ extern "C" Box* intPowInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
+    return pow_i64_i64(lhs->n, rhs_int->n);
 }
 
 extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs) {
@@ -388,10 +481,10 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-        return boxInt(pow_i64_i64(lhs->n, rhs_int->n));
+        return intPowInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
-        return boxFloat(pow(lhs->n, rhs_float->d));
+        return intPowFloat(lhs, rhs_float);
     } else {
         return NotImplemented;
     }
@@ -409,13 +502,13 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
         return NotImplemented;
     }
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxInt(lhs->n >> rhs_int->n);
+    return intRShiftInt(lhs, rhs_int);
 }
 
 extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
-    return boxInt(lhs->n - rhs->n);
+    return sub_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat* rhs) {
@@ -428,10 +521,10 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
     assert(lhs->cls == int_cls);
     if (rhs->cls == int_cls) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-        return boxInt(lhs->n - rhs_int->n);
+        return intSubInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
         BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
-        return boxFloat(lhs->n - rhs_float->d);
+        return intSubFloat(lhs, rhs_float);
     } else {
         return NotImplemented;
     }
@@ -454,6 +547,16 @@ extern "C" Box* intPos(BoxedInt* v) {
 
 extern "C" Box* intNeg(BoxedInt* v) {
     assert(v->cls == int_cls);
+
+    // It's possible for this to overflow:
+#if PYSTON_INT_MIN < -PYSTON_INT_MAX
+    static_assert(PYSTON_INT_MIN == -PYSTON_INT_MAX - 1, "");
+
+    if (v->n == PYSTON_INT_MIN) {
+        return longNeg(boxLong(v->n));
+    }
+#endif
+
     return boxInt(-v->n);
 }
 
@@ -529,7 +632,7 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
     v_iu.push_back(UNKNOWN);
 
     CLFunction* cl = createRTFunction(2, 0, false, false);
-    addRTFunction(cl, int_func, BOXED_INT, v_ii);
+    addRTFunction(cl, int_func, UNKNOWN, v_ii);
     addRTFunction(cl, float_func, BOXED_FLOAT, v_if);
     addRTFunction(cl, boxed_func, UNKNOWN, v_iu);
     int_cls->giveAttr(name, new BoxedFunction(cl));
@@ -563,6 +666,7 @@ void setupInt() {
     _addFuncIntUnknown("__xor__", BOXED_INT, (void*)intXorInt, (void*)intXor);
     _addFuncIntFloatUnknown("__sub__", (void*)intSubInt, (void*)intSubFloat, (void*)intSub);
     _addFuncIntFloatUnknown("__div__", (void*)intDivInt, (void*)intDivFloat, (void*)intDiv);
+    _addFuncIntFloatUnknown("__floordiv__", (void*)intFloordivInt, (void*)intFloordivFloat, (void*)intFloordiv);
     _addFuncIntFloatUnknown("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);
     _addFuncIntUnknown("__mod__", BOXED_INT, (void*)intModInt, (void*)intMod);
     _addFuncIntFloatUnknown("__pow__", (void*)intPowInt, (void*)intPowFloat, (void*)intPow);
@@ -574,12 +678,12 @@ void setupInt() {
     _addFuncIntUnknown("__gt__", BOXED_BOOL, (void*)intGtInt, (void*)intGt);
     _addFuncIntUnknown("__ge__", BOXED_BOOL, (void*)intGeInt, (void*)intGe);
 
-    _addFuncIntUnknown("__lshift__", BOXED_INT, (void*)intLShiftInt, (void*)intLShift);
+    _addFuncIntUnknown("__lshift__", UNKNOWN, (void*)intLShiftInt, (void*)intLShift);
     _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
 
     int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1)));
     int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1)));
-    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, BOXED_INT, 1)));
+    int_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)intNeg, UNKNOWN, 1)));
     int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
     int_cls->giveAttr("__str__", int_cls->getattr("__repr__"));

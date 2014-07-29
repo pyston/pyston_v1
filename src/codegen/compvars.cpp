@@ -734,6 +734,7 @@ public:
     }
 
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
+        /*
         static std::vector<AbstractFunctionType::Sig*> sigs;
         if (sigs.size() == 0) {
             AbstractFunctionType::Sig* int_sig = new AbstractFunctionType::Sig();
@@ -758,6 +759,7 @@ public:
             || *attr == "__ifloordiv__" || *attr == "__iand__" || *attr == "__ior__" || *attr == "__ixor__") {
             return AbstractFunctionType::get(sigs);
         }
+        */
 
         return BOXED_INT->getattrType(attr, cls_only);
     }
@@ -828,7 +830,8 @@ public:
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
-        if (rhs->getType() != INT) {
+        bool can_lower = (rhs->getType() == INT && exp_type == Compare);
+        if (!can_lower) {
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
             CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
             converted->decvref(emitter);
@@ -837,7 +840,7 @@ public:
 
         ConcreteCompilerVariable* converted_right = rhs->makeConverted(emitter, INT);
         llvm::Value* v;
-        if (op_type == AST_TYPE::Mod) {
+        /*if (op_type == AST_TYPE::Mod) {
             v = emitter.createCall2(info.exc_info, g.funcs.mod_i64_i64, var->getValue(), converted_right->getValue())
                     .getInstruction();
         } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::FloorDiv) {
@@ -879,7 +882,7 @@ public:
                     break;
             }
             v = emitter.getBuilder()->CreateBinOp(binopcode, var->getValue(), converted_right->getValue());
-        } else {
+        } else */ {
             assert(exp_type == Compare);
             llvm::CmpInst::Predicate cmp_pred;
             switch (op_type) {

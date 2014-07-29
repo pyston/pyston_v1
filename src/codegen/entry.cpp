@@ -152,8 +152,8 @@ public:
 
 static void handle_sigfpe(int signum) {
     assert(signum == SIGFPE);
-    fprintf(stderr, "ZeroDivisionError: integer division or modulo by zero\n");
-    exit(1);
+    fprintf(stderr, "SIGFPE!\n");
+    abort();
 }
 
 void initCodegen() {
@@ -226,7 +226,7 @@ void initCodegen() {
 
     setupRuntime();
 
-    signal(SIGFPE, &handle_sigfpe);
+    // signal(SIGFPE, &handle_sigfpe);
 
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:

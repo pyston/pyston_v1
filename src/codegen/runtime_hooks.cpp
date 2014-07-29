@@ -234,10 +234,6 @@ void initGlobalFuncs(GlobalState& g) {
     GET(raise0);
     GET(raise3);
 
-    g.funcs.div_i64_i64 = getFunc((void*)div_i64_i64, "div_i64_i64");
-    g.funcs.mod_i64_i64 = getFunc((void*)mod_i64_i64, "mod_i64_i64");
-    g.funcs.pow_i64_i64 = getFunc((void*)pow_i64_i64, "pow_i64_i64");
-
     GET(div_float_float);
     GET(mod_float_float);
     GET(pow_float_float);

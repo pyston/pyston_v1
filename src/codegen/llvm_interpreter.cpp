@@ -650,8 +650,8 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                                 args[0].n, args[1].d, args[2].d, args[3].n);
                             break;
                         case 0b101010:
-                            r = reinterpret_cast<int64_t (*)(double, int, double, int64_t)>(f)(args[0].d, args[1].n,
-                                                                                               args[2].d, args[3].n);
+                            r = reinterpret_cast<int64_t (*)(double, int64_t, double, int64_t)>(f)(
+                                args[0].d, args[1].n, args[2].d, args[3].n);
                             break;
                         case 0b1000000: // 64
                             r = reinterpret_cast<int64_t (*)(int64_t, int64_t, int64_t, int64_t, int64_t)>(f)(

@@ -27,6 +27,10 @@
 
 #define STACK_GROWS_DOWN 1
 
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
 #define _STRINGIFY(N) #N
 #define STRINGIFY(N) _STRINGIFY(N)
 #define _CAT(A, B) A##B
