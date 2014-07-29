@@ -1852,7 +1852,10 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     if (num_output_args > 3) {
         int size = (num_output_args - 3) * sizeof(Box*);
         oargs = (Box**)alloca(size);
+
+#ifndef NDEBUG
         memset(&oargs[0], 0, size);
+#endif
     }
 
     ////
