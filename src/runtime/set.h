@@ -28,6 +28,8 @@ void teardownSet();
 extern BoxedClass* set_cls, *frozenset_cls;
 extern const ObjectFlavor set_flavor, frozenset_flavor;
 
+extern "C" Box* createSet();
+
 class BoxedSet : public Box {
 public:
     std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > s;

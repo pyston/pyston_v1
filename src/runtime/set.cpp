@@ -31,6 +31,10 @@ extern "C" void setIteratorGCHandler(GCVisitor* v, void* p);
 const ObjectFlavor set_flavor(&setGCHandler, NULL);
 const ObjectFlavor set_iterator_flavor(&setIteratorGCHandler, NULL);
 
+extern "C" Box* createSet() {
+    return new BoxedSet(set_cls);
+}
+
 namespace set {
 
 class BoxedSetIterator : public Box {

@@ -415,6 +415,8 @@ private:
 
     virtual void* visit_repr(AST_Repr* node) { return STR; }
 
+    virtual void* visit_set(AST_Set* node) { return SET; }
+
     virtual void* visit_slice(AST_Slice* node) { return SLICE; }
 
     virtual void* visit_str(AST_Str* node) { return STR; }

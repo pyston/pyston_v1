@@ -669,6 +669,18 @@ private:
         return rtn;
     }
 
+    AST_expr* remapSet(AST_Set* node) {
+        AST_Set* rtn = new AST_Set();
+        rtn->lineno = node->lineno;
+        rtn->col_offset = node->col_offset;
+
+        for (auto e : node->elts) {
+            rtn->elts.push_back(remapExpr(e));
+        }
+
+        return rtn;
+    }
+
     AST_expr* remapSlice(AST_Slice* node) {
         AST_Slice* rtn = new AST_Slice();
         rtn->lineno = node->lineno;
@@ -777,6 +789,9 @@ private:
                 return node;
             case AST_TYPE::Repr:
                 rtn = remapRepr(ast_cast<AST_Repr>(node));
+                break;
+            case AST_TYPE::Set:
+                rtn = remapSet(ast_cast<AST_Set>(node));
                 break;
             case AST_TYPE::Slice:
                 rtn = remapSlice(ast_cast<AST_Slice>(node));

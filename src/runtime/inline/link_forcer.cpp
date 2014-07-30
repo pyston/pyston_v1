@@ -25,6 +25,7 @@
 #include "runtime/list.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
+#include "runtime/set.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -62,6 +63,7 @@ void force() {
     FORCE(createClosure);
     FORCE(createGenerator);
     FORCE(createLong);
+    FORCE(createSet);
 
     FORCE(getattr);
     FORCE(setattr);

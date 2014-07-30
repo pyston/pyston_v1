@@ -39,6 +39,7 @@
 #include "runtime/int.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
+#include "runtime/set.h"
 #include "runtime/types.h"
 
 extern "C" void* __cxa_begin_catch(void*);
@@ -173,6 +174,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createClosure);
     GET(createGenerator);
     GET(createLong);
+    GET(createSet);
 
     GET(getattr);
     GET(setattr);

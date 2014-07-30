@@ -754,6 +754,32 @@ private:
         return new ConcreteCompilerVariable(STR, rtn, true);
     }
 
+    CompilerVariable* evalSet(AST_Set* node, ExcInfo exc_info) {
+        assert(state != PARTIAL);
+
+        std::vector<CompilerVariable*> elts;
+        for (int i = 0; i < node->elts.size(); i++) {
+            CompilerVariable* value = evalExpr(node->elts[i], exc_info);
+            elts.push_back(value);
+        }
+
+        llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createSet);
+        ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(SET, v, true);
+
+        static std::string add_str("add");
+
+        for (int i = 0; i < node->elts.size(); i++) {
+            CompilerVariable* elt = elts[i];
+
+            CompilerVariable* r = rtn->callattr(emitter, getOpInfoForNode(node, exc_info), &add_str, true,
+                                                ArgPassSpec(1), { elt }, NULL);
+            r->decvref(emitter);
+            elt->decvref(emitter);
+        }
+
+        return rtn;
+    }
+
     CompilerVariable* evalSlice(AST_Slice* node, ExcInfo exc_info) {
         assert(state != PARTIAL);
 
@@ -929,6 +955,9 @@ private:
                     break;
                 case AST_TYPE::Repr:
                     rtn = evalRepr(ast_cast<AST_Repr>(node), exc_info);
+                    break;
+                case AST_TYPE::Set:
+                    rtn = evalSet(ast_cast<AST_Set>(node), exc_info);
                     break;
                 case AST_TYPE::Slice:
                     rtn = evalSlice(ast_cast<AST_Slice>(node), exc_info);

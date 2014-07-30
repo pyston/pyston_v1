@@ -578,6 +578,16 @@ AST_Return* read_return(BufferedReader* reader) {
     return rtn;
 }
 
+AST_Set* read_set(BufferedReader* reader) {
+    AST_Set* rtn = new AST_Set();
+
+    rtn->col_offset = readColOffset(reader);
+    readExprVector(rtn->elts, reader);
+    rtn->lineno = reader->readULL();
+
+    return rtn;
+}
+
 AST_Slice* read_slice(BufferedReader* reader) {
     AST_Slice* rtn = new AST_Slice();
 
@@ -742,6 +752,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_num(reader);
         case AST_TYPE::Repr:
             return read_repr(reader);
+        case AST_TYPE::Set:
+            return read_set(reader);
         case AST_TYPE::Slice:
             return read_slice(reader);
         case AST_TYPE::Str:

@@ -706,6 +706,18 @@ void AST_Return::accept_stmt(StmtVisitor* v) {
     v->visit_return(this);
 }
 
+void AST_Set::accept(ASTVisitor* v) {
+    bool skip = v->visit_set(this);
+    if (skip)
+        return;
+
+    visitVector(elts, v);
+}
+
+void* AST_Set::accept_expr(ExprVisitor* v) {
+    return v->visit_set(this);
+}
+
 void AST_Slice::accept(ASTVisitor* v) {
     bool skip = v->visit_slice(this);
     if (skip)
@@ -1443,6 +1455,23 @@ bool PrintVisitor::visit_return(AST_Return* node) {
     return false;
 }
 
+bool PrintVisitor::visit_set(AST_Set* node) {
+    assert(node->elts.size());
+    printf("{");
+
+    bool first = true;
+    for (auto e : node->elts) {
+        if (!first)
+            printf(", ");
+        first = false;
+
+        e->accept(this);
+    }
+
+    printf("}");
+    return true;
+}
+
 bool PrintVisitor::visit_slice(AST_Slice* node) {
     printf("<slice>(");
     if (node->lower)
@@ -1822,6 +1851,10 @@ public:
         return false;
     }
     virtual bool visit_return(AST_Return* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_set(AST_Set* node) {
         output->push_back(node);
         return false;
     }
