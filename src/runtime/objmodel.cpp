@@ -25,7 +25,6 @@
 #include "llvm/Support/Path.h"
 
 #include "asm_writing/icinfo.h"
-#include "asm_writing/rewriter.h"
 #include "asm_writing/rewriter2.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
@@ -609,9 +608,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrit
     }
 #endif
 
-
-
-    RewriterVar r_new_array;
     RewriterVarUsage2 r_new_array2(RewriterVarUsage2::empty());
     int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
     if (numattrs == 0) {
