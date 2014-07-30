@@ -386,6 +386,16 @@ AST_FunctionDef* read_functiondef(BufferedReader* reader) {
     return rtn;
 }
 
+AST_GeneratorExp* read_generatorexp(BufferedReader* reader) {
+    AST_GeneratorExp* rtn = new AST_GeneratorExp();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->elt = readASTExpr(reader);
+    readMiscVector(rtn->generators, reader);
+    rtn->lineno = reader->readULL();
+    return rtn;
+}
+
 AST_Global* read_global(BufferedReader* reader) {
     AST_Global* rtn = new AST_Global();
 
@@ -736,6 +746,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_dict(reader);
         case AST_TYPE::DictComp:
             return read_dictcomp(reader);
+        case AST_TYPE::GeneratorExp:
+            return read_generatorexp(reader);
         case AST_TYPE::IfExp:
             return read_ifexp(reader);
         case AST_TYPE::Index:

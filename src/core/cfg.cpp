@@ -267,7 +267,6 @@ private:
         return makeName(rtn_name, AST_TYPE::Load);
     }
 
-
     AST_expr* makeNum(int n) {
         AST_Num* node = new AST_Num();
         node->num_type = AST_Num::INT;
@@ -576,6 +575,67 @@ private:
         return rtn;
     };
 
+    AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
+        assert(node->generators.size());
+
+        // I don't think it's easy to determine by the user, but it looks like the first generator iterator gets
+        // evaluated in the parent scope / frame.
+
+        AST_expr* first = remapExpr(node->generators[0]->iter);
+
+        AST_FunctionDef* func = new AST_FunctionDef();
+        func->lineno = node->lineno;
+        func->col_offset = node->col_offset;
+        func->name = nodeName(func);
+
+        func->args = new AST_arguments();
+        func->args->vararg = "";
+        func->args->kwarg = "";
+
+        std::string first_generator_name = nodeName(node);
+        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param));
+
+        std::vector<AST_stmt*>* insert_point = &func->body;
+        for (int i = 0; i < node->generators.size(); i++) {
+            AST_comprehension* c = node->generators[i];
+
+            AST_For* loop = new AST_For();
+            loop->target = c->target;
+
+            if (i == 0) {
+                loop->iter = makeName(first_generator_name, AST_TYPE::Load);
+            } else {
+                loop->iter = c->iter;
+            }
+
+            insert_point->push_back(loop);
+            insert_point = &loop->body;
+
+            for (AST_expr* if_condition : c->ifs) {
+                AST_If* if_block = new AST_If();
+                if_block->test = if_condition;
+
+                insert_point->push_back(if_block);
+                insert_point = &if_block->body;
+            }
+        }
+
+        AST_Yield* y = new AST_Yield();
+        y->value = node->elt;
+        insert_point->push_back(makeExpr(y));
+
+        push_back(func);
+        AST_Call* call = new AST_Call();
+        call->lineno = node->lineno;
+        call->col_offset = node->col_offset;
+
+        call->starargs = NULL;
+        call->kwargs = NULL;
+        call->func = makeName(nodeName(func), AST_TYPE::Load);
+        call->args.push_back(first);
+        return call;
+    };
+
     AST_expr* remapIfExp(AST_IfExp* node) {
         std::string rtn_name = nodeName(node);
 
@@ -763,6 +823,9 @@ private:
                 break;
             case AST_TYPE::DictComp:
                 rtn = remapComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
+                break;
+            case AST_TYPE::GeneratorExp:
+                rtn = remapGeneratorExp(ast_cast<AST_GeneratorExp>(node));
                 break;
             case AST_TYPE::IfExp:
                 rtn = remapIfExp(ast_cast<AST_IfExp>(node));

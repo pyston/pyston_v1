@@ -212,6 +212,7 @@ public:
     virtual bool visit_for(AST_For* node) { return false; }
     // virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
     // virtual bool visit_global(AST_Global *node) { return false; }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) { return false; }
     virtual bool visit_if(AST_If* node) { return false; }
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }

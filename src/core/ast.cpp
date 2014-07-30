@@ -473,6 +473,22 @@ void AST_FunctionDef::accept_stmt(StmtVisitor* v) {
     v->visit_functiondef(this);
 }
 
+void AST_GeneratorExp::accept(ASTVisitor* v) {
+    bool skip = v->visit_generatorexp(this);
+    if (skip)
+        return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    elt->accept(v);
+}
+
+void* AST_GeneratorExp::accept_expr(ExprVisitor* v) {
+    return v->visit_generatorexp(this);
+}
+
 void AST_Global::accept(ASTVisitor* v) {
     bool skip = v->visit_global(this);
     if (skip)
@@ -1225,6 +1241,17 @@ bool PrintVisitor::visit_functiondef(AST_FunctionDef* node) {
         node->body[i]->accept(this);
     }
     indent -= 4;
+    return true;
+}
+
+bool PrintVisitor::visit_generatorexp(AST_GeneratorExp* node) {
+    printf("[");
+    node->elt->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
+    }
+    printf("]");
     return true;
 }
 

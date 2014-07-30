@@ -444,6 +444,19 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::FunctionDef;
 };
 
+class AST_GeneratorExp : public AST_expr {
+public:
+    std::vector<AST_comprehension*> generators;
+    AST_expr* elt;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_GeneratorExp() : AST_expr(AST_TYPE::GeneratorExp) {}
+
+    const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::GeneratorExp;
+};
+
 class AST_Global : public AST_stmt {
 public:
     std::vector<std::string> names;
@@ -955,6 +968,7 @@ public:
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_global(AST_Global* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_if(AST_If* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
@@ -1020,6 +1034,7 @@ public:
     virtual bool visit_expr(AST_Expr* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
     virtual bool visit_functiondef(AST_FunctionDef* node) { return false; }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) { return false; }
     virtual bool visit_global(AST_Global* node) { return false; }
     virtual bool visit_if(AST_If* node) { return false; }
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
@@ -1071,6 +1086,7 @@ public:
     virtual void* visit_compare(AST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_lambda(AST_Lambda* node) { RELEASE_ASSERT(0, ""); }
@@ -1156,6 +1172,7 @@ public:
     virtual bool visit_expr(AST_Expr* node);
     virtual bool visit_for(AST_For* node);
     virtual bool visit_functiondef(AST_FunctionDef* node);
+    virtual bool visit_generatorexp(AST_GeneratorExp* node);
     virtual bool visit_global(AST_Global* node);
     virtual bool visit_if(AST_If* node);
     virtual bool visit_ifexp(AST_IfExp* node);
