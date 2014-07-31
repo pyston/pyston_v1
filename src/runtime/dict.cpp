@@ -146,6 +146,11 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
     return v;
 }
 
+Box* dictContains(BoxedDict* self, Box* k) {
+    assert(self->cls == dict_cls);
+    return boxBool(self->d.count(k) != 0);
+}
+
 BoxedClass* dict_iterator_cls = NULL;
 extern "C" void dictIteratorGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
@@ -189,6 +194,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, UNKNOWN, 2)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3)));
+    dict_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
 
     dict_cls->freeze();
 
