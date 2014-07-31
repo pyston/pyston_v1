@@ -1812,7 +1812,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     if (source->ast->type == AST_TYPE::ClassDef) {
         // A classdef always starts with "__module__ = __name__"
-        Box* module_name = source->parent_module->getattr("__name__", NULL, NULL);
+        Box* module_name = source->parent_module->getattr("__name__", NULL);
         assert(module_name->cls == str_cls);
         AST_Assign* module_assign = new AST_Assign();
         module_assign->targets.push_back(makeName("__module__", AST_TYPE::Store));

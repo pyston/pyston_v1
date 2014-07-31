@@ -84,7 +84,7 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
         this->giveAttr("__name__", boxString(f->source->getName()));
 
-        Box* modname = f->source->parent_module->getattr("__name__", NULL, NULL);
+        Box* modname = f->source->parent_module->getattr("__name__", NULL);
         this->giveAttr("__module__", modname);
     }
 
@@ -110,7 +110,7 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
         this->giveAttr("__name__", boxString(f->source->getName()));
 
-        Box* modname = f->source->parent_module->getattr("__name__", NULL, NULL);
+        Box* modname = f->source->parent_module->getattr("__name__", NULL);
         this->giveAttr("__module__", modname);
     }
 
@@ -516,7 +516,7 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
 
     if (args->elts.size() != 0) {
         // TODO slow
-        if (typeLookup(cls, "__init__", NULL, NULL) == typeLookup(object_cls, "__init__", NULL, NULL))
+        if (typeLookup(cls, "__init__", NULL) == typeLookup(object_cls, "__init__", NULL))
             raiseExcHelper(TypeError, "object.__new__() takes no parameters");
     }
 
