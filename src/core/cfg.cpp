@@ -23,6 +23,7 @@
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/types.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 //#undef VERBOSITY
@@ -1266,8 +1267,7 @@ public:
 
     virtual bool visit_return(AST_Return* node) {
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda) {
-            fprintf(stderr, "SyntaxError: 'return' outside function\n");
-            exit(1);
+            raiseExcHelper(SyntaxError, "'return' outside function");
         }
 
         AST_expr* value = remapExpr(node->value);
@@ -1337,8 +1337,7 @@ public:
             return true;
 
         if (loops.size() == 0) {
-            fprintf(stderr, "SyntaxError: 'break' outside loop\n");
-            exit(1);
+            raiseExcHelper(SyntaxError, "'break' outside loop");
         }
 
         AST_Jump* j = makeJump();
@@ -1357,8 +1356,7 @@ public:
 
         if (loops.size() == 0) {
             // Note: error message is different than the 'break' case
-            fprintf(stderr, "SyntaxError: 'continue' not properly in loop\n");
-            exit(1);
+            raiseExcHelper(SyntaxError, "'continue' not properly in loop");
         }
 
         AST_Jump* j = makeJump();

@@ -165,6 +165,7 @@ int main(int argc, char** argv) {
                 std::string msg = formatException(b);
                 printLastTraceback();
                 fprintf(stderr, "%s\n", msg.c_str());
+
                 exit(1);
             }
         }

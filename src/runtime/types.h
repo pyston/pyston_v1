@@ -356,7 +356,7 @@ Box* exceptionNew2(BoxedClass* cls, Box* message);
 
 extern BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration, *GeneratorExit;
+    *StopIteration, *GeneratorExit, *SyntaxError;
 
 // cls should be obj->cls.
 // Added as parameter because it should typically be available

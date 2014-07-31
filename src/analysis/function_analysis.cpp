@@ -33,27 +33,31 @@ namespace pyston {
 
 class LivenessBBVisitor : public NoopASTVisitor {
 public:
-    typedef llvm::SmallSet<std::string, 4> StrSet;
+    enum Status {
+        NONE,
+        USED,
+        KILLED,
+    };
 
 private:
-    StrSet _loads;
-    StrSet _stores;
+    std::unordered_map<int, Status> statuses;
+    LivenessAnalysis* analysis;
 
     void _doLoad(const std::string& name) {
-        if (_stores.count(name))
-            return;
-        _loads.insert(name);
+        Status& status = statuses[analysis->getStringIndex(name)];
+        if (status == NONE)
+            status = USED;
     }
     void _doStore(const std::string& name) {
-        if (_loads.count(name))
-            return;
-        _stores.insert(name);
+        Status& status = statuses[analysis->getStringIndex(name)];
+        if (status == NONE)
+            status = KILLED;
     }
 
 public:
-    LivenessBBVisitor() {}
-    const StrSet& loads() { return _loads; }
-    const StrSet& stores() { return _stores; }
+    LivenessBBVisitor(LivenessAnalysis* analysis) : analysis(analysis) {}
+
+    Status nameStatus(int idx) { return statuses[idx]; }
 
     bool visit_classdef(AST_ClassDef* node) {
         _doStore(node->name);
@@ -94,6 +98,24 @@ public:
     }
 };
 
+int LivenessAnalysis::getStringIndex(const std::string& s) {
+    int& r = string_index_map[s];
+    if (r == 0) {
+        r = string_index_map.size(); // includes the '0' entry we just put in there
+    }
+    return r;
+}
+
+LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
+    for (CFGBlock* b : cfg->blocks) {
+        auto visitor = new LivenessBBVisitor(this); // livenessCache unique_ptr will delete it.
+        for (AST_stmt* stmt : b->body) {
+            stmt->accept(visitor);
+        }
+        liveness_cache.insert(std::make_pair(b, std::unique_ptr<LivenessBBVisitor>(visitor)));
+    }
+}
+
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
     if (name[0] != '#')
         return true;
@@ -101,50 +123,43 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
     if (block->successors.size() == 0)
         return false;
 
-    // Very inefficient liveness analysis:
-    // for each query, trace forward through all possible control flow paths.
-    // if we hit a store to the name, stop tracing that path
-    // if we hit a load to the name, return true.
-    // to improve performance we cache the liveness result of every visited BB.
-    llvm::SmallPtrSet<CFGBlock*, 1> visited;
-    std::deque<CFGBlock*> q;
-    for (CFGBlock* successor : block->successors) {
-        q.push_back(successor);
-    }
+    int idx = getStringIndex(name);
+    if (!result_cache.count(idx)) {
+        std::unordered_map<CFGBlock*, bool>& map = result_cache[idx];
 
-    while (q.size()) {
-        CFGBlock* thisblock = q.front();
-        q.pop_front();
-        if (visited.count(thisblock))
-            continue;
+        // Approach:
+        // - Find all uses (blocks where the status is USED)
+        // - Trace backwards, marking all blocks as live-at-end
+        // - If we hit a block that is KILLED, stop
+        for (CFGBlock* b : cfg->blocks) {
+            auto status = liveness_cache[b]->nameStatus(idx);
 
-        LivenessBBVisitor* visitor = nullptr;
-        LivenessCacheMap::iterator it = livenessCache.find(thisblock);
-        if (it != livenessCache.end()) {
-            visitor = it->second.get();
-        } else {
-            visitor = new LivenessBBVisitor; // livenessCache unique_ptr will delete it.
-            for (AST_stmt* stmt : thisblock->body) {
-                stmt->accept(visitor);
+            if (status != LivenessBBVisitor::USED)
+                continue;
+
+            std::deque<CFGBlock*> q;
+            for (CFGBlock* pred : b->predecessors) {
+                q.push_back(pred);
             }
-            livenessCache.insert(std::make_pair(thisblock, std::unique_ptr<LivenessBBVisitor>(visitor)));
-        }
-        visited.insert(thisblock);
 
-        if (visitor->loads().count(name)) {
-            assert(!visitor->stores().count(name));
-            return true;
-        }
+            while (q.size()) {
+                CFGBlock* thisblock = q.front();
+                q.pop_front();
 
-        if (!visitor->stores().count(name)) {
-            assert(!visitor->loads().count(name));
-            for (CFGBlock* successor : thisblock->successors) {
-                q.push_back(successor);
+                if (map[thisblock])
+                    continue;
+
+                map[thisblock] = true;
+                if (liveness_cache[thisblock]->nameStatus(idx) != LivenessBBVisitor::KILLED) {
+                    for (CFGBlock* pred : thisblock->predecessors) {
+                        q.push_back(pred);
+                    }
+                }
             }
         }
     }
 
-    return false;
+    return result_cache[idx][block];
 }
 
 class DefinednessBBAnalyzer : public BBAnalyzer<DefinednessAnalysis::DefinitionLevel> {
@@ -375,8 +390,8 @@ bool PhiAnalysis::isPotentiallyUndefinedAfter(const std::string& name, CFGBlock*
     return false;
 }
 
-LivenessAnalysis* computeLivenessInfo(CFG*) {
-    return new LivenessAnalysis();
+LivenessAnalysis* computeLivenessInfo(CFG* cfg) {
+    return new LivenessAnalysis(cfg);
 }
 
 PhiAnalysis* computeRequiredPhis(const SourceInfo::ArgNames& args, CFG* cfg, LivenessAnalysis* liveness,
