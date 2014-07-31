@@ -203,8 +203,8 @@ RewriterVarUsage2 RewriterVarUsage2::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVa
     Rewriter2* rewriter = var->rewriter;
 
     assembler::Register newvar_reg = rewriter->allocReg(dest);
+    rewriter->assembler->cmp(this_reg, other_reg);
     RewriterVarUsage2 newvar = rewriter->createNewVar(newvar_reg);
-    rewriter->assembler->cmp(this_reg, newvar_reg);
     switch (cmp_type) {
         case AST_TYPE::Eq:
             rewriter->assembler->sete(newvar_reg);
