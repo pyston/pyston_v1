@@ -54,6 +54,11 @@ struct ArgPassSpec {
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
     uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
+
+    void dump() {
+        printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
+               has_kwargs ? "true" : "false", num_keywords, num_args);
+    }
 };
 static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
 
@@ -371,10 +376,9 @@ private:
 };
 
 
-class SetattrRewriteArgs2;
+class SetattrRewriteArgs;
 class GetattrRewriteArgs;
-class GetattrRewriteArgs2;
-class DelattrRewriteArgs2;
+class DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
@@ -398,15 +402,15 @@ public:
 
     HCAttrs* getAttrsPtr();
 
-    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2);
+    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
     void giveAttr(const std::string& attr, Box* val) {
         assert(this->getattr(attr) == NULL);
         this->setattr(attr, val, NULL);
     }
 
-    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
-    Box* getattr(const std::string& attr) { return getattr(attr, NULL, NULL); }
-    void delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args);
+    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
+    Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
+    void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
 };
 
 

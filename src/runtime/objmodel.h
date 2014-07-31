@@ -84,10 +84,10 @@ extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 class BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
 
+class CallRewriteArgs;
 Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
 
-class CallRewriteArgs;
 enum LookupScope {
     CLASS_ONLY = 1,
     INST_ONLY = 2,
@@ -97,14 +97,13 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<const std::string*>* keyword_names);
 extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
-                                 DelattrRewriteArgs2* rewrite_args);
+                                 DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,
-                      GetattrRewriteArgs* rewrite_args, GetattrRewriteArgs2* rewrite_args2);
+                      GetattrRewriteArgs* rewrite_args);
 
-Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args,
-                GetattrRewriteArgs2* rewrite_args2);
+Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
