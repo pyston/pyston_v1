@@ -119,12 +119,14 @@ LLVM_PROFILE_CXXFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --
 LLVM_PROFILE_LDFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
 LLVM_PROFILE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Profile/lib/*)
 
-CLANG_EXE := $(LLVM_BIN)/clang++
+CLANG_EXE := $(LLVM_BIN)/clang
+CLANGPP_EXE := $(LLVM_BIN)/clang++
 
-COMMON_CXXFLAGS := -g -Werror -Wreturn-type -Woverloaded-virtual -Wall -Wno-sign-compare -Wno-unused -I. -I../include -fno-omit-frame-pointer
+COMMON_CFLAGS := -g -Werror -Wreturn-type -Woverloaded-virtual -Wall -Wno-sign-compare -Wno-unused -I. -I../include -fno-omit-frame-pointer
+COMMON_CFLAGS += -Wextra -Wno-sign-compare
+COMMON_CFLAGS += -Wno-unused-parameter # should use the "unused" attribute
+COMMON_CXXFLAGS := $(COMMON_CFLAGS)
 COMMON_CXXFLAGS += -std=c++11
-COMMON_CXXFLAGS += -Wextra -Wno-sign-compare
-COMMON_CXXFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
@@ -188,7 +190,7 @@ LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 
 
 BUILD_SYSTEM_DEPS := Makefile Makefile.local $(wildcard build_system/*)
-CLANG_DEPS := $(CLANG_EXE) $(abspath $(dir $(CLANG_EXE))/../../built_release)
+CLANG_DEPS := $(CLANGPP_EXE) $(abspath $(dir $(CLANGPP_EXE))/../../built_release)
 
 # settings to make clang and ccache play nicely:
 CLANG_CCACHE_FLAGS := -Qunused-arguments
@@ -200,6 +202,8 @@ else
 endif
 CLANGFLAGS := $(CXXFLAGS_DBG) $(CLANG_EXTRA_FLAGS)
 CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
+
+EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include $(CLANG_EXTRA_FLAGS)
 
 # Extra flags to enable soon:
 CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int -Wmissing-include-dirs -Wstrict-overflow=5 -Wundef -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wstrict-prototypes -Wold-style-definition -Wmissing-field-initializers -Wredundant-decls -Wnested-externs -Winline -Wint-to-pointer-cast -Wpointer-to-int-cast -Wlong-long -Wvla
@@ -214,7 +218,7 @@ CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int
 
 CXX := $(GPP)
 CXX_PROFILE := $(GPP)
-CLANG_CXX := $(CLANG_EXE)
+CLANG_CXX := $(CLANGPP_EXE)
 
 ifneq ($(USE_CLANG),0)
 	CXX := $(CLANG_CXX)
@@ -325,7 +329,7 @@ check_format:
 analyze:
 	$(MAKE) clean
 	PATH=$$PATH:$(DEPS_DIR)/llvm-trunk/tools/clang/tools/scan-view $(DEPS_DIR)/llvm-trunk/tools/clang/tools/scan-build/scan-build \
-		 --use-analyzer $(CLANG_EXE) --use-c++ $(CLANG_EXE) -V \
+		 --use-analyzer $(CLANGPP_EXE) --use-c++ $(CLANGPP_EXE) -V \
 		$(MAKE) pyston_dbg USE_DISTCC=0 USE_CCACHE=0
 
 .PHONY: lint cpplint
@@ -398,7 +402,7 @@ $(LLVM_BUILD)/built_profile: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 # the llvm rebuild finishes, if one is happening, but do it with order-only
 # dependencies so that make doesn't consider the libraries out of date
 # if they didn't get updated in the llvm rebuild:
-# $(CLANG_EXE): | $(LLVM_TRUNK)/built_release
+# $(CLANGPP_EXE): | $(LLVM_TRUNK)/built_release
 $(LLVM_LIB_DEPS): | $(LLVM_BUILD)/built_quick
 $(LLVM_DEBUG_LIB_DEPS): | $(LLVM_BUILD)/built_debug
 $(LLVM_RELEASE_LIB_DEPS): | $(LLVM_BUILD)/built_release
@@ -572,7 +576,7 @@ $$(SRCS:.cpp=$1.o.bc): CXXFLAGS:=$2
 %$1.h.pch: %.h $$(BUILD_SYSTEM_DEPS)
 	$$(ECHO) Compiling $$@
 	$$(VERB) rm -f $$@-*
-	$$(VERB) $$(CLANG_EXE) $$(CXXFLAGS) -MMD -MP -MF $$<.d -x c++-header $$< -o $$@
+	$$(VERB) $$(CLANGPP_EXE) $$(CXXFLAGS) -MMD -MP -MF $$<.d -x c++-header $$< -o $$@
 $$(CODEGEN_SRCS:.cpp=$1.o): CXXFLAGS += -include codegen/irgen$1.h
 $$(CODEGEN_SRCS:.cpp=$1.o): codegen/irgen$1.h.pch
 
@@ -688,7 +692,7 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
 
--include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d)
+-include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ../lib_python/2.7_Modules/*.d)
 
 .PHONY: clean
 clean:
@@ -845,22 +849,26 @@ wdbg_%:
 
 .PHONY: test_asm test_cpp_asm
 test_asm:
-	$(CLANG_EXE) ../test/test.s -c -o test
+	$(CLANGPP_EXE) ../test/test.s -c -o test
 	objdump -d test | less
 	@ rm test
 test_cpp_asm:
-	$(CLANG_EXE) ../test/test.cpp -o test -c -O3 -std=c++11
+	$(CLANGPP_EXE) ../test/test.cpp -o test -c -O3 -std=c++11
 	# $(GPP) tests/test.cpp -o test -c -O3
 	objdump -d test | less
 	rm test
 test_cpp_ll:
-	$(CLANG_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11
+	$(CLANGPP_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11
 	less test.ll
 	rm test.ll
 
 .PHONY: ext
 ext: ../test/test_extension/test.so
 ../test/test_extension/test.so: ../test/test_extension/test.o $(BUILD_SYSTEM_DEPS)
-	cc -shared $< -o $@ -g
+	$(CLANG_EXE) -shared $< -o $@ -g
 ../test/test_extension/test.o: ../test/test_extension/test.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
-	cc -O2 -fPIC -Wimplicit -I../include -c $< -o $@ -g
+	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I../include -c $< -o $@ -g
+
+../lib_python/2.7_Modules/%.o: ../lib_python/2.7_Modules/%.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling extension file $@
+	$(VERB) $(CLANG_EXE) $(EXT_CFLAGS) -c $< -o $@ -g -ferror-limit=$(ERROR_LIMIT) -MMD -MP -MF $<.d
