@@ -70,3 +70,9 @@ t((T(1),1), (T(2),))
 t((T(1),), (T(2),1))
 
 print ("hello", "world", ["test"])
+
+# __add__
+print () + ()
+print (1, 2, 3) + ()
+print () + (1, 2, 3)
+print (1, 2) + (2, 3)

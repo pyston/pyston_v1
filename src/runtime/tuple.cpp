@@ -56,6 +56,18 @@ Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     }
 }
 
+Box* tupleAdd(BoxedTuple* self, Box* rhs) {
+    if (rhs->cls != tuple_cls) {
+        return NotImplemented;
+    }
+
+    BoxedTuple* _rhs = static_cast<BoxedTuple*>(rhs);
+    BoxedTuple::GCVector velts;
+    velts.insert(velts.end(), self->elts.begin(), self->elts.end());
+    velts.insert(velts.end(), _rhs->elts.begin(), _rhs->elts.end());
+    return new BoxedTuple(std::move(velts));
+}
+
 Box* tupleLen(BoxedTuple* t) {
     assert(t->cls == tuple_cls);
     return boxInt(t->elts.size());
@@ -223,6 +235,7 @@ void setupTuple() {
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
     tuple_cls->giveAttr("__str__", tuple_cls->getattr("__repr__"));
+    tuple_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)tupleAdd, BOXED_TUPLE, 2)));
 
     tuple_cls->freeze();
 
