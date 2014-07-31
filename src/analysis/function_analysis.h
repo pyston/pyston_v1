@@ -31,13 +31,31 @@ class ScopeInfo;
 class LivenessBBVisitor;
 
 class LivenessAnalysis {
-public:
-    bool isLiveAtEnd(const std::string& name, CFGBlock* block);
-
 private:
+    CFG* cfg;
+
+    friend class LivenessBBVisitor;
     typedef std::unordered_map<CFGBlock*, std::unique_ptr<LivenessBBVisitor> > LivenessCacheMap;
-    LivenessCacheMap livenessCache;
+    LivenessCacheMap liveness_cache;
+
+    std::unordered_map<int, std::unordered_map<CFGBlock*, bool> > result_cache;
+
+    // Map strings to unique indices.  For a given CFG, the set of strings should be fairly small
+    // (a constant fraction max of the CFG itself), so just store all of them.  The theory is that
+    // for any particular name, we will do many lookups on it in different hash tables, and by
+    // converting to a string only once, the extra hashtable lookup will be profitable since it
+    // can make all the rest faster (int hashes vs string hashes).
+    //
+    // Haven't validated this, though.
+    std::unordered_map<std::string, int> string_index_map;
+    int getStringIndex(const std::string& s);
+
+public:
+    LivenessAnalysis(CFG* cfg);
+
+    bool isLiveAtEnd(const std::string& name, CFGBlock* block);
 };
+
 class DefinednessAnalysis {
 public:
     enum DefinitionLevel {

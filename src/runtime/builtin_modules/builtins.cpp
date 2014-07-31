@@ -382,7 +382,7 @@ BoxedModule* builtins_module;
 // TODO looks like CPython and pypy put this into an "exceptions" module:
 BoxedClass* Exception, *AssertionError, *AttributeError, *GeneratorExit, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration, *Warning;
+    *StopIteration, *Warning, *SyntaxError;
 
 const ObjectFlavor exception_flavor(&boxGCHandler, NULL);
 Box* exceptionNew1(BoxedClass* cls) {
@@ -472,6 +472,7 @@ void setupBuiltins() {
     ImportError = makeBuiltinException(Exception, "ImportError");
     StopIteration = makeBuiltinException(Exception, "StopIteration");
     Warning = makeBuiltinException(Exception, "Warning");
+    SyntaxError = makeBuiltinException(Exception, "SyntaxError");
     /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
     /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
     /*DeprecationWarning =*/makeBuiltinException(Warning, "DeprecationWarning");
