@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "asm_writing/rewriter2.h"
+#include "asm_writing/rewriter.h"
 
 #include <vector>
 
@@ -114,15 +114,15 @@ void Location::dump() const {
     RELEASE_ASSERT(0, "%d", type);
 }
 
-RewriterVarUsage2::RewriterVarUsage2(RewriterVar2* var) : var(var), done_using(false) {
+RewriterVarUsage::RewriterVarUsage(RewriterVar* var) : var(var), done_using(false) {
     var->incUse();
     assert(var->rewriter);
 }
 
-void RewriterVarUsage2::addGuard(uint64_t val) {
+void RewriterVarUsage::addGuard(uint64_t val) {
     assertValid();
 
-    Rewriter2* rewriter = var->rewriter;
+    Rewriter* rewriter = var->rewriter;
     assembler::Assembler* assembler = rewriter->assembler;
 
     assert(!rewriter->done_guarding && "too late to add a guard!");
@@ -138,10 +138,10 @@ void RewriterVarUsage2::addGuard(uint64_t val) {
     assembler->jne(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
 }
 
-void RewriterVarUsage2::addGuardNotEq(uint64_t val) {
+void RewriterVarUsage::addGuardNotEq(uint64_t val) {
     assertValid();
 
-    Rewriter2* rewriter = var->rewriter;
+    Rewriter* rewriter = var->rewriter;
     assembler::Assembler* assembler = rewriter->assembler;
 
     assert(!rewriter->done_guarding && "too late to add a guard!");
@@ -157,10 +157,10 @@ void RewriterVarUsage2::addGuardNotEq(uint64_t val) {
     assembler->je(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
 }
 
-void RewriterVarUsage2::addAttrGuard(int offset, uint64_t val) {
+void RewriterVarUsage::addAttrGuard(int offset, uint64_t val) {
     assertValid();
 
-    Rewriter2* rewriter = var->rewriter;
+    Rewriter* rewriter = var->rewriter;
     assembler::Assembler* assembler = rewriter->assembler;
 
     assert(!rewriter->done_guarding && "too late to add a guard!");
@@ -177,34 +177,34 @@ void RewriterVarUsage2::addAttrGuard(int offset, uint64_t val) {
     assembler->jne(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
 }
 
-RewriterVarUsage2 RewriterVarUsage2::getAttr(int offset, KillFlag kill, Location dest) {
+RewriterVarUsage RewriterVarUsage::getAttr(int offset, KillFlag kill, Location dest) {
     assertValid();
 
     // Save these, since if we kill this register the var might disappear:
     assembler::Register this_reg = var->getInReg();
-    Rewriter2* rewriter = var->rewriter;
+    Rewriter* rewriter = var->rewriter;
 
     if (kill == Kill) {
         setDoneUsing();
     }
 
     assembler::Register newvar_reg = rewriter->allocReg(dest);
-    RewriterVarUsage2 newvar = rewriter->createNewVar(newvar_reg);
+    RewriterVarUsage newvar = rewriter->createNewVar(newvar_reg);
     rewriter->assembler->mov(assembler::Indirect(this_reg, offset), newvar_reg);
     return std::move(newvar);
 }
 
-RewriterVarUsage2 RewriterVarUsage2::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage2 other, Location dest) {
+RewriterVarUsage RewriterVarUsage::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage other, Location dest) {
     assertValid();
 
     assembler::Register this_reg = var->getInReg();
     assembler::Register other_reg = other.var->getInReg();
     assert(this_reg != other_reg); // TODO how do we ensure this?
-    Rewriter2* rewriter = var->rewriter;
+    Rewriter* rewriter = var->rewriter;
 
     assembler::Register newvar_reg = rewriter->allocReg(dest);
     rewriter->assembler->cmp(this_reg, other_reg);
-    RewriterVarUsage2 newvar = rewriter->createNewVar(newvar_reg);
+    RewriterVarUsage newvar = rewriter->createNewVar(newvar_reg);
     switch (cmp_type) {
         case AST_TYPE::Eq:
             rewriter->assembler->sete(newvar_reg);
@@ -221,11 +221,11 @@ RewriterVarUsage2 RewriterVarUsage2::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVa
     return std::move(newvar);
 }
 
-RewriterVarUsage2 RewriterVarUsage2::toBool(KillFlag kill, Location dest) {
+RewriterVarUsage RewriterVarUsage::toBool(KillFlag kill, Location dest) {
     assertValid();
 
     assembler::Register this_reg = var->getInReg();
-    Rewriter2* rewriter = var->rewriter;
+    Rewriter* rewriter = var->rewriter;
 
     if (kill == Kill) {
         setDoneUsing();
@@ -235,11 +235,11 @@ RewriterVarUsage2 RewriterVarUsage2::toBool(KillFlag kill, Location dest) {
     assembler::Register result_reg = rewriter->allocReg(dest);
     rewriter->assembler->setnz(result_reg);
 
-    RewriterVarUsage2 result = rewriter->createNewVar(result_reg);
+    RewriterVarUsage result = rewriter->createNewVar(result_reg);
     return result;
 }
 
-void RewriterVarUsage2::setAttr(int offset, RewriterVarUsage2 val) {
+void RewriterVarUsage::setAttr(int offset, RewriterVarUsage val) {
     assertValid();
     var->rewriter->assertChangesOk();
 
@@ -263,23 +263,23 @@ void RewriterVarUsage2::setAttr(int offset, RewriterVarUsage2 val) {
     val.setDoneUsing();
 }
 
-void RewriterVarUsage2::setDoneUsing() {
+void RewriterVarUsage::setDoneUsing() {
     assertValid();
     done_using = true;
     var->decUse();
     var = NULL;
 }
 
-bool RewriterVarUsage2::isDoneUsing() {
+bool RewriterVarUsage::isDoneUsing() {
     return done_using;
 }
 
-void RewriterVarUsage2::ensureDoneUsing() {
+void RewriterVarUsage::ensureDoneUsing() {
     if (!done_using)
         setDoneUsing();
 }
 
-RewriterVarUsage2::RewriterVarUsage2(RewriterVarUsage2&& usage) {
+RewriterVarUsage::RewriterVarUsage(RewriterVarUsage&& usage) {
     assert(!usage.done_using);
     assert(usage.var != NULL);
 
@@ -290,7 +290,7 @@ RewriterVarUsage2::RewriterVarUsage2(RewriterVarUsage2&& usage) {
     usage.done_using = true;
 }
 
-RewriterVarUsage2& RewriterVarUsage2::operator=(RewriterVarUsage2&& usage) {
+RewriterVarUsage& RewriterVarUsage::operator=(RewriterVarUsage&& usage) {
     assert(done_using);
     assert(var == NULL);
     assert(!usage.done_using);
@@ -305,13 +305,13 @@ RewriterVarUsage2& RewriterVarUsage2::operator=(RewriterVarUsage2&& usage) {
     return *this;
 }
 
-void RewriterVar2::dump() {
-    printf("RewriterVar2 at %p: %d uses.  %ld locations:\n", this, num_uses, locations.size());
+void RewriterVar::dump() {
+    printf("RewriterVar at %p: %d uses.  %ld locations:\n", this, num_uses, locations.size());
     for (Location l : locations)
         l.dump();
 }
 
-assembler::Immediate RewriterVar2::tryGetAsImmediate(bool* is_immediate) {
+assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
     for (Location l : locations) {
         if (l.type == Location::Constant) {
             *is_immediate = true;
@@ -322,7 +322,7 @@ assembler::Immediate RewriterVar2::tryGetAsImmediate(bool* is_immediate) {
     return assembler::Immediate((uint64_t)0);
 }
 
-assembler::Register RewriterVar2::getInReg(Location dest) {
+assembler::Register RewriterVar::getInReg(Location dest) {
     assert(dest.type == Location::Register || dest.type == Location::AnyReg);
 
     // assembler::Register reg = var->rewriter->allocReg(l);
@@ -372,7 +372,7 @@ assembler::Register RewriterVar2::getInReg(Location dest) {
     return reg;
 }
 
-assembler::XMMRegister RewriterVar2::getInXMMReg(Location dest) {
+assembler::XMMRegister RewriterVar::getInXMMReg(Location dest) {
     assert(dest.type == Location::XMMRegister || dest.type == Location::AnyReg);
 
     assert(locations.size());
@@ -420,16 +420,16 @@ assembler::XMMRegister RewriterVar2::getInXMMReg(Location dest) {
     return reg;
 }
 
-RewriterVarUsage2::RewriterVarUsage2() : var(NULL), done_using(true) {
+RewriterVarUsage::RewriterVarUsage() : var(NULL), done_using(true) {
 }
 
-RewriterVarUsage2 RewriterVarUsage2::empty() {
-    return RewriterVarUsage2();
+RewriterVarUsage RewriterVarUsage::empty() {
+    return RewriterVarUsage();
 }
 
 
 
-void RewriterVar2::decUse() {
+void RewriterVar::decUse() {
     num_uses--;
     if (num_uses == 0) {
         rewriter->kill(this);
@@ -437,68 +437,68 @@ void RewriterVar2::decUse() {
     }
 }
 
-void RewriterVar2::incUse() {
+void RewriterVar::incUse() {
     num_uses++;
 }
 
-bool RewriterVar2::isInLocation(Location l) {
+bool RewriterVar::isInLocation(Location l) {
     return locations.count(l) != 0;
 }
 
 
 
-void Rewriter2::setDoneGuarding() {
+void Rewriter::setDoneGuarding() {
     assert(!done_guarding);
     done_guarding = true;
 
-    for (RewriterVar2* var : args) {
+    for (RewriterVar* var : args) {
         var->decUse();
     }
     args.clear();
 }
 
-RewriterVarUsage2 Rewriter2::getArg(int argnum) {
+RewriterVarUsage Rewriter::getArg(int argnum) {
     assert(!done_guarding);
     assert(argnum >= 0 && argnum < args.size());
 
-    RewriterVar2* var = args[argnum];
-    return RewriterVarUsage2(var);
+    RewriterVar* var = args[argnum];
+    return RewriterVarUsage(var);
 }
 
-Location Rewriter2::getReturnDestination() {
+Location Rewriter::getReturnDestination() {
     return return_location;
 }
 
-void Rewriter2::trap() {
+void Rewriter::trap() {
     assembler->trap();
 }
 
-RewriterVarUsage2 Rewriter2::loadConst(int64_t val, Location dest) {
+RewriterVarUsage Rewriter::loadConst(int64_t val, Location dest) {
     if (val >= (-1L << 31) && val < (1L << 31) - 1) {
         Location l(Location::Constant, val);
-        RewriterVar2*& var = vars_by_location[l];
+        RewriterVar*& var = vars_by_location[l];
         if (!var) {
-            var = new RewriterVar2(this, l);
+            var = new RewriterVar(this, l);
         }
-        return RewriterVarUsage2(var);
+        return RewriterVarUsage(var);
     }
 
     assembler::Register reg = allocReg(dest);
-    RewriterVarUsage2 var = createNewVar(reg);
+    RewriterVarUsage var = createNewVar(reg);
     assembler->mov(assembler::Immediate(val), reg);
     // I guess you don't need std::move here:
     return var;
 }
 
-RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, RewriterVarUsage2 arg0) {
-    std::vector<RewriterVarUsage2> args;
+RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0) {
+    std::vector<RewriterVarUsage> args;
     args.push_back(std::move(arg0));
     return call(can_call_into_python, func_addr, std::move(args));
 }
 
-RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, RewriterVarUsage2 arg0,
-                                  RewriterVarUsage2 arg1) {
-    std::vector<RewriterVarUsage2> args;
+RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0,
+                                RewriterVarUsage arg1) {
+    std::vector<RewriterVarUsage> args;
     args.push_back(std::move(arg0));
     args.push_back(std::move(arg1));
     return call(can_call_into_python, func_addr, std::move(args));
@@ -512,19 +512,19 @@ static const Location caller_save_registers[]{
     assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
 };
 
-RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage2> args) {
+RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args) {
     // TODO figure out why this is here -- what needs to be done differently
     // if can_call_into_python is true?
     // assert(!can_call_into_python);
 
     assertChangesOk();
 
-    // RewriterVarUsage2 scratch = createNewVar(Location::any());
+    // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
 
     for (int i = 0; i < args.size(); i++) {
         Location l(Location::forArg(i));
-        RewriterVar2* var = args[i].var;
+        RewriterVar* var = args[i].var;
 
         // printf("%d ", i);
         // var->dump();
@@ -558,7 +558,7 @@ RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, st
 
 #ifndef NDEBUG
     for (int i = 0; i < args.size(); i++) {
-        RewriterVar2* var = args[i].var;
+        RewriterVar* var = args[i].var;
         if (!var->isInLocation(Location::forArg(i))) {
             var->dump();
         }
@@ -575,7 +575,7 @@ RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, st
         if (it == vars_by_location.end())
             continue;
 
-        RewriterVar2* var = it->second;
+        RewriterVar* var = it->second;
         bool need_to_spill = true;
         for (Location l : var->locations) {
             if (!l.isClobberedByCall()) {
@@ -632,11 +632,11 @@ RewriterVarUsage2 Rewriter2::call(bool can_call_into_python, void* func_addr, st
     assembler->callq(r);
 
     assert(vars_by_location.count(assembler::RAX) == 0);
-    RewriterVar2* var = vars_by_location[assembler::RAX] = new RewriterVar2(this, assembler::RAX);
-    return RewriterVarUsage2(var);
+    RewriterVar* var = vars_by_location[assembler::RAX] = new RewriterVar(this, assembler::RAX);
+    return RewriterVarUsage(var);
 }
 
-void Rewriter2::commit() {
+void Rewriter::commit() {
     static StatCounter rewriter2_commits("rewriter2_commits");
     rewriter2_commits.log();
 
@@ -649,7 +649,7 @@ void Rewriter2::commit() {
         assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
         Location expected(ru);
 
-        RewriterVar2* var = live_outs[i];
+        RewriterVar* var = live_outs[i];
         // for (Location l : var->locations) {
         // printf("%d %d\n", l.type, l._data);
         //}
@@ -676,13 +676,13 @@ void Rewriter2::commit() {
     rewrite->commit(decision_path, this);
 }
 
-void Rewriter2::finishAssembly(int continue_offset) {
+void Rewriter::finishAssembly(int continue_offset) {
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
 
     assembler->fillWithNops();
 }
 
-void Rewriter2::commitReturning(RewriterVarUsage2 usage) {
+void Rewriter::commitReturning(RewriterVarUsage usage) {
     // assert(usage.var->isInLocation(getReturnDestination()));
     usage.var->getInReg(getReturnDestination());
 
@@ -690,18 +690,18 @@ void Rewriter2::commitReturning(RewriterVarUsage2 usage) {
     commit();
 }
 
-void Rewriter2::addDecision(int way) {
+void Rewriter::addDecision(int way) {
     assert(ndecisions < 60);
     ndecisions++;
     decision_path = (decision_path << 1) | way;
 }
 
-void Rewriter2::addDependenceOn(ICInvalidator& invalidator) {
+void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
     rewrite->addDependenceOn(invalidator);
 }
 
-void Rewriter2::kill(RewriterVar2* var) {
-    for (RewriterVarUsage2& scratch_range_usage : var->scratch_range) {
+void Rewriter::kill(RewriterVar* var) {
+    for (RewriterVarUsage& scratch_range_usage : var->scratch_range) {
         // Should be the only usage for this particular var (we
         // hold the only usage) so it should cause the array to
         // be deallocated.
@@ -715,7 +715,7 @@ void Rewriter2::kill(RewriterVar2* var) {
     }
 }
 
-Location Rewriter2::allocScratch() {
+Location Rewriter::allocScratch() {
     int scratch_bytes = rewrite->getScratchBytes();
     for (int i = 0; i < scratch_bytes; i += 8) {
         Location l(Location::Scratch, i);
@@ -726,7 +726,7 @@ Location Rewriter2::allocScratch() {
     RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_bytes);
 }
 
-std::pair<RewriterVarUsage2, int> Rewriter2::_allocate(int n) {
+std::pair<RewriterVarUsage, int> Rewriter::_allocate(int n) {
     assert(n >= 1);
 
     int scratch_bytes = rewrite->getScratchBytes();
@@ -744,11 +744,11 @@ std::pair<RewriterVarUsage2, int> Rewriter2::_allocate(int n) {
                 // this when necessary, so it won't spill. Is that worth?
                 assembler->mov(assembler::RBP, r);
                 assembler->add(assembler::Immediate(8 * a + rewrite->getScratchRbpOffset()), r);
-                RewriterVarUsage2 usage = createNewVar(r);
+                RewriterVarUsage usage = createNewVar(r);
 
                 for (int j = a; j <= b; j++) {
                     Location m(Location::Scratch, j * 8);
-                    RewriterVarUsage2 placeholder = createNewVar(m);
+                    RewriterVarUsage placeholder = createNewVar(m);
                     usage.var->scratch_range.push_back(std::move(placeholder));
                 }
 
@@ -761,15 +761,15 @@ std::pair<RewriterVarUsage2, int> Rewriter2::_allocate(int n) {
     RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_bytes);
 }
 
-RewriterVarUsage2 Rewriter2::allocate(int n) {
+RewriterVarUsage Rewriter::allocate(int n) {
     return _allocate(n).first;
 }
 
-RewriterVarUsage2 Rewriter2::allocateAndCopy(RewriterVarUsage2 array_ptr, int n) {
+RewriterVarUsage Rewriter::allocateAndCopy(RewriterVarUsage array_ptr, int n) {
     // TODO smart register allocation
     array_ptr.assertValid();
 
-    std::pair<RewriterVarUsage2, int> allocation = _allocate(n);
+    std::pair<RewriterVarUsage, int> allocation = _allocate(n);
     int offset = allocation.second;
 
     assembler::Register tmp = allocReg(Location::any());
@@ -786,15 +786,14 @@ RewriterVarUsage2 Rewriter2::allocateAndCopy(RewriterVarUsage2 array_ptr, int n)
     return std::move(allocation.first);
 }
 
-RewriterVarUsage2 Rewriter2::allocateAndCopyPlus1(RewriterVarUsage2 first_elem, RewriterVarUsage2 rest_ptr,
-                                                  int n_rest) {
+RewriterVarUsage Rewriter::allocateAndCopyPlus1(RewriterVarUsage first_elem, RewriterVarUsage rest_ptr, int n_rest) {
     first_elem.assertValid();
     if (n_rest > 0)
         rest_ptr.assertValid();
     else
         assert(rest_ptr.isDoneUsing());
 
-    std::pair<RewriterVarUsage2, int> allocation = _allocate(n_rest + 1);
+    std::pair<RewriterVarUsage, int> allocation = _allocate(n_rest + 1);
     int offset = allocation.second;
 
     assembler::Register tmp = first_elem.var->getInReg();
@@ -818,7 +817,7 @@ RewriterVarUsage2 Rewriter2::allocateAndCopyPlus1(RewriterVarUsage2 first_elem, 
     return std::move(allocation.first);
 }
 
-assembler::Indirect Rewriter2::indirectFor(Location l) {
+assembler::Indirect Rewriter::indirectFor(Location l) {
     assert(l.type == Location::Scratch || l.type == Location::Stack);
 
     if (l.type == Location::Scratch)
@@ -828,14 +827,14 @@ assembler::Indirect Rewriter2::indirectFor(Location l) {
         return assembler::Indirect(assembler::RSP, l.stack_offset);
 }
 
-void Rewriter2::spillRegister(assembler::Register reg) {
+void Rewriter::spillRegister(assembler::Register reg) {
     // Don't spill a register than an input argument is in, unless
     // we are done guarding (in which case `args` will be empty)
     for (int i = 0; i < args.size(); i++) {
         assert(!args[i]->isInLocation(Location(reg)));
     }
 
-    RewriterVar2* var = vars_by_location[reg];
+    RewriterVar* var = vars_by_location[reg];
     assert(var);
 
     // First, try to spill into a callee-save register:
@@ -858,10 +857,10 @@ void Rewriter2::spillRegister(assembler::Register reg) {
     removeLocationFromVar(var, reg);
 }
 
-void Rewriter2::spillRegister(assembler::XMMRegister reg) {
+void Rewriter::spillRegister(assembler::XMMRegister reg) {
     assert(done_guarding);
 
-    RewriterVar2* var = vars_by_location[reg];
+    RewriterVar* var = vars_by_location[reg];
     assert(var);
 
     assert(var->locations.size() == 1);
@@ -873,7 +872,7 @@ void Rewriter2::spillRegister(assembler::XMMRegister reg) {
     removeLocationFromVar(var, reg);
 }
 
-assembler::Register Rewriter2::allocReg(Location dest) {
+assembler::Register Rewriter::allocReg(Location dest) {
     if (dest.type == Location::AnyReg) {
         for (assembler::Register reg : allocatable_regs) {
             if (vars_by_location.count(reg) == 0)
@@ -894,7 +893,7 @@ assembler::Register Rewriter2::allocReg(Location dest) {
     }
 }
 
-void Rewriter2::addLocationToVar(RewriterVar2* var, Location l) {
+void Rewriter::addLocationToVar(RewriterVar* var, Location l) {
     assert(!var->isInLocation(l));
     assert(vars_by_location.count(l) == 0);
 
@@ -905,7 +904,7 @@ void Rewriter2::addLocationToVar(RewriterVar2* var, Location l) {
     vars_by_location[l] = var;
 }
 
-void Rewriter2::removeLocationFromVar(RewriterVar2* var, Location l) {
+void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {
     assert(var->isInLocation(l));
     assert(vars_by_location[l] == var);
 
@@ -913,26 +912,26 @@ void Rewriter2::removeLocationFromVar(RewriterVar2* var, Location l) {
     var->locations.erase(l);
 }
 
-RewriterVarUsage2 Rewriter2::createNewVar(Location dest) {
-    RewriterVar2*& var = vars_by_location[dest];
+RewriterVarUsage Rewriter::createNewVar(Location dest) {
+    RewriterVar*& var = vars_by_location[dest];
     assert(!var);
 
-    var = new RewriterVar2(this, dest);
+    var = new RewriterVar(this, dest);
     return var;
 }
 
-TypeRecorder* Rewriter2::getTypeRecorder() {
+TypeRecorder* Rewriter::getTypeRecorder() {
     return rewrite->getTypeRecorder();
 }
 
-Rewriter2::Rewriter2(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
+Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(rewrite), assembler(rewrite->getAssembler()), return_location(rewrite->returnRegister()),
       done_guarding(false), ndecisions(0), decision_path(1) {
     // assembler->trap();
 
     for (int i = 0; i < num_args; i++) {
         Location l = Location::forArg(i);
-        RewriterVar2* var = new RewriterVar2(this, l);
+        RewriterVar* var = new RewriterVar(this, l);
         vars_by_location[l] = var;
 
         var->incUse();
@@ -964,9 +963,9 @@ Rewriter2::Rewriter2(ICSlotRewrite* rewrite, int num_args, const std::vector<int
             rewriter_spillsavoided.log();
         }
 
-        RewriterVar2*& var = vars_by_location[l];
+        RewriterVar*& var = vars_by_location[l];
         if (!var) {
-            var = new RewriterVar2(this, l);
+            var = new RewriterVar(this, l);
         }
         var->incUse();
 
@@ -975,7 +974,7 @@ Rewriter2::Rewriter2(ICSlotRewrite* rewrite, int num_args, const std::vector<int
     }
 }
 
-Rewriter2* Rewriter2::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
+Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
     ICInfo* ic = getICInfo(rtn_addr);
 
     static StatCounter rewriter_nopatch("rewriter_nopatch");
@@ -985,10 +984,10 @@ Rewriter2* Rewriter2::createRewriter(void* rtn_addr, int num_args, const char* d
         return NULL;
     }
 
-    return new Rewriter2(ic->startRewrite(debug_name), num_args, ic->getLiveOuts());
+    return new Rewriter(ic->startRewrite(debug_name), num_args, ic->getLiveOuts());
 }
 
-RewriterVarUsage2 RewriterVarUsage2::addUse() {
-    return RewriterVarUsage2(var);
+RewriterVarUsage RewriterVarUsage::addUse() {
+    return RewriterVarUsage(var);
 }
 }

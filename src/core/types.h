@@ -238,7 +238,7 @@ public:
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
-class CallRewriteArgs2;
+class CallRewriteArgs;
 class CLFunction {
 public:
     int num_args;
@@ -254,7 +254,7 @@ public:
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
-    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs2*, ArgPassSpec, Box*, Box*, Box*, Box**,
+    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
                                      const std::vector<const std::string*>*);
     InternalCallable internal_callable = NULL;
 
@@ -376,9 +376,9 @@ private:
 };
 
 
-class SetattrRewriteArgs2;
-class GetattrRewriteArgs2;
-class DelattrRewriteArgs2;
+class SetattrRewriteArgs;
+class GetattrRewriteArgs;
+class DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
@@ -402,15 +402,15 @@ public:
 
     HCAttrs* getAttrsPtr();
 
-    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs2* rewrite_args2);
+    void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
     void giveAttr(const std::string& attr, Box* val) {
         assert(this->getattr(attr) == NULL);
         this->setattr(attr, val, NULL);
     }
 
-    Box* getattr(const std::string& attr, GetattrRewriteArgs2* rewrite_args2);
+    Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
-    void delattr(const std::string& attr, DelattrRewriteArgs2* rewrite_args);
+    void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
 };
 
 

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_ASMWRITING_REWRITER2_H
-#define PYSTON_ASMWRITING_REWRITER2_H
+#ifndef PYSTON_ASMWRITING_REWRITER_H
+#define PYSTON_ASMWRITING_REWRITER_H
 
 #include <memory>
 
@@ -29,7 +29,7 @@ class ICSlotInfo;
 class ICSlotRewrite;
 class ICInvalidator;
 
-class RewriterVar2;
+class RewriterVar;
 
 struct Location {
 public:
@@ -112,7 +112,7 @@ template <> struct hash<pyston::Location> {
 
 namespace pyston {
 
-class RewriterVarUsage2 {
+class RewriterVarUsage {
 public:
     enum KillFlag {
         NoKill,
@@ -120,12 +120,12 @@ public:
     };
 
 private:
-    RewriterVar2* var;
+    RewriterVar* var;
     bool done_using;
 
-    RewriterVarUsage2();
-    RewriterVarUsage2(const RewriterVarUsage2&) = delete;
-    RewriterVarUsage2& operator=(const RewriterVarUsage2&) = delete;
+    RewriterVarUsage();
+    RewriterVarUsage(const RewriterVarUsage&) = delete;
+    RewriterVarUsage& operator=(const RewriterVarUsage&) = delete;
 
     void assertValid() {
         assert(var);
@@ -135,17 +135,17 @@ private:
 public:
     // Creates a new Usage object of this var; ownership of
     // one use of the var gets passed to this new object.
-    RewriterVarUsage2(RewriterVar2* var);
+    RewriterVarUsage(RewriterVar* var);
 
     // Move constructor; don't need it for performance reasons, but because
     // semantically we have to pass the ownership of the use.
-    RewriterVarUsage2(RewriterVarUsage2&& usage);
-    RewriterVarUsage2& operator=(RewriterVarUsage2&& usage);
+    RewriterVarUsage(RewriterVarUsage&& usage);
+    RewriterVarUsage& operator=(RewriterVarUsage&& usage);
 
-    static RewriterVarUsage2 empty();
+    static RewriterVarUsage empty();
 
 #ifndef NDEBUG
-    ~RewriterVarUsage2() {
+    ~RewriterVarUsage() {
         if (!std::uncaught_exception())
             assert(done_using);
     }
@@ -155,25 +155,25 @@ public:
     bool isDoneUsing();
     void ensureDoneUsing();
 
-    RewriterVarUsage2 addUse();
+    RewriterVarUsage addUse();
 
     void addGuard(uint64_t val);
     void addGuardNotEq(uint64_t val);
     void addAttrGuard(int offset, uint64_t val);
-    RewriterVarUsage2 getAttr(int offset, KillFlag kill, Location loc = Location::any());
-    void setAttr(int offset, RewriterVarUsage2 other);
-    RewriterVarUsage2 cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage2 other, Location loc = Location::any());
-    RewriterVarUsage2 toBool(KillFlag kill, Location loc = Location::any());
+    RewriterVarUsage getAttr(int offset, KillFlag kill, Location loc = Location::any());
+    void setAttr(int offset, RewriterVarUsage other);
+    RewriterVarUsage cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage other, Location loc = Location::any());
+    RewriterVarUsage toBool(KillFlag kill, Location loc = Location::any());
 
-    friend class Rewriter2;
+    friend class Rewriter;
 };
 
-class Rewriter2;
-// This might make more sense as an inner class of Rewriter2, but
+class Rewriter;
+// This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
-class RewriterVar2 {
+class RewriterVar {
 private:
-    Rewriter2* rewriter;
+    Rewriter* rewriter;
     int num_uses;
 
     std::unordered_set<Location> locations;
@@ -181,7 +181,7 @@ private:
 
     // Indicates that this value is a pointer to a fixed-size range in the scratch space.
     // This is a vector of variable usages that keep the range allocated.
-    std::vector<RewriterVarUsage2> scratch_range;
+    std::vector<RewriterVarUsage> scratch_range;
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
@@ -198,16 +198,16 @@ public:
     void incUse();
     void decUse();
 
-    RewriterVar2(Rewriter2* rewriter, Location location) : rewriter(rewriter), num_uses(0) {
+    RewriterVar(Rewriter* rewriter, Location location) : rewriter(rewriter), num_uses(0) {
         assert(rewriter);
         locations.insert(location);
     }
 
-    friend class RewriterVarUsage2;
-    friend class Rewriter2;
+    friend class RewriterVarUsage;
+    friend class Rewriter;
 };
 
-class Rewriter2 : public ICSlotRewrite::CommitHook {
+class Rewriter : public ICSlotRewrite::CommitHook {
 private:
     std::unique_ptr<ICSlotRewrite> rewrite;
     assembler::Assembler* assembler;
@@ -218,15 +218,15 @@ private:
 
     std::vector<int> live_out_regs;
 
-    std::unordered_map<Location, RewriterVar2*> vars_by_location;
-    std::vector<RewriterVar2*> args;
-    std::vector<RewriterVar2*> live_outs;
+    std::unordered_map<Location, RewriterVar*> vars_by_location;
+    std::vector<RewriterVar*> args;
+    std::vector<RewriterVar*> live_outs;
 
-    Rewriter2(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs);
+    Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs);
 
     void assertChangesOk() { assert(done_guarding); }
 
-    void kill(RewriterVar2* var);
+    void kill(RewriterVar* var);
 
     // Allocates a register.  dest must be of type Register or AnyReg
     assembler::Register allocReg(Location dest);
@@ -240,22 +240,22 @@ private:
     void spillRegister(assembler::XMMRegister reg);
 
     // Given an empty location, do the internal bookkeeping to create a new var out of that location.
-    RewriterVarUsage2 createNewVar(Location dest);
+    RewriterVarUsage createNewVar(Location dest);
     // Do the bookkeeping to say that var is now also in location l
-    void addLocationToVar(RewriterVar2* var, Location l);
+    void addLocationToVar(RewriterVar* var, Location l);
     // Do the bookkeeping to say that var is no longer in location l
-    void removeLocationFromVar(RewriterVar2* var, Location l);
+    void removeLocationFromVar(RewriterVar* var, Location l);
 
     void finishAssembly(int continue_offset) override;
 
-    std::pair<RewriterVarUsage2, int> _allocate(int n);
+    std::pair<RewriterVarUsage, int> _allocate(int n);
 
     int ndecisions;
     uint64_t decision_path;
 
 public:
     // This should be called exactly once for each argument
-    RewriterVarUsage2 getArg(int argnum);
+    RewriterVarUsage getArg(int argnum);
 
     Location getReturnDestination();
 
@@ -265,26 +265,26 @@ public:
     TypeRecorder* getTypeRecorder();
 
     void trap();
-    RewriterVarUsage2 loadConst(int64_t val, Location loc = Location::any());
-    RewriterVarUsage2 call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage2> args);
-    RewriterVarUsage2 call(bool can_call_into_python, void* func_addr, RewriterVarUsage2 arg0);
-    RewriterVarUsage2 call(bool can_call_into_python, void* func_addr, RewriterVarUsage2 arg0, RewriterVarUsage2 arg1);
-    RewriterVarUsage2 allocate(int n);
-    RewriterVarUsage2 allocateAndCopy(RewriterVarUsage2 array, int n);
-    RewriterVarUsage2 allocateAndCopyPlus1(RewriterVarUsage2 first_elem, RewriterVarUsage2 rest, int n_rest);
+    RewriterVarUsage loadConst(int64_t val, Location loc = Location::any());
+    RewriterVarUsage call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args);
+    RewriterVarUsage call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0);
+    RewriterVarUsage call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0, RewriterVarUsage arg1);
+    RewriterVarUsage allocate(int n);
+    RewriterVarUsage allocateAndCopy(RewriterVarUsage array, int n);
+    RewriterVarUsage allocateAndCopyPlus1(RewriterVarUsage first_elem, RewriterVarUsage rest, int n_rest);
     void deallocateStack(int nbytes);
 
     void commit();
-    void commitReturning(RewriterVarUsage2 rtn);
+    void commitReturning(RewriterVarUsage rtn);
 
     void addDependenceOn(ICInvalidator&);
 
-    static Rewriter2* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
+    static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
 
     void addDecision(int way);
 
-    friend class RewriterVar2;
-    friend class RewriterVarUsage2;
+    friend class RewriterVar;
+    friend class RewriterVarUsage;
 };
 }
 

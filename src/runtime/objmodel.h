@@ -81,11 +81,11 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 
-class BinopRewriteArgs2;
-extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs2* rewrite_args);
+class BinopRewriteArgs;
+extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
 
-class CallRewriteArgs2;
-Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs2* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+class CallRewriteArgs;
+Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
 
 enum LookupScope {
@@ -93,17 +93,17 @@ enum LookupScope {
     INST_ONLY = 2,
     CLASS_OR_INST = 3,
 };
-extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs2* rewrite_args,
+extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope, CallRewriteArgs* rewrite_args,
                                  ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3, Box** args,
                                  const std::vector<const std::string*>* keyword_names);
 extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
-                                 DelattrRewriteArgs2* rewrite_args);
-struct CompareRewriteArgs2;
-Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs2* rewrite_args);
+                                 DelattrRewriteArgs* rewrite_args);
+struct CompareRewriteArgs;
+Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattr_internal(Box* obj, const std::string& attr, bool check_cls, bool allow_custom,
-                      GetattrRewriteArgs2* rewrite_args2);
+                      GetattrRewriteArgs* rewrite_args);
 
-Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs2* rewrite_args2);
+Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
@@ -113,7 +113,7 @@ Box* typeCall(Box*, BoxedList*);
 Box* typeNew(Box*, Box*);
 bool isUserDefined(BoxedClass* cls);
 
-Box* callCLFunc(CLFunction* f, CallRewriteArgs2* rewrite_args, int num_output_args, BoxedClosure* closure,
+Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 }
 #endif
