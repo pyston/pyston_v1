@@ -1,6 +1,9 @@
-Files in this directory were originally obtained from the CPython mercurial repository;
-the "2.7" directory is a copy of the Lib directory from the CPython revision 90928
-(2.7.7 release), and is redistributed with the following original license:
+Files in this directory were originally obtained from the CPython mercurial repository,
+revision 90928 (2.7.7 release).  The "2.7" directory is a copy of the Lib directory, and the
+"2.7_Modules" directory is a copy of the Modules directory.
+
+The original code was distributed with the license below; modifications are distributed
+under the same license as the rest of Pyston (see the base LICENSE file).
 
 
 PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2
