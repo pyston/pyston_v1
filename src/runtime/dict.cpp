@@ -146,6 +146,19 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
     return v;
 }
 
+extern "C" Box* dictNew(Box* _cls) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "dict.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, dict_cls))
+        raiseExcHelper(TypeError, "dict.__new__(%s): %s is not a subtype of dict", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+    RELEASE_ASSERT(cls == dict_cls, "");
+    return new BoxedDict();
+}
+
 BoxedClass* dict_iterator_cls = NULL;
 extern "C" void dictIteratorGCHandler(GCVisitor* v, void* p) {
     boxGCHandler(v, p);
@@ -161,7 +174,7 @@ void setupDict() {
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     // dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1)));
     // dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2)));
-    // dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, NULL, 1)));
+    dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1)));
     // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
     dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
