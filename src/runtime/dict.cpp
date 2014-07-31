@@ -149,6 +149,7 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
 Box* dictContains(BoxedDict* self, Box* k) {
     assert(self->cls == dict_cls);
     return boxBool(self->d.count(k) != 0);
+}
 
 extern "C" Box* dictNew(Box* _cls) {
     if (!isSubclass(_cls->cls, type_cls))
