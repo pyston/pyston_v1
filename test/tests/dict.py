@@ -41,3 +41,8 @@ print d.setdefault(11, 9)
 print sorted(d.items())
 print d.setdefault(11, 10)
 print sorted(d.items())
+
+print dict()
+d = dict()
+d[1] = 2
+print d
