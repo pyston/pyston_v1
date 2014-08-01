@@ -90,6 +90,7 @@ extern "C" Box* boxInt(i64);
 extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func);
+extern "C" Box* boxUnboundInstanceMethod(Box* func);
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
 Box* boxString(std::string&& s);
@@ -212,6 +213,7 @@ public:
 
 class BoxedInstanceMethod : public Box {
 public:
+    // obj is NULL for unbound instancemethod
     Box* obj, *func;
 
     BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
@@ -331,7 +333,8 @@ public:
     int offset;
 
     BoxedMemberDescriptor(MemberType type, int offset) : Box(member_cls), type(type), offset(offset) {}
-    BoxedMemberDescriptor(PyMemberDef* member) : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
+    BoxedMemberDescriptor(PyMemberDef* member)
+        : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?

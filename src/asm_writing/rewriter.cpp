@@ -157,7 +157,7 @@ void RewriterVarUsage::addGuardNotEq(uint64_t val) {
     assembler->je(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
 }
 
-void RewriterVarUsage::addAttrGuard(int offset, uint64_t val) {
+void RewriterVarUsage::addAttrGuard(int offset, uint64_t val, bool negate) {
     assertValid();
 
     Rewriter* rewriter = var->rewriter;
@@ -167,14 +167,17 @@ void RewriterVarUsage::addAttrGuard(int offset, uint64_t val) {
 
     assembler::Register this_reg = var->getInReg();
     if (val < (-1L << 31) || val >= (1L << 31) - 1) {
-        assembler::Register reg = rewriter->allocReg(Location::any());
+        assembler::Register reg = rewriter->allocReg(Location::any(), /* otherThan */ this_reg);
         assert(reg != this_reg);
         assembler->mov(assembler::Immediate(val), reg);
         assembler->cmp(assembler::Indirect(this_reg, offset), reg);
     } else {
         assembler->cmp(assembler::Indirect(this_reg, offset), assembler::Immediate(val));
     }
-    assembler->jne(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
+    if (negate)
+        assembler->je(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
+    else
+        assembler->jne(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
 }
 
 RewriterVarUsage RewriterVarUsage::getAttr(int offset, KillFlag kill, Location dest) {
@@ -772,8 +775,8 @@ RewriterVarUsage Rewriter::allocateAndCopy(RewriterVarUsage array_ptr, int n) {
     std::pair<RewriterVarUsage, int> allocation = _allocate(n);
     int offset = allocation.second;
 
-    assembler::Register tmp = allocReg(Location::any());
     assembler::Register src_ptr = array_ptr.var->getInReg();
+    assembler::Register tmp = allocReg(Location::any(), /* otherThan */ src_ptr);
     assert(tmp != src_ptr); // TODO how to ensure this?
 
     for (int i = 0; i < n; i++) {
@@ -872,14 +875,14 @@ void Rewriter::spillRegister(assembler::XMMRegister reg) {
     removeLocationFromVar(var, reg);
 }
 
-assembler::Register Rewriter::allocReg(Location dest) {
+assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
     if (dest.type == Location::AnyReg) {
         for (assembler::Register reg : allocatable_regs) {
-            if (vars_by_location.count(reg) == 0)
+            if (Location(reg) != otherThan && vars_by_location.count(reg) == 0)
                 return reg;
         }
         // TODO maybe should do some sort of round-robin or LRU eviction strategy?
-        return allocReg(assembler::R15);
+        return allocReg(otherThan == assembler::R15 ? assembler::R14 : assembler::R15);
     } else if (dest.type == Location::Register) {
         assembler::Register reg(dest.regnum);
 

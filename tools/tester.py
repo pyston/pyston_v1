@@ -197,7 +197,10 @@ def run_test(fn, check_stats, run_memcheck):
             os.unlink(out_fn)
             raise Exception("Failed on %s:\n%s" % (fn, diff))
     elif not TEST_PYPY and canonicalize_stderr(stderr) != canonicalize_stderr(expected_err):
-        if KEEP_GOING:
+        if expected == "fail":
+            r += "    Expected failure (bad stderr)"
+            return r
+        elif KEEP_GOING:
             r += "    \033[31mFAILED\033[0m (bad stderr)"
             failed.append(fn)
             return r

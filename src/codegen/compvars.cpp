@@ -270,7 +270,7 @@ public:
         llvm::Value* rtn;
         if (do_patchpoint) {
             PatchpointSetupInfo* pp
-                = patchpoints::createGenericPatchpoint(emitter.currentFunction(), info.getTypeRecorder(), true, 160);
+                = patchpoints::createGenericPatchpoint(emitter.currentFunction(), info.getTypeRecorder(), true, 256);
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());

@@ -203,7 +203,9 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
-    v->visit(im->obj);
+    if (im->obj) {
+        v->visit(im->obj);
+    }
     v->visit(im->func);
 }
 
@@ -331,6 +333,10 @@ extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
     return new BoxedInstanceMethod(obj, func);
 }
 
+extern "C" Box* boxUnboundInstanceMethod(Box* func) {
+    return new BoxedInstanceMethod(NULL, func);
+}
+
 extern "C" BoxedString* noneRepr(Box* v) {
     return new BoxedString("None");
 }
@@ -410,6 +416,27 @@ Box* instancemethodRepr(BoxedInstanceMethod* self) {
         return boxStrConstant("<bound instancemethod object>");
     else
         return boxStrConstant("<unbound instancemethod object>");
+}
+
+Box* instancemethodEq(BoxedInstanceMethod* self, Box* rhs) {
+    if (rhs->cls != instancemethod_cls) {
+        return boxBool(false);
+    }
+
+    BoxedInstanceMethod* rhs_im = static_cast<BoxedInstanceMethod*>(rhs);
+    if (self->func == rhs_im->func) {
+        if (self->obj == NULL && rhs_im->obj == NULL) {
+            return boxBool(true);
+        } else {
+            if (self->obj != NULL && rhs_im->obj != NULL) {
+                return compareInternal(self->obj, rhs_im->obj, AST_TYPE::Eq, NULL);
+            } else {
+                return boxBool(false);
+            }
+        }
+    } else {
+        return boxBool(false);
+    }
 }
 
 Box* sliceRepr(BoxedSlice* self) {
@@ -701,6 +728,7 @@ void setupRuntime() {
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
+    instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__name__", boxStrConstant("slice"));

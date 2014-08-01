@@ -1,3 +1,4 @@
+# expected: fail
 # Regression test:
 # If the init function doesn't exist, shouldn't just silently ignore any args
 # that got passed

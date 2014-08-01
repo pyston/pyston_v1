@@ -120,23 +120,23 @@ PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction* parent_cf, TypeRe
 }
 
 PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 1, 196, parent_cf, Getattr, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 1, 512, parent_cf, Getattr, type_recorder);
 }
 
 PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 1, 128, parent_cf, Getitem, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 1, 512, parent_cf, Getitem, type_recorder);
 }
 
 PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 1, 144, parent_cf, Setitem, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 1, 256, parent_cf, Setitem, type_recorder);
 }
 
 PatchpointSetupInfo* createDelitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(false, 1, 144, parent_cf, Delitem, type_recorder);
+    return PatchpointSetupInfo::initialize(false, 1, 256, parent_cf, Delitem, type_recorder);
 }
 
 PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(false, 2, 128, parent_cf, Setattr, type_recorder);
+    return PatchpointSetupInfo::initialize(false, 2, 512, parent_cf, Setattr, type_recorder);
 }
 
 PatchpointSetupInfo* createDelattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
@@ -147,7 +147,7 @@ PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, TypeR
     // TODO These are very large, but could probably be made much smaller with IC optimizations
     // - using rewriter2 for better code
     // - not emitting duplicate guards
-    return PatchpointSetupInfo::initialize(true, 3, 480 + 48 * num_args, parent_cf, Callsite, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 3, 640 + 48 * num_args, parent_cf, Callsite, type_recorder);
 }
 
 PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
@@ -155,7 +155,7 @@ PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf, Type
 }
 
 PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
-    return PatchpointSetupInfo::initialize(true, 4, 320, parent_cf, Binexp, type_recorder);
+    return PatchpointSetupInfo::initialize(true, 4, 512, parent_cf, Binexp, type_recorder);
 }
 
 PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder) {
