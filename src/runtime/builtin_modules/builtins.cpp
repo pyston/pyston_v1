@@ -470,7 +470,8 @@ public:
         int64_t idx = static_cast<BoxedInt*>(start)->n;
 
         static const std::string iter_name("__iter__");
-        Box* iterator = callattrInternal(obj, &iter_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        Box* iterator
+            = callattrInternal(obj, &iter_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         if (!iterator)
             raiseNotIterableError(getTypeName(iterator)->c_str());
         return new BoxedEnumerate(iterator, idx);
@@ -487,10 +488,11 @@ public:
 
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        Box* o = callattrInternal(self->iterator, &next_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        Box* o = callattrInternal(self->iterator, &next_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL,
+                                  NULL);
         RELEASE_ASSERT(o, "");
 
-        Box* r = new BoxedTuple({boxInt(self->idx), o});
+        Box* r = new BoxedTuple({ boxInt(self->idx), o });
         self->idx++;
         return r;
     }
@@ -500,7 +502,8 @@ public:
 
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        Box* r = callattrInternal(self->iterator, &hasnext_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        Box* r = callattrInternal(self->iterator, &hasnext_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL,
+                                  NULL, NULL);
         RELEASE_ASSERT(r, "%s", getTypeName(self->iterator)->c_str());
         return r;
     }
@@ -597,10 +600,15 @@ void setupBuiltins() {
 
     enumerate_cls = new BoxedClass(object_cls, 0, sizeof(BoxedEnumerate), false);
     enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
-    enumerate_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
-    enumerate_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::iter, typeFromClass(enumerate_cls), 1)));
-    enumerate_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::next, typeFromClass(enumerate_cls), 1)));
-    enumerate_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::hasnext, typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr(
+        "__new__",
+        new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
+    enumerate_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::iter, typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr(
+        "next", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::next, typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::hasnext,
+                                                                           typeFromClass(enumerate_cls), 1)));
     enumerate_cls->freeze();
     builtins_module->giveAttr("enumerate", enumerate_cls);
 

@@ -938,7 +938,8 @@ public:
             if (asgn->targets[0]->type == AST_TYPE::Name) {
                 AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
                 if (target->id[0] != '#') {
-                    if (asgn->value->type != AST_TYPE::Name || ast_cast<AST_Name>(asgn->value)->id[0] != '#') {
+                    if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id[0] == '#')
+                        && asgn->value->type != AST_TYPE::Str && asgn->value->type != AST_TYPE::Num) {
                         fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
                         print_ast(node);
                         printf("\n");
