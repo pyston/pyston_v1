@@ -2,15 +2,15 @@
 # Testing capitalize/title methods.
 
 def test(s):
-    print 'string:', repr(s), 'capitalize:', s.capitalize(), 'titLe:', s.titLe()
+    print 'string:', repr(s), 'capitalize:', s.capitalize(), 'title:', s.title()
 
 test(' hello ')
 test('Hello ')
 test('hello ')
 test('aaaa')
 test('AaAa')
-test('fOrMaT thIs aS titLe String')
-test('fOrMaT,thIs-aS*titLe;String')
+test('fOrMaT thIs aS title String')
+test('fOrMaT,thIs-aS*title;String')
 test('getInt')
 
 var = 'hello'
@@ -26,3 +26,9 @@ try:
    print 'TypeError not raised'
 except TypeError:
    print 'TypeError raised'
+
+for i in xrange(256):
+    c = chr(i)
+    s = "a%sb" % c
+    if s.title()[2] == 'b':
+        print repr(c)

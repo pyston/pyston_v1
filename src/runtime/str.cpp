@@ -483,15 +483,11 @@ Box* strCapitalize(BoxedString* self) {
     std::string s(self->s);
 
     for (auto& i : s) {
-        if (std::isupper(i)) {
-            i = std::tolower(i);
-        }
+        i = std::tolower(i);
     }
 
     if (!s.empty()) {
-        if (std::islower(s[0])) {
-            s[0] = std::toupper(s[0]);
-        }
+        s[0] = std::toupper(s[0]);
     }
 
     return boxString(s);
