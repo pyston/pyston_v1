@@ -359,6 +359,17 @@ Box* map2(Box* f, Box* container) {
     return rtn;
 }
 
+Box* filter2(Box* f, Box* container) {
+    Box* rtn = new BoxedList();
+    for (Box* e : container->pyElements()) {
+        Box* r = runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
+        bool b = nonzero(r);
+        if (b)
+            listAppendInternal(rtn, e);
+    }
+    return rtn;
+}
+
 Box* zip2(Box* container1, Box* container2) {
     BoxedList* rtn = new BoxedList();
 
@@ -436,6 +447,66 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
     builtins_module->giveAttr(name, cls);
     return cls;
 }
+
+BoxedClass* enumerate_cls;
+extern const ObjectFlavor enumerate_flavor;
+class BoxedEnumerate : public Box {
+private:
+    Box* iterator;
+    int64_t idx;
+
+public:
+    BoxedEnumerate(Box* iterator, int64_t idx) : Box(&enumerate_flavor, enumerate_cls), iterator(iterator), idx(idx) {}
+
+    static Box* new_(Box* cls, Box* obj, Box* start) {
+        RELEASE_ASSERT(cls == enumerate_cls, "");
+        RELEASE_ASSERT(start->cls == int_cls, "");
+        int64_t idx = static_cast<BoxedInt*>(start)->n;
+
+        static const std::string iter_name("__iter__");
+        Box* iterator = callattrInternal(obj, &iter_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        if (!iterator)
+            raiseNotIterableError(getTypeName(iterator)->c_str());
+        return new BoxedEnumerate(iterator, idx);
+    }
+
+    static Box* iter(Box* _self) {
+        assert(_self->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
+        return self;
+    }
+
+    static Box* next(Box* _self) {
+        static const std::string next_name("next");
+
+        assert(_self->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
+        Box* o = callattrInternal(self->iterator, &next_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        RELEASE_ASSERT(o, "");
+
+        Box* r = new BoxedTuple({boxInt(self->idx), o});
+        self->idx++;
+        return r;
+    }
+
+    static Box* hasnext(Box* _self) {
+        static const std::string hasnext_name("__hasnext__");
+
+        assert(_self->cls == enumerate_cls);
+        BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
+        Box* r = callattrInternal(self->iterator, &hasnext_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        RELEASE_ASSERT(r, "%s", getTypeName(self->iterator)->c_str());
+        return r;
+    }
+
+    static void gcHandler(GCVisitor* v, void* p) {
+        boxGCHandler(v, p);
+
+        BoxedEnumerate* it = (BoxedEnumerate*)p;
+        v->visit(it->iterator);
+    }
+};
+const ObjectFlavor enumerate_flavor(&BoxedEnumerate::gcHandler, NULL);
 
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
@@ -515,6 +586,17 @@ void setupBuiltins() {
     Box* issubclass_obj = new BoxedFunction(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
+
+    enumerate_cls = new BoxedClass(object_cls, 0, sizeof(BoxedEnumerate), false);
+    enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
+    enumerate_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
+    enumerate_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::iter, typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::next, typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::hasnext, typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->freeze();
+    builtins_module->giveAttr("enumerate", enumerate_cls);
+
+
     CLFunction* sorted_func = createRTFunction(1, 0, false, false);
     addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST });
     addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN });
@@ -534,6 +616,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
+    builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
     builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
