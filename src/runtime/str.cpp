@@ -477,6 +477,50 @@ Box* strRStrip(BoxedString* self, Box* chars) {
     }
 }
 
+Box* strCapitalize(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    std::string s(self->s);
+
+    for (auto& i : s) {
+        if (std::isupper(i)) {
+            i = std::tolower(i);
+        }
+    }
+
+    if (!s.empty()) {
+        if (std::islower(s[0])) {
+            s[0] = std::toupper(s[0]);
+        }
+    }
+
+    return boxString(s);
+}
+
+Box* strTitle(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    std::string s(self->s);
+    bool start_of_word = false;
+
+    for (auto& i : s) {
+        if (std::islower(i)) {
+            if (!start_of_word) {
+                i = std::toupper(i);
+            }
+            start_of_word = true;
+        } else if (std::isupper(i)) {
+            if (start_of_word) {
+                i = std::tolower(i);
+            }
+            start_of_word = true;
+        } else {
+            start_of_word = false;
+        }
+    }
+    return boxString(s);
+}
+
 Box* strContains(BoxedString* self, Box* elt) {
     assert(self->cls == str_cls);
     if (elt->cls != str_cls)
@@ -616,6 +660,9 @@ void setupStr() {
     str_cls->giveAttr("lstrip", new BoxedFunction(boxRTFunction((void*)strLStrip, STR, 2, 1, false, false), { None }));
 
     str_cls->giveAttr("rstrip", new BoxedFunction(boxRTFunction((void*)strRStrip, STR, 2, 1, false, false), { None }));
+
+    str_cls->giveAttr("capitalize", new BoxedFunction(boxRTFunction((void*)strCapitalize, STR, 1)));
+    str_cls->giveAttr("title", new BoxedFunction(boxRTFunction((void*)strTitle, STR, 1)));
 
     str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
 
