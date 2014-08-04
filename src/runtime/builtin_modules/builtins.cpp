@@ -180,6 +180,12 @@ extern "C" Box* sum(Box* container, Box* initial) {
     return cur;
 }
 
+extern "C" Box* id(Box* arg) {
+    i64 addr = (i64)(arg) ^ 0xdeadbeef00000003;
+    return boxInt(addr);
+}
+
+
 Box* open(Box* arg1, Box* arg2) {
     assert(arg2);
 
@@ -566,6 +572,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("sum",
                               new BoxedFunction(boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
 
+    id_obj = new BoxedFunction(boxRTFunction((void*)id, BOXED_INT, 1));
+    builtins_module->giveAttr("id", id_obj);
     chr_obj = new BoxedFunction(boxRTFunction((void*)chr, STR, 1));
     builtins_module->giveAttr("chr", chr_obj);
     ord_obj = new BoxedFunction(boxRTFunction((void*)ord, BOXED_INT, 1));

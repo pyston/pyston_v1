@@ -81,8 +81,8 @@ extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, f
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
-extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *chr_obj, *ord_obj,
-    *trap_obj;
+extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *id_obj, *chr_obj,
+    *ord_obj, *trap_obj;
 } // these are only needed for functionRepr, which is hacky
 extern "C" { extern BoxedModule* sys_module, *builtins_module, *math_module, *time_module, *thread_module; }
 
