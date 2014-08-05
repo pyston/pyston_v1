@@ -377,14 +377,6 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
     return boxString(std::string(chars.begin(), chars.end()));
 }
 
-Box* strLower(BoxedString* self) {
-    assert(self->cls == str_cls);
-
-    std::string lowered(self->s);
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), tolower);
-    return boxString(std::move(lowered));
-}
-
 Box* strJoin(BoxedString* self, Box* rhs) {
     assert(self->cls == str_cls);
 
@@ -514,6 +506,29 @@ Box* strTitle(BoxedString* self) {
             start_of_word = false;
         }
     }
+    return boxString(s);
+}
+
+Box* strLower(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return boxString(llvm::StringRef(self->s).lower());
+}
+
+Box* strUpper(BoxedString* self) {
+    assert(self->cls == str_cls);
+    return boxString(llvm::StringRef(self->s).upper());
+}
+
+Box* strSwapcase(BoxedString* self) {
+    std::string s(self->s);
+
+    for (auto& i : s) {
+        if (std::islower(i))
+            i = std::toupper(i);
+        else if (std::isupper(i))
+            i = std::tolower(i);
+    }
+
     return boxString(s);
 }
 
@@ -650,6 +665,8 @@ void setupStr() {
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
+    str_cls->giveAttr("swapcase", new BoxedFunction(boxRTFunction((void*)strSwapcase, STR, 1)));
+    str_cls->giveAttr("upper", new BoxedFunction(boxRTFunction((void*)strUpper, STR, 1)));
 
     str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 2, 1, false, false), { None }));
 
