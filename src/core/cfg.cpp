@@ -928,16 +928,13 @@ public:
             return;
         }
 
-        CFGBlock* normal_dest = cfg->addBlock();
-        // Add an extra exc_dest trampoline to prevent critical edges:
-        CFGBlock* exc_dest = cfg->addBlock();
-
-#ifndef NDEBUG
         if (node->type == AST_TYPE::Assign) {
             AST_Assign* asgn = ast_cast<AST_Assign>(node);
+            assert(asgn->targets.size() == 1);
             if (asgn->targets[0]->type == AST_TYPE::Name) {
                 AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
                 if (target->id[0] != '#') {
+#ifndef NDEBUG
                     if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id[0] == '#')
                         && asgn->value->type != AST_TYPE::Str && asgn->value->type != AST_TYPE::Num) {
                         fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
@@ -945,10 +942,16 @@ public:
                         printf("\n");
                         abort();
                     }
+#endif
+                    curblock->push_back(node);
+                    return;
                 }
             }
         }
-#endif
+
+        CFGBlock* normal_dest = cfg->addBlock();
+        // Add an extra exc_dest trampoline to prevent critical edges:
+        CFGBlock* exc_dest = cfg->addBlock();
 
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
