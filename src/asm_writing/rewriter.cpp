@@ -878,7 +878,8 @@ assembler::Register Rewriter::allocReg(Location dest) {
             if (vars_by_location.count(reg) == 0)
                 return reg;
         }
-        return allocReg(assembler::R15); // seem as fine as any
+        // TODO maybe should do some sort of round-robin or LRU eviction strategy?
+        return allocReg(assembler::R15);
     } else if (dest.type == Location::Register) {
         assembler::Register reg(dest.regnum);
 

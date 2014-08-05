@@ -579,9 +579,6 @@ private:
     AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
         assert(node->generators.size());
 
-        // I don't think it's easy to determine by the user, but it looks like the first generator iterator gets
-        // evaluated in the parent scope / frame.
-
         AST_expr* first = remapExpr(node->generators[0]->iter);
 
         AST_FunctionDef* func = new AST_FunctionDef();

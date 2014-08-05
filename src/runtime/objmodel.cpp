@@ -2640,12 +2640,14 @@ extern "C" Box* getitem(Box* value, Box* slice) {
     if (rtn == NULL) {
         // different versions of python give different error messages for this:
         if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
-            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(value)->c_str()); // 2.6.6
+            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(value)->c_str()); // tested on 2.6.6
         } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
-            raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(value)->c_str()); // 2.7.1
+            raiseExcHelper(TypeError, "'%s' object is not subscriptable",
+                           getTypeName(value)->c_str()); // tested on 2.7.1
         } else {
+            // Changed to this in 2.7.3:
             raiseExcHelper(TypeError, "'%s' object has no attribute '__getitem__'",
-                           getTypeName(value)->c_str()); // 2.7.3
+                           getTypeName(value)->c_str()); // tested on 2.7.3
         }
     }
 
