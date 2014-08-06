@@ -41,6 +41,10 @@ typedef std::unordered_map<std::string, CompilerVariable*> SymbolTable;
 typedef std::map<std::string, CompilerVariable*> SortedSymbolTable;
 typedef std::unordered_map<std::string, ConcreteCompilerVariable*> ConcreteSymbolTable;
 
+extern const std::string CREATED_CLOSURE_NAME;
+extern const std::string PASSED_CLOSURE_NAME;
+extern const std::string PASSED_GENERATOR_NAME;
+
 // Class that holds state of the current IR generation, that might not be local
 // to the specific phase or pass we're in.
 // TODO this probably shouldn't be here

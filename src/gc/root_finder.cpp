@@ -40,6 +40,8 @@ namespace gc {
 void collectRoots(void* start, void* end, TraceStack* stack) {
     assert(start <= end);
 
+    ASSERT((char*)end - (char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((char*)end - (char*)start) * 1.0 / (1 << 30));
     TraceStackGCVisitor(stack).visitPotentialRange((void**)start, (void**)end);
 }
 

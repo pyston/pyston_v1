@@ -197,9 +197,9 @@ static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
     return rtn;
 }
 
-static const std::string CREATED_CLOSURE_NAME = "!created_closure";
-static const std::string PASSED_CLOSURE_NAME = "!passed_closure";
-static const std::string PASSED_GENERATOR_NAME = "!passed_generator";
+const std::string CREATED_CLOSURE_NAME = "!created_closure";
+const std::string PASSED_CLOSURE_NAME = "!passed_closure";
+const std::string PASSED_GENERATOR_NAME = "!passed_generator";
 
 class IRGeneratorImpl : public IRGenerator {
 private:

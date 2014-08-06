@@ -274,6 +274,17 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
     return rtn;
 }
 
+static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, const std::string& name, CFGBlock* block) {
+    if (startswith(name, "!is_defined"))
+        return BOOL;
+    else if (name == PASSED_GENERATOR_NAME)
+        return GENERATOR;
+    else if (name == PASSED_CLOSURE_NAME)
+        return CLOSURE;
+    else
+        return types->getTypeAtBlockStart(name, block);
+}
+
 static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_guards, const GuardList& in_guards,
                     TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor, const BlockSet& full_blocks,
                     const BlockSet& partial_blocks) {
@@ -337,6 +348,14 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             arg_num++;
             if (arg_num < 3) {
                 from_arg = func_args[arg_num];
+#ifndef NDEBUG
+                if (from_arg->getType() != p.second->llvmType()) {
+                    from_arg->getType()->dump();
+                    printf("\n");
+                    p.second->llvmType()->dump();
+                    printf("\n");
+                }
+#endif
                 assert(from_arg->getType() == p.second->llvmType());
             } else {
                 ASSERT(func_args.size() == 4, "%ld", func_args.size());
@@ -355,12 +374,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             }
 
             ConcreteCompilerType* phi_type;
-            if (startswith(p.first, "!is_defined"))
-                phi_type = BOOL;
-            else
-                phi_type = types->getTypeAtBlockStart(p.first, target_block);
-            // ConcreteCompilerType *analyzed_type = types->getTypeAtBlockStart(p.first, block);
-            // ConcreteCompilerType *phi_type = (*phis)[p.first].first;
+            phi_type = getTypeAtBlockStart(types, p.first, target_block);
 
             ConcreteCompilerVariable* var = new ConcreteCompilerVariable(p.second, from_arg, true);
             (*initial_syms)[p.first] = var;
@@ -579,11 +593,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             assert(phis);
 
             for (const auto& p : entry_descriptor->args) {
-                ConcreteCompilerType* analyzed_type;
-                if (startswith(p.first, "!is_defined"))
-                    analyzed_type = BOOL;
-                else
-                    analyzed_type = types->getTypeAtBlockStart(p.first, block);
+                ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
 
                 // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
                 // analyzed_type->debugName().c_str());
@@ -916,13 +926,13 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
 
     std::vector<llvm::Type*> llvm_arg_types;
-    if (source->scoping->getScopeInfoForNode(source->ast)->takesClosure())
-        llvm_arg_types.push_back(g.llvm_closure_type_ptr);
-
-    if (source->scoping->getScopeInfoForNode(source->ast)->takesGenerator())
-        llvm_arg_types.push_back(g.llvm_generator_type_ptr);
-
     if (entry_descriptor == NULL) {
+        if (source->scoping->getScopeInfoForNode(source->ast)->takesClosure())
+            llvm_arg_types.push_back(g.llvm_closure_type_ptr);
+
+        if (source->scoping->getScopeInfoForNode(source->ast)->takesGenerator())
+            llvm_arg_types.push_back(g.llvm_generator_type_ptr);
+
         for (int i = 0; i < nargs; i++) {
             if (i == 3) {
                 llvm_arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
