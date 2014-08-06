@@ -51,7 +51,7 @@ void collectOtherThreadsStacks(TraceStack* stack) {
 
     for (threading::ThreadState& tstate : threads) {
         collectRoots(tstate.stack_start, tstate.stack_end, stack);
-        collectRoots(&tstate.ucontext, (&tstate.ucontext) + 1, stack);
+        collectRoots(tstate.ucontext, tstate.ucontext + 1, stack);
     }
 }
 
@@ -69,10 +69,11 @@ static void collectLocalStack(TraceStack* stack) {
     collectRoots(&registers, (&registers) + 1, stack);
 
     void* stack_bottom = threading::getStackBottom();
+    void* stack_top = threading::getStackTop();
 #if STACK_GROWS_DOWN
-    collectRoots(&registers, stack_bottom, stack);
+    collectRoots(stack_top, stack_bottom, stack);
 #else
-    collectRoots(stack_bottom, &registers + 1, stack);
+    collectRoots(stack_bottom, stack_top, stack);
 #endif
 }
 

@@ -36,6 +36,7 @@ namespace pyston {
 static void generatorEntry(BoxedGenerator* g) {
     assert(g->cls == generator_cls);
     assert(g->function->cls == function_cls);
+    threading::pushGenerator(&g->returnContext);
 
     try {
         // call body of the generator
@@ -50,6 +51,7 @@ static void generatorEntry(BoxedGenerator* g) {
 
     // we returned from the body of the generator. next/send/throw will notify the caller
     g->entryExited = true;
+    threading::popGenerator();
     swapcontext(&g->context, &g->returnContext);
 }
 
@@ -107,7 +109,9 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     BoxedGenerator* self = static_cast<BoxedGenerator*>(obj);
     self->returnValue = value;
 
+    threading::popGenerator();
     swapcontext(&self->context, &self->returnContext);
+    threading::pushGenerator(&self->returnContext);
 
     // if the generator receives a exception from the caller we have to throw it
     if (self->exception) {

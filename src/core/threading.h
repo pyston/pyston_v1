@@ -32,18 +32,19 @@ namespace threading {
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
 
 void registerMainThread();
+void finishMainThread();
 
 struct ThreadState {
     pid_t tid; // useful mostly for debugging
-    ucontext_t ucontext;
+    ucontext_t* ucontext;
 
+    // start and end (start < end) of the threads main stack.
+    // The thread may not be actually executing on that stack, since it may be
+    // in a generator, but those generators will be tracked separately.
     void* stack_start, *stack_end;
 
     ThreadState(pid_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
-        : tid(tid), stack_start(stack_start), stack_end(stack_end) {
-        memcpy(&this->ucontext, ucontext, sizeof(ucontext_t));
-        this->ucontext.uc_mcontext.fpregs = &this->ucontext.__fpregs_mem;
-    }
+        : tid(tid), ucontext(ucontext), stack_start(stack_start), stack_end(stack_end) {}
 };
 // Gets a ThreadState per thread, not including the thread calling this function.
 // For this call to make sense, the threads all should be blocked;
@@ -53,7 +54,16 @@ std::vector<ThreadState> getAllThreadStates();
 // Get the stack "bottom" (ie first pushed data.  For stacks that grow down, this
 // will be the highest address).
 void* getStackBottom();
+void* getStackTop();
 
+// We need to track the state of the thread's main stack.  This can get complicated when
+// generators are involved, so we add some hooks for the generator code to notify the threading
+// code that it has switched onto of off of a generator.
+// A generator should call pushGenerator() when it gets switched to, with a pointer to the context
+// that it will return to (ie the context of the thing that called the generator).
+// The generator should call popGenerator() when it is about to switch back to the caller.
+void pushGenerator(ucontext_t* prev_context);
+void popGenerator();
 
 
 #ifndef THREADING_USE_GIL

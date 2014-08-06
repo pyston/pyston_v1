@@ -270,6 +270,9 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    threading::finishMainThread();
+
     _t.split("joinRuntime");
 
     int rtncode = joinRuntime();
