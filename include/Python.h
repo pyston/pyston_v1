@@ -16,6 +16,7 @@
 #define PYSTON_EXTINCLUDE_PYTHON_H
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -26,7 +27,6 @@
 //typedef struct PyObject PyObject;
 typedef void PyObject;
 
-#define Py_INCREF(x)
 bool PyArg_ParseTuple(PyObject*, const char*, ...);
 PyObject* Py_BuildValue(const char*, ...);
 
@@ -39,6 +39,22 @@ struct PyMethodDef {
     const char  *ml_doc;    /* The __doc__ attribute, or NULL */
 };
 typedef struct PyMethodDef PyMethodDef;
+
+PyObject* PyString_FromString(const char*);
+PyObject* PyInt_FromLong(long);
+int PyDict_SetItem(PyObject* mp, PyObject* key, PyObject* item);
+int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item);
+
+PyObject* PyModule_GetDict(PyObject*);
+PyObject* PyDict_New(void);
+
+#define Py_XDECREF(op) (op)
+#define Py_INCREF(op) (op)
+#define Py_DECREF(op) (op)
+
+#define PyDoc_VAR(name) static char name[]
+#define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
+#define PyDoc_STR(str) str
 
 #define METH_VARARGS  0x0001
 
@@ -54,6 +70,10 @@ typedef struct PyMethodDef PyMethodDef;
 PyObject* Py_InitModule4(const char *arg0, PyMethodDef *arg1, const char *arg2, PyObject *arg3, int arg4);
 #define Py_InitModule(name, methods) \
 	Py_InitModule4(name, methods, (char *)NULL, (PyObject *)NULL, \
+		       PYTHON_API_VERSION)
+
+#define Py_InitModule3(name, methods, doc) \
+	Py_InitModule4(name, methods, doc, (PyObject *)NULL, \
 		       PYTHON_API_VERSION)
 
 #endif

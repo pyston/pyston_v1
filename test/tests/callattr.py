@@ -2,7 +2,7 @@
 # callattr: c.foo(i) should theoretically create an instancemethod object and then call that,
 # but calling an attribute is such a common case that I special case it as a callattr(),
 # which avoids the allocation/immediate deallocation of the instancemethod object.
-# statcheck: stats.get('num_instancemethods', 0) <= 10
+# statcheck: noninit_count('num_instancemethods') <= 10
 # statcheck: stats['slowpath_callattr'] <= 20
 class C(object):
     def foo(self, a0, a1, a2, a3, a4, a5, a6, a7):

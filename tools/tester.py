@@ -213,6 +213,9 @@ def run_test(fn, check_stats, run_memcheck):
     r += "    Correct output (%5.1fms)" % (elapsed * 1000,)
 
     if check_stats:
+        def noninit_count(s):
+            return stats[s] - stats.get("_init_" + s, 0)
+
         for l in statchecks:
             test = eval(l)
             if not test:

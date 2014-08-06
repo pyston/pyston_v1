@@ -1,6 +1,6 @@
 # run_args: -n
-# statcheck: stats['slowpath_binop'] <= 10
-# statcheck: stats['slowpath_runtimecall'] <= 10
+# statcheck: noninit_count('slowpath_binop') <= 10
+# statcheck: noninit_count('slowpath_runtimecall') <= 10
 
 i = 1
 f = 1.0

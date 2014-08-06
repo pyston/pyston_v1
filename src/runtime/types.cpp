@@ -31,6 +31,8 @@
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 
+extern "C" void initerrno();
+
 namespace pyston {
 
 bool IN_SHUTDOWN = false;
@@ -617,13 +619,16 @@ void setupRuntime() {
     setupMath();
     setupTime();
     setupThread();
-    setupErrno();
     setupPosix();
     setupSre();
 
     setupCAPI();
 
+    initerrno();
+
     setupSysEnd();
+
+    Stats::endOfInit();
 
     TRACK_ALLOCATIONS = true;
 }

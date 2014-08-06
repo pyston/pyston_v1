@@ -42,6 +42,8 @@ def verify_include_order(_, dir, files):
             for l in f:
                 l = l.strip()
                 if l.startswith("//"):
+                    if "lint: allow-unsorted-includes" in l:
+                        break
                     continue
                 if not l:
                     if section:

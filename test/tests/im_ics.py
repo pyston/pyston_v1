@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: stats['slowpath_runtimecall'] < 10
+# statcheck: noninit_count('slowpath_runtimecall') < 10
 
 class C(object):
     def foo(self, a, b, c, d, e):

@@ -39,6 +39,7 @@ public:
     static void log(int id, int count = 1) { (*counts)[id] += count; }
 
     static void dump();
+    static void endOfInit();
 };
 
 struct StatCounter {

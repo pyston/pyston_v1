@@ -21,20 +21,87 @@
 #include "codegen/compvars.h"
 #include "core/threading.h"
 #include "core/types.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-static BoxedModule* test_module = NULL;
+// A dictionary-like wrapper around the attributes array.
+// Not sure if this will be enough to satisfy users who expect __dict__
+// or PyModule_GetDict to return real dicts.
+BoxedClass* attrwrapper_cls;
+class AttrWrapper : public Box {
+private:
+    Box* b;
+
+public:
+    AttrWrapper(Box* b) : Box(attrwrapper_cls), b(b) {}
+
+    static void gcHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
+
+        AttrWrapper* aw = (AttrWrapper*)b;
+        v->visit(aw->b);
+    }
+
+    static Box* setitem(Box* _self, Box* _key, Box* value) {
+        assert(_self->cls == attrwrapper_cls);
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        self->b->setattr(key->s, value, NULL);
+
+        return None;
+    }
+};
+
+extern "C" PyObject* PyModule_GetDict(PyObject* _m) {
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+    assert(m->cls == module_cls);
+
+    return new AttrWrapper(m);
+}
+
+extern "C" PyObject* PyDict_New() {
+    return new BoxedDict();
+}
+
+extern "C" PyObject* PyString_FromString(const char* s) {
+    return boxStrConstant(s);
+}
+
+extern "C" PyObject* PyInt_FromLong(long n) {
+    return boxInt(n);
+}
+
+extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
+    Box* b = static_cast<Box*>(mp);
+    Box* key = static_cast<Box*>(_key);
+    Box* item = static_cast<Box*>(_item);
+
+    static std::string setitem_str("__setitem__");
+    Box* r = callattrInternal(b, &setitem_str, CLASS_ONLY, NULL, ArgPassSpec(2), key, item, NULL, NULL, NULL);
+
+    RELEASE_ASSERT(r, "");
+    return 0;
+}
+
+extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) {
+    return PyDict_SetItem(mp, boxStrConstant(key), item);
+}
+
 
 BoxedClass* capifunc_cls;
 class BoxedCApiFunction : public Box {
 private:
+    Box* passthrough;
     const char* name;
     PyCFunction func;
 
 public:
-    BoxedCApiFunction(const char* name, PyCFunction func) : Box(capifunc_cls), name(name), func(func) {}
+    BoxedCApiFunction(Box* passthrough, const char* name, PyCFunction func)
+        : Box(capifunc_cls), passthrough(passthrough), name(name), func(func) {}
 
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
@@ -47,26 +114,34 @@ public:
 
         threading::GLPromoteRegion _gil_lock;
 
-        Box* rtn = (Box*)self->func(test_module, varargs);
+        Box* rtn = (Box*)self->func(self->passthrough, varargs);
         assert(rtn);
         return rtn;
     }
 };
 
-extern "C" void* Py_InitModule4(const char* arg0, PyMethodDef* arg1, const char* arg2, PyObject* arg3, int arg4) {
-    test_module = createModule("test", "../test/test_extension/test.so");
+extern "C" void* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self, int apiver) {
+    BoxedModule* module = createModule(name, "__builtin__");
 
-    while (arg1->ml_name) {
+    Box* passthrough = static_cast<Box*>(self);
+    if (!passthrough)
+        passthrough = None;
+
+    while (methods->ml_name) {
         if (VERBOSITY())
-            printf("Loading method %s\n", arg1->ml_name);
-        assert(arg1->ml_flags == METH_VARARGS);
+            printf("Loading method %s\n", methods->ml_name);
+        assert(methods->ml_flags == METH_VARARGS);
 
-        // test_module->giveAttr(arg1->ml_name, boxInt(1));
-        test_module->giveAttr(arg1->ml_name, new BoxedCApiFunction(arg1->ml_name, arg1->ml_meth));
+        module->giveAttr(methods->ml_name, new BoxedCApiFunction(passthrough, methods->ml_name, methods->ml_meth));
 
-        arg1++;
+        methods++;
     }
-    return test_module;
+
+    if (doc) {
+        module->setattr("__doc__", boxStrConstant(doc), NULL);
+    }
+
+    return module;
 }
 
 extern "C" void* Py_BuildValue(const char* arg0) {
@@ -94,11 +169,9 @@ extern "C" bool PyArg_ParseTuple(void* tuple, const char* fmt, ...) {
     return true;
 }
 
-BoxedModule* getTestModule() {
-    if (test_module)
-        return test_module;
-
-    void* handle = dlopen("../test/test_extension/test.so", RTLD_NOW);
+BoxedModule* importTestExtension() {
+    const char* pathname = "../test/test_extension/test.so";
+    void* handle = dlopen(pathname, RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "%s\n", dlerror());
         exit(1);
@@ -113,12 +186,19 @@ BoxedModule* getTestModule() {
         exit(1);
     }
 
-    // dlclose(handle);
-
     assert(init);
     (*init)();
-    assert(test_module);
-    return test_module;
+
+    BoxedDict* sys_modules = getSysModulesDict();
+    Box* s = boxStrConstant("test");
+    Box* _m = sys_modules->d[s];
+    RELEASE_ASSERT(_m, "module failed to initialize properly?");
+    assert(_m->cls == module_cls);
+
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+    m->setattr("__file__", boxStrConstant(pathname), NULL);
+    m->fn = pathname;
+    return m;
 }
 
 void setupCAPI() {
@@ -133,6 +213,11 @@ void setupCAPI() {
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, false)));
 
     capifunc_cls->freeze();
+
+    attrwrapper_cls = new BoxedClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
+    attrwrapper_cls->giveAttr("__name__", boxStrConstant("attrwrapper"));
+    attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
+    attrwrapper_cls->freeze();
 }
 
 void teardownCAPI() {

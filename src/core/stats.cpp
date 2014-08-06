@@ -65,5 +65,13 @@ void Stats::dump() {
     }
 }
 
+void Stats::endOfInit() {
+    int orig_names = names->size();
+    for (int orig_id = 0; orig_id < orig_names; orig_id++) {
+        int init_id = getStatId("_init_" + (*names)[orig_id]);
+        log(init_id, (*counts)[orig_id]);
+    }
+};
+
 #endif
 }

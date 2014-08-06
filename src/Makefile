@@ -204,6 +204,7 @@ CLANGFLAGS := $(CXXFLAGS_DBG) $(CLANG_EXTRA_FLAGS)
 CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
 EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include $(CLANG_EXTRA_FLAGS)
+EXT_CFLAGS += -Wno-missing-field-initializers
 
 # Extra flags to enable soon:
 CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int -Wmissing-include-dirs -Wstrict-overflow=5 -Wundef -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wstrict-prototypes -Wold-style-definition -Wmissing-field-initializers -Wredundant-decls -Wnested-externs -Winline -Wint-to-pointer-cast -Wpointer-to-int-cast -Wlong-long -Wvla
@@ -259,11 +260,12 @@ STDLIB_SRCS := $(wildcard runtime/inline/*.cpp)
 SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
+STDMODULES_SRCS := ../lib_python/2.7_Modules/errnomodule.c
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
-OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o)
-PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o)
-OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o)
+OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(STDMODULES_SRCS:.c=.o)
+PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(STDMODULES_SRCS:.c=.o)
+OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(STDMODULES_SRCS:.c=.o)
 
 OPTIONAL_SRCS := codegen/profiling/oprofile.cpp codegen/profiling/pprof.cpp
 TOOL_SRCS := $(wildcard $(TOOLS_DIR)/*.cpp)
@@ -283,7 +285,7 @@ all: llvm
 	$(MAKE) pyston_all
 pyston_all: pyston_dbg pyston pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o)
 
-ALL_HEADERS := $(wildcard */*.h) $(wildcard */*/*.h)
+ALL_HEADERS := $(wildcard */*.h) $(wildcard */*/*.h) $(wildcard ../include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
 	$(VERB) ctags $^

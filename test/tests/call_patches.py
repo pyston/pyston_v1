@@ -1,8 +1,8 @@
 # run_args: -n
 # statcheck: stats.get('slowpath_callattr', 0) <= 20
-# statcheck: stats['slowpath_runtimecall'] <= 20
+# statcheck: noninit_count('slowpath_runtimecall') <= 20
 # statcheck: stats.get("slowpath_callclfunc", 0) <= 20
-# statcheck: stats['rewriter_nopatch'] <= 20
+# statcheck: noninit_count('rewriter_nopatch') <= 20
 
 def outer():
     def f():

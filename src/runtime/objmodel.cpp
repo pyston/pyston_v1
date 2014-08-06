@@ -3159,7 +3159,7 @@ extern "C" Box* import(const std::string* name) {
     }
 
     if (*name == "test") {
-        return getTestModule();
+        return importTestExtension();
     }
 
     raiseExcHelper(ImportError, "No module named %s", name->c_str());
