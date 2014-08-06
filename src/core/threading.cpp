@@ -27,8 +27,6 @@
 #include "core/thread_utils.h"
 #include "core/util.h"
 
-extern "C" int start_thread(void* arg);
-
 namespace pyston {
 namespace threading {
 
@@ -64,6 +62,7 @@ struct ThreadStateInternal {
 };
 static std::unordered_map<pid_t, ThreadStateInternal> saved_thread_states;
 
+// TODO could optimize these by keeping a __thread local reference to current_threads[gettid()]
 void* getStackBottom() {
     return current_threads[gettid()].stack_bottom;
 }
@@ -282,14 +281,8 @@ static void* find_stack() {
     return NULL; /* not found =^P */
 }
 
-intptr_t call_frame_base;
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
-
-    // Would be nice if we could set this to the pthread start_thread,
-    // since _thread_start doesn't always show up in the traceback.
-    // call_frame_base = (intptr_t)::start_thread;
-    call_frame_base = (intptr_t)_thread_start;
 
     current_threads[gettid()] = ThreadInfo{
         .stack_bottom = find_stack(), .pthread_id = pthread_self(),

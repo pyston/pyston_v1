@@ -28,11 +28,8 @@ class Box;
 
 namespace threading {
 
+// returns a thread id (currently, the pthread_t id)
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
-
-// The base of the call frame stack for a thread;
-// useful for knowing when to stop unwinding.
-extern intptr_t call_frame_base;
 
 void registerMainThread();
 
@@ -53,9 +50,11 @@ struct ThreadState {
 // as a corollary, this thread is very much not thread safe.
 std::vector<ThreadState> getAllThreadStates();
 
-// Get the stack "bottom" (first pushed data; for stacks that grow down, will
-// be the highest address).
+// Get the stack "bottom" (ie first pushed data.  For stacks that grow down, this
+// will be the highest address).
 void* getStackBottom();
+
+
 
 #ifndef THREADING_USE_GIL
 #define THREADING_USE_GIL 1
