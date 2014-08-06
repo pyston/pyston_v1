@@ -15,12 +15,11 @@
 #include <cstring>
 
 #include "runtime/dict.h"
-#include "runtime/gc_runtime.h"
 
 namespace pyston {
 
 BoxedDictIterator::BoxedDictIterator(BoxedDict* d, IteratorType type)
-    : Box(&dict_iterator_flavor, dict_iterator_cls), d(d), it(d->d.begin()), itEnd(d->d.end()), type(type) {
+    : Box(dict_iterator_cls), d(d), it(d->d.begin()), itEnd(d->d.end()), type(type) {
 }
 
 Box* dictIterKeys(Box* s) {

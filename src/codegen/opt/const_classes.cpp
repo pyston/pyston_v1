@@ -49,8 +49,6 @@ private:
     }
     BoxedClass* getClassFromGV(GlobalVariable* gv) { return *(BoxedClass**)getGVAddr(gv); }
 
-    ObjectFlavor* getFlavorFromGV(GlobalVariable* gv) { return (ObjectFlavor*)getGVAddr(gv); }
-
     void replaceUsesWithConstant(llvm::Value* v, uintptr_t val) {
         if (isa<PointerType>(v->getType()))
             v->replaceAllUsesWith(embedConstantPtr((void*)val, v->getType()));
@@ -67,31 +65,6 @@ private:
         else
             li->replaceAllUsesWith(embedConstantPtr(False, g.llvm_bool_type_ptr));
         return true;
-    }
-
-    bool handleFlavor(LoadInst* li, ConstantExpr* gepce) {
-        if (VERBOSITY("opt") >= 1) {
-            errs() << "\nFound this load of a flavor attr:\n" << *li << '\n';
-        }
-
-        GetElementPtrInst* gep = cast<GetElementPtrInst>(gepce->getAsInstruction());
-        APInt ap_offset(64, 0, true);
-        bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
-        delete gep;
-        assert(success);
-        int64_t offset = ap_offset.getSExtValue();
-
-        if (offset == offsetof(ObjectFlavor, kind_id)) {
-            ObjectFlavor* flavor = getFlavorFromGV(cast<GlobalVariable>(gepce->getOperand(0)));
-            replaceUsesWithConstant(li, flavor->kind_id);
-            return true;
-        } else {
-            ASSERT(0, "%ld", offset);
-            return false;
-        }
-
-        assert(0);
-        return false;
     }
 
     bool handleCls(LoadInst* li, GlobalVariable* gv) {
@@ -190,9 +163,6 @@ public:
             ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0));
             // Not 100% sure what the isGEPWithNoNotionalOverIndexing() means, but
             // at least it checks if it's a gep:
-            if (ce && ce->isGEPWithNoNotionalOverIndexing() && ce->getOperand(0)->getType() == g.llvm_flavor_type_ptr) {
-                changed = handleFlavor(li, ce);
-            }
 
             GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0));
             if (!gv)

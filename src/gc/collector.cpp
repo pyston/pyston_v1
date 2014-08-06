@@ -54,17 +54,15 @@ StaticRootHandle::~StaticRootHandle() {
     getRootHandles()->erase(this);
 }
 
-bool TraceStackGCVisitor::isValid(void* p) {
-    return global_heap.getAllocationFromInteriorPointer(p);
-}
 
-inline void TraceStackGCVisitor::_visit(void* p) {
-    assert(isValid(p));
-    stack->push(p);
+
+bool TraceStackGCVisitor::isValid(void* p) {
+    return global_heap.getAllocationFromInteriorPointer(p) != NULL;
 }
 
 void TraceStackGCVisitor::visit(void* p) {
-    _visit(p);
+    assert(global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
+    stack->push(p);
 }
 
 void TraceStackGCVisitor::visitRange(void* const* start, void* const* end) {
@@ -79,9 +77,9 @@ void TraceStackGCVisitor::visitRange(void* const* start, void* const* end) {
 }
 
 void TraceStackGCVisitor::visitPotential(void* p) {
-    void* a = global_heap.getAllocationFromInteriorPointer(p);
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
     if (a) {
-        visit(a);
+        visit(a->user_data);
     }
 }
 
@@ -90,19 +88,6 @@ void TraceStackGCVisitor::visitPotentialRange(void* const* start, void* const* e
         visitPotential(*start);
         start++;
     }
-}
-
-#define MAX_KINDS 1024
-#define KIND_OFFSET 0x111
-static kindid_t num_kinds = 0;
-static AllocationKind::GCHandler handlers[MAX_KINDS];
-
-extern "C" kindid_t registerKind(const AllocationKind* kind) {
-    assert(kind == &untracked_kind || kind->gc_handler);
-    assert(num_kinds < MAX_KINDS);
-    assert(handlers[num_kinds] == NULL);
-    handlers[num_kinds] = kind->gc_handler;
-    return KIND_OFFSET + num_kinds++;
 }
 
 static void markPhase() {
@@ -124,37 +109,37 @@ static void markPhase() {
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
     while (void* p = stack.pop()) {
         assert(((intptr_t)p) % 8 == 0);
-        GCObjectHeader* header = headerFromObject(p);
+        GCAllocation* al = GCAllocation::fromUserData(p);
 
-        if (isMarked(header)) {
+        if (isMarked(al)) {
             continue;
         }
 
         // printf("Marking + scanning %p\n", p);
 
-        setMark(header);
+        setMark(al);
 
-        // is being made
-        if (header->kind_id == 0)
+        GCKind kind_id = al->kind_id;
+        if (kind_id == GCKind::UNTRACKED) {
             continue;
+        } else if (kind_id == GCKind::CONSERVATIVE) {
+            uint32_t bytes = al->kind_data;
+            visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+        } else if (kind_id == GCKind::PYTHON) {
+            Box* b = reinterpret_cast<Box*>(p);
+            BoxedClass* cls = b->cls;
 
-        ASSERT(KIND_OFFSET <= header->kind_id && header->kind_id < KIND_OFFSET + num_kinds, "%p %d", header,
-               header->kind_id);
-
-        if (header->kind_id == untracked_kind.kind_id)
-            continue;
-
-        // ASSERT(kind->_cookie == AllocationKind::COOKIE, "%lx %lx", kind->_cookie, AllocationKind::COOKIE);
-        // AllocationKind::GCHandler gcf = kind->gc_handler;
-        AllocationKind::GCHandler gcf = handlers[header->kind_id - KIND_OFFSET];
-
-        assert(gcf);
-        // if (!gcf) {
-        // std::string name = g.func_addr_registry.getFuncNameAtAddress((void*)kind, true);
-        // ASSERT(gcf, "%p %s", kind, name.c_str());
-        //}
-
-        gcf(&visitor, p);
+            if (cls) {
+                // The cls can be NULL since we use 'new' to construct them.
+                // An arbitrary amount of stuff can happen between the 'new' and
+                // the call to the constructor (ie the args get evaluated), which
+                // can trigger a collection.
+                ASSERT(cls->gc_visit, "%s", getTypeName(b)->c_str());
+                cls->gc_visit(&visitor, b);
+            }
+        } else {
+            RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+        }
     }
 
 #ifndef NVALGRIND

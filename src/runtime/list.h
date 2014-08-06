@@ -28,7 +28,6 @@ public:
     BoxedListIterator(BoxedList* l);
 };
 
-extern "C" const ObjectFlavor list_iterator_flavor;
 Box* listIter(Box* self);
 Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);

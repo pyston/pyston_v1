@@ -15,6 +15,7 @@
 #ifndef PYSTON_GC_HEAP_H
 #define PYSTON_GC_HEAP_H
 
+#include <cstddef>
 #include <cstdint>
 
 #include "core/common.h"
@@ -23,13 +24,40 @@
 namespace pyston {
 namespace gc {
 
-inline GCObjectHeader* headerFromObject(void* obj) {
-#ifndef NVALGRIND
-    return static_cast<GCObjectHeader*>((void*)((char*)obj + 0));
-#else
-    return static_cast<GCObjectHeader*>(obj);
-#endif
+typedef uint8_t kindid_t;
+struct GCAllocation {
+    unsigned int gc_flags : 8;
+    GCKind kind_id : 8;
+    unsigned int _reserved1 : 16;
+    unsigned int kind_data : 32;
+
+    char user_data[0];
+
+    static GCAllocation* fromUserData(void* user_data) {
+        char* d = reinterpret_cast<char*>(user_data);
+        return reinterpret_cast<GCAllocation*>(d - offsetof(GCAllocation, user_data));
+    }
+};
+static_assert(sizeof(GCAllocation) <= sizeof(void*),
+              "we should try to make sure the gc header is word-sized or smaller");
+
+#define MARK_BIT 0x1
+
+inline void setMark(GCAllocation* header) {
+    header->gc_flags |= MARK_BIT;
 }
+
+inline void clearMark(GCAllocation* header) {
+    header->gc_flags &= ~MARK_BIT;
+}
+
+inline bool isMarked(GCAllocation* header) {
+    return (header->gc_flags & MARK_BIT) != 0;
+}
+
+#undef MARK_BIT
+
+
 
 #define BLOCK_SIZE (4 * 4096)
 #define ATOM_SIZE 16
@@ -80,8 +108,8 @@ private:
     Block* full_heads[NUM_BUCKETS];
     LargeObj* large_head = NULL;
 
-    void* allocSmall(size_t rounded_size, int bucket_idx);
-    void* allocLarge(size_t bytes);
+    GCAllocation* allocSmall(size_t rounded_size, int bucket_idx);
+    GCAllocation* allocLarge(size_t bytes);
 
     // DS_DEFINE_MUTEX(lock);
     DS_DEFINE_SPINLOCK(lock);
@@ -104,10 +132,10 @@ private:
 public:
     Heap() : thread_caches(this) {}
 
-    void* realloc(void* ptr, size_t bytes);
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
 
-    void* alloc(size_t bytes) {
-        void* rtn;
+    GCAllocation* alloc(size_t bytes) {
+        GCAllocation* rtn;
         // assert(bytes >= 16);
         if (bytes <= 16)
             rtn = allocSmall(16, 0);
@@ -125,16 +153,13 @@ public:
             }
         }
 
-        // assert(rtn);
-        GCObjectHeader* header = headerFromObject(rtn);
-        *reinterpret_cast<intptr_t*>(header) = 0;
         return rtn;
     }
 
-    void free(void* ptr);
+    void free(GCAllocation* alloc);
 
     // not thread safe:
-    void* getAllocationFromInteriorPointer(void* ptr);
+    GCAllocation* getAllocationFromInteriorPointer(void* ptr);
     // not thread safe:
     void freeUnmarked();
 };

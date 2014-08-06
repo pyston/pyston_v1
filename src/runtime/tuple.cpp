@@ -22,7 +22,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -203,17 +202,15 @@ Box* tupleHash(BoxedTuple* self) {
 }
 
 BoxedClass* tuple_iterator_cls = NULL;
-extern "C" void tupleIteratorGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-    BoxedTupleIterator* it = (BoxedTupleIterator*)p;
+extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+    BoxedTupleIterator* it = (BoxedTupleIterator*)b;
     v->visit(it->t);
 }
 
-extern "C" const ObjectFlavor tuple_iterator_flavor(&tupleIteratorGCHandler, NULL);
-
 
 void setupTuple() {
-    tuple_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedTuple), false);
+    tuple_iterator_cls = new BoxedClass(object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false);
 
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 

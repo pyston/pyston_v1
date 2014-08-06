@@ -67,7 +67,6 @@ struct GlobalState {
     FunctionAddressRegistry func_addr_registry;
     llvm::Type* llvm_value_type, *llvm_value_type_ptr, *llvm_value_type_ptr_ptr;
     llvm::Type* llvm_class_type, *llvm_class_type_ptr;
-    llvm::Type* llvm_flavor_type, *llvm_flavor_type_ptr;
     llvm::Type* llvm_opaque_type;
     llvm::Type* llvm_str_type_ptr;
     llvm::Type* llvm_clfunction_type_ptr, *llvm_closure_type_ptr, *llvm_generator_type_ptr;

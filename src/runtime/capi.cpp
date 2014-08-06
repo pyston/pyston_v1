@@ -27,7 +27,6 @@ namespace pyston {
 
 static BoxedModule* test_module = NULL;
 
-extern "C" const ObjectFlavor capifunc_flavor(&boxGCHandler, NULL);
 BoxedClass* capifunc_cls;
 class BoxedCApiFunction : public Box {
 private:
@@ -35,8 +34,7 @@ private:
     PyCFunction func;
 
 public:
-    BoxedCApiFunction(const char* name, PyCFunction func)
-        : Box(&capifunc_flavor, capifunc_cls), name(name), func(func) {}
+    BoxedCApiFunction(const char* name, PyCFunction func) : Box(capifunc_cls), name(name), func(func) {}
 
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
@@ -124,7 +122,7 @@ BoxedModule* getTestModule() {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedClass(object_cls, 0, sizeof(BoxedCApiFunction), false);
+    capifunc_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
     capifunc_cls->giveAttr("__repr__",

@@ -15,13 +15,12 @@
 
 #include <cstring>
 
-#include "runtime/gc_runtime.h"
 #include "runtime/list.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
 
-BoxedListIterator::BoxedListIterator(BoxedList* l) : Box(&list_iterator_flavor, list_iterator_cls), l(l), pos(0) {
+BoxedListIterator::BoxedListIterator(BoxedList* l) : Box(list_iterator_cls), l(l), pos(0) {
 }
 
 
@@ -72,7 +71,7 @@ void BoxedList::shrink() {
             elts = GCdArray::realloc(elts, new_capacity);
             capacity = new_capacity;
         } else if (size == 0) {
-            rt_free(elts);
+            delete elts;
             capacity = 0;
         }
     }

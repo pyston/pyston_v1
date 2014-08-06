@@ -28,7 +28,6 @@ public:
     BoxedTupleIterator(BoxedTuple* t);
 };
 
-extern "C" const ObjectFlavor tuple_iterator_flavor;
 Box* tupleIter(Box* self);
 Box* tupleIterIter(Box* self);
 Box* tupleiterHasnext(Box* self);

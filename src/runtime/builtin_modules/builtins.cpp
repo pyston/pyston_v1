@@ -20,7 +20,6 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/inline/xrange.h"
 #include "runtime/list.h"
 #include "runtime/long.h"
@@ -392,7 +391,6 @@ Box* zip2(Box* container1, Box* container2) {
     return rtn;
 }
 
-extern "C" const ObjectFlavor notimplemented_flavor(&boxGCHandler, NULL);
 BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
@@ -401,7 +399,6 @@ BoxedClass* Exception, *AssertionError, *AttributeError, *GeneratorExit, *TypeEr
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
     *StopIteration, *Warning, *SyntaxError;
 
-const ObjectFlavor exception_flavor(&boxGCHandler, NULL);
 Box* exceptionNew1(BoxedClass* cls) {
     return exceptionNew2(cls, boxStrConstant(""));
 }
@@ -409,7 +406,7 @@ Box* exceptionNew1(BoxedClass* cls) {
 class BoxedException : public Box {
 public:
     HCAttrs attrs;
-    BoxedException(BoxedClass* cls) : Box(&exception_flavor, cls) {}
+    BoxedException(BoxedClass* cls) : Box(cls) {}
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
@@ -441,7 +438,7 @@ Box* exceptionRepr(Box* b) {
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
-    BoxedClass* cls = new BoxedClass(base, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
+    BoxedClass* cls = new BoxedClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
@@ -455,14 +452,13 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
 }
 
 BoxedClass* enumerate_cls;
-extern const ObjectFlavor enumerate_flavor;
 class BoxedEnumerate : public Box {
 private:
     Box* iterator;
     int64_t idx;
 
 public:
-    BoxedEnumerate(Box* iterator, int64_t idx) : Box(&enumerate_flavor, enumerate_cls), iterator(iterator), idx(idx) {}
+    BoxedEnumerate(Box* iterator, int64_t idx) : Box(enumerate_cls), iterator(iterator), idx(idx) {}
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
@@ -508,25 +504,24 @@ public:
         return r;
     }
 
-    static void gcHandler(GCVisitor* v, void* p) {
-        boxGCHandler(v, p);
+    static void gcHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
 
-        BoxedEnumerate* it = (BoxedEnumerate*)p;
+        BoxedEnumerate* it = (BoxedEnumerate*)b;
         v->visit(it->iterator);
     }
 };
-const ObjectFlavor enumerate_flavor(&BoxedEnumerate::gcHandler, NULL);
 
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
     builtins_module->giveAttr("None", None);
 
-    notimplemented_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
+    notimplemented_cls = new BoxedClass(object_cls, NULL, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
-    NotImplemented = new Box(&notimplemented_flavor, notimplemented_cls);
+    NotImplemented = new Box(notimplemented_cls);
     gc::registerStaticRootObj(NotImplemented);
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
@@ -598,7 +593,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
 
-    enumerate_cls = new BoxedClass(object_cls, 0, sizeof(BoxedEnumerate), false);
+    enumerate_cls = new BoxedClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
     enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
     enumerate_cls->giveAttr(
         "__new__",

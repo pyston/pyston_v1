@@ -33,7 +33,6 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/float.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
@@ -128,10 +127,6 @@ void initGlobalFuncs(GlobalState& g) {
     g.llvm_class_type = g.stdlib_module->getTypeByName("class.pyston::BoxedClass");
     assert(g.llvm_class_type);
     g.llvm_class_type_ptr = g.llvm_class_type->getPointerTo();
-
-    g.llvm_flavor_type = g.stdlib_module->getTypeByName("class.pyston::ObjectFlavor");
-    assert(g.llvm_flavor_type);
-    g.llvm_flavor_type_ptr = g.llvm_flavor_type->getPointerTo();
 
     g.llvm_str_type_ptr = lookupFunction("boxStringPtr")->arg_begin()->getType();
 

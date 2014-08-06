@@ -15,7 +15,6 @@
 #ifndef PYSTON_RUNTIME_INLINE_BOXING_H
 #define PYSTON_RUNTIME_INLINE_BOXING_H
 
-#include "runtime/gc_runtime.h"
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

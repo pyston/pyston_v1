@@ -27,7 +27,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -78,7 +77,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 }
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(&function_flavor, function_cls), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
+    : Box(function_cls), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -95,8 +94,7 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
                                         bool isGenerator)
-    : Box(&function_flavor, function_cls), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0),
-      defaults(NULL) {
+    : Box(function_cls), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -120,10 +118,10 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box
 }
 
 // This probably belongs in dict.cpp?
-extern "C" void functionGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedFunction* f = (BoxedFunction*)p;
+    BoxedFunction* f = (BoxedFunction*)b;
 
     if (f->closure)
         v->visit(f->closure);
@@ -139,7 +137,7 @@ extern "C" void functionGCHandler(GCVisitor* v, void* p) {
     }
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : Box(&module_flavor, module_cls), fn(fn) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : Box(module_cls), fn(fn) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
 }
@@ -166,9 +164,7 @@ extern "C" CLFunction* unboxCLFunction(Box* b) {
     return static_cast<BoxedFunction*>(b)->f;
 }
 
-extern "C" void boxGCHandler(GCVisitor* v, void* p) {
-    Box* b = (Box*)p;
-
+extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
     if (b->cls) {
         v->visit(b->cls);
 
@@ -185,35 +181,31 @@ extern "C" void boxGCHandler(GCVisitor* v, void* p) {
             }
         }
     } else {
-        assert(type_cls == NULL || p == type_cls);
+        assert(type_cls == NULL || b == type_cls);
     }
 }
 
-extern "C" void typeGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedClass* b = (BoxedClass*)p;
+    BoxedClass* cls = (BoxedClass*)b;
+
+    if (cls->base)
+        v->visit(cls->base);
 }
 
-extern "C" void hcGCHandler(GCVisitor* v, void* p) {
-    HiddenClass* hc = (HiddenClass*)p;
-    for (const auto& p : hc->children) {
-        v->visit(p.second);
-    }
-}
-
-extern "C" void instancemethodGCHandler(GCVisitor* v, void* p) {
-    BoxedInstanceMethod* im = (BoxedInstanceMethod*)p;
+extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
+    BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
     v->visit(im->obj);
     v->visit(im->func);
 }
 
 // This probably belongs in list.cpp?
-extern "C" void listGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void listGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedList* l = (BoxedList*)p;
+    BoxedList* l = (BoxedList*)b;
     int size = l->size;
     int capacity = l->capacity;
     assert(capacity >= size);
@@ -226,10 +218,25 @@ extern "C" void listGCHandler(GCVisitor* v, void* p) {
     sc.log(size);
 }
 
-extern "C" void sliceGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void setGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedSlice* sl = static_cast<BoxedSlice*>(p);
+    BoxedSet* s = (BoxedSet*)b;
+
+    // This feels like a cludge, but we need to find anything that
+    // the unordered_map might have allocated.
+    // Another way to handle this would be to rt_alloc the unordered_map
+    // as well, though that incurs extra memory dereferences which would
+    // be nice to avoid.
+    void** start = (void**)&s->s;
+    void** end = start + (sizeof(s->s) / 8);
+    v->visitPotentialRange(start, end);
+}
+
+extern "C" void sliceGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    BoxedSlice* sl = static_cast<BoxedSlice*>(b);
     assert(sl->cls == slice_cls);
 
     v->visit(sl->start);
@@ -238,18 +245,18 @@ extern "C" void sliceGCHandler(GCVisitor* v, void* p) {
 }
 
 // This probably belongs in tuple.cpp?
-extern "C" void tupleGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void tupleGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedTuple* t = (BoxedTuple*)p;
+    BoxedTuple* t = (BoxedTuple*)b;
     v->visitPotentialRange((void* const*)&t->elts, (void* const*)(&t->elts + 1));
 }
 
 // This probably belongs in dict.cpp?
-extern "C" void dictGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void dictGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedDict* d = (BoxedDict*)p;
+    BoxedDict* d = (BoxedDict*)b;
 
     // This feels like a cludge, but we need to find anything that
     // the unordered_map might have allocated.
@@ -261,51 +268,12 @@ extern "C" void dictGCHandler(GCVisitor* v, void* p) {
     v->visitPotentialRange(start, end);
 }
 
-extern "C" void conservativeGCHandler(GCVisitor* v, void* p) {
-    ConservativeWrapper* wrapper = static_cast<ConservativeWrapper*>(p);
-    assert(wrapper->gc_header.kind_id == conservative_kind.kind_id);
+extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    int size = wrapper->gc_header.kind_data;
-    assert(size % sizeof(void*) == 0);
-
-    void** start = &wrapper->data[0];
-    // printf("Found a %d-byte object; header is %p (object is %p)\n", size, p, start);
-    v->visitPotentialRange(start, start + (size / sizeof(void*)));
-}
-
-extern "C" void closureGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-
-    BoxedClosure* c = (BoxedClosure*)p;
+    BoxedClosure* c = (BoxedClosure*)b;
     if (c->parent)
         v->visit(c->parent);
-}
-
-extern "C" void generatorGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-
-    BoxedGenerator* g = (BoxedGenerator*)p;
-
-    v->visit(g->function);
-    int num_args = g->function->f->num_args;
-    if (num_args >= 1)
-        v->visit(g->arg1);
-    if (num_args >= 2)
-        v->visit(g->arg2);
-    if (num_args >= 3)
-        v->visit(g->arg3);
-    if (num_args > 3)
-        v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
-                               reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
-    if (g->returnValue)
-        v->visit(g->returnValue);
-    if (g->exception)
-        v->visit(g->exception);
-
-    v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
-    v->visitPotentialRange((void**)&g->returnContext,
-                           ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
-    v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
 }
 
 extern "C" {
@@ -313,28 +281,6 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
     *closure_cls, *generator_cls;
 
-const ObjectFlavor object_flavor(&boxGCHandler, NULL);
-const ObjectFlavor type_flavor(&typeGCHandler, NULL);
-const ObjectFlavor none_flavor(&boxGCHandler, NULL);
-const ObjectFlavor bool_flavor(&boxGCHandler, NULL);
-const ObjectFlavor int_flavor(&boxGCHandler, NULL);
-const ObjectFlavor float_flavor(&boxGCHandler, NULL);
-const ObjectFlavor str_flavor(&boxGCHandler, NULL);
-const ObjectFlavor function_flavor(&functionGCHandler, NULL);
-const ObjectFlavor instancemethod_flavor(&instancemethodGCHandler, NULL);
-const ObjectFlavor list_flavor(&listGCHandler, NULL);
-const ObjectFlavor slice_flavor(&sliceGCHandler, NULL);
-const ObjectFlavor module_flavor(&boxGCHandler, NULL);
-const ObjectFlavor dict_flavor(&dictGCHandler, NULL);
-const ObjectFlavor tuple_flavor(&tupleGCHandler, NULL);
-const ObjectFlavor file_flavor(&boxGCHandler, NULL);
-const ObjectFlavor member_flavor(&boxGCHandler, NULL);
-const ObjectFlavor closure_flavor(&closureGCHandler, NULL);
-const ObjectFlavor generator_flavor(&generatorGCHandler, NULL);
-
-const AllocationKind untracked_kind(NULL, NULL);
-const AllocationKind hc_kind(&hcGCHandler, NULL);
-const AllocationKind conservative_kind(&conservativeGCHandler, NULL);
 
 BoxedTuple* EmptyTuple;
 }
@@ -350,10 +296,10 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) 
     BoxedClass* made;
 
     if (base->instancesHaveAttrs()) {
-        made = new BoxedClass(base, base->attrs_offset, base->instance_size, true);
+        made = new BoxedClass(base, NULL, base->attrs_offset, base->instance_size, true);
     } else {
         assert(base->instance_size % sizeof(void*) == 0);
-        made = new BoxedClass(base, base->instance_size, base->instance_size + sizeof(HCAttrs), true);
+        made = new BoxedClass(base, NULL, base->instance_size, base->instance_size + sizeof(HCAttrs), true);
     }
 
     for (const auto& p : attr_dict->d) {
@@ -430,6 +376,8 @@ Box* ord_obj = NULL;
 Box* trap_obj = NULL;
 Box* range_obj = NULL;
 }
+
+HiddenClass* root_hcls;
 
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     BoxedSlice* rtn = new BoxedSlice(start, stop, step);
@@ -521,9 +469,9 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     }
 
     assert(cls->instance_size >= sizeof(Box));
-    void* mem = rt_alloc(cls->instance_size);
+    void* mem = gc::gc_alloc(cls->instance_size, gc::GCKind::PYTHON);
 
-    Box* rtn = ::new (mem) Box(&object_flavor, cls);
+    Box* rtn = ::new (mem) Box(cls);
     initUserAttrs(rtn, cls);
     return rtn;
 }
@@ -534,18 +482,20 @@ Box* objectInit(Box* b, BoxedTuple* args) {
 
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
-    gc::registerStaticRootObj(HiddenClass::getRoot());
+    root_hcls = HiddenClass::makeRoot();
+    gc::registerStaticRootObj(root_hcls);
 
-    object_cls = new BoxedClass(NULL, 0, sizeof(Box), false);
-    type_cls = new BoxedClass(object_cls, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
+    object_cls = new BoxedClass(NULL, &boxGCHandler, 0, sizeof(Box), false);
+    type_cls = new BoxedClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
     type_cls->cls = type_cls;
     object_cls->cls = type_cls;
 
-    none_cls = new BoxedClass(object_cls, 0, sizeof(Box), false);
-    None = new Box(&none_flavor, none_cls);
+    none_cls = new BoxedClass(object_cls, NULL, 0, sizeof(Box), false);
+    None = new Box(none_cls);
     gc::registerStaticRootObj(None);
 
-    str_cls = new BoxedClass(object_cls, 0, sizeof(BoxedString), false);
+    // TODO we leak all the string data!
+    str_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedString), false);
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
     type_cls->giveAttr("__base__", object_cls);
@@ -554,30 +504,33 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
-    tuple_cls = new BoxedClass(object_cls, 0, sizeof(BoxedTuple), false);
+    tuple_cls = new BoxedClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false);
     EmptyTuple = new BoxedTuple({});
     gc::registerStaticRootObj(EmptyTuple);
 
 
-    module_cls = new BoxedClass(object_cls, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
+    module_cls = new BoxedClass(object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    bool_cls = new BoxedClass(object_cls, 0, sizeof(BoxedBool), false);
-    int_cls = new BoxedClass(object_cls, 0, sizeof(BoxedInt), false);
-    long_cls = new BoxedClass(object_cls, 0, sizeof(BoxedLong), false);
-    float_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFloat), false);
-    function_cls = new BoxedClass(object_cls, offsetof(BoxedFunction, attrs), sizeof(BoxedFunction), false);
-    instancemethod_cls = new BoxedClass(object_cls, 0, sizeof(BoxedInstanceMethod), false);
-    list_cls = new BoxedClass(object_cls, 0, sizeof(BoxedList), false);
-    slice_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSlice), false);
-    dict_cls = new BoxedClass(object_cls, 0, sizeof(BoxedDict), false);
-    file_cls = new BoxedClass(object_cls, 0, sizeof(BoxedFile), false);
-    set_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
-    frozenset_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
-    member_cls = new BoxedClass(object_cls, 0, sizeof(BoxedMemberDescriptor), false);
-    closure_cls = new BoxedClass(object_cls, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
+    bool_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedBool), false);
+    int_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedInt), false);
+    // TODO we're leaking long memory!
+    long_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedLong), false);
+    float_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedFloat), false);
+    function_cls
+        = new BoxedClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs), sizeof(BoxedFunction), false);
+    instancemethod_cls = new BoxedClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false);
+    list_cls = new BoxedClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false);
+    slice_cls = new BoxedClass(object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false);
+    dict_cls = new BoxedClass(object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false);
+    file_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedFile), false);
+    set_cls = new BoxedClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
+    frozenset_cls = new BoxedClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
+    member_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
+    closure_cls
+        = new BoxedClass(object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -692,7 +645,7 @@ void freeHiddenClasses(HiddenClass* hcls) {
     for (const auto& p : hcls->children) {
         freeHiddenClasses(p.second);
     }
-    rt_free(hcls);
+    gc::gc_free(hcls);
 }
 
 void teardownRuntime() {
@@ -754,8 +707,6 @@ void teardownRuntime() {
     decref(type_cls);
     */
 
-    freeHiddenClasses(HiddenClass::getRoot());
-
-    gc_teardown();
+    freeHiddenClasses(root_hcls);
 }
 }

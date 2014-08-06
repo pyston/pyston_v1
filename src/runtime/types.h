@@ -19,6 +19,7 @@
 
 #include "core/threading.h"
 #include "core/types.h"
+#include "gc/gc_alloc.h"
 
 namespace pyston {
 
@@ -74,11 +75,6 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls,
     *closure_cls, *generator_cls;
 }
-extern "C" {
-extern const ObjectFlavor object_flavor, type_flavor, bool_flavor, int_flavor, float_flavor, str_flavor,
-    function_flavor, none_flavor, instancemethod_flavor, list_flavor, slice_flavor, module_flavor, dict_flavor,
-    tuple_flavor, file_flavor, xrange_flavor, member_flavor, closure_flavor, generator_flavor;
-}
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
 extern Box* repr_obj, *len_obj, *hash_obj, *range_obj, *abs_obj, *min_obj, *max_obj, *open_obj, *id_obj, *chr_obj,
@@ -108,27 +104,6 @@ extern "C" Box* createTuple(int64_t nelts, Box** elts);
 extern "C" void printFloat(double d);
 
 
-class ConservativeWrapper : public GCObject {
-public:
-    void* data[0];
-
-    ConservativeWrapper(size_t data_size) : GCObject(&conservative_kind), data() {
-        assert(data_size % sizeof(void*) == 0);
-        gc_header.kind_data = data_size;
-    }
-
-    void* operator new(size_t size, size_t data_size) {
-        assert(size == sizeof(ConservativeWrapper));
-        return rt_alloc(data_size + size);
-    }
-
-    static ConservativeWrapper* fromPointer(void* p) {
-        ConservativeWrapper* o = (ConservativeWrapper*)((void**)p - 1);
-        assert(&o->data == p);
-        return o;
-    }
-};
-
 template <class T> class StlCompatAllocator {
 public:
     typedef size_t size_type;
@@ -148,14 +123,10 @@ public:
         size_t to_allocate = n * sizeof(value_type);
         // assert(to_allocate < (1<<16));
 
-        ConservativeWrapper* rtn = new (to_allocate) ConservativeWrapper(to_allocate);
-        return (pointer)&rtn->data[0];
+        return reinterpret_cast<pointer>(gc_alloc(to_allocate, gc::GCKind::CONSERVATIVE));
     }
 
-    void deallocate(pointer p, size_t n) {
-        ConservativeWrapper* o = ConservativeWrapper::fromPointer(p);
-        rt_free(o);
-    }
+    void deallocate(pointer p, size_t n) { gc::gc_free(p); }
 
     // I would never be able to come up with this on my own:
     // http://en.cppreference.com/w/cpp/memory/allocator/construct
@@ -169,26 +140,59 @@ public:
     bool operator!=(const StlCompatAllocator<T>& rhs) const { return false; }
 };
 
+template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<K> >
+class conservative_unordered_map
+    : public std::unordered_map<K, V, Hash, KeyEqual, StlCompatAllocator<std::pair<const K, V> > > {};
+
+class HiddenClass : public ConservativeGCObject {
+private:
+    HiddenClass() {}
+    HiddenClass(const HiddenClass* parent) : attr_offsets(parent->attr_offsets) {}
+
+public:
+    static HiddenClass* makeRoot() {
+#ifndef NDEBUG
+        static bool made = false;
+        assert(!made);
+        made = true;
+#endif
+        return new HiddenClass();
+    }
+
+    conservative_unordered_map<std::string, int> attr_offsets;
+    conservative_unordered_map<std::string, HiddenClass*> children;
+
+    HiddenClass* getOrMakeChild(const std::string& attr);
+
+    int getOffset(const std::string& attr) {
+        auto it = attr_offsets.find(attr);
+        if (it == attr_offsets.end())
+            return -1;
+        return it->second;
+    }
+    HiddenClass* delAttrToMakeHC(const std::string& attr);
+};
+
 
 class BoxedInt : public Box {
 public:
     int64_t n;
 
-    BoxedInt(BoxedClass* cls, int64_t n) __attribute__((visibility("default"))) : Box(&int_flavor, cls), n(n) {}
+    BoxedInt(BoxedClass* cls, int64_t n) __attribute__((visibility("default"))) : Box(cls), n(n) {}
 };
 
 class BoxedFloat : public Box {
 public:
     double d;
 
-    BoxedFloat(double d) __attribute__((visibility("default"))) : Box(&float_flavor, float_cls), d(d) {}
+    BoxedFloat(double d) __attribute__((visibility("default"))) : Box(float_cls), d(d) {}
 };
 
 class BoxedBool : public Box {
 public:
     bool b;
 
-    BoxedBool(bool b) __attribute__((visibility("default"))) : Box(&bool_flavor, bool_cls), b(b) {}
+    BoxedBool(bool b) __attribute__((visibility("default"))) : Box(bool_cls), b(b) {}
 };
 
 class BoxedString : public Box {
@@ -196,9 +200,8 @@ public:
     // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
     const std::string s;
 
-    BoxedString(const std::string&& s) __attribute__((visibility("default")))
-    : Box(&str_flavor, str_cls), s(std::move(s)) {}
-    BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(&str_flavor, str_cls), s(s) {}
+    BoxedString(const std::string&& s) __attribute__((visibility("default"))) : Box(str_cls), s(std::move(s)) {}
+    BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(str_cls), s(s) {}
 };
 
 class BoxedInstanceMethod : public Box {
@@ -206,22 +209,22 @@ public:
     Box* obj, *func;
 
     BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
-    : Box(&instancemethod_flavor, instancemethod_cls), obj(obj), func(func) {}
+    : Box(instancemethod_cls), obj(obj), func(func) {}
 };
 
-class GCdArray : public GCObject {
+class GCdArray {
 public:
     Box* elts[0];
 
-    GCdArray() : GCObject(&untracked_kind) {}
-
     void* operator new(size_t size, int capacity) {
         assert(size == sizeof(GCdArray));
-        return rt_alloc(capacity * sizeof(Box*) + size);
+        return gc_alloc(capacity * sizeof(Box*) + size, gc::GCKind::UNTRACKED);
     }
 
+    void operator delete(void* p) { gc::gc_free(p); }
+
     static GCdArray* realloc(GCdArray* array, int capacity) {
-        return (GCdArray*)rt_realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
+        return (GCdArray*)gc::gc_realloc(array, capacity * sizeof(Box*) + sizeof(GCdArray));
     }
 };
 
@@ -232,7 +235,7 @@ public:
 
     DS_DEFINE_MUTEX(lock);
 
-    BoxedList() __attribute__((visibility("default"))) : Box(&list_flavor, list_cls), size(0), capacity(0) {}
+    BoxedList() __attribute__((visibility("default"))) : Box(list_cls), size(0), capacity(0) {}
 
     void ensure(int space);
     void shrink();
@@ -245,9 +248,9 @@ public:
     const GCVector elts;
 
     BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >& elts) __attribute__((visibility("default")))
-    : Box(&tuple_flavor, tuple_cls), elts(elts) {}
+    : Box(tuple_cls), elts(elts) {}
     BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >&& elts) __attribute__((visibility("default")))
-    : Box(&tuple_flavor, tuple_cls), elts(std::move(elts)) {}
+    : Box(tuple_cls), elts(std::move(elts)) {}
 };
 extern "C" BoxedTuple* EmptyTuple;
 
@@ -255,7 +258,7 @@ class BoxedFile : public Box {
 public:
     FILE* f;
     bool closed;
-    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(&file_flavor, file_cls), f(f), closed(false) {}
+    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(file_cls), f(f), closed(false) {}
 };
 
 struct PyHasher {
@@ -276,7 +279,7 @@ public:
 
     DictMap d;
 
-    BoxedDict() __attribute__((visibility("default"))) : Box(&dict_flavor, dict_cls) {}
+    BoxedDict() __attribute__((visibility("default"))) : Box(dict_cls) {}
 };
 
 class BoxedFunction : public Box {
@@ -306,8 +309,7 @@ public:
 class BoxedSlice : public Box {
 public:
     Box* start, *stop, *step;
-    BoxedSlice(Box* lower, Box* upper, Box* step)
-        : Box(&slice_flavor, slice_cls), start(lower), stop(upper), step(step) {}
+    BoxedSlice(Box* lower, Box* upper, Box* step) : Box(slice_cls), start(lower), stop(upper), step(step) {}
 };
 
 class BoxedMemberDescriptor : public Box {
@@ -318,7 +320,7 @@ public:
 
     int offset;
 
-    BoxedMemberDescriptor(MemberType type, int offset) : Box(&member_flavor, member_cls), type(type), offset(offset) {}
+    BoxedMemberDescriptor(MemberType type, int offset) : Box(member_cls), type(type), offset(offset) {}
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?
@@ -327,7 +329,7 @@ public:
     HCAttrs attrs;
     BoxedClosure* parent;
 
-    BoxedClosure(BoxedClosure* parent) : Box(&closure_flavor, closure_cls), parent(parent) {}
+    BoxedClosure(BoxedClosure* parent) : Box(closure_cls), parent(parent) {}
 };
 
 class BoxedGenerator : public Box {
@@ -349,7 +351,7 @@ public:
     BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 };
 
-extern "C" void boxGCHandler(GCVisitor* v, void* p);
+extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* exceptionNew1(BoxedClass* cls);
 Box* exceptionNew2(BoxedClass* cls, Box* message);

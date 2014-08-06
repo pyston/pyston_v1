@@ -21,7 +21,6 @@
 namespace pyston {
 
 extern BoxedClass* generator_cls;
-extern "C" const ObjectFlavor generator_flavor;
 
 void setupGenerator();
 

@@ -100,6 +100,9 @@ bool makeVisible(llvm::GlobalValue* gv) {
 bool isConstant(MDNode* parent_type, int offset) {
     MDString *s = cast<MDString>(parent_type->getOperand(0));
 
+    // TODO: these were somewhat helpful, but this code is broken since
+    // it hard-codes the attribute offsets.
+    /*
     if (s->getString() == "_ZTSN6pyston19BoxedXrangeIteratorE") {
         return (offset == 16);
     }
@@ -115,6 +118,7 @@ bool isConstant(MDNode* parent_type, int offset) {
     if (s->getString() == "_ZTSN6pyston11BoxedXrangeE") {
         return offset == 16 || offset == 24 || offset == 32;
     }
+    */
 
     return false;
 }

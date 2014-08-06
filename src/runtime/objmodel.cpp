@@ -39,7 +39,6 @@
 #include "gc/heap.h"
 #include "runtime/capi.h"
 #include "runtime/float.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/generator.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -360,9 +359,16 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
     }
 }
 
-BoxedClass::BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bool is_user_defined)
-    : Box(&type_flavor, type_cls), base(base), attrs_offset(attrs_offset), instance_size(instance_size),
+BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+                       bool is_user_defined)
+    : Box(type_cls), base(base), gc_visit(gc_visit), attrs_offset(attrs_offset), instance_size(instance_size),
       is_constant(false), is_user_defined(is_user_defined) {
+
+    if (gc_visit == NULL) {
+        assert(base);
+        this->gc_visit = base->gc_visit;
+    }
+    assert(this->gc_visit);
 
     if (!base) {
         assert(object_cls == nullptr);
@@ -432,19 +438,14 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
 
     // TODO we can first locate the parent HiddenClass of the deleted
     // attribute and hence avoid creation of its ancestors.
-    HiddenClass* cur = getRoot();
+    HiddenClass* cur = root_hcls;
     for (const auto& attr : new_attrs) {
         cur = cur->getOrMakeChild(attr);
     }
     return cur;
 }
 
-HiddenClass* HiddenClass::getRoot() {
-    static HiddenClass* root = new HiddenClass();
-    return root;
-}
-
-Box::Box(const ObjectFlavor* flavor, BoxedClass* cls) : GCObject(flavor), cls(cls) {
+Box::Box(BoxedClass* cls) : cls(cls) {
     // if (TRACK_ALLOCATIONS) {
     // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
     // Stats::log(id);
@@ -613,22 +614,22 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     RewriterVarUsage r_new_array2(RewriterVarUsage::empty());
     int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
     if (numattrs == 0) {
-        attrs->attr_list = (HCAttrs::AttrList*)rt_alloc(new_size);
-        attrs->attr_list->gc_header.kind_id = untracked_kind.kind_id;
+        attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
         if (rewrite_args) {
             RewriterVarUsage r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-            r_new_array2 = rewrite_args->rewriter->call(false, (void*)rt_alloc, std::move(r_newsize));
-            RewriterVarUsage r_flavor = rewrite_args->rewriter->loadConst((int64_t)untracked_kind.kind_id);
-            r_new_array2.setAttr(ATTRLIST_KIND_OFFSET, std::move(r_flavor));
+            RewriterVarUsage r_kind
+                = rewrite_args->rewriter->loadConst((int)gc::GCKind::UNTRACKED, Location::forArg(1));
+            r_new_array2
+                = rewrite_args->rewriter->call(false, (void*)gc::gc_alloc, std::move(r_newsize), std::move(r_kind));
         }
     } else {
-        attrs->attr_list = (HCAttrs::AttrList*)rt_realloc(attrs->attr_list, new_size);
+        attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
         if (rewrite_args) {
             RewriterVarUsage r_oldarray = rewrite_args->obj.getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET,
                                                                     RewriterVarUsage::NoKill, Location::forArg(0));
             RewriterVarUsage r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-            r_new_array2
-                = rewrite_args->rewriter->call(false, (void*)rt_realloc, std::move(r_oldarray), std::move(r_newsize));
+            r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_realloc, std::move(r_oldarray),
+                                                        std::move(r_newsize));
         }
     }
     // Don't set the new hcls until after we do the allocation for the new attr_list;
@@ -1273,28 +1274,28 @@ extern "C" void dump(void* p) {
         return;
     }
 
-    GCObjectHeader* header = gc::headerFromObject(p);
-    if (header->kind_id == hc_kind.kind_id) {
-        printf("hcls object\n");
+    gc::GCAllocation* al = gc::GCAllocation::fromUserData(p);
+    if (al->kind_id == gc::GCKind::UNTRACKED) {
+        printf("gc-untracked object\n");
         return;
     }
 
-    if (header->kind_id == untracked_kind.kind_id) {
-        printf("untracked object\n");
+    if (al->kind_id == gc::GCKind::CONSERVATIVE) {
+        printf("conservatively-scanned object object\n");
         return;
     }
 
-    if (header->kind_id == conservative_kind.kind_id) {
-        printf("untracked object\n");
+    if (al->kind_id == gc::GCKind::PYTHON) {
+        printf("Python object\n");
+        Box* b = (Box*)p;
+        printf("Class: %s\n", getTypeName(b)->c_str());
+        if (isSubclass(b->cls, type_cls)) {
+            printf("Type name: %s\n", getNameOfClass(static_cast<BoxedClass*>(b))->c_str());
+        }
         return;
     }
 
-    printf("Assuming it's a Box*\n");
-    Box* b = (Box*)p;
-    printf("Class: %s\n", getTypeName(b)->c_str());
-    if (isSubclass(b->cls, type_cls)) {
-        printf("Type name: %s\n", getNameOfClass(static_cast<BoxedClass*>(b))->c_str());
-    }
+    RELEASE_ASSERT(0, "%d", (int)al->kind_id);
 }
 
 // For rewriting purposes, this function assumes that nargs will be constant.
@@ -2745,7 +2746,7 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
 
     // guarantee the size of the attr_list equals the number of attrs
     int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
-    attrs->attr_list = (HCAttrs::AttrList*)rt_realloc(attrs->attr_list, new_size);
+    attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
 }
 
 extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,

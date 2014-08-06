@@ -24,7 +24,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -448,13 +447,11 @@ Box* listReverse(BoxedList* self) {
 }
 
 BoxedClass* list_iterator_cls = NULL;
-extern "C" void listIteratorGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-    BoxedListIterator* it = (BoxedListIterator*)p;
+extern "C" void listIteratorGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+    BoxedListIterator* it = (BoxedListIterator*)b;
     v->visit(it->l);
 }
-
-extern "C" const ObjectFlavor list_iterator_flavor(&listIteratorGCHandler, NULL);
 
 extern "C" Box* listNew(Box* cls, Box* container) {
     assert(cls == list_cls);
@@ -521,7 +518,7 @@ Box* listEq(BoxedList* self, Box* rhs) {
 }
 
 void setupList() {
-    list_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedList), false);
+    list_iterator_cls = new BoxedClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false);
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 

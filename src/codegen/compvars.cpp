@@ -242,8 +242,11 @@ public:
 
     virtual llvm::Value* makeClassCheck(IREmitter& emitter, ConcreteCompilerVariable* var, BoxedClass* cls) {
         assert(var->getValue()->getType() == g.llvm_value_type_ptr);
-        // TODO this is brittle: directly embeds the position of the class object:
-        llvm::Value* cls_ptr = emitter.getBuilder()->CreateConstInBoundsGEP2_32(var->getValue(), 0, 1);
+
+        static_assert(offsetof(Box, cls) % sizeof(void*) == 0, "");
+        llvm::Value* cls_ptr
+            = emitter.getBuilder()->CreateConstInBoundsGEP2_32(var->getValue(), 0, offsetof(Box, cls) / sizeof(void*));
+
         llvm::Value* cls_value = emitter.getBuilder()->CreateLoad(cls_ptr);
         assert(cls_value->getType() == g.llvm_class_type_ptr);
         llvm::Value* rtn = emitter.getBuilder()->CreateICmpEQ(cls_value, embedConstantPtr(cls, g.llvm_class_type_ptr));

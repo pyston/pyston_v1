@@ -18,7 +18,6 @@
 #include "core/types.h"
 #include "gc/heap.h"
 #include "runtime/float.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"

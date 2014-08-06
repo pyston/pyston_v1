@@ -2,22 +2,22 @@
 #include <cstdio>
 #include "stdint.h"
 
-void set64(int64_t* ptr) {
-    *ptr = 0x1234;
-}
-
-void set64full(int64_t* ptr) {
-    *ptr = 0x1234567890;
-}
-
-namespace pyston {
-    class Box {};
-
-int throw_catch(Box* b) {
-    try {
-        throw b;
-    } catch (int e) {
-        return e;
+class C {
+public:
+    C(int i) {
+        printf("ctor\n");
     }
+    void* operator new(size_t bytes) {
+        printf("operator new\n");
+        return NULL;
+    }
+};
+
+int f() {
+    printf("f()");
+    return 1;
 }
+
+extern "C" C* c() {
+    return new C(f());
 }

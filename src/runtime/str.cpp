@@ -24,7 +24,6 @@
 #include "core/common.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -579,16 +578,13 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
 // Should probably implement that, and maybe once that's implemented get
 // rid of the striterator class?
 BoxedClass* str_iterator_cls = NULL;
-extern "C" void strIteratorGCHandler(GCVisitor* v, void* p);
-extern "C" const ObjectFlavor str_iterator_flavor(&strIteratorGCHandler, NULL);
 
 class BoxedStringIterator : public Box {
 public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s)
-        : Box(&str_iterator_flavor, str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
+    BoxedStringIterator(BoxedString* s) : Box(str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
 
     static bool hasnextUnboxed(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
@@ -610,9 +606,9 @@ public:
     }
 };
 
-extern "C" void strIteratorGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-    BoxedStringIterator* it = (BoxedStringIterator*)p;
+extern "C" void strIteratorGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+    BoxedStringIterator* it = (BoxedStringIterator*)b;
     v->visit(it->s);
 }
 
@@ -648,7 +644,7 @@ Box* strCount2(BoxedString* self, Box* elt) {
 }
 
 void setupStr() {
-    str_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedString), false);
+    str_iterator_cls = new BoxedClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedString), false);
     gc::registerStaticRootObj(str_iterator_cls);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
     str_iterator_cls->giveAttr("__hasnext__",

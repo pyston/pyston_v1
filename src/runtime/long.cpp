@@ -24,7 +24,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -33,7 +32,6 @@
 namespace pyston {
 
 BoxedClass* long_cls;
-const ObjectFlavor long_flavor(&boxGCHandler, NULL);
 
 extern "C" Box* createLong(const std::string* s) {
     BoxedLong* rtn = new BoxedLong(long_cls);
@@ -58,7 +56,7 @@ extern "C" Box* longNew(Box* _cls, Box* val) {
                        getNameOfClass(cls)->c_str());
 
     assert(cls->instance_size >= sizeof(BoxedInt));
-    void* mem = rt_alloc(cls->instance_size);
+    void* mem = gc_alloc(cls->instance_size, gc::GCKind::PYTHON);
     BoxedLong* rtn = ::new (mem) BoxedLong(cls);
     initUserAttrs(rtn, cls);
 

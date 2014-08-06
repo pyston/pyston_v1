@@ -14,15 +14,11 @@
 
 #include "codegen/compvars.h"
 #include "core/types.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-extern "C" const ObjectFlavor xrange_flavor(&boxGCHandler, NULL);
-
-extern "C" const ObjectFlavor xrange_iterator_flavor;
 BoxedClass* xrange_cls, *xrange_iterator_cls;
 
 class BoxedXrangeIterator;
@@ -31,8 +27,7 @@ private:
     const int64_t start, stop, step;
 
 public:
-    BoxedXrange(i64 start, i64 stop, i64 step)
-        : Box(&xrange_flavor, xrange_cls), start(start), stop(stop), step(step) {}
+    BoxedXrange(i64 start, i64 stop, i64 step) : Box(xrange_cls), start(start), stop(stop), step(step) {}
 
     friend class BoxedXrangeIterator;
 };
@@ -43,8 +38,7 @@ private:
     int64_t cur;
 
 public:
-    BoxedXrangeIterator(BoxedXrange* xrange)
-        : Box(&xrange_iterator_flavor, xrange_iterator_cls), xrange(xrange), cur(xrange->start) {}
+    BoxedXrangeIterator(BoxedXrange* xrange) : Box(xrange_iterator_cls), xrange(xrange), cur(xrange->start) {}
 
     static bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);
@@ -70,14 +64,13 @@ public:
         return boxInt(xrangeIteratorNextUnboxed(s));
     }
 
-    static void xrangeIteratorGCHandler(GCVisitor* v, void* p) {
-        boxGCHandler(v, p);
+    static void xrangeIteratorGCHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
 
-        BoxedXrangeIterator* it = (BoxedXrangeIterator*)p;
+        BoxedXrangeIterator* it = (BoxedXrangeIterator*)b;
         v->visit(it->xrange);
     }
 };
-extern "C" const ObjectFlavor xrange_iterator_flavor(&BoxedXrangeIterator::xrangeIteratorGCHandler, NULL);
 
 Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
     assert(cls == xrange_cls);
@@ -117,9 +110,10 @@ Box* xrangeIter(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = new BoxedClass(object_cls, 0, sizeof(BoxedXrange), false);
+    xrange_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedXrange), false);
     xrange_cls->giveAttr("__name__", boxStrConstant("xrange"));
-    xrange_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedXrangeIterator), false);
+    xrange_iterator_cls = new BoxedClass(object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
+                                         sizeof(BoxedXrangeIterator), false);
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 
     xrange_cls->giveAttr(

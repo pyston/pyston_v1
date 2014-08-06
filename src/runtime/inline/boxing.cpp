@@ -14,7 +14,6 @@
 
 #include "runtime/inline/boxing.h"
 
-#include "runtime/gc_runtime.h"
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

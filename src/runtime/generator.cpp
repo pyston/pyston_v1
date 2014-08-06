@@ -26,7 +26,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -128,8 +127,8 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, B
 
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
-    : Box(&generator_flavor, generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr),
-      entryExited(false), returnValue(nullptr), exception(nullptr) {
+    : Box(generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false),
+      returnValue(nullptr), exception(nullptr) {
 
     giveAttr("__name__", boxString(function->f->source->getName()));
 
@@ -147,9 +146,37 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Bo
     makecontext(&context, (void (*)(void))generatorEntry, 1, this);
 }
 
+extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    BoxedGenerator* g = (BoxedGenerator*)b;
+
+    v->visit(g->function);
+    int num_args = g->function->f->num_args;
+    if (num_args >= 1)
+        v->visit(g->arg1);
+    if (num_args >= 2)
+        v->visit(g->arg2);
+    if (num_args >= 3)
+        v->visit(g->arg3);
+    if (num_args > 3)
+        v->visitPotentialRange(reinterpret_cast<void* const*>(&g->args->elts[0]),
+                               reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
+    if (g->returnValue)
+        v->visit(g->returnValue);
+    if (g->exception)
+        v->visit(g->exception);
+
+    v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
+    v->visitPotentialRange((void**)&g->returnContext,
+                           ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
+    v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
+}
+
 
 void setupGenerator() {
-    generator_cls = new BoxedClass(object_cls, offsetof(BoxedGenerator, attrs), sizeof(BoxedGenerator), false);
+    generator_cls = new BoxedClass(object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
+                                   sizeof(BoxedGenerator), false);
     generator_cls->giveAttr("__name__", boxStrConstant("generator"));
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));

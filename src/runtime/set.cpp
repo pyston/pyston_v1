@@ -25,12 +25,6 @@ namespace pyston {
 BoxedClass* set_cls, *set_iterator_cls;
 BoxedClass* frozenset_cls;
 
-extern "C" void setGCHandler(GCVisitor* v, void* p);
-extern "C" void setIteratorGCHandler(GCVisitor* v, void* p);
-
-const ObjectFlavor set_flavor(&setGCHandler, NULL);
-const ObjectFlavor set_iterator_flavor(&setIteratorGCHandler, NULL);
-
 extern "C" Box* createSet() {
     return new BoxedSet(set_cls);
 }
@@ -42,7 +36,7 @@ public:
     BoxedSet* s;
     decltype(BoxedSet::s)::iterator it;
 
-    BoxedSetIterator(BoxedSet* s) : Box(&set_iterator_flavor, set_iterator_cls), s(s), it(s->s.begin()) {}
+    BoxedSetIterator(BoxedSet* s) : Box(set_iterator_cls), s(s), it(s->s.begin()) {}
 
     bool hasNext() { return it != s->s.end(); }
 
@@ -53,25 +47,10 @@ public:
     }
 };
 
-extern "C" void setGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
+extern "C" void setIteratorGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
-    BoxedSet* s = (BoxedSet*)p;
-
-    // This feels like a cludge, but we need to find anything that
-    // the unordered_map might have allocated.
-    // Another way to handle this would be to rt_alloc the unordered_map
-    // as well, though that incurs extra memory dereferences which would
-    // be nice to avoid.
-    void** start = (void**)&s->s;
-    void** end = start + (sizeof(s->s) / 8);
-    v->visitPotentialRange(start, end);
-}
-
-extern "C" void setIteratorGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-
-    BoxedSetIterator* it = (BoxedSetIterator*)p;
+    BoxedSetIterator* it = (BoxedSetIterator*)b;
 
     v->visit(it->s);
 }
@@ -228,7 +207,7 @@ void setupSet() {
     set_cls->giveAttr("__name__", boxStrConstant("set"));
     frozenset_cls->giveAttr("__name__", boxStrConstant("frozenset"));
 
-    set_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedSet), false);
+    set_iterator_cls = new BoxedClass(object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));

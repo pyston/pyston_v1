@@ -25,13 +25,12 @@ namespace pyston {
 void setupLong();
 
 extern BoxedClass* long_cls;
-extern const ObjectFlavor long_flavor;
 
 class BoxedLong : public Box {
 public:
     mpz_t n;
 
-    BoxedLong(BoxedClass* cls) __attribute__((visibility("default"))) : Box(&long_flavor, cls) {}
+    BoxedLong(BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls) {}
 };
 
 extern "C" Box* createLong(const std::string* s);

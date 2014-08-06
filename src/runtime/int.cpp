@@ -23,7 +23,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
@@ -590,7 +589,7 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
                        getNameOfClass(cls)->c_str());
 
     assert(cls->instance_size >= sizeof(BoxedInt));
-    void* mem = rt_alloc(cls->instance_size);
+    void* mem = gc_alloc(cls->instance_size, gc::GCKind::PYTHON);
     BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
     initUserAttrs(rtn, cls);
 

@@ -19,7 +19,6 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -165,16 +164,15 @@ extern "C" Box* dictNew(Box* _cls) {
 }
 
 BoxedClass* dict_iterator_cls = NULL;
-extern "C" void dictIteratorGCHandler(GCVisitor* v, void* p) {
-    boxGCHandler(v, p);
-    BoxedDictIterator* it = (BoxedDictIterator*)p;
+extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
     v->visit(it->d);
 }
 
-extern "C" const ObjectFlavor dict_iterator_flavor(&dictIteratorGCHandler, NULL);
-
 void setupDict() {
-    dict_iterator_cls = new BoxedClass(object_cls, 0, sizeof(BoxedDict), false);
+    dict_iterator_cls = new BoxedClass(object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     // dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1)));

@@ -33,7 +33,6 @@ public:
     BoxedDictIterator(BoxedDict* d, IteratorType type);
 };
 
-extern "C" const ObjectFlavor dict_iterator_flavor;
 Box* dictIterKeys(Box* self);
 Box* dictIterValues(Box* self);
 Box* dictIterItems(Box* self);

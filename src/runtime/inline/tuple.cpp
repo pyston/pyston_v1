@@ -14,13 +14,12 @@
 
 #include <cstring>
 
-#include "runtime/gc_runtime.h"
 #include "runtime/objmodel.h"
 #include "runtime/tuple.h"
 
 namespace pyston {
 
-BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : Box(&tuple_iterator_flavor, tuple_iterator_cls), t(t), pos(0) {
+BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : Box(tuple_iterator_cls), t(t), pos(0) {
 }
 
 Box* tupleIterIter(Box* s) {

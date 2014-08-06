@@ -17,7 +17,6 @@
 
 #include "codegen/compvars.h"
 #include "core/types.h"
-#include "runtime/gc_runtime.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

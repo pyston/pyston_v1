@@ -37,7 +37,6 @@ void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 
-extern "C" const std::string* getTypeName(Box* o);
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 // TODO sort this

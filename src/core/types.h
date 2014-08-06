@@ -71,37 +71,6 @@ public:
     virtual void visitPotentialRange(void* const* start, void* const* end) = 0;
 };
 
-typedef int kindid_t;
-class AllocationKind;
-extern "C" kindid_t registerKind(const AllocationKind*);
-class AllocationKind {
-public:
-#ifndef NDEBUG
-    static const int64_t COOKIE = 0x1234abcd0c00c1e;
-    const int64_t _cookie = COOKIE;
-#endif
-
-    typedef void (*GCHandler)(GCVisitor*, void*);
-    GCHandler gc_handler;
-
-    typedef void (*FinalizationFunc)(void*);
-    FinalizationFunc finalizer;
-
-    const kindid_t kind_id;
-
-public:
-    AllocationKind(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
-    : gc_handler(gc_handler), finalizer(finalizer), kind_id(registerKind(this)) {}
-};
-extern "C" const AllocationKind untracked_kind, conservative_kind;
-
-class ObjectFlavor;
-class ObjectFlavor : public AllocationKind {
-public:
-    ObjectFlavor(GCHandler gc_handler, FinalizationFunc finalizer) __attribute__((visibility("default")))
-    : AllocationKind(gc_handler, finalizer) {}
-};
-
 
 
 namespace EffortLevel {
@@ -302,55 +271,10 @@ EffortLevel::EffortLevel initialEffort();
 typedef bool i1;
 typedef int64_t i64;
 
-extern "C" void* rt_alloc(size_t);
-extern "C" void rt_free(void*);
-extern "C" void* rt_realloc(void* ptr, size_t new_size);
-
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 class Rewriter;
 class RewriterVar;
-
-struct GCObjectHeader {
-    kindid_t kind_id;
-    uint16_t kind_data; // this part of the header is free for the kind to set as it wishes.
-    uint8_t gc_flags;
-
-    constexpr GCObjectHeader(const AllocationKind* kind) : kind_id(kind->kind_id), kind_data(0), gc_flags(0) {}
-};
-static_assert(sizeof(GCObjectHeader) <= sizeof(void*), "");
-
-class GCObject {
-public:
-    GCObjectHeader gc_header;
-
-    constexpr GCObject(const AllocationKind* kind) : gc_header(kind) {}
-
-    void* operator new(size_t size) __attribute__((visibility("default"))) { return rt_alloc(size); }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { rt_free(ptr); }
-};
-
-extern "C" const AllocationKind hc_kind;
-class HiddenClass : public GCObject {
-private:
-    HiddenClass() : GCObject(&hc_kind) {}
-    HiddenClass(const HiddenClass* parent) : GCObject(&hc_kind), attr_offsets(parent->attr_offsets) {}
-
-public:
-    static HiddenClass* getRoot();
-    std::unordered_map<std::string, int> attr_offsets;
-    std::unordered_map<std::string, HiddenClass*> children;
-
-    HiddenClass* getOrMakeChild(const std::string& attr);
-
-    int getOffset(const std::string& attr) {
-        std::unordered_map<std::string, int>::iterator it = attr_offsets.find(attr);
-        if (it == attr_offsets.end())
-            return -1;
-        return it->second;
-    }
-    HiddenClass* delAttrToMakeHC(const std::string& attr);
-};
 
 class Box;
 class BoxIterator {
@@ -375,6 +299,43 @@ private:
     Box* value;
 };
 
+namespace gc {
+
+enum class GCKind : uint8_t {
+    PYTHON = 1,
+    CONSERVATIVE = 2,
+    UNTRACKED = 3,
+};
+
+void* gc_alloc(size_t nbytes, GCKind kind);
+}
+
+class PythonGCObject {
+public:
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+        return gc_alloc(size, gc::GCKind::PYTHON);
+    }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+};
+
+class ConservativeGCObject {
+public:
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+        return gc_alloc(size, gc::GCKind::CONSERVATIVE);
+    }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+};
+
+class UntrackedGCObject {
+public:
+    void* operator new(size_t size) __attribute__((visibility("default"))) {
+        return gc_alloc(size, gc::GCKind::UNTRACKED);
+    }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+};
+
+class HiddenClass;
+extern HiddenClass* root_hcls;
 
 class SetattrRewriteArgs;
 class GetattrRewriteArgs;
@@ -382,23 +343,23 @@ class DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
-    struct AttrList : GCObject {
+    struct AttrList : ConservativeGCObject {
         Box* attrs[0];
     };
 
     HiddenClass* hcls;
     AttrList* attr_list;
 
-    HCAttrs() : hcls(HiddenClass::getRoot()), attr_list(nullptr) {}
+    HCAttrs() : hcls(root_hcls), attr_list(nullptr) {}
 };
 
-class Box : public GCObject {
+class Box : public PythonGCObject {
 public:
     BoxedClass* cls;
 
     llvm::iterator_range<BoxIterator> pyElements();
 
-    Box(const ObjectFlavor* flavor, BoxedClass* cls);
+    Box(BoxedClass* cls);
 
     HCAttrs* getAttrsPtr();
 
@@ -412,6 +373,7 @@ public:
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
     void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
 };
+extern "C" const std::string* getTypeName(Box* o);
 
 
 
@@ -428,6 +390,9 @@ public:
     // Only a single base supported for now.
     // Is NULL iff this is object_cls
     BoxedClass* const base;
+
+    typedef void (*gcvisit_func)(GCVisitor*, Box*);
+    gcvisit_func gc_visit;
 
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Analogous to tp_dictoffset
@@ -450,7 +415,7 @@ public:
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
-    BoxedClass(BoxedClass* base, int attrs_offset, int instance_size, bool is_user_defined);
+    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
     void freeze() {
         assert(!is_constant);
         is_constant = true;

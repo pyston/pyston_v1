@@ -22,22 +22,6 @@
 namespace pyston {
 namespace gc {
 
-#define MARK_BIT 0x1
-
-inline void setMark(GCObjectHeader* header) {
-    header->gc_flags |= MARK_BIT;
-}
-
-inline void clearMark(GCObjectHeader* header) {
-    header->gc_flags &= ~MARK_BIT;
-}
-
-inline bool isMarked(GCObjectHeader* header) {
-    return (header->gc_flags & MARK_BIT) != 0;
-}
-
-#undef MARK_BIT
-
 class TraceStack {
 private:
     std::vector<void*> v;
@@ -65,12 +49,11 @@ class TraceStackGCVisitor : public GCVisitor {
 private:
     bool isValid(void* p);
 
-    void _visit(void* p);
-
 public:
     TraceStack* stack;
     TraceStackGCVisitor(TraceStack* stack) : stack(stack) {}
 
+    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
     void visit(void* p) override;
     void visitRange(void* const* start, void* const* end) override;
     void visitPotential(void* p) override;

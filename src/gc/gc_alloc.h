@@ -27,8 +27,9 @@
 namespace pyston {
 namespace gc {
 
-inline void* gc_alloc(size_t bytes) __attribute__((visibility("default")));
-inline void* gc_alloc(size_t bytes) {
+inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
+inline void* gc_alloc(size_t bytes, GCKind kind_id) {
+    bytes += sizeof(GCAllocation);
 
 #ifndef NVALGRIND
 // Adding a redzone will confuse the allocator, so disable it for now.
@@ -37,18 +38,32 @@ inline void* gc_alloc(size_t bytes) {
 // valgrind is actively running, but I think it's better to just always turn them on.
 // They're broken and have 0 size anyway.
 #define ENABLE_REDZONES 1
-    void* r;
+
+    if (ENABLE_REDZONES)
+        bytes += REDZONE_SIZE * 2;
+#endif
+
+    GCAllocation* alloc = global_heap.alloc(bytes);
+    alloc->kind_id = kind_id;
+    alloc->gc_flags = 0;
+
+    if (kind_id == GCKind::CONSERVATIVE) {
+        assert(bytes < (1 << 31));
+        alloc->kind_data = bytes;
+    }
+
+    void* r = alloc->user_data;
+#ifndef NVALGRIND
     if (ENABLE_REDZONES) {
-        void* base = global_heap.alloc(bytes + REDZONE_SIZE * 2);
-        r = ((char*)base) + REDZONE_SIZE;
-        // printf("alloc base = %p\n", base);
-    } else {
-        r = global_heap.alloc(bytes);
+        r = ((char*)r) + REDZONE_SIZE;
     }
     VALGRIND_MALLOCLIKE_BLOCK(r, bytes, REDZONE_SIZE, false);
-#else
-    void* r = global_heap.alloc(bytes);
 #endif
+
+    // TODO This doesn't belong here (probably in PythonGCObject?)...
+    if (kind_id == GCKind::PYTHON) {
+        ((Box*)r)->cls = NULL;
+    }
 
 #ifndef NDEBUG
 // I think I have a suspicion: the gc will see the constant and treat it as a
@@ -68,21 +83,23 @@ inline void* gc_alloc(size_t bytes) {
 
 inline void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
 inline void* gc_realloc(void* ptr, size_t bytes) {
+    bytes += sizeof(GCAllocation);
+
 #ifndef NVALGRIND
     void* rtn;
     if (ENABLE_REDZONES) {
         void* base = (char*)ptr - REDZONE_SIZE;
-        void* rtn_base = global_heap.realloc(base, bytes + 2 * REDZONE_SIZE);
+        void* rtn_base = global_heap.realloc(GCAllocation::fromUserData(base), bytes + 2 * REDZONE_SIZE)->user_data;
         rtn = (char*)rtn_base + REDZONE_SIZE;
     } else {
-        rtn = global_heap.realloc(ptr, bytes);
+        rtn = global_heap.realloc(GCAllocation::fromUserData(ptr), bytes)->user_data;
     }
 
     VALGRIND_FREELIKE_BLOCK(ptr, REDZONE_SIZE);
     VALGRIND_MALLOCLIKE_BLOCK(rtn, bytes, REDZONE_SIZE, true);
     return rtn;
 #else
-    return global_heap.realloc(ptr, bytes);
+    return global_heap.realloc(GCAllocation::fromUserData(ptr), bytes)->user_data;
 #endif
 }
 
@@ -91,13 +108,13 @@ inline void gc_free(void* ptr) {
 #ifndef NVALGRIND
     if (ENABLE_REDZONES) {
         void* base = (char*)ptr - REDZONE_SIZE;
-        global_heap.free(base);
+        global_heap.free(GCAllocation::fromUserData(base));
     } else {
-        global_heap.free(ptr);
+        global_heap.free(GCAllocation::fromUserData(ptr));
     }
     VALGRIND_FREELIKE_BLOCK(ptr, REDZONE_SIZE);
 #else
-    global_heap.free(ptr);
+    global_heap.free(GCAllocation::fromUserData(ptr));
 #endif
 }
 }

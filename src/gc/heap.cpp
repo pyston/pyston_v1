@@ -83,13 +83,13 @@ public:
     bool contains(void* addr) { return start <= addr && addr < cur; }
 };
 
-Arena small_arena((void*)0x1270000000L);
-Arena large_arena((void*)0x2270000000L);
+static Arena small_arena((void*)0x1270000000L);
+static Arena large_arena((void*)0x2270000000L);
 
 struct LargeObj {
     LargeObj* next, **prev;
     size_t obj_size;
-    char data[0];
+    GCAllocation data[0];
 
     int mmap_size() {
         size_t total_size = obj_size + sizeof(LargeObj);
@@ -99,14 +99,14 @@ struct LargeObj {
 
     int capacity() { return mmap_size() - sizeof(LargeObj); }
 
-    static LargeObj* fromPointer(void* ptr) {
-        char* rtn = (char*)ptr + ((char*)NULL - ((LargeObj*)(NULL))->data);
+    static LargeObj* fromAllocation(GCAllocation* alloc) {
+        char* rtn = (char*)alloc - offsetof(LargeObj, data);
         assert((uintptr_t)rtn % PAGE_SIZE == 0);
         return reinterpret_cast<LargeObj*>(rtn);
     }
 };
 
-void* Heap::allocLarge(size_t size) {
+GCAllocation* Heap::allocLarge(size_t size) {
     _collectIfNeeded(size);
 
     LOCK_REGION(lock);
@@ -122,7 +122,7 @@ void* Heap::allocLarge(size_t size) {
     rtn->prev = &large_head;
     large_head = rtn;
 
-    return &rtn->data;
+    return rtn->data;
 }
 
 static Block* alloc_block(uint64_t size, Block** prev) {
@@ -197,7 +197,7 @@ Heap::ThreadBlockCache::~ThreadBlockCache() {
     }
 }
 
-static void* allocFromBlock(Block* b) {
+static GCAllocation* allocFromBlock(Block* b) {
     int i = 0;
     uint64_t mask = 0;
     for (; i < BITFIELD_ELTS; i++) {
@@ -220,7 +220,7 @@ static void* allocFromBlock(Block* b) {
     int idx = first + i * 64;
 
     void* rtn = &b->atoms[idx];
-    return rtn;
+    return reinterpret_cast<GCAllocation*>(rtn);
 }
 
 static Block* claimBlock(size_t rounded_size, Block** free_head) {
@@ -233,7 +233,7 @@ static Block* claimBlock(size_t rounded_size, Block** free_head) {
     return alloc_block(rounded_size, NULL);
 }
 
-void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
+GCAllocation* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
     _collectIfNeeded(rounded_size);
 
     Block** free_head = &heads[bucket_idx];
@@ -252,7 +252,7 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
 
     while (true) {
         while (Block* cache_block = *cache_head) {
-            void* rtn = allocFromBlock(cache_block);
+            GCAllocation* rtn = allocFromBlock(cache_block);
             if (rtn)
                 return rtn;
 
@@ -280,11 +280,11 @@ void* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
     }
 }
 
-void _freeFrom(void* ptr, Block* b) {
-    assert(b == Block::forPointer(ptr));
+void _freeFrom(GCAllocation* alloc, Block* b) {
+    assert(b == Block::forPointer(alloc));
 
     size_t size = b->size;
-    int offset = (char*)ptr - (char*)b;
+    int offset = (char*)alloc - (char*)b;
     assert(offset % size == 0);
     int atom_idx = offset / ATOM_SIZE;
 
@@ -308,56 +308,56 @@ static void _freeLargeObj(LargeObj* lobj) {
     assert(r == 0);
 }
 
-void Heap::free(void* ptr) {
-    if (large_arena.contains(ptr)) {
-        LargeObj* lobj = LargeObj::fromPointer(ptr);
+void Heap::free(GCAllocation* al) {
+    if (large_arena.contains(al)) {
+        LargeObj* lobj = LargeObj::fromAllocation(al);
         _freeLargeObj(lobj);
         return;
     }
 
-    assert(small_arena.contains(ptr));
-    Block* b = Block::forPointer(ptr);
-    _freeFrom(ptr, b);
+    assert(small_arena.contains(al));
+    Block* b = Block::forPointer(al);
+    _freeFrom(al, b);
 }
 
-void* Heap::realloc(void* ptr, size_t bytes) {
-    if (large_arena.contains(ptr)) {
-        LargeObj* lobj = LargeObj::fromPointer(ptr);
+GCAllocation* Heap::realloc(GCAllocation* al, size_t bytes) {
+    if (large_arena.contains(al)) {
+        LargeObj* lobj = LargeObj::fromAllocation(al);
 
         int capacity = lobj->capacity();
         if (capacity >= bytes && capacity < bytes * 2)
-            return ptr;
+            return al;
 
-        void* rtn = alloc(bytes);
-        memcpy(rtn, ptr, std::min(bytes, lobj->obj_size));
+        GCAllocation* rtn = alloc(bytes);
+        memcpy(rtn, al, std::min(bytes, lobj->obj_size));
 
         _freeLargeObj(lobj);
         return rtn;
     }
 
-    assert(small_arena.contains(ptr));
-    Block* b = Block::forPointer(ptr);
+    assert(small_arena.contains(al));
+    Block* b = Block::forPointer(al);
 
     size_t size = b->size;
 
     if (size >= bytes && size < bytes * 2)
-        return ptr;
+        return al;
 
-    void* rtn = alloc(bytes);
+    GCAllocation* rtn = alloc(bytes);
 
 #ifndef NVALGRIND
     VALGRIND_DISABLE_ERROR_REPORTING;
-    memcpy(rtn, ptr, std::min(bytes, size));
+    memcpy(rtn, al, std::min(bytes, size));
     VALGRIND_ENABLE_ERROR_REPORTING;
 #else
-    memcpy(rtn, ptr, std::min(bytes, size));
+    memcpy(rtn, al, std::min(bytes, size));
 #endif
 
-    _freeFrom(ptr, b);
+    _freeFrom(al, b);
     return rtn;
 }
 
-void* Heap::getAllocationFromInteriorPointer(void* ptr) {
+GCAllocation* Heap::getAllocationFromInteriorPointer(void* ptr) {
     if (large_arena.contains(ptr)) {
         LargeObj* cur = large_head;
         while (cur) {
@@ -387,7 +387,7 @@ void* Heap::getAllocationFromInteriorPointer(void* ptr) {
     if (b->isfree[bitmap_idx] & mask)
         return NULL;
 
-    return &b->atoms[atom_idx];
+    return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
 
 static Block** freeChain(Block** head) {
@@ -406,11 +406,14 @@ static Block** freeChain(Block** head) {
                 continue;
 
             void* p = &b->atoms[atom_idx];
-            GCObjectHeader* header = headerFromObject(p);
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
 
-            if (isMarked(header)) {
-                clearMark(header);
+            if (isMarked(al)) {
+                clearMark(al);
             } else {
+                if (VERBOSITY() >= 2)
+                    printf("Freeing %p\n", al->user_data);
+
                 // assert(p != (void*)0x127000d960); // the main module
                 b->isfree[bitmap_idx] |= mask;
             }
@@ -464,13 +467,12 @@ void Heap::freeUnmarked() {
 
     LargeObj* cur = large_head;
     while (cur) {
-        void* p = cur->data;
-        GCObjectHeader* header = headerFromObject(p);
-        if (isMarked(header)) {
-            clearMark(header);
+        GCAllocation* al = cur->data;
+        if (isMarked(al)) {
+            clearMark(al);
         } else {
             if (VERBOSITY() >= 2)
-                printf("Freeing %p\n", p);
+                printf("Freeing %p\n", al->user_data);
 
             *cur->prev = cur->next;
             if (cur->next)
