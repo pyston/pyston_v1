@@ -81,7 +81,7 @@ def verify_include_order(_, dir, files):
             for incl in section:
                 if incl.startswith('#include "llvm/'):
                     continue
-                if '"opagent.h"' in incl or '"Python.h"' in incl:
+                if '"opagent.h"' in incl or '"Python.h"' in incl or '"object.h"' in incl:
                     continue
                 return False
             return True

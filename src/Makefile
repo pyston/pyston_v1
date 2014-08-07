@@ -871,6 +871,6 @@ ext: ../test/test_extension/test.so
 ../test/test_extension/test.o: ../test/test_extension/test.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
 	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I../include -c $< -o $@ -g
 
-../lib_python/2.7_Modules/%.o: ../lib_python/2.7_Modules/%.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
+../lib_python/2.7_Modules/%.o: ../lib_python/2.7_Modules/%.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling extension file $@
 	$(VERB) $(CLANG_EXE) $(EXT_CFLAGS) -c $< -o $@ -g -ferror-limit=$(ERROR_LIMIT) -MMD -MP -MF $<.d

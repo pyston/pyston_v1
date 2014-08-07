@@ -120,7 +120,8 @@ public:
     }
 };
 
-extern "C" void* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self, int apiver) {
+extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
+                                    int apiver) {
     BoxedModule* module = createModule(name, "__builtin__");
 
     Box* passthrough = static_cast<Box*>(self);
@@ -144,12 +145,12 @@ extern "C" void* Py_InitModule4(const char* name, PyMethodDef* methods, const ch
     return module;
 }
 
-extern "C" void* Py_BuildValue(const char* arg0) {
+extern "C" PyObject* Py_BuildValue(const char* arg0, ...) {
     assert(*arg0 == '\0');
     return None;
 }
 
-extern "C" bool PyArg_ParseTuple(void* tuple, const char* fmt, ...) {
+extern "C" bool PyArg_ParseTuple(PyObject* tuple, const char* fmt, ...) {
     if (strcmp("", fmt) == 0)
         return true;
 
