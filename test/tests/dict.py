@@ -53,13 +53,7 @@ print 'a' in {}
 print 'a' in {'a': 1}
 
 print 'a' in dict()
-try:
-    # attempting to print the following result causes the test
-    # to fail (bad output), but runtime is ok.  otherwise it
-    # throws a TypeError exception.
-    # print 'a' in dict(a=1)
-    'a' in dict(a=1)
-except TypeError, e:
-    # throws <function ...> doesn't take keyword arguments
-    pass
+print 'a' in dict(a=1)
 print d
+
+print dict(**dict(a=1, b=2))
