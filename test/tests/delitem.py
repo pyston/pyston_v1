@@ -24,3 +24,12 @@ def f1():
         del x[1]
     return f2
 f1()()
+
+
+a = {i: i for i in range(10)}
+del a[0]
+print a
+del a[1]
+print a
+del a[8]
+print a
