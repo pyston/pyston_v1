@@ -201,6 +201,51 @@ Box* tupleHash(BoxedTuple* self) {
     return boxInt(rtn);
 }
 
+extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "tuple.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, tuple_cls))
+        raiseExcHelper(TypeError, "tuple.__new__(%s): %s is not a subtype of tuple", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+    RELEASE_ASSERT(cls == tuple_cls, "");
+
+    int args_sz = args->elts.size();
+    int kwargs_sz = kwargs->d.size();
+
+    if (args_sz + kwargs_sz > 1)
+        raiseExcHelper(TypeError, "tuple() takes at most 1 argument (%d given)", args_sz + kwargs_sz);
+
+    BoxedTuple::GCVector velts;
+    Box* elements;
+
+    if (args_sz || kwargs_sz) {
+        // if initializing from iterable argument, check common case positional args first
+        if (args_sz) {
+            elements = args->elts[0];
+        } else {
+            assert(kwargs_sz);
+            static const BoxedString* seq_str = boxStrConstant("sequence");
+            auto const seq = *(kwargs->d.begin());
+            auto const kw = static_cast<BoxedString*>(seq.first);
+
+            if (kw->s == seq_str->s)
+                elements = seq.second;
+            else
+                raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->s.c_str());
+        }
+
+        llvm::iterator_range<BoxIterator> range = elements->pyElements();
+        for (BoxIterator it1 = range.begin(); it1 != range.end(); ++it1)
+            velts.push_back(*it1);
+    }
+
+    return new BoxedTuple(std::move(velts));
+}
+
+
 BoxedClass* tuple_iterator_cls = NULL;
 extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
@@ -215,6 +260,7 @@ void setupTuple() {
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, UNKNOWN, 2)));
+    tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
 
     tuple_cls->giveAttr("__iter__",

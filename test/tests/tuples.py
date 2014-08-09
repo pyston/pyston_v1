@@ -76,3 +76,45 @@ print () + ()
 print (1, 2, 3) + ()
 print () + (1, 2, 3)
 print (1, 2) + (2, 3)
+
+## __new__
+print tuple()
+print tuple((1,3,7,42))
+print tuple(['i', 42, 'j', 318])
+print tuple('hello world')
+print tuple({'a': 1})
+#print tuple({1,2,3,4})
+
+print tuple(sequence=(1,3,7,42))
+print tuple(sequence=['i', 42, 'j', 318])
+print tuple(sequence='hello world')
+print tuple(sequence={'a': 1})
+#print tuple(sequence={1,2,3,4})
+
+print tuple((1,3,7,42)) == tuple(sequence=(1,3,7,42))
+print tuple(['i', 42, 'j', 318]) == tuple(sequence=['i', 42, 'j', 318])
+print tuple('hello world') == tuple(sequence='hello world')
+print tuple({'a': 1}) == tuple(sequence={'a': 1})
+#print tuple({1,2,3,4}) == tuple(sequence={1,2,3,4})
+
+# too many arguments
+try:
+    tuple((1,2), (3,4))
+except TypeError, e:
+    print e
+
+try:
+    tuple((1,2), sequence=(3,4))
+except TypeError, e:
+    print e
+
+try:
+    tuple(sequence=(3,4), test='test', rest='rest')
+except TypeError, e:
+    print e
+
+# invalid keyword argument for function
+try:
+    tuple(oops='invalid keyword')
+except TypeError, e:
+    print e
