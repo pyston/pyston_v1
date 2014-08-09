@@ -77,6 +77,10 @@ Box* dictKeys(BoxedDict* self) {
     return rtn;
 }
 
+Box* dictLen(BoxedDict* self) {
+    return boxInt(self->d.size());
+}
+
 Box* dictGetitem(BoxedDict* self, Box* k) {
     Box*& pos = self->d[k];
 
@@ -181,8 +185,7 @@ void setupDict() {
     dict_iterator_cls = new BoxedClass(object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
-    // dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, NULL, 1)));
-    // dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, NULL, 2)));
+    dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, false, true)));
     // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
