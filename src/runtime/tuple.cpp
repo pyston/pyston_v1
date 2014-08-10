@@ -33,23 +33,27 @@ extern "C" Box* createTuple(int64_t nelts, Box** elts) {
     return new BoxedTuple(std::move(velts));
 }
 
+Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice)
+{
+    i64 n = slice->n;
+    i64 size = self->elts.size();
+
+    if (n < 0)
+        n = size - n;
+    if (n < 0 || n >= size) {
+        fprintf(stderr, "IndexError: tuple index out of range\n");
+        raiseExcHelper(IndexError, "");
+    }
+
+    Box* rtn = self->elts[n];
+    return rtn;
+}  
+
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
-    i64 size = self->elts.size();
-
     if (slice->cls == int_cls) {
-        i64 n = static_cast<BoxedInt*>(slice)->n;
-
-        if (n < 0)
-            n = size - n;
-        if (n < 0 || n >= size) {
-            fprintf(stderr, "IndexError: tuple index out of range\n");
-            raiseExcHelper(IndexError, "");
-        }
-
-        Box* rtn = self->elts[n];
-        return rtn;
+        return tupleGetitemInt(self, static_cast<BoxedInt*>(slice));
     } else {
         RELEASE_ASSERT(0, "");
     }
@@ -214,7 +218,11 @@ void setupTuple() {
 
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
-    tuple_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)tupleGetitem, UNKNOWN, 2)));
+    CLFunction* getitem = createRTFunction(2, 0, 0, 0);
+    addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, BOXED_INT });
+    addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, UNKNOWN });
+    tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
+
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
 
     tuple_cls->giveAttr("__iter__",

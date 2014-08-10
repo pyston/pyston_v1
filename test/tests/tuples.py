@@ -76,3 +76,8 @@ print () + ()
 print (1, 2, 3) + ()
 print () + (1, 2, 3)
 print (1, 2) + (2, 3)
+
+# __getitem__
+t = (1, "2")
+assert t[0] == 1
+assert t[1] == "2"
