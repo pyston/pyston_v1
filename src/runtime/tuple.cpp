@@ -33,8 +33,39 @@ extern "C" Box* createTuple(int64_t nelts, Box** elts) {
     return new BoxedTuple(std::move(velts));
 }
 
-Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice)
-{
+Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step) {
+
+    i64 size = self->elts.size();
+    assert(step != 0);
+    if (step > 0) {
+        assert(0 <= start);
+        assert(stop <= size);
+    } else {
+        assert(start < size);
+        assert(-1 <= stop);
+    }
+
+    // This is adapted from CPython's PySlice_GetIndicesEx.
+    i64 slicelength;
+    if (step < 0)
+        slicelength = (stop-start+1)/(step)+1;
+    else
+        slicelength = (stop-start-1)/(step)+1;
+
+    if (slicelength < 0)
+      slicelength = 0;
+
+    // FIXME: No need to initialize with 0.
+    BoxedTuple::GCVector velts(slicelength, 0);
+
+    i64 curr, i;
+    for (curr = start, i = 0; i < slicelength; curr += step, i++)
+        velts[i] = self->elts[curr];
+
+    return new BoxedTuple(std::move(velts));
+}
+
+Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
     i64 n = slice->n;
     i64 size = self->elts.size();
 
@@ -49,13 +80,24 @@ Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice)
     return rtn;
 }  
 
+Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
+    assert(self->cls == tuple_cls);
+    assert(slice->cls == slice_cls);
+
+    i64 start, stop, step;
+    parseSlice(slice, self->elts.size(), &start, &stop, &step);
+    return _tupleSlice(self, start, stop, step);
+}
+
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
     if (slice->cls == int_cls) {
         return tupleGetitemInt(self, static_cast<BoxedInt*>(slice));
+    } else if (slice->cls == slice_cls) {
+      return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
-        RELEASE_ASSERT(0, "");
+      RELEASE_ASSERT(0, "");  // Fix this.
     }
 }
 
@@ -220,6 +262,7 @@ void setupTuple() {
 
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
     addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, BOXED_INT });
+    addRTFunction(getitem, (void*)tupleGetitemSlice, SLICE, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, SLICE });
     addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, UNKNOWN });
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
