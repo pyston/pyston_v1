@@ -48,12 +48,12 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step) {
     // This is adapted from CPython's PySlice_GetIndicesEx.
     i64 slicelength;
     if (step < 0)
-        slicelength = (stop-start+1)/(step)+1;
+        slicelength = (stop - start + 1) / (step)+1;
     else
-        slicelength = (stop-start-1)/(step)+1;
+        slicelength = (stop - start - 1) / (step)+1;
 
     if (slicelength < 0)
-      slicelength = 0;
+        slicelength = 0;
 
     // FIXME: No need to initialize with 0.
     BoxedTuple::GCVector velts(slicelength, 0);
@@ -78,7 +78,7 @@ Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
 
     Box* rtn = self->elts[n];
     return rtn;
-}  
+}
 
 Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
     assert(self->cls == tuple_cls);
@@ -97,8 +97,7 @@ Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     else if (slice->cls == slice_cls)
         return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     else
-        raiseExcHelper(TypeError,
-		       "tuple indices must be integers, not %s", getTypeName(slice)->c_str());
+        raiseExcHelper(TypeError, "tuple indices must be integers, not %s", getTypeName(slice)->c_str());
 }
 
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {
@@ -261,7 +260,8 @@ void setupTuple() {
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
-    addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, BOXED_INT });
+    addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN,
+                  std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, BOXED_INT });
     addRTFunction(getitem, (void*)tupleGetitemSlice, SLICE, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, SLICE });
     addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, UNKNOWN });
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
