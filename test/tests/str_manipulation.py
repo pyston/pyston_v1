@@ -32,12 +32,6 @@ try:
 except TypeError:
    print 'TypeError raised'
 
-for i in xrange(256):
-    c = chr(i)
-    s = "a%sb" % c
-    if s.title()[2] == 'b':
-        print repr(c)
-
 try:
     var = 'hello'
     var.lower(42)
@@ -55,6 +49,97 @@ except TypeError:
 try:
     var = 'hello'
     var.swapcase(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+# Testing isalnum, isalpha, isdigit, islower, isspace, istitle and isupper methods
+
+def test_is(s):
+    print 'string:', repr(s), 'isalnum:', s.isalnum(), 'isalpha:', s.isalpha(), 'isdigit:', s.isdigit(), 'islower:', s.islower(), 'isspace:', s.isspace(), 'istitle:', s.istitle(), 'isupper:', s.isupper()
+
+test_is('')
+test_is('a')
+test_is('A')
+test_is('123abc456')
+test_is('a1b3c')
+test_is('aBc000 ')
+test_is('abc\n')
+test_is('aBc123')
+test_is('abc')
+test_is('0')
+test_is('0123456789')
+test_is('0123456789a')
+test_is(' ')
+test_is('\t')
+test_is('\r')
+test_is('\n')
+test_is(' \t\r\n')
+test_is(' \t\r\na')
+test_is('A Titlecased Line')
+test_is('A\nTitlecased Line')
+test_is('A Titlecased, Line')
+test_is('Not a capitalized String')
+test_is('Not\ta Titlecase String')
+test_is('Not--a Titlecase String')
+test_is('NOT')
+
+for i in xrange(256):
+    c = chr(i)
+    s = "a%sb" % c
+    if s.title()[2] == 'b':
+        print repr(c)
+
+    test(c)
+    test_is(c)
+
+try:
+    var = 'abc'
+    var.isalnum(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+
+try:
+    var = 'abc'
+    var.isalpha(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+try:
+    var = 'abc'
+    var.isdigit(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+try:
+    var = 'abc'
+    var.islower(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+try:
+    var = 'abc'
+    var.isspace(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+try:
+    var = 'abc'
+    var.istitle(42)
+    print 'TypeError not raised'
+except TypeError:
+    print 'TypeError raised'
+
+
+try:
+    var = 'abc'
+    var.isupper(42)
     print 'TypeError not raised'
 except TypeError:
     print 'TypeError raised'
