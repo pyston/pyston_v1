@@ -92,13 +92,13 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
-    if (slice->cls == int_cls) {
+    if (slice->cls == int_cls)
         return tupleGetitemInt(self, static_cast<BoxedInt*>(slice));
-    } else if (slice->cls == slice_cls) {
-      return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
-    } else {
-      RELEASE_ASSERT(0, "");  // Fix this.
-    }
+    else if (slice->cls == slice_cls)
+        return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
+    else
+        raiseExcHelper(TypeError,
+		       "tuple indices must be integers, not %s", getTypeName(slice)->c_str());
 }
 
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {

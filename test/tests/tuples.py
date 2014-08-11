@@ -101,3 +101,13 @@ print t[5:1:-1]
 print t[5:1:-2]
 print t[5:1:-5]
 print t[5:1]
+
+try:
+    t[None]
+except TypeError as e:
+    print e
+
+try:
+    t[(1, 2)]
+except TypeError as e:
+    print e
