@@ -76,3 +76,38 @@ print () + ()
 print (1, 2, 3) + ()
 print () + (1, 2, 3)
 print (1, 2) + (2, 3)
+
+# __getitem__
+t = (1, "2")
+print t[0]
+print t[1]
+
+t = (1, 2, 'a', 'b', 'c')
+print t[::-1]
+print t[:-1]
+print t[0:2]
+print t[-5:]
+print t[-5:3]
+print t[-5:10]
+print t[:-5]
+print t[:3]
+print t[:10]
+print t[1:3:-1]
+print t[3:1:-1]
+print t[1:3:1]
+print t[1:3:2]
+print t[1:5:3]
+print t[5:1:-1]
+print t[5:1:-2]
+print t[5:1:-5]
+print t[5:1]
+
+try:
+    t[None]
+except TypeError as e:
+    print e
+
+try:
+    t[(1, 2)]
+except TypeError as e:
+    print e
