@@ -70,11 +70,9 @@ Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
     i64 size = self->elts.size();
 
     if (n < 0)
-        n = size - n;
-    if (n < 0 || n >= size) {
-        fprintf(stderr, "IndexError: tuple index out of range\n");
-        raiseExcHelper(IndexError, "");
-    }
+        n = size + n;
+    if (n < 0 || n >= size)
+        raiseExcHelper(IndexError, "tuple index out of range");
 
     Box* rtn = self->elts[n];
     return rtn;

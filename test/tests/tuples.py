@@ -111,3 +111,18 @@ try:
     t[(1, 2)]
 except TypeError as e:
     print e
+
+# Single element indexing.
+t = (1, None, "abc")
+for n in range(-3, 3):
+    print t[n]
+
+try:
+    t[-4]
+except IndexError as e:
+    print e
+
+try:
+    t[3]
+except IndexError as e:
+    print e
