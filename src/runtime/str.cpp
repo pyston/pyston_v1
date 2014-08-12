@@ -376,6 +376,145 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
     return boxString(std::string(chars.begin(), chars.end()));
 }
 
+Box* strIsAlpha(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+    if (str.empty())
+        return False;
+
+    for (const auto& c : str) {
+        if (!std::isalpha(c))
+            return False;
+    }
+
+    return True;
+}
+
+Box* strIsDigit(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+    if (str.empty())
+        return False;
+
+    for (const auto& c : str) {
+        if (!std::isdigit(c))
+            return False;
+    }
+
+    return True;
+}
+
+Box* strIsAlnum(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+    if (str.empty())
+        return False;
+
+    for (const auto& c : str) {
+        if (!std::isalnum(c))
+            return False;
+    }
+
+    return True;
+}
+
+Box* strIsLower(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+    bool lowered = false;
+
+    if (str.empty())
+        return False;
+
+    for (const auto& c : str) {
+        if (std::isspace(c) || std::isdigit(c)) {
+            continue;
+        } else if (!std::islower(c)) {
+            return False;
+        } else {
+            lowered = true;
+        }
+    }
+
+    return boxBool(lowered);
+}
+
+Box* strIsUpper(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+    bool uppered = false;
+
+    if (str.empty())
+        return False;
+
+    for (const auto& c : str) {
+        if (std::isspace(c) || std::isdigit(c)) {
+            continue;
+        } else if (!std::isupper(c)) {
+            return False;
+        } else {
+            uppered = true;
+        }
+    }
+
+    return boxBool(uppered);
+}
+
+Box* strIsSpace(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+    if (str.empty())
+        return False;
+
+    for (const auto& c : str) {
+        if (!std::isspace(c))
+            return False;
+    }
+
+    return True;
+}
+
+Box* strIsTitle(BoxedString* self) {
+    assert(self->cls == str_cls);
+
+    const std::string& str(self->s);
+
+    if (str.empty())
+        return False;
+    if (str.size() == 1)
+        return boxBool(std::isupper(str[0]));
+
+    bool cased = false, start_of_word = true;
+
+    for (const auto& c : str) {
+        if (std::isupper(c)) {
+            if (!start_of_word) {
+                return False;
+            }
+
+            start_of_word = false;
+            cased = true;
+        } else if (std::islower(c)) {
+            if (start_of_word) {
+                return False;
+            }
+
+            start_of_word = false;
+            cased = true;
+        } else {
+            start_of_word = true;
+        }
+    }
+
+    return boxBool(cased);
+}
+
 Box* strJoin(BoxedString* self, Box* rhs) {
     assert(self->cls == str_cls);
 
@@ -659,6 +798,14 @@ void setupStr() {
     str_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)strRepr, STR, 1)));
     str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, BOXED_INT, 1)));
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
+
+    str_cls->giveAttr("isalnum", new BoxedFunction(boxRTFunction((void*)strIsAlnum, STR, 1)));
+    str_cls->giveAttr("isalpha", new BoxedFunction(boxRTFunction((void*)strIsAlpha, STR, 1)));
+    str_cls->giveAttr("isdigit", new BoxedFunction(boxRTFunction((void*)strIsDigit, STR, 1)));
+    str_cls->giveAttr("islower", new BoxedFunction(boxRTFunction((void*)strIsLower, STR, 1)));
+    str_cls->giveAttr("isspace", new BoxedFunction(boxRTFunction((void*)strIsSpace, STR, 1)));
+    str_cls->giveAttr("istitle", new BoxedFunction(boxRTFunction((void*)strIsTitle, STR, 1)));
+    str_cls->giveAttr("isupper", new BoxedFunction(boxRTFunction((void*)strIsUpper, STR, 1)));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
     str_cls->giveAttr("swapcase", new BoxedFunction(boxRTFunction((void*)strSwapcase, STR, 1)));
