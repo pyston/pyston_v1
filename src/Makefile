@@ -49,6 +49,7 @@ TOOLS_DIR := ../tools
 TESTS_DIR := ../test/tests
 
 GPP := $(GCC_DIR)/bin/g++
+GCC := $(GCC_DIR)/bin/gcc
 
 ifeq ($(V),1)
 	VERBOSE := 1
@@ -122,11 +123,12 @@ LLVM_PROFILE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Profile/lib/*)
 CLANG_EXE := $(LLVM_BIN)/clang
 CLANGPP_EXE := $(LLVM_BIN)/clang++
 
-COMMON_CFLAGS := -g -Werror -Wreturn-type -Woverloaded-virtual -Wall -Wno-sign-compare -Wno-unused -I. -I../include -fno-omit-frame-pointer
+COMMON_CFLAGS := -g -Werror -Wreturn-type -Wall -Wno-sign-compare -Wno-unused -I. -I../include -fno-omit-frame-pointer
 COMMON_CFLAGS += -Wextra -Wno-sign-compare
 COMMON_CFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS := $(COMMON_CFLAGS)
 COMMON_CXXFLAGS += -std=c++11
+COMMON_CXXFLAGS += -Woverloaded-virtual
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
@@ -203,8 +205,11 @@ endif
 CLANGFLAGS := $(CXXFLAGS_DBG) $(CLANG_EXTRA_FLAGS)
 CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
-EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include $(CLANG_EXTRA_FLAGS)
+EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include
 EXT_CFLAGS += -Wno-missing-field-initializers
+ifneq ($(USE_CLANG),0)
+	EXT_CFLAGS += $(CLANG_EXTRA_FLAGS)
+endif
 
 # Extra flags to enable soon:
 CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int -Wmissing-include-dirs -Wstrict-overflow=5 -Wundef -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wstrict-prototypes -Wold-style-definition -Wmissing-field-initializers -Wredundant-decls -Wnested-externs -Winline -Wint-to-pointer-cast -Wpointer-to-int-cast -Wlong-long -Wvla
@@ -218,11 +223,13 @@ CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int
 # CLANGFLAGS += -Weverything -Wno-c++98-compat-pedantic -Wno-shadow -Wno-padded -Wno-zero-length-array
 
 CXX := $(GPP)
+CC := $(GCC)
 CXX_PROFILE := $(GPP)
 CLANG_CXX := $(CLANGPP_EXE)
 
 ifneq ($(USE_CLANG),0)
 	CXX := $(CLANG_CXX)
+	CC := $(CLANG_EXE)
 
 	CXXFLAGS_DBG := $(CLANGFLAGS)
 	CXXFLAGS_RELEASE := $(CLANGFLAGS_RELEASE)
@@ -873,4 +880,4 @@ ext: ../test/test_extension/test.so
 
 ../lib_python/2.7_Modules/%.o: ../lib_python/2.7_Modules/%.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling extension file $@
-	$(VERB) $(CLANG_EXE) $(EXT_CFLAGS) -c $< -o $@ -g -ferror-limit=$(ERROR_LIMIT) -MMD -MP -MF $<.d
+	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $<.d
