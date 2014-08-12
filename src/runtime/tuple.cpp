@@ -227,19 +227,17 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             elements = args->elts[0];
         } else {
             assert(kwargs_sz);
-            static const BoxedString* seq_str = boxStrConstant("sequence");
             auto const seq = *(kwargs->d.begin());
             auto const kw = static_cast<BoxedString*>(seq.first);
 
-            if (kw->s == seq_str->s)
+            if (kw->s == "sequence")
                 elements = seq.second;
             else
                 raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->s.c_str());
         }
 
-        llvm::iterator_range<BoxIterator> range = elements->pyElements();
-        for (BoxIterator it1 = range.begin(); it1 != range.end(); ++it1)
-            velts.push_back(*it1);
+        for (auto e : elements->pyElements())
+            velts.push_back(e);
     }
 
     return new BoxedTuple(std::move(velts));

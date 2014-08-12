@@ -89,13 +89,13 @@ print tuple(sequence=(1,3,7,42))
 print tuple(sequence=['i', 42, 'j', 318])
 print tuple(sequence='hello world')
 print tuple(sequence={'a': 1})
-#print tuple(sequence={1,2,3,4})
+print sorted(tuple(sequence={1,2,3,4}))
 
 print tuple((1,3,7,42)) == tuple(sequence=(1,3,7,42))
 print tuple(['i', 42, 'j', 318]) == tuple(sequence=['i', 42, 'j', 318])
 print tuple('hello world') == tuple(sequence='hello world')
 print tuple({'a': 1}) == tuple(sequence={'a': 1})
-#print tuple({1,2,3,4}) == tuple(sequence={1,2,3,4})
+print sorted(tuple({1,2,3,4})) == sorted(tuple(sequence={1,2,3,4}))
 
 # too many arguments
 try:
