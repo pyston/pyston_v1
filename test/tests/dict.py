@@ -57,3 +57,44 @@ print 'a' in dict(a=1)
 print d
 
 print dict(**dict(a=1, b=2))
+
+# __new__
+print sorted(dict([['a', 1], ['b', 2]]))
+print sorted(dict([('a', 1), ('b', 2)]))
+print sorted(dict((['a', 1], ['b', 2])))
+print sorted(dict((('a', 1), ('b', 2))))
+print sorted(dict((('a', 1), ['b', 2])))
+
+print sorted(dict([['a', 1], ['b', 2]])) == sorted(dict((['a', 1], ['b', 2])))
+print sorted(dict([('a', 1), ('b', 2)])) == sorted(dict((('a', 1), ['b', 2])))
+print sorted(dict((('a', 1), ('b', 2)), b=3)) == sorted(dict((['a', 1], ('b', 3))))
+
+try:
+    print dict([1,2], [2,3])
+except TypeError, e:
+    print 'dict expected at most 1 arg'
+else:
+    raise
+
+try:
+    print dict([(1,2), 42])
+except TypeError, e:
+    print 'cannot convert dictionary update sequence element #1 to a sequence'
+else:
+    raise
+
+try:
+    # invalid tuple len
+    print dict([(10,20), (1,2,3)])
+except TypeError, e:
+    print 'dictionary update sequence element #1 has length 3; 2 is required'
+else:
+    raise
+
+try:
+    # invalid list len
+    print dict([[10,20], [1,2,3]])
+except TypeError, e:
+    print 'dictionary update sequence element #1 has length 3; 2 is required'
+else:
+    raise

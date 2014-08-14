@@ -78,17 +78,24 @@ Box* dictKeys(BoxedDict* self) {
 }
 
 Box* dictLen(BoxedDict* self) {
+    assert(self->cls == dict_cls);
     return boxInt(self->d.size());
 }
 
 Box* dictGetitem(BoxedDict* self, Box* k) {
-    Box*& pos = self->d[k];
+    assert(self->cls == dict_cls);
 
-    if (pos == NULL) {
-        BoxedString* s = static_cast<BoxedString*>(repr(k));
-        fprintf(stderr, "KeyError: %s\n", s->s.c_str());
-        raiseExcHelper(KeyError, "");
+    auto it = self->d.find(k);
+    if (it == self->d.end()) {
+        BoxedString* s = reprOrNull(k);
+
+        if (s)
+            raiseExcHelper(KeyError, "%s", s->s.c_str());
+        else
+            raiseExcHelper(KeyError, "");
     }
+
+    Box* pos = self->d[k];
 
     return pos;
 }
@@ -154,7 +161,7 @@ Box* dictContains(BoxedDict* self, Box* k) {
     return boxBool(self->d.count(k) != 0);
 }
 
-extern "C" Box* dictNew(Box* _cls, BoxedDict* kwargs) {
+extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "dict.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
@@ -165,11 +172,49 @@ extern "C" Box* dictNew(Box* _cls, BoxedDict* kwargs) {
 
     RELEASE_ASSERT(cls == dict_cls, "");
 
+    int args_sz = args->elts.size();
+    int kwargs_sz = kwargs->d.size();
     BoxedDict* r = new BoxedDict();
+
+    // CPython accepts a single positional and keyword arguments, in any combination
+    if (args_sz > 1)
+        raiseExcHelper(TypeError, "dict expected at most 1 arguments, got %d", args_sz);
+
+    // handle positional argument first as iterable
+    if (args_sz == 1) {
+        int idx = 0;
+        // raises if not iterable
+        llvm::iterator_range<BoxIterator> range = args->elts[0]->pyElements();
+        for (BoxIterator it1 = range.begin(); it1 != range.end(); ++it1, idx++) {
+
+            Box* element = *it1;
+
+            // should this check subclasses? anyway to check if something is iterable...
+            if (element->cls == list_cls) {
+                BoxedList* list = static_cast<BoxedList*>(element);
+                if (list->size != 2)
+                    raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required",
+                                   idx, list->size);
+
+                r->d[list->elts->elts[0]] = list->elts->elts[1];
+            } else if (element->cls == tuple_cls) {
+                BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
+                if (tuple->elts.size() != 2)
+                    raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required",
+                                   idx, tuple->elts.size());
+
+                r->d[tuple->elts[0]] = tuple->elts[1];
+            } else
+                raiseExcHelper(TypeError, "cannot convert dictionary update sequence element #%d to a sequence", idx);
+        }
+    }
+
+    // handle keyword arguments by merging (possibly over positional entries per CPy)
     assert(kwargs->cls == dict_cls);
 
-    // Copy any kwargs:
-    r->d = kwargs->d;
+    for (const auto& p : kwargs->d)
+        r->d[p.first] = p.second;
+
     return r;
 }
 
@@ -186,7 +231,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
-    dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, false, true)));
+    dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));
     // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
     dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
