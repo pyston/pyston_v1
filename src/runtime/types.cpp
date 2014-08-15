@@ -487,6 +487,21 @@ Box* objectInit(Box* b, BoxedTuple* args) {
     return None;
 }
 
+Box* objectRepr(Box* obj) {
+    char buf[80];
+    if (obj->cls == type_cls) {
+        snprintf(buf, 80, "<type '%s'>", getNameOfClass(static_cast<BoxedClass*>(obj))->c_str());
+    } else {
+        snprintf(buf, 80, "<%s object at %p>", getTypeName(obj)->c_str(), obj);
+    }
+    return boxStrConstant(buf);
+}
+
+Box* objectStr(Box* obj) {
+    static const std::string repr_str("__repr__");
+    return callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
@@ -556,6 +571,8 @@ void setupRuntime() {
     object_cls->giveAttr("__name__", boxStrConstant("object"));
     object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
+    object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
+    object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
     object_cls->freeze();
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, false);

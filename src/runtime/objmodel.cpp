@@ -1094,17 +1094,10 @@ extern "C" BoxedString* str(Box* obj) {
 
     if (obj->cls != str_cls) {
         Box* str = getclsattr_internal(obj, "__str__", NULL);
-        if (str == NULL)
-            str = getclsattr_internal(obj, "__repr__", NULL);
-
-        if (str == NULL) {
-            char buf[80];
-            snprintf(buf, 80, "<%s object at %p>", getTypeName(obj)->c_str(), obj);
-            return boxStrConstant(buf);
-        } else {
-            obj = runtimeCallInternal0(str, NULL, ArgPassSpec(0));
-        }
+        assert(str); // TODO clean the rest of this up now that this assert is true
+        obj = runtimeCallInternal0(str, NULL, ArgPassSpec(0));
     }
+
     if (obj->cls != str_cls) {
         fprintf(stderr, "__str__ did not return a string!\n");
         abort();
@@ -1117,19 +1110,8 @@ extern "C" Box* repr(Box* obj) {
     slowpath_repr.log();
 
     Box* repr = getclsattr_internal(obj, "__repr__", NULL);
-    if (repr == NULL) {
-        ASSERT(isUserDefined(obj->cls), "%s", getTypeName(obj)->c_str());
-
-        char buf[80];
-        if (obj->cls == type_cls) {
-            snprintf(buf, 80, "<type '%s'>", getNameOfClass(static_cast<BoxedClass*>(obj))->c_str());
-        } else {
-            snprintf(buf, 80, "<%s object at %p>", getTypeName(obj)->c_str(), obj);
-        }
-        return boxStrConstant(buf);
-    } else {
-        obj = runtimeCall0(repr, ArgPassSpec(0));
-    }
+    assert(repr);
+    obj = runtimeCall0(repr, ArgPassSpec(0));
 
     if (obj->cls != str_cls) {
         raiseExcHelper(TypeError, "__repr__ did not return a string!");
