@@ -268,14 +268,14 @@ SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
-STDMODULES_SRCS := errnomodule.c shamodule.c md5.c md5module.c
-STDMODULES_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULES_SRCS))
+STDMODULE_SRCS := errnomodule.c shamodule.c md5.c md5module.c $(EXTRA_STDMODULE_SRCS)
+STDMODULE_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULE_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
-OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(STDMODULES_SRCS:.c=.o)
-PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(STDMODULES_SRCS:.c=.release.o)
-OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(STDMODULES_SRCS:.c=.release.o)
+OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(STDMODULE_SRCS:.c=.o)
+PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(STDMODULE_SRCS:.c=.release.o)
+OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(STDMODULE_SRCS:.c=.release.o)
 
 OPTIONAL_SRCS := codegen/profiling/oprofile.cpp codegen/profiling/pprof.cpp
 TOOL_SRCS := $(wildcard $(TOOLS_DIR)/*.cpp)

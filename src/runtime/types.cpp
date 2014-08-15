@@ -489,7 +489,7 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        pyston::setattr(self->b, key->s.c_str(), value);
+        self->b->setattr(key->s, value, NULL);
         return None;
     }
 
@@ -499,8 +499,11 @@ public:
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
-        // TODO swap between AttributeError and KeyError?
-        return pyston::getattr(self->b, key->s.c_str());
+        Box* r = self->b->getattr(key->s);
+        if (!r) {
+            raiseExcHelper(KeyError, "'%s'", key->s.c_str());
+        }
+        return r;
     }
 
     static Box* str(Box* _self) {
@@ -522,6 +525,16 @@ public:
         }
         os << "})";
         return boxString(os.str());
+    }
+
+    static Box* contains(Box* _self, Box* _key) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        Box* r = self->b->getattr(key->s);
+        return r ? True : False;
     }
 };
 
@@ -702,6 +715,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
+    attrwrapper_cls->giveAttr("__contains__",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
     attrwrapper_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules
