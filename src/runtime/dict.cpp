@@ -172,9 +172,13 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 
     RELEASE_ASSERT(cls == dict_cls, "");
 
+    return new BoxedDict();
+}
+
+extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
+
     int args_sz = args->elts.size();
     int kwargs_sz = kwargs->d.size();
-    BoxedDict* r = new BoxedDict();
 
     // CPython accepts a single positional and keyword arguments, in any combination
     if (args_sz > 1)
@@ -183,11 +187,9 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     // handle positional argument first as iterable
     if (args_sz == 1) {
         int idx = 0;
-        // raises if not iterable
-        llvm::iterator_range<BoxIterator> range = args->elts[0]->pyElements();
-        for (BoxIterator it1 = range.begin(); it1 != range.end(); ++it1, idx++) {
 
-            Box* element = *it1;
+        // raises if not iterable
+        for (const auto& element : args->elts[0]->pyElements()) {
 
             // should this check subclasses? anyway to check if something is iterable...
             if (element->cls == list_cls) {
@@ -196,16 +198,18 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
                     raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required",
                                    idx, list->size);
 
-                r->d[list->elts->elts[0]] = list->elts->elts[1];
+                self->d[list->elts->elts[0]] = list->elts->elts[1];
             } else if (element->cls == tuple_cls) {
                 BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
                 if (tuple->elts.size() != 2)
                     raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required",
                                    idx, tuple->elts.size());
 
-                r->d[tuple->elts[0]] = tuple->elts[1];
+                self->d[tuple->elts[0]] = tuple->elts[1];
             } else
                 raiseExcHelper(TypeError, "cannot convert dictionary update sequence element #%d to a sequence", idx);
+
+            idx++;
         }
     }
 
@@ -213,9 +217,9 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     assert(kwargs->cls == dict_cls);
 
     for (const auto& p : kwargs->d)
-        r->d[p.first] = p.second;
+        self->d[p.first] = p.second;
 
-    return r;
+    return None;
 }
 
 BoxedClass* dict_iterator_cls = NULL;
@@ -232,7 +236,7 @@ void setupDict() {
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));
-    // dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NULL, 1)));
+    dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, UNKNOWN, 1, 0, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
     dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
 

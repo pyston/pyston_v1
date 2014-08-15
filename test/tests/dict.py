@@ -98,3 +98,7 @@ except TypeError, e:
     print 'dictionary update sequence element #1 has length 3; 2 is required'
 else:
     raise
+
+# __init__
+d = {}
+print sorted(d.__init__((('a', 1), ('b', 2)), b=3)) == sorted(dict((['a', 1], ('b', 3))))
