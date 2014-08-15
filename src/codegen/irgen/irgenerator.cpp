@@ -756,6 +756,7 @@ private:
         std::vector<llvm::Value*> args{ cvar->getValue() };
         llvm::Value* rtn = emitter.createCall(exc_info, g.funcs.repr, args).getInstruction();
         cvar->decvref(emitter);
+        rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
 
         return new ConcreteCompilerVariable(STR, rtn, true);
     }

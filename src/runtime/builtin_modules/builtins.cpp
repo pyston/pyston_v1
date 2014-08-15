@@ -512,6 +512,12 @@ public:
     }
 };
 
+Box* globals() {
+    BoxedModule* m = getCurrentModule();
+    // TODO is it ok that we don't return a real dict here?
+    return makeAttrWrapper(m);
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -626,6 +632,8 @@ void setupBuiltins() {
     open_obj = new BoxedFunction(boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false),
                                  { boxStrConstant("r") });
     builtins_module->giveAttr("open", open_obj);
+
+    builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
     builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));

@@ -378,5 +378,7 @@ inline void initUserAttrs(Box* obj, BoxedClass* cls) {
         attrs = new ((void*)attrs) HCAttrs();
     }
 }
+
+Box* makeAttrWrapper(Box* b);
 }
 #endif

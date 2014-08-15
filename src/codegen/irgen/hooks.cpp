@@ -121,6 +121,19 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
     patchpoints::processStackmap(stackmap);
 }
 
+static std::unordered_map<std::string, CLFunction*> machine_name_to_clfunction;
+CLFunction* clFunctionForMachineFunctionName(const std::string& machine_name) {
+    assert(machine_name.size());
+    auto r = machine_name_to_clfunction[machine_name];
+    ASSERT(r, "%s", machine_name.c_str());
+    return r;
+}
+
+void registerMachineName(const std::string& machine_name, CLFunction* cl) {
+    assert(machine_name_to_clfunction.count(machine_name) == 0);
+    machine_name_to_clfunction[machine_name] = cl;
+}
+
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
@@ -168,6 +181,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     }
 
     CompiledFunction* cf = doCompile(source, entry, effort, spec, name);
+
+    registerMachineName(cf->func->getName(), f);
 
     compileIR(cf, effort);
     f->addVersion(cf);

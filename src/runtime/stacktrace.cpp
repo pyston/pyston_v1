@@ -18,6 +18,7 @@
 #include "llvm/DebugInfo/DIContext.h"
 
 #include "codegen/codegen.h"
+#include "codegen/irgen/hooks.h"
 #include "codegen/llvm_interpreter.h"
 #include "core/options.h"
 #include "gc/collector.h"
@@ -205,6 +206,20 @@ static std::vector<const LineInfo*> getTracebackEntries() {
     std::reverse(entries.begin(), entries.end());
 
     return entries;
+}
+
+static const LineInfo* getMostRecentLineInfo() {
+    // TODO not very efficient, could stop after the first one:
+    return getTracebackEntries().back();
+}
+
+BoxedModule* getCurrentModule() {
+    const LineInfo* last_entry = getMostRecentLineInfo();
+    assert(last_entry->func.size());
+
+    CLFunction* cl = clFunctionForMachineFunctionName(last_entry->func);
+    assert(cl);
+    return cl->source->parent_module;
 }
 
 void raise0() {

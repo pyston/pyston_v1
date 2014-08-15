@@ -26,36 +26,6 @@
 
 namespace pyston {
 
-// A dictionary-like wrapper around the attributes array.
-// Not sure if this will be enough to satisfy users who expect __dict__
-// or PyModule_GetDict to return real dicts.
-BoxedClass* attrwrapper_cls;
-class AttrWrapper : public Box {
-private:
-    Box* b;
-
-public:
-    AttrWrapper(Box* b) : Box(attrwrapper_cls), b(b) {}
-
-    static void gcHandler(GCVisitor* v, Box* b) {
-        boxGCHandler(v, b);
-
-        AttrWrapper* aw = (AttrWrapper*)b;
-        v->visit(aw->b);
-    }
-
-    static Box* setitem(Box* _self, Box* _key, Box* value) {
-        assert(_self->cls == attrwrapper_cls);
-        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
-
-        RELEASE_ASSERT(_key->cls == str_cls, "");
-        BoxedString* key = static_cast<BoxedString*>(_key);
-        self->b->setattr(key->s, value, NULL);
-
-        return None;
-    }
-};
-
 BoxedClass* method_cls;
 class BoxedMethodDescriptor : public Box {
 public:
@@ -93,7 +63,7 @@ extern "C" PyObject* PyModule_GetDict(PyObject* _m) {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
-    return new AttrWrapper(m);
+    return makeAttrWrapper(m);
 }
 
 extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) {
@@ -504,11 +474,6 @@ void setupCAPI() {
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true)));
 
     capifunc_cls->freeze();
-
-    attrwrapper_cls = new BoxedClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
-    attrwrapper_cls->giveAttr("__name__", boxStrConstant("attrwrapper"));
-    attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
-    attrwrapper_cls->freeze();
 
     method_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
     method_cls->giveAttr("__name__", boxStrConstant("method"));

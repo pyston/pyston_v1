@@ -15,9 +15,12 @@
 #ifndef PYSTON_CODEGEN_IRGEN_HOOKS_H
 #define PYSTON_CODEGEN_IRGEN_HOOKS_H
 
+#include <string>
+
 namespace pyston {
 
 class CompiledFunction;
+class CLFunction;
 class OSRExit;
 
 void* compilePartialFunc(OSRExit*);
@@ -26,6 +29,9 @@ extern "C" char* reoptCompiledFunc(CompiledFunction*);
 class AST_Module;
 class BoxedModule;
 void compileAndRunModule(AST_Module* m, BoxedModule* bm);
+
+// will we always want to generate unique function names? (ie will this function always be reasonable?)
+CLFunction* clFunctionForMachineFunctionName(const std::string&);
 }
 
 #endif

@@ -1132,7 +1132,7 @@ extern "C" BoxedString* str(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
-extern "C" Box* repr(Box* obj) {
+extern "C" BoxedString* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 

@@ -465,6 +465,70 @@ CLFunction* unboxRTFunction(Box* b) {
     return static_cast<BoxedFunction*>(b)->f;
 }
 
+// A dictionary-like wrapper around the attributes array.
+// Not sure if this will be enough to satisfy users who expect __dict__
+// or PyModule_GetDict to return real dicts.
+BoxedClass* attrwrapper_cls;
+class AttrWrapper : public Box {
+private:
+    Box* b;
+
+public:
+    AttrWrapper(Box* b) : Box(attrwrapper_cls), b(b) {}
+
+    static void gcHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
+
+        AttrWrapper* aw = (AttrWrapper*)b;
+        v->visit(aw->b);
+    }
+
+    static Box* setitem(Box* _self, Box* _key, Box* value) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        pyston::setattr(self->b, key->s.c_str(), value);
+        return None;
+    }
+
+    static Box* getitem(Box* _self, Box* _key) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        // TODO swap between AttributeError and KeyError?
+        return pyston::getattr(self->b, key->s.c_str());
+    }
+
+    static Box* str(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        std::ostringstream os("");
+        os << "attrwrapper({";
+
+        HCAttrs* attrs = self->b->getAttrsPtr();
+        bool first = true;
+        for (const auto& p : attrs->hcls->attr_offsets) {
+            if (!first)
+                os << ", ";
+            first = false;
+
+            BoxedString* v = repr(attrs->attr_list->attrs[p.second]);
+            os << p.first << ": " << v->s;
+        }
+        os << "})";
+        return boxString(os.str());
+    }
+};
+
+Box* makeAttrWrapper(Box* b) {
+    return new AttrWrapper(b);
+}
+
 Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     assert(isSubclass(cls->cls, type_cls));
     assert(args->cls == tuple_cls);
@@ -553,6 +617,7 @@ void setupRuntime() {
     member_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
     closure_cls
         = new BoxedClass(object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
+    attrwrapper_cls = new BoxedClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -632,6 +697,12 @@ void setupRuntime() {
     slice_cls->giveAttr("stop", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STOP_OFFSET));
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STEP_OFFSET));
     slice_cls->freeze();
+
+    attrwrapper_cls->giveAttr("__name__", boxStrConstant("attrwrapper"));
+    attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
+    attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
+    attrwrapper_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules
     // being tracked in sys.modules:

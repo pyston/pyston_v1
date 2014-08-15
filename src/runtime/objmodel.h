@@ -37,6 +37,8 @@ void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 
+BoxedModule* getCurrentModule();
+
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 // TODO sort this
@@ -50,7 +52,7 @@ extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const st
 extern "C" Box* callattr(Box*, std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
                          const std::vector<const std::string*>*);
 extern "C" BoxedString* str(Box* obj);
-extern "C" Box* repr(Box* obj);
+extern "C" BoxedString* repr(Box* obj);
 extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
 extern "C" BoxedString* strOrNull(Box* obj);  // similar to str, but returns NULL on exception
 extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags);
