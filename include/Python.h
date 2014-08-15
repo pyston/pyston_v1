@@ -24,10 +24,12 @@
 #include <string.h>
 #include <limits.h>
 
-#include "pyport.h"
-
 
 // These include orders come from CPython:
+#include "patchlevel.h"
+
+#include "pyport.h"
+
 #include "pymem.h"
 
 #include "object.h"
