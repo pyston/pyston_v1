@@ -1572,6 +1572,15 @@ private:
         if (state == PARTIAL)
             return;
 
+        if (node->module == "__future__") {
+            // TODO I'm not sure that it's safe to raise an exception here, since I think
+            // there will be things that end up not getting cleaned up.
+            // Then again, there are a huge number of things that don't get cleaned up even
+            // if an exception doesn't get thrown...
+            raiseSyntaxError("the __future__ module is not supported yet", node->lineno, node->col_offset,
+                             irstate->getSourceInfo()->parent_module->fn, irstate->getLLVMFunction()->getName());
+        }
+
         assert(node->level == 0);
 
         llvm::Value* imported_v

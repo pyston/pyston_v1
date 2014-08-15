@@ -452,6 +452,11 @@ void addToSysArgv(const char* str);
 std::string formatException(Box* e);
 void printLastTraceback();
 
+// Raise a SyntaxError that occurs at a specific location.
+// The traceback given to the user will include this,
+// even though the execution didn't actually arrive there.
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func);
+
 struct LineInfo {
 public:
     const int line, column;

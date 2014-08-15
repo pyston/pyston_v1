@@ -121,6 +121,19 @@ void raiseExc(Box* exc_obj) {
     raiseRaw(exc_obj);
 }
 
+// Have a special helper function for syntax errors, since we want to include the location
+// of the syntax error in the traceback, even though it is not part of the execution:
+void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func) {
+    last_exc = exceptionNew2(SyntaxError, boxStrConstant(msg));
+
+    auto entries = getTracebackEntries();
+    last_tb = std::move(entries);
+    // TODO: leaks this!
+    last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
+
+    raiseRaw(last_exc);
+}
+
 void printLastTraceback() {
     fprintf(stderr, "Traceback (most recent call last):\n");
 
