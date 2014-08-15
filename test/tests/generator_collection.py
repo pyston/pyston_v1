@@ -5,7 +5,7 @@ def f():
 
     # Something above the OSR threshold:
     for i in xrange(12000):
-        l = (l * 2)[:500]
+        l = (l * 4)[:100]
     yield 0
 
 print list(f())
