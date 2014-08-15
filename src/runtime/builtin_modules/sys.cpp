@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "codegen/compvars.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/inline/boxing.h"
@@ -70,6 +71,28 @@ void prependToSysPath(const std::string& path) {
     callattr(sys_path, &attr, false, ArgPassSpec(2), boxInt(0), new BoxedString(path), NULL, NULL, NULL);
 }
 
+static BoxedClass* sys_flags_cls;
+class BoxedSysFlags : public Box {
+public:
+    Box* division_warning, *bytes_warning;
+
+    BoxedSysFlags() : Box(sys_flags_cls) {
+        auto zero = boxInt(0);
+        division_warning = zero;
+        bytes_warning = zero;
+    }
+
+    static void gcHandler(GCVisitor* v, Box* b) {
+        assert(b->cls == sys_flags_cls);
+
+        boxGCHandler(v, b);
+    }
+
+    static Box* __new__(Box* cls, Box* args, Box* kwargs) {
+        raiseExcHelper(TypeError, "cannot create 'sys.flags' instances");
+    }
+};
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerStaticRootObj(sys_modules_dict);
@@ -91,10 +114,26 @@ void setupSys() {
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
 
-    sys_module->giveAttr("hexversion", boxInt(0x01000000 * PYTHON_VERSION_MAJOR + 0x010000 * PYTHON_VERSION_MINOR
-                                              + 0x0100 * PYTHON_VERSION_MICRO));
+    sys_module->giveAttr("platform", boxStrConstant("unknown")); // seems like a reasonable, if poor, default
+
+    sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
+
+    sys_flags_cls = new BoxedClass(object_cls, BoxedSysFlags::gcHandler, 0, sizeof(BoxedSysFlags), false);
+    sys_flags_cls->giveAttr("__name__", boxStrConstant("flags"));
+    sys_flags_cls->giveAttr("__new__",
+                            new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, 0, true, true)));
+#define ADD(name)                                                                                                      \
+    sys_flags_cls->giveAttr(STRINGIFY(name),                                                                           \
+                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))
+    ADD(division_warning);
+    ADD(bytes_warning);
+#undef ADD
+
+    sys_flags_cls->freeze();
+
+    sys_module->giveAttr("flags", new BoxedSysFlags());
 }
 
 void setupSysEnd() {

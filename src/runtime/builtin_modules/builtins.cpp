@@ -551,6 +551,7 @@ void setupBuiltins() {
     /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
     /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
     /*DeprecationWarning =*/makeBuiltinException(Warning, "DeprecationWarning");
+    /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
