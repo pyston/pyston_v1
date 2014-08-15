@@ -402,7 +402,10 @@ extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
 }
 
 Box* instancemethodRepr(BoxedInstanceMethod* self) {
-    return boxStrConstant("<bound instancemethod object>");
+    if (self->obj)
+        return boxStrConstant("<bound instancemethod object>");
+    else
+        return boxStrConstant("<unbound instancemethod object>");
 }
 
 Box* sliceRepr(BoxedSlice* self) {
