@@ -72,7 +72,7 @@ BoxedList* getSysPath();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls,
-    *closure_cls, *generator_cls;
+    *method_cls, *closure_cls, *generator_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -88,7 +88,9 @@ extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func);
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
+Box* boxString(std::string&& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
+extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
@@ -199,6 +201,7 @@ public:
     // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
     const std::string s;
 
+    BoxedString(const char* s, size_t n) __attribute__((visibility("default"))) : Box(str_cls), s(s, n) {}
     BoxedString(const std::string&& s) __attribute__((visibility("default"))) : Box(str_cls), s(std::move(s)) {}
     BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(str_cls), s(s) {}
 };

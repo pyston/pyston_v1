@@ -390,6 +390,16 @@ GCAllocation* Heap::getAllocationFromInteriorPointer(void* ptr) {
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
 
+static void _doFree(GCAllocation* al) {
+    if (VERBOSITY() >= 2)
+        printf("Freeing %p\n", al->user_data);
+
+    if (al->kind_id == GCKind::PYTHON) {
+        Box* b = (Box*)al->user_data;
+        ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b)->c_str());
+    }
+}
+
 static Block** freeChain(Block** head) {
     while (Block* b = *head) {
         int num_objects = b->numObjects();
@@ -411,8 +421,7 @@ static Block** freeChain(Block** head) {
             if (isMarked(al)) {
                 clearMark(al);
             } else {
-                if (VERBOSITY() >= 2)
-                    printf("Freeing %p\n", al->user_data);
+                _doFree(al);
 
                 // assert(p != (void*)0x127000d960); // the main module
                 b->isfree[bitmap_idx] |= mask;
@@ -471,8 +480,7 @@ void Heap::freeUnmarked() {
         if (isMarked(al)) {
             clearMark(al);
         } else {
-            if (VERBOSITY() >= 2)
-                printf("Freeing %p\n", al->user_data);
+            _doFree(al);
 
             *cur->prev = cur->next;
             if (cur->next)

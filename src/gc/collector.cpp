@@ -42,6 +42,17 @@ void registerStaticRootObj(void* obj) {
     roots.push(obj);
 }
 
+std::vector<std::pair<void*, void*> > static_root_memory;
+void registerStaticRootMemory(void* start, void* end) {
+    assert(start < end);
+
+    // While these aren't necessary to work correctly, they are the anticipated use case:
+    assert(global_heap.getAllocationFromInteriorPointer(start) == NULL);
+    assert(global_heap.getAllocationFromInteriorPointer(end) == NULL);
+
+    static_root_memory.push_back(std::make_pair(start, end));
+}
+
 static std::unordered_set<StaticRootHandle*>* getRootHandles() {
     static std::unordered_set<StaticRootHandle*> root_handles;
     return &root_handles;
@@ -101,6 +112,10 @@ static void markPhase() {
     collectStackRoots(&stack);
 
     TraceStackGCVisitor visitor(&stack);
+
+    for (const auto& p : static_root_memory) {
+        visitor.visitPotentialRange((void**)p.first, (void**)p.second);
+    }
 
     for (auto h : *getRootHandles()) {
         visitor.visitPotential(h->value);

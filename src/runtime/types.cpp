@@ -32,6 +32,7 @@
 #include "runtime/set.h"
 
 extern "C" void initerrno();
+extern "C" void init_sha();
 
 namespace pyston {
 
@@ -298,10 +299,10 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) 
     BoxedClass* made;
 
     if (base->instancesHaveAttrs()) {
-        made = new BoxedClass(base, NULL, base->attrs_offset, base->instance_size, true);
+        made = new BoxedClass(base, NULL, base->attrs_offset, base->tp_basicsize, true);
     } else {
-        assert(base->instance_size % sizeof(void*) == 0);
-        made = new BoxedClass(base, NULL, base->instance_size, base->instance_size + sizeof(HCAttrs), true);
+        assert(base->tp_basicsize % sizeof(void*) == 0);
+        made = new BoxedClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
     }
 
     for (const auto& p : attr_dict->d) {
@@ -473,8 +474,8 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
             raiseExcHelper(TypeError, "object.__new__() takes no parameters");
     }
 
-    assert(cls->instance_size >= sizeof(Box));
-    void* mem = gc::gc_alloc(cls->instance_size, gc::GCKind::PYTHON);
+    assert(cls->tp_basicsize >= sizeof(Box));
+    void* mem = gc::gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
 
     Box* rtn = ::new (mem) Box(cls);
     initUserAttrs(rtn, cls);
@@ -628,6 +629,7 @@ void setupRuntime() {
     setupCAPI();
 
     initerrno();
+    init_sha();
 
     setupSysEnd();
 

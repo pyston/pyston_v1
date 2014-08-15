@@ -31,6 +31,11 @@
 
 namespace pyston {
 
+extern "C" long PyInt_AsLong(PyObject* obj) {
+    assert(obj->cls == int_cls);
+    return static_cast<BoxedInt*>(obj)->n;
+}
+
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
 // If we don't have fast overflow-checking builtins, provide some slow variants:
@@ -588,8 +593,8 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
         raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
                        getNameOfClass(cls)->c_str());
 
-    assert(cls->instance_size >= sizeof(BoxedInt));
-    void* mem = gc_alloc(cls->instance_size, gc::GCKind::PYTHON);
+    assert(cls->tp_basicsize >= sizeof(BoxedInt));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
     BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
     initUserAttrs(rtn, cls);
 

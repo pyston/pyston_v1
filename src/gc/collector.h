@@ -60,11 +60,13 @@ public:
     void visitPotentialRange(void* const* start, void* const* end) override;
 };
 
-// Call it a "root obj" because this function takes the pointer to the object, not a pointer
-// to a storage location where we might store different objects.
-// ie this only works for constant roots, and not out-of-gc-knowledge storage locations
-// (that should be registerStaticRootPtr)
+// Mark this gc-allocated object as being a root, even if there are no visible references to it.
+// (Note: this marks the gc allocation itself, not the pointer that points to one.  For that, use
+// a StaticRootHandle or registerStaticRootMemory)
 void registerStaticRootObj(void* root_obj);
+// Register a non-gc region of memory (such as statically-allocated memory) as a source of potential
+// GC roots.
+void registerStaticRootMemory(void* start, void* end);
 void runCollection();
 
 // If you want to have a static root "location" where multiple values could be stored, use this:

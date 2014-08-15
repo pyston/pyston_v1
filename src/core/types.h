@@ -19,7 +19,10 @@
 // over having them spread randomly in different files, this should probably be split again
 // but in a way that makes more sense.
 
-#include <llvm/ADT/iterator_range.h>
+#include <stddef.h>
+
+#include "llvm/ADT/iterator_range.h"
+#include "Python.h"
 
 #include "core/common.h"
 #include "core/stats.h"
@@ -379,6 +382,9 @@ extern "C" const std::string* getTypeName(Box* o);
 
 class BoxedClass : public Box {
 public:
+    Py_ssize_t ob_size; // CPython API compatibility
+    PyTypeObject_BODY;
+
     HCAttrs attrs;
 
     // If the user sets __getattribute__ or __getattr__, we will have to invalidate
@@ -389,7 +395,7 @@ public:
 
     // Only a single base supported for now.
     // Is NULL iff this is object_cls
-    BoxedClass* const base;
+    BoxedClass* base;
 
     typedef void (*gcvisit_func)(GCVisitor*, Box*);
     gcvisit_func gc_visit;
@@ -397,8 +403,6 @@ public:
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Analogous to tp_dictoffset
     const int attrs_offset;
-    // Analogous to tp_basicsize
-    const int instance_size;
 
     bool instancesHaveAttrs() { return attrs_offset != 0; }
 
@@ -421,6 +425,17 @@ public:
         is_constant = true;
     }
 };
+
+static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
+static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "");
+
+static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, ob_type), "");
+static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
+static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
+static_assert(offsetof(pyston::BoxedClass, dependent_icgetattrs) == offsetof(struct _typeobject, _dep_getattrs), "");
+static_assert(offsetof(pyston::BoxedClass, base) == offsetof(struct _typeobject, _base), "");
+static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
+static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 
 // TODO these shouldn't be here
 void setupRuntime();

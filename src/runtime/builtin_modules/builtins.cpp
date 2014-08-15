@@ -410,7 +410,7 @@ public:
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
-    assert(cls->instance_size == sizeof(BoxedException));
+    assert(cls->tp_basicsize == sizeof(BoxedException));
     Box* r = new BoxedException(cls);
     r->giveAttr("message", message);
     return r;

@@ -558,12 +558,15 @@ void Assembler::cmp(Indirect mem, Register reg) {
     emitRex(rex);
     emitByte(0x3B);
 
-    assert(-0x80 <= mem.offset && mem.offset < 0x80);
     if (mem.offset == 0) {
         emitModRM(0b00, reg_idx, mem_idx);
-    } else {
+    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, reg_idx, mem_idx);
         emitByte(mem.offset);
+    } else {
+        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        emitModRM(0b10, reg_idx, mem_idx);
+        emitInt(mem.offset, 4);
     }
 }
 

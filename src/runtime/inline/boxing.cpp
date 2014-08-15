@@ -32,12 +32,19 @@ extern "C" BoxedString* boxStrConstant(const char* chars) {
     return new BoxedString(chars);
 }
 
+extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n) {
+    return new BoxedString(chars, n);
+}
+
 extern "C" Box* boxStringPtr(const std::string* s) {
     return new BoxedString(*s);
 }
 
 Box* boxString(const std::string& s) {
     return new BoxedString(s);
+}
+Box* boxString(std::string&& s) {
+    return new BoxedString(std::move(s));
 }
 
 extern "C" double unboxFloat(Box* b) {

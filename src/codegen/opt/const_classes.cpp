@@ -124,9 +124,9 @@ private:
                     errs() << "attrs_offset; replacing with " << cls->attrs_offset << "\n";
                     replaceUsesWithConstant(gep_load, cls->attrs_offset);
                     changed = true;
-                } else if (offset == offsetof(BoxedClass, instance_size)) {
-                    errs() << "instance_size; replacing with " << cls->instance_size << "\n";
-                    replaceUsesWithConstant(gep_load, cls->instance_size);
+                } else if (offset == offsetof(BoxedClass, tp_basicsize)) {
+                    errs() << "tp_basicsize; replacing with " << cls->tp_basicsize << "\n";
+                    replaceUsesWithConstant(gep_load, cls->tp_basicsize);
                     changed = true;
                 }
             }

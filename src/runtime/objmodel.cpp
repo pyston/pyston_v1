@@ -361,8 +361,9 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
                        bool is_user_defined)
-    : Box(type_cls), base(base), gc_visit(gc_visit), attrs_offset(attrs_offset), instance_size(instance_size),
-      is_constant(false), is_user_defined(is_user_defined) {
+    : Box(type_cls), tp_basicsize(instance_size), tp_dealloc(NULL), base(base), gc_visit(gc_visit),
+      attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined) {
+    assert(tp_dealloc == NULL);
 
     if (gc_visit == NULL) {
         assert(base);
@@ -378,15 +379,15 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         assert(object_cls);
         if (base->attrs_offset)
             RELEASE_ASSERT(attrs_offset == base->attrs_offset, "");
-        assert(instance_size >= base->instance_size);
+        assert(tp_basicsize >= base->tp_basicsize);
     }
 
     if (base && cls && str_cls)
         giveAttr("__base__", base);
 
-    assert(instance_size % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
+    assert(tp_basicsize % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     if (attrs_offset) {
-        assert(instance_size >= attrs_offset + sizeof(HCAttrs));
+        assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     }
 
@@ -651,7 +652,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
 }
 
 static Box* _handleClsAttr(Box* obj, Box* attr) {
-    if (attr->cls == function_cls) {
+    if (attr->cls == function_cls || attr->cls == method_cls) {
         Box* rtn = boxInstanceMethod(obj, attr);
         return rtn;
     }
@@ -1567,6 +1568,11 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             rewrite_args = NULL;
             r_clsattr.ensureDoneUsing();
         }
+
+        auto old_clsattr = clsattr;
+        clsattr = _handleClsAttr(obj, clsattr);
+        if (clsattr != old_clsattr)
+            rewrite_args = NULL;
 
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_clsattr), rewrite_args->destination,
