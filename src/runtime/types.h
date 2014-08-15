@@ -17,6 +17,9 @@
 
 #include <ucontext.h>
 
+#include "Python.h"
+#include "structmember.h"
+
 #include "core/threading.h"
 #include "core/types.h"
 #include "gc/gc_alloc.h"
@@ -68,6 +71,7 @@ void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
+Box* getSysStdout();
 
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
@@ -260,7 +264,8 @@ class BoxedFile : public Box {
 public:
     FILE* f;
     bool closed;
-    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(file_cls), f(f), closed(false) {}
+    bool softspace;
+    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(file_cls), f(f), closed(false), softspace(false) {}
 };
 
 struct PyHasher {
@@ -317,7 +322,9 @@ public:
 class BoxedMemberDescriptor : public Box {
 public:
     enum MemberType {
-        OBJECT,
+        BOOL = T_BOOL,
+        BYTE = T_BYTE,
+        OBJECT = T_OBJECT,
     } type;
 
     int offset;

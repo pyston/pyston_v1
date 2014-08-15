@@ -1,6 +1,6 @@
 # run_args: -n
 # callattr: c.foo(i) should theoretically create an instancemethod object and then call that,
-# but calling an attribute is such a common case that I special case it as a callattr(),
+# but calling an attribute is such a common case that we special case it as a callattr(),
 # which avoids the allocation/immediate deallocation of the instancemethod object.
 # statcheck: noninit_count('num_instancemethods') <= 10
 # statcheck: stats['slowpath_callattr'] <= 20

@@ -42,6 +42,7 @@ namespace _force {
 
 #define FORCE(name) forceLink((void*)name)
 void force() {
+    FORCE(softspace);
     FORCE(my_assert);
 
     FORCE(boxInt);
@@ -84,6 +85,7 @@ void force() {
     FORCE(importFrom);
     FORCE(importStar);
     FORCE(repr);
+    FORCE(str);
     FORCE(isinstance);
     FORCE(yield);
 

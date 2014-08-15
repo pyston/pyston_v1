@@ -29,6 +29,9 @@ def verify_license(_, dir, files):
 
 PYSTON_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
 PYSTON_SRC_SUBDIRS = [bn for bn in os.listdir(PYSTON_SRC_DIR) if os.path.isdir(os.path.join(PYSTON_SRC_DIR, bn))]
+CAPI_HEADER_DIR = os.path.join(PYSTON_SRC_DIR, "../include")
+CAPI_HEADERS = [bn for bn in os.listdir(CAPI_HEADER_DIR) if bn.endswith(".h")]
+
 def verify_include_order(_, dir, files):
     for bn in files:
         fn = os.path.join(dir, bn)
@@ -81,8 +84,17 @@ def verify_include_order(_, dir, files):
             for incl in section:
                 if incl.startswith('#include "llvm/'):
                     continue
-                if '"opagent.h"' in incl or '"Python.h"' in incl or '"object.h"' in incl:
+                if '"opagent.h"' in incl:
                     continue
+
+                matches_capi_header = False
+                for h in CAPI_HEADERS:
+                    if '"%s"' % h in incl:
+                        matches_capi_header = True
+                        break
+                if matches_capi_header:
+                    continue
+
                 return False
             return True
 

@@ -173,6 +173,9 @@ void setupFile() {
     file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1)));
     file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4)));
 
+    file_cls->giveAttr("softspace",
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::BYTE, offsetof(BoxedFile, softspace)));
+
     file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 3, 1, false, false),
                                                     { boxStrConstant("r") }));
 

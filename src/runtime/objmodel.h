@@ -40,6 +40,7 @@ void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
 
 // TODO sort this
+extern "C" bool softspace(Box* b, bool newval);
 extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);

@@ -53,6 +53,12 @@ BoxedList* getSysPath() {
     return static_cast<BoxedList*>(_sys_path);
 }
 
+Box* getSysStdout() {
+    Box* sys_stdout = sys_module->getattr("stdout");
+    RELEASE_ASSERT(sys_stdout, "lost sys.stdout??");
+    return sys_stdout;
+}
+
 void addToSysArgv(const char* str) {
     Box* sys_argv = sys_module->getattr("argv");
     assert(sys_argv);

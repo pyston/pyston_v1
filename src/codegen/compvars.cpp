@@ -178,11 +178,6 @@ public:
 
     virtual bool isFitBy(BoxedClass* c) { return true; }
 
-    // XXX should get rid of this implementation and have it just do print o.__repr__()
-    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        emitter.createCall(info.exc_info, g.funcs.print, var->getValue());
-    }
-
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                       const std::string* attr, bool cls_only);
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
@@ -728,14 +723,6 @@ public:
         // pass
     }
 
-    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        assert(var->getValue()->getType() == g.i64);
-
-        llvm::Constant* int_fmt = getStringConstantPtr("%ld");
-        ;
-        emitter.getBuilder()->CreateCall2(g.funcs.printf, int_fmt, var->getValue());
-    }
-
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
         /*
         static std::vector<AbstractFunctionType::Sig*> sigs;
@@ -944,12 +931,6 @@ public:
         // pass
     }
 
-    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        assert(var->getValue()->getType() == g.double_);
-
-        emitter.getBuilder()->CreateCall(g.funcs.printFloat, var->getValue());
-    }
-
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) {
         static std::vector<AbstractFunctionType::Sig*> sigs;
         if (sigs.size() == 0) {
@@ -984,8 +965,18 @@ public:
 
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                       const std::string* attr, bool cls_only) {
-        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1270,12 +1261,6 @@ public:
         return UNKNOWN->delattr(emitter, info, var, attr);
     }
 
-    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        converted->print(emitter, info);
-        converted->decvref(emitter);
-    }
-
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                                    ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
                                    const std::vector<const std::string*>* keyword_names) {
@@ -1539,7 +1524,7 @@ public:
 } _GENERATOR;
 ConcreteCompilerType* GENERATOR = &_GENERATOR;
 
-class StrConstantType : public ValuedCompilerType<std::string*> {
+class StrConstantType : public ValuedCompilerType<const std::string*> {
 public:
     std::string debugName() { return "str_constant"; }
 
@@ -1555,14 +1540,7 @@ public:
         // pass
     }
 
-    virtual void print(IREmitter& emitter, const OpInfo& info, ValuedCompilerVariable<std::string*>* value) {
-        llvm::Constant* ptr = getStringConstantPtr(*(value->getValue()) + '\0');
-        llvm::Constant* fmt = getStringConstantPtr("%s\0");
-        emitter.getBuilder()->CreateCall2(g.funcs.printf, fmt, ptr);
-    }
-
-    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ValuedCompilerVariable<std::string*>* var,
-                                                    ConcreteCompilerType* other_type) {
+    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) {
         assert(other_type == STR || other_type == UNKNOWN);
         llvm::Value* boxed = emitter.getBuilder()->CreateCall(g.funcs.boxStringPtr,
                                                               embedConstantPtr(var->getValue(), g.llvm_str_type_ptr));
@@ -1618,10 +1596,10 @@ public:
         return rtn;
     }
 };
-ValuedCompilerType<std::string*>* STR_CONSTANT = new StrConstantType();
+static ValuedCompilerType<const std::string*>* STR_CONSTANT = new StrConstantType();
 
-CompilerVariable* makeStr(std::string* s) {
-    return new ValuedCompilerVariable<std::string*>(STR_CONSTANT, s, true);
+CompilerVariable* makeStr(const std::string* s) {
+    return new ValuedCompilerVariable<const std::string*>(STR_CONSTANT, s, true);
 }
 
 class VoidType : public ConcreteCompilerType {
@@ -1646,14 +1624,6 @@ public:
     }
     virtual void grab(IREmitter& emitter, VAR* var) {
         // pass
-    }
-    virtual void print(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
-        assert(var->getValue()->getType() == g.i1);
-
-        llvm::Value* true_str = getStringConstantPtr("True");
-        llvm::Value* false_str = getStringConstantPtr("False");
-        llvm::Value* selected = emitter.getBuilder()->CreateSelect(var->getValue(), true_str, false_str);
-        emitter.getBuilder()->CreateCall(g.funcs.printf, selected);
     }
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
@@ -1685,6 +1655,16 @@ public:
                                       bool cls_only) {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
         CompilerVariable* rtn = converted->getattr(emitter, info, attr, cls_only);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
+    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                                       const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
+                                       const std::vector<const std::string*>* keyword_names) {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1751,10 +1731,6 @@ public:
                 rtn->incvref();
         }
         return rtn;
-    }
-
-    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {
-        return makeConverted(emitter, var, getConcreteType())->print(emitter, info);
     }
 
     virtual bool canConvertTo(ConcreteCompilerType* other_type) {
@@ -1881,7 +1857,6 @@ public:
         }
         return rtn;
     }
-    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {}
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, VAR* var, ConcreteCompilerType* other_type) {
         llvm::Value* v = llvm::UndefValue::get(other_type->llvmType());
         return new ConcreteCompilerVariable(other_type, v, true);

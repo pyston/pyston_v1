@@ -363,8 +363,8 @@ check:
 	$(MAKE) run_unittests
 
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
-	# $(MAKE) check_prof
 	$(MAKE) pyston_prof
+	@# and run some basic tests to make sure it works:
 	$(call checksha,./pyston_prof -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)

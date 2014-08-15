@@ -295,6 +295,27 @@ bool PyLt::operator()(Box* lhs, Box* rhs) const {
     return rtn;
 }
 
+extern "C" bool softspace(Box* b, bool newval) {
+    assert(b);
+
+    if (isSubclass(b->cls, file_cls)) {
+        bool& ss = static_cast<BoxedFile*>(b)->softspace;
+        bool r = ss;
+        ss = newval;
+        return r;
+    }
+
+    bool r;
+    Box* gotten = b->getattr("softspace");
+    if (!gotten) {
+        r = 0;
+    } else {
+        r = nonzero(gotten);
+    }
+    b->setattr("softspace", boxInt(newval), NULL);
+    return r;
+}
+
 extern "C" void my_assert(bool b) {
     assert(b);
 }
@@ -665,6 +686,14 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
                 // be careful about returning NULLs; I'm not sure what the correct behavior is here:
                 RELEASE_ASSERT(rtn, "");
                 return rtn;
+            }
+            case BoxedMemberDescriptor::BYTE: {
+                int8_t rtn = reinterpret_cast<int8_t*>(obj)[member_desc->offset];
+                return boxInt(rtn);
+            }
+            case BoxedMemberDescriptor::BOOL: {
+                bool rtn = reinterpret_cast<bool*>(obj)[member_desc->offset];
+                return boxBool(rtn);
             }
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
@@ -1093,14 +1122,12 @@ extern "C" BoxedString* str(Box* obj) {
     slowpath_str.log();
 
     if (obj->cls != str_cls) {
-        Box* str = getclsattr_internal(obj, "__str__", NULL);
-        assert(str); // TODO clean the rest of this up now that this assert is true
-        obj = runtimeCallInternal0(str, NULL, ArgPassSpec(0));
+        static const std::string str_str("__str__");
+        obj = callattrInternal(obj, &str_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
     if (obj->cls != str_cls) {
-        fprintf(stderr, "__str__ did not return a string!\n");
-        abort();
+        raiseExcHelper(TypeError, "__str__ did not return a string!");
     }
     return static_cast<BoxedString*>(obj);
 }
@@ -1109,9 +1136,8 @@ extern "C" Box* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 
-    Box* repr = getclsattr_internal(obj, "__repr__", NULL);
-    assert(repr);
-    obj = runtimeCall0(repr, ArgPassSpec(0));
+    static const std::string repr_str("__repr__");
+    obj = callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
     if (obj->cls != str_cls) {
         raiseExcHelper(TypeError, "__repr__ did not return a string!");

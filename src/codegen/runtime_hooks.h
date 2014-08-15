@@ -28,6 +28,8 @@ namespace pyston {
 struct GlobalFuncs {
     llvm::Value* allowGLReadPreemption;
 
+    llvm::Value* softspace;
+
     llvm::Value* printf, *my_assert, *malloc, *free;
 
     llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction,
@@ -35,7 +37,7 @@ struct GlobalFuncs {
         *createUserClass, *createClosure, *createGenerator, *createLong, *createSet;
     llvm::Value* getattr, *setattr, *delattr, *delitem, *delGlobal, *print, *nonzero, *binop, *compare, *augbinop,
         *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom, *importStar, *repr,
-        *isinstance, *yield;
+        *str, *isinstance, *yield;
 
     llvm::Value* checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *assertNameDefined, *assertFail;

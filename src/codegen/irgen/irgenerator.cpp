@@ -250,6 +250,12 @@ private:
 
     OpInfo getEmptyOpInfo(ExcInfo exc_info) { return OpInfo(irstate->getEffortLevel(), NULL, exc_info); }
 
+    // Helper function:
+    void raiseSyntaxError(const char* msg, AST* node_at) {
+        ::pyston::raiseSyntaxError(msg, node_at->lineno, node_at->col_offset,
+                                   irstate->getSourceInfo()->parent_module->fn, irstate->getLLVMFunction()->getName());
+    }
+
     void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, CompilerVariable* node_value) {
         assert(check_val->getType() == g.i1);
 
@@ -1577,8 +1583,7 @@ private:
             // there will be things that end up not getting cleaned up.
             // Then again, there are a huge number of things that don't get cleaned up even
             // if an exception doesn't get thrown...
-            raiseSyntaxError("the __future__ module is not supported yet", node->lineno, node->col_offset,
-                             irstate->getSourceInfo()->parent_module->fn, irstate->getLLVMFunction()->getName());
+            raiseSyntaxError("the __future__ module is not supported yet", node);
         }
 
         assert(node->level == 0);
@@ -1618,20 +1623,73 @@ private:
         if (state == PARTIAL)
             return;
 
-        RELEASE_ASSERT(node->dest == NULL, "");
-        for (int i = 0; i < node->values.size(); i++) {
-            if (i > 0) {
-                emitter.getBuilder()->CreateCall(g.funcs.printf, getStringConstantPtr(" "));
-            }
+        ConcreteCompilerVariable* dest = NULL;
+        if (node->dest) {
+            auto d = evalExpr(node->dest, exc_info);
+            dest = d->makeConverted(emitter, d->getConcreteType());
+            d->decvref(emitter);
+        } else {
+            dest = new ConcreteCompilerVariable(typeFromClass(file_cls),
+                                                embedConstantPtr(getSysStdout(), g.llvm_value_type_ptr), true);
+        }
+        assert(dest);
+
+        static const std::string write_str("write");
+        static const std::string newline_str("\n");
+        static const std::string space_str(" ");
+
+        int nvals = node->values.size();
+        for (int i = 0; i < nvals; i++) {
             CompilerVariable* var = evalExpr(node->values[i], exc_info);
-            var->print(emitter, getEmptyOpInfo(exc_info));
+            ConcreteCompilerVariable* converted = var->makeConverted(emitter, var->getBoxType());
             var->decvref(emitter);
+
+            // begin code for handling of softspace
+            bool new_softspace = (i < nvals - 1) || (!node->nl);
+            llvm::Value* dospace
+                = emitter.createCall(exc_info, g.funcs.softspace,
+                                     { dest->getValue(), getConstantInt(new_softspace, g.i1) }).getInstruction();
+            assert(dospace->getType() == g.i1);
+
+            llvm::BasicBlock* ss_block = llvm::BasicBlock::Create(g.context, "softspace", irstate->getLLVMFunction());
+            llvm::BasicBlock* join_block = llvm::BasicBlock::Create(g.context, "print", irstate->getLLVMFunction());
+
+            emitter.getBuilder()->CreateCondBr(dospace, ss_block, join_block);
+
+            curblock = ss_block;
+            emitter.getBuilder()->SetInsertPoint(ss_block);
+
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, exc_info), &write_str, false, ArgPassSpec(1),
+                                    { makeStr(&space_str) }, NULL);
+            r->decvref(emitter);
+
+            emitter.getBuilder()->CreateBr(join_block);
+            curblock = join_block;
+            emitter.getBuilder()->SetInsertPoint(join_block);
+            // end code for handling of softspace
+
+
+            llvm::Value* v = emitter.createCall(exc_info, g.funcs.str, { converted->getValue() }).getInstruction();
+            v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
+            auto s = new ConcreteCompilerVariable(STR, v, true);
+            r = dest->callattr(emitter, getOpInfoForNode(node, exc_info), &write_str, false, ArgPassSpec(1), { s },
+                               NULL);
+            s->decvref(emitter);
+            r->decvref(emitter);
+            converted->decvref(emitter);
         }
 
-        if (node->nl)
-            emitter.createCall(exc_info, g.funcs.printf, getStringConstantPtr("\n"));
-        else
-            emitter.createCall(exc_info, g.funcs.printf, getStringConstantPtr(" "));
+        if (node->nl) {
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, exc_info), &write_str, false, ArgPassSpec(1),
+                                    { makeStr(&newline_str) }, NULL);
+            r->decvref(emitter);
+
+            if (nvals == 0) {
+                emitter.createCall(exc_info, g.funcs.softspace, { dest->getValue(), getConstantInt(0, g.i1) });
+            }
+        }
+
+        dest->decvref(emitter);
     }
 
     void doReturn(AST_Return* node, ExcInfo exc_info) {

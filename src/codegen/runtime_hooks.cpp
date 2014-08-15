@@ -151,6 +151,8 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.funcs.allowGLReadPreemption = addFunc((void*)threading::allowGLReadPreemption, g.void_);
 
+    GET(softspace);
+
     GET(boxCLFunction);
     GET(unboxCLFunction);
     GET(createUserClass);
@@ -191,6 +193,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(importFrom);
     GET(importStar);
     GET(repr);
+    GET(str);
     GET(isinstance);
     GET(yield);
 

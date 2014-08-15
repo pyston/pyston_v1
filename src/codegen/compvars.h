@@ -119,10 +119,6 @@ public:
         printf("call not defined for %s\n", debugName().c_str());
         abort();
     }
-    virtual void print(IREmitter& emitter, const OpInfo& info, VAR* var) {
-        printf("print not defined for %s\n", debugName().c_str());
-        abort();
-    }
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) {
         printf("len not defined for %s\n", debugName().c_str());
         abort();
@@ -245,7 +241,6 @@ public:
     virtual CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,
                                    const std::vector<CompilerVariable*>& args,
                                    const std::vector<const std::string*>* keyword_names) = 0;
-    virtual void print(IREmitter& emitter, const OpInfo& info) = 0;
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
     virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs,
@@ -318,7 +313,6 @@ public:
                            const std::vector<const std::string*>* keyword_names) override {
         return type->call(emitter, info, this, argspec, args, keyword_names);
     }
-    void print(IREmitter& emitter, const OpInfo& info) override { type->print(emitter, info, this); }
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) override {
         return type->len(emitter, info, this);
     }
@@ -348,7 +342,7 @@ ConcreteCompilerVariable* makeInt(int64_t);
 ConcreteCompilerVariable* makeFloat(double);
 ConcreteCompilerVariable* makeBool(bool);
 ConcreteCompilerVariable* makeLong(IREmitter& emitter, std::string&);
-CompilerVariable* makeStr(std::string*);
+CompilerVariable* makeStr(const std::string*);
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure, bool isGenerator,
                                const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();
