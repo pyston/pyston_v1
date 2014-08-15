@@ -268,7 +268,7 @@ SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
-STDMODULES_SRCS := errnomodule.c shamodule.c
+STDMODULES_SRCS := errnomodule.c shamodule.c md5.c md5module.c
 STDMODULES_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULES_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
