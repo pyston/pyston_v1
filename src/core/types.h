@@ -297,6 +297,8 @@ public:
     Box* operator*() const { return value; }
     Box* operator*() { return value; }
 
+    void gcHandler(GCVisitor* v);
+
 private:
     Box* iter;
     Box* value;

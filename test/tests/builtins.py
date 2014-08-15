@@ -32,3 +32,6 @@ print zip([1, 2, 3, 0], ["one", "two", "three"])
 print filter(lambda x: x % 2, xrange(20))
 print type(enumerate([]))
 print list(enumerate(xrange(5, 10)))
+def G():
+ yield "A"; yield "B"; yield "C"
+print list(enumerate(G()))
