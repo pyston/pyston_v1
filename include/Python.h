@@ -17,29 +17,43 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include <string.h>
+#include <limits.h>
+
+#include "pyport.h"
+
+
+// These include orders come from CPython:
+#include "pymem.h"
 
 #include "object.h"
+#include "objimpl.h"
+
+#include "intobject.h"
+#include "boolobject.h"
+#include "longobject.h"
+#include "floatobject.h"
+#include "stringobject.h"
+#include "tupleobject.h"
+#include "methodobject.h"
+#include "descrobject.h"
+
+#include "pyerrors.h"
+
+#include "modsupport.h"
+
+#include "abstract.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool PyArg_ParseTuple(PyObject*, const char*, ...);
 PyObject* Py_BuildValue(const char*, ...);
 
-typedef PyObject *(*PyCFunction)(PyObject *, PyObject *);
-struct PyMethodDef {
-    const char  *ml_name;   /* The name of the built-in function/method */
-    PyCFunction  ml_meth;   /* The C function that implements it */
-    int          ml_flags;  /* Combination of METH_xxx flags, which mostly
-                               describe the args expected by the C func */
-    const char  *ml_doc;    /* The __doc__ attribute, or NULL */
-};
-typedef struct PyMethodDef PyMethodDef;
 
 PyObject* PyString_FromString(const char*);
 PyObject* PyInt_FromLong(long);
@@ -56,8 +70,6 @@ PyObject* PyDict_New(void);
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str
-
-#define METH_VARARGS  0x0001
 
 #ifdef __cplusplus
 #define PyMODINIT_FUNC extern "C" void

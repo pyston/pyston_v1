@@ -150,9 +150,9 @@ extern "C" PyObject* Py_BuildValue(const char* arg0, ...) {
     return None;
 }
 
-extern "C" bool PyArg_ParseTuple(PyObject* tuple, const char* fmt, ...) {
+extern "C" int PyArg_ParseTuple(PyObject* tuple, const char* fmt, ...) {
     if (strcmp("", fmt) == 0)
-        return true;
+        return 1;
 
     assert(strcmp("O", fmt) == 0);
 
@@ -167,7 +167,7 @@ extern "C" bool PyArg_ParseTuple(PyObject* tuple, const char* fmt, ...) {
 
     va_end(ap);
 
-    return true;
+    return 1;
 }
 
 BoxedModule* importTestExtension() {
