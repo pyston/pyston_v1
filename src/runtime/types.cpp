@@ -578,7 +578,7 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
     if (args->elts.size() != 0) {
         // TODO slow
         if (typeLookup(cls, "__init__", NULL) == typeLookup(object_cls, "__init__", NULL))
-            raiseExcHelper(TypeError, "object.__new__() takes no parameters");
+            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
     }
 
     assert(cls->tp_basicsize >= sizeof(Box));
