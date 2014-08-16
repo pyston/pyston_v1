@@ -33,6 +33,8 @@
 
 extern "C" void initerrno();
 extern "C" void init_sha();
+extern "C" void init_sha256();
+extern "C" void init_sha512();
 extern "C" void init_md5();
 
 namespace pyston {
@@ -734,7 +736,9 @@ void setupRuntime() {
 
     initerrno();
     init_sha();
-    // init_md5();
+    init_sha256();
+    init_sha512();
+    init_md5();
 
     setupSysEnd();
 

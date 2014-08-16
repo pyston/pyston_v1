@@ -13,6 +13,9 @@
 typedef ssize_t         Py_ssize_t;
 #define Py_FORMAT_PARSETUPLE(func,p1,p2)
 #define Py_GCC_ATTRIBUTE(x) __attribute__(x)
+#define HAVE_LONG_LONG 1
+#define PY_LONG_LONG long long
+
 
 
 // Pyston change: the rest of these have just been copied from CPython's pyport.h, in an arbitrary order:
@@ -126,6 +129,13 @@ typedef ssize_t         Py_ssize_t;
 #define Py_SAFE_DOWNCAST(VALUE, WIDE, NARROW) (NARROW)(VALUE)
 #endif
 
+#ifndef Py_LL
+#define Py_LL(x) x##LL
+#endif
+
+#ifndef Py_ULL
+#define Py_ULL(x) Py_LL(x##U)
+#endif
 
 #endif /* Py_PYPORT_H */
 

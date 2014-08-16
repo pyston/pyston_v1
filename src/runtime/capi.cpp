@@ -225,7 +225,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
-    RELEASE_ASSERT(cls->tp_members == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_dict == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
@@ -254,13 +253,13 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     // tp_basicsize, tp_itemsize
     // tp_doc
 
-    if (cls->tp_methods) {
-        PyMethodDef* method = cls->tp_methods;
-        while (method->ml_name) {
-            auto desc = new BoxedMethodDescriptor(method);
-            cls->giveAttr(method->ml_name, desc);
-            method++;
-        }
+
+    for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
+        cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method));
+    }
+
+    for (PyMemberDef* member = cls->tp_members; member && member->name; ++member) {
+        cls->giveAttr(member->name, new BoxedMemberDescriptor(member));
     }
 
     if (cls->tp_getset) {
