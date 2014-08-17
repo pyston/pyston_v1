@@ -33,6 +33,8 @@
 
 extern "C" void initerrno();
 extern "C" void init_sha();
+extern "C" void init_sha256();
+extern "C" void init_sha512();
 extern "C" void init_md5();
 
 namespace pyston {
@@ -181,7 +183,7 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
                 HCAttrs::AttrList* attr_list = attrs->attr_list;
                 assert(attr_list);
                 v->visit(attr_list);
-                v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
+                v->visitPotentialRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
             }
         }
     } else {
@@ -734,7 +736,9 @@ void setupRuntime() {
 
     initerrno();
     init_sha();
-    // init_md5();
+    init_sha256();
+    init_sha512();
+    init_md5();
 
     setupSysEnd();
 

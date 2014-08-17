@@ -695,6 +695,10 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
                 bool rtn = reinterpret_cast<bool*>(obj)[member_desc->offset];
                 return boxBool(rtn);
             }
+            case BoxedMemberDescriptor::INT: {
+                int rtn = reinterpret_cast<int*>(obj)[member_desc->offset/sizeof(int)];
+                return boxInt(rtn);
+            }
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
         }
