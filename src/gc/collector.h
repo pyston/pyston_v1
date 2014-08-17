@@ -27,7 +27,7 @@ private:
     std::vector<void*> v;
 
 public:
-    void pushall(void* const* start, void* const* end) { v.insert(v.end(), start, end); }
+    template <typename T> void pushall(T start, T end) { v.insert(v.end(), start, end); }
 
     void push(void* p) { v.push_back(p); }
 
@@ -62,25 +62,27 @@ public:
 
 // Mark this gc-allocated object as being a root, even if there are no visible references to it.
 // (Note: this marks the gc allocation itself, not the pointer that points to one.  For that, use
-// a StaticRootHandle or registerStaticRootMemory)
-void registerStaticRootObj(void* root_obj);
-// Register a non-gc region of memory (such as statically-allocated memory) as a source of potential
-// GC roots.
-void registerStaticRootMemory(void* start, void* end);
-void runCollection();
+// a GCRootHandle)
+void registerPermanentRoot(void* root_obj);
+// Register an object that was not allocated through this collector, as a root for this collector.
+// The motivating usecase is statically-allocated PyTypeObject objects, which are full Python objects
+// even if they are not heap allocated.
+void registerNonheapRootObject(void* obj);
 
 // If you want to have a static root "location" where multiple values could be stored, use this:
-class StaticRootHandle {
+class GCRootHandle {
 public:
     Box* value;
 
-    StaticRootHandle();
-    ~StaticRootHandle();
+    GCRootHandle();
+    ~GCRootHandle();
 
     void operator=(Box* b) { value = b; }
 
     operator Box*() { return value; }
 };
+
+void runCollection();
 }
 }
 

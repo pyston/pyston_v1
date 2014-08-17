@@ -102,7 +102,7 @@ void unwindExc(Box* exc_obj) {
 }
 
 static std::vector<const LineInfo*> getTracebackEntries();
-static gc::StaticRootHandle last_exc;
+static gc::GCRootHandle last_exc;
 static std::vector<const LineInfo*> last_tb;
 
 void raiseRaw(Box* exc_obj) __attribute__((__noreturn__));

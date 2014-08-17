@@ -784,7 +784,6 @@ Box* strCount2(BoxedString* self, Box* elt) {
 
 void setupStr() {
     str_iterator_cls = new BoxedClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedString), false);
-    gc::registerStaticRootObj(str_iterator_cls);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));

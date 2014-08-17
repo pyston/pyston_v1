@@ -37,31 +37,46 @@ namespace pyston {
 namespace gc {
 
 static TraceStack roots;
-void registerStaticRootObj(void* obj) {
+void registerPermanentRoot(void* obj) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
     roots.push(obj);
+
+#ifndef NDEBUG
+    // Check for double-registers.  Wouldn't cause any problems, but we probably shouldn't be doing them.
+    static std::unordered_set<void*> roots;
+    ASSERT(roots.count(obj) == 0, "Please only register roots once");
+    roots.insert(obj);
+#endif
 }
 
-std::vector<std::pair<void*, void*> > static_root_memory;
-void registerStaticRootMemory(void* start, void* end) {
-    assert(start < end);
+static std::unordered_set<void*> nonheap_roots;
+// Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
+// typically all have lower addresses than the heap roots, so this can serve as a cheap
+// way to verify it's not a nonheap root (the full check requires a hashtable lookup).
+static void* max_nonheap_root = 0;
+void registerNonheapRootObject(void* obj) {
+    // I suppose that things could work fine even if this were true, but why would it happen?
+    assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
+    assert(nonheap_roots.count(obj) == 0);
 
-    // While these aren't necessary to work correctly, they are the anticipated use case:
-    assert(global_heap.getAllocationFromInteriorPointer(start) == NULL);
-    assert(global_heap.getAllocationFromInteriorPointer(end) == NULL);
+    nonheap_roots.insert(obj);
 
-    static_root_memory.push_back(std::make_pair(start, end));
+    max_nonheap_root = std::max(obj, max_nonheap_root);
 }
 
-static std::unordered_set<StaticRootHandle*>* getRootHandles() {
-    static std::unordered_set<StaticRootHandle*> root_handles;
+static bool isNonheapRoot(void* p) {
+    return p <= max_nonheap_root && nonheap_roots.count(p) != 0;
+}
+
+static std::unordered_set<GCRootHandle*>* getRootHandles() {
+    static std::unordered_set<GCRootHandle*> root_handles;
     return &root_handles;
 }
 
-StaticRootHandle::StaticRootHandle() {
+GCRootHandle::GCRootHandle() {
     getRootHandles()->insert(this);
 }
-StaticRootHandle::~StaticRootHandle() {
+GCRootHandle::~GCRootHandle() {
     getRootHandles()->erase(this);
 }
 
@@ -72,19 +87,19 @@ bool TraceStackGCVisitor::isValid(void* p) {
 }
 
 void TraceStackGCVisitor::visit(void* p) {
-    assert(global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
-    stack->push(p);
+    if (isNonheapRoot(p)) {
+        return;
+    } else {
+        assert(global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
+        stack->push(p);
+    }
 }
 
 void TraceStackGCVisitor::visitRange(void* const* start, void* const* end) {
-#ifndef NDEBUG
-    void* const* cur = start;
-    while (cur < end) {
-        assert(isValid(*cur));
-        cur++;
+    while (start < end) {
+        visit(*start);
+        start++;
     }
-#endif
-    stack->pushall(start, end);
 }
 
 void TraceStackGCVisitor::visitPotential(void* p) {
@@ -113,8 +128,14 @@ static void markPhase() {
 
     TraceStackGCVisitor visitor(&stack);
 
-    for (const auto& p : static_root_memory) {
-        visitor.visitPotentialRange((void**)p.first, (void**)p.second);
+    for (void* p : nonheap_roots) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            ASSERT(cls->gc_visit, "%s", getTypeName(b)->c_str());
+            cls->gc_visit(&visitor, b);
+        }
     }
 
     for (auto h : *getRootHandles()) {

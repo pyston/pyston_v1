@@ -329,7 +329,6 @@ void setupTuple() {
 
     tuple_cls->freeze();
 
-    gc::registerStaticRootObj(tuple_iterator_cls);
     tuple_iterator_cls->giveAttr("__name__", boxStrConstant("tupleiterator"));
 
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);

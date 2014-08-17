@@ -213,7 +213,6 @@ void setupSet() {
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
     set_iterator_cls->freeze();
-    gc::registerStaticRootObj(set_iterator_cls);
 
     set_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)setNew, UNKNOWN, 2, 1, false, false), { None }));

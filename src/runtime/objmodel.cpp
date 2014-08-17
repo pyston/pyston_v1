@@ -413,7 +413,7 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     }
 
     if (!is_user_defined)
-        gc::registerStaticRootObj(this);
+        gc::registerPermanentRoot(this);
 }
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
@@ -696,7 +696,7 @@ static Box* _handleClsAttr(Box* obj, Box* attr) {
                 return boxBool(rtn);
             }
             case BoxedMemberDescriptor::INT: {
-                int rtn = reinterpret_cast<int*>(obj)[member_desc->offset/sizeof(int)];
+                int rtn = reinterpret_cast<int*>(obj)[member_desc->offset / sizeof(int)];
                 return boxInt(rtn);
             }
             default:

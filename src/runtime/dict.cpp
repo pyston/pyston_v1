@@ -263,7 +263,6 @@ void setupDict() {
 
     dict_cls->freeze();
 
-    gc::registerStaticRootObj(dict_iterator_cls);
     dict_iterator_cls->giveAttr("__name__", boxStrConstant("dictiterator"));
 
     CLFunction* hasnext = boxRTFunction((void*)dictIterHasnextUnboxed, BOOL, 1);

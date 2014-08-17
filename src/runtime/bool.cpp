@@ -71,8 +71,8 @@ void setupBool() {
     True = new BoxedBool(true);
     False = new BoxedBool(false);
 
-    gc::registerStaticRootObj(True);
-    gc::registerStaticRootObj(False);
+    gc::registerPermanentRoot(True);
+    gc::registerPermanentRoot(False);
 }
 
 void teardownBool() {

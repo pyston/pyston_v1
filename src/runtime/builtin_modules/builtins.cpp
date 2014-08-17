@@ -528,7 +528,7 @@ void setupBuiltins() {
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new Box(notimplemented_cls);
-    gc::registerStaticRootObj(NotImplemented);
+    gc::registerPermanentRoot(NotImplemented);
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
     builtins_module->giveAttr("NotImplementedType", notimplemented_cls);

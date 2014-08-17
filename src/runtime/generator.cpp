@@ -190,7 +190,6 @@ void setupGenerator() {
     generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend, UNKNOWN, 2)));
     generator_cls->giveAttr("throw", new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 2)));
 
-    gc::registerStaticRootObj(generator_cls);
     generator_cls->freeze();
 }
 }

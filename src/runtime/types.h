@@ -331,7 +331,8 @@ public:
     int offset;
 
     BoxedMemberDescriptor(MemberType type, int offset) : Box(member_cls), type(type), offset(offset) {}
-    BoxedMemberDescriptor(PyMemberDef* member) : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
+    BoxedMemberDescriptor(PyMemberDef* member)
+        : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?

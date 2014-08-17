@@ -659,7 +659,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(int_cls, i);
-        gc::registerStaticRootObj(interned_ints[i]);
+        gc::registerPermanentRoot(interned_ints[i]);
     }
 
     int_cls->giveAttr("__name__", boxStrConstant("int"));

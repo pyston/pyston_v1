@@ -101,7 +101,7 @@ public:
 
 void setupSys() {
     sys_modules_dict = new BoxedDict();
-    gc::registerStaticRootObj(sys_modules_dict);
+    gc::registerPermanentRoot(sys_modules_dict);
 
     // This is ok to call here because we've already created the sys_modules_dict
     sys_module = createModule("sys", "__builtin__");

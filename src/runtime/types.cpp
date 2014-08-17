@@ -183,7 +183,7 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
                 HCAttrs::AttrList* attr_list = attrs->attr_list;
                 assert(attr_list);
                 v->visit(attr_list);
-                v->visitPotentialRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
+                v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
             }
         }
     } else {
@@ -584,7 +584,7 @@ Box* objectStr(Box* obj) {
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
-    gc::registerStaticRootObj(root_hcls);
+    gc::registerPermanentRoot(root_hcls);
 
     object_cls = new BoxedClass(NULL, &boxGCHandler, 0, sizeof(Box), false);
     type_cls = new BoxedClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
@@ -593,7 +593,7 @@ void setupRuntime() {
 
     none_cls = new BoxedClass(object_cls, NULL, 0, sizeof(Box), false);
     None = new Box(none_cls);
-    gc::registerStaticRootObj(None);
+    gc::registerPermanentRoot(None);
 
     // TODO we leak all the string data!
     str_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedString), false);
@@ -607,7 +607,7 @@ void setupRuntime() {
 
     tuple_cls = new BoxedClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false);
     EmptyTuple = new BoxedTuple({});
-    gc::registerStaticRootObj(EmptyTuple);
+    gc::registerPermanentRoot(EmptyTuple);
 
 
     module_cls = new BoxedClass(object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);

@@ -201,7 +201,7 @@ extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) {
-    gc::registerStaticRootMemory(cls, cls + 1);
+    gc::registerNonheapRootObject(cls);
 
     // unhandled fields:
     RELEASE_ASSERT(cls->tp_print == NULL, "");

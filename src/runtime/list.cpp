@@ -575,7 +575,6 @@ void setupList() {
     list_cls->freeze();
 
 
-    gc::registerStaticRootObj(list_iterator_cls);
     list_iterator_cls->giveAttr("__name__", boxStrConstant("listiterator"));
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
