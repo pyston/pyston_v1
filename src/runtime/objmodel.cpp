@@ -1023,6 +1023,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                 _get_ = typeLookup(descr->cls, "__get__", NULL);
             }
 
+            // As an optimization, don't check for __set__ if we're in cls_only mode, since it won't matter.
             if (_get_ && !cls_only) {
                 // Check if __set__ exists
                 Box* _set_ = NULL;
