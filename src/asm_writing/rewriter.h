@@ -159,7 +159,7 @@ public:
 
     void addGuard(uint64_t val);
     void addGuardNotEq(uint64_t val);
-    void addAttrGuard(int offset, uint64_t val);
+    void addAttrGuard(int offset, uint64_t val, bool negate = false);
     RewriterVarUsage getAttr(int offset, KillFlag kill, Location loc = Location::any());
     void setAttr(int offset, RewriterVarUsage other);
     RewriterVarUsage cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage other, Location loc = Location::any());
@@ -229,7 +229,8 @@ private:
     void kill(RewriterVar* var);
 
     // Allocates a register.  dest must be of type Register or AnyReg
-    assembler::Register allocReg(Location dest);
+    // If otherThan is a register, guaranteed to not use that register.
+    assembler::Register allocReg(Location dest, Location otherThan = Location::any());
     // Allocates an 8-byte region in the scratch space
     Location allocScratch();
     assembler::Indirect indirectFor(Location l);

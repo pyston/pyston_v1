@@ -55,7 +55,7 @@ extern "C" Box* dir(Box* obj) {
     }
 
     // If __dict__ is present use its keys and add the reset below
-    Box* obj_dict = getattr_internal(obj, "__dict__", false, true, nullptr);
+    Box* obj_dict = getattrInternal(obj, "__dict__", nullptr);
     if (obj_dict && obj_dict->cls == dict_cls) {
         result = new BoxedList();
         for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
@@ -331,7 +331,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* rtn = getattr_internal(obj, str->s, true, true, NULL);
+    Box* rtn = getattrInternal(obj, str->s, NULL);
 
     if (!rtn) {
         if (default_value)
@@ -350,7 +350,7 @@ Box* hasattr(Box* obj, Box* _str) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* attr = getattr_internal(obj, str->s, true, true, NULL);
+    Box* attr = getattrInternal(obj, str->s, NULL);
 
     Box* rtn = attr ? True : False;
     return rtn;

@@ -1,3 +1,4 @@
+# expected: fail
 # object.__new__ doesn't complain if __init__ is overridden:
 
 class C1(object):

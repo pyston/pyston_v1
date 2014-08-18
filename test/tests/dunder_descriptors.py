@@ -1,4 +1,3 @@
-# expected: fail
 # - descriptors
 
 #  Descriptors get processed when fetched as part of a dunder lookup
