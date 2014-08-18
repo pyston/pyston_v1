@@ -137,5 +137,10 @@ typedef ssize_t         Py_ssize_t;
 #define Py_ULL(x) Py_LL(x##U)
 #endif
 
+/* Largest positive value of type Py_ssize_t. */
+#define PY_SSIZE_T_MAX ((Py_ssize_t)(((size_t)-1)>>1))
+/* Smallest negative value of type Py_ssize_t. */
+#define PY_SSIZE_T_MIN (-PY_SSIZE_T_MAX-1)
+
 #endif /* Py_PYPORT_H */
 

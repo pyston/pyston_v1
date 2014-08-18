@@ -40,13 +40,18 @@
 #include "longobject.h"
 #include "floatobject.h"
 #include "stringobject.h"
+#include "listobject.h"
+#include "dictobject.h"
 #include "tupleobject.h"
 #include "methodobject.h"
+#include "iterobject.h"
 #include "descrobject.h"
+#include "warnings.h"
 
 #include "pyerrors.h"
 
 #include "modsupport.h"
+#include "import.h"
 
 #include "abstract.h"
 

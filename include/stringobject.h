@@ -59,8 +59,12 @@ typedef struct {
 PyAPI_DATA(PyTypeObject) PyBaseString_Type;
 PyAPI_DATA(PyTypeObject) PyString_Type;
 
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+PyAPI_FUNC(bool) PyString_Check(PyObject*);
+#if 0
 #define PyString_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_STRING_SUBCLASS)
+#endif
 #define PyString_CheckExact(op) (Py_TYPE(op) == &PyString_Type)
 
 PyAPI_FUNC(PyObject *) PyString_FromStringAndSize(const char *, Py_ssize_t);

@@ -33,8 +33,12 @@ typedef void PyIntObject;
 
 PyAPI_DATA(PyTypeObject) PyInt_Type;
 
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+PyAPI_FUNC(bool) PyInt_Check(PyObject*);
+#if 0
 #define PyInt_Check(op) \
 		 PyType_FastSubclass((op)->ob_type, Py_TPFLAGS_INT_SUBCLASS)
+#endif
 #define PyInt_CheckExact(op) ((op)->ob_type == &PyInt_Type)
 
 PyAPI_FUNC(PyObject *) PyInt_FromString(char*, char**, int);
@@ -55,7 +59,9 @@ PyAPI_FUNC(unsigned PY_LONG_LONG) PyInt_AsUnsignedLongLongMask(PyObject *);
 PyAPI_FUNC(long) PyInt_GetMax(void);
 
 /* Macro, trading safety for speed */
-#define PyInt_AS_LONG(op) (((PyIntObject *)(op))->ob_ival)
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+#define PyInt_AS_LONG(op) PyInt_FromLong(op)
+//#define PyInt_AS_LONG(op) (((PyIntObject *)(op))->ob_ival)
 
 /* These aren't really part of the Int object, but they're handy; the protos
  * are necessary for systems that need the magic of PyAPI_FUNC and that want

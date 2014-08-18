@@ -17,8 +17,12 @@ typedef void PyLongObject;
 
 PyAPI_DATA(PyTypeObject) PyLong_Type;
 
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+PyAPI_FUNC(bool) PyLong_Check(PyObject*);
+#if 0
 #define PyLong_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LONG_SUBCLASS)
+#endif
 #define PyLong_CheckExact(op) (Py_TYPE(op) == &PyLong_Type)
 
 PyAPI_FUNC(PyObject *) PyLong_FromLong(long);
