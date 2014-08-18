@@ -250,12 +250,6 @@ private:
 
     OpInfo getEmptyOpInfo(ExcInfo exc_info) { return OpInfo(irstate->getEffortLevel(), NULL, exc_info); }
 
-    // Helper function:
-    void raiseSyntaxError(const char* msg, AST* node_at) {
-        ::pyston::raiseSyntaxError(msg, node_at->lineno, node_at->col_offset,
-                                   irstate->getSourceInfo()->parent_module->fn, irstate->getLLVMFunction()->getName());
-    }
-
     void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, CompilerVariable* node_value) {
         assert(check_val->getType() == g.i1);
 
@@ -1578,14 +1572,6 @@ private:
     void doImportFrom(AST_ImportFrom* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
-
-        if (node->module == "__future__") {
-            // TODO I'm not sure that it's safe to raise an exception here, since I think
-            // there will be things that end up not getting cleaned up.
-            // Then again, there are a huge number of things that don't get cleaned up even
-            // if an exception doesn't get thrown...
-            raiseSyntaxError("the __future__ module is not supported yet", node);
-        }
 
         assert(node->level == 0);
 
