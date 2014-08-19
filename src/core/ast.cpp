@@ -425,7 +425,7 @@ void* AST_DictComp::accept_expr(ExprVisitor* v) {
 
 void AST_Ellipsis::accept(ASTVisitor* v) {
     bool skip = v->visit_ellipsis(this);
-    if(skip)
+    if (skip)
         return;
 }
 
@@ -460,7 +460,7 @@ void AST_Expr::accept_stmt(StmtVisitor* v) {
 
 void AST_ExtSlice::accept(ASTVisitor* v) {
     bool skip = v->visit_extslice(this);
-    if(skip)
+    if (skip)
         return;
     visitVector(dims, v);
 }
@@ -1250,8 +1250,9 @@ bool PrintVisitor::visit_expr(AST_Expr* node) {
 }
 
 bool PrintVisitor::visit_extslice(AST_ExtSlice* node) {
-    for(int i = 0; i < node->dims.size(); ++i) {
-        if(i > 0) printf(", ");
+    for (int i = 0; i < node->dims.size(); ++i) {
+        if (i > 0)
+            printf(", ");
         node->dims[i]->accept(this);
     }
     return true;
