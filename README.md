@@ -2,6 +2,8 @@
 
 Pyston is a new, under-development Python implementation built using LLVM and modern JIT techniques with the goal of achieving good performance.
 
+We have a small website [pyston.org](http://pyston.org/), which for now just hosts the mailing lists.  We have two mailing lists: [pyston-dev@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev) for development-related discussions, and [pyston-announce@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-announce) which is for wider announcements (new releases, major project changes).
+
 ### Current state
 
 Pyston "works", though doesn't support very much of the Python language, and currently is not very useful for end-users.
