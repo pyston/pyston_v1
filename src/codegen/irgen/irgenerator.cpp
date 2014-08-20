@@ -405,6 +405,10 @@ private:
         assert(left);
         assert(right);
 
+        if (type == AST_TYPE::Div && (irstate->getSourceInfo()->parent_module->future_flags & FF_DIVISION)) {
+            type = AST_TYPE::TrueDiv;
+        }
+
         return left->binexp(emitter, getOpInfoForNode(node, exc_info), right, type, exp_type);
     }
 

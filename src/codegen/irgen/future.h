@@ -31,22 +31,7 @@ namespace pyston {
 #define FF_NESTED_SCOPES 0x20
 #define FF_WITH_STATEMENT 0x40
 
-struct FutureOption {
-    int optional_version_hex;
-    int mandatory_version_hex;
-    int ff_mask;
-};
-
 typedef int FutureFlags;
-
-const std::map<std::string, FutureOption> future_options
-    = { { "absolute_import", { version_hex(2, 5, 0), version_hex(3, 0, 0), FF_ABSOLUTE_IMPORT } },
-        { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_DIVISION } },
-        { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_GENERATOR } },
-        { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_UNICODE_LITERALS } },
-        { "print_functions", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_PRINT_FUNCTIONS } },
-        { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), FF_NESTED_SCOPES } },
-        { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), FF_WITH_STATEMENT } } };
 
 // Loop through import statements to find __future__ imports throwing errors for
 // bad __future__ imports. Returns the futures that are turned on. This is used

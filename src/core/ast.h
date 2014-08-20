@@ -125,6 +125,7 @@ enum AST_TYPE {
     Invoke = 204,
     LangPrimitive = 205,
     Unreachable = 206,
+    TrueDiv = 207,
 };
 };
 

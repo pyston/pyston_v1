@@ -16,6 +16,21 @@
 
 namespace pyston {
 
+struct FutureOption {
+    int optional_version_hex;
+    int mandatory_version_hex;
+    int ff_mask;
+};
+
+const std::map<std::string, FutureOption> future_options
+    = { { "absolute_import", { version_hex(2, 5, 0), version_hex(3, 0, 0), FF_ABSOLUTE_IMPORT } },
+        { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_DIVISION } },
+        { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_GENERATOR } },
+        { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_UNICODE_LITERALS } },
+        { "print_functions", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_PRINT_FUNCTIONS } },
+        { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), FF_NESTED_SCOPES } },
+        { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), FF_WITH_STATEMENT } } };
+
 // Helper function:
 void raiseSyntaxError(const char* file, AST* node_at, const char* msg, ...) {
     va_list ap;
@@ -105,7 +120,7 @@ FutureFlags getFutureFlags(AST_Module* m, const char* file) {
                         raiseFutureImportErrorNotFound(file, alias, option_name.c_str());
                     } else {
                         const FutureOption& fo = iter->second;
-                        if (PYTHON_VERSION_HEX >= fo.mandatory_version_hex) {
+                        if (PYTHON_VERSION_HEX >= fo.optional_version_hex) {
                             ff |= fo.ff_mask;
                         } else {
                             raiseFutureImportErrorNotFound(file, alias, option_name.c_str());

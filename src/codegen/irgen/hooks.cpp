@@ -237,7 +237,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         Timer _t("for compileModule()");
 
-        FutureFlags ff = getFutureFlags(m, bm->fn.c_str());
+        bm->future_flags = getFutureFlags(m, bm->fn.c_str());
 
         ScopingAnalysis* scoping = runScopingAnalysis(m);
 

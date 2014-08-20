@@ -106,6 +106,7 @@ def run_test(fn, check_stats, run_memcheck):
     statchecks = []
     jit_args = ["-csrq"] + EXTRA_JIT_ARGS
     expected = "success"
+    allow_warning = False
     for l in open(fn):
         l = l.strip()
         if not l:
@@ -125,6 +126,8 @@ def run_test(fn, check_stats, run_memcheck):
             skip = eval(skip_if)
             if skip:
                 return r + "    (skipped due to 'skip-if: %s')" % skip_if[:30]
+        elif l.startswith("# allow-warning"):
+            allow_warning = True
 
     assert expected in ("success", "fail", "statfail"), expected
 
@@ -143,6 +146,9 @@ def run_test(fn, check_stats, run_memcheck):
     elapsed = time.time() - start
 
     stats = {}
+    if allow_warning:
+        out_lines = [l for l in out.split('\n') if not l.startswith("Warning: ")]
+        out = "\n".join(out_lines)
     if code == 0 and not TEST_PYPY:
         assert out.count("Stats:") == 1
         out, stats_str = out.split("Stats:")
