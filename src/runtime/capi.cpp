@@ -18,6 +18,7 @@
 
 #include "Python.h"
 
+#include "capi/types.h"
 #include "codegen/compvars.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -64,14 +65,6 @@ extern "C" PyObject* PyModule_GetDict(PyObject* _m) {
     assert(m->cls == module_cls);
 
     return makeAttrWrapper(m);
-}
-
-extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) {
-    BoxedModule* m = static_cast<BoxedModule*>(_m);
-    assert(m->cls == module_cls);
-
-    m->setattr(name, boxInt(value), NULL);
-    return 0;
 }
 
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
@@ -144,68 +137,6 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
 
 
 BoxedClass* capifunc_cls;
-class BoxedCApiFunction : public Box {
-private:
-    int ml_flags;
-    Box* passthrough;
-    const char* name;
-    PyCFunction func;
-
-public:
-    BoxedCApiFunction(int ml_flags, Box* passthrough, const char* name, PyCFunction func)
-        : Box(capifunc_cls), ml_flags(ml_flags), passthrough(passthrough), name(name), func(func) {}
-
-    static BoxedString* __repr__(BoxedCApiFunction* self) {
-        assert(self->cls == capifunc_cls);
-        return boxStrConstant(self->name);
-    }
-
-    static Box* __call__(BoxedCApiFunction* self, BoxedTuple* varargs, BoxedDict* kwargs) {
-        assert(self->cls == capifunc_cls);
-        assert(varargs->cls == tuple_cls);
-        assert(kwargs->cls == dict_cls);
-
-        threading::GLPromoteRegion _gil_lock;
-
-        Box* rtn;
-        if (self->ml_flags == METH_VARARGS) {
-            assert(kwargs->d.size() == 0);
-            rtn = (Box*)self->func(self->passthrough, varargs);
-        } else if (self->ml_flags == (METH_VARARGS | METH_KEYWORDS)) {
-            rtn = (Box*)((PyCFunctionWithKeywords)self->func)(self->passthrough, varargs, kwargs);
-        } else {
-            RELEASE_ASSERT(0, "0x%x", self->ml_flags);
-        }
-        assert(rtn);
-        return rtn;
-    }
-};
-
-extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
-                                    int apiver) {
-    BoxedModule* module = createModule(name, "__builtin__");
-
-    Box* passthrough = static_cast<Box*>(self);
-    if (!passthrough)
-        passthrough = None;
-
-    while (methods->ml_name) {
-        if (VERBOSITY())
-            printf("Loading method %s\n", methods->ml_name);
-
-        assert((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS))) == 0);
-        module->giveAttr(methods->ml_name,
-                         new BoxedCApiFunction(methods->ml_flags, passthrough, methods->ml_name, methods->ml_meth));
-
-        methods++;
-    }
-
-    if (doc) {
-        module->setattr("__doc__", boxStrConstant(doc), NULL);
-    }
-
-    return module;
-}
 
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
@@ -289,11 +220,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     assert(cls->attrs_offset == 0);
 
     return 0;
-}
-
-extern "C" PyObject* Py_BuildValue(const char* arg0, ...) {
-    assert(*arg0 == '\0');
-    return None;
 }
 
 // copied from CPython's getargs.c:
