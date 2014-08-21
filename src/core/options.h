@@ -22,7 +22,11 @@ extern "C" {
 extern int GLOBAL_VERBOSITY;
 #define VERBOSITY(x) GLOBAL_VERBOSITY
 // Version number we're targeting:
-extern int PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO;
+extern int PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO, PYTHON_VERSION_HEX;
+
+inline int version_hex(int major, int minor, int micro, int level = 0, int serial = 0) {
+    return (major << 24) | (minor << 16) | (micro << 8) | (level << 4) | (serial << 0);
+}
 
 extern int MAX_OPT_ITERATIONS;
 

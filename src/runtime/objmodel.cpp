@@ -3241,7 +3241,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     ArgPassSpec new_argspec = argspec;
     if (npassed_args > 1 && new_attr == typeLookup(object_cls, _new_str, NULL)) {
         if (init_attr == typeLookup(object_cls, _init_str, NULL)) {
-            raiseExcHelper(TypeError, "object.__new__() takes no parameters");
+            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
         } else {
             new_argspec = ArgPassSpec(1);
         }
@@ -3315,7 +3315,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
         // assert(0 && "I don't think this should be reached");
         if (new_attr == NULL && npassed_args != 1) {
             // TODO not npassed args, since the starargs or kwargs could be null
-            raiseExcHelper(TypeError, "object.__new__() takes no parameters");
+            raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
         }
     }
 
