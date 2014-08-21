@@ -11,3 +11,6 @@ print 1L / 5L
 print -1L / 5L
 print 1L / -5L
 print -1L / -5L
+
+print (2L).__sub__(1)
+print (2L).__sub__(-1)

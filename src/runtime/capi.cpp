@@ -124,7 +124,7 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
         r = callattrInternal(b, &setitem_str, CLASS_ONLY, NULL, ArgPassSpec(2), key, item, NULL, NULL, NULL);
     } catch (Box* b) {
         fprintf(stderr, "Error: uncaught error would be propagated to C code!\n");
-        abort();
+        Py_FatalError("unimplemented");
     }
 
     RELEASE_ASSERT(r, "");
@@ -164,7 +164,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_traverse == NULL, "");
     RELEASE_ASSERT(cls->tp_clear == NULL, "");
     RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
-    RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");
@@ -184,10 +183,17 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
 
+// I think it is safe to ignore tp_weaklistoffset for now:
+// RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
+
 #define INITIALIZE(a) new (&(a)) decltype(a)
     INITIALIZE(cls->attrs);
     INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
+
+    cls->base = object_cls;
+    if (!cls->cls)
+        cls->cls = cls->base->cls;
 
     assert(cls->tp_name);
     cls->giveAttr("__name__", boxStrConstant(cls->tp_name));
@@ -208,8 +214,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
         if (VERBOSITY())
             printf("warning: ignoring tp_getset for now\n");
     }
-
-    cls->base = object_cls;
 
     cls->gc_visit = &conservativeGCHandler;
 
@@ -270,13 +274,16 @@ extern "C" void PyBuffer_Release(Py_buffer* view) {
     view->obj = NULL;
 }
 
+// Not sure why we need another declaration here:
+extern "C" void Py_FatalError(const char* msg) __attribute__((__noreturn__));
 extern "C" void Py_FatalError(const char* msg) {
-    fprintf(stderr, "%s", msg);
+    fprintf(stderr, "Fatal Python error: %s\n", msg);
+    _printStacktrace();
     abort();
 }
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
@@ -287,7 +294,7 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
 }
 
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) {
-    abort(); // "var" objects not tested yet
+    Py_FatalError("'var' objects not tested yet");
 
     RELEASE_ASSERT(op, "");
     RELEASE_ASSERT(tp, "");
@@ -320,16 +327,16 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) {
         Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
         return r;
     } catch (Box* b) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
 extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
@@ -340,7 +347,7 @@ extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
     try {
         return getattr(o, attr);
     } catch (Box* b) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
@@ -348,7 +355,7 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
     try {
         return len(o)->n;
     } catch (Box* b) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
@@ -356,12 +363,12 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
     try {
         return getitem(o, key);
     } catch (Box* b) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
 extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 
@@ -370,7 +377,7 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) {
         // Not sure if this is really the same:
         return getitem(o, boxInt(i));
     } catch (Box* b) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
@@ -379,7 +386,7 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t 
         // Not sure if this is really the same:
         return getitem(o, new BoxedSlice(boxInt(i1), boxInt(i2), None));
     } catch (Box* b) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
@@ -394,7 +401,7 @@ extern "C" int PyCallable_Check(PyObject* x) {
 
 
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" void PyErr_Clear() {
@@ -410,23 +417,23 @@ extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) {
 }
 
 extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyErr_NoMemory() {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" int PyErr_CheckSignals() {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyErr_Occurred() {
-    abort();
+    Py_FatalError("unimplemented");
     /*
     printf("need to hook exception handling -- make sure errors dont propagate into C code, and error codes get "
            "checked coming out\n");
@@ -435,7 +442,7 @@ extern "C" PyObject* PyErr_Occurred() {
 }
 
 extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 
@@ -446,13 +453,13 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) {
     try {
         return import(&static_cast<BoxedString*>(module_name)->s);
     } catch (Box* e) {
-        abort();
+        Py_FatalError("unimplemented");
     }
 }
 
 
 extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) {
-    abort();
+    Py_FatalError("unimplemented");
 }
 
 

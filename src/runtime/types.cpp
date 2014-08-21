@@ -767,7 +767,7 @@ void setupRuntime() {
     init_sha256();
     init_sha512();
     init_md5();
-    // init_sre();
+    init_sre();
 
     setupSysEnd();
 

@@ -49,6 +49,10 @@ public:
             rtn = (Box*)self->func(self->passthrough, varargs);
         } else if (self->ml_flags == (METH_VARARGS | METH_KEYWORDS)) {
             rtn = (Box*)((PyCFunctionWithKeywords)self->func)(self->passthrough, varargs, kwargs);
+        } else if (self->ml_flags == METH_NOARGS) {
+            assert(kwargs->d.size() == 0);
+            assert(varargs->elts.size() == 0);
+            rtn = (Box*)self->func(self->passthrough, NULL);
         } else {
             RELEASE_ASSERT(0, "0x%x", self->ml_flags);
         }

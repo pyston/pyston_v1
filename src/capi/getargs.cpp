@@ -59,8 +59,26 @@ static int vgetargs1(PyObject* _tuple, const char* fmt, va_list* ap, int flags) 
             }
 
             PyObject* arg = tuple->elts[arg_idx];
+            arg_idx++;
 
             switch (c) {
+                case 'i': { // signed int
+                    int* p = (int*)va_arg(*ap, int*);
+                    RELEASE_ASSERT(arg->cls == int_cls, "%s", getTypeName(arg)->c_str());
+                    int64_t n = static_cast<BoxedInt*>(arg)->n;
+                    RELEASE_ASSERT(n >= INT_MIN, "");
+                    RELEASE_ASSERT(n <= INT_MAX, "");
+                    *p = n;
+                    break;
+                }
+                case 'n': { // ssize_t
+                    Py_ssize_t* p = (Py_ssize_t*)va_arg(*ap, Py_ssize_t*);
+                    // could also be a long:
+                    RELEASE_ASSERT(arg->cls == int_cls, "%s", getTypeName(arg)->c_str());
+                    int64_t n = static_cast<BoxedInt*>(arg)->n;
+                    *p = n;
+                    break;
+                }
                 case 's': {
                     if (*fmt == '*') {
                         Py_buffer* p = (Py_buffer*)va_arg(*ap, Py_buffer*);
@@ -76,8 +94,25 @@ static int vgetargs1(PyObject* _tuple, const char* fmt, va_list* ap, int flags) 
                     break;
                 }
                 case 'O': {
-                    PyObject** p = (PyObject**)va_arg(*ap, PyObject**);
-                    *p = arg;
+                    if (fmt && *fmt == '!') {
+                        fmt++;
+
+                        PyObject* _cls = (PyObject*)va_arg(*ap, PyObject*);
+                        PyObject** p = (PyObject**)va_arg(*ap, PyObject**);
+
+                        RELEASE_ASSERT(_cls->cls == type_cls, "%s", getTypeName(_cls)->c_str());
+                        PyTypeObject* cls = static_cast<PyTypeObject*>(_cls);
+
+                        if (!isSubclass(arg->cls, cls)) {
+                            // should raise a TypeError
+                            abort();
+                        }
+
+                        *p = arg;
+                    } else {
+                        PyObject** p = (PyObject**)va_arg(*ap, PyObject**);
+                        *p = arg;
+                    }
                     break;
                 }
                 default:

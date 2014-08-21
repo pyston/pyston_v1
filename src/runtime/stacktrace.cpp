@@ -135,10 +135,10 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     raiseRaw(last_exc);
 }
 
-void printLastTraceback() {
+static void _printTraceback(const std::vector<const LineInfo*>& tb) {
     fprintf(stderr, "Traceback (most recent call last):\n");
 
-    for (auto line : last_tb) {
+    for (auto line : tb) {
         fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
 
         FILE* f = fopen(line->file.c_str(), "r");
@@ -168,6 +168,14 @@ void printLastTraceback() {
             }
         }
     }
+}
+
+void printLastTraceback() {
+    _printTraceback(last_tb);
+}
+
+void _printStacktrace() {
+    _printTraceback(getTracebackEntries());
 }
 
 static std::vector<const LineInfo*> getTracebackEntries() {

@@ -150,15 +150,26 @@ Box* longSub(BoxedLong* v1, Box* _v2) {
         raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'",
                        getTypeName(v1)->c_str());
 
-    if (!isSubclass(_v2->cls, long_cls))
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_sub(r->n, v1->n, v2->n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        if (v2->n >= 0)
+            mpz_sub_ui(r->n, v1->n, v2->n);
+        else
+            mpz_add_ui(r->n, v1->n, -v2->n);
+        return r;
+    } else {
         return NotImplemented;
-
-    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-    BoxedLong* r = new BoxedLong(long_cls);
-    mpz_init(r->n);
-    mpz_sub(r->n, v1->n, v2->n);
-    return r;
+    }
 }
 
 Box* longMul(BoxedLong* v1, Box* _v2) {
@@ -225,6 +236,8 @@ void setupLong() {
 
     long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
     long_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)longDiv, UNKNOWN, 2)));
+    long_cls->giveAttr("__sub__", new BoxedFunction(boxRTFunction((void*)longSub, UNKNOWN, 2)));
+    long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
 
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));

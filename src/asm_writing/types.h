@@ -67,9 +67,9 @@ inline bool Register::isCalleeSave() {
 struct Indirect {
 public:
     const Register base;
-    const int offset;
+    const int64_t offset;
 
-    Indirect(const Register base, int offset) : base(base), offset(offset) {}
+    Indirect(const Register base, int64_t offset) : base(base), offset(offset) {}
 };
 
 struct XMMRegister {
