@@ -324,6 +324,14 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) {
     }
 }
 
+extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) {
+    abort();
+}
+
+extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) {
+    abort();
+}
+
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
     // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
     // won't end up doing a GIL check?
@@ -334,6 +342,35 @@ extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
     } catch (Box* b) {
         abort();
     }
+}
+
+extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
+    try {
+        return len(o)->n;
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
+    try {
+        return getitem(o, key);
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
+    abort();
+}
+
+
+extern "C" int PyCallable_Check(PyObject* x) {
+    if (x == NULL)
+        return 0;
+
+    static const std::string call_attr("__call__");
+    return typeLookup(x->cls, call_attr, NULL) != NULL;
 }
 
 
@@ -376,6 +413,21 @@ extern "C" PyObject* PyErr_Occurred() {
            "checked coming out\n");
     return NULL;
     */
+}
+
+extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {
+    abort();
+}
+
+extern "C" PyObject* PyImport_Import(PyObject* module_name) {
+    RELEASE_ASSERT(module_name, "");
+    RELEASE_ASSERT(module_name->cls == str_cls, "");
+
+    try {
+        return import(&static_cast<BoxedString*>(module_name)->s);
+    } catch (Box* e) {
+        abort();
+    }
 }
 
 BoxedModule* importTestExtension() {
