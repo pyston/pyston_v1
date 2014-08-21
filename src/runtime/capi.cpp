@@ -365,6 +365,25 @@ extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
 }
 
 
+extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) {
+    try {
+        // Not sure if this is really the same:
+        return getitem(o, boxInt(i));
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) {
+    try {
+        // Not sure if this is really the same:
+        return getitem(o, new BoxedSlice(boxInt(i1), boxInt(i2), None));
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+
 extern "C" int PyCallable_Check(PyObject* x) {
     if (x == NULL)
         return 0;
@@ -419,6 +438,7 @@ extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t sta
     abort();
 }
 
+
 extern "C" PyObject* PyImport_Import(PyObject* module_name) {
     RELEASE_ASSERT(module_name, "");
     RELEASE_ASSERT(module_name->cls == str_cls, "");
@@ -429,6 +449,12 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) {
         abort();
     }
 }
+
+
+extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) {
+    abort();
+}
+
 
 BoxedModule* importTestExtension() {
     const char* pathname = "../test/test_extension/test.so";
