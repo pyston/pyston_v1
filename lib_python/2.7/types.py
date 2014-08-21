@@ -33,7 +33,8 @@ try:
 except NameError:
     StringTypes = (StringType,)
 
-BufferType = buffer
+# Pyston change: 'buffer' is not implemented yet
+# BufferType = buffer
 
 TupleType = tuple
 ListType = list
@@ -42,12 +43,15 @@ DictType = DictionaryType = dict
 def _f(): pass
 FunctionType = type(_f)
 LambdaType = type(lambda: None)         # Same as FunctionType
-CodeType = type(_f.func_code)
+# Pyston change: there is no concept of a "code object" yet:
+# CodeType = type(_f.func_code)
 
 def _g():
     yield 1
 GeneratorType = type(_g())
 
+# Pyston change: we do not support old-style classes yet
+"""
 class _C:
     def _m(self): pass
 ClassType = type(_C)
@@ -55,6 +59,7 @@ UnboundMethodType = type(_C._m)         # Same as MethodType
 _x = _C()
 InstanceType = type(_x)
 MethodType = type(_x._m)
+"""
 
 BuiltinFunctionType = type(len)
 BuiltinMethodType = type([].append)     # Same as BuiltinFunctionType
@@ -63,6 +68,8 @@ ModuleType = type(sys)
 FileType = file
 XRangeType = xrange
 
+# Pyston change: we don't support sys.exc_info yet
+"""
 try:
     raise TypeError
 except TypeError:
@@ -70,15 +77,20 @@ except TypeError:
     TracebackType = type(tb)
     FrameType = type(tb.tb_frame)
     del tb
+"""
 
 SliceType = slice
-EllipsisType = type(Ellipsis)
+# Pyston change: don't support this yet
+# EllipsisType = type(Ellipsis)
 
-DictProxyType = type(TypeType.__dict__)
+# Pyston change: don't support this yet
+# DictProxyType = type(TypeType.__dict__)
 NotImplementedType = type(NotImplemented)
 
 # For Jython, the following two types are identical
-GetSetDescriptorType = type(FunctionType.func_code)
-MemberDescriptorType = type(FunctionType.func_globals)
+# Pyston change: don't support these yet
+# GetSetDescriptorType = type(FunctionType.func_code)
+# MemberDescriptorType = type(FunctionType.func_globals)
 
-del sys, _f, _g, _C, _x                           # Not for export
+# Pyston change: had to change this to match above changes
+del sys, _f, _g, #_C, _x                           # Not for export

@@ -52,6 +52,8 @@ public:
         } else if (ml_flags == METH_VARARGS) {
             assert(kwargs->d.size() == 0);
             rtn = (Box*)self->method->ml_meth(obj, varargs);
+        } else if (ml_flags == (METH_VARARGS | METH_KEYWORDS)) {
+            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(obj, varargs, kwargs);
         } else {
             RELEASE_ASSERT(0, "0x%x", ml_flags);
         }
@@ -277,7 +279,7 @@ extern "C" void PyBuffer_Release(Py_buffer* view) {
 // Not sure why we need another declaration here:
 extern "C" void Py_FatalError(const char* msg) __attribute__((__noreturn__));
 extern "C" void Py_FatalError(const char* msg) {
-    fprintf(stderr, "Fatal Python error: %s\n", msg);
+    fprintf(stderr, "\nFatal Python error: %s\n", msg);
     _printStacktrace();
     abort();
 }
@@ -294,8 +296,6 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
 }
 
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) {
-    Py_FatalError("'var' objects not tested yet");
-
     RELEASE_ASSERT(op, "");
     RELEASE_ASSERT(tp, "");
     Py_TYPE(op) = tp;
