@@ -119,6 +119,20 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
     return None;
 }
 
+Box* dictDelitem(BoxedDict* self, Box* k) {
+    assert(self->cls == dict_cls);
+    Box*& pos = self->d[k];
+
+    if (pos == NULL) {
+        BoxedString* s = reprOrNull(k);
+        raiseExcHelper(KeyError, "%s", s->s.c_str());
+    }
+
+    self->d.erase(k);
+
+    return None;
+}
+
 Box* dictPop(BoxedDict* self, Box* k, Box* d) {
     assert(self->cls == dict_cls);
 
@@ -264,6 +278,7 @@ void setupDict() {
 
     dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, UNKNOWN, 2)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3)));
+    dict_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)dictDelitem, NONE, 2)));
     dict_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
 
     dict_cls->freeze();
