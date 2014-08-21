@@ -11,7 +11,9 @@ extern "C" {
 
 typedef PyIntObject PyBoolObject;
 
-PyAPI_DATA(PyTypeObject) PyBool_Type;
+// Pyston change: this is no longer a static object
+PyAPI_DATA(PyTypeObject*) bool_cls;
+#define PyBool_Type (*bool_cls)
 
 #define PyBool_Check(x) (Py_TYPE(x) == &PyBool_Type)
 

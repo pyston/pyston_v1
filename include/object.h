@@ -112,21 +112,24 @@ struct _object {
     PyObject_HEAD
 };
 
+struct _varobject {
+    PyObject_VAR_HEAD
+};
+
 // Pyston change: hacks to allow C++ features
 #ifndef __cplusplus
 typedef struct _object PyObject;
+typedef struct _varobject PyVarObject;
 #define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
 #else
 namespace pyston {
 class Box;
+class BoxVar;
 }
 typedef pyston::Box PyObject;
+typedef pyston::BoxVar PyVarObject;
 #define Py_TYPE(ob)             ((ob)->cls)
 #endif
-
-typedef struct {
-    PyObject_VAR_HEAD
-} PyVarObject;
 
 // Pyston change: removed Py_REFCNT, moved Py_TYPE to above
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)

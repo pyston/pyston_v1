@@ -15,7 +15,9 @@ typedef struct _longobject PyLongObject; /* Revealed in longintrepr.h */
 #endif
 typedef void PyLongObject;
 
-PyAPI_DATA(PyTypeObject) PyLong_Type;
+// Pyston change: this is no longer a static object
+PyAPI_DATA(PyTypeObject*) long_cls;
+#define PyLong_Type (*long_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyLong_Check(PyObject*);

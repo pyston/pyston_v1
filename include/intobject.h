@@ -31,7 +31,9 @@ typedef struct {
 #endif
 typedef void PyIntObject;
 
-PyAPI_DATA(PyTypeObject) PyInt_Type;
+// Pyston change: this is no longer a static object
+PyAPI_DATA(PyTypeObject*) int_cls;
+#define PyInt_Type (*int_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyInt_Check(PyObject*);

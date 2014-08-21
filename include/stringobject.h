@@ -57,7 +57,9 @@ typedef struct {
 #define SSTATE_INTERNED_IMMORTAL 2
 
 PyAPI_DATA(PyTypeObject) PyBaseString_Type;
-PyAPI_DATA(PyTypeObject) PyString_Type;
+// Pyston change: this is no longer a static object
+PyAPI_DATA(PyTypeObject*) str_cls;
+#define PyString_Type (*str_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyString_Check(PyObject*);

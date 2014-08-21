@@ -25,6 +25,15 @@
 #include <limits.h>
 
 
+// These belong in pyconfig.h:
+#define HAVE_STDARG_PROTOTYPES
+#define HAVE_LONG_LONG 1
+#define PY_LONG_LONG long long
+#define SIZEOF_VOID_P 8
+#define SIZEOF_SIZE_T 8
+#define SIZEOF_INT 4
+
+
 // These include orders come from CPython:
 #include "patchlevel.h"
 
@@ -35,15 +44,21 @@
 #include "object.h"
 #include "objimpl.h"
 
+#include "pydebug.h"
+
 #include "intobject.h"
 #include "boolobject.h"
 #include "longobject.h"
 #include "floatobject.h"
+#ifndef WITHOUT_COMPLEX
+#include "complexobject.h"
+#endif
 #include "stringobject.h"
 #include "listobject.h"
 #include "dictobject.h"
 #include "tupleobject.h"
 #include "methodobject.h"
+#include "pycapsule.h"
 #include "iterobject.h"
 #include "descrobject.h"
 #include "warnings.h"
@@ -54,6 +69,10 @@
 #include "import.h"
 
 #include "abstract.h"
+
+// directly from CPython:
+/* Argument must be a char or an int in [-128, 127] or [0, 255]. */
+#define Py_CHARMASK(c)		((unsigned char)((c) & 0xff))
 
 #ifdef __cplusplus
 extern "C" {

@@ -43,7 +43,9 @@ typedef struct {
 #endif
 typedef void PyListObject;
 
-PyAPI_DATA(PyTypeObject) PyList_Type;
+// Pyston change: this is no longer a static object
+PyAPI_DATA(PyTypeObject*) list_cls;
+#define PyList_Type (*list_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyList_Check(PyObject*);

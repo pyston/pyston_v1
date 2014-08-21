@@ -7,14 +7,9 @@
 #include <stdint.h>
 
 // Pyston change: these are just hard-coded for now:
-#define SIZEOF_VOID_P 8
-#define SIZEOF_SIZE_T 8
-#define SIZEOF_INT 4
 typedef ssize_t         Py_ssize_t;
 #define Py_FORMAT_PARSETUPLE(func,p1,p2)
 #define Py_GCC_ATTRIBUTE(x) __attribute__(x)
-#define HAVE_LONG_LONG 1
-#define PY_LONG_LONG long long
 
 
 
