@@ -33,6 +33,21 @@ namespace pyston {
 
 BoxedClass* long_cls;
 
+extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) {
+    RELEASE_ASSERT(PyLong_Check(vv), "");
+    BoxedLong* l = static_cast<BoxedLong*>(vv);
+
+    // TODO Will this error on negative values?
+    RELEASE_ASSERT(mpz_fits_ulong_p(l->n), "");
+    return mpz_get_ui(l->n);
+}
+
+extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
+    BoxedLong* rtn = new BoxedLong(long_cls);
+    mpz_init_set_ui(rtn->n, ival);
+    return rtn;
+}
+
 extern "C" Box* createLong(const std::string* s) {
     BoxedLong* rtn = new BoxedLong(long_cls);
     int r = mpz_init_set_str(rtn->n, s->c_str(), 10);

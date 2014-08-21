@@ -74,9 +74,9 @@ BoxedList* getSysPath();
 Box* getSysStdout();
 
 extern "C" {
-extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls, *none_cls,
-    *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls, *member_cls,
-    *method_cls, *closure_cls, *generator_cls;
+extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
+    *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
+    *member_cls, *method_cls, *closure_cls, *generator_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -253,12 +253,10 @@ public:
 class BoxedTuple : public Box {
 public:
     typedef std::vector<Box*, StlCompatAllocator<Box*> > GCVector;
-    const GCVector elts;
+    GCVector elts;
 
-    BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >& elts) __attribute__((visibility("default")))
-    : Box(tuple_cls), elts(elts) {}
-    BoxedTuple(std::vector<Box*, StlCompatAllocator<Box*> >&& elts) __attribute__((visibility("default")))
-    : Box(tuple_cls), elts(std::move(elts)) {}
+    BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : Box(tuple_cls), elts(elts) {}
+    BoxedTuple(GCVector&& elts) __attribute__((visibility("default"))) : Box(tuple_cls), elts(std::move(elts)) {}
 };
 extern "C" BoxedTuple* EmptyTuple;
 
@@ -370,7 +368,7 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 Box* exceptionNew1(BoxedClass* cls);
 Box* exceptionNew2(BoxedClass* cls, Box* message);
 
-extern BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
+extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
     *StopIteration, *GeneratorExit, *SyntaxError;
 

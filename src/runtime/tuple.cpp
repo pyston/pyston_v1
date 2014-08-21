@@ -65,8 +65,7 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step) {
     return new BoxedTuple(std::move(velts));
 }
 
-Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
-    i64 n = slice->n;
+Box* tupleGetitemUnboxed(BoxedTuple* self, i64 n) {
     i64 size = self->elts.size();
 
     if (n < 0)
@@ -76,6 +75,20 @@ Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
 
     Box* rtn = self->elts[n];
     return rtn;
+}
+
+Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
+    return tupleGetitemUnboxed(self, slice->n);
+}
+
+extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) {
+    RELEASE_ASSERT(PyTuple_Check(op), "");
+    RELEASE_ASSERT(i >= 0, ""); // unlike tuple.__getitem__, PyTuple_GetItem doesn't do index wrapping
+    try {
+        return tupleGetitemUnboxed(static_cast<BoxedTuple*>(op), i);
+    } catch (Box* b) {
+        abort();
+    }
 }
 
 Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
@@ -113,6 +126,11 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
 Box* tupleLen(BoxedTuple* t) {
     assert(t->cls == tuple_cls);
     return boxInt(t->elts.size());
+}
+
+extern "C" Py_ssize_t PyTuple_Size(PyObject* op) {
+    RELEASE_ASSERT(PyTuple_Check(op), "");
+    return static_cast<BoxedTuple*>(op)->elts.size();
 }
 
 Box* tupleRepr(BoxedTuple* t) {
@@ -284,6 +302,40 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     }
 
     return new BoxedTuple(std::move(velts));
+}
+
+extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) {
+    RELEASE_ASSERT(PyTuple_Check(op), "");
+
+    BoxedTuple* t = static_cast<BoxedTuple*>(op);
+    RELEASE_ASSERT(i >= 0 && i < t->elts.size(), "");
+    t->elts[i] = newitem;
+    return 0;
+}
+
+extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) {
+    va_list vargs;
+
+    va_start(vargs, n);
+    PyObject* result = PyTuple_New(n);
+
+    if (result == NULL) {
+        va_end(vargs);
+        return NULL;
+    }
+
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject* o = va_arg(vargs, PyObject*);
+        PyTuple_SetItem(result, i, o);
+    }
+    va_end(vargs);
+    return result;
+}
+
+extern "C" PyObject* PyTuple_New(Py_ssize_t size) {
+    RELEASE_ASSERT(size >= 0, "");
+
+    return new BoxedTuple(BoxedTuple::GCVector(size, NULL));
 }
 
 

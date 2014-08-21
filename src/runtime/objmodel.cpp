@@ -382,7 +382,7 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
                        bool is_user_defined)
-    : Box(type_cls), tp_basicsize(instance_size), tp_dealloc(NULL), base(base), gc_visit(gc_visit),
+    : BoxVar(type_cls, 0), tp_basicsize(instance_size), tp_dealloc(NULL), base(base), gc_visit(gc_visit),
       attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined) {
     assert(tp_dealloc == NULL);
 

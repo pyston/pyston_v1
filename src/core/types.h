@@ -376,13 +376,23 @@ public:
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
     void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
 };
+static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
+
+// CPython C API compatibility class:
+class BoxVar : public Box {
+public:
+    Py_ssize_t ob_size;
+
+    BoxVar(BoxedClass* cls, Py_ssize_t ob_size) : Box(cls), ob_size(ob_size) {}
+};
+static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
+
 extern "C" const std::string* getTypeName(Box* o);
 
 
 
-class BoxedClass : public Box {
+class BoxedClass : public BoxVar {
 public:
-    Py_ssize_t ob_size; // CPython API compatibility
     PyTypeObject_BODY;
 
     HCAttrs attrs;

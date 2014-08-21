@@ -31,9 +31,23 @@
 
 namespace pyston {
 
-extern "C" long PyInt_AsLong(PyObject* obj) {
-    assert(obj->cls == int_cls);
-    return static_cast<BoxedInt*>(obj)->n;
+extern "C" long PyInt_AsLong(PyObject* op) {
+    RELEASE_ASSERT(op->cls == int_cls, "");
+    return static_cast<BoxedInt*>(op)->n;
+}
+
+extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) {
+    RELEASE_ASSERT(op->cls == int_cls, "");
+    return static_cast<BoxedInt*>(op)->n;
+}
+
+extern "C" PyObject* PyInt_FromSize_t(size_t ival) {
+    RELEASE_ASSERT(ival <= LONG_MAX, "");
+    return boxInt(ival);
+}
+
+extern "C" PyObject* PyInt_FromSsize_t(Py_ssize_t ival) {
+    return boxInt(ival);
 }
 
 BoxedInt* interned_ints[NUM_INTERNED_INTS];

@@ -74,6 +74,17 @@ extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long valu
     return 0;
 }
 
+#define MAKE_CHECK(NAME, cls_name)                                                                                     \
+    extern "C" bool Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
+
+MAKE_CHECK(Int, int_cls)
+MAKE_CHECK(String, str_cls)
+MAKE_CHECK(Long, long_cls)
+MAKE_CHECK(List, list_cls)
+MAKE_CHECK(Tuple, tuple_cls)
+MAKE_CHECK(Dict, dict_cls)
+#undef MAKE_CHECK
+
 extern "C" PyObject* PyDict_New() {
     return new BoxedDict();
 }
@@ -333,82 +344,30 @@ extern "C" void PyBuffer_Release(Py_buffer* view) {
     view->obj = NULL;
 }
 
-int vPyArg_ParseTuple(PyObject* _tuple, const char* fmt, va_list ap) {
-    RELEASE_ASSERT(_tuple->cls == tuple_cls, "");
-    BoxedTuple* tuple = static_cast<BoxedTuple*>(_tuple);
-
-    bool now_optional = false;
-    int arg_idx = 0;
-
-    int tuple_size = tuple->elts.size();
-
-    while (char c = *fmt) {
-        fmt++;
-
-        if (c == ':') {
-            break;
-        } else if (c == '|') {
-            now_optional = true;
-            continue;
-        } else {
-            if (arg_idx >= tuple_size) {
-                RELEASE_ASSERT(now_optional, "");
-                break;
-            }
-
-            PyObject* arg = tuple->elts[arg_idx];
-
-            switch (c) {
-                case 's': {
-                    if (*fmt == '*') {
-                        Py_buffer* p = (Py_buffer*)va_arg(ap, Py_buffer*);
-
-                        RELEASE_ASSERT(arg->cls == str_cls, "");
-                        PyBuffer_FillInfo(p, arg, PyString_AS_STRING(arg), PyString_GET_SIZE(arg), 1, 0);
-                        fmt++;
-                    } else if (*fmt == ':') {
-                        break;
-                    } else {
-                        RELEASE_ASSERT(0, "");
-                    }
-                    break;
-                }
-                case 'O': {
-                    PyObject** p = (PyObject**)va_arg(ap, PyObject**);
-                    *p = arg;
-                    break;
-                }
-                default:
-                    RELEASE_ASSERT(0, "Unhandled format character: '%c'", c);
-            }
-        }
-    }
-    return 1;
+extern "C" void Py_FatalError(const char* msg) {
+    fprintf(stderr, "%s", msg);
+    abort();
 }
 
-extern "C" int PyArg_ParseTuple(PyObject* _tuple, const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-
-    int r = vPyArg_ParseTuple(_tuple, fmt, ap);
-
-    va_end(ap);
-
-    return r;
+extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) {
+    abort();
 }
 
-extern "C" int PyArg_ParseTupleAndKeywords(PyObject* args, PyObject* kwargs, const char* format, char** kwlist, ...) {
-    assert(kwargs->cls == dict_cls);
-    RELEASE_ASSERT(static_cast<BoxedDict*>(kwargs)->d.size() == 0, "");
+extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
+    RELEASE_ASSERT(op, "");
+    RELEASE_ASSERT(tp, "");
+    Py_TYPE(op) = tp;
+    return op;
+}
 
-    va_list ap;
-    va_start(ap, kwlist);
+extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) {
+    abort(); // "var" objects not tested yet
 
-    int r = vPyArg_ParseTuple(args, format, ap);
-
-    va_end(ap);
-
-    return r;
+    RELEASE_ASSERT(op, "");
+    RELEASE_ASSERT(tp, "");
+    Py_TYPE(op) = tp;
+    op->ob_size = size;
+    return op;
 }
 
 extern "C" PyObject* _PyObject_New(PyTypeObject* cls) {
@@ -423,10 +382,74 @@ extern "C" void PyObject_Free(void* p) {
     ASSERT(0, "I think this is good enough but I'm not sure; should test");
 }
 
+extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) {
+    RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
+    RELEASE_ASSERT(args->cls == tuple_cls, "");
+
+    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
+    // won't end up doing a GIL check?
+    // threading::GLDemoteRegion _gil_demote;
+
+    try {
+        Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
+        return r;
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
+    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
+    // won't end up doing a GIL check?
+    // threading::GLDemoteRegion _gil_demote;
+
+    try {
+        return getattr(o, attr);
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+
+extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
+    abort();
+}
+
+extern "C" void PyErr_Clear() {
+    PyErr_Restore(NULL, NULL, NULL);
+}
+
+extern "C" void PyErr_SetString(PyObject* exception, const char* string) {
+    PyErr_SetObject(exception, boxStrConstant(string));
+}
+
+extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) {
+    PyErr_Restore(exception, value, NULL);
+}
+
+extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) {
+    abort();
+}
+
+extern "C" PyObject* PyErr_NoMemory() {
+    abort();
+}
+
+extern "C" int PyErr_CheckSignals() {
+    abort();
+}
+
+extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
+    abort();
+}
+
 extern "C" PyObject* PyErr_Occurred() {
+    abort();
+    /*
     printf("need to hook exception handling -- make sure errors dont propagate into C code, and error codes get "
            "checked coming out\n");
     return NULL;
+    */
 }
 
 BoxedModule* importTestExtension() {

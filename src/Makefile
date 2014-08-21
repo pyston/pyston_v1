@@ -262,20 +262,20 @@ CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
 # Not sure if ccache_basedir actually helps at all (I think the generated files make them different?)
 LLVM_BUILD_ENV += CCACHE_DIR=$(HOME)/.ccache_llvm CCACHE_BASEDIR=$(LLVM_SRC)
 
-MAIN_SRCS := $(wildcard codegen/*.cpp) $(wildcard asm_writing/*.cpp) $(wildcard codegen/irgen/*.cpp) $(wildcard codegen/opt/*.cpp) $(wildcard analysis/*.cpp) $(wildcard core/*.cpp) jit.cpp codegen/profiling/profiling.cpp codegen/profiling/dumprof.cpp $(wildcard runtime/*.cpp) $(wildcard runtime/builtin_modules/*.cpp) $(wildcard gc/*.cpp)
+MAIN_SRCS := $(wildcard codegen/*.cpp) $(wildcard asm_writing/*.cpp) $(wildcard codegen/irgen/*.cpp) $(wildcard codegen/opt/*.cpp) $(wildcard analysis/*.cpp) $(wildcard core/*.cpp) jit.cpp codegen/profiling/profiling.cpp codegen/profiling/dumprof.cpp $(wildcard runtime/*.cpp) $(wildcard runtime/builtin_modules/*.cpp) $(wildcard gc/*.cpp) $(wildcard capi/*.cpp)
 STDLIB_SRCS := $(wildcard runtime/inline/*.cpp)
 SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
 STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c md5.c md5module.c $(EXTRA_STDMODULE_SRCS)
-STDMODULE_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULE_SRCS))
+FROM_CPYTHON_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(wildcard capi/*.c)
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
-OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(STDMODULE_SRCS:.c=.o)
-PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(STDMODULE_SRCS:.c=.release.o)
-OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(STDMODULE_SRCS:.c=.release.o)
+OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o)
+PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o)
+OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o)
 
 OPTIONAL_SRCS := codegen/profiling/oprofile.cpp codegen/profiling/pprof.cpp
 TOOL_SRCS := $(wildcard $(TOOLS_DIR)/*.cpp)
@@ -881,10 +881,14 @@ ext: ../test/test_extension/test.so
 ../test/test_extension/test.o: ../test/test_extension/test.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
 	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I../include -c $< -o $@ -g
 
-../lib_python/2.7_Modules/%.o: ../lib_python/2.7_Modules/%.c $(BUILD_SYSTEM_DEPS)
-	$(ECHO) Compiling extension file $@
+$(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $<.d -O0
 
-../lib_python/2.7_Modules/%.release.o: ../lib_python/2.7_Modules/%.c $(BUILD_SYSTEM_DEPS)
-	$(ECHO) Compiling extension file $@
+$(FROM_CPYTHON_SRCS:.c=.release.o): %.release.o: %.c $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $<.d
+
+# These are necessary until we support unicode:
+../lib_python/2.7_Modules/_sre.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
+../lib_python/2.7_Modules/_sre.release.o: EXT_CFLAGS += -Wno-sometimes-uninitialized

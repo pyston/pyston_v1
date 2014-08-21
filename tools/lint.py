@@ -1,11 +1,17 @@
 import os
 import sys
 
-def verify_include(_, dir, files):
+def file_is_from_cpython(fn):
+    return '2.7' in fn
+
+def verify_include_guard(_, dir, files):
     for bn in files:
         fn = os.path.join(dir, bn)
 
         if not bn.endswith(".h"):
+            continue
+
+        if file_is_from_cpython(fn):
             continue
 
         expected_guard = "PYSTON" + fn[1:-2].replace('_', '').replace('/', '_').upper() + "_H"
@@ -24,8 +30,11 @@ def verify_license(_, dir, files):
 
         if bn.endswith(".h") or bn.endswith(".cpp"):
             s = open(fn).read(1024)
-            assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
-            assert "Apache License, Version 2.0" in s, fn
+            if file_is_from_cpython(fn):
+                assert "This file is originally from CPython 2.7, with modifications for Pyston" in s, fn
+            else:
+                assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
+                assert "Apache License, Version 2.0" in s, fn
 
 PYSTON_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
 PYSTON_SRC_SUBDIRS = [bn for bn in os.listdir(PYSTON_SRC_DIR) if os.path.isdir(os.path.join(PYSTON_SRC_DIR, bn))]
@@ -147,7 +156,7 @@ def verify_include_order(_, dir, files):
 
 
 if __name__ == "__main__":
-    os.path.walk('.', verify_include, None)
+    os.path.walk('.', verify_include_guard, None)
     os.path.walk('.', verify_include_order, None)
     os.path.walk('.', verify_license, None)
     os.path.walk('../tools', verify_license, None)

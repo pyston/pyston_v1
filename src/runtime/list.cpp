@@ -30,6 +30,15 @@
 
 namespace pyston {
 
+extern "C" int PyList_Append(PyObject* op, PyObject* newitem) {
+    try {
+        listAppend(op, newitem);
+    } catch (Box* b) {
+        abort();
+    }
+    return 0;
+}
+
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 
@@ -87,7 +96,13 @@ extern "C" Box* listPop(BoxedList* self, Box* idx) {
     return rtn;
 }
 
+extern "C" Py_ssize_t PyList_Size(PyObject* self) {
+    RELEASE_ASSERT(self->cls == list_cls, "");
+    return static_cast<BoxedList*>(self)->size;
+}
+
 extern "C" Box* listLen(BoxedList* self) {
+    assert(self->cls == list_cls);
     return boxInt(self->size);
 }
 
@@ -117,12 +132,10 @@ Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
     return rtn;
 }
 
-extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
+extern "C" Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
     LOCK_REGION(self->lock.asRead());
 
     assert(self->cls == list_cls);
-    assert(slice->cls == int_cls);
-    int64_t n = slice->n;
     if (n < 0)
         n = self->size + n;
 
@@ -131,6 +144,21 @@ extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
     }
     Box* rtn = self->elts->elts[n];
     return rtn;
+}
+
+extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
+    assert(slice->cls == int_cls);
+    return listGetitemUnboxed(self, slice->n);
+}
+
+extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) {
+    RELEASE_ASSERT(PyList_Check(op), "");
+    RELEASE_ASSERT(i >= 0, ""); // unlike list.__getitem__, PyList_GetItem doesn't do index wrapping
+    try {
+        return listGetitemUnboxed(static_cast<BoxedList*>(op), i);
+    } catch (Box* b) {
+        abort();
+    }
 }
 
 extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
@@ -464,6 +492,18 @@ extern "C" Box* listNew(Box* cls, Box* container) {
         listAppendInternal(rtn, e);
     }
     return rtn;
+}
+
+extern "C" PyObject* PyList_New(Py_ssize_t size) {
+    // This function is supposed to return a list of `size` NULL elements.
+    // That will probably trip an assert somewhere if we try to create that (ex
+    // I think the GC will expect them to be real objects so they can be relocated).
+    RELEASE_ASSERT(size == 0, "");
+    try {
+        return new BoxedList();
+    } catch (Box* b) {
+        abort();
+    }
 }
 
 Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {

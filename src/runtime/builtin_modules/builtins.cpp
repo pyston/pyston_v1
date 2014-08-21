@@ -395,9 +395,11 @@ BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
 // TODO looks like CPython and pypy put this into an "exceptions" module:
+extern "C" {
 BoxedClass* Exception, *AssertionError, *AttributeError, *GeneratorExit, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration, *Warning, *SyntaxError;
+    *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning;
+}
 
 Box* exceptionNew1(BoxedClass* cls) {
     return exceptionNew2(cls, boxStrConstant(""));
@@ -554,9 +556,10 @@ void setupBuiltins() {
     StopIteration = makeBuiltinException(Exception, "StopIteration");
     Warning = makeBuiltinException(Exception, "Warning");
     SyntaxError = makeBuiltinException(Exception, "SyntaxError");
+    OverflowError = makeBuiltinException(Exception, "OverflowError");
     /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
     /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
-    /*DeprecationWarning =*/makeBuiltinException(Warning, "DeprecationWarning");
+    DeprecationWarning = makeBuiltinException(Warning, "DeprecationWarning");
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
