@@ -433,12 +433,9 @@ extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
 }
 
 extern "C" PyObject* PyErr_Occurred() {
-    Py_FatalError("unimplemented");
-    /*
-    printf("need to hook exception handling -- make sure errors dont propagate into C code, and error codes get "
-           "checked coming out\n");
+    // While there clearly needs to be more here, I think this is ok for now because all of the exception-setting
+    // functions will abort()
     return NULL;
-    */
 }
 
 extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {

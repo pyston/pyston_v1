@@ -782,6 +782,33 @@ Box* strCount2(BoxedString* self, Box* elt) {
     return boxInt(strCount2Unboxed(self, elt));
 }
 
+static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) {
+    RELEASE_ASSERT(index == 0, "");
+    // I think maybe this can just be a non-release assert?  shouldn't be able to call this with
+    // the wrong type
+    RELEASE_ASSERT(self->cls == str_cls, "");
+
+    auto s = static_cast<BoxedString*>(self);
+    *ptr = s->s.c_str();
+    return s->s.size();
+}
+
+static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) {
+    RELEASE_ASSERT(lenp == NULL, "");
+    RELEASE_ASSERT(o->cls == str_cls, "");
+
+    return 1;
+}
+
+static PyBufferProcs string_as_buffer = {
+    (readbufferproc)string_buffer_getreadbuf, // comments are the only way I've found of
+    (writebufferproc)NULL,                    // forcing clang-format to break these onto multiple lines
+    (segcountproc)string_buffer_getsegcount,  //
+    (charbufferproc)NULL,                     //
+    (getbufferproc)NULL,                      //
+    (releasebufferproc)NULL,
+};
+
 void setupStr() {
     str_iterator_cls = new BoxedClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedString), false);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
@@ -789,6 +816,8 @@ void setupStr() {
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
+
+    str_cls->tp_as_buffer = &string_as_buffer;
 
     str_cls->giveAttr("__name__", boxStrConstant("str"));
 
