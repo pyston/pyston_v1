@@ -51,6 +51,10 @@ extern "C" {
    performed on failure (no exception is set, no warning is printed, etc).
 */
 
+PyAPI_FUNC(void *) gc_compat_malloc(size_t);
+PyAPI_FUNC(void *) gc_compat_realloc(void *, size_t);
+PyAPI_FUNC(void) gc_compat_free(void *);
+
 PyAPI_FUNC(void *) PyMem_Malloc(size_t);
 PyAPI_FUNC(void *) PyMem_Realloc(void *, size_t);
 PyAPI_FUNC(void) PyMem_Free(void *);
@@ -74,10 +78,10 @@ PyAPI_FUNC(void) PyMem_Free(void *);
 /* Returns NULL to indicate error if a negative size or size larger than
    Py_ssize_t can represent is supplied.  Helps prevents security holes. */
 #define PyMem_MALLOC(n)		((size_t)(n) > (size_t)PY_SSIZE_T_MAX ? NULL \
-				: malloc((n) ? (n) : 1))
+				: gc_compat_malloc((n) ? (n) : 1))
 #define PyMem_REALLOC(p, n)	((size_t)(n) > (size_t)PY_SSIZE_T_MAX  ? NULL \
-				: realloc((p), (n) ? (n) : 1))
-#define PyMem_FREE		free
+				: gc_compat_realloc((p), (n) ? (n) : 1))
+#define PyMem_FREE		gc_compat_free
 
 #endif	/* PYMALLOC_DEBUG */
 

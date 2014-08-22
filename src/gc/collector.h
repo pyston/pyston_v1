@@ -83,6 +83,8 @@ public:
 };
 
 void runCollection();
+
+bool isValidGCObject(void* p);
 }
 }
 

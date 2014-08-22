@@ -27,8 +27,8 @@
 namespace pyston {
 namespace gc {
 
-inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
-inline void* gc_alloc(size_t bytes, GCKind kind_id) {
+extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
+extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     bytes += sizeof(GCAllocation);
 
 #ifndef NVALGRIND
@@ -68,8 +68,7 @@ inline void* gc_alloc(size_t bytes, GCKind kind_id) {
 #ifndef NDEBUG
 // I think I have a suspicion: the gc will see the constant and treat it as a
 // root.  So instead, shift to hide the pointer
-// if ((((intptr_t)r) >> 4) == (0x127001424L)) {
-// if ((((intptr_t)r) >> 4) == (0x127000718L)) {
+// if ((((intptr_t)r) >> 4) == (0x127014f9f)) {
 // raise(SIGTRAP);
 //}
 
@@ -81,8 +80,11 @@ inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     return r;
 }
 
-inline void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
-inline void* gc_realloc(void* ptr, size_t bytes) {
+extern "C" inline void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
+extern "C" inline void* gc_realloc(void* ptr, size_t bytes) {
+    // Normal realloc() supports receiving a NULL pointer, but we need to know what the GCKind is:
+    assert(ptr);
+
     bytes += sizeof(GCAllocation);
 
 #ifndef NVALGRIND
@@ -103,8 +105,9 @@ inline void* gc_realloc(void* ptr, size_t bytes) {
 #endif
 }
 
-inline void gc_free(void* ptr) __attribute__((visibility("default")));
-inline void gc_free(void* ptr) {
+extern "C" inline void gc_free(void* ptr) __attribute__((visibility("default")));
+extern "C" inline void gc_free(void* ptr) {
+    assert(ptr);
 #ifndef NVALGRIND
     if (ENABLE_REDZONES) {
         void* base = (char*)ptr - REDZONE_SIZE;

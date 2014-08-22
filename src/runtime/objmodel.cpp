@@ -553,6 +553,7 @@ static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("
 
 void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(cls->instancesHaveAttrs());
+    assert(gc::isValidGCObject(val));
 
     // Have to guard on the memory layout of this object.
     // Right now, guard on the specific Python-class, which in turn
@@ -1340,6 +1341,8 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
 }
 
 static void setattr_internal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+    assert(gc::isValidGCObject(val));
+
     // Lookup a descriptor
     Box* descr = NULL;
     RewriterVarUsage r_descr(RewriterVarUsage::empty());

@@ -68,6 +68,10 @@ static bool isNonheapRoot(void* p) {
     return p <= max_nonheap_root && nonheap_roots.count(p) != 0;
 }
 
+bool isValidGCObject(void* p) {
+    return isNonheapRoot(p) || (global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
+}
+
 static std::unordered_set<GCRootHandle*>* getRootHandles() {
     static std::unordered_set<GCRootHandle*> root_handles;
     return &root_handles;

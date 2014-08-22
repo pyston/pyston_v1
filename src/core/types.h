@@ -310,7 +310,7 @@ enum class GCKind : uint8_t {
     UNTRACKED = 3,
 };
 
-void* gc_alloc(size_t nbytes, GCKind kind);
+extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
 }
 
 class PythonGCObject {
