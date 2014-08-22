@@ -413,6 +413,8 @@ private:
                 return FLOAT;
             case AST_Num::LONG:
                 return LONG;
+            case AST_Num::COMPLEX:
+                return BOXED_COMPLEX;
         }
         abort();
     }

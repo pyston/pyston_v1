@@ -117,6 +117,8 @@ def convert(n, f):
             f.write('\x30')
         elif isinstance(n.n, float):
             f.write('\x20')
+        elif isinstance(n.n, complex):
+            f.write('\x40')
         else:
             raise Exception(type(n.n))
 
@@ -160,6 +162,8 @@ def convert(n, f):
             _print_str(str(v), f)
         elif isinstance(v, float):
             f.write(struct.pack(">d", v))
+        elif isinstance(v, complex):
+            f.write(struct.pack(">d", v.imag))
         elif v is None or isinstance(v, _ast.AST):
             convert(v, f)
         else:

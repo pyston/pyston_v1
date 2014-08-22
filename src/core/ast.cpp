@@ -1431,6 +1431,8 @@ bool PrintVisitor::visit_num(AST_Num* node) {
         printf("%sL", node->n_long.c_str());
     } else if (node->num_type == AST_Num::FLOAT) {
         printf("%f", node->n_float);
+    } else if (node->num_type == AST_Num::COMPLEX) {
+        printf("%fj", node->n_float);
     } else {
         RELEASE_ASSERT(0, "");
     }

@@ -107,6 +107,10 @@ llvm::Constant* getConstantInt(int n) {
     return getConstantInt(n, g.i64);
 }
 
+llvm::Constant* getConstantDouble(double val) {
+    return llvm::ConstantFP::get(g.double_, val);
+}
+
 class PrettifyingMaterializer : public llvm::ValueMaterializer {
 private:
     llvm::Module* module;

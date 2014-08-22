@@ -32,6 +32,7 @@
 #include "codegen/irgen/util.h"
 #include "core/threading.h"
 #include "core/types.h"
+#include "runtime/complex.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
@@ -171,6 +172,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createClosure);
     GET(createGenerator);
     GET(createLong);
+    GET(createPureImaginary);
     GET(createSet);
 
     GET(getattr);

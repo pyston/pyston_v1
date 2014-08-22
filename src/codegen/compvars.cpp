@@ -1133,6 +1133,11 @@ ConcreteCompilerVariable* makeLong(IREmitter& emitter, std::string& n_long) {
     return new ConcreteCompilerVariable(LONG, v, true);
 }
 
+ConcreteCompilerVariable* makePureImaginary(IREmitter& emitter, double imag) {
+    llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createPureImaginary, getConstantDouble(imag));
+    return new ConcreteCompilerVariable(BOXED_COMPLEX, v, true);
+}
+
 class KnownClassobjType : public ValuedCompilerType<BoxedClass*> {
 private:
     BoxedClass* cls;
@@ -1168,7 +1173,6 @@ std::unordered_map<BoxedClass*, KnownClassobjType*> KnownClassobjType::made;
 CompilerType* typeOfClassobj(BoxedClass* cls) {
     return KnownClassobjType::fromClass(cls);
 }
-
 
 class NormalObjectType : public ConcreteCompilerType {
 private:
@@ -1907,6 +1911,6 @@ ConcreteCompilerVariable* undefVariable() {
 }
 
 
-ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET, *LONG;
+ConcreteCompilerType* LIST, *SLICE, *MODULE, *DICT, *SET, *FROZENSET, *LONG, *BOXED_COMPLEX;
 
 } // namespace pyston

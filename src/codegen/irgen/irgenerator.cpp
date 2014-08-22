@@ -758,6 +758,8 @@ private:
             return makeInt(node->n_int);
         else if (node->num_type == AST_Num::FLOAT)
             return makeFloat(node->n_float);
+        else if (node->num_type == AST_Num::COMPLEX)
+            return makePureImaginary(emitter, node->n_float);
         else
             return makeLong(emitter, node->n_long);
     }
