@@ -27,6 +27,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/iterobject.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -721,6 +722,7 @@ void setupRuntime() {
     setupTuple();
     setupFile();
     setupGenerator();
+    setupIter();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));

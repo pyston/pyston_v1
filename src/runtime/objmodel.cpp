@@ -40,6 +40,7 @@
 #include "runtime/capi.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
+#include "runtime/iterobject.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -3152,6 +3153,21 @@ extern "C" void delattr(Box* obj, const char* attr) {
 
 
     delattr_internal(obj, attr, true, NULL);
+}
+
+extern "C" Box* getiter(Box* o) {
+    // TODO add rewriting to this?  probably want to try to avoid this path though
+    static const std::string iter_str("__iter__");
+    Box* r = callattrInternal0(o, &iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
+    if (r)
+        return r;
+
+    static const std::string getitem_str("__getitem__");
+    if (typeLookup(o->cls, getitem_str, NULL)) {
+        return new BoxedSeqIter(o);
+    }
+
+    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o)->c_str());
 }
 
 // For use on __init__ return values

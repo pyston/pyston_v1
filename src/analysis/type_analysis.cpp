@@ -361,6 +361,8 @@ private:
                 return UNKNOWN;
             case AST_LangPrimitive::LOCALS:
                 return DICT;
+            case AST_LangPrimitive::GET_ITER:
+                return UNKNOWN;
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

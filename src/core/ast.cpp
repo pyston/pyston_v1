@@ -1354,13 +1354,16 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
     printf(":");
     switch (node->opcode) {
         case AST_LangPrimitive::ISINSTANCE:
-            printf("isinstance");
+            printf("ISINSTANCE");
             break;
         case AST_LangPrimitive::LANDINGPAD:
-            printf("landingpad");
+            printf("LANDINGPAD");
             break;
         case AST_LangPrimitive::LOCALS:
-            printf("locals");
+            printf("LOCALS");
+            break;
+        case AST_LangPrimitive::GET_ITER:
+            printf("GET_ITER");
             break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);

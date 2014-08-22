@@ -912,6 +912,7 @@ public:
         ISINSTANCE,
         LANDINGPAD,
         LOCALS,
+        GET_ITER,
     } opcode;
     std::vector<AST_expr*> args;
 

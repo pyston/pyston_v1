@@ -156,8 +156,8 @@ private:
             bool is_innermost = (i == n - 1);
 
             AST_expr* remapped_iter = remapExpr(c->iter);
-            AST_expr* iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
-            AST_expr* iter_call = makeCall(iter_attr);
+            AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
+            iter_call->args.push_back(remapped_iter);
             std::string iter_name = nodeName(node, "lc_iter", i);
             AST_stmt* iter_assign = makeAssign(iter_name, iter_call);
             push_back(iter_assign);
@@ -1440,8 +1440,8 @@ public:
         // critical edges and needed to be broken, otherwise it's not too different.
 
         AST_expr* remapped_iter = remapExpr(node->iter);
-        AST_expr* iter_attr = makeLoadAttribute(remapped_iter, "__iter__", true);
-        AST_expr* iter_call = makeCall(iter_attr);
+        AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
+        iter_call->args.push_back(remapped_iter);
 
         char itername_buf[80];
         snprintf(itername_buf, 80, "#iter_%p", node);

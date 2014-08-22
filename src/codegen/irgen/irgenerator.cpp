@@ -399,6 +399,24 @@ private:
 
                 return rtn;
             }
+            case AST_LangPrimitive::GET_ITER: {
+                // TODO if this is a type that has an __iter__, we could do way better than this, both in terms of
+                // function call overhead and resulting type information, if we went with that instead of the generic
+                // version.
+                // TODO Move this behavior into to the type-specific section (compvars.cpp)?
+                emitter.getBuilder();
+                assert(node->args.size() == 1);
+                CompilerVariable* obj = evalExpr(node->args[0], exc_info);
+
+                ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
+                obj->decvref(emitter);
+
+                llvm::Value* v
+                    = emitter.createCall(exc_info, g.funcs.getiter, { converted_obj->getValue() }).getInstruction();
+                assert(v->getType() == g.llvm_value_type_ptr);
+
+                return new ConcreteCompilerVariable(UNKNOWN, v, true);
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

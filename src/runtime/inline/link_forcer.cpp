@@ -88,6 +88,7 @@ void force() {
     FORCE(str);
     FORCE(isinstance);
     FORCE(yield);
+    FORCE(getiter);
 
     FORCE(checkUnpackingLength);
     FORCE(raiseAttributeError);

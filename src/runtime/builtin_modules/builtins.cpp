@@ -638,6 +638,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
 
+    builtins_module->giveAttr("iter", new BoxedFunction(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
+
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
     builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));

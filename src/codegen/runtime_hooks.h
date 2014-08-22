@@ -37,7 +37,7 @@ struct GlobalFuncs {
         *createUserClass, *createClosure, *createGenerator, *createLong, *createSet;
     llvm::Value* getattr, *setattr, *delattr, *delitem, *delGlobal, *print, *nonzero, *binop, *compare, *augbinop,
         *unboxedLen, *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom, *importStar, *repr,
-        *str, *isinstance, *yield;
+        *str, *isinstance, *yield, *getiter;
 
     llvm::Value* checkUnpackingLength, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *assertNameDefined, *assertFail;
