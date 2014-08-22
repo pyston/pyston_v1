@@ -168,3 +168,8 @@ try:
     t[3]
 except IndexError as e:
     print e
+
+print bool(())
+print bool((1,))
+print bool((0,))
+print bool((0, 0))

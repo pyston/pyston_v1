@@ -765,11 +765,15 @@ endif
 .PHONY: perf$1_%
 perf$1_%: %.py pyston$1
 	perf record -g -- ./pyston$1 -q -p $$(ARGS) $$<
-	perf report -v -n -g flat,1000 | bash $$(TOOLS_DIR)/cumulate.sh | less -S
+	@$(MAKE) perf_report
 $$(call make_search,perf$1_%)
 
 )
 endef
+
+.PHONY: perf_report
+perf_report:
+	perf report -v -n -g flat,1000 | bash $(TOOLS_DIR)/cumulate.sh | less -S
 
 .PHONY: run run_% dbg_% debug_% perf_%
 run: run_dbg

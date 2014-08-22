@@ -237,6 +237,11 @@ Box* tupleNe(BoxedTuple* self, Box* rhs) {
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::NotEq);
 }
 
+Box* tupleNonzero(BoxedTuple* self) {
+    RELEASE_ASSERT(self->cls == tuple_cls, "");
+    return boxBool(self->elts.size() != 0);
+}
+
 Box* tupleContains(BoxedTuple* self, Box* elt) {
     int size = self->elts.size();
     for (int i = 0; i < size; i++) {
@@ -372,6 +377,8 @@ void setupTuple() {
     tuple_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)tupleGe, UNKNOWN, 2)));
     tuple_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)tupleEq, UNKNOWN, 2)));
     tuple_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)tupleNe, UNKNOWN, 2)));
+
+    tuple_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)tupleNonzero, BOXED_BOOL, 1)));
 
     tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1)));
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
