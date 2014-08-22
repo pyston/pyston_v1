@@ -1493,6 +1493,8 @@ extern "C" bool nonzero(Box* obj) {
     } else if (obj->cls == none_cls) {
         if (rewriter.get()) {
             r_obj.setDoneUsing();
+            RewriterVarUsage b = rewriter->loadConst(0, rewriter->getReturnDestination());
+            rewriter->commitReturning(std::move(b));
         }
         return false;
     }

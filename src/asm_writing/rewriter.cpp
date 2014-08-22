@@ -325,7 +325,7 @@ assembler::Immediate RewriterVar::tryGetAsImmediate(bool* is_immediate) {
     return assembler::Immediate((uint64_t)0);
 }
 
-assembler::Register RewriterVar::getInReg(Location dest) {
+assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_reg) {
     assert(dest.type == Location::Register || dest.type == Location::AnyReg);
 
     // assembler::Register reg = var->rewriter->allocReg(l);
@@ -333,8 +333,10 @@ assembler::Register RewriterVar::getInReg(Location dest) {
     // return reg;
     assert(locations.size());
 #ifndef NDEBUG
-    for (Location l : locations) {
-        ASSERT(l.type != Location::Constant, "why do you want this in a register?");
+    if (!allow_constant_in_reg) {
+        for (Location l : locations) {
+            ASSERT(l.type != Location::Constant, "why do you want this in a register?");
+        }
     }
 #endif
 
@@ -363,15 +365,20 @@ assembler::Register RewriterVar::getInReg(Location dest) {
 
     assert(locations.size() == 1);
     Location l(*locations.begin());
-    assert(l.type == Location::Scratch || l.type == Location::Stack);
-
 
     assembler::Register reg = rewriter->allocReg(dest);
     assert(rewriter->vars_by_location.count(reg) == 0);
 
-    assembler::Indirect mem = rewriter->indirectFor(l);
-    rewriter->assembler->mov(mem, reg);
+    if (l.type == Location::Constant) {
+        rewriter->assembler->mov(assembler::Immediate(l.constant_val), reg);
+    } else if (l.type == Location::Scratch || l.type == Location::Stack) {
+        assembler::Indirect mem = rewriter->indirectFor(l);
+        rewriter->assembler->mov(mem, reg);
+    } else {
+        abort();
+    }
     rewriter->addLocationToVar(this, reg);
+
     return reg;
 }
 
@@ -639,7 +646,29 @@ RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, std:
     return RewriterVarUsage(var);
 }
 
+void Rewriter::abort() {
+    assert(!finished);
+    finished = true;
+
+    // This feels hacky: are we really guaranteed to find all of the things we need to delete?
+    std::unordered_set<RewriterVar*> found;
+
+    for (const auto& p : vars_by_location) {
+        found.insert(p.second);
+    }
+    for (const auto v : live_outs) {
+        found.insert(v);
+    }
+
+    for (auto v : found) {
+        delete v;
+    }
+}
+
 void Rewriter::commit() {
+    assert(!finished);
+    finished = true;
+
     static StatCounter rewriter2_commits("rewriter2_commits");
     rewriter2_commits.log();
 
@@ -687,7 +716,7 @@ void Rewriter::finishAssembly(int continue_offset) {
 
 void Rewriter::commitReturning(RewriterVarUsage usage) {
     // assert(usage.var->isInLocation(getReturnDestination()));
-    usage.var->getInReg(getReturnDestination());
+    usage.var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
 
     usage.setDoneUsing();
     commit();
@@ -931,6 +960,10 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(rewrite), assembler(rewrite->getAssembler()), return_location(rewrite->returnRegister()),
       done_guarding(false), ndecisions(0), decision_path(1) {
+#ifndef NDEBUG
+    start_vars = RewriterVar::nvars;
+#endif
+    finished = false;
     // assembler->trap();
 
     for (int i = 0; i < num_args; i++) {
@@ -994,4 +1027,8 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
 RewriterVarUsage RewriterVarUsage::addUse() {
     return RewriterVarUsage(var);
 }
+
+#ifndef NDEBUG
+int RewriterVar::nvars = 0;
+#endif
 }

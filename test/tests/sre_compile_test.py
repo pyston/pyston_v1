@@ -9,3 +9,5 @@ print r.match("ac")
 print r.match("abc").groups()
 for i in xrange(100000):
     r.match("abbc").groups()
+    if i % 1000 == 0:
+        print i

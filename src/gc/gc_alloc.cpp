@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <stdint.h>
 #include <sys/mman.h>
 
@@ -44,16 +45,36 @@ extern "C" void gc_compat_free(void* ptr) {
     gc_free(ptr);
 }
 
+int nallocs = 0;
+bool recursive = false;
+
 // We may need to hook malloc as well:
-/*
+#if 0
 extern "C" void* malloc(size_t sz) {
-    abort();
+    static void *(*libc_malloc)(size_t) = (void* (*)(size_t))dlsym(RTLD_NEXT, "malloc");
+    nallocs++;
+    void* r = libc_malloc(sz);;
+    if (!recursive && nallocs > 4000000) {
+        recursive = true;
+        printf("malloc'd: %p\n", r);
+        raise(SIGTRAP);
+        recursive = false;
+    }
+    return r;
 }
 
 extern "C" void free(void* p) {
-    abort();
+    static void (*libc_free)(void*) = (void (*)(void*))dlsym(RTLD_NEXT, "free");
+    if (!recursive && nallocs > 4000000) {
+        recursive = true;
+        printf("free: %p\n", p);
+        raise(SIGTRAP);
+        recursive = false;
+    }
+    nallocs--;
+    libc_free(p);
 }
-*/
+#endif
 
 } // namespace gc
 } // namespace pyston

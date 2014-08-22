@@ -186,7 +186,7 @@ private:
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
     // that the register will still contain your value when you go to use it
-    assembler::Register getInReg(Location l = Location::any());
+    assembler::Register getInReg(Location l = Location::any(), bool allow_constant_in_reg = false);
     assembler::XMMRegister getInXMMReg(Location l = Location::any());
 
     // If this is an immediate, try getting it as one
@@ -195,13 +195,23 @@ private:
     void dump();
 
 public:
+#ifndef NDEBUG
+    static int nvars;
+#endif
     void incUse();
     void decUse();
 
     RewriterVar(Rewriter* rewriter, Location location) : rewriter(rewriter), num_uses(0) {
+#ifndef NDEBUG
+        nvars++;
+#endif
         assert(rewriter);
         locations.insert(location);
     }
+
+#ifndef NDEBUG
+    ~RewriterVar() { nvars--; }
+#endif
 
     friend class RewriterVarUsage;
     friend class Rewriter;
@@ -215,6 +225,11 @@ private:
     const Location return_location;
 
     bool done_guarding;
+
+    bool finished; // committed or aborted
+#ifndef NDEBUG
+    int start_vars;
+#endif
 
     std::vector<int> live_out_regs;
 
@@ -258,6 +273,14 @@ public:
     // This should be called exactly once for each argument
     RewriterVarUsage getArg(int argnum);
 
+    ~Rewriter() {
+        if (!finished)
+            this->abort();
+        assert(finished);
+
+        ASSERT(RewriterVar::nvars == start_vars, "%d %d", RewriterVar::nvars, start_vars);
+    }
+
     Location getReturnDestination();
 
     bool isDoneGuarding() { return done_guarding; }
@@ -275,6 +298,7 @@ public:
     RewriterVarUsage allocateAndCopyPlus1(RewriterVarUsage first_elem, RewriterVarUsage rest, int n_rest);
     void deallocateStack(int nbytes);
 
+    void abort();
     void commit();
     void commitReturning(RewriterVarUsage rtn);
 
