@@ -289,6 +289,9 @@ extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) {
 }
 
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
+    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCObject(tp));
+
     RELEASE_ASSERT(op, "");
     RELEASE_ASSERT(tp, "");
     Py_TYPE(op) = tp;
@@ -296,6 +299,9 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
 }
 
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) {
+    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCObject(tp));
+
     RELEASE_ASSERT(op, "");
     RELEASE_ASSERT(tp, "");
     Py_TYPE(op) = tp;

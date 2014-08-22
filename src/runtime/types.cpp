@@ -303,6 +303,8 @@ extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) 
     ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict)->c_str());
     BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 
+    RELEASE_ASSERT(attr_dict->d.count(boxStrConstant("__metaclass__")) == 0, "metaclasses not supported yet");
+
     BoxedClass* made;
 
     if (base->instancesHaveAttrs()) {
