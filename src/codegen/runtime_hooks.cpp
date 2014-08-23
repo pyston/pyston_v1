@@ -35,6 +35,7 @@
 #include "runtime/complex.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
+#include "runtime/import.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
 #include "runtime/long.h"

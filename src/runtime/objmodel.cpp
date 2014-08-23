@@ -21,9 +21,6 @@
 #include <memory>
 #include <stdint.h>
 
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Path.h"
-
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
 #include "codegen/compvars.h"
@@ -3585,71 +3582,6 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
     }
 
     raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
-}
-
-BoxedModule* compileAndRunModule(const std::string& name, const std::string& fn, bool add_to_sys_modules) {
-    BoxedModule* module = createModule(name, fn, add_to_sys_modules);
-
-    AST_Module* ast = caching_parse(fn.c_str());
-    compileAndRunModule(ast, module);
-    return module;
-}
-
-// TODO I feel like importing should go somewhere else; it's more closely tied to codegen
-// than to the object model.
-extern "C" Box* import(const std::string* name) {
-    assert(name);
-
-    static StatCounter slowpath_import("slowpath_import");
-    slowpath_import.log();
-
-    BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxStringPtr(name);
-    if (sys_modules->d.find(s) != sys_modules->d.end())
-        return sys_modules->d[s];
-
-    BoxedList* sys_path = getSysPath();
-    if (sys_path->cls != list_cls) {
-        raiseExcHelper(RuntimeError, "sys.path must be a list of directory name");
-    }
-
-    llvm::SmallString<128> joined_path;
-    for (int i = 0; i < sys_path->size; i++) {
-        Box* _p = sys_path->elts->elts[i];
-        if (_p->cls != str_cls)
-            continue;
-        BoxedString* p = static_cast<BoxedString*>(_p);
-
-        joined_path.clear();
-        llvm::sys::path::append(joined_path, p->s, *name + ".py");
-        std::string fn(joined_path.str());
-
-        if (VERBOSITY() >= 2)
-            printf("Searching for %s at %s...\n", name->c_str(), fn.c_str());
-
-        bool exists;
-        llvm::error_code code = llvm::sys::fs::exists(joined_path.str(), exists);
-#if LLVMREV < 210072
-        assert(code == 0);
-#else
-        assert(!code);
-#endif
-        if (!exists)
-            continue;
-
-        if (VERBOSITY() >= 1)
-            printf("Importing %s from %s\n", name->c_str(), fn.c_str());
-
-        // TODO duplication with jit.cpp:
-        BoxedModule* module = compileAndRunModule(*name, fn, true);
-        return module;
-    }
-
-    if (*name == "test") {
-        return importTestExtension();
-    }
-
-    raiseExcHelper(ImportError, "No module named %s", name->c_str());
 }
 
 extern "C" Box* importFrom(Box* _m, const std::string* name) {

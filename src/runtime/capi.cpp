@@ -22,6 +22,7 @@
 #include "codegen/compvars.h"
 #include "core/threading.h"
 #include "core/types.h"
+#include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
