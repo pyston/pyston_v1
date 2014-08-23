@@ -684,6 +684,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
+    builtins_module->giveAttr("basestring", basestring_cls);
     builtins_module->giveAttr("int", int_cls);
     builtins_module->giveAttr("long", long_cls);
     builtins_module->giveAttr("float", float_cls);
