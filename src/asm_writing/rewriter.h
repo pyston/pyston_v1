@@ -144,12 +144,12 @@ public:
 
     static RewriterVarUsage empty();
 
-#ifndef NDEBUG
     ~RewriterVarUsage() {
-        if (!std::uncaught_exception())
-            assert(done_using);
+        if (!done_using) {
+            assert(std::uncaught_exception());
+            setDoneUsing();
+        }
     }
-#endif
 
     void setDoneUsing();
     bool isDoneUsing();
@@ -278,6 +278,8 @@ public:
             this->abort();
         assert(finished);
 
+        // This check isn't thread safe and should be fine to remove if it causes
+        // issues (along with the nvars/start_vars accounting)
         ASSERT(RewriterVar::nvars == start_vars, "%d %d", RewriterVar::nvars, start_vars);
     }
 

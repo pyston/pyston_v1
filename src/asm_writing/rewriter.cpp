@@ -650,18 +650,11 @@ void Rewriter::abort() {
     assert(!finished);
     finished = true;
 
-    // This feels hacky: are we really guaranteed to find all of the things we need to delete?
-    std::unordered_set<RewriterVar*> found;
-
-    for (const auto& p : vars_by_location) {
-        found.insert(p.second);
+    for (auto v : args) {
+        v->decUse();
     }
-    for (const auto v : live_outs) {
-        found.insert(v);
-    }
-
-    for (auto v : found) {
-        delete v;
+    for (auto v : live_outs) {
+        v->decUse();
     }
 }
 
