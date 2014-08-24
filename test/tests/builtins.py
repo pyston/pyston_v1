@@ -33,6 +33,9 @@ print filter(lambda x: x % 2, xrange(20))
 print type(enumerate([]))
 print list(enumerate(xrange(5, 10)))
 
+# If the first argument is None, filter calls checks for truthiness (ie is equivalent to passing 'bool')
+print filter(None, xrange(-5, 5))
+
 print isinstance(1, int)
 print isinstance(1, (float, int))
 print isinstance(1, (float, (), (int, 3), 4))

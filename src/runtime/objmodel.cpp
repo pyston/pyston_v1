@@ -1340,7 +1340,7 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     raiseAttributeError(obj, attr);
 }
 
-static void setattr_internal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
 
     // Lookup a descriptor
@@ -1431,7 +1431,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     if (rewriter.get()) {
         // rewriter->trap();
         SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2), false);
-        setattr_internal(obj, attr, attr_val, &rewrite_args);
+        setattrInternal(obj, attr, attr_val, &rewrite_args);
         if (rewrite_args.out_success) {
             rewriter->commit();
         } else {
@@ -1439,7 +1439,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
             rewrite_args.attrval.ensureDoneUsing();
         }
     } else {
-        setattr_internal(obj, attr, attr_val, NULL);
+        setattrInternal(obj, attr, attr_val, NULL);
     }
 }
 

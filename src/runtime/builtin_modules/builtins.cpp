@@ -341,6 +341,16 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     return rtn;
 }
 
+Box* setattrFunc(Box* obj, Box* _str, Box* value) {
+    if (_str->cls != str_cls) {
+        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+    }
+
+    BoxedString* str = static_cast<BoxedString*>(_str);
+    setattrInternal(obj, str->s, value, NULL);
+    return None;
+}
+
 Box* hasattr(Box* obj, Box* _str) {
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
@@ -362,6 +372,14 @@ Box* map2(Box* f, Box* container) {
 }
 
 Box* filter2(Box* f, Box* container) {
+    // If the filter-function argument is None, filter() works by only returning
+    // the elements that are truthy.  This is equivalent to using the bool() constructor.
+    // - actually since we call nonzero() afterwards, we could use an ident() function
+    //   but we don't have one.
+    // If this is a common case we could speed it up with special handling.
+    if (f == None)
+        f = bool_cls;
+
     Box* rtn = new BoxedList();
     for (Box* e : container->pyElements()) {
         Box* r = runtimeCall(f, ArgPassSpec(1), e, NULL, NULL, NULL, NULL);
@@ -588,6 +606,9 @@ void setupBuiltins() {
 
     builtins_module->giveAttr(
         "getattr", new BoxedFunction(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
+
+    builtins_module->giveAttr("setattr",
+                              new BoxedFunction(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, 0, false, false)));
 
     Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, BOXED_BOOL, 2));
     builtins_module->giveAttr("hasattr", hasattr_obj);
