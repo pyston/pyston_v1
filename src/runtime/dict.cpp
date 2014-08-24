@@ -256,6 +256,30 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
+extern "C" int PyMapping_Check(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_ssize_t PyMapping_Size(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyMapping_HasKeyString(PyObject* o, char* key) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* v) {
+    Py_FatalError("unimplemented");
+}
+
 BoxedClass* dict_iterator_cls = NULL;
 extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);

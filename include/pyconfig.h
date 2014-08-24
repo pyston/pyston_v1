@@ -32,5 +32,7 @@
 #define HAVE_ASINH 1
 #define HAVE_ATANH 1
 #define HAVE_EXPM1 1
+#define Py_USING_UNICODE 1
+#define Py_UNICODE_SIZE 4
 
 #endif /*Py_PYCONFIG_H*/

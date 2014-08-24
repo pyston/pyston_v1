@@ -426,8 +426,12 @@ typedef struct {
 
 PyAPI_DATA(PyTypeObject) PyUnicode_Type;
 
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+PyAPI_FUNC(bool) PyUnicode_Check(PyObject*);
+#if 0
 #define PyUnicode_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_UNICODE_SUBCLASS)
+#endif
 #define PyUnicode_CheckExact(op) (Py_TYPE(op) == &PyUnicode_Type)
 
 /* Fast access macros */

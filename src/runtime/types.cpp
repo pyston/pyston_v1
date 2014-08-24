@@ -41,6 +41,7 @@ extern "C" void init_sha512();
 extern "C" void init_md5();
 extern "C" void init_sre();
 extern "C" void initmath();
+extern "C" void initoperator();
 
 namespace pyston {
 
@@ -290,7 +291,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls, *complex_cls, *basestring_cls;
+    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -662,6 +663,7 @@ void setupRuntime() {
 
     // TODO we leak all the string data!
     str_cls = new BoxedClass(type_cls, basestring_cls, NULL, 0, sizeof(BoxedString), false);
+    unicode_cls = new BoxedClass(type_cls, basestring_cls, NULL, 0, sizeof(BoxedUnicode), false);
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
     type_cls->giveAttr("__base__", object_cls);
@@ -821,6 +823,8 @@ void setupRuntime() {
     init_md5();
     init_sre();
     initmath();
+    // TODO enable this
+    // initoperator();
 
     setupSysEnd();
 

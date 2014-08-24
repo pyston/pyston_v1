@@ -100,6 +100,10 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
     return _tupleSlice(self, start, stop, step);
 }
 
+extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) {
+    Py_FatalError("unimplemented");
+}
+
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
