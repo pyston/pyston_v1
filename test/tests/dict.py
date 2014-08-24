@@ -72,29 +72,32 @@ print sorted(dict((('a', 1), ('b', 2)), b=3)) == sorted(dict((['a', 1], ('b', 3)
 try:
     print dict([1,2], [2,3])
 except TypeError, e:
-    print 'dict expected at most 1 arg'
-else:
-    raise
+    print e
 
 try:
     print dict([(1,2), 42])
 except TypeError, e:
-    print 'cannot convert dictionary update sequence element #1 to a sequence'
-else:
-    raise
+    print e
 
 try:
     # invalid tuple len
     print dict([(10,20), (1,2,3)])
-except TypeError, e:
-    print 'dictionary update sequence element #1 has length 3; 2 is required'
-else:
-    raise
+except ValueError, e:
+    print e
 
 try:
     # invalid list len
     print dict([[10,20], [1,2,3]])
-except TypeError, e:
-    print 'dictionary update sequence element #1 has length 3; 2 is required'
-else:
-    raise
+except ValueError, e:
+    print e
+
+d = {i:i**2 for i in xrange(10)}
+print sorted(d.items())
+del d[2]
+print d.__delitem__(4)
+print sorted(d.items())
+
+try:
+    del d[2]
+except KeyError, e:
+    print e

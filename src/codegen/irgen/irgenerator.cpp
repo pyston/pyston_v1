@@ -1436,8 +1436,7 @@ private:
 
             emitter.createPatchpoint(pp, (void*)pyston::delitem, llvm_args, exc_info);
         } else {
-            emitter.getBuilder()->CreateCall2(g.funcs.delitem, converted_target->getValue(),
-                                              converted_slice->getValue());
+            emitter.createCall2(exc_info, g.funcs.delitem, converted_target->getValue(), converted_slice->getValue());
         }
 
         converted_target->decvref(emitter);
