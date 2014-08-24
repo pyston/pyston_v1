@@ -583,6 +583,7 @@ public:
 };
 
 Box* makeAttrWrapper(Box* b) {
+    assert(b->cls->instancesHaveAttrs());
     return new AttrWrapper(b);
 }
 

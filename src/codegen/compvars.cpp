@@ -1356,7 +1356,8 @@ public:
         for (int i = args.size() + 1; i < cl->num_args; i++) {
             // TODO should _call() be able to take llvm::Value's directly?
             new_args.push_back(new ConcreteCompilerVariable(
-                UNKNOWN, embedConstantPtr(rtattr_func->defaults->elts[i - args.size() - 1], g.llvm_value_type_ptr),
+                UNKNOWN, embedConstantPtr(rtattr_func->defaults->elts[i - cl->num_args + cl->num_defaults],
+                                          g.llvm_value_type_ptr),
                 true));
         }
 

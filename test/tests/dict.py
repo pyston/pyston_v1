@@ -101,3 +101,11 @@ try:
     del d[2]
 except KeyError, e:
     print e
+
+d = {1:[2]}
+d2 = d.copy()
+print d2, d
+d2[1].append(1)
+print d2, d
+d2[1] = 1
+print d2, d

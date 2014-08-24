@@ -53,3 +53,6 @@ test_comparisons("a", "aa")
 test_comparisons("ab", "aa")
 
 print sorted([str(i) for i in xrange(25)])
+
+for i in xrange(-3, 5):
+    print i, "bananananananananana".split("an", i)

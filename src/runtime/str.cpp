@@ -533,13 +533,15 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     }
 }
 
-Box* strSplit(BoxedString* self, BoxedString* sep) {
+Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     assert(self->cls == str_cls);
+    if (_max_split->cls != int_cls)
+        raiseExcHelper(TypeError, "an integer is required");
 
     if (sep->cls == str_cls) {
         if (!sep->s.empty()) {
             llvm::SmallVector<llvm::StringRef, 16> parts;
-            llvm::StringRef(self->s).split(parts, sep->s);
+            llvm::StringRef(self->s).split(parts, sep->s, _max_split->n);
 
             BoxedList* rtn = new BoxedList();
             for (const auto& s : parts)
@@ -549,6 +551,7 @@ Box* strSplit(BoxedString* self, BoxedString* sep) {
             raiseExcHelper(ValueError, "empty separator");
         }
     } else if (sep->cls == none_cls) {
+        RELEASE_ASSERT(_max_split->n < 0, "this case hasn't been updated to handle limited splitting amounts");
         BoxedList* rtn = new BoxedList();
 
         std::ostringstream os("");
@@ -569,6 +572,14 @@ Box* strSplit(BoxedString* self, BoxedString* sep) {
     } else {
         raiseExcHelper(TypeError, "expected a character buffer object");
     }
+}
+
+Box* strRsplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
+    // TODO: implement this for real
+    // for now, just forward rsplit() to split() in the cases they have to return the same value
+    assert(_max_split->cls == int_cls);
+    RELEASE_ASSERT(_max_split->n <= 0, "");
+    return strSplit(self, sep, _max_split);
 }
 
 Box* strStrip(BoxedString* self, Box* chars) {
@@ -867,8 +878,10 @@ void setupStr() {
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2)));
 
-    str_cls->giveAttr("split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 2, 1, false, false), { None }));
-    str_cls->giveAttr("rsplit", str_cls->getattr("split"));
+    str_cls->giveAttr(
+        "split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
+    str_cls->giveAttr(
+        "rsplit", new BoxedFunction(boxRTFunction((void*)strRsplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
 
     CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
     addRTFunction(count, (void*)strCount2, BOXED_INT);

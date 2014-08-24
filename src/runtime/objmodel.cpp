@@ -1299,6 +1299,11 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
 #endif
     }
 
+    if (strcmp(attr, "__dict__") == 0) {
+        if (obj->cls->instancesHaveAttrs())
+            return makeAttrWrapper(obj);
+    }
+
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
 
