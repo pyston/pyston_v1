@@ -780,9 +780,9 @@ public:
     }
 
     virtual void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr) {
-        llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
-            g.funcs.raiseAttributeErrorStr, getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
-        call->setDoesNotReturn();
+        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                  getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
+        call.setDoesNotReturn();
     }
 
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
@@ -989,9 +989,9 @@ public:
     }
 
     virtual void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr) {
-        llvm::CallInst* call = emitter.getBuilder()->CreateCall2(
-            g.funcs.raiseAttributeErrorStr, getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
-        call->setDoesNotReturn();
+        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                                                  getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
+        call.setDoesNotReturn();
     }
 
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
