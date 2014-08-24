@@ -23,6 +23,10 @@ namespace pyston {
 
 Box* True, *False;
 
+extern "C" PyObject* PyBool_FromLong(long n) {
+    return boxBool(n != 0);
+}
+
 extern "C" Box* boolInvert(BoxedBool* v) {
     return boxInt(~v->b);
 }

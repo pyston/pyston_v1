@@ -53,6 +53,10 @@ public:
             assert(kwargs->d.size() == 0);
             assert(varargs->elts.size() == 0);
             rtn = (Box*)self->func(self->passthrough, NULL);
+        } else if (self->ml_flags == METH_O) {
+            assert(kwargs->d.size() == 0);
+            assert(varargs->elts.size() == 1);
+            rtn = (Box*)self->func(self->passthrough, varargs->elts[0]);
         } else {
             RELEASE_ASSERT(0, "0x%x", self->ml_flags);
         }

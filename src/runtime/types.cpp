@@ -38,6 +38,7 @@ extern "C" void init_sha256();
 extern "C" void init_sha512();
 extern "C" void init_md5();
 extern "C" void init_sre();
+extern "C" void initmath();
 
 namespace pyston {
 
@@ -773,7 +774,6 @@ void setupRuntime() {
     setupSys();
 
     setupBuiltins();
-    setupMath();
     setupTime();
     setupThread();
     setupPosix();
@@ -786,6 +786,7 @@ void setupRuntime() {
     init_sha512();
     init_md5();
     init_sre();
+    initmath();
 
     setupSysEnd();
 

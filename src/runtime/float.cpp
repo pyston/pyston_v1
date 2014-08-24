@@ -24,6 +24,19 @@
 
 namespace pyston {
 
+extern "C" PyObject* PyFloat_FromDouble(double d) {
+    return boxFloat(d);
+}
+
+extern "C" double PyFloat_AsDouble(PyObject* o) {
+    if (o->cls == float_cls)
+        return static_cast<BoxedFloat*>(o)->d;
+    else if (o->cls == int_cls)
+        return static_cast<BoxedInt*>(o)->n;
+    Py_FatalError("unimplemented");
+    return 0.0;
+}
+
 template <typename T> static inline void raiseDivZeroExcIfZero(T var) {
     if (var == 0) {
         raiseExcHelper(ZeroDivisionError, "float divide by zero");

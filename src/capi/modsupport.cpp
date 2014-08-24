@@ -55,7 +55,7 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
         if (VERBOSITY())
             printf("Loading method %s\n", methods->ml_name);
 
-        assert((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS))) == 0);
+        assert((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
         module->giveAttr(methods->ml_name,
                          new BoxedCApiFunction(methods->ml_flags, passthrough, methods->ml_name, methods->ml_meth));
 
@@ -69,12 +69,23 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     return module;
 }
 
-extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) {
+extern "C" PyObject* PyModule_GetDict(PyObject* _m) {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
-    m->setattr(name, boxInt(value), NULL);
+    return makeAttrWrapper(m);
+}
+
+extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) {
+    BoxedModule* m = static_cast<BoxedModule*>(_m);
+    assert(m->cls == module_cls);
+
+    m->setattr(name, value, NULL);
     return 0;
+}
+
+extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) {
+    return PyModule_AddObject(_m, name, boxInt(value));
 }
 
 

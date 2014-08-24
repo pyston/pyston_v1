@@ -42,10 +42,35 @@ extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) {
     return mpz_get_ui(l->n);
 }
 
+extern "C" long PyLong_AsLong(PyObject* vv) {
+    RELEASE_ASSERT(PyLong_Check(vv), "");
+    BoxedLong* l = static_cast<BoxedLong*>(vv);
+    RELEASE_ASSERT(mpz_fits_slong_p(l->n), "");
+    return mpz_get_si(l->n);
+}
+
+extern "C" long PyLong_AsLongAndOverflow(PyObject*, int*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" double PyLong_AsDouble(PyObject* vv) {
+    RELEASE_ASSERT(PyLong_Check(vv), "");
+    BoxedLong* l = static_cast<BoxedLong*>(vv);
+    return mpz_get_d(l->n);
+}
+
+extern "C" PyObject* PyLong_FromDouble(double v) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
     BoxedLong* rtn = new BoxedLong(long_cls);
     mpz_init_set_ui(rtn->n, ival);
     return rtn;
+}
+
+extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) {
+    Py_FatalError("unimplemented");
 }
 
 extern "C" Box* createLong(const std::string* s) {

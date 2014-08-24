@@ -61,7 +61,9 @@ PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double);
 /* Extract C double from Python float.  The macro version trades safety for
    speed. */
 PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
-#define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
+// Pyston changes: these aren't direct macros any more [they potentially could be though]
+#define PyFloat_AS_DOUBLE(op) PyFloat_AsDouble(op)
+//#define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
 
 /* Write repr(v) into the char buffer argument, followed by null byte.  The
    buffer must be "big enough"; >= 100 is very safe.

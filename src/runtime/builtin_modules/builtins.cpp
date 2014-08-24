@@ -413,7 +413,7 @@ BoxedModule* builtins_module;
 extern "C" {
 BoxedClass* Exception, *AssertionError, *AttributeError, *GeneratorExit, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning;
+    *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning, *MemoryError;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -576,6 +576,7 @@ void setupBuiltins() {
     /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
     DeprecationWarning = makeBuiltinException(Warning, "DeprecationWarning");
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
+    MemoryError = makeBuiltinException(Exception, "MemoryError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);

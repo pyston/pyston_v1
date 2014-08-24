@@ -62,13 +62,6 @@ public:
     }
 };
 
-extern "C" PyObject* PyModule_GetDict(PyObject* _m) {
-    BoxedModule* m = static_cast<BoxedModule*>(_m);
-    assert(m->cls == module_cls);
-
-    return makeAttrWrapper(m);
-}
-
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
     extern "C" bool Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
 
@@ -110,10 +103,6 @@ extern "C" Py_ssize_t PyString_Size(PyObject* s) {
     return static_cast<BoxedString*>(s)->s.size();
 }
 
-extern "C" PyObject* PyInt_FromLong(long n) {
-    return boxInt(n);
-}
-
 extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
     Box* b = static_cast<Box*>(mp);
     Box* key = static_cast<Box*>(_key);
@@ -136,7 +125,6 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
 extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) {
     return PyDict_SetItem(mp, boxStrConstant(key), item);
 }
-
 
 BoxedClass* capifunc_cls;
 
@@ -226,6 +214,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     assert(cls->attrs_offset == 0);
 
     return 0;
+}
+
+extern "C" int PyType_IsSubtype(PyTypeObject*, PyTypeObject*) {
+    Py_FatalError("unimplemented");
 }
 
 // copied from CPython's getargs.c:
@@ -365,6 +357,10 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
     }
 }
 
+extern "C" PyObject* PyObject_GetIter(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
     try {
         return getitem(o, key);
@@ -396,6 +392,9 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t 
     }
 }
 
+extern "C" PyObject* PyIter_Next(PyObject*) {
+    Py_FatalError("unimplemented");
+}
 
 extern "C" int PyCallable_Check(PyObject* x) {
     if (x == NULL)
@@ -448,6 +447,10 @@ extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t sta
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* PyErr_SetFromErrno(PyObject* type) {
+    Py_FatalError("unimplemented");
+    return NULL;
+}
 
 extern "C" PyObject* PyImport_Import(PyObject* module_name) {
     RELEASE_ASSERT(module_name, "");
@@ -465,6 +468,25 @@ extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" void* PyMem_Malloc(size_t sz) {
+    return gc_compat_malloc(sz);
+}
+
+extern "C" void* PyMem_Realloc(void* ptr, size_t sz) {
+    return gc_compat_realloc(ptr, sz);
+}
+
+extern "C" void PyMem_Free(void* ptr) {
+    gc_compat_free(ptr);
+}
+
+extern "C" PyObject* PyNumber_Divide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Multiply(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
 
 BoxedModule* importTestExtension() {
     const char* pathname = "../test/test_extension/test.so";

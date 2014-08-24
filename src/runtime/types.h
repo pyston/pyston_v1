@@ -62,7 +62,6 @@ void setupGenerator();
 
 void setupSys();
 void setupBuiltins();
-void setupMath();
 void setupTime();
 void setupThread();
 void setupPosix();
