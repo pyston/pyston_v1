@@ -166,6 +166,10 @@ Box* dictContains(BoxedDict* self, Box* k) {
     return boxBool(self->d.count(k) != 0);
 }
 
+Box* dictNonzero(BoxedDict* self) {
+    return boxBool(self->d.size());
+}
+
 extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "dict.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
@@ -265,6 +269,8 @@ void setupDict() {
     dict_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)dictGetitem, UNKNOWN, 2)));
     dict_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)dictSetitem, NONE, 3)));
     dict_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
+
+    dict_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)dictNonzero, BOXED_BOOL, 1)));
 
     dict_cls->freeze();
 

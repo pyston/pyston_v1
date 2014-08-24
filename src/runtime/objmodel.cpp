@@ -1585,6 +1585,15 @@ extern "C" BoxedString* strOrNull(Box* obj) {
 extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
     bool false_on_noncls = (flags & 0x1);
 
+    if (cls->cls == tuple_cls) {
+        auto t = static_cast<BoxedTuple*>(cls);
+        for (auto c : t->elts) {
+            if (isinstance(obj, c, flags))
+                return true;
+        }
+        return false;
+    }
+
     if (!false_on_noncls) {
         assert(cls->cls == type_cls);
     } else {

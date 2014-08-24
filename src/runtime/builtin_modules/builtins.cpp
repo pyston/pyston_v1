@@ -311,9 +311,6 @@ Box* sortedList(Box* obj) {
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
-    assert(cls->cls == type_cls);
-    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
-
     return boxBool(isinstance(obj, cls, 0));
 }
 

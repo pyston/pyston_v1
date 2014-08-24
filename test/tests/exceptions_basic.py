@@ -67,3 +67,10 @@ def f11():
     except TypeError, e:
         print e
 f11()
+
+def f12():
+    try:
+        raise IndexError
+    except (KeyError, IndexError), e:
+        print e
+f12()

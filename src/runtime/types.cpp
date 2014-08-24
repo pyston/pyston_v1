@@ -349,6 +349,10 @@ extern "C" Box* noneHash(Box* v) {
     return boxInt(819239); // chosen randomly
 }
 
+extern "C" Box* noneNonzero(Box* v) {
+    return False;
+}
+
 extern "C" BoxedString* functionRepr(BoxedFunction* v) {
     // TODO there has to be a better way
     if (v == repr_obj)
@@ -477,6 +481,13 @@ Box* typeRepr(BoxedClass* self) {
         snprintf(buf, 80, "<type '%s'>", getNameOfClass(self)->c_str());
         return boxStrConstant(buf);
     }
+}
+
+Box* typeHash(BoxedClass* self) {
+    assert(isSubclass(self->cls, type_cls));
+
+    // This is how CPython defines it; seems reasonable enough:
+    return boxInt(reinterpret_cast<intptr_t>(self) >> 4);
 }
 
 Box* moduleRepr(BoxedModule* m) {
@@ -694,12 +705,14 @@ void setupRuntime() {
     type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 2)));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->giveAttr("__str__", type_cls->getattr("__repr__"));
+    type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
     type_cls->freeze();
 
     none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
     none_cls->giveAttr("__str__", none_cls->getattr("__repr__"));
     none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
+    none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->freeze();
 
     module_cls->giveAttr("__name__", boxStrConstant("module"));

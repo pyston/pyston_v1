@@ -878,7 +878,8 @@ private:
             operand->decvref(emitter);
 
             llvm::Value* v = rtn->getValue();
-            assert(v->getType() == g.i1);
+            ASSERT(v->getType() == g.i1, "%s %s", operand->getType()->debugName().c_str(),
+                   rtn->getType()->debugName().c_str());
             llvm::Value* negated = emitter.getBuilder()->CreateNot(v);
             rtn->decvref(emitter);
             return new ConcreteCompilerVariable(BOOL, negated, true);
@@ -1769,7 +1770,8 @@ private:
         // ASSERT(val->getType() == BOOL, "%s", val->getType()->debugName().c_str());
 
         ConcreteCompilerVariable* nonzero = val->nonzero(emitter, getOpInfoForNode(node, exc_info));
-        assert(nonzero->getType() == BOOL);
+        ASSERT(nonzero->getType() == BOOL, "%s %s", val->getType()->debugName().c_str(),
+               nonzero->getType()->debugName().c_str());
         val->decvref(emitter);
 
         llvm::Value* llvm_nonzero = nonzero->getValue();

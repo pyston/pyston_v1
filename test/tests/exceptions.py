@@ -1,5 +1,5 @@
 # expected: fail
-# - exceptions
+# - with statements
 
 class TestException(Exception):
     pass

@@ -198,6 +198,10 @@ Box* setContains(BoxedSet* self, Box* v) {
     return boxBool(self->s.count(v) != 0);
 }
 
+Box* setNonzero(BoxedSet* self) {
+    return boxBool(self->s.size());
+}
+
 
 } // namespace set
 
@@ -264,6 +268,9 @@ void setupSet() {
 
     set_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)setContains, BOXED_BOOL, 2)));
     frozenset_cls->giveAttr("__contains__", set_cls->getattr("__contains__"));
+
+    set_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)setNonzero, BOXED_BOOL, 1)));
+    frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
 

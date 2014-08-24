@@ -292,6 +292,16 @@ Box* longPow(BoxedLong* v1, Box* _v2) {
     return r;
 }
 
+Box* longNonzero(BoxedLong* self) {
+    if (!isSubclass(self->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
+    if (mpz_cmp_si(self->n, 0) == 0)
+        return False;
+    return True;
+}
+
 void setupLong() {
     long_cls->giveAttr("__name__", boxStrConstant("long"));
 
@@ -312,6 +322,8 @@ void setupLong() {
 
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
+
+    long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
 
     long_cls->freeze();
 }
