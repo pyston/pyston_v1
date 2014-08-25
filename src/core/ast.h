@@ -126,9 +126,10 @@ enum AST_TYPE {
     LangPrimitive = 205,
     Unreachable = 206,
 
-    // This isn't a real AST type, but since we use AST types to represent binexp types
-    // and divmod is essentially a type of binop, we add it here (at least for now):
+    // These aren't real AST types, but since we use AST types to represent binexp types
+    // and divmod+truediv are essentially types of binops, we add them here (at least for now):
     DivMod = 250,
+    TrueDiv = 251,
 };
 };
 

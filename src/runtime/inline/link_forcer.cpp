@@ -111,6 +111,7 @@ void force() {
     FORCE(pow_i64_i64);
 
     FORCE(div_float_float);
+    FORCE(floordiv_float_float);
     FORCE(mod_float_float);
     FORCE(pow_float_float);
 

@@ -1037,8 +1037,11 @@ public:
         if (op_type == AST_TYPE::Mod) {
             v = emitter.createCall2(info.exc_info, g.funcs.mod_float_float, var->getValue(),
                                     converted_right->getValue()).getInstruction();
-        } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::FloorDiv) {
+        } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::TrueDiv) {
             v = emitter.createCall2(info.exc_info, g.funcs.div_float_float, var->getValue(),
+                                    converted_right->getValue()).getInstruction();
+        } else if (op_type == AST_TYPE::FloorDiv) {
+            v = emitter.createCall2(info.exc_info, g.funcs.floordiv_float_float, var->getValue(),
                                     converted_right->getValue()).getInstruction();
         } else if (op_type == AST_TYPE::Pow) {
             v = emitter.createCall2(info.exc_info, g.funcs.pow_float_float, var->getValue(),

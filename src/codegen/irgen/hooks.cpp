@@ -23,6 +23,7 @@
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen.h"
+#include "codegen/irgen/future.h"
 #include "codegen/irgen/util.h"
 #include "codegen/llvm_interpreter.h"
 #include "codegen/osrentry.h"
@@ -235,6 +236,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         LOCK_REGION(codegen_rwlock.asWrite());
 
         Timer _t("for compileModule()");
+
+        bm->future_flags = getFutureFlags(m, bm->fn.c_str());
 
         ScopingAnalysis* scoping = runScopingAnalysis(m);
 

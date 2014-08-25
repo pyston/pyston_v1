@@ -20,6 +20,7 @@
 #include "Python.h"
 #include "structmember.h"
 
+#include "codegen/irgen/future.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "gc/gc_alloc.h"
@@ -307,6 +308,7 @@ class BoxedModule : public Box {
 public:
     HCAttrs attrs;
     std::string fn; // for traceback purposes; not the same as __file__
+    FutureFlags future_flags;
 
     BoxedModule(const std::string& name, const std::string& fn);
     std::string name();

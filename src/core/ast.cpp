@@ -22,8 +22,6 @@
 
 #include "core/cfg.h"
 
-#define FUTURE_DIVISION 0
-
 namespace pyston {
 
 llvm::StringRef getOpSymbol(int op_type) {
@@ -37,6 +35,7 @@ llvm::StringRef getOpSymbol(int op_type) {
         case AST_TYPE::BitXor:
             return "^";
         case AST_TYPE::Div:
+        case AST_TYPE::TrueDiv:
             return "/";
         case AST_TYPE::DivMod:
             return "divmod()";
@@ -113,10 +112,9 @@ const std::string& getOpName(int op_type) {
         case AST_TYPE::BitXor:
             return strBitXor;
         case AST_TYPE::Div:
-            if (FUTURE_DIVISION)
-                return strTrueDiv;
-            else
-                return strDiv;
+            return strDiv;
+        case AST_TYPE::TrueDiv:
+            return strTrueDiv;
         case AST_TYPE::DivMod:
             return strDivMod;
         case AST_TYPE::Eq:
