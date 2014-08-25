@@ -35,6 +35,10 @@ class NullTypeAnalysis : public TypeAnalysis {
 public:
     virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block);
     virtual ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block);
+
+    BoxedClass* speculatedExprClass(AST_expr*) override {
+        return NULL;
+    }
 };
 
 ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(const std::string& name, CFGBlock* block) {
