@@ -298,6 +298,9 @@ public:
     int ndefaults;
     GCdArray* defaults;
 
+    // Accessed via member descriptor
+    Box* modname; // __module__
+
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   bool isGenerator = false);
