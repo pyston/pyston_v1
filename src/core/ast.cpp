@@ -38,6 +38,8 @@ llvm::StringRef getOpSymbol(int op_type) {
             return "^";
         case AST_TYPE::Div:
             return "/";
+        case AST_TYPE::DivMod:
+            return "divmod()";
         case AST_TYPE::Eq:
             return "==";
         case AST_TYPE::FloorDiv:
@@ -91,10 +93,11 @@ std::string getInplaceOpSymbol(int op_type) {
 }
 
 const static std::string strAdd("__add__"), strBitAnd("__and__"), strBitOr("__or__"), strBitXor("__xor__"),
-    strDiv("__div__"), strTrueDiv("__truediv__"), strEq("__eq__"), strFloorDiv("__floordiv__"), strLShift("__lshift__"),
-    strLt("__lt__"), strLtE("__le__"), strGt("__gt__"), strGtE("__ge__"), strIn("__contains__"),
-    strInvert("__invert__"), strMod("__mod__"), strMult("__mul__"), strNot("__nonzero__"), strNotEq("__ne__"),
-    strPow("__pow__"), strRShift("__rshift__"), strSub("__sub__"), strUAdd("__pos__"), strUSub("__neg__");
+    strDiv("__div__"), strTrueDiv("__truediv__"), strDivMod("__divmod__"), strEq("__eq__"), strFloorDiv("__floordiv__"),
+    strLShift("__lshift__"), strLt("__lt__"), strLtE("__le__"), strGt("__gt__"), strGtE("__ge__"),
+    strIn("__contains__"), strInvert("__invert__"), strMod("__mod__"), strMult("__mul__"), strNot("__nonzero__"),
+    strNotEq("__ne__"), strPow("__pow__"), strRShift("__rshift__"), strSub("__sub__"), strUAdd("__pos__"),
+    strUSub("__neg__");
 
 const std::string& getOpName(int op_type) {
     assert(op_type != AST_TYPE::Is);
@@ -114,6 +117,8 @@ const std::string& getOpName(int op_type) {
                 return strTrueDiv;
             else
                 return strDiv;
+        case AST_TYPE::DivMod:
+            return strDivMod;
         case AST_TYPE::Eq:
             return strEq;
         case AST_TYPE::FloorDiv:

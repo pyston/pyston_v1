@@ -33,13 +33,33 @@ namespace pyston {
 
 BoxedClass* long_cls;
 
+static int64_t asSignedLong(BoxedLong* self) {
+    assert(self->cls == long_cls);
+    if (!mpz_fits_slong_p(self->n))
+        raiseExcHelper(OverflowError, "long int too large to convert to int");
+    return mpz_get_si(self->n);
+}
+
+static uint64_t asUnsignedLong(BoxedLong* self) {
+    assert(self->cls == long_cls);
+
+    // if this is ever true, we should raise a Python error, but I don't think we should hit it?
+    assert(mpz_cmp_si(self->n, 0) >= 0);
+
+    if (!mpz_fits_ulong_p(self->n))
+        raiseExcHelper(OverflowError, "long int too large to convert to int");
+    return mpz_get_ui(self->n);
+}
+
 extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) {
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
 
-    // TODO Will this error on negative values?
-    RELEASE_ASSERT(mpz_fits_ulong_p(l->n), "");
-    return mpz_get_ui(l->n);
+    try {
+        return asUnsignedLong(l);
+    } catch (Box* e) {
+        abort();
+    }
 }
 
 extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
@@ -156,6 +176,36 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
     }
 }
 
+Box* longLshift(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        if (mpz_cmp_si(v2->n, 0) < 0)
+            raiseExcHelper(ValueError, "negative shift count");
+
+        uint64_t n = asUnsignedLong(v2);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_mul_2exp(r->n, v1->n, n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+        if (v2->n < 0)
+            raiseExcHelper(ValueError, "negative shift count");
+
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_mul_2exp(r->n, v1->n, v2->n);
+        return r;
+    } else {
+        return NotImplemented;
+    }
+}
+
 Box* longSub(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'",
@@ -245,6 +295,40 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
     }
 }
 
+extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
+    if (!isSubclass(lhs->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(_rhs->cls, long_cls)) {
+        BoxedLong* rhs = static_cast<BoxedLong*>(_rhs);
+
+        if (mpz_cmp_si(rhs->n, 0) == 0)
+            raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
+
+        BoxedLong* q = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(q->n);
+        mpz_init(r->n);
+        mpz_fdiv_qr(q->n, r->n, lhs->n, rhs->n);
+        return new BoxedTuple({ q, r });
+    } else if (isSubclass(_rhs->cls, int_cls)) {
+        BoxedInt* rhs = static_cast<BoxedInt*>(_rhs);
+
+        if (rhs->n == 0)
+            raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
+
+        BoxedLong* q = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(q->n);
+        mpz_init_set_si(r->n, rhs->n);
+        mpz_fdiv_qr(q->n, r->n, lhs->n, r->n);
+        return new BoxedTuple({ q, r });
+    } else {
+        return NotImplemented;
+    }
+}
+
 Box* longRdiv(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
@@ -314,11 +398,15 @@ void setupLong() {
     long_cls->giveAttr("__div__", new BoxedFunction(boxRTFunction((void*)longDiv, UNKNOWN, 2)));
     long_cls->giveAttr("__rdiv__", new BoxedFunction(boxRTFunction((void*)longRdiv, UNKNOWN, 2)));
 
+    long_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)longDivmod, UNKNOWN, 2)));
+
     long_cls->giveAttr("__sub__", new BoxedFunction(boxRTFunction((void*)longSub, UNKNOWN, 2)));
     long_cls->giveAttr("__rsub__", new BoxedFunction(boxRTFunction((void*)longRsub, UNKNOWN, 2)));
 
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr("__add__"));
+
+    long_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)longLshift, UNKNOWN, 2)));
 
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));

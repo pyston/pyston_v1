@@ -28,3 +28,14 @@ print (2L).__rdiv__(-1)
 print (2L).__rdiv__(-1L)
 print (-2L).__rdiv__(1L)
 print (-2L).__rdiv__(1)
+
+print (1L) << (2L)
+print (1L) << (2)
+try:
+    print (1L) << (-1L)
+except ValueError, e:
+    print e
+try:
+    print (1L) << (-1)
+except ValueError, e:
+    print e
