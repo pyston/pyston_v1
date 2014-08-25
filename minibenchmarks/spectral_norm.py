@@ -11,16 +11,6 @@
 from math      import sqrt
 from sys       import argv
 
-# pyston does not yet support enumerate
-def _enumerate(sequence):
-    n = 0
-    rtn = []
-    for elem in sequence:
-        rtn.append((n, elem))
-        n += 1
-    return rtn
-
-
 def eval_A(i, j):
     ij = i+j
     return 1.0 / (ij * (ij + 1) / 2 + i + 1)
@@ -30,7 +20,7 @@ def eval_A_times_u(u):
     local_eval_A = eval_A
 
     return [ sum([ local_eval_A(i, j) * u_j
-                   for j, u_j in _enumerate(u)
+                   for j, u_j in enumerate(u)
                  ]
                 )
              for i in range(len(u))
@@ -41,7 +31,7 @@ def eval_At_times_u(u):
     local_eval_A = eval_A
 
     return [ sum([ local_eval_A(j, i) * u_j
-                   for j, u_j in _enumerate(u)
+                   for j, u_j in enumerate(u)
                  ]
                 )
              for i in range(len(u))

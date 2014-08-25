@@ -46,3 +46,8 @@ try:
     divmod(1, "")
 except TypeError, e:
     print e
+
+def G():
+    yield "A"; yield "B"; yield "C"
+print list(enumerate(G()))
+

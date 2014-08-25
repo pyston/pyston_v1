@@ -471,23 +471,20 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
 BoxedClass* enumerate_cls;
 class BoxedEnumerate : public Box {
 private:
-    Box* iterator;
+    BoxIterator iterator, iterator_end;
     int64_t idx;
 
 public:
-    BoxedEnumerate(Box* iterator, int64_t idx) : Box(enumerate_cls), iterator(iterator), idx(idx) {}
+    BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx)
+        : Box(enumerate_cls), iterator(iterator_begin), iterator_end(iterator_end), idx(idx) {}
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
         RELEASE_ASSERT(start->cls == int_cls, "");
         int64_t idx = static_cast<BoxedInt*>(start)->n;
 
-        static const std::string iter_name("__iter__");
-        Box* iterator
-            = callattrInternal(obj, &iter_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-        if (!iterator)
-            raiseNotIterableError(getTypeName(iterator)->c_str());
-        return new BoxedEnumerate(iterator, idx);
+        llvm::iterator_range<BoxIterator> range = obj->pyElements();
+        return new BoxedEnumerate(range.begin(), range.end(), idx);
     }
 
     static Box* iter(Box* _self) {
@@ -497,35 +494,23 @@ public:
     }
 
     static Box* next(Box* _self) {
-        static const std::string next_name("next");
-
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        Box* o = callattrInternal(self->iterator, &next_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL,
-                                  NULL);
-        RELEASE_ASSERT(o, "");
-
-        Box* r = new BoxedTuple({ boxInt(self->idx), o });
-        self->idx++;
-        return r;
+        return new BoxedTuple({ boxInt(self->idx++), *self->iterator++ });
     }
 
     static Box* hasnext(Box* _self) {
-        static const std::string hasnext_name("__hasnext__");
-
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        Box* r = callattrInternal(self->iterator, &hasnext_name, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL,
-                                  NULL, NULL);
-        RELEASE_ASSERT(r, "%s", getTypeName(self->iterator)->c_str());
-        return r;
+        return boxBool(self->iterator != self->iterator_end);
     }
 
     static void gcHandler(GCVisitor* v, Box* b) {
         boxGCHandler(v, b);
 
         BoxedEnumerate* it = (BoxedEnumerate*)b;
-        v->visit(it->iterator);
+        it->iterator.gcHandler(v);
+        it->iterator_end.gcHandler(v);
     }
 };
 

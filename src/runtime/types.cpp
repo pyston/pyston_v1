@@ -73,6 +73,11 @@ BoxIterator& BoxIterator::operator++() {
     return *this;
 }
 
+void BoxIterator::gcHandler(GCVisitor* v) {
+    v->visitPotential(iter);
+    v->visitPotential(value);
+}
+
 llvm::iterator_range<BoxIterator> Box::pyElements() {
     static std::string iter_str("__iter__");
 
