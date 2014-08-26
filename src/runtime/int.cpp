@@ -50,6 +50,10 @@ extern "C" PyObject* PyInt_FromSsize_t(Py_ssize_t ival) {
     return boxInt(ival);
 }
 
+extern "C" PyObject* PyInt_FromLong(long n) {
+    return boxInt(n);
+}
+
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
 // If we don't have fast overflow-checking builtins, provide some slow variants:

@@ -79,6 +79,12 @@ static int vgetargs1(PyObject* _tuple, const char* fmt, va_list* ap, int flags) 
                     *p = n;
                     break;
                 }
+                case 'd': { // double
+                    double* p = (double*)va_arg(*ap, double*);
+                    RELEASE_ASSERT(arg->cls == float_cls, "%s", getTypeName(arg)->c_str());
+                    *p = static_cast<BoxedFloat*>(arg)->d;
+                    break;
+                }
                 case 's': {
                     if (*fmt == '*') {
                         Py_buffer* p = (Py_buffer*)va_arg(*ap, Py_buffer*);

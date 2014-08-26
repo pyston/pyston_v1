@@ -24,21 +24,13 @@
 #include <string.h>
 #include <limits.h>
 
-
-// These belong in pyconfig.h:
-#define HAVE_STDARG_PROTOTYPES
-#define HAVE_LONG_LONG 1
-#define PY_LONG_LONG long long
-#define SIZEOF_VOID_P 8
-#define SIZEOF_SIZE_T 8
-#define SIZEOF_INT 4
-
-
 // These include orders come from CPython:
 #include "patchlevel.h"
+#include "pyconfig.h"
 
 #include "pyport.h"
 
+#include "pymath.h"
 #include "pymem.h"
 
 #include "object.h"
@@ -73,6 +65,8 @@
 // directly from CPython:
 /* Argument must be a char or an int in [-128, 127] or [0, 255]. */
 #define Py_CHARMASK(c)		((unsigned char)((c) & 0xff))
+
+#include "pyfpe.h"
 
 #ifdef __cplusplus
 extern "C" {
