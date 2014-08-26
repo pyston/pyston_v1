@@ -908,6 +908,8 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
                             EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix) {
     Timer _t("in doCompile");
+    Timer _t2;
+    long irgen_us = 0;
 
     if (VERBOSITY("irgen") >= 1)
         source->cfg->print();
@@ -964,11 +966,15 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
     llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
 
+    irgen_us += _t2.split();
+
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, speculation_level,
                                          source->scoping->getScopeInfoForNode(source->ast));
+
+    _t2.split();
 
     GuardList guards;
 
@@ -1003,8 +1009,11 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
+        irgen_us += _t2.split();
         TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, TypeAnalysis::NONE,
                                                    source->scoping->getScopeInfoForNode(source->ast));
+        _t2.split();
+
         emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, NULL, deopt_full_blocks, deopt_partial_blocks);
         assert(deopt_guards.isEmpty());
         deopt_guards.assertGotPatched();
@@ -1044,9 +1053,9 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     }
 #endif
 
-    long us = _t.end();
+    irgen_us += _t2.split();
     static StatCounter us_irgen("us_compiling_irgen");
-    us_irgen.log(us);
+    us_irgen.log(irgen_us);
 
     if (ENABLE_LLVMOPTS)
         optimizeIR(f, effort);

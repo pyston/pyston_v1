@@ -107,6 +107,8 @@ int LivenessAnalysis::getStringIndex(const std::string& s) {
 }
 
 LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
+    Timer _t("LivenessAnalysis()");
+
     for (CFGBlock* b : cfg->blocks) {
         auto visitor = new LivenessBBVisitor(this); // livenessCache unique_ptr will delete it.
         for (AST_stmt* stmt : b->body) {
@@ -114,9 +116,14 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
         }
         liveness_cache.insert(std::make_pair(b, std::unique_ptr<LivenessBBVisitor>(visitor)));
     }
+
+    static StatCounter us_liveness("us_compiling_analysis_liveness");
+    us_liveness.log(_t.end());
 }
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
+    Timer _t("LivenessAnalysis()");
+
     if (name[0] != '#')
         return true;
 
@@ -158,6 +165,10 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
             }
         }
     }
+
+    // Note: this one gets counted as part of us_compiling_irgen as well:
+    static StatCounter us_liveness("us_compiling_analysis_liveness");
+    us_liveness.log(_t.end());
 
     return result_cache[idx][block];
 }
@@ -315,7 +326,7 @@ DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, 
         defined_at_end.insert(make_pair(p.first, required));
     }
 
-    static StatCounter us_definedness("us_analysis_definedness");
+    static StatCounter us_definedness("us_compiling_analysis_definedness");
     us_definedness.log(_t.end());
 }
 
@@ -333,6 +344,7 @@ const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEn
 PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, LivenessAnalysis* liveness,
                          ScopeInfo* scope_info)
     : definedness(arg_names, cfg, scope_info), liveness(liveness) {
+    Timer _t("PhiAnalysis()");
 
     for (CFGBlock* block : cfg->blocks) {
         RequiredSet required;
@@ -352,6 +364,9 @@ PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, Livene
 
         required_phis.insert(make_pair(block, std::move(required)));
     }
+
+    static StatCounter us_phis("us_compiling_analysis_phis");
+    us_phis.log(_t.end());
 }
 
 const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredAfter(CFGBlock* block) {

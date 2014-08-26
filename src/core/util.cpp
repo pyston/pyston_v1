@@ -27,9 +27,6 @@ namespace pyston {
 
 int Timer::level = 0;
 
-Timer::Timer(const char* desc) : min_usec(-1), ended(true) {
-    restart(desc);
-}
 Timer::Timer(const char* desc, long min_usec) : min_usec(min_usec), ended(true) {
     restart(desc);
 }
@@ -55,7 +52,7 @@ long Timer::end() {
         long us = 1000000L * (end.tv_sec - start_time.tv_sec) + (end.tv_usec - start_time.tv_usec);
 
         Timer::level--;
-        if (VERBOSITY("time") >= 1) {
+        if (VERBOSITY("time") >= 1 && desc) {
             if (us > min_usec) {
                 for (int i = 0; i < Timer::level; i++) {
                     putchar(' ');

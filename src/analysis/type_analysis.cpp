@@ -768,7 +768,7 @@ public:
             }
         }
 
-        static StatCounter us_types("us_analysis_types");
+        static StatCounter us_types("us_compiling_analysis_types");
         us_types.log(_t.end());
 
         return new PropagatingTypeAnalysis(starting_types, expr_types, type_speculations, speculation);
