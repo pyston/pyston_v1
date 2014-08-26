@@ -24,6 +24,7 @@
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/options.h"
+#include "core/util.h"
 #include "runtime/types.h"
 
 //#undef VERBOSITY
@@ -664,6 +665,8 @@ public:
     static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
                                                const std::vector<ConcreteCompilerType*>& arg_types,
                                                SpeculationLevel speculation, ScopeInfo* scope_info) {
+        Timer _t("PropagatingTypeAnalysis::doAnalysis()");
+
         AllTypeMap starting_types;
         ExprTypeMap expr_types;
         TypeSpeculations type_speculations;
@@ -764,6 +767,9 @@ public:
                 }
             }
         }
+
+        static StatCounter us_types("us_analysis_types");
+        us_types.log(_t.end());
 
         return new PropagatingTypeAnalysis(starting_types, expr_types, type_speculations, speculation);
     }

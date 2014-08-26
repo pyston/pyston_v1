@@ -299,6 +299,8 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
 
 DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, ScopeInfo* scope_info)
     : scope_info(scope_info) {
+    Timer _t("DefinednessAnalysis()");
+
     results = computeFixedPoint(cfg, DefinednessBBAnalyzer(cfg, arg_names), false);
 
     for (const auto& p : results) {
@@ -312,6 +314,9 @@ DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, 
         }
         defined_at_end.insert(make_pair(p.first, required));
     }
+
+    static StatCounter us_definedness("us_analysis_definedness");
+    us_definedness.log(_t.end());
 }
 
 DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(const std::string& name, CFGBlock* block) {

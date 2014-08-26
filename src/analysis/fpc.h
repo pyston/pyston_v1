@@ -46,20 +46,24 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
 
     typedef typename BBAnalyzer<T>::Map Map;
     typedef typename BBAnalyzer<T>::AllMap AllMap;
-    AllMap states;
+    AllMap starting_states;
+    AllMap ending_states;
 
+    std::unordered_set<CFGBlock*> in_queue;
     std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> q;
 
-    states.insert(make_pair(cfg->getStartingBlock(), Map()));
+    starting_states.insert(make_pair(cfg->getStartingBlock(), Map()));
     q.push(cfg->getStartingBlock());
+    in_queue.insert(cfg->getStartingBlock());
 
     int num_evaluations = 0;
     while (q.size()) {
         num_evaluations++;
         CFGBlock* block = q.top();
         q.pop();
+        in_queue.erase(block);
 
-        Map& initial = states[block];
+        Map& initial = starting_states[block];
         if (VERBOSITY("analysis") >= 2)
             printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
 
@@ -71,12 +75,12 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
             CFGBlock* next_block = block->successors[i];
             bool changed = false;
             bool initial = false;
-            if (states.count(next_block) == 0) {
+            if (starting_states.count(next_block) == 0) {
                 changed = true;
                 initial = true;
             }
 
-            Map& next = states[next_block];
+            Map& next = starting_states[next_block];
             for (const auto& p : ending) {
                 if (next.count(p.first) == 0) {
                     changed = true;
@@ -107,12 +111,12 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
                 }
             }
 
-            if (changed)
+            if (changed && in_queue.insert(next_block).second) {
                 q.push(next_block);
+            }
         }
 
-        states.erase(block);
-        states.insert(make_pair(block, ending));
+        ending_states[block] = std::move(ending);
     }
 
     if (VERBOSITY("analysis")) {
@@ -121,7 +125,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
     }
 
 
-    return states;
+    return ending_states;
 }
 }
 
