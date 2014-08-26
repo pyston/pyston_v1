@@ -20,6 +20,7 @@
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/options.h"
+#include "core/util.h"
 
 namespace pyston {
 
@@ -42,6 +43,7 @@ public:
 
 template <typename T>
 typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& analyzer, bool reverse) {
+    Timer _t("computeFixedPoint");
     assert(!reverse);
 
     typedef typename BBAnalyzer<T>::Map Map;
@@ -59,11 +61,9 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
         CFGBlock* block = q.top();
         q.pop();
 
-        Map& initial = states[block];
+        Map& ending = states[block];
         if (VERBOSITY("analysis") >= 2)
-            printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
-
-        Map ending = Map(initial);
+            printf("fpc on block %d - %ld entries\n", block->idx, ending.size());
 
         analyzer.processBB(ending, block);
 
@@ -110,10 +110,10 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
             if (changed)
                 q.push(next_block);
         }
-
-        states.erase(block);
-        states.insert(make_pair(block, ending));
     }
+
+    static StatCounter us_computeFixedPoint("us_computeFixedPoint");
+    us_computeFixedPoint.log(_t.end());
 
     if (VERBOSITY("analysis")) {
         printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
