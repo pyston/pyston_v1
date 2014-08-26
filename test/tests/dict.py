@@ -109,3 +109,8 @@ d2[1].append(1)
 print d2, d
 d2[1] = 1
 print d2, d
+
+# __init__
+d = {}
+print d.__init__((('a', 1), ('b', 2)), b=3)
+print sorted(d.items())
