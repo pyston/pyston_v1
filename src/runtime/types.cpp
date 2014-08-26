@@ -823,8 +823,7 @@ void setupRuntime() {
     init_md5();
     init_sre();
     initmath();
-    // TODO enable this
-    // initoperator();
+    initoperator();
 
     setupSysEnd();
 
