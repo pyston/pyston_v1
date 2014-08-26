@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <err.h>
 
+#include "llvm/Support/FileSystem.h"
+
 #include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/types.h"
@@ -524,6 +526,29 @@ Box* divmod(Box* lhs, Box* rhs) {
     return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
 }
 
+Box* execfile(Box* _fn) {
+    // The "globals" and "locals" arguments aren't implemented for now
+    if (!isSubclass(_fn->cls, str_cls)) {
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn)->c_str());
+    }
+
+    BoxedString* fn = static_cast<BoxedString*>(_fn);
+
+    bool exists;
+    llvm::error_code code = llvm::sys::fs::exists(fn->s, exists);
+#if LLVMREV < 210072
+    ASSERT(code == 0, "%s: %s", code.message().c_str(), fn->s.c_str());
+#else
+    assert(!code);
+#endif
+    if (!exists)
+        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.c_str());
+
+    compileAndRunModule("aoeu", fn->s, false);
+
+    return None;
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -648,6 +673,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("iter", new BoxedFunction(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
 
     builtins_module->giveAttr("divmod", new BoxedFunction(boxRTFunction((void*)divmod, UNKNOWN, 2)));
+
+    builtins_module->giveAttr("execfile", new BoxedFunction(boxRTFunction((void*)execfile, UNKNOWN, 1)));
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
     builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));

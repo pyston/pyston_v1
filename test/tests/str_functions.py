@@ -56,3 +56,7 @@ print sorted([str(i) for i in xrange(25)])
 
 for i in xrange(-3, 5):
     print i, "bananananananananana".split("an", i)
+
+for i in ["", "a", "ab", "aa"]:
+    for j in ["", "b", "a", "ab", "aa"]:
+        print i, j, i.startswith(j), j.startswith(i), i.endswith(j), j.endswith(i), i.find(j), j.find(i), i.rfind(j), j.rfind(i)

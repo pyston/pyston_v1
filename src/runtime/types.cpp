@@ -805,14 +805,16 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string& name, const std::string& fn) {
+BoxedModule* createModule(const std::string& name, const std::string& fn, bool add_to_sys_modules) {
     assert(fn.size() && "probably wanted to set the fn to <stdin>?");
     BoxedModule* module = new BoxedModule(name, fn);
 
-    BoxedDict* d = getSysModulesDict();
-    Box* b_name = boxStringPtr(&name);
-    assert(d->d.count(b_name) == 0);
-    d->d[b_name] = module;
+    if (add_to_sys_modules) {
+        BoxedDict* d = getSysModulesDict();
+        Box* b_name = boxStringPtr(&name);
+        assert(d->d.count(b_name) == 0);
+        d->d[b_name] = module;
+    }
 
     module->giveAttr("__doc__", None);
     return module;

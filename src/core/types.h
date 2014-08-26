@@ -452,7 +452,8 @@ static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 // TODO these shouldn't be here
 void setupRuntime();
 void teardownRuntime();
-BoxedModule* createModule(const std::string& name, const std::string& fn);
+BoxedModule* compileAndRunModule(const std::string& name, const std::string& fn, bool add_to_sys_modules);
+BoxedModule* createModule(const std::string& name, const std::string& fn, bool add_to_sys_modules = true);
 
 std::string getPythonFuncAt(void* ip, void* sp);
 

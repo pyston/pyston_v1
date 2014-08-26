@@ -83,9 +83,15 @@ Timer::~Timer() {
 }
 
 bool startswith(const std::string& s, const std::string& pattern) {
-    if (s.size() == 0)
-        return pattern.size() == 0;
+    if (pattern.size() > s.size())
+        return false;
     return s.compare(0, pattern.size(), pattern) == 0;
+}
+
+bool endswith(const std::string& s, const std::string& pattern) {
+    if (pattern.size() > s.size())
+        return false;
+    return s.compare(s.size() - pattern.size(), pattern.size(), pattern) == 0;
 }
 
 void removeDirectoryIfExists(const std::string& path) {

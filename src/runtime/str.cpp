@@ -23,6 +23,7 @@
 #include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/types.h"
+#include "core/util.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -694,6 +695,64 @@ Box* strContains(BoxedString* self, Box* elt) {
     return True;
 }
 
+Box* strStartswith(BoxedString* self, Box* elt) {
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
+                       getTypeName(elt)->c_str());
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    BoxedString* sub = static_cast<BoxedString*>(elt);
+
+    return boxBool(startswith(self->s, sub->s));
+}
+
+Box* strEndswith(BoxedString* self, Box* elt) {
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
+                       getTypeName(elt)->c_str());
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    BoxedString* sub = static_cast<BoxedString*>(elt);
+
+    return boxBool(endswith(self->s, sub->s));
+}
+
+Box* strFind(BoxedString* self, Box* elt) {
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'",
+                       getTypeName(elt)->c_str());
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    BoxedString* sub = static_cast<BoxedString*>(elt);
+
+    size_t r = self->s.find(sub->s);
+    if (r == std::string::npos)
+        return boxInt(-1);
+    return boxInt(r);
+}
+
+Box* strRfind(BoxedString* self, Box* elt) {
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'rfind' requires a 'str' object but received a '%s'",
+                       getTypeName(elt)->c_str());
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    BoxedString* sub = static_cast<BoxedString*>(elt);
+
+    size_t r = self->s.rfind(sub->s);
+    if (r == std::string::npos)
+        return boxInt(-1);
+    return boxInt(r);
+}
+
 
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     assert(self->cls == str_cls);
@@ -851,15 +910,19 @@ void setupStr() {
     str_cls->giveAttr("upper", new BoxedFunction(boxRTFunction((void*)strUpper, STR, 1)));
 
     str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 2, 1, false, false), { None }));
-
     str_cls->giveAttr("lstrip", new BoxedFunction(boxRTFunction((void*)strLStrip, STR, 2, 1, false, false), { None }));
-
     str_cls->giveAttr("rstrip", new BoxedFunction(boxRTFunction((void*)strRStrip, STR, 2, 1, false, false), { None }));
 
     str_cls->giveAttr("capitalize", new BoxedFunction(boxRTFunction((void*)strCapitalize, STR, 1)));
     str_cls->giveAttr("title", new BoxedFunction(boxRTFunction((void*)strTitle, STR, 1)));
 
     str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
+
+    str_cls->giveAttr("startswith", new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 2)));
+    str_cls->giveAttr("endswith", new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 2)));
+
+    str_cls->giveAttr("find", new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 2)));
+    str_cls->giveAttr("rfind", new BoxedFunction(boxRTFunction((void*)strRfind, BOXED_INT, 2)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));

@@ -48,6 +48,7 @@ public:
 };
 
 bool startswith(const std::string& s, const std::string& pattern);
+bool endswith(const std::string& s, const std::string& pattern);
 
 void removeDirectoryIfExists(const std::string& path);
 

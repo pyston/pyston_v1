@@ -3487,6 +3487,14 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
     raiseExcHelper(NameError, "global name '%s' is not defined", name->c_str());
 }
 
+BoxedModule* compileAndRunModule(const std::string& name, const std::string& fn, bool add_to_sys_modules) {
+    BoxedModule* module = createModule(name, fn, add_to_sys_modules);
+
+    AST_Module* ast = caching_parse(fn.c_str());
+    compileAndRunModule(ast, module);
+    return module;
+}
+
 // TODO I feel like importing should go somewhere else; it's more closely tied to codegen
 // than to the object model.
 extern "C" Box* import(const std::string* name) {
@@ -3533,9 +3541,7 @@ extern "C" Box* import(const std::string* name) {
             printf("Importing %s from %s\n", name->c_str(), fn.c_str());
 
         // TODO duplication with jit.cpp:
-        BoxedModule* module = createModule(*name, fn);
-        AST_Module* ast = caching_parse(fn.c_str());
-        compileAndRunModule(ast, module);
+        BoxedModule* module = compileAndRunModule(*name, fn, true);
         return module;
     }
 

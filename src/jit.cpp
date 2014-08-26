@@ -127,8 +127,6 @@ int main(int argc, char** argv) {
     _t.split("to run");
     BoxedModule* main_module = NULL;
     if (fn != NULL) {
-        main_module = createModule("__main__", fn);
-
         llvm::SmallString<128> path;
 
         if (!llvm::sys::path::is_absolute(fn)) {
@@ -147,20 +145,8 @@ int main(int argc, char** argv) {
             num_iterations = 1000;
 
         for (int i = 0; i < num_iterations; i++) {
-            AST_Module* m;
-            if (caching)
-                m = caching_parse(fn);
-            else
-                m = parse(fn);
-
-            if (VERBOSITY() >= 1) {
-                printf("Parsed code; ast:\n");
-                print_ast(m);
-                printf("==============\n");
-            }
-
             try {
-                compileAndRunModule(m, main_module);
+                main_module = compileAndRunModule("__main__", fn, true);
             } catch (Box* b) {
                 std::string msg = formatException(b);
                 printLastTraceback();
@@ -173,7 +159,7 @@ int main(int argc, char** argv) {
 
     if (repl && BENCH) {
         if (!main_module) {
-            main_module = createModule("__main__", "<bench>");
+            main_module = createModule("__main__", "<bench>", true);
         } else {
             main_module->fn = "<bench>";
         }
@@ -211,7 +197,7 @@ int main(int argc, char** argv) {
         printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
         if (!main_module) {
-            main_module = createModule("__main__", "<stdin>");
+            main_module = createModule("__main__", "<stdin>", true);
         } else {
             main_module->fn = "<stdin>";
         }
