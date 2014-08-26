@@ -89,6 +89,8 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(this)->c_str());
 }
 
+std::string builtinStr("__builtin__");
+
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
     : Box(function_cls), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
     if (f->source) {
@@ -96,8 +98,9 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
         this->giveAttr("__name__", boxString(f->source->getName()));
 
-        Box* modname = f->source->parent_module->getattr("__name__", NULL);
-        this->giveAttr("__module__", modname);
+        this->modname = f->source->parent_module->getattr("__name__", NULL);
+    } else {
+        this->modname = boxStringPtr(&builtinStr);
     }
 
     this->giveAttr("__doc__", None);
@@ -121,8 +124,9 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
         this->giveAttr("__name__", boxString(f->source->getName()));
 
-        Box* modname = f->source->parent_module->getattr("__name__", NULL);
-        this->giveAttr("__module__", modname);
+        this->modname = f->source->parent_module->getattr("__name__", NULL);
+    } else {
+        this->modname = boxStringPtr(&builtinStr);
     }
 
     this->giveAttr("__doc__", None);
@@ -748,6 +752,8 @@ void setupRuntime() {
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__str__", function_cls->getattr("__repr__"));
+    function_cls->giveAttr("__module__",
+                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, modname)));
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
