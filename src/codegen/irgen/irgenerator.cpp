@@ -431,6 +431,52 @@ private:
                 converted_module->decvref(emitter);
                 return v;
             }
+            case AST_LangPrimitive::IMPORT_STAR: {
+                assert(node->args.size() == 1);
+                assert(node->args[0]->type == AST_TYPE::Name);
+
+                RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
+                               "import * not supported in functions");
+
+                CompilerVariable* module = evalExpr(node->args[0], exc_info);
+                ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
+                module->decvref(emitter);
+
+                llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importStar, converted_module->getValue(),
+                                                     embedConstantPtr(irstate->getSourceInfo()->parent_module,
+                                                                      g.llvm_module_type_ptr)).getInstruction();
+                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
+
+                converted_module->decvref(emitter);
+                return v;
+            }
+            case AST_LangPrimitive::IMPORT_NAME: {
+                assert(node->args.size() == 3);
+                assert(node->args[0]->type == AST_TYPE::Num);
+                assert(static_cast<AST_Num*>(node->args[0])->num_type == AST_Num::INT);
+                assert(node->args[2]->type == AST_TYPE::Str);
+
+                int level = static_cast<AST_Num*>(node->args[0])->n_int;
+
+                // TODO this could be a constant Box* too
+                CompilerVariable* froms = evalExpr(node->args[1], exc_info);
+                ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
+                froms->decvref(emitter);
+
+                const std::string& module_name = static_cast<AST_Str*>(node->args[2])->s;
+
+                llvm::Value* imported
+                    = emitter.createCall3(exc_info, g.funcs.import, getConstantInt(level, g.i32),
+                                          converted_froms->getValue(),
+                                          embedConstantPtr(&module_name, g.llvm_str_type_ptr)).getInstruction();
+                ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
+
+                converted_froms->decvref(emitter);
+                return v;
+            }
+            case AST_LangPrimitive::NONE: {
+                return getNone();
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
@@ -1611,54 +1657,6 @@ private:
         func->decvref(emitter);
     }
 
-    void doImport(AST_Import* node, ExcInfo exc_info) {
-        if (state == PARTIAL)
-            return;
-
-        for (int i = 0; i < node->names.size(); i++) {
-            AST_alias* alias = node->names[i];
-
-            const std::string& modname = alias->name;
-            const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
-
-            llvm::Value* imported
-                = emitter.createCall(exc_info, g.funcs.import, embedConstantPtr(&modname, g.llvm_str_type_ptr))
-                      .getInstruction();
-            ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
-            _doSet(asname, v, exc_info);
-            v->decvref(emitter);
-        }
-    }
-
-    void doImportFrom(AST_ImportFrom* node, ExcInfo exc_info) {
-        if (state == PARTIAL)
-            return;
-
-        assert(node->level == 0);
-
-        llvm::Value* imported_v
-            = emitter.createCall(exc_info, g.funcs.import, embedConstantPtr(&node->module, g.llvm_str_type_ptr))
-                  .getInstruction();
-        ConcreteCompilerVariable* module = new ConcreteCompilerVariable(typeFromClass(module_cls), imported_v, true);
-
-        // ImportFrom statements should only get generated for "import *"; all other import from's
-        // should get translated to IMPORT_FROM bytecodes.
-        for (int i = 0; i < node->names.size(); i++) {
-            AST_alias* alias = node->names[i];
-
-            assert(alias->name == "*");
-            assert(alias->asname == "");
-
-            RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
-                           "import * not supported in functions");
-            emitter.createCall2(exc_info, g.funcs.importStar, imported_v,
-                                embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
-            continue;
-        }
-
-        module->decvref(emitter);
-    }
-
     void doPrint(AST_Print* node, ExcInfo exc_info) {
         if (state == PARTIAL)
             return;
@@ -2043,12 +2041,12 @@ private:
             // case AST_TYPE::If:
             // doIf(ast_cast<AST_If>(node));
             // break;
-            case AST_TYPE::Import:
-                doImport(ast_cast<AST_Import>(node), exc_info);
-                break;
-            case AST_TYPE::ImportFrom:
-                doImportFrom(ast_cast<AST_ImportFrom>(node), exc_info);
-                break;
+            // case AST_TYPE::Import:
+            //     doImport(ast_cast<AST_Import>(node), exc_info);
+            //     break;
+            // case AST_TYPE::ImportFrom:
+            //     doImportFrom(ast_cast<AST_ImportFrom>(node), exc_info);
+            //     break;
             case AST_TYPE::Global:
                 // Should have been handled already
                 break;
