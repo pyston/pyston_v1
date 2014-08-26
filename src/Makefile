@@ -787,6 +787,7 @@ perf_%: perf_release_%
 	@true
 
 $(call make_target,_dbg)
+$(call make_target,_debug)
 $(call make_target,_release)
 $(call make_target,_grwl)
 $(call make_target,_grwl_dbg)

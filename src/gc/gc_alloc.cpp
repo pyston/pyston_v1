@@ -45,19 +45,29 @@ extern "C" void gc_compat_free(void* ptr) {
     gc_free(ptr);
 }
 
-int nallocs = 0;
 bool recursive = false;
 
-// We may need to hook malloc as well:
+// We may need to hook malloc as well.  For now, these definitions serve
+// as a reference on how to do that, and also can help with debugging malloc
+// usage issues.
 #if 0
 extern "C" void* malloc(size_t sz) {
     static void *(*libc_malloc)(size_t) = (void* (*)(size_t))dlsym(RTLD_NEXT, "malloc");
-    nallocs++;
-    void* r = libc_malloc(sz);;
-    if (!recursive && nallocs > 4000000) {
+    void* r = libc_malloc(sz);
+    if (!recursive) {
         recursive = true;
-        printf("malloc'd: %p\n", r);
-        raise(SIGTRAP);
+        printf("\nmalloc %p\n", r);
+        recursive = false;
+    }
+    return r;
+}
+
+extern "C" void* relloc(void* p, size_t sz) {
+    static void *(*libc_realloc)(void*, size_t) = (void* (*)(void*, size_t))dlsym(RTLD_NEXT, "realloc");
+    void* r = libc_realloc(p, sz);
+    if (!recursive) {
+        recursive = true;
+        printf("\nrealloc %p %p\n", p, r);
         recursive = false;
     }
     return r;
@@ -65,13 +75,13 @@ extern "C" void* malloc(size_t sz) {
 
 extern "C" void free(void* p) {
     static void (*libc_free)(void*) = (void (*)(void*))dlsym(RTLD_NEXT, "free");
-    if (!recursive && nallocs > 4000000) {
+    if (!recursive) {
         recursive = true;
-        printf("free: %p\n", p);
-        raise(SIGTRAP);
+        printf("\nfree %p\n", p);
+        if (p == (void*)0x1c4c780)
+            raise(SIGTRAP);
         recursive = false;
     }
-    nallocs--;
     libc_free(p);
 }
 #endif
