@@ -299,7 +299,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls;
+    *closure_cls, *generator_cls, *complex_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -670,6 +670,7 @@ void setupRuntime() {
     // We could have a multi-stage setup process, but that seems overkill for now.
     bool_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedBool), false);
     int_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedInt), false);
+    complex_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedComplex), false);
     // TODO we're leaking long memory!
     long_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedLong), false);
     float_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedFloat), false);
@@ -700,6 +701,7 @@ void setupRuntime() {
     FROZENSET = typeFromClass(frozenset_cls);
     BOXED_TUPLE = typeFromClass(tuple_cls);
     LONG = typeFromClass(long_cls);
+    BOXED_COMPLEX = typeFromClass(complex_cls);
 
     object_cls->giveAttr("__name__", boxStrConstant("object"));
     object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
@@ -741,6 +743,7 @@ void setupRuntime() {
     setupInt();
     setupLong();
     setupFloat();
+    setupComplex();
     setupStr();
     setupList();
     setupDict();
@@ -841,6 +844,7 @@ void teardownRuntime() {
     teardownList();
     teardownInt();
     teardownFloat();
+    teardownComplex();
     teardownStr();
     teardownBool();
     teardownDict();

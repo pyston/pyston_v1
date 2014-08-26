@@ -26,6 +26,11 @@ extern "C" inline Box* boxFloat(double d) {
     return new BoxedFloat(d);
 }
 
+extern "C" inline Box* boxComplex(double r, double i) __attribute__((visibility("default")));
+extern "C" inline Box* boxComplex(double r, double i) {
+    return new BoxedComplex(r, i);
+}
+
 extern "C" inline Box* boxBool(bool b) __attribute__((visibility("default")));
 extern "C" inline Box* boxBool(bool b) {
     Box* rtn = b ? True : False;

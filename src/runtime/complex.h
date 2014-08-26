@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_RUNTIME_FLOAT_H
-#define PYSTON_RUNTIME_FLOAT_H
+#ifndef PYSTON_RUNTIME_COMPLEX_H
+#define PYSTON_RUNTIME_COMPLEX_H
+
+#include "core/types.h"
 
 namespace pyston {
 
-extern "C" double mod_float_float(double lhs, double rhs);
-extern "C" double div_float_float(double lhs, double rhs);
-extern "C" double floordiv_float_float(double lhs, double rhs);
-extern "C" double pow_float_float(double lhs, double rhs);
+extern "C" Box* createPureImaginary(double i);
 
-class BoxedFloat;
-bool floatNonzeroUnboxed(BoxedFloat* self);
-
-std::string floatFmt(double x, int precision, char code);
+extern "C" double mod_complex_complex(double lhs, double rhs);
+extern "C" double div_complex_complex(double lhs, double rhs);
+extern "C" double floordiv_complex_complex(double lhs, double rhs);
+extern "C" double pow_complex_complex(double lhs, double rhs);
 }
 
 #endif

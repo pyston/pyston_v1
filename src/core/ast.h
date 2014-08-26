@@ -621,6 +621,9 @@ public:
         INT = 0x10,
         FLOAT = 0x20,
         LONG = 0x30,
+
+        // for COMPLEX, n_float is the imaginary part, real part is 0
+        COMPLEX = 0x40,
     } num_type;
 
     union {

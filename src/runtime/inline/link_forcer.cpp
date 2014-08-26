@@ -17,6 +17,7 @@
 
 #include "core/types.h"
 #include "gc/heap.h"
+#include "runtime/complex.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
 #include "runtime/inline/boxing.h"
@@ -63,6 +64,7 @@ void force() {
     FORCE(createClosure);
     FORCE(createGenerator);
     FORCE(createLong);
+    FORCE(createPureImaginary);
     FORCE(createSet);
 
     FORCE(getattr);

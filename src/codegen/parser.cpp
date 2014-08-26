@@ -532,6 +532,8 @@ AST_Num* read_num(BufferedReader* reader) {
         rtn->n_long = readString(reader);
     } else if (rtn->num_type == AST_Num::FLOAT) {
         rtn->n_float = reader->readDouble();
+    } else if (rtn->num_type == AST_Num::COMPLEX) {
+        rtn->n_float = reader->readDouble();
     } else {
         RELEASE_ASSERT(0, "%d", rtn->num_type);
     }

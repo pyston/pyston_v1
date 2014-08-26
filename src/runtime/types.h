@@ -41,6 +41,8 @@ void setupInt();
 void teardownInt();
 void setupFloat();
 void teardownFloat();
+void setupComplex();
+void teardownComplex();
 void setupStr();
 void teardownStr();
 void setupList();
@@ -75,7 +77,7 @@ Box* getSysStdout();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
-    *member_cls, *method_cls, *closure_cls, *generator_cls;
+    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -191,6 +193,14 @@ public:
     double d;
 
     BoxedFloat(double d) __attribute__((visibility("default"))) : Box(float_cls), d(d) {}
+};
+
+class BoxedComplex : public Box {
+public:
+    double real;
+    double imag;
+
+    BoxedComplex(double r, double i) __attribute__((visibility("default"))) : Box(complex_cls), real(r), imag(i) {}
 };
 
 class BoxedBool : public Box {
