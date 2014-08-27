@@ -300,7 +300,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls, *complex_cls;
+    *closure_cls, *generator_cls, *complex_cls, *basestring_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -646,12 +646,16 @@ void setupRuntime() {
     None = new Box(none_cls);
     gc::registerPermanentRoot(None);
 
+    // You can't actually have an instance of basestring
+    basestring_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
+
     // TODO we leak all the string data!
-    str_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedString), false);
+    str_cls = new BoxedClass(type_cls, basestring_cls, NULL, 0, sizeof(BoxedString), false);
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
     type_cls->giveAttr("__base__", object_cls);
-    str_cls->giveAttr("__base__", object_cls);
+    basestring_cls->giveAttr("__base__", object_cls);
+    str_cls->giveAttr("__base__", basestring_cls);
     none_cls->giveAttr("__base__", object_cls);
     object_cls->giveAttr("__base__", None);
 

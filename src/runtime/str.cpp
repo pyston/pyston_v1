@@ -353,6 +353,10 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
     return str(obj);
 }
 
+extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
+    raiseExcHelper(TypeError, "The basestring type cannot be instantiated");
+}
+
 Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
     assert(self->cls == str_cls);
 
@@ -954,6 +958,13 @@ void setupStr() {
                                                    { boxStrConstant("") }));
 
     str_cls->freeze();
+
+    basestring_cls->giveAttr(
+        "__doc__", boxStrConstant("Type basestring cannot be instantiated; it is the base for str and unicode."));
+    basestring_cls->giveAttr("__new__",
+                             new BoxedFunction(boxRTFunction((void*)basestringNew, UNKNOWN, 1, 0, true, true)));
+    basestring_cls->giveAttr("__name__", boxStrConstant("basestring"));
+    basestring_cls->freeze();
 }
 
 void teardownStr() {
