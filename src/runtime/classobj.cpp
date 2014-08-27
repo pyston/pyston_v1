@@ -169,12 +169,7 @@ Box* instanceGetattribute(Box* _inst, Box* _attr) {
 
     r = classLookup(inst->inst_cls, attr->s);
     if (r) {
-        static const std::string get_str("__get__");
-        Box* descr_r = callattrInternal(r, &get_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), inst,
-                                        inst->inst_cls, NULL, NULL, NULL);
-        if (descr_r)
-            return descr_r;
-        return r;
+        return processDescriptor(r, inst, inst->inst_cls);
     }
     RELEASE_ASSERT(!r, "");
 

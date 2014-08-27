@@ -27,6 +27,7 @@
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
+#include "runtime/super.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -699,5 +700,6 @@ void setupBuiltins() {
     builtins_module->giveAttr("tuple", tuple_cls);
     builtins_module->giveAttr("instancemethod", instancemethod_cls);
     builtins_module->giveAttr("complex", complex_cls);
+    builtins_module->giveAttr("super", super_cls);
 }
 }

@@ -121,6 +121,8 @@ Box* typeCall(Box*, BoxedList*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
 bool isUserDefined(BoxedClass* cls);
 
+Box* processDescriptor(Box* obj, Box* inst, Box* owner);
+
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
                 BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 

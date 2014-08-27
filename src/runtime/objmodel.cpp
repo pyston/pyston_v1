@@ -901,6 +901,20 @@ RELEASE_ASSERT(gotten, "%s:%s", getTypeName(obj)->c_str(), attr);
 return gotten;
 }
 
+
+// Does a simple call of the descriptor's __get__ if it exists;
+// this function is useful for custom getattribute implementations that already know whether the descriptor
+// came from the class or not.
+Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
+    static const std::string get_str("__get__");
+    Box* descr_r
+        = callattrInternal(obj, &get_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), inst, owner, NULL, NULL, NULL);
+    if (descr_r)
+        return descr_r;
+    return obj;
+}
+
+
 static Box* (*runtimeCall0)(Box*, ArgPassSpec) = (Box * (*)(Box*, ArgPassSpec))runtimeCall;
 static Box* (*runtimeCall1)(Box*, ArgPassSpec, Box*) = (Box * (*)(Box*, ArgPassSpec, Box*))runtimeCall;
 static Box* (*runtimeCall2)(Box*, ArgPassSpec, Box*, Box*) = (Box * (*)(Box*, ArgPassSpec, Box*, Box*))runtimeCall;

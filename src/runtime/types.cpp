@@ -32,6 +32,7 @@
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
+#include "runtime/super.h"
 
 extern "C" void initerrno();
 extern "C" void init_sha();
@@ -765,6 +766,7 @@ void setupRuntime() {
     setupGenerator();
     setupIter();
     setupClassobj();
+    setupSuper();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));

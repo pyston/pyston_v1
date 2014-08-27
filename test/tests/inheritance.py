@@ -62,6 +62,41 @@ def f3():
     print a.foo()
 f3()
 
+def f4():
+    print
+    print "f4"
+
+    class C(object):
+        A = 1
+        def __init__(self, n):
+            super(C, self).__init__()
+            self.n = n
+
+        def foo(self):
+            print "C.foo()", self.n
+
+    class D(C):
+        A = 2
+        def __init__(self, n, m):
+            super(D, self).__init__(n)
+            self.m = m
+
+        def foo(self):
+            super(D, self).foo()
+            print "D.foo()", self.m
+
+    c = C(1)
+    d = D(1, 2)
+    c.foo()
+    d.foo()
+    C.foo(c)
+    C.foo(d)
+
+    print c.A
+    print d.A
+    print super(D, d).A
+f4()
+
 print isinstance(1, int)
 print isinstance(1, object)
 print isinstance(1, float)
