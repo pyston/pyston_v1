@@ -50,7 +50,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" void delattr(Box* obj, const char* attr);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
-extern "C" Box* callattr(Box*, std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
+extern "C" Box* callattr(Box*, const std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
                          const std::vector<const std::string*>*);
 extern "C" BoxedString* str(Box* obj);
 extern "C" BoxedString* repr(Box* obj);

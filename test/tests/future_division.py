@@ -1,7 +1,3 @@
-# allow-warning
-
-# The __future__ module has an old-style class, so we allow warnings for now
-
 "docstring"
 
 from __future__ import division

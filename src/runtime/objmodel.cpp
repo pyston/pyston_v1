@@ -1942,7 +1942,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
     }
 }
 
-extern "C" Box* callattr(Box* obj, std::string* attr, bool clsonly, ArgPassSpec argspec, Box* arg1, Box* arg2,
+extern "C" Box* callattr(Box* obj, const std::string* attr, bool clsonly, ArgPassSpec argspec, Box* arg1, Box* arg2,
                          Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 

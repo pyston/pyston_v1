@@ -388,6 +388,14 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
     return new BoxedString("function");
 }
 
+static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
+    RELEASE_ASSERT(self->cls == function_cls, "");
+
+    if (inst == None)
+        return boxUnboundInstanceMethod(self);
+    return boxInstanceMethod(inst, self);
+}
+
 extern "C" {
 Box* None = NULL;
 Box* NotImplemented = NULL;
@@ -763,6 +771,7 @@ void setupRuntime() {
     function_cls->giveAttr("__str__", function_cls->getattr("__repr__"));
     function_cls->giveAttr("__module__",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, modname)));
+    function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));

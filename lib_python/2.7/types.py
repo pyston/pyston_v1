@@ -50,8 +50,6 @@ def _g():
     yield 1
 GeneratorType = type(_g())
 
-# Pyston change: we do not support old-style classes yet
-"""
 class _C:
     def _m(self): pass
 ClassType = type(_C)
@@ -59,7 +57,6 @@ UnboundMethodType = type(_C._m)         # Same as MethodType
 _x = _C()
 InstanceType = type(_x)
 MethodType = type(_x._m)
-"""
 
 BuiltinFunctionType = type(len)
 BuiltinMethodType = type([].append)     # Same as BuiltinFunctionType
@@ -92,5 +89,4 @@ NotImplementedType = type(NotImplemented)
 # GetSetDescriptorType = type(FunctionType.func_code)
 # MemberDescriptorType = type(FunctionType.func_globals)
 
-# Pyston change: had to change this to match above changes
-del sys, _f, _g, #_C, _x                           # Not for export
+del sys, _f, _g, _C, _x                           # Not for export

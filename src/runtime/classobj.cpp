@@ -60,6 +60,21 @@ public:
     }
 };
 
+static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
+    Box* r = cls->getattr(attr);
+    if (r)
+        return r;
+
+    for (auto b : cls->bases->elts) {
+        RELEASE_ASSERT(b->cls == classobj_cls, "");
+        Box* r = classLookup(static_cast<BoxedClassobj*>(b), attr);
+        if (r)
+            return r;
+    }
+
+    return NULL;
+}
+
 Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "classobj.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
@@ -101,12 +116,28 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
 
 Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     assert(_cls->cls == classobj_cls);
-    assert(_args->cls == tuple_cls);
-    assert(_kwargs->cls == dict_cls);
-
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
 
-    return new BoxedInstance(cls);
+    assert(_args->cls == tuple_cls);
+    BoxedTuple* args = static_cast<BoxedTuple*>(_args);
+
+    assert(_kwargs->cls == dict_cls);
+    BoxedDict* kwargs = static_cast<BoxedDict*>(_kwargs);
+
+    BoxedInstance* made = new BoxedInstance(cls);
+
+    static const std::string init_str("__init__");
+    Box* init_func = classLookup(cls, init_str);
+
+    if (init_func) {
+        Box* init_rtn = runtimeCall(init_func, ArgPassSpec(1, 0, true, true), made, args, kwargs, NULL, NULL);
+        if (init_rtn != None)
+            raiseExcHelper(TypeError, "__init__() should return None");
+    } else {
+        if (args->elts.size() || kwargs->d.size())
+            raiseExcHelper(TypeError, "this constructor takes no arguments");
+    }
+    return made;
 }
 
 Box* classobjStr(Box* _obj) {
@@ -121,6 +152,51 @@ Box* classobjStr(Box* _obj) {
     RELEASE_ASSERT(_mod, "");
     RELEASE_ASSERT(_mod->cls == str_cls, "");
     return boxString(static_cast<BoxedString*>(_mod)->s + "." + cls->name->s);
+}
+
+Box* instanceGetattribute(Box* _inst, Box* _attr) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    // TODO: special handling for accessing __dict__ and __class__
+
+    Box* r = inst->getattr(attr->s);
+    if (r)
+        return r;
+
+    r = classLookup(inst->inst_cls, attr->s);
+    if (r) {
+        static const std::string get_str("__get__");
+        Box* descr_r = callattrInternal(r, &get_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), inst,
+                                        inst->inst_cls, NULL, NULL, NULL);
+        if (descr_r)
+            return descr_r;
+        return r;
+    }
+    RELEASE_ASSERT(!r, "");
+
+    static const std::string getattr_str("__getattr__");
+    Box* getattr = classLookup(inst->inst_cls, getattr_str);
+    RELEASE_ASSERT(getattr == NULL, "unimplemented");
+
+    raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->s.c_str(),
+                   attr->s.c_str());
+}
+
+Box* instanceStr(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* str_func = instanceGetattribute(inst, boxStrConstant("__str__"));
+
+    if (str_func) {
+        return runtimeCall(str_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } else {
+        return objectStr(_inst);
+    }
 }
 
 void setupClassobj() {
@@ -143,6 +219,10 @@ void setupClassobj() {
 
 
     instance_cls->giveAttr("__name__", boxStrConstant("instance"));
+
+    instance_cls->giveAttr("__getattribute__",
+                           new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
+    instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
 
     instance_cls->freeze();
 }
