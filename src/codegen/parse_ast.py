@@ -163,6 +163,9 @@ def convert(n, f):
         elif isinstance(v, float):
             f.write(struct.pack(">d", v))
         elif isinstance(v, complex):
+            # Complex constants can only be pure imaginary
+            # (e.g., in 1+0j, 1 and 0j are separate literals)
+            assert v.real == 0.0
             f.write(struct.pack(">d", v.imag))
         elif v is None or isinstance(v, _ast.AST):
             convert(v, f)
