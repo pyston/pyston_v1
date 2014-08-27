@@ -32,14 +32,14 @@ private:
     bool ended;
 
 public:
-    Timer(const char* desc=NULL, long min_usec=-1);
+    Timer(const char* desc = NULL, long min_usec = -1);
     ~Timer();
 
     void restart(const char* newdesc, long new_min_usec);
-    void restart(const char* newdesc=NULL);
+    void restart(const char* newdesc = NULL);
 
     long end();
-    long split(const char* newdesc=NULL) {
+    long split(const char* newdesc = NULL) {
         long rtn = end();
         restart(newdesc);
         return rtn;

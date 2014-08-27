@@ -1334,26 +1334,24 @@ private:
         ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
         assert(scope_info);
 
-        if (node->bases.size() == 0) {
-            printf("Warning: old-style class '%s' in file '%s' detected! Converting to a new-style class!\n",
-                   node->name.c_str(), irstate->getSourceInfo()->parent_module->fn.c_str());
-
-            AST_Name* base = new AST_Name();
-            base->id = "object";
-            base->ctx_type = AST_TYPE::Load;
-            node->bases.push_back(base);
+        std::vector<CompilerVariable*> bases;
+        for (auto b : node->bases) {
+            CompilerVariable* base = evalExpr(b, exc_info);
+            bases.push_back(base);
         }
 
-        RELEASE_ASSERT(node->bases.size() == 1, "");
+        CompilerVariable* _bases_tuple = makeTuple(bases);
+        for (auto b : bases) {
+            b->decvref(emitter);
+        }
+
+        ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
+        _bases_tuple->decvref(emitter);
 
         std::vector<CompilerVariable*> decorators;
         for (auto d : node->decorator_list) {
             decorators.push_back(evalExpr(d, exc_info));
         }
-
-        CompilerVariable* base = evalExpr(node->bases[0], exc_info);
-        ConcreteCompilerVariable* converted_base = base->makeConverted(emitter, base->getBoxType());
-        base->decvref(emitter);
 
         CLFunction* cl = _wrapFunction(node, nullptr, node->body);
 
@@ -1380,7 +1378,7 @@ private:
 
         llvm::Value* classobj
             = emitter.createCall3(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
-                                  converted_base->getValue(), converted_attr_dict->getValue()).getInstruction();
+                                  bases_tuple->getValue(), converted_attr_dict->getValue()).getInstruction();
 
         // Note: createuserClass is free to manufacture non-class objects
         CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);

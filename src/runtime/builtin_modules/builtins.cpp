@@ -457,7 +457,8 @@ Box* exceptionRepr(Box* b) {
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
-    BoxedClass* cls = new BoxedClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
+    BoxedClass* cls
+        = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
 
     // TODO these should be on the base Exception class:
@@ -554,7 +555,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("None", None);
 
-    notimplemented_cls = new BoxedClass(object_cls, NULL, 0, sizeof(Box), false);
+    notimplemented_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
@@ -636,7 +637,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
 
-    enumerate_cls = new BoxedClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
+    enumerate_cls = new BoxedClass(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
     enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
     enumerate_cls->giveAttr(
         "__new__",

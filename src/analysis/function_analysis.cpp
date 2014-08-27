@@ -107,7 +107,7 @@ int LivenessAnalysis::getStringIndex(const std::string& s) {
 }
 
 LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
-    Timer _t("LivenessAnalysis()");
+    Timer _t("LivenessAnalysis()", 10);
 
     for (CFGBlock* b : cfg->blocks) {
         auto visitor = new LivenessBBVisitor(this); // livenessCache unique_ptr will delete it.
@@ -122,7 +122,7 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
 }
 
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
-    Timer _t("LivenessAnalysis()");
+    Timer _t("LivenessAnalysis()", 10);
 
     if (name[0] != '#')
         return true;
@@ -310,7 +310,7 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
 
 DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, ScopeInfo* scope_info)
     : scope_info(scope_info) {
-    Timer _t("DefinednessAnalysis()");
+    Timer _t("DefinednessAnalysis()", 10);
 
     results = computeFixedPoint(cfg, DefinednessBBAnalyzer(cfg, arg_names), false);
 
@@ -344,7 +344,7 @@ const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEn
 PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, LivenessAnalysis* liveness,
                          ScopeInfo* scope_info)
     : definedness(arg_names, cfg, scope_info), liveness(liveness) {
-    Timer _t("PhiAnalysis()");
+    Timer _t("PhiAnalysis()", 10);
 
     for (CFGBlock* block : cfg->blocks) {
         RequiredSet required;

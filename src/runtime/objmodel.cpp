@@ -381,10 +381,16 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
     }
 }
 
-BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                       bool is_user_defined)
-    : BoxVar(type_cls, 0), tp_basicsize(instance_size), tp_dealloc(NULL), base(base), gc_visit(gc_visit),
+BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                       int instance_size, bool is_user_defined)
+    : BoxVar(metaclass, 0), tp_basicsize(instance_size), tp_dealloc(NULL), base(base), gc_visit(gc_visit),
       attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined) {
+    if (metaclass == NULL) {
+        assert(type_cls == NULL);
+    } else {
+        assert(isSubclass(metaclass, type_cls));
+    }
+
     assert(tp_dealloc == NULL);
 
     if (gc_visit == NULL) {
@@ -3196,6 +3202,66 @@ static void assertInitNone(Box* obj) {
     }
 }
 
+Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
+    Box* arg3 = _args[0];
+
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    RELEASE_ASSERT(isSubclass(cls, type_cls), "");
+
+    if (arg2 == NULL) {
+        assert(arg3 == NULL);
+        BoxedClass* rtn = arg1->cls;
+        return rtn;
+    }
+
+    RELEASE_ASSERT(arg3->cls == dict_cls, "%s", getTypeName(arg3)->c_str());
+    BoxedDict* attr_dict = static_cast<BoxedDict*>(arg3);
+
+    RELEASE_ASSERT(arg2->cls == tuple_cls, "");
+    BoxedTuple* bases = static_cast<BoxedTuple*>(arg2);
+
+    RELEASE_ASSERT(arg1->cls == str_cls, "");
+    BoxedString* name = static_cast<BoxedString*>(arg1);
+
+    BoxedClass* base;
+    if (bases->elts.size() == 0) {
+        printf("Warning: old style class detected\n");
+        base = object_cls;
+    } else {
+        RELEASE_ASSERT(bases->elts.size() == 1, "");
+        Box* _base = bases->elts[0];
+        RELEASE_ASSERT(_base->cls == type_cls, "");
+        base = static_cast<BoxedClass*>(_base);
+    }
+
+
+    BoxedClass* made;
+
+    if (base->instancesHaveAttrs()) {
+        made = new BoxedClass(cls, base, NULL, base->attrs_offset, base->tp_basicsize, true);
+    } else {
+        assert(base->tp_basicsize % sizeof(void*) == 0);
+        made = new BoxedClass(cls, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
+    }
+
+    for (const auto& p : attr_dict->d) {
+        assert(p.first->cls == str_cls);
+        made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
+    }
+
+    if (made->getattr("__doc__") == NULL) {
+        made->giveAttr("__doc__", None);
+    }
+
+    // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
+    made->setattr("__name__", name, NULL);
+
+    return made;
+}
+
 Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
@@ -3203,21 +3269,38 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
 
-    // if (rewrite_args && VERBOSITY()) {
-    // printf("typeCallInternal: %d", rewrite_args->obj.getArgnum());
-    // if (npassed_args >= 1) printf(" %d", rewrite_args->arg1.getArgnum());
-    // if (npassed_args >= 2) printf(" %d", rewrite_args->arg2.getArgnum());
-    // if (npassed_args >= 3) printf(" %d", rewrite_args->arg3.getArgnum());
-    // if (npassed_args >= 4) printf(" %d", rewrite_args->args.getArgnum());
-    // printf("\n");
-    //}
+    // TODO shouldn't have to redo this argument handling here...
+    if (argspec.has_starargs) {
+        rewrite_args = NULL;
 
+        assert(argspec.num_args == 0); // doesn't need to be true, but assumed here
+        Box* starargs = arg1;
+        assert(starargs->cls == tuple_cls);
+        BoxedTuple* targs = static_cast<BoxedTuple*>(starargs);
+
+        int n = targs->elts.size();
+        if (n >= 1)
+            arg1 = targs->elts[0];
+        if (n >= 2)
+            arg2 = targs->elts[1];
+        if (n >= 3)
+            arg3 = targs->elts[2];
+        if (n >= 4)
+            args = &targs->elts[3];
+
+        argspec = ArgPassSpec(n);
+    }
+
+    Box* _cls = arg1;
 
     RewriterVarUsage r_ccls(RewriterVarUsage::empty());
     RewriterVarUsage r_new(RewriterVarUsage::empty());
     RewriterVarUsage r_init(RewriterVarUsage::empty());
     Box* new_attr, *init_attr;
     if (rewrite_args) {
+        assert(!argspec.has_starargs);
+        assert(argspec.num_args > 0);
+
         rewrite_args->obj.setDoneUsing();
         // rewrite_args->rewriter->annotate(0);
         // rewrite_args->rewriter->trap();
@@ -3227,17 +3310,16 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
         r_ccls.addGuard((intptr_t)arg1);
     }
 
-    Box* cls = arg1;
-    if (cls->cls != type_cls) {
+    if (!isSubclass(_cls->cls, type_cls)) {
         raiseExcHelper(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
-                       getTypeName(cls)->c_str());
+                       getTypeName(_cls)->c_str());
     }
 
-    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, true);
-        new_attr = typeLookup(ccls, _new_str, &grewrite_args);
+        new_attr = typeLookup(cls, _new_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -3248,13 +3330,13 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             }
         }
     } else {
-        new_attr = typeLookup(ccls, _new_str, NULL);
+        new_attr = typeLookup(cls, _new_str, NULL);
     }
     assert(new_attr && "This should always resolve");
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, true);
-        init_attr = typeLookup(ccls, _init_str, &grewrite_args);
+        init_attr = typeLookup(cls, _init_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -3266,7 +3348,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             rewrite_args->rewriter->setDoneGuarding();
         }
     } else {
-        init_attr = typeLookup(ccls, _init_str, NULL);
+        init_attr = typeLookup(cls, _init_str, NULL);
     }
     // The init_attr should always resolve as well, but doesn't yet
 
@@ -3310,8 +3392,14 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     }
 
     assert(made);
+
+    // Special-case (also a special case in CPython): if we just called type.__new__(arg), don't call __init__
+    if (cls == type_cls && argspec == ArgPassSpec(2))
+        return made;
+
     // If this is true, not supposed to call __init__:
-    RELEASE_ASSERT(made->cls == ccls, "allowed but unsupported");
+    RELEASE_ASSERT(made->cls == cls, "allowed but unsupported (%s vs %s)", getNameOfClass(made->cls)->c_str(),
+                   getNameOfClass(cls)->c_str());
 
     if (init_attr && init_attr != typeLookup(object_cls, _init_str, NULL)) {
         Box* initrtn;
@@ -3329,7 +3417,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             srewrite_args.args_guarded = true;
             srewrite_args.func_guarded = true;
 
-            // initrtn = callattrInternal(ccls, &_init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3, args,
+            // initrtn = callattrInternal(cls, &_init_str, INST_ONLY, &srewrite_args, argspec, made, arg2, arg3, args,
             // keyword_names);
             initrtn = runtimeCallInternal(init_attr, &srewrite_args, argspec, made, arg2, arg3, args, keyword_names);
 
@@ -3340,14 +3428,12 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
                     .setDoneUsing();
             }
         } else {
-            // initrtn = callattrInternal(ccls, &_init_str, INST_ONLY, NULL, argspec, made, arg2, arg3, args,
+            // initrtn = callattrInternal(cls, &_init_str, INST_ONLY, NULL, argspec, made, arg2, arg3, args,
             // keyword_names);
             initrtn = runtimeCallInternal(init_attr, NULL, argspec, made, arg2, arg3, args, keyword_names);
         }
         assertInitNone(initrtn);
     } else {
-        // TODO this shouldn't be reached
-        // assert(0 && "I don't think this should be reached");
         if (new_attr == NULL && npassed_args != 1) {
             // TODO not npassed args, since the starargs or kwargs could be null
             raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
@@ -3382,15 +3468,7 @@ Box* typeCall(Box* obj, BoxedList* vararg) {
     else if (vararg->size == 2)
         return typeCallInternal3(NULL, NULL, ArgPassSpec(3), obj, vararg->elts->elts[0], vararg->elts->elts[1]);
     else
-        return typeCallInternal(NULL, NULL, ArgPassSpec(1 + vararg->size), obj, vararg->elts->elts[0],
-                                vararg->elts->elts[1], &vararg->elts->elts[2], NULL);
-}
-
-Box* typeNew(Box* cls, Box* obj) {
-    assert(cls == type_cls);
-
-    BoxedClass* rtn = obj->cls;
-    return rtn;
+        abort();
 }
 
 extern "C" void delGlobal(BoxedModule* m, std::string* name) {

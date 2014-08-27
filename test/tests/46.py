@@ -1,6 +1,3 @@
-# expected: fail
-# - metaclasses
-
 # Metaclass test:
 
 class M(type):

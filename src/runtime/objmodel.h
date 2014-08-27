@@ -118,7 +118,7 @@ extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((_
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
 
 Box* typeCall(Box*, BoxedList*);
-Box* typeNew(Box*, Box*);
+Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
 bool isUserDefined(BoxedClass* cls);
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,

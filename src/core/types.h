@@ -54,6 +54,11 @@ struct ArgPassSpec {
         assert(num_keywords <= MAX_KEYWORDS);
     }
 
+    bool operator==(ArgPassSpec rhs) {
+        return has_starargs == rhs.has_starargs && has_kwargs == rhs.has_kwargs && num_keywords == rhs.num_keywords
+               && num_args == rhs.num_args;
+    }
+
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
     uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
@@ -431,7 +436,8 @@ public:
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
-    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
+    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+               bool is_user_defined);
     void freeze() {
         assert(!is_constant);
         is_constant = true;

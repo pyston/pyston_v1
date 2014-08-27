@@ -305,39 +305,38 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *
 BoxedTuple* EmptyTuple;
 }
 
-extern "C" Box* createUserClass(std::string* name, Box* _base, Box* _attr_dict) {
-    assert(_base);
-    assert(isSubclass(_base->cls, type_cls));
-    BoxedClass* base = static_cast<BoxedClass*>(_base);
-
+extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict) {
     ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict)->c_str());
     BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 
-    RELEASE_ASSERT(attr_dict->d.count(boxStrConstant("__metaclass__")) == 0, "metaclasses not supported yet");
+    assert(_bases->cls == tuple_cls);
+    BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
+
+    Box* metaclass = NULL;
+    metaclass = attr_dict->getOrNull(boxStrConstant("__metaclass__"));
+
+    if (metaclass != NULL) {
+    } else if (bases->elts.size() > 0) {
+        // TODO Apparently this is supposed to look up __class__, and if that throws
+        // an error, then look up ob_type (aka cls)
+        metaclass = bases->elts[0]->cls;
+    } else {
+        BoxedModule* m = getCurrentModule();
+        metaclass = m->getattr("__metaclass__");
+
+        if (!metaclass) {
+            printf("Warning: old style class detected\n");
+            metaclass = type_cls;
+            // Py_FatalError("Should default to an old-style class here");
+        }
+    }
+    assert(metaclass);
 
     BoxedClass* made;
 
-    if (base->instancesHaveAttrs()) {
-        made = new BoxedClass(base, NULL, base->attrs_offset, base->tp_basicsize, true);
-    } else {
-        assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = new BoxedClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
-    }
-
-    for (const auto& p : attr_dict->d) {
-        assert(p.first->cls == str_cls);
-        made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
-    }
-
-    if (made->getattr("__doc__") == NULL) {
-        made->giveAttr("__doc__", None);
-    }
-
-    // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
-    made->setattr("__name__", boxString(*name), NULL);
-
-
-    return made;
+    Box* r = runtimeCall(metaclass, ArgPassSpec(3), boxStringPtr(name), _bases, _attr_dict, NULL, NULL);
+    RELEASE_ASSERT(r, "");
+    return r;
 }
 
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
@@ -639,17 +638,17 @@ void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
 
-    object_cls = new BoxedClass(NULL, &boxGCHandler, 0, sizeof(Box), false);
-    type_cls = new BoxedClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
+    object_cls = new BoxedClass(NULL, NULL, &boxGCHandler, 0, sizeof(Box), false);
+    type_cls = new BoxedClass(NULL, object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
     type_cls->cls = type_cls;
     object_cls->cls = type_cls;
 
-    none_cls = new BoxedClass(object_cls, NULL, 0, sizeof(Box), false);
+    none_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
     None = new Box(none_cls);
     gc::registerPermanentRoot(None);
 
     // TODO we leak all the string data!
-    str_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedString), false);
+    str_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedString), false);
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
     type_cls->giveAttr("__base__", object_cls);
@@ -658,35 +657,36 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
-    tuple_cls = new BoxedClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false);
+    tuple_cls = new BoxedClass(type_cls, object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false);
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
 
 
-    module_cls = new BoxedClass(object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
+    module_cls = new BoxedClass(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    bool_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedBool), false);
-    int_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedInt), false);
-    complex_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedComplex), false);
+    bool_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedBool), false);
+    int_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedInt), false);
+    complex_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedComplex), false);
     // TODO we're leaking long memory!
-    long_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedLong), false);
-    float_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedFloat), false);
-    function_cls
-        = new BoxedClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs), sizeof(BoxedFunction), false);
-    instancemethod_cls = new BoxedClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false);
-    list_cls = new BoxedClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false);
-    slice_cls = new BoxedClass(object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false);
-    dict_cls = new BoxedClass(object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false);
-    file_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedFile), false);
-    set_cls = new BoxedClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
-    frozenset_cls = new BoxedClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
-    member_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
-    closure_cls
-        = new BoxedClass(object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
-    attrwrapper_cls = new BoxedClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
+    long_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedLong), false);
+    float_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedFloat), false);
+    function_cls = new BoxedClass(type_cls, object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
+                                  sizeof(BoxedFunction), false);
+    instancemethod_cls
+        = new BoxedClass(type_cls, object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false);
+    list_cls = new BoxedClass(type_cls, object_cls, &listGCHandler, 0, sizeof(BoxedList), false);
+    slice_cls = new BoxedClass(type_cls, object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false);
+    dict_cls = new BoxedClass(type_cls, object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false);
+    file_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedFile), false);
+    set_cls = new BoxedClass(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
+    frozenset_cls = new BoxedClass(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
+    member_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
+    closure_cls = new BoxedClass(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
+                                 sizeof(BoxedClosure), false);
+    attrwrapper_cls = new BoxedClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -715,7 +715,8 @@ void setupRuntime() {
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
     type_cls->giveAttr("__name__", boxStrConstant("type"));
-    type_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 2)));
+    type_cls->giveAttr("__new__",
+                       new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->giveAttr("__str__", type_cls->getattr("__repr__"));
     type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));

@@ -265,7 +265,7 @@ extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
 }
 
 void setupDict() {
-    dict_iterator_cls = new BoxedClass(object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
+    dict_iterator_cls = new BoxedClass(type_cls, object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));

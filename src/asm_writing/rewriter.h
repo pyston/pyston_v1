@@ -146,7 +146,6 @@ public:
 
     ~RewriterVarUsage() {
         if (!done_using) {
-            assert(std::uncaught_exception());
             setDoneUsing();
         }
     }

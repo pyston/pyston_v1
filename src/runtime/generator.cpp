@@ -179,7 +179,7 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
 
 
 void setupGenerator() {
-    generator_cls = new BoxedClass(object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
+    generator_cls = new BoxedClass(type_cls, object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
                                    sizeof(BoxedGenerator), false);
     generator_cls->giveAttr("__name__", boxStrConstant("generator"));
     generator_cls->giveAttr("__iter__",

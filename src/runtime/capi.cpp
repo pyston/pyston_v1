@@ -521,7 +521,7 @@ BoxedModule* importTestExtension() {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
+    capifunc_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
     capifunc_cls->giveAttr("__repr__",
@@ -533,7 +533,7 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 
-    method_cls = new BoxedClass(object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
+    method_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
     method_cls->giveAttr("__name__", boxStrConstant("method"));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
                                                                      0, true, true)));

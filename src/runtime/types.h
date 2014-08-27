@@ -296,6 +296,13 @@ public:
     DictMap d;
 
     BoxedDict() __attribute__((visibility("default"))) : Box(dict_cls) {}
+
+    Box* getOrNull(Box* k) {
+        const auto& p = d.find(k);
+        if (p != d.end())
+            return p->second;
+        return NULL;
+    }
 };
 
 class BoxedFunction : public Box {
