@@ -12,3 +12,6 @@ print 0.5j - 1.5
 print 0.5j * 1.5
 print 0.5j * 1.5
 print 0.5j * 1.5
+
+print (0.5j + 1.5).real
+print (0.5j + 1.5).imag
