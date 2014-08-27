@@ -205,8 +205,38 @@ Box* complexRepr(BoxedComplex* self) {
     return boxString(complexFmt(self->real, self->imag, 16, 'g'));
 }
 
+Box* complexNew(Box* _cls, Box* real, Box* imag) {
+    RELEASE_ASSERT(_cls == complex_cls, "");
+
+    double real_f;
+    if (real->cls == int_cls) {
+        real_f = static_cast<BoxedInt*>(real)->n;
+    } else if (real->cls == float_cls) {
+        real_f = static_cast<BoxedFloat*>(real)->d;
+    } else {
+        // TODO: implement taking a string argument
+        raiseExcHelper(TypeError, "complex() argument must be a string or number");
+    }
+
+    double imag_f;
+    if (imag->cls == int_cls) {
+        imag_f = static_cast<BoxedInt*>(imag)->n;
+    } else if (imag->cls == float_cls) {
+        imag_f = static_cast<BoxedFloat*>(imag)->d;
+    } else if (imag->cls == str_cls) {
+        raiseExcHelper(TypeError, "complex() second arg can't be a string");
+    } else {
+        raiseExcHelper(TypeError, "complex() argument must be a string or number");
+    }
+
+    return new BoxedComplex(real_f, imag_f);
+}
+
 void setupComplex() {
     complex_cls->giveAttr("__name__", boxStrConstant("complex"));
+
+    complex_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)complexNew, UNKNOWN, 3, 2, false, false),
+                                                       { boxInt(0), boxInt(0) }));
 
     _addFunc("__add__", BOXED_COMPLEX, (void*)complexAddComplex, (void*)complexAddFloat, (void*)complexAddInt,
              (void*)complexAdd);

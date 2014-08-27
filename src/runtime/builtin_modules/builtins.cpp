@@ -698,5 +698,6 @@ void setupBuiltins() {
     builtins_module->giveAttr("frozenset", frozenset_cls);
     builtins_module->giveAttr("tuple", tuple_cls);
     builtins_module->giveAttr("instancemethod", instancemethod_cls);
+    builtins_module->giveAttr("complex", complex_cls);
 }
 }
