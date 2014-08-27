@@ -20,11 +20,6 @@
 namespace pyston {
 
 extern "C" Box* createPureImaginary(double i);
-
-extern "C" double mod_complex_complex(double lhs, double rhs);
-extern "C" double div_complex_complex(double lhs, double rhs);
-extern "C" double floordiv_complex_complex(double lhs, double rhs);
-extern "C" double pow_complex_complex(double lhs, double rhs);
 }
 
 #endif

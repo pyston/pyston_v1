@@ -346,6 +346,7 @@ public:
         BYTE = T_BYTE,
         INT = T_INT,
         OBJECT = T_OBJECT,
+        FLOAT = T_FLOAT,
     } type;
 
     int offset;

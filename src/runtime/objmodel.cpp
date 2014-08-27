@@ -842,6 +842,11 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
                 int rtn = reinterpret_cast<int*>(obj)[member_desc->offset / sizeof(int)];
                 return boxInt(rtn);
             }
+            case BoxedMemberDescriptor::FLOAT: {
+                rewrite_args = NULL;
+                double rtn = reinterpret_cast<double*>(obj)[member_desc->offset / sizeof(double)];
+                return boxFloat(rtn);
+            }
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
         }
