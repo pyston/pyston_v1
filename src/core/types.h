@@ -440,6 +440,7 @@ public:
                bool is_user_defined);
     void freeze() {
         assert(!is_constant);
+        assert(getattr("__name__")); // otherwise debugging will be very hard
         is_constant = true;
     }
 };

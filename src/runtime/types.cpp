@@ -27,6 +27,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/classobj.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
@@ -325,9 +326,7 @@ extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict)
         metaclass = m->getattr("__metaclass__");
 
         if (!metaclass) {
-            printf("Warning: old style class detected\n");
-            metaclass = type_cls;
-            // Py_FatalError("Should default to an old-style class here");
+            metaclass = classobj_cls;
         }
     }
     assert(metaclass);
@@ -753,6 +752,7 @@ void setupRuntime() {
     setupFile();
     setupGenerator();
     setupIter();
+    setupClassobj();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));

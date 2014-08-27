@@ -3209,7 +3209,9 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    RELEASE_ASSERT(isSubclass(cls, type_cls), "");
+    if (!isSubclass(cls, type_cls))
+        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
 
     if (arg2 == NULL) {
         assert(arg3 == NULL);
@@ -3228,14 +3230,14 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     BoxedClass* base;
     if (bases->elts.size() == 0) {
-        printf("Warning: old style class detected\n");
-        base = object_cls;
-    } else {
-        RELEASE_ASSERT(bases->elts.size() == 1, "");
-        Box* _base = bases->elts[0];
-        RELEASE_ASSERT(_base->cls == type_cls, "");
-        base = static_cast<BoxedClass*>(_base);
+        bases = new BoxedTuple({ object_cls });
     }
+
+    RELEASE_ASSERT(bases->elts.size() == 1, "");
+    Box* _base = bases->elts[0];
+    RELEASE_ASSERT(_base->cls == type_cls, "");
+    base = static_cast<BoxedClass*>(_base);
+
 
 
     BoxedClass* made;
@@ -3247,13 +3249,12 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made = new BoxedClass(cls, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
     }
 
+    made->giveAttr("__module__", boxString(getCurrentModule()->name()));
+    made->giveAttr("__doc__", None);
+
     for (const auto& p : attr_dict->d) {
         assert(p.first->cls == str_cls);
-        made->giveAttr(static_cast<BoxedString*>(p.first)->s, p.second);
-    }
-
-    if (made->getattr("__doc__") == NULL) {
-        made->giveAttr("__doc__", None);
+        made->setattr(static_cast<BoxedString*>(p.first)->s, p.second, NULL);
     }
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__

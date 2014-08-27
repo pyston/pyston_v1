@@ -237,7 +237,7 @@ void raise0() {
 void raise3(Box* arg0, Box* arg1, Box* arg2) {
     RELEASE_ASSERT(arg2 == None, "unsupported");
 
-    if (arg0->cls == type_cls) {
+    if (isSubclass(arg0->cls, type_cls)) {
         BoxedClass* c = static_cast<BoxedClass*>(arg0);
         if (isSubclass(c, Exception)) {
             Box* exc_obj;

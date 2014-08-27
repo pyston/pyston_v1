@@ -40,3 +40,17 @@ try:
     type.__new__(1, 2, 3)
 except TypeError, e:
     print e
+
+try:
+    type.__new__(int, 1, 2, 3)
+except TypeError, e:
+    print e
+
+
+class D():
+    __metaclass__ = type
+print D
+print D.__base__
+
+print type("test", (), {})
+print type("test", (), {"__module__":"fake"})
