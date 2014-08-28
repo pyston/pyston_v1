@@ -25,6 +25,7 @@
 #include "core/types.h"
 #include "core/util.h"
 #include "gc/collector.h"
+#include "runtime/dict.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -54,6 +55,10 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
         _elts.push_back(rhs);
     }
 
+    BoxedDict* dict = NULL;
+    if (rhs->cls == dict_cls)
+        dict = static_cast<BoxedDict*>(rhs);
+
     const char* fmt = lhs->s.c_str();
     const char* fmt_end = fmt + lhs->s.size();
 
@@ -74,6 +79,32 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
             int mode = 0;
             while (true) {
                 RELEASE_ASSERT(fmt < fmt_end, "");
+
+                Box* val_to_use = NULL;
+                if (*fmt == '(') {
+                    if (dict == NULL)
+                        raiseExcHelper(TypeError, "format requires a mapping");
+
+                    int pcount = 1;
+                    fmt++;
+                    const char* keystart = fmt;
+
+                    while (pcount > 0 && fmt < fmt_end) {
+                        char c = *fmt;
+                        if (c == ')')
+                            pcount--;
+                        else if (c == '(')
+                            pcount++;
+                        fmt++;
+                    }
+
+                    if (pcount > 0)
+                        raiseExcHelper(ValueError, "incomplete format key");
+
+                    BoxedString* key = boxStrConstantSize(keystart, fmt - keystart - 1);
+                    val_to_use = dictGetitem(dict, key);
+                }
+
                 char c = *fmt;
                 fmt++;
 
@@ -107,19 +138,23 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     RELEASE_ASSERT(nzero == 0, "");
                     RELEASE_ASSERT(nspace == 0, "");
 
-                    RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
-                    Box* b = (*elts)[elt_num];
-                    elt_num++;
+                    if (!val_to_use) {
+                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        val_to_use = (*elts)[elt_num];
+                        elt_num++;
+                    }
 
-                    BoxedString* s = str(b);
+                    BoxedString* s = str(val_to_use);
                     os << s->s;
                     break;
                 } else if (c == 'd') {
-                    RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
-                    Box* b = (*elts)[elt_num];
-                    elt_num++;
+                    if (!val_to_use) {
+                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        val_to_use = (*elts)[elt_num];
+                        elt_num++;
+                    }
 
-                    RELEASE_ASSERT(b->cls == int_cls, "unsupported");
+                    RELEASE_ASSERT(val_to_use->cls == int_cls, "unsupported");
 
                     std::ostringstream fmt("");
                     fmt << '%';
@@ -132,19 +167,21 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     fmt << "ld";
 
                     char buf[20];
-                    snprintf(buf, 20, fmt.str().c_str(), static_cast<BoxedInt*>(b)->n);
+                    snprintf(buf, 20, fmt.str().c_str(), static_cast<BoxedInt*>(val_to_use)->n);
                     os << std::string(buf);
                     break;
                 } else if (c == 'f') {
-                    RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
-                    Box* b = (*elts)[elt_num];
-                    elt_num++;
+                    if (!val_to_use) {
+                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        val_to_use = (*elts)[elt_num];
+                        elt_num++;
+                    }
 
                     double d;
-                    if (b->cls == float_cls) {
-                        d = static_cast<BoxedFloat*>(b)->d;
-                    } else if (b->cls == int_cls) {
-                        d = static_cast<BoxedInt*>(b)->n;
+                    if (val_to_use->cls == float_cls) {
+                        d = static_cast<BoxedFloat*>(val_to_use)->d;
+                    } else if (val_to_use->cls == int_cls) {
+                        d = static_cast<BoxedInt*>(val_to_use)->n;
                     } else {
                         RELEASE_ASSERT(0, "unsupported");
                     }

@@ -33,6 +33,8 @@ public:
     BoxedDictIterator(BoxedDict* d, IteratorType type);
 };
 
+Box* dictGetitem(BoxedDict* self, Box* k);
+
 Box* dictIterKeys(Box* self);
 Box* dictIterValues(Box* self);
 Box* dictIterItems(Box* self);
