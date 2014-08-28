@@ -200,7 +200,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(yield);
     GET(getiter);
 
-    GET(checkUnpackingLength);
+    GET(unpackIntoArray);
     GET(raiseAttributeError);
     GET(raiseAttributeErrorStr);
     GET(raiseNotIterableError);

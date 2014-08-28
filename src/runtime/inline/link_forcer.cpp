@@ -92,7 +92,7 @@ void force() {
     FORCE(yield);
     FORCE(getiter);
 
-    FORCE(checkUnpackingLength);
+    FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);
     FORCE(raiseAttributeErrorStr);
     FORCE(raiseNotIterableError);

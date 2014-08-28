@@ -368,7 +368,7 @@ extern "C" void raiseNotIterableError(const char* typeName) {
     raiseExcHelper(TypeError, "'%s' object is not iterable", typeName);
 }
 
-extern "C" void checkUnpackingLength(i64 expected, i64 given) {
+static void _checkUnpackingLength(i64 expected, i64 given) {
     if (given == expected)
         return;
 
@@ -380,6 +380,32 @@ extern "C" void checkUnpackingLength(i64 expected, i64 given) {
         else
             raiseExcHelper(ValueError, "need more than %ld values to unpack", given);
     }
+}
+
+extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
+    assert(expected_size > 0);
+
+    if (obj->cls == tuple_cls) {
+        BoxedTuple* t = static_cast<BoxedTuple*>(obj);
+        _checkUnpackingLength(expected_size, t->elts.size());
+        return &t->elts[0];
+    }
+
+    if (obj->cls == list_cls) {
+        BoxedList* l = static_cast<BoxedList*>(obj);
+        _checkUnpackingLength(expected_size, l->size);
+        return &l->elts->elts[0];
+    }
+
+    BoxedTuple::GCVector elts;
+    for (auto e : obj->pyElements()) {
+        elts.push_back(e);
+        if (elts.size() > expected_size)
+            break;
+    }
+
+    _checkUnpackingLength(expected_size, elts.size());
+    return &elts[0];
 }
 
 BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
@@ -3214,6 +3240,12 @@ extern "C" Box* getiter(Box* o) {
     }
 
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o)->c_str());
+}
+
+llvm::iterator_range<BoxIterator> Box::pyElements() {
+    Box* iter = getiter(this);
+    assert(iter);
+    return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
 }
 
 // For use on __init__ return values

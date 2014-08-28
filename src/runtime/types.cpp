@@ -81,17 +81,6 @@ void BoxIterator::gcHandler(GCVisitor* v) {
     v->visitPotential(value);
 }
 
-llvm::iterator_range<BoxIterator> Box::pyElements() {
-    static std::string iter_str("__iter__");
-
-    Box* iter = callattr(const_cast<Box*>(this), &iter_str, true, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    if (iter) {
-        return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
-    }
-
-    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(this)->c_str());
-}
-
 std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)

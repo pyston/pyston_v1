@@ -914,6 +914,7 @@ public:
 // but aren't directly *exactly* representable as normal Python.
 // ClsAttribute would fall into this category, as would isinstance (which
 // is not the same as the "isinstance" name since that could get redefined).
+// These are basically bytecodes, framed as pseudo-AST-nodes.
 class AST_LangPrimitive : public AST_expr {
 public:
     enum Opcodes {

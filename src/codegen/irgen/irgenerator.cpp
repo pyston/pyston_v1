@@ -353,7 +353,7 @@ private:
                 ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
 
                 for (auto& p : symbol_table) {
-                    if (p.first[0] == '!')
+                    if (p.first[0] == '!' || p.first[0] == '#')
                         continue;
 
                     ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(
@@ -1260,14 +1260,33 @@ private:
     void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, ExcInfo exc_info) {
         assert(state != PARTIAL);
         int ntargets = target->elts.size();
-        // TODO do type recording here?
-        ConcreteCompilerVariable* len = val->len(emitter, getEmptyOpInfo(exc_info));
-        emitter.createCall2(exc_info, g.funcs.checkUnpackingLength, getConstantInt(ntargets, g.i64), len->getValue());
+
+// TODO can do faster unpacking of non-instantiated tuples; ie for something like
+// a, b = 1, 2
+// We shouldn't need to do any runtime error checking or allocations
+
+#ifndef NDEBUG
+        for (auto e : target->elts) {
+            ASSERT(e->type == AST_TYPE::Name && ast_cast<AST_Name>(e)->id[0] == '#',
+                   "should only be unpacking tuples into cfg-generated names!");
+        }
+#endif
+
+        ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
+
+        llvm::Value* unpacked = emitter.createCall2(exc_info, g.funcs.unpackIntoArray, converted_val->getValue(),
+                                                    getConstantInt(ntargets, g.i64)).getInstruction();
+        assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());
+        converted_val->decvref(emitter);
 
         for (int i = 0; i < ntargets; i++) {
-            CompilerVariable* unpacked = val->getitem(emitter, getEmptyOpInfo(exc_info), makeInt(i));
-            _doSet(target->elts[i], unpacked, exc_info);
-            unpacked->decvref(emitter);
+            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(unpacked, i);
+            llvm::Value* val = emitter.getBuilder()->CreateLoad(ptr);
+            assert(val->getType() == g.llvm_value_type_ptr);
+
+            CompilerVariable* thisval = new ConcreteCompilerVariable(UNKNOWN, val, true);
+            _doSet(target->elts[i], thisval, exc_info);
+            thisval->decvref(emitter);
         }
     }
 

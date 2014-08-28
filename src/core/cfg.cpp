@@ -97,7 +97,7 @@ private:
         assert(value);
         CFGBlock* rtn_dest = getReturn();
         if (rtn_dest != NULL) {
-            push_back(makeAssign("#rtnval", value));
+            pushAssign("#rtnval", value);
 
             AST_Jump* j = makeJump();
             j->target = rtn_dest;
@@ -142,7 +142,7 @@ private:
 
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         std::string rtn_name = nodeName(node);
-        push_back(makeAssign(rtn_name, new ResultASTType()));
+        pushAssign(rtn_name, new ResultASTType());
         std::vector<CFGBlock*> exit_blocks;
 
         // Where the current level should jump to after finishing its iteration.
@@ -159,8 +159,7 @@ private:
             AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
             iter_call->args.push_back(remapped_iter);
             std::string iter_name = nodeName(node, "lc_iter", i);
-            AST_stmt* iter_assign = makeAssign(iter_name, iter_call);
-            push_back(iter_assign);
+            pushAssign(iter_name, iter_call);
 
             // TODO bad to save these like this?
             AST_expr* hasnext_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load), "__hasnext__", true);
@@ -198,8 +197,8 @@ private:
             push_back(br);
 
             curblock = body_block;
-            push_back(makeAssign(nodeName(next_attr), makeCall(next_attr)));
-            push_back(makeAssign(c->target, makeName(nodeName(next_attr), AST_TYPE::Load)));
+            pushAssign(nodeName(next_attr), makeCall(next_attr));
+            pushAssign(c->target, makeName(nodeName(next_attr), AST_TYPE::Load));
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = remapExpr(if_condition);
@@ -340,19 +339,69 @@ private:
         return call;
     }
 
-    AST_stmt* makeAssign(AST_expr* target, AST_expr* val) {
+    void pushAssign(AST_expr* target, AST_expr* val) {
         AST_Assign* assign = new AST_Assign();
-        assign->targets.push_back(target);
         assign->value = val;
         assign->col_offset = val->col_offset;
         assign->lineno = val->lineno;
-        return assign;
+
+        if (target->type == AST_TYPE::Name) {
+            assign->targets.push_back(target);
+            push_back(assign);
+        } else if (target->type == AST_TYPE::Subscript) {
+            AST_Subscript* s = ast_cast<AST_Subscript>(target);
+            assert(s->ctx_type == AST_TYPE::Store);
+
+            AST_Subscript* s_target = new AST_Subscript();
+            s_target->value = remapExpr(s->value);
+            s_target->slice = remapExpr(s->slice);
+            s_target->ctx_type = AST_TYPE::Store;
+            s_target->col_offset = s->col_offset;
+            s_target->lineno = s->lineno;
+
+            assign->targets.push_back(s_target);
+            push_back(assign);
+        } else if (target->type == AST_TYPE::Attribute) {
+            AST_Attribute* a = ast_cast<AST_Attribute>(target);
+            assert(a->ctx_type == AST_TYPE::Store);
+
+            AST_Attribute* a_target = new AST_Attribute();
+            a_target->value = remapExpr(a->value);
+            a_target->attr = a->attr;
+            a_target->ctx_type = AST_TYPE::Store;
+            a_target->col_offset = a->col_offset;
+            a_target->lineno = a->lineno;
+
+            assign->targets.push_back(a_target);
+            push_back(assign);
+        } else if (target->type == AST_TYPE::Tuple) {
+            AST_Tuple* old_target = ast_cast<AST_Tuple>(target);
+
+            AST_Tuple* new_target = new AST_Tuple();
+            new_target->ctx_type = old_target->ctx_type;
+            new_target->lineno = old_target->lineno;
+            new_target->col_offset = old_target->col_offset;
+
+            // A little hackery: push the assign, even though we're not done constructing it yet,
+            // so that we can iteratively push more stuff after it
+            assign->targets.push_back(new_target);
+            push_back(assign);
+
+            for (int i = 0; i < old_target->elts.size(); i++) {
+                std::string tmp_name = nodeName(target, "", i);
+                new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store));
+
+                pushAssign(old_target->elts[i], makeName(tmp_name, AST_TYPE::Load));
+            }
+        } else {
+            RELEASE_ASSERT(0, "%d", target->type);
+        }
     }
 
-    AST_stmt* makeAssign(const std::string& id, AST_expr* val) {
+    void pushAssign(const std::string& id, AST_expr* val) {
         assert(val);
         AST_expr* name = makeName(id, AST_TYPE::Store, val->lineno, 0);
-        return makeAssign(name, val);
+        pushAssign(name, val);
     }
 
     AST_stmt* makeExpr(AST_expr* expr) {
@@ -371,7 +420,7 @@ private:
         return std::string(buf);
     }
 
-    std::string nodeName(AST_expr* node, const std::string& suffix, int idx) {
+    std::string nodeName(AST* node, const std::string& suffix, int idx) {
         char buf[50];
         snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
         return std::string(buf);
@@ -406,7 +455,7 @@ private:
 
         for (int i = 0; i < node->values.size() - 1; i++) {
             AST_expr* val = remapExpr(node->values[i]);
-            push_back(makeAssign(name, val));
+            pushAssign(name, val);
 
             AST_Branch* br = new AST_Branch();
             br->test = val;
@@ -436,7 +485,7 @@ private:
         }
 
         AST_expr* final_val = remapExpr(node->values[node->values.size() - 1]);
-        push_back(makeAssign(name, final_val));
+        pushAssign(name, final_val);
 
         AST_Jump* j = new AST_Jump();
         push_back(j);
@@ -523,7 +572,7 @@ private:
                 val->comparators.push_back(right);
                 val->ops.push_back(node->ops[i]);
 
-                push_back(makeAssign(name, val));
+                pushAssign(name, val);
 
                 AST_Branch* br = new AST_Branch();
                 br->test = makeName(name, AST_TYPE::Load);
@@ -651,7 +700,7 @@ private:
         br->iftrue = iftrue;
         starting_block->connectTo(iftrue);
         curblock = iftrue;
-        push_back(makeAssign(rtn_name, remapExpr(node->body)));
+        pushAssign(rtn_name, remapExpr(node->body));
         AST_Jump* jtrue = new AST_Jump();
         push_back(jtrue);
         CFGBlock* endtrue = curblock;
@@ -661,7 +710,7 @@ private:
         br->iffalse = iffalse;
         starting_block->connectTo(iffalse);
         curblock = iffalse;
-        push_back(makeAssign(rtn_name, remapExpr(node->orelse)));
+        pushAssign(rtn_name, remapExpr(node->orelse));
         AST_Jump* jfalse = new AST_Jump();
         push_back(jfalse);
         CFGBlock* endfalse = curblock;
@@ -877,7 +926,7 @@ private:
 
         if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id[0] != '#')) {
             std::string name = nodeName(node);
-            push_back(makeAssign(name, rtn));
+            pushAssign(name, rtn);
             return makeName(name, AST_TYPE::Load);
         } else {
             return rtn;
@@ -963,7 +1012,10 @@ public:
         ExcBlockInfo& exc_info = exc_handlers.back();
 
         curblock = exc_dest;
-        curblock->push_back(makeAssign(exc_info.exc_obj_name, new AST_LangPrimitive(AST_LangPrimitive::LANDINGPAD)));
+        AST_Assign* exc_asgn = new AST_Assign();
+        exc_asgn->targets.push_back(makeName(exc_info.exc_obj_name, AST_TYPE::Store));
+        exc_asgn->value = new AST_LangPrimitive(AST_LangPrimitive::LANDINGPAD);
+        curblock->push_back(exc_asgn);
 
         AST_Jump* j = new AST_Jump();
         j->target = exc_info.exc_dest;
@@ -1083,12 +1135,7 @@ public:
         AST_expr* remapped_value = remapExpr(node->value);
 
         for (AST_expr* target : node->targets) {
-            AST_Assign* remapped = new AST_Assign();
-            remapped->lineno = node->lineno;
-            remapped->col_offset = node->col_offset;
-            remapped->value = remapped_value;
-            remapped->targets.push_back(target);
-            push_back(remapped);
+            pushAssign(target, remapped_value);
         }
         return true;
     }
@@ -1119,7 +1166,7 @@ public:
             case AST_TYPE::Name: {
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
-                push_back(makeAssign(nodeName(n), makeName(n->id, AST_TYPE::Load)));
+                pushAssign(nodeName(n), makeName(n->id, AST_TYPE::Load));
                 remapped_target = n;
                 remapped_lhs = makeName(nodeName(n), AST_TYPE::Load);
                 break;
@@ -1179,8 +1226,8 @@ public:
         binop->col_offset = node->col_offset;
         binop->lineno = node->lineno;
 
-        push_back(makeAssign(nodeName(node), binop));
-        push_back(makeAssign(remapped_target, makeName(nodeName(node), AST_TYPE::Load)));
+        pushAssign(nodeName(node), binop);
+        pushAssign(remapped_target, makeName(nodeName(node), AST_TYPE::Load));
         return true;
     }
 
@@ -1445,8 +1492,7 @@ public:
 
         char itername_buf[80];
         snprintf(itername_buf, 80, "#iter_%p", node);
-        AST_stmt* iter_assign = makeAssign(itername_buf, iter_call);
-        push_back(iter_assign);
+        pushAssign(itername_buf, iter_call);
 
         AST_expr* hasnext_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "__hasnext__", true);
         AST_expr* next_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "next", true);
@@ -1490,8 +1536,8 @@ public:
         pushLoop(test_block, end_block);
 
         curblock = loop_block;
-        push_back(makeAssign(nodeName(next_attr), makeCall(next_attr)));
-        push_back(makeAssign(node->target, makeName(nodeName(next_attr), AST_TYPE::Load)));
+        pushAssign(nodeName(next_attr), makeCall(next_attr));
+        pushAssign(node->target, makeName(nodeName(next_attr), AST_TYPE::Load));
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
@@ -1627,7 +1673,7 @@ public:
                 }
 
                 if (exc_handler->name) {
-                    push_back(makeAssign(exc_handler->name, exc_obj));
+                    pushAssign(exc_handler->name, exc_obj);
                 }
 
                 for (AST_stmt* subnode : exc_handler->body) {
@@ -1674,15 +1720,15 @@ public:
         char exitname_buf[80];
         snprintf(exitname_buf, 80, "#exit_%p", node);
 
-        push_back(makeAssign(ctxmgrname_buf, remapExpr(node->context_expr)));
+        pushAssign(ctxmgrname_buf, remapExpr(node->context_expr));
 
         AST_expr* enter = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load), "__enter__", true);
         AST_expr* exit = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load), "__exit__", true);
-        push_back(makeAssign(exitname_buf, exit));
+        pushAssign(exitname_buf, exit);
         enter = makeCall(enter);
 
         if (node->optional_vars) {
-            push_back(makeAssign(node->optional_vars, enter));
+            pushAssign(node->optional_vars, enter);
         } else {
             push_back(makeExpr(enter));
         }
