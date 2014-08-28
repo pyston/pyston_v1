@@ -33,14 +33,44 @@ namespace pyston {
 
 #define FLAG_SIZE_T 1
 
-extern "C" PyObject* _Py_BuildValue_SizeT(const char* arg0, ...) {
-    RELEASE_ASSERT(*arg0 == '\0', "");
-    return None;
+static PyObject* va_build_value(const char* fmt, va_list va, int flags) {
+    int len = strlen(fmt);
+    if (len == 0)
+        return None;
+
+    if (len == 1) {
+        switch (*fmt) {
+            case 'b':
+            case 'B':
+            case 'h':
+            case 'i':
+                return PyInt_FromLong((long)va_arg(va, int));
+            default:
+                RELEASE_ASSERT(0, "%c", *fmt);
+        }
+    }
+
+    RELEASE_ASSERT(0, "");
 }
 
-extern "C" PyObject* Py_BuildValue(const char* arg0, ...) {
-    RELEASE_ASSERT(*arg0 == '\0', "");
-    return None;
+extern "C" PyObject* _Py_BuildValue_SizeT(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+
+    Box* r = va_build_value(fmt, ap, FLAG_SIZE_T);
+
+    va_end(ap);
+    return r;
+}
+
+extern "C" PyObject* Py_BuildValue(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+
+    Box* r = va_build_value(fmt, ap, 0);
+
+    va_end(ap);
+    return r;
 }
 
 extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
