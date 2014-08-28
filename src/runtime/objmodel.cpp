@@ -38,6 +38,7 @@
 #include "gc/collector.h"
 #include "gc/heap.h"
 #include "runtime/capi.h"
+#include "runtime/classobj.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
 #include "runtime/iterobject.h"
@@ -1547,7 +1548,8 @@ extern "C" bool nonzero(Box* obj) {
     Box* func = getclsattr_internal(obj, "__nonzero__", NULL);
 
     if (func == NULL) {
-        RELEASE_ASSERT(isUserDefined(obj->cls), "%s.__nonzero__", getTypeName(obj)->c_str()); // TODO
+        ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls, "%s.__nonzero__",
+               getTypeName(obj)->c_str()); // TODO
         return true;
     }
 

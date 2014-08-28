@@ -154,7 +154,7 @@ Box* classobjStr(Box* _obj) {
     return boxString(static_cast<BoxedString*>(_mod)->s + "." + cls->name->s);
 }
 
-Box* instanceGetattribute(Box* _inst, Box* _attr) {
+static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
@@ -177,20 +177,40 @@ Box* instanceGetattribute(Box* _inst, Box* _attr) {
     Box* getattr = classLookup(inst->inst_cls, getattr_str);
     RELEASE_ASSERT(getattr == NULL, "unimplemented");
 
+    if (!raise_on_missing)
+        return NULL;
+
     raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->s.c_str(),
                    attr->s.c_str());
+}
+
+Box* instanceGetattribute(Box* _inst, Box* _attr) {
+    return _instanceGetattribute(_inst, _attr, true);
 }
 
 Box* instanceStr(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    Box* str_func = instanceGetattribute(inst, boxStrConstant("__str__"));
+    Box* str_func = _instanceGetattribute(inst, boxStrConstant("__str__"), false);
 
     if (str_func) {
         return runtimeCall(str_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         return objectStr(_inst);
+    }
+}
+
+Box* instanceNonzero(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
+
+    if (nonzero_func) {
+        return runtimeCall(nonzero_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } else {
+        return True;
     }
 }
 
@@ -218,6 +238,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
     instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
+    instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
 
     instance_cls->freeze();
 }

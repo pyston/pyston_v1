@@ -53,3 +53,16 @@ def str2():
     return "str2"
 e.__str__ = str2
 print e
+
+print bool(e)
+print bool(E)
+
+class F:
+    def __init__(self, n):
+        self.n = n
+
+    def __nonzero__(self):
+        return self.n
+
+print bool(F(0))
+print bool(F(1))
