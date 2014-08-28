@@ -73,6 +73,7 @@ public:
 
     void addDependenceOn(ICInvalidator&);
     void commit(uint64_t decision_path, CommitHook* hook);
+    void abort();
 
     friend class ICInfo;
 };
@@ -100,6 +101,7 @@ private:
     const std::vector<int> live_outs;
     const assembler::GenericRegister return_register;
     TypeRecorder* const type_recorder;
+    bool failed;
 
     // for ICSlotRewrite:
     ICSlotInfo* pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
@@ -119,6 +121,8 @@ public:
 
     ICSlotRewrite* startRewrite(const char* debug_name);
     void clear(ICSlotInfo* entry);
+
+    bool shouldAttempt();
 
     friend class ICSlotRewrite;
 };
