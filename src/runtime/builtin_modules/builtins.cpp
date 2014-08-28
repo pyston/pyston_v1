@@ -414,9 +414,10 @@ BoxedModule* builtins_module;
 
 // TODO looks like CPython and pypy put this into an "exceptions" module:
 extern "C" {
-BoxedClass* Exception, *AssertionError, *AttributeError, *GeneratorExit, *TypeError, *NameError, *KeyError, *IndexError,
-    *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning, *MemoryError;
+BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *AttributeError, *GeneratorExit, *TypeError,
+    *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
+    *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
+    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -569,30 +570,35 @@ void setupBuiltins() {
     builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1)));
     builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1)));
 
-    Exception = makeBuiltinException(object_cls, "Exception");
-    AssertionError = makeBuiltinException(Exception, "AssertionError");
-    AttributeError = makeBuiltinException(Exception, "AttributeError");
-    GeneratorExit = makeBuiltinException(Exception, "GeneratorExit");
-    TypeError = makeBuiltinException(Exception, "TypeError");
-    NameError = makeBuiltinException(Exception, "NameError");
-    KeyError = makeBuiltinException(Exception, "KeyError");
-    IndexError = makeBuiltinException(Exception, "IndexError");
-    IOError = makeBuiltinException(Exception, "IOError");
-    OSError = makeBuiltinException(Exception, "OSError");
-    ZeroDivisionError = makeBuiltinException(Exception, "ZeroDivisionError");
-    ValueError = makeBuiltinException(Exception, "ValueError");
-    UnboundLocalError = makeBuiltinException(Exception, "UnboundLocalError");
-    RuntimeError = makeBuiltinException(Exception, "RuntimeError");
-    ImportError = makeBuiltinException(Exception, "ImportError");
+    BaseException = makeBuiltinException(object_cls, "BaseException");
+    Exception = makeBuiltinException(BaseException, "Exception");
+    StandardError = makeBuiltinException(Exception, "StandardError");
+    AssertionError = makeBuiltinException(StandardError, "AssertionError");
+    AttributeError = makeBuiltinException(StandardError, "AttributeError");
+    GeneratorExit = makeBuiltinException(BaseException, "GeneratorExit");
+    TypeError = makeBuiltinException(StandardError, "TypeError");
+    NameError = makeBuiltinException(StandardError, "NameError");
+    LookupError = makeBuiltinException(StandardError, "LookupError");
+    KeyError = makeBuiltinException(LookupError, "KeyError");
+    IndexError = makeBuiltinException(LookupError, "IndexError");
+    EnvironmentError = makeBuiltinException(StandardError, "EnvironmentError");
+    IOError = makeBuiltinException(EnvironmentError, "IOError");
+    OSError = makeBuiltinException(EnvironmentError, "OSError");
+    ArithmeticError = makeBuiltinException(StandardError, "ArithmeticError");
+    ZeroDivisionError = makeBuiltinException(ArithmeticError, "ZeroDivisionError");
+    ValueError = makeBuiltinException(StandardError, "ValueError");
+    UnboundLocalError = makeBuiltinException(NameError, "UnboundLocalError");
+    RuntimeError = makeBuiltinException(StandardError, "RuntimeError");
+    ImportError = makeBuiltinException(StandardError, "ImportError");
     StopIteration = makeBuiltinException(Exception, "StopIteration");
     Warning = makeBuiltinException(Exception, "Warning");
-    SyntaxError = makeBuiltinException(Exception, "SyntaxError");
-    OverflowError = makeBuiltinException(Exception, "OverflowError");
+    SyntaxError = makeBuiltinException(StandardError, "SyntaxError");
+    OverflowError = makeBuiltinException(ArithmeticError, "OverflowError");
     /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
     /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
     DeprecationWarning = makeBuiltinException(Warning, "DeprecationWarning");
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
-    MemoryError = makeBuiltinException(Exception, "MemoryError");
+    MemoryError = makeBuiltinException(StandardError, "MemoryError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
