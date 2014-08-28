@@ -207,11 +207,38 @@ Box* instanceNonzero(Box* _inst) {
 
     Box* nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
 
+    if (nonzero_func == NULL)
+        nonzero_func = _instanceGetattribute(inst, boxStrConstant("__len__"), false);
+
     if (nonzero_func) {
         return runtimeCall(nonzero_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
         return True;
     }
+}
+
+Box* instanceLen(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* len_func = _instanceGetattribute(inst, boxStrConstant("__len__"), true);
+    return runtimeCall(len_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceGetitem(Box* _inst, Box* key) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* getitem_func = _instanceGetattribute(inst, boxStrConstant("__getitem__"), true);
+    return runtimeCall(getitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* setitem_func = _instanceGetattribute(inst, boxStrConstant("__setitem__"), true);
+    return runtimeCall(setitem_func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
 }
 
 void setupClassobj() {
@@ -239,6 +266,9 @@ void setupClassobj() {
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
     instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
+    instance_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)instanceLen, UNKNOWN, 1)));
+    instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
 
     instance_cls->freeze();
 }
