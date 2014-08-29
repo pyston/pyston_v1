@@ -23,6 +23,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/float.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
@@ -143,11 +144,13 @@ extern "C" i64 mod_i64_i64(i64 lhs, i64 rhs) {
 }
 
 extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
-    // TODO overflow very possible
     i64 orig_rhs = rhs;
     i64 rtn = 1, curpow = lhs;
-    RELEASE_ASSERT(rhs >= 0, "");
 
+    if (rhs < 0)
+        return boxFloat(pow_float_float(lhs, rhs));
+
+    assert(rhs > 0);
     while (rhs) {
         if (rhs & 1) {
             // TODO: could potentially avoid restarting the entire computation on overflow?
@@ -445,6 +448,10 @@ extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
+
+    if (rhs->n < 0)
+        raiseExcHelper(ValueError, "negative shift count");
+
     // TODO overflow?
     return boxInt(lhs->n << rhs->n);
 }
@@ -546,6 +553,10 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
     assert(lhs->cls == int_cls);
     assert(rhs->cls == int_cls);
+
+    if (rhs->n < 0)
+        raiseExcHelper(ValueError, "negative shift count");
+
     return boxInt(lhs->n >> rhs->n);
 }
 
