@@ -44,7 +44,7 @@ public:
 
 // TypeAnalysis* analyze(CFG *cfg, std::unordered_map<std::string, ConcreteCompilerType*> arg_types);
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
-                             const std::vector<ConcreteCompilerType*>& arg_types,
+                             const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel::EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info);
 }
 

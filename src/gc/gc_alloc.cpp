@@ -47,6 +47,20 @@ extern "C" void gc_compat_free(void* ptr) {
 
 bool recursive = false;
 
+extern "C" void abort() {
+    static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
+
+    // Py_FatalError is likely to call abort() itself...
+    static bool recursive = false;
+    if (!recursive) {
+        recursive = true;
+        Py_FatalError("someone called abort!\n");
+    }
+
+    libc_abort();
+    __builtin_unreachable();
+}
+
 // We may need to hook malloc as well.  For now, these definitions serve
 // as a reference on how to do that, and also can help with debugging malloc
 // usage issues.

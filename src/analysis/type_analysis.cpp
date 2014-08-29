@@ -778,9 +778,11 @@ public:
 
 // public entry point:
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
-                             const std::vector<ConcreteCompilerType*>& arg_types,
+                             const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel::EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
+    // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
+    //}
     return PropagatingTypeAnalysis::doAnalysis(cfg, arg_names, arg_types, speculation, scope_info);
 }
 }

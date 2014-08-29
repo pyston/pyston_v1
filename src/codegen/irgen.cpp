@@ -405,6 +405,9 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 }
                 ASSERT(speculated_class, "%s", phi_type->debugName().c_str());
 
+                ASSERT(entry_descriptor->args.count("!is_defined_" + p.first) == 0,
+                       "This class-check-creating behavior will segfault if the argument wasn't actually defined!");
+
                 llvm::Value* type_check = ConcreteCompilerVariable(p.second, from_arg, true)
                                               .makeClassCheck(*entry_emitter, speculated_class);
                 if (guard_val) {
@@ -760,16 +763,63 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             }
 
             for (int i = 0; i < block_guards.size(); i++) {
-                GuardList::BlockEntryGuard* g = block_guards[i];
+                GuardList::BlockEntryGuard* guard = block_guards[i];
                 IREmitter* emitter = emitters[i];
 
-                CompilerVariable* unconverted = g->symbol_table[it->first];
-                ConcreteCompilerVariable* v = unconverted->makeConverted(*emitter, it->second.first);
-                assert(v);
-                assert(v->isGrabbed());
+                ASSERT(phis->count("!is_defined_" + it->first) == 0,
+                       "This class-check-creating behavior will segfault if the argument wasn't actually defined!");
+
+                CompilerVariable* unconverted = guard->symbol_table[it->first];
+                ConcreteCompilerVariable* v;
+                if (unconverted->canConvertTo(it->second.first)) {
+                    v = unconverted->makeConverted(*emitter, it->second.first);
+                    assert(v);
+                    assert(v->isGrabbed());
+                } else {
+                    // This path is for handling the case that we did no type analysis in the previous tier,
+                    // but in this tier we know that even in the deopt branch with no speculations, that
+                    // the type is more refined than what we got from the previous tier.
+                    //
+                    // We're going to blindly assume that we're right about what the type should be.
+                    assert(unconverted->getType() == UNKNOWN);
+                    assert(strcmp(bb_type, "deopt") == 0);
+
+                    ConcreteCompilerVariable* converted = unconverted->makeConverted(*emitter, UNKNOWN);
+
+                    if (it->second.first->llvmType() == g.llvm_value_type_ptr) {
+                        v = new ConcreteCompilerVariable(it->second.first, converted->getValue(), true);
+                    } else if (it->second.first == FLOAT) {
+                        llvm::Value* unboxed
+                            = emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, converted->getValue());
+                        v = new ConcreteCompilerVariable(FLOAT, unboxed, true);
+                    } else if (it->second.first == INT) {
+                        llvm::Value* unboxed
+                            = emitter->getBuilder()->CreateCall(g.funcs.unboxInt, converted->getValue());
+                        v = new ConcreteCompilerVariable(INT, unboxed, true);
+                    } else {
+                        printf("%s\n", it->second.first->debugName().c_str());
+                        abort();
+                    }
+
+                    converted->decvref(*emitter);
+
+                    /*
+                    if (speculated_class == int_cls) {
+                        v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
+                        (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(*unbox_emitter);
+                    } else if (speculated_class == float_cls) {
+                        v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
+                        (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(*unbox_emitter);
+                    } else {
+                        assert(phi_type == typeFromClass(speculated_class));
+                        v = from_arg;
+                    }
+                    */
+                }
 
 
                 ASSERT(it->second.first == v->getType(), "");
+                assert(it->second.first->llvmType() == v->getValue()->getType());
                 llvm_phi->addIncoming(v->getValue(), offramps[i]);
 
                 // TODO not sure if this is right:
@@ -971,7 +1021,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
-    TypeAnalysis* types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, speculation_level,
+    TypeAnalysis* types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort, speculation_level,
                                          source->scoping->getScopeInfoForNode(source->ast));
 
     _t2.split();
@@ -1010,8 +1060,9 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
         irgen_us += _t2.split();
-        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, TypeAnalysis::NONE,
-                                                   source->scoping->getScopeInfoForNode(source->ast));
+        TypeAnalysis* deopt_types
+            = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort, TypeAnalysis::NONE,
+                             source->scoping->getScopeInfoForNode(source->ast));
         _t2.split();
 
         emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, NULL, deopt_full_blocks, deopt_partial_blocks);
