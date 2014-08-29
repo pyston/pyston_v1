@@ -19,6 +19,8 @@
 #include "llvm/Support/FileSystem.h"
 
 #include "codegen/compvars.h"
+#include "codegen/irgen/hooks.h"
+#include "codegen/parser.h"
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
@@ -551,7 +553,9 @@ Box* execfile(Box* _fn) {
     if (!exists)
         raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.c_str());
 
-    compileAndRunModule("aoeu", fn->s, false);
+    // Run directly inside the current module:
+    AST_Module* ast = caching_parse(fn->s.c_str());
+    compileAndRunModule(ast, getCurrentModule());
 
     return None;
 }
