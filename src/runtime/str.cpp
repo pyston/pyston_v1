@@ -580,6 +580,33 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     }
 }
 
+Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
+    RELEASE_ASSERT(_self->cls == str_cls, "");
+    BoxedString* self = static_cast<BoxedString*>(_self);
+
+    RELEASE_ASSERT(_old->cls == str_cls, "");
+    BoxedString* old = static_cast<BoxedString*>(_old);
+
+    RELEASE_ASSERT(_new->cls == str_cls, "");
+    BoxedString* new_ = static_cast<BoxedString*>(_new);
+
+    Box* _count = _args[0];
+
+    RELEASE_ASSERT(_count->cls == int_cls, "an integer is required");
+    BoxedInt* count = static_cast<BoxedInt*>(_count);
+
+    RELEASE_ASSERT(count->n < 0, "'count' argument unsupported");
+
+    BoxedString* rtn = new BoxedString(self->s);
+    // From http://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
+    size_t start_pos = 0;
+    while ((start_pos = rtn->s.find(old->s, start_pos)) != std::string::npos) {
+        rtn->s.replace(start_pos, old->s.length(), new_->s);
+        start_pos += new_->s.length(); // Handles case where 'to' is a substring of 'from'
+    }
+    return rtn;
+}
+
 Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     assert(self->cls == str_cls);
     if (_max_split->cls != int_cls)
@@ -1028,6 +1055,9 @@ void setupStr() {
     str_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)strIter, typeFromClass(str_iterator_cls), 1)));
 
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2)));
+
+    str_cls->giveAttr("replace",
+                      new BoxedFunction(boxRTFunction((void*)strReplace, STR, 4, 1, false, false), { boxInt(-1) }));
 
     str_cls->giveAttr(
         "split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));

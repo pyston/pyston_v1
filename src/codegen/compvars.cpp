@@ -455,7 +455,8 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         }
         llvm_args.push_back(arg_array);
 
-        llvm_args.push_back(embedConstantPtr(keyword_names, g.vector_ptr));
+        if (pass_keyword_names)
+            llvm_args.push_back(embedConstantPtr(keyword_names, g.vector_ptr));
     } else if (pass_keyword_names) {
         llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr->getPointerTo()));
         llvm_args.push_back(embedConstantPtr(keyword_names, g.vector_ptr));
@@ -487,11 +488,14 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
                    ->getReturnType() == g.llvm_value_type_ptr);
         rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
+        // printf("\n");
         // func->dump();
+        // printf("\n");
         // for (auto a : llvm_args) {
         // a->dump();
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
+        // printf("\n");
         rtn = emitter.createCall(info.exc_info, func, llvm_args).getInstruction();
     }
 
@@ -527,7 +531,7 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
     else if (npassed_args == 3)
         func = g.funcs.runtimeCall3;
     else
-        func = g.funcs.runtimeCall;
+        func = g.funcs.runtimeCallN;
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
@@ -556,7 +560,7 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     else if (npassed_args == 3)
         func = g.funcs.callattr3;
     else
-        func = g.funcs.callattr;
+        func = g.funcs.callattrN;
 
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
@@ -1346,10 +1350,11 @@ public:
             // TODO support passing unboxed values as arguments
             assert(cf->spec->arg_types[i]->llvmType() == g.llvm_value_type_ptr);
 
-            arg_types.push_back(g.llvm_value_type_ptr);
             if (i == 3) {
                 arg_types.push_back(g.llvm_value_type_ptr->getPointerTo());
                 break;
+            } else {
+                arg_types.push_back(g.llvm_value_type_ptr);
             }
         }
         llvm::FunctionType* ft = llvm::FunctionType::get(cf->spec->rtn_type->llvmType(), arg_types, false);
