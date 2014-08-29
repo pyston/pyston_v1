@@ -188,10 +188,34 @@ extern "C" void abort() {
     if (!recursive) {
         recursive = true;
 
+        fprintf(stderr, "Someone called abort!\n");
+
         _printStacktrace();
     }
 
     libc_abort();
+    __builtin_unreachable();
+}
+
+extern "C" void exit(int code) {
+    static void (*libc_exit)(int) = (void (*)(int))dlsym(RTLD_NEXT, "exit");
+
+    if (code == 0) {
+        libc_exit(0);
+        __builtin_unreachable();
+    }
+
+    fprintf(stderr, "Someone called exit with code=%d!\n", code);
+
+    // In case something calls exit down the line:
+    static bool recursive = false;
+    if (!recursive) {
+        recursive = true;
+
+        _printStacktrace();
+    }
+
+    libc_exit(code);
     __builtin_unreachable();
 }
 

@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
                 printLastTraceback();
                 fprintf(stderr, "%s\n", msg.c_str());
 
-                exit(1);
+                return 1;
             }
         }
     }

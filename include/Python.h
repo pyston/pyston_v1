@@ -16,6 +16,7 @@
 #define PYSTON_EXTINCLUDE_PYTHON_H
 
 #include <assert.h>
+#include <ctype.h> // it looks like this gets included via unicodeobject.h in CPython
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -61,6 +62,8 @@
 #include "import.h"
 
 #include "abstract.h"
+
+#include "pyctype.h"
 
 // directly from CPython:
 /* Argument must be a char or an int in [-128, 127] or [0, 255]. */
