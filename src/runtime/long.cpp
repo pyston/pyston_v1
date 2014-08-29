@@ -201,6 +201,115 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
     }
 }
 
+// TODO reduce duplication between these 6 functions, and add double support
+Box* longGt(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        return boxBool(mpz_cmp(v1->n, v2->n) > 0);
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        return boxBool(mpz_cmp_si(v1->n, v2->n) > 0);
+    } else {
+        return NotImplemented;
+    }
+}
+
+Box* longGe(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        return boxBool(mpz_cmp(v1->n, v2->n) >= 0);
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        return boxBool(mpz_cmp_si(v1->n, v2->n) >= 0);
+    } else {
+        return NotImplemented;
+    }
+}
+
+Box* longLt(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        return boxBool(mpz_cmp(v1->n, v2->n) < 0);
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        return boxBool(mpz_cmp_si(v1->n, v2->n) < 0);
+    } else {
+        return NotImplemented;
+    }
+}
+
+Box* longLe(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        return boxBool(mpz_cmp(v1->n, v2->n) <= 0);
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        return boxBool(mpz_cmp_si(v1->n, v2->n) <= 0);
+    } else {
+        return NotImplemented;
+    }
+}
+
+Box* longEq(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        return boxBool(mpz_cmp(v1->n, v2->n) == 0);
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        return boxBool(mpz_cmp_si(v1->n, v2->n) == 0);
+    } else {
+        return NotImplemented;
+    }
+}
+
+Box* longNe(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        return boxBool(mpz_cmp(v1->n, v2->n) != 0);
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+
+        return boxBool(mpz_cmp_si(v1->n, v2->n) != 0);
+    } else {
+        return NotImplemented;
+    }
+}
+
 Box* longLshift(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'long' object but received a '%s'",
@@ -430,6 +539,13 @@ void setupLong() {
 
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr("__add__"));
+
+    long_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)longGt, UNKNOWN, 2)));
+    long_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)longGe, UNKNOWN, 2)));
+    long_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)longLt, UNKNOWN, 2)));
+    long_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)longLe, UNKNOWN, 2)));
+    long_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)longEq, UNKNOWN, 2)));
+    long_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)longNe, UNKNOWN, 2)));
 
     long_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)longLshift, UNKNOWN, 2)));
 

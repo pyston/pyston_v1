@@ -94,3 +94,11 @@ try:
     f[1] = 2
 except AttributeError, e:
     print e
+
+print isinstance(f, F)
+print isinstance(e, F)
+print isinstance(D(), D)
+print isinstance(D(), C)
+
+print str(f)[:26]
+print repr(f)[:26]

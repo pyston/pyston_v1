@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <dlfcn.h>
 
 #include "llvm/DebugInfo/DIContext.h"
 
@@ -176,6 +177,22 @@ void printLastTraceback() {
 
 void _printStacktrace() {
     _printTraceback(getTracebackEntries());
+}
+
+// where should this go...
+extern "C" void abort() {
+    static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
+
+    // In case something calls abort down the line:
+    static bool recursive = false;
+    if (!recursive) {
+        recursive = true;
+
+        _printStacktrace();
+    }
+
+    libc_abort();
+    __builtin_unreachable();
 }
 
 static std::vector<const LineInfo*> getTracebackEntries() {

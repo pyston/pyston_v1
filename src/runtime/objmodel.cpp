@@ -1652,6 +1652,13 @@ extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
         return false;
     }
 
+    if (cls->cls == classobj_cls) {
+        if (!isSubclass(obj->cls, instance_cls))
+            return false;
+
+        return instanceIsinstance(static_cast<BoxedInstance*>(obj), static_cast<BoxedClassobj*>(cls));
+    }
+
     if (!false_on_noncls) {
         assert(cls->cls == type_cls);
     } else {
@@ -2953,6 +2960,13 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         return boxBool(lhs == rhs);
     if (op_type == AST_TYPE::NotEq)
         return boxBool(lhs != rhs);
+
+#ifndef NDEBUG
+    if ((lhs->cls == int_cls || lhs->cls == float_cls || lhs->cls == long_cls)
+        && (rhs->cls == int_cls || rhs->cls == float_cls || rhs->cls == long_cls)) {
+        Py_FatalError("missing comparison between these classes");
+    }
+#endif
 
     // TODO
     // According to http://docs.python.org/2/library/stdtypes.html#comparisons

@@ -26,39 +26,20 @@ namespace pyston {
 
 BoxedClass* classobj_cls, *instance_cls;
 
-class BoxedClassobj : public Box {
-public:
-    HCAttrs attrs;
+bool classIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
+    if (child == parent)
+        return true;
 
-    BoxedTuple* bases;
-    BoxedString* name;
-
-    BoxedClassobj(BoxedClass* metaclass, BoxedString* name, BoxedTuple* bases)
-        : Box(metaclass), bases(bases), name(name) {}
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == classobj_cls);
-        BoxedClassobj* o = static_cast<BoxedClassobj*>(_o);
-
-        boxGCHandler(v, o);
+    for (auto e : child->bases->elts) {
+        if (e->cls == classobj_cls && classIssubclass(static_cast<BoxedClassobj*>(e), parent))
+            return true;
     }
-};
+    return false;
+}
 
-class BoxedInstance : public Box {
-public:
-    HCAttrs attrs;
-
-    BoxedClassobj* inst_cls;
-
-    BoxedInstance(BoxedClassobj* inst_cls) : Box(instance_cls), inst_cls(inst_cls) {}
-
-    static void gcHandler(GCVisitor* v, Box* _o) {
-        assert(_o->cls == instance_cls);
-        BoxedInstance* o = static_cast<BoxedInstance*>(_o);
-
-        boxGCHandler(v, o);
-    }
-};
+bool instanceIsinstance(BoxedInstance* obj, BoxedClassobj* cls) {
+    return classIssubclass(obj->inst_cls, cls);
+}
 
 static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
     Box* r = cls->getattr(attr);
@@ -188,6 +169,24 @@ Box* instanceGetattribute(Box* _inst, Box* _attr) {
     return _instanceGetattribute(_inst, _attr, true);
 }
 
+Box* instanceRepr(Box* _inst) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* repr_func = _instanceGetattribute(inst, boxStrConstant("__repr__"), false);
+
+    if (repr_func) {
+        return runtimeCall(repr_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } else {
+        Box* class_str = classobjStr(inst->inst_cls);
+        assert(class_str->cls == str_cls);
+
+        char buf[80];
+        snprintf(buf, 80, "<%s instance at %p>", static_cast<BoxedString*>(class_str)->s.c_str(), inst);
+        return boxStrConstant(buf);
+    }
+}
+
 Box* instanceStr(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -197,6 +196,7 @@ Box* instanceStr(Box* _inst) {
     if (str_func) {
         return runtimeCall(str_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } else {
+        return instanceRepr(inst);
         return objectStr(_inst);
     }
 }
@@ -265,6 +265,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
     instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
+    instance_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instanceRepr, UNKNOWN, 1)));
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
     instance_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)instanceLen, UNKNOWN, 1)));
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));

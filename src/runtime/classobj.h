@@ -15,12 +15,52 @@
 #ifndef PYSTON_RUNTIME_CLASSOBJ_H
 #define PYSTON_RUNTIME_CLASSOBJ_H
 
+#include "runtime/types.h"
+
 namespace pyston {
 
 void setupClassobj();
 
 class BoxedClass;
-extern BoxedClass* classobj_cls;
+class BoxedClassobj;
+class BoxedInstance;
+extern BoxedClass* classobj_cls, *instance_cls;
+
+bool instanceIsinstance(BoxedInstance* obj, BoxedClassobj* cls);
+
+class BoxedClassobj : public Box {
+public:
+    HCAttrs attrs;
+
+    BoxedTuple* bases;
+    BoxedString* name;
+
+    BoxedClassobj(BoxedClass* metaclass, BoxedString* name, BoxedTuple* bases)
+        : Box(metaclass), bases(bases), name(name) {}
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == classobj_cls);
+        BoxedClassobj* o = static_cast<BoxedClassobj*>(_o);
+
+        boxGCHandler(v, o);
+    }
+};
+
+class BoxedInstance : public Box {
+public:
+    HCAttrs attrs;
+
+    BoxedClassobj* inst_cls;
+
+    BoxedInstance(BoxedClassobj* inst_cls) : Box(instance_cls), inst_cls(inst_cls) {}
+
+    static void gcHandler(GCVisitor* v, Box* _o) {
+        assert(_o->cls == instance_cls);
+        BoxedInstance* o = static_cast<BoxedInstance*>(_o);
+
+        boxGCHandler(v, o);
+    }
+};
 }
 
 #endif

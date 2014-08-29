@@ -272,7 +272,6 @@ extern "C" void PyBuffer_Release(Py_buffer* view) {
 extern "C" void Py_FatalError(const char* msg) __attribute__((__noreturn__));
 extern "C" void Py_FatalError(const char* msg) {
     fprintf(stderr, "\nFatal Python error: %s\n", msg);
-    _printStacktrace();
     abort();
 }
 
@@ -406,7 +405,7 @@ extern "C" int PyCallable_Check(PyObject* x) {
 
 
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
-    Py_FatalError("unimplemented");
+    Py_FatalError("setting exceptions from the C API is current unimplemented");
 }
 
 extern "C" void PyErr_Clear() {

@@ -13,6 +13,8 @@ def test(a, b):
     print a - b, b - a, a.__sub__(b), b.__sub__(a)
     print a * b, b * a, a.__mul__(b), b.__mul__(a)
     print a / b, b / a, a.__div__(b), b.__div__(a)
+    print repr(a), repr(b), a < b, a > b, a <= b, a >= b, a == b, a != b
+    # print a ^ b, a | b, a & b
 
 
 print 1L / 5L
