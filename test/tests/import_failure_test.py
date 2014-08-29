@@ -1,5 +1,4 @@
-# expected: fail
-# - wip
+# allow-warning: converting unicode literal to str
 
 try:
     import non_existent_module
@@ -59,7 +58,7 @@ def f2():
     except ImportError, e:
         print e
 
-    print path
+    print type(path)
     try:
         print doesnt_exist
     except NameError, e:

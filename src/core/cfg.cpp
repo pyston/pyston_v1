@@ -1071,12 +1071,59 @@ public:
     }
 
     virtual bool visit_import(AST_Import* node) {
-        push_back(node);
+        for (AST_alias* a : node->names) {
+            AST_Import* remapped = new AST_Import();
+            remapped->lineno = node->lineno;
+            remapped->col_offset = node->col_offset;
+
+            std::string tmpname = nodeName(a);
+            AST_alias* remapped_alias = new AST_alias(a->name, tmpname);
+            remapped->names.push_back(remapped_alias);
+
+            push_back(remapped);
+            pushAssign(a->asname.size() ? a->asname : a->name, makeName(tmpname, AST_TYPE::Load));
+        }
+
         return true;
     }
 
     virtual bool visit_importfrom(AST_ImportFrom* node) {
-        push_back(node);
+        RELEASE_ASSERT(node->level == 0, "");
+
+        AST_Import* import = new AST_Import();
+        import->lineno = node->lineno;
+        import->col_offset = node->col_offset;
+
+        std::string tmp_module_name = nodeName(node);
+        AST_alias* tmp_alias = new AST_alias(node->module, tmp_module_name);
+        import->names.push_back(tmp_alias);
+        push_back(import);
+
+        for (AST_alias* a : node->names) {
+            if (a->name == "*") {
+                assert(a->asname.size() == 0);
+
+                AST_ImportFrom* remapped = new AST_ImportFrom();
+                remapped->lineno = node->lineno;
+                remapped->col_offset = node->col_offset;
+                remapped->module = node->module;
+                remapped->level = node->level;
+                remapped->names.push_back(a);
+
+                push_back(remapped);
+            } else {
+                AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
+                import_from->lineno = node->lineno;
+                import_from->col_offset = node->col_offset;
+                import_from->args.push_back(makeName(tmp_module_name, AST_TYPE::Load));
+                import_from->args.push_back(makeName(a->name, AST_TYPE::Load));
+
+                std::string tmp_import_name = nodeName(a);
+                pushAssign(tmp_import_name, import_from);
+                pushAssign(a->asname.size() ? a->asname : a->name, makeName(tmp_import_name, AST_TYPE::Load));
+            }
+        }
+
         return true;
     }
 

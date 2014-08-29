@@ -360,11 +360,11 @@ private:
         switch (node->opcode) {
             case AST_LangPrimitive::ISINSTANCE:
                 return BOOL;
-            case AST_LangPrimitive::LANDINGPAD:
-                return UNKNOWN;
             case AST_LangPrimitive::LOCALS:
                 return DICT;
+            case AST_LangPrimitive::LANDINGPAD:
             case AST_LangPrimitive::GET_ITER:
+            case AST_LangPrimitive::IMPORT_FROM:
                 return UNKNOWN;
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);

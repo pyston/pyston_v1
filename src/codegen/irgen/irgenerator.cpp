@@ -411,6 +411,26 @@ private:
 
                 return new ConcreteCompilerVariable(UNKNOWN, v, true);
             }
+            case AST_LangPrimitive::IMPORT_FROM: {
+                assert(node->args.size() == 2);
+                assert(node->args[0]->type == AST_TYPE::Name);
+                assert(node->args[1]->type == AST_TYPE::Name);
+
+                CompilerVariable* module = evalExpr(node->args[0], exc_info);
+                ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
+                module->decvref(emitter);
+
+                const std::string& name = ast_cast<AST_Name>(node->args[1])->id;
+                assert(name.size());
+
+                llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, converted_module->getValue(),
+                                                     embedConstantPtr(&name, g.llvm_str_type_ptr)).getInstruction();
+
+                CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
+
+                module->decvref(emitter);
+                return v;
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
@@ -1621,27 +1641,19 @@ private:
                   .getInstruction();
         ConcreteCompilerVariable* module = new ConcreteCompilerVariable(typeFromClass(module_cls), imported_v, true);
 
+        // ImportFrom statements should only get generated for "import *"; all other import from's
+        // should get translated to IMPORT_FROM bytecodes.
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
 
-            const std::string& name = alias->name;
-            const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
+            assert(alias->name == "*");
+            assert(alias->asname == "");
 
-            if (name == "*") {
-                RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
-                               "import * not supported in functions");
-                emitter.createCall2(exc_info, g.funcs.importStar, imported_v,
-                                    embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
-                continue;
-            }
-
-            // TODO add patchpoints to this?
-            llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, module->getValue(),
-                                                 embedConstantPtr(&name, g.llvm_str_type_ptr)).getInstruction();
-
-            CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
-            _doSet(asname, v, exc_info);
-            v->decvref(emitter);
+            RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
+                           "import * not supported in functions");
+            emitter.createCall2(exc_info, g.funcs.importStar, imported_v,
+                                embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+            continue;
         }
 
         module->decvref(emitter);

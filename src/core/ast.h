@@ -922,6 +922,7 @@ public:
         LANDINGPAD,
         LOCALS,
         GET_ITER,
+        IMPORT_FROM,
     } opcode;
     std::vector<AST_expr*> args;
 

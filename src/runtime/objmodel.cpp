@@ -837,13 +837,6 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
             if (!rewrite_args->more_guards_after)
                 rewrite_args->rewriter->setDoneGuarding();
             r_descr.setDoneUsing();
-
-            // TODO figure out guards
-            // do i need to have the rewriter write code to lookup the
-            // offset or do the guards protect that?
-            rewrite_args->out_rtn = rewrite_args->obj.getAttr(member_desc->offset, RewriterVarUsage::KillFlag::Kill,
-                                                              rewrite_args->destination);
-            rewrite_args->out_success = true;
         }
 
         switch (member_desc->type) {
@@ -851,6 +844,13 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
                 assert(member_desc->offset % sizeof(Box*) == 0);
                 Box* rtn = reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
                 RELEASE_ASSERT(rtn, "");
+
+                if (rewrite_args) {
+                    rewrite_args->out_rtn = rewrite_args->obj.getAttr(
+                        member_desc->offset, RewriterVarUsage::KillFlag::Kill, rewrite_args->destination);
+                    rewrite_args->out_success = true;
+                }
+
                 return rtn;
             }
             case BoxedMemberDescriptor::BYTE: {

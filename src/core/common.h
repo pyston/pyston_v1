@@ -47,10 +47,6 @@
 #define NOINLINE
 #endif
 
-namespace pyston {
-void _printStacktrace();
-}
-
 // From http://stackoverflow.com/questions/3767869/adding-message-to-assert, modified to use fprintf and give a Python
 // stacktrace
 #define RELEASE_ASSERT(condition, fmt, ...)                                                                            \
@@ -58,7 +54,6 @@ void _printStacktrace();
         if (!(condition)) {                                                                                            \
             ::fprintf(stderr, __FILE__ ":" STRINGIFY(__LINE__) ": %s: Assertion `" #condition "' failed: " fmt "\n",   \
                       __PRETTY_FUNCTION__, ##__VA_ARGS__);                                                             \
-            ::pyston::_printStacktrace();                                                                              \
             ::abort();                                                                                                 \
         }                                                                                                              \
     } while (false)

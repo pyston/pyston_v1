@@ -121,6 +121,10 @@ def run_test(fn, check_stats, run_memcheck):
             jit_args += l
         elif l.startswith("# expected:"):
             expected = l[len("# expected:"):].strip()
+        elif l.startswith("# fail-if:"):
+            condition = l.split(':', 1)[1].strip()
+            if eval(condition):
+                expected = "fail"
         elif l.startswith("# skip-if:"):
             skip_if = l[len("# skip-if:"):].strip()
             skip = eval(skip_if)
