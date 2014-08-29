@@ -197,8 +197,9 @@ private:
             push_back(br);
 
             curblock = body_block;
-            pushAssign(nodeName(next_attr), makeCall(next_attr));
-            pushAssign(c->target, makeName(nodeName(next_attr), AST_TYPE::Load));
+            std::string next_name(nodeName(next_attr));
+            pushAssign(next_name, makeCall(next_attr));
+            pushAssign(c->target, makeName(next_name, AST_TYPE::Load));
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = remapExpr(if_condition);
@@ -417,7 +418,18 @@ private:
     std::string nodeName(AST* node) {
         char buf[40];
         snprintf(buf, 40, "#%p", node);
+// Uncomment this line to check to make sure we never reuse the same nodeName() accidentally.
+// This check is potentially too expensive for even debug mode, since it never frees any memory.
+// #define VALIDATE_FAKE_NAMES
+#ifdef VALIDATE_FAKE_NAMES
+        std::string r(buf);
+        static std::unordered_set<std::string> made;
+        assert(made.count(r) == 0);
+        made.insert(r);
+        return std::move(r);
+#else
         return std::string(buf);
+#endif
     }
 
     std::string nodeName(AST* node, const std::string& suffix, int idx) {
@@ -633,13 +645,14 @@ private:
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
-        func->name = nodeName(func);
+        std::string func_name(nodeName(func));
+        func->name = func_name;
 
         func->args = new AST_arguments();
         func->args->vararg = "";
         func->args->kwarg = "";
 
-        std::string first_generator_name = nodeName(node);
+        std::string first_generator_name = nodeName(node->generators[0]);
         func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param));
 
         std::vector<AST_stmt*>* insert_point = &func->body;
@@ -678,7 +691,7 @@ private:
 
         call->starargs = NULL;
         call->kwargs = NULL;
-        call->func = makeName(nodeName(func), AST_TYPE::Load);
+        call->func = makeName(func_name, AST_TYPE::Load);
         call->args.push_back(first);
         return call;
     };
@@ -1213,9 +1226,10 @@ public:
             case AST_TYPE::Name: {
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
-                pushAssign(nodeName(n), makeName(n->id, AST_TYPE::Load));
+                std::string n_name(nodeName(n));
+                pushAssign(n_name, makeName(n->id, AST_TYPE::Load));
                 remapped_target = n;
-                remapped_lhs = makeName(nodeName(n), AST_TYPE::Load);
+                remapped_lhs = makeName(n_name, AST_TYPE::Load);
                 break;
             }
             case AST_TYPE::Subscript: {
@@ -1273,8 +1287,9 @@ public:
         binop->col_offset = node->col_offset;
         binop->lineno = node->lineno;
 
-        pushAssign(nodeName(node), binop);
-        pushAssign(remapped_target, makeName(nodeName(node), AST_TYPE::Load));
+        std::string node_name(nodeName(node));
+        pushAssign(node_name, binop);
+        pushAssign(remapped_target, makeName(node_name, AST_TYPE::Load));
         return true;
     }
 
@@ -1583,8 +1598,9 @@ public:
         pushLoop(test_block, end_block);
 
         curblock = loop_block;
-        pushAssign(nodeName(next_attr), makeCall(next_attr));
-        pushAssign(node->target, makeName(nodeName(next_attr), AST_TYPE::Load));
+        std::string next_name(nodeName(next_attr));
+        pushAssign(next_name, makeCall(next_attr));
+        pushAssign(node->target, makeName(next_name, AST_TYPE::Load));
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
