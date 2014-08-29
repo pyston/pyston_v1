@@ -433,6 +433,7 @@ public:
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
     assert(cls->tp_basicsize == sizeof(BoxedException));
     Box* r = new BoxedException(cls);
+    // TODO: maybe this should be a MemberDescriptor?
     r->giveAttr("message", message);
     return r;
 }
@@ -463,10 +464,13 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
         = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
 
-    // TODO these should be on the base Exception class:
-    cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew1, UNKNOWN, 1)));
-    cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1)));
-    cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1)));
+    if (base == object_cls) {
+        cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew2, UNKNOWN, 2, 1, false, false),
+                                                   { boxStrConstant("") }));
+        cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1)));
+        cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1)));
+    }
+
     cls->freeze();
 
     builtins_module->giveAttr(name, cls);

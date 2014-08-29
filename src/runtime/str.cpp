@@ -211,14 +211,18 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
     return boxString(os.str());
 }
 
-extern "C" BoxedString* strMul(BoxedString* lhs, BoxedInt* rhs) {
+extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     assert(lhs->cls == str_cls);
-    assert(rhs->cls == int_cls);
 
-    RELEASE_ASSERT(rhs->n >= 0, "");
+    int n;
+    if (isSubclass(rhs->cls, int_cls))
+        n = static_cast<BoxedInt*>(rhs)->n;
+    else if (isSubclass(rhs->cls, bool_cls))
+        n = static_cast<BoxedBool*>(rhs)->b;
+    else
+        return NotImplemented;
 
     int sz = lhs->s.size();
-    int n = rhs->n;
     char* buf = new char[sz * n + 1];
     for (int i = 0; i < n; i++) {
         memcpy(buf + (sz * i), lhs->s.c_str(), sz);

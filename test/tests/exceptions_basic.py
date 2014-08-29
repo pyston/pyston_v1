@@ -74,3 +74,20 @@ def f12():
     except (KeyError, IndexError), e:
         print e
 f12()
+
+def f13():
+    try:
+        raise IndexError
+    except Exception, e:
+        print repr(e.message)
+
+    try:
+        raise IndexError()
+    except Exception, e:
+        print repr(e.message)
+
+    try:
+        raise IndexError(1)
+    except Exception, e:
+        print repr(e.message)
+f13()
