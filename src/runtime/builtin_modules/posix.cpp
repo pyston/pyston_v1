@@ -13,7 +13,11 @@
 // limitations under the License.
 
 #include <cmath>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
+#include "codegen/compvars.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/inline/boxing.h"
@@ -24,8 +28,36 @@ namespace pyston {
 
 BoxedModule* posix_module;
 
+namespace posix {
+
+Box* urandom(Box* _n) {
+    RELEASE_ASSERT(_n->cls == int_cls, "");
+
+    int64_t n = static_cast<BoxedInt*>(_n)->n;
+    RELEASE_ASSERT(n < INT_MAX, "");
+
+    int fd = ::open("/dev/urandom", O_RDONLY);
+    RELEASE_ASSERT(fd > 0, "");
+
+    BoxedString* r = static_cast<BoxedString*>(PyString_FromStringAndSize(NULL, sizeof(n)));
+    RELEASE_ASSERT(r, "");
+    char* buf = PyString_AsString(r);
+
+    int total_read = 0;
+    while (total_read < n) {
+        int this_read = read(fd, buf, n - total_read);
+        assert(this_read > 0);
+        total_read += this_read;
+    }
+
+    return r;
+}
+}
+
 void setupPosix() {
     posix_module = createModule("posix", "__builtin__");
+
+    posix_module->giveAttr("urandom", new BoxedFunction(boxRTFunction((void*)posix::urandom, STR, 1)));
 
     posix_module->giveAttr("error", OSError);
 }

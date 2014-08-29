@@ -92,11 +92,20 @@ extern "C" i64 unboxInt(Box*);
 extern "C" Box* boxFloat(double d);
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func);
 extern "C" Box* boxUnboundInstanceMethod(Box* func);
+
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
 Box* boxString(std::string&& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
+
+// creates an uninitialized string of length n; useful for directly constructing into the string and avoiding copies:
+BoxedString* createUninitializedString(ssize_t n);
+// Gets a writeable pointer to the contents of a string.
+// Is only meant to be used with something just created from createUninitializedString(), though
+// in theory it might work in more cases.
+char* getWriteableStringContents(BoxedString* s);
+
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
@@ -216,7 +225,7 @@ public:
 class BoxedString : public Box {
 public:
     // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
-    const std::string s;
+    std::string s;
 
     BoxedString(const char* s, size_t n) __attribute__((visibility("default"))) : Box(str_cls), s(s, n) {}
     BoxedString(const std::string&& s) __attribute__((visibility("default"))) : Box(str_cls), s(std::move(s)) {}

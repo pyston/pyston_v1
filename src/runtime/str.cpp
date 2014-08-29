@@ -222,6 +222,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     else
         return NotImplemented;
 
+    // TODO: use createUninitializedString and getWriteableStringContents
     int sz = lhs->s.size();
     char* buf = new char[sz * n + 1];
     for (int i = 0; i < n; i++) {
@@ -895,6 +896,46 @@ int64_t strCount2Unboxed(BoxedString* self, Box* elt) {
 
 Box* strCount2(BoxedString* self, Box* elt) {
     return boxInt(strCount2Unboxed(self, elt));
+}
+
+extern "C" PyObject* PyString_FromString(const char* s) {
+    return boxStrConstant(s);
+}
+
+BoxedString* createUninitializedString(ssize_t n) {
+    // I *think* this should avoid doing any copies, by using move constructors:
+    return new BoxedString(std::string(n, '\x00'));
+}
+
+char* getWriteableStringContents(BoxedString* s) {
+    ASSERT(s->s.size() > 0, "not sure whether this is valid for strings with zero size");
+
+    // After doing some reading, I think this is ok:
+    // http://stackoverflow.com/questions/14290795/why-is-modifying-a-string-through-a-retrieved-pointer-to-its-data-not-allowed
+    // In C++11, std::string is required to store its data contiguously.
+    // It looks like it's also required to make it available to write via the [] operator.
+    // - Taking a look at GCC's libstdc++, calling operator[] on a non-const string will return
+    //   a writeable reference, and "unshare" the string.
+    // So surprisingly, this looks ok!
+    return &s->s[0];
+}
+
+extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) {
+    if (s == NULL)
+        return createUninitializedString(n);
+    return boxStrConstantSize(s, n);
+}
+
+extern "C" char* PyString_AsString(PyObject* o) {
+    RELEASE_ASSERT(o->cls == str_cls, "");
+
+    BoxedString* s = static_cast<BoxedString*>(o);
+    return getWriteableStringContents(s);
+}
+
+extern "C" Py_ssize_t PyString_Size(PyObject* s) {
+    RELEASE_ASSERT(s->cls == str_cls, "");
+    return static_cast<BoxedString*>(s)->s.size();
 }
 
 static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) {

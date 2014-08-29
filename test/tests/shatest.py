@@ -1,6 +1,3 @@
-# expected: fail
-# - warnings about PyString_AsString(), since that is allowed to be modified
-
 try:
     import _sha as sha
 except ImportError:

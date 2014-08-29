@@ -77,32 +77,6 @@ extern "C" PyObject* PyDict_New() {
     return new BoxedDict();
 }
 
-extern "C" PyObject* PyString_FromString(const char* s) {
-    return boxStrConstant(s);
-}
-
-extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) {
-    if (s == NULL)
-        return boxString(std::string(n, '\x00'));
-    return boxStrConstantSize(s, n);
-}
-
-extern "C" char* PyString_AsString(PyObject* o) {
-    assert(o->cls == str_cls);
-
-    // TODO this is very brittle, since
-    // - you are very much not supposed to change the data, and
-    // - the pointer doesn't have great longevity guarantees
-    // To satisfy this API we might have to change the string representation?
-    printf("Warning: PyString_AsString() currently has risky behavior\n");
-    return const_cast<char*>(static_cast<BoxedString*>(o)->s.data());
-}
-
-extern "C" Py_ssize_t PyString_Size(PyObject* s) {
-    RELEASE_ASSERT(s->cls == str_cls, "");
-    return static_cast<BoxedString*>(s)->s.size();
-}
-
 extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
     Box* b = static_cast<Box*>(mp);
     Box* key = static_cast<Box*>(_key);
