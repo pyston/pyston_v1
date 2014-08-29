@@ -712,8 +712,6 @@ if _exists("fork"):
             return p.stdin, p.stdout
         __all__.append("popen4")
 
-# Pyston change: disable custom pickle-registration for now
-"""
 import copy_reg as _copy_reg
 
 def _make_stat_result(tup, dict):
@@ -740,4 +738,3 @@ try:
                      _make_statvfs_result)
 except NameError: # statvfs_result may not exist
     pass
-"""

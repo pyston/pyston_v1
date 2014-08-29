@@ -280,15 +280,12 @@ def _subx(pattern, template):
 
 # register myself for pickling
 
-# Pyston change: disable the pickle-registration for now
-"""
 import copy_reg
 
 def _pickle(p):
     return _compile, (p.pattern, p.flags)
 
 copy_reg.pickle(_pattern_type, _pickle, _compile)
-"""
 
 # --------------------------------------------------------------------
 # experimental stuff (see python-dev discussions for details)

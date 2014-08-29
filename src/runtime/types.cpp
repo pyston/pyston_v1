@@ -386,6 +386,19 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     return boxInstanceMethod(inst, self);
 }
 
+static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
+    RELEASE_ASSERT(self->cls == function_cls, "%s", getTypeName(self)->c_str());
+
+    // This won't work if you subclass from function_cls, since runtimeCall will
+    // just call back into this function.
+    // Fortunately, CPython disallows subclassing FunctionType; we don't currently
+    // disallow it but it's good to know.
+
+    assert(args->cls == tuple_cls);
+    assert(kwargs->cls == dict_cls);
+    return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
+}
+
 extern "C" {
 Box* None = NULL;
 Box* NotImplemented = NULL;
@@ -763,6 +776,8 @@ void setupRuntime() {
     function_cls->giveAttr("__module__",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, modname)));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
+    function_cls->giveAttr("__call__",
+                           new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
