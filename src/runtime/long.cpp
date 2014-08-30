@@ -83,6 +83,12 @@ extern "C" PyObject* PyLong_FromDouble(double v) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* PyLong_FromLong(long ival) {
+    BoxedLong* rtn = new BoxedLong(long_cls);
+    mpz_init_set_si(rtn->n, ival);
+    return rtn;
+}
+
 extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
     BoxedLong* rtn = new BoxedLong(long_cls);
     mpz_init_set_ui(rtn->n, ival);
@@ -91,6 +97,27 @@ extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
 
 extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) {
     Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n, int little_endian, int is_signed) {
+    if (n == 0)
+        return PyLong_FromLong(0);
+
+    if (is_signed) {
+        Py_FatalError("unimplemented");
+        return 0;
+    }
+
+    if (!little_endian) {
+        // TODO: check if the behaviour of mpz_import is right when big endian is specified.
+        Py_FatalError("unimplemented");
+        return 0;
+    }
+
+    BoxedLong* rtn = new BoxedLong(long_cls);
+    mpz_init(rtn->n);
+    mpz_import(rtn->n, 1, 1, n, little_endian ? -1 : 1, 0, &bytes[0]);
+    return rtn;
 }
 
 extern "C" Box* createLong(const std::string* s) {
@@ -199,6 +226,33 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
     } else {
         return NotImplemented;
     }
+}
+
+extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_and(r->n, v1->n, v2->n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_t v2_long;
+        mpz_init(v2_long);
+        if (v2_int->n >= 0)
+            mpz_init_set_ui(v2_long, v2_int->n);
+        else
+            mpz_init_set_si(v2_long, v2_int->n);
+
+        mpz_and(r->n, v1->n, v2_long);
+        return r;
+    }
+    return NotImplemented;
 }
 
 // TODO reduce duplication between these 6 functions, and add double support
@@ -539,6 +593,9 @@ void setupLong() {
 
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr("__add__"));
+
+    long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
+    long_cls->giveAttr("__rand__", long_cls->getattr("__and__"));
 
     long_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)longGt, UNKNOWN, 2)));
     long_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)longGe, UNKNOWN, 2)));

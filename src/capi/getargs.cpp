@@ -210,4 +210,19 @@ extern "C" int PyArg_UnpackTuple(PyObject* args, const char* name, Py_ssize_t mi
     return true;
 }
 
+extern "C" int _PyArg_NoKeywords(const char* funcname, PyObject* kw) {
+    if (kw == NULL)
+        return 1;
+    if (kw->cls != dict_cls) {
+        PyErr_BadInternalCall();
+        return 0;
+    }
+    if (static_cast<BoxedDict*>(kw)->d.empty())
+        return 1;
+
+    PyErr_Format(PyExc_TypeError, "%s does not take keyword arguments", funcname);
+    return 0;
+}
+
+
 } // namespace pyston

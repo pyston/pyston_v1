@@ -39,6 +39,7 @@ extern "C" void init_sha();
 extern "C" void init_sha256();
 extern "C" void init_sha512();
 extern "C" void init_md5();
+extern "C" void init_random();
 extern "C" void init_sre();
 extern "C" void initmath();
 extern "C" void initoperator();
@@ -822,6 +823,7 @@ void setupRuntime() {
     init_sha256();
     init_sha512();
     init_md5();
+    init_random();
     init_sre();
     initmath();
     // TODO enable this
