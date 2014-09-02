@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include <stdint.h>
 #include <ucontext.h>
 
 #include "Python.h"
