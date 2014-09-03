@@ -419,7 +419,7 @@ extern "C" {
 BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *AttributeError, *GeneratorExit, *TypeError,
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
-    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError;
+    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -607,6 +607,7 @@ void setupBuiltins() {
     DeprecationWarning = makeBuiltinException(Warning, "DeprecationWarning");
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
     MemoryError = makeBuiltinException(StandardError, "MemoryError");
+    BufferError = makeBuiltinException(StandardError, "BufferError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
@@ -700,6 +701,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);
+    builtins_module->giveAttr("unicode", unicode_cls);
     builtins_module->giveAttr("int", int_cls);
     builtins_module->giveAttr("long", long_cls);
     builtins_module->giveAttr("float", float_cls);

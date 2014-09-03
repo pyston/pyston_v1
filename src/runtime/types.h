@@ -77,7 +77,7 @@ Box* getSysStdout();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
-    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls;
+    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -230,6 +230,10 @@ public:
     BoxedString(const char* s, size_t n) __attribute__((visibility("default"))) : Box(str_cls), s(s, n) {}
     BoxedString(const std::string&& s) __attribute__((visibility("default"))) : Box(str_cls), s(std::move(s)) {}
     BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(str_cls), s(s) {}
+};
+
+class BoxedUnicode : public Box {
+    // TODO implementation
 };
 
 class BoxedInstanceMethod : public Box {

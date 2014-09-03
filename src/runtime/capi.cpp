@@ -72,7 +72,14 @@ MAKE_CHECK(Long, long_cls)
 MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)
 MAKE_CHECK(Dict, dict_cls)
+
+#ifdef Py_USING_UNICODE
+MAKE_CHECK(Unicode, unicode_cls)
+#endif
+
 #undef MAKE_CHECK
+
+extern "C" { int Py_Py3kWarningFlag; }
 
 extern "C" PyObject* PyDict_New() {
     return new BoxedDict();
@@ -287,6 +294,25 @@ extern "C" void PyObject_Free(void* p) {
     ASSERT(0, "I think this is good enough but I'm not sure; should test");
 }
 
+extern "C" PyObject* _PyObject_GC_Malloc(size_t) {
+    Py_FatalError("unimplemented");
+}
+extern "C" PyObject* _PyObject_GC_New(PyTypeObject*) {
+    Py_FatalError("unimplemented");
+}
+extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject*, Py_ssize_t) {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyObject_GC_Track(void*) {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyObject_GC_UnTrack(void*) {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyObject_GC_Del(void*) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) {
     RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
     RELEASE_ASSERT(args->cls == tuple_cls, "");
@@ -335,6 +361,14 @@ extern "C" PyObject* PyObject_GetIter(PyObject*) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
     try {
         return getitem(o, key);
@@ -343,10 +377,65 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
     }
 }
 
+extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyObject_IsTrue(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyObject_Not(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int _PyArg_NoKeywords(const char* funcname, PyObject* kw) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySequence_Check(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_ssize_t PySequence_Size(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_Concat(PyObject* o1, PyObject* o2) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_InPlaceConcat(PyObject* o1, PyObject* o2) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) {
+    Py_FatalError("unimplemented");
+}
 
 extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) {
     try {
@@ -364,6 +453,46 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t 
     } catch (Box* b) {
         Py_FatalError("unimplemented");
     }
+}
+
+extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySequence_Contains(PyObject* o, PyObject* value) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_List(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_Tuple(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PySequence_Fast(PyObject* o, const char* m) {
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyIter_Next(PyObject*) {
@@ -454,11 +583,163 @@ extern "C" void PyMem_Free(void* ptr) {
     gc_compat_free(ptr);
 }
 
-extern "C" PyObject* PyNumber_Divide(PyObject*, PyObject*) {
+extern "C" int PyNumber_Check(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Add(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Subtract(PyObject*, PyObject*) {
     Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyNumber_Multiply(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Divide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Remainder(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Divmod(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Negative(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Positive(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Absolute(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Invert(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Rshift(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_And(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Or(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceDivide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlacePower(PyObject*, PyObject*, PyObject* o3) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceLshift(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceRshift(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceAnd(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceXor(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyNumber_Coerce(PyObject**, PyObject**) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Int(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Long(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Float(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_Index(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
     Py_FatalError("unimplemented");
 }
 

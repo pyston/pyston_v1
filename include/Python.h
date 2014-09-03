@@ -16,7 +16,6 @@
 #define PYSTON_EXTINCLUDE_PYTHON_H
 
 #include <assert.h>
-#include <ctype.h> // it looks like this gets included via unicodeobject.h in CPython
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -39,6 +38,7 @@
 
 #include "pydebug.h"
 
+#include "unicodeobject.h"
 #include "intobject.h"
 #include "boolobject.h"
 #include "longobject.h"
