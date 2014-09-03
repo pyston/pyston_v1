@@ -465,6 +465,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
     BoxedClass* cls
         = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
+    cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {
         cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew2, UNKNOWN, 2, 1, false, false),
@@ -477,6 +478,27 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
 
     builtins_module->giveAttr(name, cls);
     return cls;
+}
+
+extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* dict) {
+    RELEASE_ASSERT(_base == NULL, "unimplemented");
+    RELEASE_ASSERT(dict == NULL, "unimplemented");
+
+    try {
+        BoxedClass* base = Exception;
+        BoxedClass* cls
+            = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
+
+        char* dot_pos = strchr(name, '.');
+        RELEASE_ASSERT(dot_pos, "");
+        int n = strlen(name);
+
+        cls->giveAttr("__module__", boxStrConstantSize(name, dot_pos - name));
+        cls->giveAttr("__name__", boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1));
+        return cls;
+    } catch (Box* e) {
+        abort();
+    }
 }
 
 BoxedClass* enumerate_cls;

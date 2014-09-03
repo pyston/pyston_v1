@@ -965,6 +965,10 @@ extern "C" Py_ssize_t PyString_Size(PyObject* s) {
     return static_cast<BoxedString*>(s)->s.size();
 }
 
+extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) {
+    Py_FatalError("unimplemented");
+}
+
 static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) {
     RELEASE_ASSERT(index == 0, "");
     // I think maybe this can just be a non-release assert?  shouldn't be able to call this with

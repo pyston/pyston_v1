@@ -42,6 +42,7 @@ extern "C" void init_md5();
 extern "C" void init_sre();
 extern "C" void initmath();
 extern "C" void initoperator();
+extern "C" void initbinascii();
 
 namespace pyston {
 
@@ -825,6 +826,7 @@ void setupRuntime() {
     initmath();
     // TODO enable this
     // initoperator();
+    initbinascii();
 
     setupSysEnd();
 
