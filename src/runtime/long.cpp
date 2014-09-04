@@ -394,6 +394,36 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
     }
 }
 
+Box* longRshift(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        if (mpz_cmp_si(v2->n, 0) < 0)
+            raiseExcHelper(ValueError, "negative shift count");
+
+        uint64_t n = asUnsignedLong(v2);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_div_2exp(r->n, v1->n, n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+        if (v2->n < 0)
+            raiseExcHelper(ValueError, "negative shift count");
+
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_div_2exp(r->n, v1->n, v2->n);
+        return r;
+    } else {
+        return NotImplemented;
+    }
+}
+
 Box* longSub(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'",
@@ -605,6 +635,7 @@ void setupLong() {
     long_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)longNe, UNKNOWN, 2)));
 
     long_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)longLshift, UNKNOWN, 2)));
+    long_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)longRshift, UNKNOWN, 2)));
 
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));

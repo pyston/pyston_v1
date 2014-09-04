@@ -35,6 +35,15 @@ public:
 
     BoxedMethodDescriptor(PyMethodDef* method) : Box(method_cls), method(method) {}
 
+    static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
+        RELEASE_ASSERT(self->cls == method_cls, "");
+
+        if (inst == None)
+            return self;
+        // CPython apparently returns a "builtin_function_or_method" object
+        return boxInstanceMethod(inst, self);
+    }
+
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args) {
         BoxedDict* kwargs = static_cast<BoxedDict*>(_args[0]);
 
@@ -119,10 +128,14 @@ extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
-    if (nitems == 0)
-        return _PyObject_New(cls);
-    Py_FatalError("unimplemented");
-    return NULL;
+    RELEASE_ASSERT(nitems == 0, "unimplemented");
+    RELEASE_ASSERT(cls->tp_itemsize == 0, "unimplemented");
+
+    auto rtn = (PyObject*)gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    memset(rtn, 0, cls->tp_basicsize);
+
+    PyObject_Init(rtn, cls);
+    return rtn;
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) {
@@ -294,12 +307,22 @@ extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) {
 }
 
 extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
+    RELEASE_ASSERT(op, "");
+    RELEASE_ASSERT(tp, "");
+
     assert(gc::isValidGCObject(op));
     assert(gc::isValidGCObject(tp));
 
-    RELEASE_ASSERT(op, "");
-    RELEASE_ASSERT(tp, "");
     Py_TYPE(op) = tp;
+
+    // I think CPython defers the dict creation (equivalent of our initUserAttrs) to the
+    // first time that an attribute gets set.
+    // Our HCAttrs object already includes this optimization of no-allocation-if-empty,
+    // but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
+    // TODO It does mean that anything not defering to this function will have to call
+    // initUserAttrs themselves, though.
+    initUserAttrs(op, tp);
+
     return op;
 }
 
@@ -316,8 +339,11 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
 
 extern "C" PyObject* _PyObject_New(PyTypeObject* cls) {
     assert(cls->tp_itemsize == 0);
+
     auto rtn = (PyObject*)gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    rtn->cls = cls;
+    // no memset for this function
+
+    PyObject_Init(rtn, cls);
     return rtn;
 }
 
@@ -421,8 +447,12 @@ extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) 
     Py_FatalError("unimplemented");
 }
 
-extern "C" long PyObject_Hash(PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" long PyObject_Hash(PyObject* o) {
+    try {
+        return hash(o)->n;
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" int PyObject_IsTrue(PyObject* o) {
@@ -851,6 +881,8 @@ void setupCAPI() {
 
     method_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
     method_cls->giveAttr("__name__", boxStrConstant("method"));
+    method_cls->giveAttr("__get__",
+                         new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
                                                                      0, true, true)));
     method_cls->freeze();

@@ -324,8 +324,6 @@ extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict)
     }
     assert(metaclass);
 
-    BoxedClass* made;
-
     Box* r = runtimeCall(metaclass, ArgPassSpec(3), boxStringPtr(name), _bases, _attr_dict, NULL, NULL);
     RELEASE_ASSERT(r, "");
     return r;
@@ -387,6 +385,12 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     if (inst == None)
         return boxUnboundInstanceMethod(self);
     return boxInstanceMethod(inst, self);
+}
+
+static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
+    RELEASE_ASSERT(self->cls == member_cls, "");
+
+    Py_FatalError("unimplemented");
 }
 
 static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
@@ -753,6 +757,7 @@ void setupRuntime() {
     module_cls->freeze();
 
     member_cls->giveAttr("__name__", boxStrConstant("member"));
+    member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_cls->freeze();
 
     closure_cls->giveAttr("__name__", boxStrConstant("closure"));

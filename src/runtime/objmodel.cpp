@@ -447,6 +447,28 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
         gc::registerPermanentRoot(this);
 }
 
+std::string getFullNameOfClass(BoxedClass* cls) {
+    Box* b = cls->getattr("__name__");
+    assert(b);
+    ASSERT(b->cls == str_cls, "%p", b->cls);
+    BoxedString* name = static_cast<BoxedString*>(b);
+
+    b = cls->getattr("__module__");
+    if (!b)
+        return name->s;
+    assert(b);
+    if (b->cls != str_cls)
+        return name->s;
+
+    BoxedString* module = static_cast<BoxedString*>(b);
+
+    return module->s + "." + name->s;
+}
+
+std::string getFullTypeName(Box* o) {
+    return getFullNameOfClass(o->cls);
+}
+
 extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
     Box* b = cls->getattr("__name__");
     assert(b);
@@ -1788,9 +1810,14 @@ extern "C" void dump(void* p) {
     if (al->kind_id == gc::GCKind::PYTHON) {
         printf("Python object\n");
         Box* b = (Box*)p;
-        printf("Class: %s\n", getTypeName(b)->c_str());
+        printf("Class: %s\n", getFullTypeName(b).c_str());
+
         if (isSubclass(b->cls, type_cls)) {
-            printf("Type name: %s\n", getNameOfClass(static_cast<BoxedClass*>(b))->c_str());
+            printf("Type name: %s\n", getFullNameOfClass(static_cast<BoxedClass*>(b)).c_str());
+        }
+
+        if (isSubclass(b->cls, str_cls)) {
+            printf("String value: %s\n", static_cast<BoxedString*>(b)->s.c_str());
         }
         return;
     }
@@ -3323,6 +3350,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
     made->setattr("__name__", name, NULL);
+
+    // TODO this function (typeNew) should probably call PyType_Ready
+
+    made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
 
     return made;
 }

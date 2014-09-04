@@ -630,6 +630,7 @@ void setupBuiltins() {
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
     MemoryError = makeBuiltinException(StandardError, "MemoryError");
     BufferError = makeBuiltinException(StandardError, "BufferError");
+    /*NotImplementedError=*/makeBuiltinException(RuntimeError, "NotImplementedError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
