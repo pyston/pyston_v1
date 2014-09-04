@@ -184,7 +184,22 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     // tp_doc
 
     if (cls->tp_new) {
-        cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)cls->tp_new, UNKNOWN, 1, 0, true, true)));
+        // Wrap the tp_new in a MethodDescriptor, which will take care of
+        // converting between C API mode and Pyston mode:
+        static bool initialized = false;
+        static PyMethodDef new_method_def;
+        if (!initialized) {
+            new_method_def.ml_name = "__new__";
+            new_method_def.ml_meth = (PyCFunction)cls->tp_new;
+            new_method_def.ml_flags = METH_VARARGS | METH_KEYWORDS;
+            new_method_def.ml_doc = NULL;
+            initialized = true;
+        }
+        cls->giveAttr("__new__", new BoxedMethodDescriptor(&new_method_def));
+
+        // Clear tp_new for now since we are not keeping it updated, and would rather that
+        // clients crash instead of use unguaranteed behavior:
+        cls->tp_new = NULL;
     }
 
     if (!cls->tp_alloc) {
