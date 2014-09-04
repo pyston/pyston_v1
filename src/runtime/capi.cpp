@@ -55,6 +55,10 @@ public:
             rtn = (Box*)self->method->ml_meth(obj, varargs);
         } else if (ml_flags == (METH_VARARGS | METH_KEYWORDS)) {
             rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(obj, varargs, kwargs);
+        } else if (ml_flags == METH_O) {
+            assert(kwargs->d.size() == 0);
+            assert(varargs->elts.size() == 1);
+            rtn = (Box*)self->method->ml_meth(obj, varargs->elts[0]);
         } else {
             RELEASE_ASSERT(0, "0x%x", ml_flags);
         }
@@ -114,6 +118,13 @@ extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
 }
 
+extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
+    if (nitems == 0)
+        return _PyObject_New(cls);
+    Py_FatalError("unimplemented");
+    return NULL;
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) {
     gc::registerNonheapRootObject(cls);
 
@@ -129,10 +140,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_hash == NULL, "");
     RELEASE_ASSERT(cls->tp_call == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
-    RELEASE_ASSERT(cls->tp_getattro == NULL, "");
+    RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
-    RELEASE_ASSERT(cls->tp_flags == Py_TPFLAGS_DEFAULT, "");
+    RELEASE_ASSERT((cls->tp_flags & ~(Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE)) == 0, "");
     RELEASE_ASSERT(cls->tp_traverse == NULL, "");
     RELEASE_ASSERT(cls->tp_clear == NULL, "");
     RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
@@ -144,8 +155,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_init == NULL, "");
     RELEASE_ASSERT(cls->tp_alloc == NULL, "");
-    RELEASE_ASSERT(cls->tp_new == NULL, "");
-    RELEASE_ASSERT(cls->tp_free == NULL, "");
+    RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
@@ -173,6 +183,13 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     // tp_basicsize, tp_itemsize
     // tp_doc
 
+    if (cls->tp_new) {
+        cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)cls->tp_new, UNKNOWN, 1, 0, true, true)));
+    }
+
+    if (!cls->tp_alloc) {
+        cls->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
+    }
 
     for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
         cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method));
@@ -389,9 +406,18 @@ extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) 
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_IsTrue(PyObject* o) {
+extern "C" long PyObject_Hash(PyObject*) {
     Py_FatalError("unimplemented");
 }
+
+extern "C" int PyObject_IsTrue(PyObject* o) {
+    try {
+        return nonzero(o);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
+}
+
 
 extern "C" int PyObject_Not(PyObject* o) {
     Py_FatalError("unimplemented");
@@ -406,10 +432,6 @@ extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
 }
 
 extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" int _PyArg_NoKeywords(const char* funcname, PyObject* kw) {
     Py_FatalError("unimplemented");
 }
 
@@ -595,12 +617,20 @@ extern "C" PyObject* PyNumber_Subtract(PyObject*, PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Multiply(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::Mult);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
-extern "C" PyObject* PyNumber_Divide(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::Div);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) {
@@ -611,8 +641,12 @@ extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Remainder(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::Mod);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_Divmod(PyObject*, PyObject*) {
@@ -632,7 +666,11 @@ extern "C" PyObject* PyNumber_Positive(PyObject* o) {
 }
 
 extern "C" PyObject* PyNumber_Absolute(PyObject* o) {
-    Py_FatalError("unimplemented");
+    try {
+        return abs_(o);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_Invert(PyObject* o) {
@@ -643,12 +681,20 @@ extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Rshift(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::RShift);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
-extern "C" PyObject* PyNumber_And(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::BitAnd);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) {

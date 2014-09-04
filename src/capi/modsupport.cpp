@@ -81,7 +81,7 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     if (!passthrough)
         passthrough = None;
 
-    while (methods->ml_name) {
+    while (methods && methods->ml_name) {
         if (VERBOSITY())
             printf("Loading method %s\n", methods->ml_name);
 
