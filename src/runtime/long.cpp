@@ -224,6 +224,14 @@ Box* longNeg(BoxedLong* v1) {
     return r;
 }
 
+Box* longAbs(BoxedLong* v1) {
+    assert(isSubclass(v1->cls, long_cls));
+    BoxedLong* r = new BoxedLong(long_cls);
+    mpz_init(r->n);
+    mpz_abs(r->n, v1->n);
+    return r;
+}
+
 Box* longAdd(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__add__' requires a 'long' object but received a '%s'",
