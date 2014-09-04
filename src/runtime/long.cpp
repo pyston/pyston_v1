@@ -133,7 +133,7 @@ extern "C" BoxedLong* boxLong(int64_t n) {
     return rtn;
 }
 
-extern "C" Box* longNew(Box* _cls, Box* val) {
+extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
@@ -147,16 +147,39 @@ extern "C" Box* longNew(Box* _cls, Box* val) {
     BoxedLong* rtn = ::new (mem) BoxedLong(cls);
     initUserAttrs(rtn, cls);
 
-    if (val->cls == int_cls) {
-        mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
-    } else if (val->cls == str_cls) {
-        const std::string& s = static_cast<BoxedString*>(val)->s;
-        int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
+    if (_base) {
+        if (!isSubclass(_base->cls, int_cls))
+            raiseExcHelper(TypeError, "an integer is required");
+        int base = static_cast<BoxedInt*>(_base)->n;
+
+        if (!isSubclass(val->cls, str_cls))
+            raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
+        BoxedString* s = static_cast<BoxedString*>(val);
+
+        if (base == 0) {
+            // mpz_init_set_str has the ability to auto-detect the base, but I doubt it's
+            // quite the same as Python's (ex might be missing octal or binary)
+            Py_FatalError("unimplemented");
+        }
+
+        if (base < 2 || base > 36) {
+            raiseExcHelper(TypeError, "long() arg2 must be >= 2 and <= 36");
+        }
+
+        int r = mpz_init_set_str(rtn->n, s->s.c_str(), base);
         RELEASE_ASSERT(r == 0, "");
     } else {
-        fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
-                getTypeName(val)->c_str());
-        raiseExcHelper(TypeError, "");
+        if (val->cls == int_cls) {
+            mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
+        } else if (val->cls == str_cls) {
+            const std::string& s = static_cast<BoxedString*>(val)->s;
+            int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
+            RELEASE_ASSERT(r == 0, "");
+        } else {
+            fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
+                    getTypeName(val)->c_str());
+            raiseExcHelper(TypeError, "");
+        }
     }
     return rtn;
 }
@@ -607,8 +630,8 @@ Box* longNonzero(BoxedLong* self) {
 void setupLong() {
     long_cls->giveAttr("__name__", boxStrConstant("long"));
 
-    long_cls->giveAttr("__new__",
-                       new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
+    long_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
 
     long_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)longMul, UNKNOWN, 2)));
     long_cls->giveAttr("__rmul__", long_cls->getattr("__mul__"));

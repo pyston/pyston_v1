@@ -41,3 +41,7 @@ try:
     print (1L) << (-1)
 except ValueError, e:
     print e
+
+print long("100", 16)
+print long("100", 10)
+print long("100", 26)
