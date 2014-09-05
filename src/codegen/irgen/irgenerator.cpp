@@ -414,13 +414,13 @@ private:
             case AST_LangPrimitive::IMPORT_FROM: {
                 assert(node->args.size() == 2);
                 assert(node->args[0]->type == AST_TYPE::Name);
-                assert(node->args[1]->type == AST_TYPE::Name);
+                assert(node->args[1]->type == AST_TYPE::Str);
 
                 CompilerVariable* module = evalExpr(node->args[0], exc_info);
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
                 module->decvref(emitter);
 
-                const std::string& name = ast_cast<AST_Name>(node->args[1])->id;
+                const std::string& name = ast_cast<AST_Str>(node->args[1])->s;
                 assert(name.size());
 
                 llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, converted_module->getValue(),

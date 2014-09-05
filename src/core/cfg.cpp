@@ -1129,7 +1129,7 @@ public:
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
                 import_from->args.push_back(makeName(tmp_module_name, AST_TYPE::Load));
-                import_from->args.push_back(makeName(a->name, AST_TYPE::Load));
+                import_from->args.push_back(new AST_Str(a->name));
 
                 std::string tmp_import_name = nodeName(a);
                 pushAssign(tmp_import_name, import_from);

@@ -669,8 +669,12 @@ Box* longHash(BoxedLong* self) {
 
     // Not sure if this is a good hash function or not;
     // simple, but only includes top bits:
-    double d = mpz_get_d(self->n);
-    return boxInt(*reinterpret_cast<int64_t*>(&d));
+    union {
+        uint64_t n;
+        double d;
+    };
+    d = mpz_get_d(self->n);
+    return boxInt(n);
 }
 
 void setupLong() {
