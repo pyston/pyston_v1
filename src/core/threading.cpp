@@ -345,6 +345,7 @@ void registerMainThread() {
     current_threads[gettid()] = new ThreadStateInternal(find_stack(), pthread_self());
 
     struct sigaction act;
+    memset(&act, 0, sizeof(act));
     act.sa_flags = SA_SIGINFO;
     act.sa_sigaction = _thread_context_dump;
     struct sigaction oldact;

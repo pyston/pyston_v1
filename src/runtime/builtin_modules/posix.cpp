@@ -39,7 +39,7 @@ Box* urandom(Box* _n) {
     int fd = ::open("/dev/urandom", O_RDONLY);
     RELEASE_ASSERT(fd > 0, "");
 
-    BoxedString* r = static_cast<BoxedString*>(PyString_FromStringAndSize(NULL, sizeof(n)));
+    BoxedString* r = static_cast<BoxedString*>(PyString_FromStringAndSize(NULL, n));
     RELEASE_ASSERT(r, "");
     char* buf = PyString_AsString(r);
 
@@ -49,6 +49,7 @@ Box* urandom(Box* _n) {
         assert(this_read > 0);
         total_read += this_read;
     }
+    ::close(fd);
 
     return r;
 }

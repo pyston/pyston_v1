@@ -90,6 +90,8 @@ extern "C" Box* abs_(Box* x) {
     } else if (x->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(x)->d;
         return boxFloat(d >= 0 ? d : -d);
+    } else if (x->cls == long_cls) {
+        return longAbs(static_cast<BoxedLong*>(x));
     } else {
         RELEASE_ASSERT(0, "%s", getTypeName(x)->c_str());
     }
