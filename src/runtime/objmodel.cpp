@@ -2225,9 +2225,9 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         } else {
             rewrite_args->obj.setDoneUsing();
         }
-        assert(rewrite_args->call_done_guarding);
-        if (!rewrite_args->rewriter->isDoneGuarding())
+        if (rewrite_args->call_done_guarding)
             rewrite_args->rewriter->setDoneGuarding();
+        assert(rewrite_args->rewriter->isDoneGuarding());
         // if (guard_clfunc) {
         // Have to save the defaults array since the object itself will probably get overwritten:
         // rewrite_args->obj = rewrite_args->obj.move(-2);
@@ -3443,7 +3443,6 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
                 r_init = std::move(grewrite_args.out_rtn);
                 r_init.addGuard((intptr_t)init_attr);
             }
-            rewrite_args->rewriter->setDoneGuarding();
         }
     } else {
         init_attr = typeLookup(cls, _init_str, NULL);
@@ -3483,6 +3482,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
         if (!srewrite_args.out_success) {
             rewrite_args = NULL;
         } else {
+            assert(rewrite_args->rewriter->isDoneGuarding());
             r_made = std::move(srewrite_args.out_rtn);
         }
     } else {
@@ -3502,8 +3502,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     if (init_attr && init_attr != typeLookup(object_cls, _init_str, NULL)) {
         Box* initrtn;
         if (rewrite_args) {
-            CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_init), rewrite_args->destination,
-                                          rewrite_args->call_done_guarding);
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_init), rewrite_args->destination, false);
             if (npassed_args >= 1)
                 srewrite_args.arg1 = r_made.addUse();
             if (npassed_args >= 2)
