@@ -58,15 +58,15 @@ struct GetattrRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage obj;
     Location destination;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
     RewriterVarUsage out_rtn;
 
     bool obj_hcls_guarded;
 
-    GetattrRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, Location destination, bool more_guards_after)
-        : rewriter(rewriter), obj(std::move(obj)), destination(destination), more_guards_after(more_guards_after),
+    GetattrRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, Location destination, bool call_done_guarding)
+        : rewriter(rewriter), obj(std::move(obj)), destination(destination), call_done_guarding(call_done_guarding),
           out_success(false), out_rtn(RewriterVarUsage::empty()), obj_hcls_guarded(false) {}
 
     ~GetattrRewriteArgs() {
@@ -81,12 +81,12 @@ struct GetattrRewriteArgs {
 struct SetattrRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage obj, attrval;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
 
-    SetattrRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, RewriterVarUsage&& attrval, bool more_guards_after)
-        : rewriter(rewriter), obj(std::move(obj)), attrval(std::move(attrval)), more_guards_after(more_guards_after),
+    SetattrRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, RewriterVarUsage&& attrval, bool call_done_guarding)
+        : rewriter(rewriter), obj(std::move(obj)), attrval(std::move(attrval)), call_done_guarding(call_done_guarding),
           out_success(false) {}
 
     ~SetattrRewriteArgs() {
@@ -101,12 +101,12 @@ struct SetattrRewriteArgs {
 struct DelattrRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage obj;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
 
-    DelattrRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, bool more_guards_after)
-        : rewriter(rewriter), obj(std::move(obj)), more_guards_after(more_guards_after), out_success(false) {}
+    DelattrRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, bool call_done_guarding)
+        : rewriter(rewriter), obj(std::move(obj)), call_done_guarding(call_done_guarding), out_success(false) {}
 
     ~DelattrRewriteArgs() {
         if (!out_success) {
@@ -121,13 +121,13 @@ struct LenRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage obj;
     Location destination;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
     RewriterVarUsage out_rtn;
 
-    LenRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, Location destination, bool more_guards_after)
-        : rewriter(rewriter), obj(std::move(obj)), destination(destination), more_guards_after(more_guards_after),
+    LenRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, Location destination, bool call_done_guarding)
+        : rewriter(rewriter), obj(std::move(obj)), destination(destination), call_done_guarding(call_done_guarding),
           out_success(false), out_rtn(RewriterVarUsage::empty()) {}
 
     ~LenRewriteArgs() {
@@ -146,15 +146,15 @@ struct CallRewriteArgs {
     bool func_guarded;
     bool args_guarded;
     Location destination;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
     RewriterVarUsage out_rtn;
 
-    CallRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, Location destination, bool more_guards_after)
+    CallRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& obj, Location destination, bool call_done_guarding)
         : rewriter(rewriter), obj(std::move(obj)), arg1(RewriterVarUsage::empty()), arg2(RewriterVarUsage::empty()),
           arg3(RewriterVarUsage::empty()), args(RewriterVarUsage::empty()), func_guarded(false), args_guarded(false),
-          destination(destination), more_guards_after(more_guards_after), out_success(false),
+          destination(destination), call_done_guarding(call_done_guarding), out_success(false),
           out_rtn(RewriterVarUsage::empty()) {}
 
     ~CallRewriteArgs() {
@@ -176,15 +176,15 @@ struct BinopRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage lhs, rhs;
     Location destination;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
     RewriterVarUsage out_rtn;
 
     BinopRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& lhs, RewriterVarUsage&& rhs, Location destination,
-                     bool more_guards_after)
+                     bool call_done_guarding)
         : rewriter(rewriter), lhs(std::move(lhs)), rhs(std::move(rhs)), destination(destination),
-          more_guards_after(more_guards_after), out_success(false), out_rtn(RewriterVarUsage::empty()) {}
+          call_done_guarding(call_done_guarding), out_success(false), out_rtn(RewriterVarUsage::empty()) {}
 
     ~BinopRewriteArgs() {
         if (!out_success) {
@@ -202,15 +202,15 @@ struct CompareRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage lhs, rhs;
     Location destination;
-    bool more_guards_after;
+    bool call_done_guarding;
 
     bool out_success;
     RewriterVarUsage out_rtn;
 
     CompareRewriteArgs(Rewriter* rewriter, RewriterVarUsage&& lhs, RewriterVarUsage&& rhs, Location destination,
-                       bool more_guards_after)
+                       bool call_done_guarding)
         : rewriter(rewriter), lhs(std::move(lhs)), rhs(std::move(rhs)), destination(destination),
-          more_guards_after(more_guards_after), out_success(false), out_rtn(RewriterVarUsage::empty()) {}
+          call_done_guarding(call_done_guarding), out_success(false), out_rtn(RewriterVarUsage::empty()) {}
 
     ~CompareRewriteArgs() {
         if (!out_success) {
@@ -561,7 +561,7 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     if (!cls->instancesHaveAttrs()) {
         if (rewrite_args) {
             rewrite_args->obj.setDoneUsing();
-            if (!rewrite_args->more_guards_after)
+            if (rewrite_args->call_done_guarding)
                 rewrite_args->rewriter->setDoneGuarding();
         }
 
@@ -575,7 +575,7 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
         if (!rewrite_args->obj_hcls_guarded)
             rewrite_args->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
 
-        if (!rewrite_args->more_guards_after)
+        if (rewrite_args->call_done_guarding)
             rewrite_args->rewriter->setDoneGuarding();
     }
 
@@ -652,7 +652,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     if (rewrite_args) {
         rewrite_args->obj.addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
 
-        if (!rewrite_args->more_guards_after)
+        if (rewrite_args->call_done_guarding)
             rewrite_args->rewriter->setDoneGuarding();
         // rewrite_args->rewriter->addDecision(offset == -1 ? 1 : 0);
     }
@@ -733,8 +733,8 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
         assert(!rewrite_args->out_success);
 
         RewriterVarUsage obj_saved = rewrite_args->obj.addUse();
-        bool more_guards_after_saved = rewrite_args->more_guards_after;
-        rewrite_args->more_guards_after = true;
+        bool call_done_guarding = rewrite_args->call_done_guarding;
+        rewrite_args->call_done_guarding = false;
 
         val = cls->getattr(attr, rewrite_args);
         assert(rewrite_args->out_success);
@@ -745,7 +745,7 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
         } else {
             obj_saved.setDoneUsing();
         }
-        if (!more_guards_after_saved)
+        if (call_done_guarding)
             rewrite_args->rewriter->setDoneGuarding();
         return val;
     } else {
@@ -769,7 +769,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                 // can't guard after because we make this call... the call is trivial enough
                 // that we can probably work around it if it's important, but otherwise, if
                 // this triggers, just abort rewriting, I guess
-                assert(!rewrite_args->more_guards_after);
+                assert(rewrite_args->call_done_guarding);
                 rewrite_args->rewriter->setDoneGuarding();
                 rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod,
                                                                      std::move(rewrite_args->obj), std::move(r_descr));
@@ -778,7 +778,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             return boxInstanceMethod(obj, descr);
         } else {
             if (rewrite_args) {
-                if (!rewrite_args->more_guards_after)
+                if (rewrite_args->call_done_guarding)
                     rewrite_args->rewriter->setDoneGuarding();
                 rewrite_args->obj.setDoneUsing();
                 rewrite_args->out_rtn = std::move(r_descr);
@@ -801,7 +801,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
 
         if (!for_call) {
             if (rewrite_args) {
-                assert(!rewrite_args->more_guards_after);
+                assert(rewrite_args->call_done_guarding);
                 rewrite_args->rewriter->setDoneGuarding();
                 rewrite_args->obj.setDoneUsing();
 
@@ -813,7 +813,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             return boxUnboundInstanceMethod(descr);
         } else {
             if (rewrite_args) {
-                if (!rewrite_args->more_guards_after)
+                if (rewrite_args->call_done_guarding)
                     rewrite_args->rewriter->setDoneGuarding();
                 rewrite_args->obj.setDoneUsing();
                 rewrite_args->out_success = true;
@@ -830,7 +830,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             r_descr.addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
         if (rewrite_args) {
-            assert(!rewrite_args->more_guards_after);
+            assert(rewrite_args->call_done_guarding);
             rewrite_args->rewriter->setDoneGuarding();
             rewrite_args->obj.setDoneUsing();
 
@@ -853,7 +853,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
         // TODO should also have logic to raise a type error if type of obj is wrong
 
         if (rewrite_args) {
-            if (!rewrite_args->more_guards_after)
+            if (rewrite_args->call_done_guarding)
                 rewrite_args->rewriter->setDoneGuarding();
             r_descr.setDoneUsing();
         }
@@ -931,7 +931,7 @@ extern "C" Box* getclsattr(Box* obj, const char* attr) {
 
     if (rewriter.get()) {
         // rewriter->trap();
-        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), false);
+        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), true);
         gotten = getclsattr_internal(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success && gotten) {
@@ -977,13 +977,13 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         Box* val = NULL;
         if (rewrite_args) {
             GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj.addUse(),
-                                             rewrite_args->destination, true);
+                                             rewrite_args->destination, false);
             val = obj->getattr(attr, &hrewrite_args);
 
             if (!hrewrite_args.out_success) {
                 rewrite_args = NULL;
             } else if (val) {
-                if (!rewrite_args->more_guards_after)
+                if (rewrite_args->call_done_guarding)
                     rewrite_args->rewriter->setDoneGuarding();
                 rewrite_args->out_rtn = std::move(hrewrite_args.out_rtn);
                 rewrite_args->out_success = true;
@@ -1005,7 +1005,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         if (closure->parent) {
             if (rewrite_args) {
                 rewrite_args->obj = rewrite_args->obj.getAttr(offsetof(BoxedClosure, parent), RewriterVarUsage::NoKill);
-                if (!rewrite_args->more_guards_after)
+                if (rewrite_args->call_done_guarding)
                     rewrite_args->rewriter->setDoneGuarding();
             }
             return getattrInternal(closure->parent, attr, rewrite_args);
@@ -1051,7 +1051,8 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
     if (rewrite_args) {
         RewriterVarUsage r_obj_cls
             = rewrite_args->obj.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::NoKill, Location::any());
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, std::move(r_obj_cls), rewrite_args->destination, true);
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, std::move(r_obj_cls), rewrite_args->destination,
+                                         false);
         descr = typeLookup(obj->cls, attr, &grewrite_args);
 
         if (!grewrite_args.out_success) {
@@ -1085,7 +1086,8 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             if (rewrite_args) {
                 RewriterVarUsage r_descr_cls
                     = r_descr.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::NoKill, Location::any());
-                GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, std::move(r_descr_cls), Location::any(), true);
+                GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, std::move(r_descr_cls), Location::any(),
+                                                 false);
                 _get_ = typeLookup(descr->cls, "__get__", &grewrite_args);
                 if (!grewrite_args.out_success) {
                     rewrite_args = NULL;
@@ -1104,7 +1106,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                     RewriterVarUsage r_descr_cls
                         = r_descr.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::NoKill, Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, std::move(r_descr_cls), Location::any(),
-                                                     true);
+                                                     false);
                     _set_ = typeLookup(descr->cls, "__set__", &grewrite_args);
                     if (!grewrite_args.out_success) {
                         rewrite_args = NULL;
@@ -1118,13 +1120,13 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                 // Call __get__(descr, obj, obj->cls)
                 if (_set_) {
                     // this could happen for the callattr path...
-                    if (rewrite_args && rewrite_args->more_guards_after)
+                    if (rewrite_args && !rewrite_args->call_done_guarding)
                         rewrite_args = NULL;
 
                     Box* res;
                     if (rewrite_args) {
                         CallRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(r_get),
-                                                      rewrite_args->destination, rewrite_args->more_guards_after);
+                                                      rewrite_args->destination, rewrite_args->call_done_guarding);
                         crewrite_args.arg1 = std::move(r_descr);
                         crewrite_args.arg2 = rewrite_args->obj.addUse();
                         crewrite_args.arg3
@@ -1156,7 +1158,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             RewriterVarUsage r_val(RewriterVarUsage::empty());
             if (rewrite_args) {
                 GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj.addUse(),
-                                                 rewrite_args->destination, true);
+                                                 rewrite_args->destination, false);
                 val = obj->getattr(attr, &hrewrite_args);
 
                 if (!hrewrite_args.out_success) {
@@ -1170,7 +1172,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
 
             if (val) {
                 if (rewrite_args) {
-                    if (!rewrite_args->more_guards_after)
+                    if (rewrite_args->call_done_guarding)
                         rewrite_args->rewriter->setDoneGuarding();
                     rewrite_args->obj.setDoneUsing();
                     rewrite_args->out_rtn = std::move(r_val);
@@ -1191,7 +1193,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             RewriterVarUsage r_val(RewriterVarUsage::empty());
             if (rewrite_args) {
                 GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj.addUse(),
-                                                 rewrite_args->destination, true);
+                                                 rewrite_args->destination, false);
 
                 val = typeLookup(static_cast<BoxedClass*>(obj), attr, &grewrite_args);
                 if (!grewrite_args.out_success) {
@@ -1220,7 +1222,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                     RewriterVarUsage r_val_cls
                         = r_val.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::NoKill, Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, std::move(r_val_cls), Location::any(),
-                                                     true);
+                                                     false);
                     local_get = typeLookup(val->cls, "__get__", &grewrite_args);
                     if (!grewrite_args.out_success) {
                         rewrite_args = NULL;
@@ -1236,12 +1238,12 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                     Box* res;
 
                     // this could happen for the callattr path...
-                    if (rewrite_args && rewrite_args->more_guards_after)
+                    if (rewrite_args && !rewrite_args->call_done_guarding)
                         rewrite_args = NULL;
 
                     if (rewrite_args) {
                         CallRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(r_get),
-                                                      rewrite_args->destination, rewrite_args->more_guards_after);
+                                                      rewrite_args->destination, rewrite_args->call_done_guarding);
                         crewrite_args.arg1 = std::move(r_val);
                         crewrite_args.arg2 = rewrite_args->rewriter->loadConst((intptr_t)None, Location::any());
                         crewrite_args.arg3 = std::move(rewrite_args->obj);
@@ -1263,7 +1265,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
 
                 // If there was no local __get__, just return val
                 if (rewrite_args) {
-                    if (!rewrite_args->more_guards_after)
+                    if (rewrite_args->call_done_guarding)
                         rewrite_args->rewriter->setDoneGuarding();
                     rewrite_args->obj.setDoneUsing();
                     rewrite_args->out_rtn = std::move(r_val);
@@ -1288,13 +1290,13 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // the result.
         if (_get_) {
             // this could happen for the callattr path...
-            if (rewrite_args && rewrite_args->more_guards_after)
+            if (rewrite_args && !rewrite_args->call_done_guarding)
                 rewrite_args = NULL;
 
             Box* res;
             if (rewrite_args) {
                 CallRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(r_get), rewrite_args->destination,
-                                              rewrite_args->more_guards_after);
+                                              rewrite_args->call_done_guarding);
                 crewrite_args.arg1 = std::move(r_descr);
                 crewrite_args.arg2 = rewrite_args->obj.addUse();
                 crewrite_args.arg3 = rewrite_args->obj.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::Kill, Location::any());
@@ -1316,7 +1318,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // Otherwise, just return descr.
         if (rewrite_args) {
             rewrite_args->obj.setDoneUsing();
-            if (!rewrite_args->more_guards_after)
+            if (rewrite_args->call_done_guarding)
                 rewrite_args->rewriter->setDoneGuarding();
             rewrite_args->out_rtn = std::move(r_descr);
             rewrite_args->out_success = true;
@@ -1386,7 +1388,7 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
             dest = Location::forArg(1);
         else
             dest = rewriter->getReturnDestination();
-        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest, false);
+        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), dest, true);
         val = getattrInternal(obj, attr, &rewrite_args);
 
         // should make sure getattrInternal calls finishes using obj itself
@@ -1429,7 +1431,7 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         RewriterVarUsage r_cls
             = rewrite_args->obj.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::KillFlag::NoKill, Location::any());
         GetattrRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(r_cls),
-                                         rewrite_args->rewriter->getReturnDestination(), true);
+                                         rewrite_args->rewriter->getReturnDestination(), false);
         descr = typeLookup(obj->cls, attr, &crewrite_args);
 
         if (!crewrite_args.out_success) {
@@ -1447,7 +1449,7 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         if (rewrite_args) {
             RewriterVarUsage r_cls
                 = r_descr.getAttr(BOX_CLS_OFFSET, RewriterVarUsage::KillFlag::NoKill, Location::any());
-            GetattrRewriteArgs trewrite_args(rewrite_args->rewriter, std::move(r_cls), Location::any(), true);
+            GetattrRewriteArgs trewrite_args(rewrite_args->rewriter, std::move(r_cls), Location::any(), false);
             _set_ = typeLookup(descr->cls, "__set__", &trewrite_args);
             if (!trewrite_args.out_success) {
                 rewrite_args = NULL;
@@ -1464,7 +1466,7 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
     if (descr && _set_) {
         if (rewrite_args) {
             CallRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(r_set), Location::any(),
-                                          rewrite_args->more_guards_after);
+                                          rewrite_args->call_done_guarding);
             crewrite_args.arg1 = std::move(r_descr);
             crewrite_args.arg2 = std::move(rewrite_args->obj);
             crewrite_args.arg3 = std::move(rewrite_args->attrval);
@@ -1506,7 +1508,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
 
     if (rewriter.get()) {
         // rewriter->trap();
-        SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2), false);
+        SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2), true);
         setattrInternal(obj, attr, attr_val, &rewrite_args);
         if (rewrite_args.out_success) {
             rewriter->commit();
@@ -1716,7 +1718,7 @@ extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     static std::string attr_str("__len__");
     if (rewrite_args) {
         CallRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(rewrite_args->obj), rewrite_args->destination,
-                                      rewrite_args->more_guards_after);
+                                      rewrite_args->call_done_guarding);
         rtn = callattrInternal0(obj, &attr_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(0));
         if (!crewrite_args.out_success)
             rewrite_args = NULL;
@@ -1757,7 +1759,7 @@ extern "C" i64 unboxedLen(Box* obj) {
     RewriterVarUsage r_boxed(RewriterVarUsage::empty());
     if (rewriter.get()) {
         // rewriter->trap();
-        LenRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), false);
+        LenRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), true);
         lobj = lenInternal(obj, &rewrite_args);
 
         if (!rewrite_args.out_success) {
@@ -1866,7 +1868,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
     Box* val;
     RewriterVarUsage r_val(RewriterVarUsage::empty());
     if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj.addUse(), Location::any(), true);
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj.addUse(), Location::any(), false);
         val = getattrInternalGeneral(obj, *attr, &grewrite_args, scope == CLASS_ONLY, true, &should_bind);
         if (!grewrite_args.out_success) {
             rewrite_args = NULL;
@@ -1901,7 +1903,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             Box* rtn;
             if (rewrite_args) {
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_val), rewrite_args->destination,
-                                              rewrite_args->more_guards_after);
+                                              rewrite_args->call_done_guarding);
                 srewrite_args.arg1 = std::move(rewrite_args->obj);
 
                 // should be no-ops:
@@ -1941,7 +1943,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             Box* rtn;
             if (rewrite_args) {
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_val), rewrite_args->destination,
-                                              rewrite_args->more_guards_after);
+                                              rewrite_args->call_done_guarding);
                 srewrite_args.arg1 = std::move(rewrite_args->obj);
                 srewrite_args.arg2 = std::move(rewrite_args->arg1);
                 srewrite_args.arg3 = std::move(rewrite_args->arg2);
@@ -1983,7 +1985,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_val), rewrite_args->destination,
-                                          rewrite_args->more_guards_after);
+                                          rewrite_args->call_done_guarding);
             if (npassed_args >= 1)
                 srewrite_args.arg1 = std::move(rewrite_args->arg1);
             if (npassed_args >= 2)
@@ -2039,7 +2041,7 @@ extern "C" Box* callattr(Box* obj, const std::string* attr, bool clsonly, ArgPas
         // rewriter->getArg(3).addGuard(npassed_args);
 
         CallRewriteArgs rewrite_args(rewriter.get(), std::move(rewriter->getArg(0)), rewriter->getReturnDestination(),
-                                     false);
+                                     true);
         if (npassed_args >= 1)
             rewrite_args.arg1 = std::move(rewriter->getArg(4));
         if (npassed_args >= 2)
@@ -2223,7 +2225,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         } else {
             rewrite_args->obj.setDoneUsing();
         }
-        assert(!rewrite_args->more_guards_after);
+        assert(rewrite_args->call_done_guarding);
         if (!rewrite_args->rewriter->isDoneGuarding())
             rewrite_args->rewriter->setDoneGuarding();
         // if (guard_clfunc) {
@@ -2598,7 +2600,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                 // (since we've already guarded on the function).
                 // rewriter enforce that we give it one, though
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->obj.addUse(),
-                                              rewrite_args->destination, rewrite_args->more_guards_after);
+                                              rewrite_args->destination, rewrite_args->call_done_guarding);
 
                 srewrite_args.arg1 = rewrite_args->obj.getAttr(INSTANCEMETHOD_OBJ_OFFSET,
                                                                RewriterVarUsage::KillFlag::Kill, Location::any());
@@ -2663,7 +2665,7 @@ extern "C" Box* runtimeCall(Box* obj, ArgPassSpec argspec, Box* arg1, Box* arg2,
         // rewriter->getArg(1).addGuard(npassed_args);
 
         CallRewriteArgs rewrite_args(rewriter.get(), std::move(rewriter->getArg(0)), rewriter->getReturnDestination(),
-                                     false);
+                                     true);
         if (npassed_args >= 1)
             rewrite_args.arg1 = std::move(rewriter->getArg(2));
         if (npassed_args >= 2)
@@ -2708,7 +2710,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         std::string iop_name = getInplaceOpName(op_type);
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->lhs.addUse(), rewrite_args->destination,
-                                          rewrite_args->more_guards_after);
+                                          rewrite_args->call_done_guarding);
             srewrite_args.arg1 = rewrite_args->rhs.addUse();
             srewrite_args.args_guarded = true;
             irtn = callattrInternal1(lhs, &iop_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
@@ -2741,7 +2743,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     Box* lrtn;
     if (rewrite_args) {
         CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(rewrite_args->lhs), rewrite_args->destination,
-                                      rewrite_args->more_guards_after);
+                                      rewrite_args->call_done_guarding);
         srewrite_args.arg1 = std::move(rewrite_args->rhs);
         lrtn = callattrInternal1(lhs, &op_name, CLASS_ONLY, &srewrite_args, ArgPassSpec(1), rhs);
 
@@ -2831,7 +2833,7 @@ extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
     if (rewriter.get()) {
         // rewriter->trap();
         BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
-                                      rewriter->getReturnDestination(), false);
+                                      rewriter->getReturnDestination(), true);
         rtn = binopInternal(lhs, rhs, op_type, false, &rewrite_args);
         assert(rtn);
         if (!rewrite_args.out_success) {
@@ -2867,7 +2869,7 @@ extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type) {
     Box* rtn;
     if (rewriter.get()) {
         BinopRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(1),
-                                      rewriter->getReturnDestination(), false);
+                                      rewriter->getReturnDestination(), true);
         rtn = binopInternal(lhs, rhs, op_type, true, &rewrite_args);
         if (!rewrite_args.out_success) {
             rewrite_args.ensureAllDone();
@@ -2941,7 +2943,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     Box* lrtn;
     if (rewrite_args) {
         CallRewriteArgs crewrite_args(rewrite_args->rewriter, std::move(rewrite_args->lhs), rewrite_args->destination,
-                                      rewrite_args->more_guards_after);
+                                      rewrite_args->call_done_guarding);
         crewrite_args.arg1 = std::move(rewrite_args->rhs);
         lrtn = callattrInternal1(lhs, &op_name, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), rhs);
 
@@ -3038,7 +3040,7 @@ extern "C" Box* compare(Box* lhs, Box* rhs, int op_type) {
     if (rewriter.get()) {
         // rewriter->trap();
         CompareRewriteArgs rewrite_args(rewriter.get(), std::move(rewriter->getArg(0)), std::move(rewriter->getArg(1)),
-                                        rewriter->getReturnDestination(), false);
+                                        rewriter->getReturnDestination(), true);
         rtn = compareInternal(lhs, rhs, op_type, &rewrite_args);
         if (!rewrite_args.out_success) {
             rewrite_args.ensureAllDone();
@@ -3081,7 +3083,7 @@ extern "C" Box* getitem(Box* value, Box* slice) {
     Box* rtn;
     if (rewriter.get()) {
         CallRewriteArgs rewrite_args(rewriter.get(), std::move(rewriter->getArg(0)), rewriter->getReturnDestination(),
-                                     false);
+                                     true);
         rewrite_args.arg1 = std::move(rewriter->getArg(1));
 
         rtn = callattrInternal1(value, &str_getitem, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
@@ -3124,7 +3126,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     Box* rtn;
     if (rewriter.get()) {
         CallRewriteArgs rewrite_args(rewriter.get(), std::move(rewriter->getArg(0)), rewriter->getReturnDestination(),
-                                     false);
+                                     true);
         rewrite_args.arg1 = std::move(rewriter->getArg(1));
         rewrite_args.arg2 = std::move(rewriter->getArg(2));
 
@@ -3159,7 +3161,7 @@ extern "C" void delitem(Box* target, Box* slice) {
 
     Box* rtn;
     if (rewriter.get()) {
-        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), false);
+        CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(), true);
         rewrite_args.arg1 = std::move(rewriter->getArg(1));
 
         rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
@@ -3414,7 +3416,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
 
     if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, true);
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, false);
         new_attr = typeLookup(cls, _new_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
@@ -3431,7 +3433,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     assert(new_attr && "This should always resolve");
 
     if (rewrite_args) {
-        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, true);
+        GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, false);
         init_attr = typeLookup(cls, _init_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
@@ -3462,7 +3464,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
     if (rewrite_args) {
         CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_new), rewrite_args->destination,
-                                      rewrite_args->more_guards_after);
+                                      rewrite_args->call_done_guarding);
         int new_npassed_args = new_argspec.totalPassed();
 
         if (new_npassed_args >= 1)
@@ -3501,7 +3503,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
         Box* initrtn;
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, std::move(r_init), rewrite_args->destination,
-                                          rewrite_args->more_guards_after);
+                                          rewrite_args->call_done_guarding);
             if (npassed_args >= 1)
                 srewrite_args.arg1 = r_made.addUse();
             if (npassed_args >= 2)
@@ -3596,7 +3598,7 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
             // rewriter->trap();
 
             GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination(),
-                                            true);
+                                            false);
             r = m->getattr(*name, &rewrite_args);
             if (!rewrite_args.obj.isDoneUsing()) {
                 rewrite_args.obj.setDoneUsing();
@@ -3639,7 +3641,7 @@ extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
         if (rewriter.get()) {
             RewriterVarUsage builtins = rewriter->loadConst((intptr_t)builtins_module, Location::any());
             GetattrRewriteArgs rewrite_args(rewriter.get(), std::move(builtins), rewriter->getReturnDestination(),
-                                            false);
+                                            true);
             rtn = builtins_module->getattr(*name, &rewrite_args);
 
             if (!rtn || !rewrite_args.out_success) {
