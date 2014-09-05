@@ -778,6 +778,7 @@ void setupRuntime() {
     setupIter();
     setupClassobj();
     setupSuper();
+    setupUnicode();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));

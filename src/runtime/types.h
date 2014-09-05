@@ -62,6 +62,7 @@ void teardownFile();
 void setupCAPI();
 void teardownCAPI();
 void setupGenerator();
+void setupUnicode();
 
 void setupSys();
 void setupBuiltins();

@@ -1,5 +1,7 @@
+# allow-warning: converting unicode literal to str
 # expected: fail
-# - wip
+# - too slow
+# - prints out poorly since we return an "attrwrapper" instead of a real dict
 
 
 # Simple opt parse test, taken from the optparse.py docstring:

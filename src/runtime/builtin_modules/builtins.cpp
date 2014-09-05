@@ -726,7 +726,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);
-    builtins_module->giveAttr("unicode", unicode_cls);
+    // builtins_module->giveAttr("unicode", unicode_cls);
     builtins_module->giveAttr("int", int_cls);
     builtins_module->giveAttr("long", long_cls);
     builtins_module->giveAttr("float", float_cls);
