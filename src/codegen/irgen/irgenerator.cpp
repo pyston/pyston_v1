@@ -428,7 +428,7 @@ private:
 
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
-                module->decvref(emitter);
+                converted_module->decvref(emitter);
                 return v;
             }
             default:
