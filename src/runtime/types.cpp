@@ -831,8 +831,7 @@ void setupRuntime() {
     init_random();
     init_sre();
     initmath();
-    // TODO enable this
-    // initoperator();
+    initoperator();
     initbinascii();
 
     setupSysEnd();

@@ -1,3 +1,4 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
 
 #include "Python.h"
 
@@ -913,6 +914,9 @@ initoperator(void)
     if (m == NULL)
         return;
 
+    /* Pyston TODO: un-comment these when we have the functionality to
+     * support them.
+
     if (PyType_Ready(&itemgetter_type) < 0)
         return;
     Py_INCREF(&itemgetter_type);
@@ -927,4 +931,5 @@ initoperator(void)
         return;
     Py_INCREF(&methodcaller_type);
     PyModule_AddObject(m, "methodcaller", (PyObject *)&methodcaller_type);
+    */
 }
