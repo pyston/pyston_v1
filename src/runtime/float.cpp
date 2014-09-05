@@ -535,6 +535,8 @@ Box* floatNew(BoxedClass* cls, Box* a) {
 
     if (a->cls == float_cls) {
         return a;
+    } else if (a->cls == int_cls) {
+        return boxFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(a)->s;
         if (s == "nan")

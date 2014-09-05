@@ -45,3 +45,6 @@ except ValueError, e:
 print long("100", 16)
 print long("100", 10)
 print long("100", 26)
+
+print type(hash(1L))
+print hash(1L) == hash(2L)

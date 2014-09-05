@@ -193,6 +193,12 @@ Box* setAdd(BoxedSet* self, Box* v) {
     return None;
 }
 
+Box* setClear(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls);
+    self->s.clear();
+    return None;
+}
+
 Box* setContains(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls || self->cls == frozenset_cls);
     return boxBool(self->s.count(v) != 0);
@@ -273,6 +279,8 @@ void setupSet() {
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
+
+    set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
 
     set_cls->freeze();
     frozenset_cls->freeze();

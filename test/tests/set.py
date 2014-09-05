@@ -54,3 +54,8 @@ print set() | set()
 for i in xrange(8):
     print i, i in set(range(2, 5))
     print i, i in frozenset(range(2, 5))
+
+s = set(range(5))
+print len(s)
+s.clear()
+print s

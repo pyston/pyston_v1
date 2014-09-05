@@ -286,6 +286,33 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
     return NotImplemented;
 }
 
+extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'long' object but received a '%s'",
+                       getTypeName(v1)->c_str());
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_xor(r->n, v1->n, v2->n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
+        BoxedLong* r = new BoxedLong(long_cls);
+        mpz_init(r->n);
+        mpz_t v2_long;
+        mpz_init(v2_long);
+        if (v2_int->n >= 0)
+            mpz_init_set_ui(v2_long, v2_int->n);
+        else
+            mpz_init_set_si(v2_long, v2_int->n);
+
+        mpz_xor(r->n, v1->n, v2_long);
+        return r;
+    }
+    return NotImplemented;
+}
+
 // TODO reduce duplication between these 6 functions, and add double support
 Box* longGt(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
@@ -635,6 +662,17 @@ Box* longNonzero(BoxedLong* self) {
     return True;
 }
 
+Box* longHash(BoxedLong* self) {
+    if (!isSubclass(self->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
+    // Not sure if this is a good hash function or not;
+    // simple, but only includes top bits:
+    double d = mpz_get_d(self->n);
+    return boxInt(*reinterpret_cast<int64_t*>(&d));
+}
+
 void setupLong() {
     long_cls->giveAttr("__name__", boxStrConstant("long"));
 
@@ -657,6 +695,8 @@ void setupLong() {
 
     long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
     long_cls->giveAttr("__rand__", long_cls->getattr("__and__"));
+    long_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)longXor, UNKNOWN, 2)));
+    long_cls->giveAttr("__rxor__", long_cls->getattr("__xor__"));
 
     long_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)longGt, UNKNOWN, 2)));
     long_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)longGe, UNKNOWN, 2)));
@@ -672,6 +712,7 @@ void setupLong() {
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
 
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
+    long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
 
     long_cls->freeze();
 }
