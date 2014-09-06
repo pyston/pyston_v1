@@ -1371,6 +1371,15 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
         case AST_LangPrimitive::IMPORT_FROM:
             printf("IMPORT_FROM");
             break;
+        case AST_LangPrimitive::IMPORT_NAME:
+            printf("IMPORT_NAME");
+            break;
+        case AST_LangPrimitive::IMPORT_STAR:
+            printf("IMPORT_STAR");
+            break;
+        case AST_LangPrimitive::NONE:
+            printf("NONE");
+            break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }

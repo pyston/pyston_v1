@@ -365,7 +365,11 @@ private:
             case AST_LangPrimitive::LANDINGPAD:
             case AST_LangPrimitive::GET_ITER:
             case AST_LangPrimitive::IMPORT_FROM:
+            case AST_LangPrimitive::IMPORT_STAR:
+            case AST_LangPrimitive::IMPORT_NAME:
                 return UNKNOWN;
+            case AST_LangPrimitive::NONE:
+                return NONE;
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

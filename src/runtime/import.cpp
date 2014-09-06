@@ -38,24 +38,7 @@ BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) 
 #define LLVM_SYS_FS_EXISTS_CODE_OKAY(code) (!(code))
 #endif
 
-extern "C" Box* import(const std::string* name) {
-    assert(name);
-
-    static StatCounter slowpath_import("slowpath_import");
-    slowpath_import.log();
-
-    Box* parent_module = NULL;
-    size_t periodIndex = name->rfind('.');
-    if (periodIndex != std::string::npos) {
-        std::string parent_name(*name, 0, periodIndex);
-        parent_module = import(&parent_name);
-    }
-
-    BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxStringPtr(name);
-    if (sys_modules->d.find(s) != sys_modules->d.end())
-        return sys_modules->d[s];
-
+static Box* importSub(const std::string* name, Box* parent_module) {
     BoxedList* path_list;
     if (parent_module == NULL) {
         path_list = getSysPath();
@@ -102,5 +85,46 @@ extern "C" Box* import(const std::string* name) {
     }
 
     raiseExcHelper(ImportError, "No module named %s", name->c_str());
+}
+
+static Box* import(const std::string* name, bool return_first) {
+    assert(name);
+    assert(name->size() > 0);
+
+    static StatCounter slowpath_import("slowpath_import");
+    slowpath_import.log();
+
+    BoxedDict* sys_modules = getSysModulesDict();
+
+    size_t l = 0, r;
+    Box* last_module = NULL;
+    Box* first_module = NULL;
+    while (l < name->size()) {
+        size_t r = name->find('.', l);
+        if (r == std::string::npos) {
+            r = name->size();
+        }
+
+        std::string prefix_name = std::string(*name, 0, r);
+        Box* s = boxStringPtr(&prefix_name);
+        if (sys_modules->d.find(s) != sys_modules->d.end()) {
+            last_module = sys_modules->d[s];
+        } else {
+            std::string small_name = std::string(*name, l, r - l);
+            last_module = importSub(&small_name, last_module);
+        }
+
+        if (l == 0) {
+            first_module = last_module;
+        }
+
+        l = r + 1;
+    }
+
+    return return_first ? first_module : last_module;
+}
+
+extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
+    return import(module_name, from_imports == None);
 }
 }

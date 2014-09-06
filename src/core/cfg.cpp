@@ -1083,18 +1083,50 @@ public:
         return true;
     }
 
+    static std::string getTopModule(const std::string& full_name) {
+        size_t period_index = full_name.find('.');
+        if (period_index == std::string::npos) {
+            return full_name;
+        } else {
+            return full_name.substr(0, period_index);
+        }
+    }
+
     virtual bool visit_import(AST_Import* node) {
         for (AST_alias* a : node->names) {
-            AST_Import* remapped = new AST_Import();
-            remapped->lineno = node->lineno;
-            remapped->col_offset = node->col_offset;
+            AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
+            import->args.push_back(new AST_Num());
+            static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
+            static_cast<AST_Num*>(import->args[0])->n_int = -1;
+            import->args.push_back(new AST_LangPrimitive(AST_LangPrimitive::NONE));
+            import->args.push_back(new AST_Str(a->name));
 
             std::string tmpname = nodeName(a);
-            AST_alias* remapped_alias = new AST_alias(a->name, tmpname);
-            remapped->names.push_back(remapped_alias);
+            pushAssign(tmpname, import);
 
-            push_back(remapped);
-            pushAssign(a->asname.size() ? a->asname : a->name, makeName(tmpname, AST_TYPE::Load));
+            if (a->asname.size() == 0) {
+                // No asname, so load the top-level module into the name
+                // (e.g., for `import os.path`, loads the os module into `os`)
+                pushAssign(getTopModule(a->name), makeName(tmpname, AST_TYPE::Load));
+            } else {
+                // If there is an asname, get the bottom-level module by
+                // getting the attributes and load it into asname.
+                int l = 0;
+                do {
+                    int r = a->name.find('.', l);
+                    if (r == std::string::npos) {
+                        r = a->name.size();
+                    }
+                    if (l == 0) {
+                        l = r + 1;
+                        continue;
+                    }
+                    pushAssign(tmpname, new AST_Attribute(makeName(tmpname, AST_TYPE::Load), AST_TYPE::Load,
+                                                          a->name.substr(l, r)));
+                    l = r + 1;
+                } while (l < a->name.size());
+                pushAssign(a->asname, makeName(tmpname, AST_TYPE::Load));
+            }
         }
 
         return true;
@@ -1103,27 +1135,32 @@ public:
     virtual bool visit_importfrom(AST_ImportFrom* node) {
         RELEASE_ASSERT(node->level == 0, "");
 
-        AST_Import* import = new AST_Import();
-        import->lineno = node->lineno;
-        import->col_offset = node->col_offset;
+        AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
+        import->args.push_back(new AST_Num());
+        static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
+        static_cast<AST_Num*>(import->args[0])->n_int = node->level;
+        import->args.push_back(new AST_Tuple());
+        static_cast<AST_Tuple*>(import->args[1])->ctx_type = AST_TYPE::Load;
+        for (int i = 0; i < node->names.size(); i++) {
+            static_cast<AST_Tuple*>(import->args[1])->elts.push_back(new AST_Str(node->names[i]->name));
+        }
+        import->args.push_back(new AST_Str(node->module));
 
         std::string tmp_module_name = nodeName(node);
-        AST_alias* tmp_alias = new AST_alias(node->module, tmp_module_name);
-        import->names.push_back(tmp_alias);
-        push_back(import);
+        pushAssign(tmp_module_name, import);
 
         for (AST_alias* a : node->names) {
             if (a->name == "*") {
-                assert(a->asname.size() == 0);
 
-                AST_ImportFrom* remapped = new AST_ImportFrom();
-                remapped->lineno = node->lineno;
-                remapped->col_offset = node->col_offset;
-                remapped->module = node->module;
-                remapped->level = node->level;
-                remapped->names.push_back(a);
+                AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
+                import_star->lineno = node->lineno;
+                import_star->col_offset = node->col_offset;
+                import_star->args.push_back(makeName(tmp_module_name, AST_TYPE::Load));
 
-                push_back(remapped);
+                AST_Expr* import_star_expr = new AST_Expr();
+                import_star_expr->value = import_star;
+
+                push_back(import_star_expr);
             } else {
                 AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
                 import_from->lineno = node->lineno;

@@ -256,6 +256,9 @@ public:
 
     AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
 
+    AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, const std::string& attr)
+        : AST_expr(AST_TYPE::Attribute), value(value), ctx_type(ctx_type), attr(attr) {}
+
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Attribute;
 };
 
@@ -923,6 +926,9 @@ public:
         LOCALS,
         GET_ITER,
         IMPORT_FROM,
+        IMPORT_NAME,
+        IMPORT_STAR,
+        NONE,
     } opcode;
     std::vector<AST_expr*> args;
 

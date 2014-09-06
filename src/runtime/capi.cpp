@@ -627,7 +627,7 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) {
     RELEASE_ASSERT(module_name->cls == str_cls, "");
 
     try {
-        return import(&static_cast<BoxedString*>(module_name)->s);
+        return import(-1, None, &static_cast<BoxedString*>(module_name)->s);
     } catch (Box* e) {
         Py_FatalError("unimplemented");
     }

@@ -3674,7 +3674,7 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
     raiseExcHelper(ImportError, "cannot import name %s", name->c_str());
 }
 
-extern "C" void importStar(Box* _from_module, BoxedModule* to_module) {
+extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     assert(_from_module->cls == module_cls);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
@@ -3710,7 +3710,7 @@ extern "C" void importStar(Box* _from_module, BoxedModule* to_module) {
 
             to_module->setattr(casted_attr_name->s, attr_value, NULL);
         }
-        return;
+        return None;
     }
 
     HCAttrs* module_attrs = from_module->getAttrsPtr();
@@ -3720,5 +3720,7 @@ extern "C" void importStar(Box* _from_module, BoxedModule* to_module) {
 
         to_module->setattr(p.first, module_attrs->attr_list->attrs[p.second], NULL);
     }
+
+    return None;
 }
 }
