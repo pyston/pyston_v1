@@ -147,7 +147,26 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     BoxedString* s = str(val_to_use);
                     os << s->s;
                     break;
-                } else if (c == 'd') {
+                } else if (c == 'c') {
+                    if (!val_to_use) {
+                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        val_to_use = (*elts)[elt_num];
+                        elt_num++;
+                    }
+
+                    RELEASE_ASSERT(val_to_use->cls == int_cls, "unsupported");
+                    RELEASE_ASSERT(nspace == 0, "unsupported");
+                    RELEASE_ASSERT(ndot == 0, "unsupported");
+                    RELEASE_ASSERT(nzero == 0, "unsupported");
+
+                    int64_t n = static_cast<BoxedInt*>(val_to_use)->n;
+                    if (n < 0)
+                        raiseExcHelper(OverflowError, "unsigned byte integer is less than minimum");
+                    if (n >= 256)
+                        raiseExcHelper(OverflowError, "unsigned byte integer is greater than maximum");
+                    os << (char)n;
+                    break;
+                } else if (c == 'd' || c == 'i') {
                     if (!val_to_use) {
                         RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
                         val_to_use = (*elts)[elt_num];

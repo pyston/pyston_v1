@@ -378,6 +378,25 @@ Box* map2(Box* f, Box* container) {
     return rtn;
 }
 
+Box* reduce(Box* f, Box* container, Box* initial) {
+    Box* current = initial;
+
+    for (Box* e : container->pyElements()) {
+        assert(e);
+        if (current == NULL) {
+            current = e;
+        } else {
+            current = runtimeCall(f, ArgPassSpec(2), current, e, NULL, NULL, NULL);
+        }
+    }
+
+    if (current == NULL) {
+        raiseExcHelper(TypeError, "reduce() of empty sequence with no initial value");
+    }
+
+    return current;
+}
+
 Box* filter2(Box* f, Box* container) {
     // If the filter-function argument is None, filter() works by only returning
     // the elements that are truthy.  This is equivalent to using the bool() constructor.
@@ -720,6 +739,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("execfile", new BoxedFunction(boxRTFunction((void*)execfile, UNKNOWN, 1)));
 
     builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
+    builtins_module->giveAttr("reduce",
+                              new BoxedFunction(boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), { NULL }));
     builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
     builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));

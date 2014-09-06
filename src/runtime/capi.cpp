@@ -654,12 +654,20 @@ extern "C" int PyNumber_Check(PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Add(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::Add);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
-extern "C" PyObject* PyNumber_Subtract(PyObject*, PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) {
+    try {
+        return binop(lhs, rhs, AST_TYPE::Sub);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) {

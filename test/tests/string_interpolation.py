@@ -8,3 +8,17 @@ print "%(a(b))s" % {'a(b)': 1}
 
 # I'm not sure if this is a feature or a bug, but both CPython and PyPy will accept it:
 print "%s %(a)s" % {'a': 1}
+
+print "%c" % ord('A')
+
+print repr("%c" % 255)
+print repr("%c" % 0)
+
+try:
+    print repr("%c" % -1)
+except OverflowError, e:
+    print e
+try:
+    print repr("%c" % 256)
+except OverflowError, e:
+    print e

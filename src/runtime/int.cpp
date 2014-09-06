@@ -331,7 +331,7 @@ extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
     if (rhs->n == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
     }
-    return boxFloat(lhs->n / (float)rhs->n);
+    return boxFloat(lhs->n / (double)rhs->n);
 }
 
 extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
@@ -731,7 +731,7 @@ void setupInt() {
     _addFuncIntFloatUnknown("__sub__", (void*)intSubInt, (void*)intSubFloat, (void*)intSub);
     _addFuncIntFloatUnknown("__div__", (void*)intDivInt, (void*)intDivFloat, (void*)intDiv);
     _addFuncIntFloatUnknown("__floordiv__", (void*)intFloordivInt, (void*)intFloordivFloat, (void*)intFloordiv);
-    _addFuncIntFloatUnknown("__truediv__", (void*)intTruedivInt, (void*)intDivFloat, (void*)intTruediv);
+    _addFuncIntFloatUnknown("__truediv__", (void*)intTruedivInt, (void*)intTruedivFloat, (void*)intTruediv);
     _addFuncIntFloatUnknown("__mul__", (void*)intMulInt, (void*)intMulFloat, (void*)intMul);
     _addFuncIntUnknown("__mod__", BOXED_INT, (void*)intModInt, (void*)intMod);
     _addFuncIntFloatUnknown("__pow__", (void*)intPowInt, (void*)intPowFloat, (void*)intPow);

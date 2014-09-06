@@ -154,7 +154,7 @@ extern "C" Box* complexDivInt(BoxedComplex* lhs, BoxedInt* rhs) {
     if (rhs->n == 0) {
         raiseDivZeroExc();
     }
-    return boxComplex(lhs->real / (float)rhs->n, lhs->imag / (float)rhs->n);
+    return boxComplex(lhs->real / (double)rhs->n, lhs->imag / (double)rhs->n);
 }
 
 extern "C" Box* complexDiv(BoxedComplex* lhs, Box* rhs) {

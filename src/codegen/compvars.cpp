@@ -1424,14 +1424,16 @@ public:
             // Ugly, but for now special-case the set of type-pairs that we know will always work
             if (exp_type == BinOp
                 && ((cls == int_cls && rhs_cls == int_cls) || (cls == float_cls && rhs_cls == float_cls)
-                    || (cls == list_cls && rhs_cls == int_cls))) {
+                    || (cls == list_cls && rhs_cls == int_cls) || (cls == str_cls))) {
 
                 const std::string& left_side_name = getOpName(op_type);
 
                 ConcreteCompilerVariable* called_constant = tryCallattrConstant(
                     emitter, info, var, &left_side_name, true, ArgPassSpec(1, 0, 0, 0), { converted_rhs }, NULL, false);
-                if (called_constant)
+                if (called_constant) {
+                    converted_rhs->decvref(emitter);
                     return called_constant;
+                }
             }
         }
 
@@ -1588,7 +1590,7 @@ public:
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
-        ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
         CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
         converted->decvref(emitter);
         return rtn;
