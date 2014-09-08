@@ -22,3 +22,15 @@ try:
     print repr("%c" % 256)
 except OverflowError, e:
     print e
+
+try:
+    "" % (1, 2)
+    assert 0
+except TypeError, e:
+    print e
+
+try:
+    "%d" % ()
+    assert 0
+except TypeError, e:
+    print e

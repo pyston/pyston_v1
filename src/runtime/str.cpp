@@ -139,7 +139,8 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     RELEASE_ASSERT(nspace == 0, "");
 
                     if (!val_to_use) {
-                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        if (elt_num >= num_elts)
+                            raiseExcHelper(TypeError, "not enough arguments for format string");
                         val_to_use = (*elts)[elt_num];
                         elt_num++;
                     }
@@ -149,7 +150,8 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     break;
                 } else if (c == 'c') {
                     if (!val_to_use) {
-                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        if (elt_num >= num_elts)
+                            raiseExcHelper(TypeError, "not enough arguments for format string");
                         val_to_use = (*elts)[elt_num];
                         elt_num++;
                     }
@@ -168,7 +170,8 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     break;
                 } else if (c == 'd' || c == 'i') {
                     if (!val_to_use) {
-                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        if (elt_num >= num_elts)
+                            raiseExcHelper(TypeError, "not enough arguments for format string");
                         val_to_use = (*elts)[elt_num];
                         elt_num++;
                     }
@@ -191,7 +194,8 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     break;
                 } else if (c == 'f') {
                     if (!val_to_use) {
-                        RELEASE_ASSERT(elt_num < num_elts, "insufficient number of arguments for format string");
+                        if (elt_num >= num_elts)
+                            raiseExcHelper(TypeError, "not enough arguments for format string");
                         val_to_use = (*elts)[elt_num];
                         elt_num++;
                     }
@@ -226,6 +230,10 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
         }
     }
     assert(fmt == fmt_end && "incomplete format");
+
+    if (dict == NULL && elt_num < num_elts) {
+        raiseExcHelper(TypeError, "not all arguments converted during string formatting");
+    }
 
     return boxString(os.str());
 }
