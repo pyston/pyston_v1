@@ -1760,15 +1760,27 @@ public:
         std::vector<ConcreteCompilerVariable*> converted_args;
 
         llvm::Value* nelts = llvm::ConstantInt::get(g.i64, v->size(), false);
-        llvm::Value* alloca = emitter.getBuilder()->CreateAlloca(g.llvm_value_type_ptr, nelts);
+
+        llvm::Value* _scratch = emitter.getScratch(v->size() * sizeof(void*));
+        auto scratch = emitter.getBuilder()->CreateBitCast(_scratch, g.llvm_value_type_ptr->getPointerTo());
+
+        // First, convert all the args, before putting any in the scratch.
+        // Do it this way in case any of the conversions themselves need scratch space
+        // (ie nested tuples).
+        // TODO could probably do this better: create a scratch reservation that gets released
+        // at some point, so that we know which scratch space is still in use, so that we can handle
+        // multiple concurrent scratch users.
         for (int i = 0; i < v->size(); i++) {
-            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(alloca, i);
             ConcreteCompilerVariable* converted = (*v)[i]->makeConverted(emitter, (*v)[i]->getBoxType());
             converted_args.push_back(converted);
-            emitter.getBuilder()->CreateStore(converted->getValue(), ptr);
         }
 
-        llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, alloca);
+        for (int i = 0; i < v->size(); i++) {
+            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(scratch, i);
+            emitter.getBuilder()->CreateStore(converted_args[i]->getValue(), ptr);
+        }
+
+        llvm::Value* rtn = emitter.getBuilder()->CreateCall2(g.funcs.createTuple, nelts, scratch);
 
         for (int i = 0; i < converted_args.size(); i++) {
             converted_args[i]->decvref(emitter);

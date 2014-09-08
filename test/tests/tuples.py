@@ -173,3 +173,5 @@ print bool(())
 print bool((1,))
 print bool((0,))
 print bool((0, 0))
+
+print (65, (1, 2, 3), 65)
