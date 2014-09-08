@@ -156,6 +156,14 @@ static void handle_sigfpe(int signum) {
     abort();
 }
 
+static void handle_sigint(int signum) {
+    assert(signum == SIGINT);
+    // TODO: this should set a flag saying a KeyboardInterrupt is pending.
+    // For now, just call abort(), so that we get a traceback at least.
+    fprintf(stderr, "SIGINT!\n");
+    abort();
+}
+
 void initCodegen() {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
@@ -227,6 +235,7 @@ void initCodegen() {
     setupRuntime();
 
     // signal(SIGFPE, &handle_sigfpe);
+    signal(SIGINT, &handle_sigint);
 
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:
