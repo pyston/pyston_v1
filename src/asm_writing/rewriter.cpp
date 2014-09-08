@@ -649,6 +649,7 @@ RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, std:
 void Rewriter::abort() {
     assert(!finished);
     finished = true;
+    rewrite->abort();
 
     for (auto v : args) {
         v->decUse();
@@ -1009,7 +1010,7 @@ Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* deb
 
     static StatCounter rewriter_nopatch("rewriter_nopatch");
 
-    if (!ic) {
+    if (!ic || !ic->shouldAttempt()) {
         rewriter_nopatch.log();
         return NULL;
     }

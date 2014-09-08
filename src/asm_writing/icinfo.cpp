@@ -67,6 +67,10 @@ ICSlotRewrite::~ICSlotRewrite() {
     free(buf);
 }
 
+void ICSlotRewrite::abort() {
+    ic->failed = true;
+}
+
 void ICSlotRewrite::commit(uint64_t decision_path, CommitHook* hook) {
     bool still_valid = true;
     for (int i = 0; i < dependencies.size(); i++) {
@@ -187,7 +191,7 @@ ICInfo::ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int 
                assembler::GenericRegister return_register, TypeRecorder* type_recorder)
     : next_slot_to_try(0), stack_info(stack_info), num_slots(num_slots), slot_size(slot_size),
       calling_conv(calling_conv), live_outs(live_outs.begin(), live_outs.end()), return_register(return_register),
-      type_recorder(type_recorder), start_addr(start_addr), continue_addr(continue_addr) {
+      type_recorder(type_recorder), failed(false), start_addr(start_addr), continue_addr(continue_addr) {
     for (int i = 0; i < num_slots; i++) {
         slots.push_back(SlotInfo(this, i));
     }
@@ -280,5 +284,9 @@ void ICInfo::clear(ICSlotInfo* icentry) {
 
     // writer->endWithSlowpath();
     llvm::sys::Memory::InvalidateInstructionCache(start, getSlotSize());
+}
+
+bool ICInfo::shouldAttempt() {
+    return !failed;
 }
 }
