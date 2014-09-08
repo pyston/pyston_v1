@@ -211,6 +211,8 @@ void runCollection() {
     long us = _t.end();
     static StatCounter sc_us("gc_collections_us");
     sc_us.log(us);
+
+    // dumpHeapStatistics();
 }
 
 } // namespace gc

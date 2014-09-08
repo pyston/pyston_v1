@@ -280,6 +280,7 @@ typedef bool i1;
 typedef int64_t i64;
 
 extern "C" const std::string* getNameOfClass(BoxedClass* cls);
+std::string getFullNameOfClass(BoxedClass* cls);
 
 class Rewriter;
 class RewriterVar;

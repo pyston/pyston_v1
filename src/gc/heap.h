@@ -162,9 +162,12 @@ public:
     GCAllocation* getAllocationFromInteriorPointer(void* ptr);
     // not thread safe:
     void freeUnmarked();
+
+    void dumpHeapStatistics();
 };
 
 extern Heap global_heap;
+void dumpHeapStatistics();
 
 } // namespace gc
 } // namespace pyston

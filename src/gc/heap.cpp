@@ -495,5 +495,114 @@ void Heap::freeUnmarked() {
         cur = cur->next;
     }
 }
+
+void dumpHeapStatistics() {
+    global_heap.dumpHeapStatistics();
+}
+
+struct HeapStatistics {
+    struct TypeStats {
+        int64_t nallocs;
+        int64_t nbytes;
+        TypeStats() : nallocs(0), nbytes(0) {}
+
+        void print(const char* name) const {
+            if (nbytes > (1 << 20))
+                printf("%s: %ld allocations for %.1f MB\n", name, nallocs, nbytes * 1.0 / (1 << 20));
+            else if (nbytes > (1 << 10))
+                printf("%s: %ld allocations for %.1f KB\n", name, nallocs, nbytes * 1.0 / (1 << 10));
+            else
+                printf("%s: %ld allocations for %ld bytes\n", name, nallocs, nbytes);
+        }
+    };
+    std::unordered_map<BoxedClass*, TypeStats> by_cls;
+    TypeStats conservative, untracked;
+    TypeStats total;
+};
+
+void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
+    stats->total.nallocs++;
+    stats->total.nbytes += nbytes;
+
+    if (al->kind_id == GCKind::PYTHON) {
+        Box* b = (Box*)al->user_data;
+        auto& t = stats->by_cls[b->cls];
+
+        t.nallocs++;
+        t.nbytes += nbytes;
+    } else if (al->kind_id == GCKind::CONSERVATIVE) {
+        stats->conservative.nallocs++;
+        stats->conservative.nbytes += nbytes;
+    } else if (al->kind_id == GCKind::UNTRACKED) {
+        stats->untracked.nallocs++;
+        stats->untracked.nbytes += nbytes;
+    } else {
+        RELEASE_ASSERT(0, "%d", (int)al->kind_id);
+    }
+}
+
+// TODO: copy-pasted from freeChain
+void getChainStatistics(HeapStatistics* stats, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
+            int atom_idx = obj_idx * atoms_per_obj;
+            int bitmap_idx = atom_idx / 64;
+            int bitmap_bit = atom_idx % 64;
+            uint64_t mask = 1L << bitmap_bit;
+
+            if (b->isfree[bitmap_idx] & mask)
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            addStatistic(stats, al, b->size);
+        }
+
+        head = &b->next;
+    }
+}
+
+// TODO: copy-pasted from freeUnmarked()
+void Heap::dumpHeapStatistics() {
+    threading::GLPromoteRegion _lock;
+
+    HeapStatistics stats;
+
+    thread_caches.forEachValue([this, &stats](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+
+            getChainStatistics(&stats, &cache->cache_free_heads[bidx]);
+            getChainStatistics(&stats, &cache->cache_full_heads[bidx]);
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        getChainStatistics(&stats, &heads[bidx]);
+        getChainStatistics(&stats, &full_heads[bidx]);
+    }
+
+    LargeObj* cur = large_head;
+    while (cur) {
+        GCAllocation* al = cur->data;
+        addStatistic(&stats, al, cur->capacity());
+
+        cur = cur->next;
+    }
+
+    stats.conservative.print("conservative");
+    stats.untracked.print("untracked");
+    for (const auto& p : stats.by_cls) {
+        p.second.print(getFullNameOfClass(p.first).c_str());
+    }
+    stats.total.print("Total");
+    printf("\n");
+}
+
 } // namespace gc
 } // namespace pyston

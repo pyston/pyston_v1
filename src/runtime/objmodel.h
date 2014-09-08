@@ -40,8 +40,6 @@ void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn
 
 BoxedModule* getCurrentModule();
 
-extern "C" const std::string* getNameOfClass(BoxedClass* cls);
-
 // TODO sort this
 extern "C" bool softspace(Box* b, bool newval);
 extern "C" void my_assert(bool b);
