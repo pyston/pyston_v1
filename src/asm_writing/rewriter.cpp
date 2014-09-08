@@ -651,6 +651,9 @@ void Rewriter::abort() {
     finished = true;
     rewrite->abort();
 
+    static StatCounter rewriter_aborts("rewriter_aborts");
+    rewriter_aborts.log();
+
     for (auto v : args) {
         v->decUse();
     }
@@ -663,8 +666,8 @@ void Rewriter::commit() {
     assert(!finished);
     finished = true;
 
-    static StatCounter rewriter2_commits("rewriter2_commits");
-    rewriter2_commits.log();
+    static StatCounter rewriter_commits("rewriter_commits");
+    rewriter_commits.log();
 
     assert(done_guarding && "Could call setDoneGuarding for you, but probably best to do it yourself");
     // if (!done_guarding)
@@ -969,9 +972,9 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
         args.push_back(var);
     }
 
-    static StatCounter rewriter_starts("rewriter2_starts");
+    static StatCounter rewriter_starts("rewriter_starts");
     rewriter_starts.log();
-    static StatCounter rewriter_spillsavoided("rewriter2_spillsavoided");
+    static StatCounter rewriter_spillsavoided("rewriter_spillsavoided");
 
     // Calculate the list of live-ins based off the live-outs list,
     // and create a Use of them so that they get preserved
@@ -1008,10 +1011,19 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
 Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
     ICInfo* ic = getICInfo(rtn_addr);
 
-    static StatCounter rewriter_nopatch("rewriter_nopatch");
+    static StatCounter rewriter_attempts("rewriter_attempts");
+    rewriter_attempts.log();
 
-    if (!ic || !ic->shouldAttempt()) {
+    static StatCounter rewriter_nopatch("rewriter_nopatch");
+    static StatCounter rewriter_skipped("rewriter_skipped");
+
+    if (!ic) {
         rewriter_nopatch.log();
+        return NULL;
+    }
+
+    if (!ic->shouldAttempt()) {
+        rewriter_skipped.log();
         return NULL;
     }
 
