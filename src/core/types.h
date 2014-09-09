@@ -180,6 +180,7 @@ public:
 };
 
 class BoxedModule;
+class ScopeInfo;
 class SourceInfo {
 public:
     BoxedModule* parent_module;
@@ -188,6 +189,8 @@ public:
     CFG* cfg;
     LivenessAnalysis* liveness;
     PhiAnalysis* phis;
+
+    ScopeInfo* getScopeInfo();
 
     struct ArgNames {
         const std::vector<AST_expr*>* args;

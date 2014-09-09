@@ -979,10 +979,10 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
     std::vector<llvm::Type*> llvm_arg_types;
     if (entry_descriptor == NULL) {
-        if (source->scoping->getScopeInfoForNode(source->ast)->takesClosure())
+        if (source->getScopeInfo()->takesClosure())
             llvm_arg_types.push_back(g.llvm_closure_type_ptr);
 
-        if (source->scoping->getScopeInfoForNode(source->ast)->takesGenerator())
+        if (source->getScopeInfo()->takesGenerator())
             llvm_arg_types.push_back(g.llvm_generator_type_ptr);
 
         for (int i = 0; i < nargs; i++) {
@@ -1022,7 +1022,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort, speculation_level,
-                                         source->scoping->getScopeInfoForNode(source->ast));
+                                         source->getScopeInfo());
 
     _t2.split();
 
@@ -1060,9 +1060,8 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
         irgen_us += _t2.split();
-        TypeAnalysis* deopt_types
-            = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort, TypeAnalysis::NONE,
-                             source->scoping->getScopeInfoForNode(source->ast));
+        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort,
+                                                   TypeAnalysis::NONE, source->getScopeInfo());
         _t2.split();
 
         emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, NULL, deopt_full_blocks, deopt_partial_blocks);

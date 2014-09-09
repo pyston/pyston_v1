@@ -150,6 +150,12 @@ extern "C" Box* pow_i64_i64(i64 lhs, i64 rhs) {
     if (rhs < 0)
         return boxFloat(pow_float_float(lhs, rhs));
 
+    if (rhs == 0) {
+        if (lhs < 0)
+            return boxInt(-1);
+        return boxInt(1);
+    }
+
     assert(rhs > 0);
     while (rhs) {
         if (rhs & 1) {

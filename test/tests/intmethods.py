@@ -9,3 +9,7 @@ for i in xrange(1, 12):
         print i | j
         print i & j
         print i ^ j
+
+print 1 ** 0
+print 0 ** 0
+print -1 ** 0

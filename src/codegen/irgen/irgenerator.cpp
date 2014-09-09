@@ -66,8 +66,12 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
 }
 
 ScopeInfo* IRGenState::getScopeInfo() {
-    SourceInfo* source = getSourceInfo();
-    return source->scoping->getScopeInfoForNode(source->ast);
+    return getSourceInfo()->getScopeInfo();
+}
+
+ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
+    auto source = getSourceInfo();
+    return source->scoping->getScopeInfoForNode(node);
 }
 
 GuardList::ExprTypeGuard::ExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node,
@@ -1416,7 +1420,7 @@ private:
             return;
 
         assert(node->type == AST_TYPE::ClassDef);
-        ScopeInfo* scope_info = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node);
+        ScopeInfo* scope_info = irstate->getScopeInfoForNode(node);
         assert(scope_info);
 
         std::vector<CompilerVariable*> bases;
@@ -1612,11 +1616,11 @@ private:
         if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
             takes_closure = false;
         else {
-            takes_closure = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesClosure();
+            takes_closure = irstate->getScopeInfoForNode(node)->takesClosure();
         }
 
         // TODO: this lines disables the optimization mentioned above...
-        bool is_generator = irstate->getSourceInfo()->scoping->getScopeInfoForNode(node)->takesGenerator();
+        bool is_generator = irstate->getScopeInfoForNode(node)->takesGenerator();
 
         if (takes_closure) {
             if (irstate->getScopeInfo()->createsClosure()) {
@@ -1910,6 +1914,8 @@ private:
                 } else if (var->getType() == FLOAT) {
                     // val = emitter.getBuilder()->CreateBitCast(val, g.llvm_value_type_ptr);
                     ptr = emitter.getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
+                } else if (var->getType() == GENERATOR) {
+                    ptr = emitter.getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
                 } else if (var->getType() == UNDEF) {
                     // TODO if there are any undef variables, we're in 'unreachable' territory.
                     // Do we even need to generate any of this code?

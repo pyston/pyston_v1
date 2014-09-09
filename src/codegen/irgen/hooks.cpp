@@ -77,6 +77,10 @@ const std::string SourceInfo::getName() {
     }
 }
 
+ScopeInfo* SourceInfo::getScopeInfo() {
+    return scoping->getScopeInfoForNode(ast);
+}
+
 EffortLevel::EffortLevel initialEffort() {
     if (FORCE_OPTIMIZE)
         return EffortLevel::MAXIMAL;
@@ -177,8 +181,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         assert(source->ast);
         source->cfg = computeCFG(source, source->body);
         source->liveness = computeLivenessInfo(source->cfg);
-        source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness,
-                                           source->scoping->getScopeInfoForNode(source->ast));
+        source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness, source->getScopeInfo());
     }
 
     CompiledFunction* cf = doCompile(source, entry, effort, spec, name);
@@ -244,7 +247,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         si->cfg = computeCFG(si, m->body);
         si->liveness = computeLivenessInfo(si->cfg);
-        si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->scoping->getScopeInfoForNode(si->ast));
+        si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->getScopeInfo());
 
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 

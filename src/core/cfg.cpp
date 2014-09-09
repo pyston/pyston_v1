@@ -67,6 +67,7 @@ private:
     AST_TYPE::AST_TYPE root_type;
     CFG* cfg;
     CFGBlock* curblock;
+    ScopingAnalysis* scoping_analysis;
 
     struct LoopInfo {
         CFGBlock* continue_dest, *break_dest;
@@ -648,6 +649,8 @@ private:
         std::string func_name(nodeName(func));
         func->name = func_name;
 
+        scoping_analysis->registerScopeReplacement(node, func);
+
         func->args = new AST_arguments();
         func->args->vararg = "";
         func->args->kwarg = "";
@@ -947,7 +950,8 @@ private:
     }
 
 public:
-    CFGVisitor(AST_TYPE::AST_TYPE root_type, CFG* cfg) : root_type(root_type), cfg(cfg) {
+    CFGVisitor(AST_TYPE::AST_TYPE root_type, ScopingAnalysis* scoping_analysis, CFG* cfg)
+        : root_type(root_type), cfg(cfg), scoping_analysis(scoping_analysis) {
         curblock = cfg->addBlock();
         curblock->info = "entry";
     }
@@ -1955,7 +1959,10 @@ void CFG::print() {
 
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     CFG* rtn = new CFG();
-    CFGVisitor visitor(source->ast->type, rtn);
+
+    ScopingAnalysis* scoping_analysis = source->scoping;
+
+    CFGVisitor visitor(source->ast->type, scoping_analysis, rtn);
 
     if (source->ast->type == AST_TYPE::ClassDef) {
         // A classdef always starts with "__module__ = __name__"
@@ -1987,8 +1994,6 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     // The functions we create for classdefs are supposed to return a dictionary of their locals.
     // This is the place that we add all of that:
     if (source->ast->type == AST_TYPE::ClassDef) {
-        ScopeInfo* scope_info = source->scoping->getScopeInfoForNode(source->ast);
-
         AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
 
         AST_Return* rtn = new AST_Return();

@@ -263,6 +263,13 @@ const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
     }
 }
 
+void dumpLLVM(llvm::Value* v) {
+    v->dump();
+}
+void dumpLLVM(llvm::Instruction* v) {
+    v->dump();
+}
+
 Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args) {
     assert(f);

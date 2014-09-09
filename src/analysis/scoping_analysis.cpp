@@ -212,7 +212,6 @@ public:
     virtual bool visit_for(AST_For* node) { return false; }
     // virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
     // virtual bool visit_global(AST_Global *node) { return false; }
-    virtual bool visit_generatorexp(AST_GeneratorExp* node) { return false; }
     virtual bool visit_if(AST_If* node) { return false; }
     virtual bool visit_ifexp(AST_IfExp* node) { return false; }
     virtual bool visit_index(AST_Index* node) { return false; }
@@ -299,6 +298,26 @@ public:
             collect(node, map);
             return true;
         }
+    }
+
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) {
+        if (node == orig_node) {
+            bool first = true;
+            for (AST_comprehension* c : node->generators) {
+                if (!first)
+                    c->iter->accept(this);
+                c->target->accept(this);
+                first = false;
+            }
+
+            node->elt->accept(this);
+        } else {
+            node->generators[0]->iter->accept(this);
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
+            collect(node, map);
+        }
+
+        return true;
     }
 
     virtual bool visit_lambda(AST_Lambda* node) {
@@ -426,9 +445,15 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::ClassDef:
             case AST_TYPE::FunctionDef:
             case AST_TYPE::Lambda: {
-                ScopeInfoBase* scopInfo = new ScopeInfoBase(parent_info, usage);
-                scopInfo->setTakesGenerator(containsYield(node));
-                this->scopes[node] = scopInfo;
+                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage);
+                scopeInfo->setTakesGenerator(containsYield(node));
+                this->scopes[node] = scopeInfo;
+                break;
+            }
+            case AST_TYPE::GeneratorExp: {
+                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage);
+                scopeInfo->setTakesGenerator(true);
+                this->scopes[node] = scopeInfo;
                 break;
             }
             default:
@@ -447,30 +472,36 @@ ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
 
     ScopeInfo* rtn = scopes[node];
     assert(rtn);
-
-    rtn->setTakesGenerator(containsYield(node));
-
     return rtn;
+}
+
+void ScopingAnalysis::registerScopeReplacement(AST* original_node, AST* new_node) {
+    assert(scope_replacements.count(original_node) == 0);
+    assert(scope_replacements.count(new_node) == 0);
+    assert(scopes.count(new_node) == 0);
+
+#ifndef NDEBUG
+    // NULL this out just to make sure it doesn't get accessed:
+    scopes[new_node] = NULL;
+#endif
+
+    scope_replacements[new_node] = original_node;
 }
 
 ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     assert(node);
 
-    ScopeInfo* rtn = scopes[node];
-    if (rtn)
-        return rtn;
+    auto it = scope_replacements.find(node);
+    if (it != scope_replacements.end())
+        node = it->second;
 
-    switch (node->type) {
-        case AST_TYPE::ClassDef:
-        case AST_TYPE::FunctionDef:
-        case AST_TYPE::Lambda:
-            return analyzeSubtree(node);
-        // this is handled in the constructor:
-        // case AST_TYPE::Module:
-        // return new ModuleScopeInfo();
-        default:
-            RELEASE_ASSERT(0, "%d", node->type);
+    auto rtn = scopes.find(node);
+    if (rtn != scopes.end()) {
+        assert(rtn->second);
+        return rtn->second;
     }
+
+    return analyzeSubtree(node);
 }
 
 ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m) {

@@ -83,6 +83,7 @@ public:
     SourceInfo* getSourceInfo() { return source_info; }
 
     ScopeInfo* getScopeInfo();
+    ScopeInfo* getScopeInfoForNode(AST* node);
 
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
 };

@@ -57,10 +57,21 @@ private:
     std::unordered_map<AST*, ScopeInfo*> scopes;
     AST_Module* parent_module;
 
+    std::unordered_map<AST*, AST*> scope_replacements;
+
     ScopeInfo* analyzeSubtree(AST* node);
     void processNameUsages(NameUsageMap* usages);
 
 public:
+    // The scope-analysis is done before any CFG-ization is done,
+    // but many of the queries will be done post-CFG-ization.
+    // The CFG process can replace scope AST nodes with others (ex:
+    // generator expressions with generator functions), so we need to
+    // have a way of mapping the original analysis with the new queries.
+    // This is a hook for the CFG process to register when it has replaced
+    // a scope-node with a different node.
+    void registerScopeReplacement(AST* original_node, AST* new_node);
+
     ScopingAnalysis(AST_Module* m);
     ScopeInfo* getScopeInfoForNode(AST* node);
 };
