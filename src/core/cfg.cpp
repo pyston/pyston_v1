@@ -376,24 +376,33 @@ private:
 
             assign->targets.push_back(a_target);
             push_back(assign);
-        } else if (target->type == AST_TYPE::Tuple) {
-            AST_Tuple* old_target = ast_cast<AST_Tuple>(target);
+        } else if (target->type == AST_TYPE::Tuple || target->type == AST_TYPE::List) {
+            std::vector<AST_expr*>* elts;
+            if (target->type == AST_TYPE::Tuple) {
+                AST_Tuple* _t = ast_cast<AST_Tuple>(target);
+                assert(_t->ctx_type == AST_TYPE::Store);
+                elts = &_t->elts;
+            } else {
+                AST_List* _t = ast_cast<AST_List>(target);
+                assert(_t->ctx_type == AST_TYPE::Store);
+                elts = &_t->elts;
+            }
 
             AST_Tuple* new_target = new AST_Tuple();
-            new_target->ctx_type = old_target->ctx_type;
-            new_target->lineno = old_target->lineno;
-            new_target->col_offset = old_target->col_offset;
+            new_target->ctx_type = AST_TYPE::Store;
+            new_target->lineno = target->lineno;
+            new_target->col_offset = target->col_offset;
 
             // A little hackery: push the assign, even though we're not done constructing it yet,
             // so that we can iteratively push more stuff after it
             assign->targets.push_back(new_target);
             push_back(assign);
 
-            for (int i = 0; i < old_target->elts.size(); i++) {
+            for (int i = 0; i < elts->size(); i++) {
                 std::string tmp_name = nodeName(target, "", i);
                 new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store));
 
-                pushAssign(old_target->elts[i], makeName(tmp_name, AST_TYPE::Load));
+                pushAssign((*elts)[i], makeName(tmp_name, AST_TYPE::Load));
             }
         } else {
             RELEASE_ASSERT(0, "%d", target->type);

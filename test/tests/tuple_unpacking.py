@@ -19,4 +19,11 @@ def sort(l):
     return l
 print sort([1, 3, 5, 7, 2, 4, 9, 9, 4])
 
-a, b, c = 1,
+try:
+    a, b, c = 1,
+except ValueError, e:
+    print e
+
+# Ok this isn't really "tuple" unpacking but it's pretty much the same thing:
+[a, [b, c], d] = (1, [3, 4], 5)
+print a, b, c, d
