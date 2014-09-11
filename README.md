@@ -25,7 +25,7 @@ We have a [small list of starter projects](https://github.com/dropbox/pyston/wik
 - Focus was on building and validating the core Python-to-LLVM JIT infrastructure.
 - Many core parts of the language were missing.
 
-##### v0.2: [released 9/11/2014](http://blog.pyston.org/)
+##### v0.2: [released 9/11/2014](http://blog.pyston.org/2014/09/11/9/)
 - Focus was on improving language compatibility to the point that we can start running "real code" in the form of existing benchmarks.
 - Many new features:
  - Exceptions
