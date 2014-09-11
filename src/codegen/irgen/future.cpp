@@ -27,7 +27,7 @@ const std::map<std::string, FutureOption> future_options
         { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_DIVISION } },
         { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_GENERATOR } },
         { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_UNICODE_LITERALS } },
-        { "print_functions", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_PRINT_FUNCTIONS } },
+        { "print_function", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_PRINT_FUNCTION } },
         { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), FF_NESTED_SCOPES } },
         { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), FF_WITH_STATEMENT } } };
 

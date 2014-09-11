@@ -1,3 +1,5 @@
+# This is the same as print_function.py, but using print as a statement
+
 def f(o, msg):
     print msg
     return o

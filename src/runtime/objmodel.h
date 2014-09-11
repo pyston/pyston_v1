@@ -61,7 +61,6 @@ Box* open(Box* arg1, Box* arg2);
 // extern "C" Box* chr(Box* arg);
 extern "C" Box* compare(Box*, Box*, int);
 extern "C" BoxedInt* len(Box* obj);
-extern "C" void print(Box* obj);
 // extern "C" Box* trap();
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);

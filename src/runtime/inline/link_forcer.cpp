@@ -71,7 +71,6 @@ void force() {
     FORCE(getattr);
     FORCE(setattr);
     FORCE(delattr);
-    FORCE(print);
     FORCE(nonzero);
     FORCE(binop);
     FORCE(compare);

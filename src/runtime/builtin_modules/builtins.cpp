@@ -603,10 +603,61 @@ Box* execfile(Box* _fn) {
     return None;
 }
 
+Box* print(BoxedTuple* args, BoxedDict* kwargs) {
+    assert(args->cls == tuple_cls);
+    assert(kwargs->cls == dict_cls);
+
+    Box* dest, *end;
+
+    auto it = kwargs->d.find(new BoxedString("file"));
+    if (it != kwargs->d.end()) {
+        dest = it->second;
+        kwargs->d.erase(it);
+    } else {
+        dest = getSysStdout();
+    }
+
+    it = kwargs->d.find(new BoxedString("end"));
+    if (it != kwargs->d.end()) {
+        end = it->second;
+        kwargs->d.erase(it);
+    } else {
+        end = new BoxedString("\n");
+    }
+
+    RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
+
+    static const std::string write_str("write");
+
+    Box* space_box = new BoxedString(" ");
+
+    // TODO softspace handling?
+    bool first = true;
+    for (auto e : args->elts) {
+        BoxedString* s = str(e);
+
+        if (!first) {
+            Box* r = callattr(dest, &write_str, false, ArgPassSpec(1), space_box, NULL, NULL, NULL, NULL);
+            RELEASE_ASSERT(r, "");
+        }
+        first = false;
+
+        Box* r = callattr(dest, &write_str, false, ArgPassSpec(1), s, NULL, NULL, NULL, NULL);
+        RELEASE_ASSERT(r, "");
+    }
+
+    Box* r = callattr(dest, &write_str, false, ArgPassSpec(1), end, NULL, NULL, NULL, NULL);
+    RELEASE_ASSERT(r, "");
+
+    return None;
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
     builtins_module->giveAttr("None", None);
+
+    builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
     notimplemented_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));

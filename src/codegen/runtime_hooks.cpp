@@ -188,7 +188,6 @@ void initGlobalFuncs(GlobalState& g) {
     GET(compare);
     GET(augbinop);
     GET(nonzero);
-    GET(print);
     GET(unboxedLen);
     GET(getclsattr);
     GET(unaryop);

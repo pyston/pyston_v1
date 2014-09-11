@@ -27,7 +27,7 @@ namespace pyston {
 #define FF_DIVISION 0x02
 #define FF_GENERATOR 0x04
 #define FF_UNICODE_LITERALS 0x08
-#define FF_PRINT_FUNCTIONS 0x10
+#define FF_PRINT_FUNCTION 0x10
 #define FF_NESTED_SCOPES 0x20
 #define FF_WITH_STATEMENT 0x40
 

@@ -1782,14 +1782,6 @@ extern "C" i64 unboxedLen(Box* obj) {
     return rtn;
 }
 
-extern "C" void print(Box* obj) {
-    static StatCounter slowpath_print("slowpath_print");
-    slowpath_print.log();
-
-    BoxedString* strd = str(obj);
-    printf("%s", strd->s.c_str());
-}
-
 extern "C" void dump(void* p) {
     printf("\n");
     bool is_gc = (gc::global_heap.getAllocationFromInteriorPointer(p) != NULL);
