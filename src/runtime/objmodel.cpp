@@ -54,6 +54,11 @@
 
 namespace pyston {
 
+// TODO should centralize all of these:
+static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("__init__"), _get_str("__get__");
+static const std::string _getattr_str("__getattr__");
+static const std::string _getattribute_str("__getattribute__");
+
 struct GetattrRewriteArgs {
     Rewriter* rewriter;
     RewriterVarUsage obj;
@@ -405,10 +410,41 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
+PyObject* Py_CallPythonNew(PyTypeObject* self, PyObject* args, PyObject* kwds) {
+    try {
+        Py_FatalError("this function is unverified");
+
+        Box* new_attr = typeLookup(self, _new_str, NULL);
+        assert(new_attr);
+        new_attr = processDescriptor(new_attr, None, self);
+        return runtimeCallInternal(new_attr, NULL, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+void BoxedClass::freeze() {
+    assert(!is_constant);
+    assert(getattr("__name__")); // otherwise debugging will be very hard
+
+    if (!tp_new) {
+        this->tp_new = &Py_CallPythonNew;
+    } else if (tp_new != Py_CallPythonNew) {
+        ASSERT(0, "need to set __new__?");
+    }
+
+    is_constant = true;
+}
+
 BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                        int instance_size, bool is_user_defined)
-    : BoxVar(metaclass, 0), tp_basicsize(instance_size), tp_dealloc(NULL), base(base), gc_visit(gc_visit),
-      attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined) {
+    : BoxVar(metaclass, 0), base(base), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false),
+      is_user_defined(is_user_defined) {
+
+    // Zero out the CPython tp_* slots:
+    memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
+    tp_basicsize = instance_size;
+
     if (metaclass == NULL) {
         assert(type_cls == NULL);
     } else {
@@ -600,9 +636,6 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     return rtn;
 }
 
-// TODO should centralize all of these:
-static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("__init__"), _get_str("__get__");
-
 void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(cls->instancesHaveAttrs());
     assert(gc::isValidGCObject(val));
@@ -621,27 +654,8 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
 
 
     static const std::string none_str("None");
-    static const std::string getattr_str("__getattr__");
-    static const std::string getattribute_str("__getattribute__");
 
     RELEASE_ASSERT(attr != none_str || this == builtins_module, "can't assign to None");
-
-    if (isSubclass(this->cls, type_cls)) {
-        BoxedClass* self = static_cast<BoxedClass*>(this);
-
-        if (attr == getattr_str || attr == getattribute_str) {
-            // Will have to embed the clear in the IC, so just disable the patching for now:
-            rewrite_args = NULL;
-
-            // TODO should put this clearing behavior somewhere else, since there are probably more
-            // cases in which we want to do it.
-            self->dependent_icgetattrs.invalidateAll();
-        }
-
-        if (attr == "__base__" && getattr("__base__")) {
-            raiseExcHelper(TypeError, "readonly attribute");
-        }
-    }
 
     HCAttrs* attrs = getAttrsPtr();
     HiddenClass* hcls = attrs->hcls;
@@ -799,7 +813,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         if (rewrite_args)
             r_descr.addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
-        if (!for_call) {
+        if (!for_call && descr->cls == function_cls) {
             if (rewrite_args) {
                 assert(rewrite_args->call_done_guarding);
                 rewrite_args->rewriter->setDoneGuarding();
@@ -811,17 +825,17 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
                 rewrite_args->out_success = true;
             }
             return boxUnboundInstanceMethod(descr);
-        } else {
-            if (rewrite_args) {
-                if (rewrite_args->call_done_guarding)
-                    rewrite_args->rewriter->setDoneGuarding();
-                rewrite_args->obj.setDoneUsing();
-                rewrite_args->out_success = true;
-                rewrite_args->out_rtn = std::move(r_descr);
-            }
-            // leave should_bind_out set to false
-            return descr;
         }
+
+        if (rewrite_args) {
+            if (rewrite_args->call_done_guarding)
+                rewrite_args->rewriter->setDoneGuarding();
+            rewrite_args->obj.setDoneUsing();
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = std::move(r_descr);
+        }
+        // leave should_bind_out set to false
+        return descr;
     }
 
     // Special case: member descriptor
@@ -1445,6 +1459,29 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         }
     } else {
         descr = typeLookup(obj->cls, attr, NULL);
+    }
+
+    if (isSubclass(obj->cls, type_cls)) {
+        BoxedClass* self = static_cast<BoxedClass*>(obj);
+
+        if (attr == _getattr_str || attr == _getattribute_str) {
+            // Will have to embed the clear in the IC, so just disable the patching for now:
+            rewrite_args = NULL;
+
+            // TODO should put this clearing behavior somewhere else, since there are probably more
+            // cases in which we want to do it.
+            self->dependent_icgetattrs.invalidateAll();
+        }
+
+        if (attr == "__base__" && self->getattr("__base__"))
+            raiseExcHelper(TypeError, "readonly attribute");
+
+        if (attr == "__new__") {
+            self->tp_new = &Py_CallPythonNew;
+            // TODO update subclasses
+
+            rewrite_args = NULL;
+        }
     }
 
     Box* _set_ = NULL;
@@ -3351,6 +3388,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     // TODO this function (typeNew) should probably call PyType_Ready
 
+    made->tp_new = base->tp_new;
     made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
 
     return made;
@@ -3413,15 +3451,15 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls.addUse(), rewrite_args->destination, false);
+        // TODO: if tp_new != Py_CallPythonNew, call that instead?
         new_attr = typeLookup(cls, _new_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
         else {
-            if (new_attr) {
-                r_new = std::move(grewrite_args.out_rtn);
-                r_new.addGuard((intptr_t)new_attr);
-            }
+            assert(new_attr);
+            r_new = std::move(grewrite_args.out_rtn);
+            r_new.addGuard((intptr_t)new_attr);
         }
 
         // Special-case functions to allow them to still rewrite:

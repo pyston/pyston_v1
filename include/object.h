@@ -322,6 +322,17 @@ typedef struct {
 } PyBufferProcs;
 
 
+// Pyston change: hacks to allow C++ features
+#ifndef __cplusplus
+typedef struct _typeobject PyTypeObject;
+#else
+namespace pyston {
+class BoxedClass;
+}
+typedef pyston::BoxedClass PyTypeObject;
+#endif
+
+
 typedef void (*freefunc)(void *);
 typedef void (*destructor)(PyObject *);
 typedef int (*printfunc)(PyObject *, FILE *, int);
@@ -338,8 +349,9 @@ typedef PyObject *(*iternextfunc) (PyObject *);
 typedef PyObject *(*descrgetfunc) (PyObject *, PyObject *, PyObject *);
 typedef int (*descrsetfunc) (PyObject *, PyObject *, PyObject *);
 typedef int (*initproc)(PyObject *, PyObject *, PyObject *);
-typedef PyObject *(*newfunc)(struct _typeobject *, PyObject *, PyObject *);
-typedef PyObject *(*allocfunc)(struct _typeobject *, Py_ssize_t);
+// Pyston change: renamed from struct _typeobject to PyTypeObject
+typedef PyObject *(*newfunc)(PyTypeObject *, PyObject *, PyObject *);
+typedef PyObject *(*allocfunc)(PyTypeObject *, Py_ssize_t);
 
 // Pyston change: moved the field definitions of a PyTypeObject to this macro
 #define PyTypeObject_BODY                                                       \
@@ -448,17 +460,6 @@ struct _typeobject {
     int _attrs_offset;
     bool _flags[2];
 };
-
-// Pyston change: hacks to allow C++ features
-#ifndef __cplusplus
-typedef struct _typeobject PyTypeObject;
-#else
-namespace pyston {
-class BoxedClass;
-}
-typedef pyston::BoxedClass PyTypeObject;
-#endif
-
 
 /* The *real* layout of a type object when allocated on the heap */
 typedef struct _heaptypeobject {

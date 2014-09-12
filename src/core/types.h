@@ -399,6 +399,7 @@ public:
 static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
 
 extern "C" const std::string* getTypeName(Box* o);
+std::string getFullTypeName(Box* o);
 
 
 
@@ -442,11 +443,8 @@ public:
 
     BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
                bool is_user_defined);
-    void freeze() {
-        assert(!is_constant);
-        assert(getattr("__name__")); // otherwise debugging will be very hard
-        is_constant = true;
-    }
+
+    void freeze();
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");

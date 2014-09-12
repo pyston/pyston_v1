@@ -32,8 +32,9 @@ BoxedClass* method_cls;
 class BoxedMethodDescriptor : public Box {
 public:
     PyMethodDef* method;
+    BoxedClass* type;
 
-    BoxedMethodDescriptor(PyMethodDef* method) : Box(method_cls), method(method) {}
+    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : Box(method_cls), method(method), type(type) {}
 
     static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
         RELEASE_ASSERT(self->cls == method_cls, "");
@@ -50,6 +51,10 @@ public:
         assert(self->cls == method_cls);
         assert(varargs->cls == tuple_cls);
         assert(kwargs->cls == dict_cls);
+
+        if (!isSubclass(obj->cls, self->type))
+            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' object but received a '%s'",
+                           self->method->ml_name, getFullNameOfClass(self->type).c_str(), getFullTypeName(obj).c_str());
 
         threading::GLPromoteRegion _gil_lock;
 
@@ -138,6 +143,62 @@ extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
     return rtn;
 }
 
+/*
+// These are for supporting things like tp_call.
+// tp_new is handled differently, which is the only one supported right now,
+// which is why these are (temporarily) commented out.
+BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
+class BoxedWrapperDescriptor : public Box {
+public:
+    const int offset;
+    BoxedWrapperDescriptor(int offset) : Box(wrapperdescr_cls), offset(offset) {}
+
+    static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+};
+
+class BoxedWrapperObject : public Box {
+public:
+    BoxedWrapperDescriptor* descr;
+    Box* obj;
+
+    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : Box(wrapperobject_cls), descr(descr), obj(obj) {}
+
+    static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
+        assert(args->cls == tuple_cls);
+        assert(kwds->cls == dict_cls);
+
+        abort();
+    }
+};
+
+Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
+    RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");
+
+    if (inst == None)
+        return self;
+
+    return new BoxedWrapperObject(self, inst);
+}
+*/
+
+PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
+    RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
+
+    // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
+
+    RELEASE_ASSERT(args->cls == tuple_cls, "");
+    RELEASE_ASSERT(kwds->cls == dict_cls, "");
+    RELEASE_ASSERT(args->elts.size() >= 1, "");
+
+    BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
+    RELEASE_ASSERT(isSubclass(subtype->cls, type_cls), "");
+    RELEASE_ASSERT(isSubclass(subtype, self), "");
+
+    BoxedTuple* new_args = new BoxedTuple(BoxedTuple::GCVector(args->elts.begin() + 1, args->elts.end()));
+
+    return self->tp_new(subtype, new_args, kwds);
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) {
     gc::registerNonheapRootObject(cls);
 
@@ -186,7 +247,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
 
-    cls->base = object_cls;
+    BoxedClass* base = cls->base = object_cls;
     if (!cls->cls)
         cls->cls = cls->base->cls;
 
@@ -196,23 +257,12 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     // tp_basicsize, tp_itemsize
     // tp_doc
 
-    if (cls->tp_new) {
-        // Wrap the tp_new in a MethodDescriptor, which will take care of
-        // converting between C API mode and Pyston mode:
-        static bool initialized = false;
-        static PyMethodDef new_method_def;
-        if (!initialized) {
-            new_method_def.ml_name = "__new__";
-            new_method_def.ml_meth = (PyCFunction)cls->tp_new;
-            new_method_def.ml_flags = METH_VARARGS | METH_KEYWORDS;
-            new_method_def.ml_doc = NULL;
-            initialized = true;
-        }
-        cls->giveAttr("__new__", new BoxedMethodDescriptor(&new_method_def));
+    if (!cls->tp_new && base != object_cls)
+        cls->tp_new = base->tp_new;
 
-        // Clear tp_new for now since we are not keeping it updated, and would rather that
-        // clients crash instead of use unguaranteed behavior:
-        cls->tp_new = NULL;
+    if (cls->tp_new) {
+        cls->giveAttr("__new__",
+                      new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, cls, "__new__", (PyCFunction)tp_new_wrapper));
     }
 
     if (!cls->tp_alloc) {
@@ -220,7 +270,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     }
 
     for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
-        cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method));
+        cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method, cls));
     }
 
     for (PyMemberDef* member = cls->tp_members; member && member->name; ++member) {
@@ -894,6 +944,20 @@ void setupCAPI() {
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
                                                                      0, true, true)));
     method_cls->freeze();
+
+    /*
+    wrapperdescr_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
+    wrapperdescr_cls->giveAttr("__name__", boxStrConstant("wrapper_descriptor"));
+    wrapperdescr_cls->giveAttr("__get__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
+    wrapperdescr_cls->freeze();
+
+    wrapperobject_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
+    wrapperobject_cls->giveAttr("__name__", boxStrConstant("method-wrapper"));
+    wrapperobject_cls->giveAttr(
+        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
+    wrapperobject_cls->freeze();
+    */
 }
 
 void teardownCAPI() {
