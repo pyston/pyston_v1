@@ -143,15 +143,21 @@ extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
     return rtn;
 }
 
-/*
-// These are for supporting things like tp_call.
-// tp_new is handled differently, which is the only one supported right now,
-// which is why these are (temporarily) commented out.
 BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
+struct wrapper_def {
+    const char* name;
+    int offset;
+    int flags;
+};
+
+wrapper_def call_wrapper = { "__call__", offsetof(PyTypeObject, tp_call), PyWrapperFlag_KEYWORDS };
+
 class BoxedWrapperDescriptor : public Box {
 public:
-    const int offset;
-    BoxedWrapperDescriptor(int offset) : Box(wrapperdescr_cls), offset(offset) {}
+    const wrapper_def* wrapper;
+    BoxedClass* type;
+    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type)
+        : Box(wrapperdescr_cls), wrapper(wrapper), type(type) {}
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
 };
@@ -164,9 +170,19 @@ public:
     BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : Box(wrapperobject_cls), descr(descr), obj(obj) {}
 
     static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
+        assert(self->cls == wrapperobject_cls);
         assert(args->cls == tuple_cls);
         assert(kwds->cls == dict_cls);
 
+        int flags = self->descr->wrapper->flags;
+        char* ptr = (char*)self->descr->type + self->descr->wrapper->offset;
+
+        if (flags & PyWrapperFlag_KEYWORDS) {
+            PyCFunctionWithKeywords f = *(PyCFunctionWithKeywords*)ptr;
+            return f(self->obj, args, kwds);
+        } else {
+            abort();
+        }
         abort();
     }
 };
@@ -177,9 +193,12 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     if (inst == None)
         return self;
 
+    if (!isSubclass(inst->cls, self->type))
+        raiseExcHelper(TypeError, "Descriptor '' for '%s' objects doesn't apply to '%s' object",
+                       getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
+
     return new BoxedWrapperObject(self, inst);
 }
-*/
 
 PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
     RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
@@ -212,14 +231,16 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_as_sequence == NULL, "");
     RELEASE_ASSERT(cls->tp_as_mapping == NULL, "");
     RELEASE_ASSERT(cls->tp_hash == NULL, "");
-    RELEASE_ASSERT(cls->tp_call == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
-    RELEASE_ASSERT((cls->tp_flags & ~(Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE)) == 0, "");
-    RELEASE_ASSERT(cls->tp_traverse == NULL, "");
-    RELEASE_ASSERT(cls->tp_clear == NULL, "");
+
+    int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
+    RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
+    // RELEASE_ASSERT(cls->tp_traverse == NULL, "");
+    // RELEASE_ASSERT(cls->tp_clear == NULL, "");
+
     RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
@@ -263,6 +284,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     if (cls->tp_new) {
         cls->giveAttr("__new__",
                       new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, cls, "__new__", (PyCFunction)tp_new_wrapper));
+    }
+
+    if (cls->tp_call) {
+        cls->giveAttr("__call__", new BoxedWrapperDescriptor(&call_wrapper, cls));
     }
 
     if (!cls->tp_alloc) {
@@ -405,18 +430,23 @@ extern "C" void PyObject_Free(void* p) {
 extern "C" PyObject* _PyObject_GC_Malloc(size_t) {
     Py_FatalError("unimplemented");
 }
-extern "C" PyObject* _PyObject_GC_New(PyTypeObject*) {
-    Py_FatalError("unimplemented");
+
+extern "C" PyObject* _PyObject_GC_New(PyTypeObject* cls) {
+    return _PyObject_New(cls);
 }
+
 extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject*, Py_ssize_t) {
     Py_FatalError("unimplemented");
 }
+
 extern "C" void PyObject_GC_Track(void*) {
-    Py_FatalError("unimplemented");
+    // TODO do we have to do anything to support the C API GC protocol?
 }
+
 extern "C" void PyObject_GC_UnTrack(void*) {
-    Py_FatalError("unimplemented");
+    // TODO do we have to do anything to support the C API GC protocol?
 }
+
 extern "C" void PyObject_GC_Del(void*) {
     Py_FatalError("unimplemented");
 }
@@ -470,7 +500,16 @@ extern "C" PyObject* PyObject_GetIter(PyObject*) {
 }
 
 extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) {
-    Py_FatalError("unimplemented");
+    if (!isSubclass(attr_name->cls, str_cls)) {
+        PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
+        return NULL;
+    }
+
+    try {
+        return getattr(o, static_cast<BoxedString*>(attr_name)->s.c_str());
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) {
@@ -519,7 +558,11 @@ extern "C" int PyObject_Not(PyObject* o) {
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
-    Py_FatalError("unimplemented");
+    try {
+        return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
@@ -945,7 +988,6 @@ void setupCAPI() {
                                                                      0, true, true)));
     method_cls->freeze();
 
-    /*
     wrapperdescr_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
     wrapperdescr_cls->giveAttr("__name__", boxStrConstant("wrapper_descriptor"));
     wrapperdescr_cls->giveAttr("__get__",
@@ -957,7 +999,6 @@ void setupCAPI() {
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->freeze();
-    */
 }
 
 void teardownCAPI() {

@@ -412,7 +412,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
 
 PyObject* Py_CallPythonNew(PyTypeObject* self, PyObject* args, PyObject* kwds) {
     try {
-        Py_FatalError("this function is unverified");
+        Py_FatalError("this function is untested");
 
         Box* new_attr = typeLookup(self, _new_str, NULL);
         assert(new_attr);
@@ -423,14 +423,31 @@ PyObject* Py_CallPythonNew(PyTypeObject* self, PyObject* args, PyObject* kwds) {
     }
 }
 
+PyObject* Py_CallPythonCall(PyObject* self, PyObject* args, PyObject* kwds) {
+    try {
+        Py_FatalError("this function is untested");
+
+        return runtimeCallInternal(self, NULL, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
 void BoxedClass::freeze() {
     assert(!is_constant);
     assert(getattr("__name__")); // otherwise debugging will be very hard
 
+    // This will probably share a lot in common with Py_TypeReady:
     if (!tp_new) {
         this->tp_new = &Py_CallPythonNew;
     } else if (tp_new != Py_CallPythonNew) {
         ASSERT(0, "need to set __new__?");
+    }
+
+    if (!tp_call) {
+        this->tp_call = &Py_CallPythonCall;
+    } else if (tp_call != Py_CallPythonCall) {
+        ASSERT(0, "need to set __call__?");
     }
 
     is_constant = true;
@@ -565,7 +582,7 @@ Box::Box(BoxedClass* cls) : cls(cls) {
     // the only way cls should be NULL is if we're creating the type_cls
     // object itself:
     if (cls == NULL) {
-        assert(type_cls == NULL);
+        ASSERT(type_cls == NULL, "should pass a non-null cls here");
     } else {
     }
 }
@@ -1482,6 +1499,13 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
 
             rewrite_args = NULL;
         }
+
+        if (attr == "__call__") {
+            self->tp_call = &Py_CallPythonCall;
+            // TODO update subclasses
+
+            rewrite_args = NULL;
+        }
     }
 
     Box* _set_ = NULL;
@@ -1854,6 +1878,11 @@ extern "C" void dump(void* p) {
         if (isSubclass(b->cls, str_cls)) {
             printf("String value: %s\n", static_cast<BoxedString*>(b)->s.c_str());
         }
+
+        if (isSubclass(b->cls, tuple_cls)) {
+            printf("%ld elements\n", static_cast<BoxedTuple*>(b)->elts.size());
+        }
+
         return;
     }
 

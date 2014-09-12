@@ -101,7 +101,21 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
 }
 
 extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(p->cls == tuple_cls, ""); // could it be a subclass or something else?
+    BoxedTuple* t = static_cast<BoxedTuple*>(p);
+
+    Py_ssize_t n = t->elts.size();
+    if (low < 0)
+        low = 0;
+    if (high > n)
+        high = n;
+    if (high < low)
+        high = low;
+
+    if (low == 0 && high == n)
+        return p;
+
+    return new BoxedTuple(BoxedTuple::GCVector(&t->elts[low], &t->elts[high]));
 }
 
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
