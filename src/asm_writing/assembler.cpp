@@ -116,7 +116,9 @@ void Assembler::emitInt(int64_t n, int bytes) {
 }
 
 void Assembler::emitRex(uint8_t rex) {
-    emitByte(rex | 0x40);
+    if (rex != 0) {
+        emitByte(rex | 0x40);
+    }
 }
 
 void Assembler::emitModRM(uint8_t mod, uint8_t reg, uint8_t rm) {
@@ -255,8 +257,20 @@ void Assembler::mov(Register src, Indirect dest) {
     }
 }
 
-void Assembler::mov(Indirect src, Register dest) {
-    int rex = REX_W;
+void Assembler::mov(Indirect src, Register dest, MovType type) {
+    int rex;
+    switch (type) {
+        case MovType::Q:
+            rex = REX_W;
+            break;
+        case MovType::L:
+        case MovType::B:
+        case MovType::ZBL:
+            rex = 0;
+            break;
+        default:
+            RELEASE_ASSERT(false, "unrecognized MovType");
+    }
 
     int src_idx = src.base.regnum;
     int dest_idx = dest.regnum;
@@ -270,8 +284,25 @@ void Assembler::mov(Indirect src, Register dest) {
         dest_idx -= 8;
     }
 
-    emitRex(rex);
-    emitByte(0x8b); // opcode
+    if (rex)
+        emitRex(rex);
+
+    // opcode
+    switch (type) {
+        case MovType::Q:
+        case MovType::L:
+            emitByte(0x8b);
+            break;
+        case MovType::B:
+            emitByte(0x8a);
+            break;
+        case MovType::ZBL:
+            emitByte(0x0f);
+            emitByte(0xb6);
+            break;
+        default:
+            RELEASE_ASSERT(false, "unrecognized MovType");
+    }
 
     bool needssib = (src_idx == 0b100);
 

@@ -180,7 +180,7 @@ void RewriterVarUsage::addAttrGuard(int offset, uint64_t val, bool negate) {
         assembler->jne(assembler::JumpDestination::fromStart(rewriter->rewrite->getSlotSize()));
 }
 
-RewriterVarUsage RewriterVarUsage::getAttr(int offset, KillFlag kill, Location dest) {
+RewriterVarUsage RewriterVarUsage::getAttr(int offset, KillFlag kill, Location dest, assembler::MovType type) {
     assertValid();
 
     // Save these, since if we kill this register the var might disappear:
@@ -191,10 +191,18 @@ RewriterVarUsage RewriterVarUsage::getAttr(int offset, KillFlag kill, Location d
         setDoneUsing();
     }
 
-    assembler::Register newvar_reg = rewriter->allocReg(dest);
-    RewriterVarUsage newvar = rewriter->createNewVar(newvar_reg);
-    rewriter->assembler->mov(assembler::Indirect(this_reg, offset), newvar_reg);
-    return std::move(newvar);
+    if (dest.type == Location::XMMRegister) {
+        assert(rewriter->vars_by_location.count(dest) == 0);
+        assembler::XMMRegister newvar_reg = dest.asXMMRegister();
+        RewriterVarUsage newvar = rewriter->createNewVar(dest);
+        rewriter->assembler->movsd(assembler::Indirect(this_reg, offset), newvar_reg);
+        return std::move(newvar);
+    } else {
+        assembler::Register newvar_reg = rewriter->allocReg(dest);
+        RewriterVarUsage newvar = rewriter->createNewVar(newvar_reg);
+        rewriter->assembler->mov(assembler::Indirect(this_reg, offset), newvar_reg, type);
+        return std::move(newvar);
+    }
 }
 
 RewriterVarUsage RewriterVarUsage::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage other, Location dest) {
@@ -522,7 +530,8 @@ static const Location caller_save_registers[]{
     assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
 };
 
-RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args) {
+RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args,
+                                std::vector<RewriterVarUsage> args_xmm) {
     // TODO figure out why this is here -- what needs to be done differently
     // if can_call_into_python is true?
     // assert(!can_call_into_python);
@@ -564,6 +573,11 @@ RewriterVarUsage Rewriter::call(bool can_call_into_python, void* func_addr, std:
         }
 
         assert(var->isInLocation(Location::forArg(i)));
+    }
+
+    for (int i = 0; i < args_xmm.size(); i++) {
+        Location l((assembler::XMMRegister(i)));
+        assert(args_xmm[i].var->isInLocation(l));
     }
 
 #ifndef NDEBUG

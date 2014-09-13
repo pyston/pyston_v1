@@ -92,6 +92,7 @@ public:
     static constexpr Location any() { return Location(AnyReg, 0); }
     static constexpr Location none() { return Location(None, 0); }
     static Location forArg(int argnum);
+    static Location forXMMArg(int argnum);
 
     bool operator==(const Location rhs) const { return this->asInt() == rhs.asInt(); }
 
@@ -159,7 +160,8 @@ public:
     void addGuard(uint64_t val);
     void addGuardNotEq(uint64_t val);
     void addAttrGuard(int offset, uint64_t val, bool negate = false);
-    RewriterVarUsage getAttr(int offset, KillFlag kill, Location loc = Location::any());
+    RewriterVarUsage getAttr(int offset, KillFlag kill, Location loc = Location::any(),
+                             assembler::MovType type = assembler::MovType::Q);
     void setAttr(int offset, RewriterVarUsage other);
     RewriterVarUsage cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage other, Location loc = Location::any());
     RewriterVarUsage toBool(KillFlag kill, Location loc = Location::any());
@@ -291,7 +293,8 @@ public:
 
     void trap();
     RewriterVarUsage loadConst(int64_t val, Location loc = Location::any());
-    RewriterVarUsage call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args);
+    RewriterVarUsage call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args,
+                          std::vector<RewriterVarUsage> args_xmm = std::vector<RewriterVarUsage>());
     RewriterVarUsage call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0);
     RewriterVarUsage call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0, RewriterVarUsage arg1);
     RewriterVarUsage allocate(int n);
