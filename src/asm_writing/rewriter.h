@@ -114,119 +114,94 @@ template <> struct hash<pyston::Location> {
 
 namespace pyston {
 
-class RewriterVarUsage {
-public:
-    enum KillFlag {
-        NoKill,
-        Kill,
-    };
-
-private:
-    RewriterVar* var;
-    bool done_using;
-
-    RewriterVarUsage();
-    RewriterVarUsage(const RewriterVarUsage&) = delete;
-    RewriterVarUsage& operator=(const RewriterVarUsage&) = delete;
-
-    void assertValid() {
-        assert(var);
-        assert(!done_using);
-    }
-
-public:
-    // Creates a new Usage object of this var; ownership of
-    // one use of the var gets passed to this new object.
-    RewriterVarUsage(RewriterVar* var);
-
-    // Move constructor; don't need it for performance reasons, but because
-    // semantically we have to pass the ownership of the use.
-    RewriterVarUsage(RewriterVarUsage&& usage);
-    RewriterVarUsage& operator=(RewriterVarUsage&& usage);
-
-    static RewriterVarUsage empty();
-
-    ~RewriterVarUsage() {
-        if (!done_using) {
-            setDoneUsing();
-        }
-    }
-
-    void setDoneUsing();
-    bool isDoneUsing();
-    void ensureDoneUsing();
-
-    RewriterVarUsage addUse();
-
-    void addGuard(uint64_t val);
-    void addGuardNotEq(uint64_t val);
-    void addAttrGuard(int offset, uint64_t val, bool negate = false);
-    RewriterVarUsage getAttr(int offset, KillFlag kill, Location loc = Location::any(),
-                             assembler::MovType type = assembler::MovType::Q);
-    void setAttr(int offset, RewriterVarUsage other);
-    RewriterVarUsage cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVarUsage other, Location loc = Location::any());
-    RewriterVarUsage toBool(KillFlag kill, Location loc = Location::any());
-
-    friend class Rewriter;
-};
-
 class Rewriter;
+class RewriterVar;
+class RewriterAction;
+
 // This might make more sense as an inner class of Rewriter, but
 // you can't forward-declare that :/
 class RewriterVar {
+public:
+    void addGuard(uint64_t val);
+    void addGuardNotEq(uint64_t val);
+    void addAttrGuard(int offset, uint64_t val, bool negate = false);
+    RewriterVar* getAttr(int offset, Location loc = Location::any(), assembler::MovType type = assembler::MovType::Q);
+    void setAttr(int offset, RewriterVar* other);
+    RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
+    RewriterVar* toBool(Location loc = Location::any());
+
 private:
     Rewriter* rewriter;
-    int num_uses;
 
     std::unordered_set<Location> locations;
     bool isInLocation(Location l);
 
-    // Indicates that this value is a pointer to a fixed-size range in the scratch space.
-    // This is a vector of variable usages that keep the range allocated.
-    std::vector<RewriterVarUsage> scratch_range;
+    std::vector<int> uses;
+    int next_use;
+    void bumpUse();
+    bool isDoneUsing() { return next_use == uses.size(); }
+
+    // Indicates if this variable is an arg, and if so, what location the arg is from.
+    bool is_arg;
+    Location arg_loc;
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
     // that the register will still contain your value when you go to use it
-    assembler::Register getInReg(Location l = Location::any(), bool allow_constant_in_reg = false);
+    assembler::Register getInReg(Location l = Location::any(), bool allow_constant_in_reg = false,
+                                 Location otherThan = Location::any());
     assembler::XMMRegister getInXMMReg(Location l = Location::any());
+
+    assembler::Register initializeInReg(Location l = Location::any());
+    assembler::XMMRegister initializeInXMMReg(Location l = Location::any());
 
     // If this is an immediate, try getting it as one
     assembler::Immediate tryGetAsImmediate(bool* is_immediate);
 
     void dump();
 
+    RewriterVar(const RewriterVar&) = delete;
+    RewriterVar& operator=(const RewriterVar&) = delete;
+
 public:
 #ifndef NDEBUG
     static int nvars;
 #endif
-    void incUse();
-    void decUse();
 
-    RewriterVar(Rewriter* rewriter, Location location) : rewriter(rewriter), num_uses(0) {
+    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false) {
 #ifndef NDEBUG
         nvars++;
 #endif
         assert(rewriter);
-        locations.insert(location);
     }
 
 #ifndef NDEBUG
     ~RewriterVar() { nvars--; }
 #endif
 
-    friend class RewriterVarUsage;
     friend class Rewriter;
 };
+
+class RewriterAction {
+public:
+    std::function<void()> action;
+
+    RewriterAction(std::function<void()> f) : action(f) {}
+};
+
+enum class ActionType { NORMAL, GUARD, MUTATION };
+
+// non-NULL fake pointer, definitely legit
+#define LOCATION_PLACEHOLDER ((RewriterVar*)1)
 
 class Rewriter : public ICSlotRewrite::CommitHook {
 private:
     std::unique_ptr<ICSlotRewrite> rewrite;
     assembler::Assembler* assembler;
 
-    const Location return_location;
+    std::vector<RewriterVar*> vars;
 
-    bool done_guarding;
+    const Location return_location;
 
     bool finished; // committed or aborted
 #ifndef NDEBUG
@@ -241,13 +216,30 @@ private:
 
     Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs);
 
-    void assertChangesOk() { assert(done_guarding); }
+    std::vector<RewriterAction> actions;
+    void addAction(const std::function<void()>& action, std::vector<RewriterVar*> const& vars, ActionType type) {
+        for (RewriterVar* var : vars) {
+            assert(var != NULL);
+            var->uses.push_back(actions.size());
+        }
+        if (type == ActionType::MUTATION) {
+            added_changing_action = true;
+        } else if (type == ActionType::GUARD) {
+            assert(!added_changing_action);
+            last_guard_action = (int)actions.size();
+        }
+        actions.emplace_back(action);
+    }
+    bool added_changing_action;
+    int last_guard_action;
 
-    void kill(RewriterVar* var);
+    bool done_guarding;
+    bool isDoneGuarding() { return done_guarding; }
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
     assembler::Register allocReg(Location dest, Location otherThan = Location::any());
+    assembler::XMMRegister allocXMMReg(Location dest, Location otherThan = Location::any());
     // Allocates an 8-byte region in the scratch space
     Location allocScratch();
     assembler::Indirect indirectFor(Location l);
@@ -257,8 +249,8 @@ private:
     // Similar, but for XMM registers (always go on the stack)
     void spillRegister(assembler::XMMRegister reg);
 
-    // Given an empty location, do the internal bookkeeping to create a new var out of that location.
-    RewriterVarUsage createNewVar(Location dest);
+    // Create a new var with no location.
+    RewriterVar* createNewVar();
     // Do the bookkeeping to say that var is now also in location l
     void addLocationToVar(RewriterVar* var, Location l);
     // Do the bookkeeping to say that var is no longer in location l
@@ -266,19 +258,57 @@ private:
 
     void finishAssembly(int continue_offset) override;
 
-    std::pair<RewriterVarUsage, int> _allocate(int n);
-
     int ndecisions;
     uint64_t decision_path;
 
+    void _trap();
+    void _loadConst(RewriterVar* result, int64_t val, Location loc);
+    void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
+               const std::vector<RewriterVar*>& args_xmm);
+    int _allocate(RewriterVar* result, int n);
+    void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
+    void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
+
+    // The public versions of these are in RewriterVar
+    void _addGuard(RewriterVar* var, uint64_t val);
+    void _addGuardNotEq(RewriterVar* var, uint64_t val);
+    void _addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool negate = false);
+    void _getAttr(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any(),
+                  assembler::MovType type = assembler::MovType::Q);
+    void _setAttr(RewriterVar* var, int offset, RewriterVar* other);
+    void _cmp(RewriterVar* result, RewriterVar* var1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* var2,
+              Location loc = Location::any());
+    void _toBool(RewriterVar* result, RewriterVar* var, Location loc = Location::any());
+
+    void assertConsistent() {
+#ifndef NDEBUG
+        for (RewriterVar* var : vars) {
+            for (Location l : var->locations) {
+                assert(vars_by_location[l] == var);
+            }
+        }
+        for (std::pair<Location, RewriterVar*> p : vars_by_location) {
+            assert(p.second != NULL);
+            if (p.second != LOCATION_PLACEHOLDER) {
+                assert(std::find(vars.begin(), vars.end(), p.second) != vars.end());
+                assert(p.second->locations.count(p.first) == 1);
+            }
+        }
+#endif
+    }
+
 public:
     // This should be called exactly once for each argument
-    RewriterVarUsage getArg(int argnum);
+    RewriterVar* getArg(int argnum);
 
     ~Rewriter() {
         if (!finished)
             this->abort();
         assert(finished);
+
+        for (RewriterVar* var : vars) {
+            delete var;
+        }
 
         // This check isn't thread safe and should be fine to remove if it causes
         // issues (along with the nvars/start_vars accounting)
@@ -287,25 +317,21 @@ public:
 
     Location getReturnDestination();
 
-    bool isDoneGuarding() { return done_guarding; }
-    void setDoneGuarding();
-
     TypeRecorder* getTypeRecorder();
 
     void trap();
-    RewriterVarUsage loadConst(int64_t val, Location loc = Location::any());
-    RewriterVarUsage call(bool can_call_into_python, void* func_addr, std::vector<RewriterVarUsage> args,
-                          std::vector<RewriterVarUsage> args_xmm = std::vector<RewriterVarUsage>());
-    RewriterVarUsage call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0);
-    RewriterVarUsage call(bool can_call_into_python, void* func_addr, RewriterVarUsage arg0, RewriterVarUsage arg1);
-    RewriterVarUsage allocate(int n);
-    RewriterVarUsage allocateAndCopy(RewriterVarUsage array, int n);
-    RewriterVarUsage allocateAndCopyPlus1(RewriterVarUsage first_elem, RewriterVarUsage rest, int n_rest);
-    void deallocateStack(int nbytes);
+    RewriterVar* loadConst(int64_t val, Location loc = Location::any());
+    RewriterVar* call(bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
+                      const std::vector<RewriterVar*>& args_xmm = std::vector<RewriterVar*>());
+    RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0);
+    RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);
+    RewriterVar* allocate(int n);
+    RewriterVar* allocateAndCopy(RewriterVar* array, int n);
+    RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
 
     void abort();
     void commit();
-    void commitReturning(RewriterVarUsage rtn);
+    void commitReturning(RewriterVar* rtn);
 
     void addDependenceOn(ICInvalidator&);
 
@@ -314,7 +340,6 @@ public:
     void addDecision(int way);
 
     friend class RewriterVar;
-    friend class RewriterVarUsage;
 };
 
 void* extractSlowpathFunc(uint8_t* pp_addr);
