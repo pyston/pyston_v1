@@ -22,6 +22,7 @@
 
 #include "core/common.h"
 #include "core/options.h"
+#include "core/types.h"
 
 namespace pyston {
 
@@ -92,7 +93,7 @@ bool endswith(const std::string& s, const std::string& pattern) {
 }
 
 void removeDirectoryIfExists(const std::string& path) {
-    llvm::error_code code;
+    llvm_error_code code;
 
     llvm::sys::fs::file_status status;
     code = llvm::sys::fs::status(path, status);

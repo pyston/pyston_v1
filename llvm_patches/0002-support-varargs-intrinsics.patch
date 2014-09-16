@@ -1,0 +1,29 @@
+From b370f4621298ec557e356e21fa0fa675a21d2331 Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kmod@dropbox.com>
+Date: Fri, 21 Mar 2014 16:06:58 -0700
+Subject: [PATCH] Support varargs intrinsics
+
+diff --git a/lib/IR/Function.cpp b/lib/IR/Function.cpp
+index c1fa372..d11727d 100644
+--- a/lib/IR/Function.cpp
++++ b/lib/IR/Function.cpp
+@@ -681,7 +681,13 @@ FunctionType *Intrinsic::getType(LLVMContext &Context,
+   while (!TableRef.empty())
+     ArgTys.push_back(DecodeFixedType(TableRef, Tys, Context));
+ 
+-  return FunctionType::get(ResultTy, ArgTys, false);
++  bool variadic = false;
++  if (ArgTys.size() && ArgTys.back() == Type::getVoidTy(Context)) {
++    variadic = true;
++    ArgTys.pop_back();
++  }
++
++  return FunctionType::get(ResultTy, ArgTys, variadic);
+ }
+ 
+ bool Intrinsic::isOverloaded(ID id) {
+
+-- 
+1.7.9.5
+
+

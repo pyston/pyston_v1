@@ -165,7 +165,11 @@ int main(int argc, char **argv) {
 
     SMDiagnostic Err;
 
+#if LLVMREV < 216466
     std::unique_ptr<Module> M(ParseIRFile(InputFilename, Err, Context));
+#else
+    std::unique_ptr<Module> M(parseIRFile(InputFilename, Err, Context));
+#endif
 
     if (M.get() == 0) {
         Err.print(argv[0], errs());
@@ -187,12 +191,21 @@ int main(int argc, char **argv) {
     if (OutputFilename.empty())
         OutputFilename = "-";
 
+#if LLVMREV < 216393
     std::string ErrorInfo;
     tool_output_file out(OutputFilename.c_str(), ErrorInfo, sys::fs::F_None);
     if (!ErrorInfo.empty()) {
         errs() << ErrorInfo << '\n';
         return 1;
     }
+#else
+    std::error_code EC;
+    tool_output_file out(OutputFilename, EC, sys::fs::F_None);
+    if (EC) {
+        errs() << "error opening file for writing\n";
+        return 1;
+    }
+#endif
 
     WriteBitcodeToFile(M.get(), out.os());
 

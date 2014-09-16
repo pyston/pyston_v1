@@ -14,6 +14,8 @@
 
 #include "codegen/dis.h"
 
+#if LLVMREV < 216983
+
 #include <cstdio>
 #include <iostream>
 #include <unordered_map>
@@ -225,3 +227,5 @@ void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     llvm::outs().flush();
 }
 }
+
+#endif

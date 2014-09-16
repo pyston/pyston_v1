@@ -12,25 +12,6 @@ Subject: [PATCH] Support emitting stackmap sections for ELF object files as
  4 files changed, 138 insertions(+), 1 deletion(-)
  create mode 100644 test/CodeGen/X86/stackmap-elf.ll
 
-diff --git a/lib/IR/Function.cpp b/lib/IR/Function.cpp
-index c1fa372..d11727d 100644
---- a/lib/IR/Function.cpp
-+++ b/lib/IR/Function.cpp
-@@ -681,7 +681,13 @@ FunctionType *Intrinsic::getType(LLVMContext &Context,
-   while (!TableRef.empty())
-     ArgTys.push_back(DecodeFixedType(TableRef, Tys, Context));
- 
--  return FunctionType::get(ResultTy, ArgTys, false);
-+  bool variadic = false;
-+  if (ArgTys.size() && ArgTys.back() == Type::getVoidTy(Context)) {
-+    variadic = true;
-+    ArgTys.pop_back();
-+  }
-+
-+  return FunctionType::get(ResultTy, ArgTys, variadic);
- }
- 
- bool Intrinsic::isOverloaded(ID id) {
 diff --git a/lib/MC/MCObjectFileInfo.cpp b/lib/MC/MCObjectFileInfo.cpp
 index 931b354..40899c1 100644
 --- a/lib/MC/MCObjectFileInfo.cpp

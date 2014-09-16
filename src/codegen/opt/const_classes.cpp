@@ -25,6 +25,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 #include "codegen/codegen.h"
 #include "codegen/irgen/util.h"
@@ -104,7 +105,11 @@ private:
             }
 
             APInt ap_offset(64, 0, true);
+#if LLVMREV < 214781
             bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
+#else
+            bool success = gep->accumulateConstantOffset(*g.tm->getSubtargetImpl()->getDataLayout(), ap_offset);
+#endif
             assert(success);
             int64_t offset = ap_offset.getSExtValue();
 

@@ -586,13 +586,20 @@ Box* execfile(Box* _fn) {
 
     BoxedString* fn = static_cast<BoxedString*>(_fn);
 
+#if LLVMREV < 217625
     bool exists;
-    llvm::error_code code = llvm::sys::fs::exists(fn->s, exists);
+    llvm_error_code code = llvm::sys::fs::exists(fn->s, exists);
+
 #if LLVMREV < 210072
     ASSERT(code == 0, "%s: %s", code.message().c_str(), fn->s.c_str());
 #else
     assert(!code);
 #endif
+
+#else
+    bool exists = llvm::sys::fs::exists(fn->s);
+#endif
+
     if (!exists)
         raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.c_str());
 

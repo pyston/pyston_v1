@@ -41,7 +41,7 @@ void FunctionAddressRegistry::dumpPerfMap() {
     std::string out_path = "perf_map";
     removeDirectoryIfExists(out_path);
 
-    llvm::error_code code;
+    llvm_error_code code;
     code = llvm::sys::fs::create_directory(out_path, false);
     assert(!code);
 
@@ -139,7 +139,7 @@ public:
         static StatCounter code_bytes("code_bytes");
         code_bytes.log(Obj.getData().size());
 
-        llvm::error_code code;
+        llvm_error_code code;
         for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;
 #if LLVMREV < 200442
              I = I.increment(code)

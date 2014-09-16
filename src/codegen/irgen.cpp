@@ -26,6 +26,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Scalar.h"
 
@@ -65,7 +66,7 @@ void MyInserter::InsertHelper(llvm::Instruction* I, const llvm::Twine& Name, llv
 static void addIRDebugSymbols(llvm::Function* f) {
     llvm::legacy::PassManager mpm;
 
-    llvm::error_code code = llvm::sys::fs::create_directory(".debug_ir", true);
+    llvm_error_code code = llvm::sys::fs::create_directory(".debug_ir", true);
     assert(!code);
 
     mpm.add(llvm::createDebugIRPass(false, false, ".debug_ir", f->getName()));
@@ -83,8 +84,11 @@ static void optimizeIR(llvm::Function* f, EffortLevel::EffortLevel effort) {
 
     llvm::FunctionPassManager fpm(g.cur_module);
 
-    // TODO: using this as a pass is a legacy cludge that shouldn't be necessary any more; can it be updated?
+#if LLVMREV < 217548
     fpm.add(new llvm::DataLayoutPass(*g.tm->getDataLayout()));
+#else
+    fpm.add(new llvm::DataLayoutPass());
+#endif
 
     if (ENABLE_INLINING && effort >= EffortLevel::MAXIMAL)
         fpm.add(makeFPInliner(275));
@@ -918,7 +922,11 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
     llvm::DIFile file = builder.createFile(fn, dir);
+#if LLVMREV < 214132
     llvm::DIArray param_types = builder.getOrCreateArray(llvm::None);
+#else
+    llvm::DITypeArray param_types = builder.getOrCreateTypeArray(llvm::None);
+#endif
     llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
     llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
                                                           false, true, lineno + 1, 0, true, f);
@@ -967,7 +975,11 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     assert(g.cur_module == NULL);
     std::string name = getUniqueFunctionName(nameprefix, effort, entry_descriptor);
     g.cur_module = new llvm::Module(name, g.context);
+#if LLVMREV < 217070 // not sure if this is the right rev
     g.cur_module->setDataLayout(g.tm->getDataLayout()->getStringRepresentation());
+#else
+    g.cur_module->setDataLayout(g.tm->getSubtargetImpl()->getDataLayout());
+#endif
     // g.engine->addModule(g.cur_module);
 
     ////

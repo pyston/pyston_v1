@@ -53,7 +53,7 @@ private:
 
     uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment);
 
-    error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions);
+    llvm_error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions);
 
     virtual uint64_t getSymbolAddress(const std::string& Name);
 
@@ -110,7 +110,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
     //
     // FIXME: Initialize the Near member for each memory group to avoid
     // interleaving.
-    error_code ec;
+    llvm_error_code ec;
     sys::MemoryBlock MB = sys::Memory::allocateMappedMemory(RequiredSize, &MemGroup.Near,
                                                             sys::Memory::MF_READ | sys::Memory::MF_WRITE, ec);
     if (ec) {
@@ -140,7 +140,7 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
 
 bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
     // FIXME: Should in-progress permissions be reverted if an error occurs?
-    error_code ec;
+    llvm_error_code ec;
 
     // Don't allow free memory blocks to be used after setting protection flags.
     CodeMem.FreeMem.clear();
@@ -177,10 +177,10 @@ bool PystonMemoryManager::finalizeMemory(std::string* ErrMsg) {
     return false;
 }
 
-error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
+llvm_error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions) {
 
     for (int i = 0, e = MemGroup.AllocatedMem.size(); i != e; ++i) {
-        error_code ec;
+        llvm_error_code ec;
         ec = sys::Memory::protectMappedMemory(MemGroup.AllocatedMem[i], Permissions);
         if (ec) {
             return ec;
@@ -188,9 +188,9 @@ error_code PystonMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGrou
     }
 
 #if LLVMREV < 209952
-    return error_code::success();
+    return llvm_error_code::success();
 #else
-    return error_code();
+    return llvm_error_code();
 #endif
 }
 

@@ -60,7 +60,7 @@ extern void _force_link() {
 void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     // llvm::outs() << "An object has been emitted:\n";
 
-    llvm::error_code code;
+    llvm_error_code code;
 
     for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
         llvm::StringRef name;

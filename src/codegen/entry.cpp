@@ -92,10 +92,14 @@ static llvm::Module* loadStdlib() {
         data = llvm::StringRef(STRIPPED_STDLIB_BC_START, size);
     }
 
+#if LLVMREV < 216583
     llvm::MemoryBuffer* buffer = llvm::MemoryBuffer::getMemBuffer(data, "", false);
+#else
+    std::unique_ptr<llvm::MemoryBuffer> buffer = llvm::MemoryBuffer::getMemBuffer(data, "", false);
+#endif
 
     // llvm::ErrorOr<llvm::Module*> m_or = llvm::parseBitcodeFile(buffer, g.context);
-    llvm::ErrorOr<llvm::Module*> m_or = llvm::getLazyBitcodeModule(buffer, g.context);
+    llvm::ErrorOr<llvm::Module*> m_or = llvm::getLazyBitcodeModule(std::move(buffer), g.context);
     RELEASE_ASSERT(m_or, "");
     llvm::Module* m = m_or.get();
     assert(m);
@@ -115,13 +119,21 @@ private:
 public:
     MyObjectCache() : loaded(false) {}
 
+#if LLVMREV < 216002
     virtual void notifyObjectCompiled(const llvm::Module* M, const llvm::MemoryBuffer* Obj) {}
+#else
+    virtual void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) {}
+#endif
 
+#if LLVMREV < 215566
     virtual llvm::MemoryBuffer* getObject(const llvm::Module* M) {
+#else
+    virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) {
+#endif
         assert(!loaded);
-        loaded = true;
-        g.engine->setObjectCache(NULL);
-        std::unique_ptr<MyObjectCache> del_at_end(this);
+    loaded = true;
+    g.engine->setObjectCache(NULL);
+    std::unique_ptr<MyObjectCache> del_at_end(this);
 
 #if 0
             if (!USE_STRIPPED_STDLIB) {
@@ -137,17 +149,17 @@ public:
         intptr_t size = 0;
 #endif
 
-        // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
-        assert(start[0] == 0x7f);
-        assert(start[1] == 'E');
-        assert(start[2] == 'L');
-        assert(start[3] == 'F');
+    // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
+    assert(start[0] == 0x7f);
+    assert(start[1] == 'E');
+    assert(start[2] == 'L');
+    assert(start[3] == 'F');
 
-        assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
+    assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
 
-        llvm::StringRef data(start, size);
-        return llvm::MemoryBuffer::getMemBufferCopy(data, "");
-    }
+    llvm::StringRef data(start, size);
+    return llvm::MemoryBuffer::getMemBufferCopy(data, "");
+}
 };
 
 static void handle_sigfpe(int signum) {
@@ -171,9 +183,17 @@ void initCodegen() {
 
     g.stdlib_module = loadStdlib();
 
+#if LLVMREV < 215967
     llvm::EngineBuilder eb(new llvm::Module("empty_initial_module", g.context));
-    eb.setEngineKind(llvm::EngineKind::JIT); // specify we only want the JIT, and not the interpreter fallback
+#else
+    jlvm::EngineBuilder eb(std::unique_ptr<llvm::Module>(new llvm::Module("empty_initial_module", g.context)));
+#endif
+
+#if LLVMREV < 216982
     eb.setUseMCJIT(true);
+#endif
+
+    eb.setEngineKind(llvm::EngineKind::JIT); // specify we only want the JIT, and not the interpreter fallback
     eb.setMCJITMemoryManager(createMemoryManager());
     // eb.setOptLevel(llvm::CodeGenOpt::None); // -O0
     // eb.setOptLevel(llvm::CodeGenOpt::Less); // -O1
@@ -225,9 +245,14 @@ void initCodegen() {
     g.engine->RegisterJITEventListener(tracebacks_listener);
 
     if (SHOW_DISASM) {
+#if LLVMREV < 216983
         llvm::JITEventListener* listener = new PystonJITEventListener();
         g.jit_listeners.push_back(listener);
         g.engine->RegisterJITEventListener(listener);
+#else
+        fprintf(stderr, "The LLVM disassembler has been removed\n");
+        abort();
+#endif
     }
 
     initGlobalFuncs(g);
@@ -240,7 +265,7 @@ void initCodegen() {
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:
     const char* llvm_args[] = {
-        "fake_name", "--enable-stackmap-liveness", "--enable-patchpoint-liveness",
+        "fake_name", "--enable-patchpoint-liveness",
 
 // Enabling and debugging fast-isel:
 //"--fast-isel",

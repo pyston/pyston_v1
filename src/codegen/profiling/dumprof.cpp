@@ -31,7 +31,7 @@ public:
 
 static int num = 0;
 void DumpJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
-    llvm::error_code code;
+    llvm_error_code code;
 
     std::ostringstream os("");
     os << "jit" << ++num << ".o";

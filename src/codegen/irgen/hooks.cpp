@@ -102,7 +102,11 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
     void* compiled = NULL;
     if (effort > EffortLevel::INTERPRETED) {
         Timer _t("to jit the IR");
+#if LLVMREV < 215967
         g.engine->addModule(cf->func->getParent());
+#else
+        g.engine->addModule(std::unique_ptr<llvm::Module>(cf->func->getParent()));
+#endif
         compiled = (void*)g.engine->getFunctionAddress(cf->func->getName());
         assert(compiled);
         cf->llvm_code = embedConstantPtr(compiled, cf->func->getType());

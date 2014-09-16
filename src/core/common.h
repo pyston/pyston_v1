@@ -47,6 +47,12 @@
 #define NOINLINE
 #endif
 
+#if LLVMREV < 210783
+#define llvm_error_code llvm::error_code
+#else
+#define llvm_error_code std::error_code
+#endif
+
 // From http://stackoverflow.com/questions/3767869/adding-message-to-assert, modified to use fprintf and give a Python
 // stacktrace
 #define RELEASE_ASSERT(condition, fmt, ...)                                                                            \

@@ -81,6 +81,10 @@ if __name__ == "__main__":
             continue
         if "Update-TailCallElim" in patch_fn and svn_rev >= 208017:
             continue
+        if "Update-IntelJITEvents" in patch_fn and svn_rev >= 209989:
+            continue
+        if "stackmap-sections-for-ELF" in patch_fn and svn_rev >= 214538:
+            continue
 
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)

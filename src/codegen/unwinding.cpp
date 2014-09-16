@@ -111,9 +111,13 @@ const LineInfo* getLineInfoFor(uint64_t addr) {
 class TracebacksEventListener : public llvm::JITEventListener {
 public:
     void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+#if LLVMREV < 214433
         llvm::DIContext* Context = llvm::DIContext::getDWARFContext(Obj.getObjectFile());
+#else
+        llvm::DIContext* Context = llvm::DIContext::getDWARFContext(*Obj.getObjectFile());
+#endif
 
-        llvm::error_code ec;
+        llvm_error_code ec;
         for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
             llvm::object::SymbolRef::Type SymType;
             if (I->getType(SymType))
@@ -151,7 +155,7 @@ public:
         delete Context;
 
         // Currently-unused libunwind support:
-        llvm::error_code code;
+        llvm_error_code code;
         bool found_text = false, found_eh_frame = false;
         uint64_t text_addr, text_size;
         uint64_t eh_frame_addr, eh_frame_size;

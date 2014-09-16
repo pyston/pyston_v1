@@ -66,9 +66,13 @@ static Box* importSub(const std::string* name, Box* parent_module) {
         if (VERBOSITY() >= 2)
             printf("Searching for %s at %s...\n", name->c_str(), fn.c_str());
 
+#if LLVMREV < 217625
         bool exists;
-        llvm::error_code code = llvm::sys::fs::exists(joined_path.str(), exists);
+        llvm_error_code code = llvm::sys::fs::exists(joined_path.str(), exists);
         assert(LLVM_SYS_FS_EXISTS_CODE_OKAY(code));
+#else
+        bool exists = llvm::sys::fs::exists(joined_path.str());
+#endif
 
         if (!exists)
             continue;
