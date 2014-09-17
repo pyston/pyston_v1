@@ -32,7 +32,7 @@ bool BENCH = false;
 bool PROFILE = false;
 bool DUMPJIT = false;
 bool TRAP = false;
-bool USE_STRIPPED_STDLIB = false;
+bool USE_STRIPPED_STDLIB = true; // always true
 bool ENABLE_INTERPRETER = true;
 
 static bool _GLOBAL_ENABLE = 1;
