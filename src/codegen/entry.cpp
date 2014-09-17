@@ -27,6 +27,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
@@ -204,6 +205,9 @@ void initCodegen() {
     target_options.NoFramePointerElim = true;
     // target_options.EnableFastISel = true;
     eb.setTargetOptions(target_options);
+
+    // TODO enable this?  should let us get better code:
+    // eb.setMCPU(llvm::sys::getHostCPUName());
 
     g.tm = eb.selectTarget();
     assert(g.tm && "failed to get a target machine");
