@@ -674,15 +674,35 @@ void Rewriter::commit() {
     // setDoneGuarding();
 
     assert(live_out_regs.size() == live_outs.size());
-    for (int i = 0; i < live_outs.size(); i++) {
-        assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
-        Location expected(ru);
 
-        RewriterVar* var = live_outs[i];
-        // for (Location l : var->locations) {
-        // printf("%d %d\n", l.type, l._data);
-        //}
-        if (!var->isInLocation(expected)) {
+    // Live-outs placement: sometimes a live out can be placed into the location of a different live-out,
+    // so we need to reshuffle and solve those conflicts.
+    // For now, just use a simple approach, and iteratively try to move variables into place, and skip
+    // them if there's a conflict.  Doesn't handle conflict cycles, but I would be very curious
+    // to see us generate one of those.
+    int num_to_move = live_outs.size();
+    std::vector<bool> moved(num_to_move, false);
+    while (num_to_move) {
+        int _start_move = num_to_move;
+
+        for (int i = 0; i < live_outs.size(); i++) {
+            if (moved[i])
+                continue;
+
+            assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
+            Location expected(ru);
+
+            RewriterVar* var = live_outs[i];
+
+            if (var->isInLocation(expected)) {
+                moved[i] = true;
+                num_to_move--;
+                continue;
+            }
+
+            if (vars_by_location.count(expected))
+                continue;
+
             assert(vars_by_location.count(expected) == 0);
 
             if (ru.type == assembler::GenericRegister::GP) {
@@ -694,8 +714,39 @@ void Rewriter::commit() {
             } else {
                 RELEASE_ASSERT(0, "%d", ru.type);
             }
+
+            // silly, but need to make a copy due to the mutations:
+            for (auto l : std::vector<Location>(var->locations.begin(), var->locations.end())) {
+                if (l == expected)
+                    continue;
+                removeLocationFromVar(var, l);
+            }
+
+            moved[i] = true;
+            num_to_move--;
         }
 
+#ifndef NDEBUG
+        if (num_to_move >= _start_move) {
+            for (int i = 0; i < live_outs.size(); i++) {
+                printf("\n");
+                assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
+                Location expected(ru);
+                expected.dump();
+
+                RewriterVar* var = live_outs[i];
+                for (auto l : var->locations) {
+                    l.dump();
+                }
+            }
+        }
+#endif
+        RELEASE_ASSERT(num_to_move < _start_move, "algorithm isn't going to terminate!");
+    }
+
+    for (int i = 0; i < live_outs.size(); i++) {
+        assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(live_out_regs[i]);
+        RewriterVar* var = live_outs[i];
         assert(var->isInLocation(ru));
         var->decUse();
     }
