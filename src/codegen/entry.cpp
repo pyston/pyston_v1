@@ -186,7 +186,7 @@ void initCodegen() {
 #if LLVMREV < 215967
     llvm::EngineBuilder eb(new llvm::Module("empty_initial_module", g.context));
 #else
-    jlvm::EngineBuilder eb(std::unique_ptr<llvm::Module>(new llvm::Module("empty_initial_module", g.context)));
+    llvm::EngineBuilder eb(std::unique_ptr<llvm::Module>(new llvm::Module("empty_initial_module", g.context)));
 #endif
 
 #if LLVMREV < 216982

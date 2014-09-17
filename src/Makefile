@@ -80,9 +80,14 @@ else
 	LLVM_BIN := $(LLVM_BUILD)/Release/bin
 endif
 
-LLVM_LINK_LIBS := core mcjit native bitreader ipo irreader jit debuginfo instrumentation
+LLVM_LINK_LIBS := core mcjit native bitreader ipo irreader debuginfo instrumentation
 ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
 LLVM_LINK_LIBS += inteljitevents
+endif
+
+NEED_OLD_JIT := $(shell if [ $(LLVM_REVISION) -le 216982 ]; then echo 1; else echo 0; fi )
+ifeq ($(NEED_OLD_JIT),1)
+	LLVM_LINK_LIBS += jit
 endif
 
 LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
