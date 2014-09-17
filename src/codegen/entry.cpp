@@ -126,7 +126,7 @@ public:
 #endif
 
 #if LLVMREV < 215566
-    virtual llvm::MemoryBuffer* getObject(const llvm::Module* M) {
+    virtual llvm::MemoryBuffer* getObject(const llvm::Module* M){
 #else
     virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) {
 #endif

@@ -197,5 +197,5 @@ FunctionPass* createConstClassesPass() {
 }
 
 static RegisterPass<pyston::ConstClassesPass>
-X("const_classes", "Use the fact that builtin classes are constant and their attributes can be constant-folded", true,
-  false);
+    X("const_classes", "Use the fact that builtin classes are constant and their attributes can be constant-folded",
+      true, false);

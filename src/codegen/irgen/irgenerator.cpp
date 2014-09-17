@@ -1862,7 +1862,7 @@ private:
         // prevent us from having two OSR exits point to the same OSR entry; not something that
         // we're doing right now but something that would be nice in the future.
 
-        llvm::Value* arg_array = NULL, *malloc_save = NULL;
+        llvm::Value* arg_array = NULL, * malloc_save = NULL;
         if (sorted_symbol_table.size() > 3) {
             // Leave in the ability to use malloc but I guess don't use it.
             // Maybe if there are a ton of live variables it'd be nice to have them be

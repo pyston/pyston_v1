@@ -2324,7 +2324,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     }
 
     // The "output" args that we will pass to the called function:
-    Box* oarg1 = NULL, *oarg2 = NULL, *oarg3 = NULL;
+    Box* oarg1 = NULL, * oarg2 = NULL, * oarg3 = NULL;
     Box** oargs = NULL;
 
     if (num_output_args > 3) {

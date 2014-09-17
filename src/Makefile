@@ -364,7 +364,7 @@ check:
 
 	$(MAKE) check_dbg
 
-	# $(MAKE) check_format
+	$(MAKE) check_format
 	$(MAKE) run_unittests
 
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:

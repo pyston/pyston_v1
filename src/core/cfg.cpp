@@ -1846,8 +1846,8 @@ public:
             push_back(makeExpr(enter));
         }
 
-        CFGBlock* continue_dest = NULL, *break_dest = NULL;
-        CFGBlock* orig_continue_dest = NULL, *orig_break_dest = NULL;
+        CFGBlock* continue_dest = NULL, * break_dest = NULL;
+        CFGBlock* orig_continue_dest = NULL, * orig_break_dest = NULL;
         if (loops.size()) {
             continue_dest = cfg->addDeferredBlock();
             continue_dest->info = "with_continue";

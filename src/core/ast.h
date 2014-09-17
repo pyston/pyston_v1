@@ -394,7 +394,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Delete() : AST_stmt(AST_TYPE::Delete) {};
+    AST_Delete() : AST_stmt(AST_TYPE::Delete){};
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
 };

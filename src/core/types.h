@@ -227,7 +227,7 @@ public:
 
     SourceInfo* source;
     FunctionList
-    versions; // any compiled versions along with their type parameters; in order from most preferred to least
+        versions; // any compiled versions along with their type parameters; in order from most preferred to least
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
     // Functions can provide an "internal" version, which will get called instead

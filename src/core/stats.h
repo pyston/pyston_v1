@@ -68,11 +68,11 @@ struct Stats {
 };
 struct StatCounter {
     StatCounter(const char* name) {}
-    void log(int count = 1) {};
+    void log(int count = 1){};
 };
 struct StatPerThreadCounter {
     StatPerThreadCounter(const char* name) {}
-    void log(int count = 1) {};
+    void log(int count = 1){};
 };
 #endif
 }

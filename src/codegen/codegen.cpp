@@ -146,7 +146,7 @@ public:
 #else
              ++I
 #endif
-             ) {
+                 ) {
             llvm::object::section_iterator section(Obj.end_sections());
             code = I->getSection(section);
             assert(!code);
@@ -173,7 +173,7 @@ public:
     }
 };
 
-GlobalState::GlobalState() : context(llvm::getGlobalContext()) {};
+GlobalState::GlobalState() : context(llvm::getGlobalContext()){};
 
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();
