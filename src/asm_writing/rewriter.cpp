@@ -557,11 +557,10 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
         // check_reg.dump();
         assert(check_reg.isClobberedByCall());
 
-        auto it = vars_by_location.find(check_reg);
-        if (it == vars_by_location.end())
+        RewriterVar*& var = vars_by_location[check_reg];
+        if (var == NULL)
             continue;
 
-        RewriterVar* var = it->second;
         bool need_to_spill = true;
         for (Location l : var->locations) {
             if (!l.isClobberedByCall()) {
@@ -597,7 +596,7 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     }
 
 #ifndef NDEBUG
-    for (const auto& p : vars_by_location) {
+    for (const auto& p : vars_by_location.getAsMap()) {
         Location l = p.first;
         // l.dump();
         if (l.isClobberedByCall()) {
@@ -807,7 +806,7 @@ void Rewriter::commit() {
 
     // At this point, all real variables should have been removed. Check that
     // anything left is the fake LOCATION_PLACEHOLDER.
-    for (std::pair<Location, RewriterVar*> p : vars_by_location) {
+    for (std::pair<Location, RewriterVar*> p : vars_by_location.getAsMap()) {
         assert(p.second == LOCATION_PLACEHOLDER);
     }
 #endif
@@ -882,7 +881,7 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                 // This won't get collected, but that's fine.
                 for (int j = a; j <= b; j++) {
                     Location m(Location::Scratch, j * 8);
-                    vars_by_location.emplace(m, LOCATION_PLACEHOLDER);
+                    vars_by_location[m] = LOCATION_PLACEHOLDER;
                 }
 
                 return a;
