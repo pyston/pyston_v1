@@ -113,6 +113,92 @@ template <> struct hash<pyston::Location> {
 
 namespace pyston {
 
+// Replacement for unordered_map<Location, T>
+template <class T> class LocationMap {
+private:
+    static const int N_REGS = 16;
+    static const int N_XMM = 16;
+    static const int N_SCRATCH = 16;
+    static const int N_STACK = 16;
+
+    T map_reg[N_REGS];
+    T map_xmm[N_XMM];
+    T map_scratch[N_SCRATCH];
+    T map_stack[N_STACK];
+    std::unordered_map<int32_t, T> map_const;
+
+public:
+    LocationMap() {
+        memset(map_reg, 0, sizeof(map_reg));
+        memset(map_xmm, 0, sizeof(map_xmm));
+        memset(map_scratch, 0, sizeof(map_scratch));
+        memset(map_stack, 0, sizeof(map_stack));
+    }
+
+    T& operator[](Location l) {
+        switch (l.type) {
+            case Location::Register:
+                assert(0 <= l.regnum);
+                assert(l.regnum < N_REGS);
+                return map_reg[l.regnum];
+            case Location::XMMRegister:
+                assert(0 <= l.regnum);
+                assert(l.regnum < N_XMM);
+                return map_xmm[l.regnum];
+            case Location::Stack:
+                assert(0 <= l.stack_offset / 8);
+                assert(l.stack_offset / 8 < N_STACK);
+                return map_stack[l.stack_offset / 8];
+            case Location::Scratch:
+                assert(0 <= l.scratch_offset / 8);
+                assert(l.scratch_offset / 8 < N_SCRATCH);
+                return map_scratch[l.scratch_offset / 8];
+            case Location::Constant:
+                return map_const[l.constant_val];
+            default:
+                RELEASE_ASSERT(0, "%d", l.type);
+        }
+    };
+
+    const T& operator[](Location l) const { return const_cast<T&>(*this)[l]; };
+
+    size_t count(Location l) { return ((*this)[l] != NULL ? 1 : 0); }
+
+    void erase(Location l) { (*this)[l] = NULL; }
+
+#ifndef NDEBUG
+    // For iterating
+    // Slow so only use it in debug mode plz
+    std::unordered_map<Location, T> getAsMap() {
+        std::unordered_map<Location, T> m;
+        for (int i = 0; i < N_REGS; i++) {
+            if (map_reg[i] != NULL) {
+                m.emplace(Location(Location::Register, i), map_reg[i]);
+            }
+        }
+        for (int i = 0; i < N_XMM; i++) {
+            if (map_xmm[i] != NULL) {
+                m.emplace(Location(Location::XMMRegister, i), map_xmm[i]);
+            }
+        }
+        for (int i = 0; i < N_SCRATCH; i++) {
+            if (map_scratch[i] != NULL) {
+                m.emplace(Location(Location::Scratch, i * 8), map_scratch[i]);
+            }
+        }
+        for (int i = 0; i < N_STACK; i++) {
+            if (map_stack[i] != NULL) {
+                m.emplace(Location(Location::Stack, i * 8), map_stack[i]);
+            }
+        }
+        for (std::pair<int32_t, RewriterVar*> p : map_const) {
+            m.emplace(Location(Location::Constant, p.first), p.second);
+        }
+        return m;
+    }
+#endif
+};
+
 class Rewriter;
 class RewriterVar;
 class RewriterAction;
@@ -207,7 +293,7 @@ private:
 
     std::vector<int> live_out_regs;
 
-    std::unordered_map<Location, RewriterVar*> vars_by_location;
+    LocationMap<RewriterVar*> vars_by_location;
     std::vector<RewriterVar*> args;
     std::vector<RewriterVar*> live_outs;
 
@@ -284,7 +370,7 @@ private:
                 assert(vars_by_location[l] == var);
             }
         }
-        for (std::pair<Location, RewriterVar*> p : vars_by_location) {
+        for (std::pair<Location, RewriterVar*> p : vars_by_location.getAsMap()) {
             assert(p.second != NULL);
             if (p.second != LOCATION_PLACEHOLDER) {
                 assert(std::find(vars.begin(), vars.end(), p.second) != vars.end());
