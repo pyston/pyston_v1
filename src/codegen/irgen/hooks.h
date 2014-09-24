@@ -31,7 +31,7 @@ class BoxedModule;
 void compileAndRunModule(AST_Module* m, BoxedModule* bm);
 
 // will we always want to generate unique function names? (ie will this function always be reasonable?)
-CLFunction* clFunctionForMachineFunctionName(const std::string&);
+CompiledFunction* cfForMachineFunctionName(const std::string&);
 }
 
 #endif

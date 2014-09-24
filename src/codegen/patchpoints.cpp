@@ -54,7 +54,7 @@ PatchpointSetupInfo* PatchpointSetupInfo::initialize(bool has_return_value, int 
 
 namespace patchpoints {
 
-void processStackmap(StackMap* stackmap) {
+void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
     int nrecords = stackmap ? stackmap->records.size() : 0;
 
     for (int i = 0; i < nrecords; i++) {
@@ -103,7 +103,7 @@ void processStackmap(StackMap* stackmap) {
         live_outs.insert(14);
         live_outs.insert(15);
 
-        registerCompiledPatchpoint(start_addr, pp,
+        registerCompiledPatchpoint(cf, start_addr, pp,
                                    StackInfo({ stack_size, has_scratch, pp->numScratchBytes(), scratch_rbp_offset }),
                                    std::move(live_outs));
     }

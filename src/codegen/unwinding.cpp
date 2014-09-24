@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "codegen/unwinding.h"
+
 #include <dlfcn.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -22,6 +24,8 @@
 #include "llvm/IR/DebugInfo.h"
 
 #include "codegen/codegen.h"
+#include "codegen/irgen/hooks.h"
+#include "codegen/llvm_interpreter.h"
 
 
 #define UNW_LOCAL_ONLY
@@ -65,57 +69,37 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64
     *out_len = nentries;
 }
 
-class LineTableRegistry {
+class CFRegistry {
 private:
-    struct LineTableRegistryEntry {
-        const uint64_t addr, size;
-        std::vector<std::pair<uint64_t, LineInfo> > linetable;
-        LineTableRegistryEntry(uint64_t addr, uint64_t size) : addr(addr), size(size) {}
-    };
-
-    std::vector<LineTableRegistryEntry> entries;
+    // TODO use a binary search tree
+    std::vector<CompiledFunction*> cfs;
 
 public:
-    void registerLineTable(uint64_t addr, uint64_t size, llvm::DILineInfoTable& lines) {
-        entries.push_back(LineTableRegistryEntry(addr, size));
+    void registerCF(CompiledFunction* cf) { cfs.push_back(cf); }
 
-        auto& entry = entries.back();
-        for (int i = 0; i < lines.size(); i++) {
-            entry.linetable.push_back(
-                std::make_pair(lines[i].first, LineInfo(lines[i].second.Line, lines[i].second.Column,
-                                                        lines[i].second.FileName, lines[i].second.FunctionName)));
-        }
-    }
-
-    const LineInfo* getLineInfoFor(uint64_t addr) {
-        for (const auto& entry : entries) {
-            if (addr < entry.addr || addr >= entry.addr + entry.size)
-                continue;
-
-            const auto& linetable = entry.linetable;
-            for (int i = linetable.size() - 1; i >= 0; i--) {
-                if (linetable[i].first < addr)
-                    return &linetable[i].second;
-            }
-            abort();
+    CompiledFunction* getCFForAddress(uint64_t addr) {
+        for (auto* cf : cfs) {
+            if (cf->code_start <= addr && addr < cf->code_start + cf->code_size)
+                return cf;
         }
         return NULL;
     }
 };
-static LineTableRegistry line_table_registry;
 
-const LineInfo* getLineInfoFor(uint64_t addr) {
-    return line_table_registry.getLineInfoFor(addr);
+static CFRegistry cf_registry;
+
+CompiledFunction* getCFForAddress(uint64_t addr) {
+    return cf_registry.getCFForAddress(addr);
 }
 
 class TracebacksEventListener : public llvm::JITEventListener {
 public:
     void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
-#if LLVMREV < 214433
-        llvm::DIContext* Context = llvm::DIContext::getDWARFContext(Obj.getObjectFile());
-#else
-        llvm::DIContext* Context = llvm::DIContext::getDWARFContext(*Obj.getObjectFile());
-#endif
+        std::unique_ptr<llvm::DIContext> Context(llvm::DIContext::getDWARFContext(*Obj.getObjectFile()));
+
+        assert(g.cur_cf);
+        assert(!g.cur_cf->line_table);
+        LineTable* line_table = g.cur_cf->line_table = new LineTable();
 
         llvm_error_code ec;
         for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
@@ -149,10 +133,18 @@ public:
                                lines[i].second.FunctionName.c_str(), lines[i].first);
                     }
                 }
-                line_table_registry.registerLineTable(Addr, Size, lines);
+
+                assert(g.cur_cf->code_start == 0);
+                g.cur_cf->code_start = Addr;
+                g.cur_cf->code_size = Size;
+                cf_registry.registerCF(g.cur_cf);
+
+                for (const auto& p : lines) {
+                    line_table->entries.push_back(std::make_pair(
+                        p.first, LineInfo(p.second.Line, p.second.Column, p.second.FileName, p.second.FunctionName)));
+                }
             }
         }
-        delete Context;
 
         // Currently-unused libunwind support:
         llvm_error_code code;
@@ -212,9 +204,198 @@ public:
     }
 };
 
-std::string getPythonFuncAt(void* addr, void* sp) {
-    return "";
+struct PythonFrameId {
+    enum FrameType {
+        COMPILED,
+        INTERPRETED,
+    } type;
+
+    union {
+        uint64_t ip; // if type == COMPILED
+        uint64_t bp; // if type == INTERPRETED
+    };
+};
+
+class PythonFrameIterator {
+private:
+    PythonFrameId id;
+
+    unw_context_t ctx;
+    unw_cursor_t cursor;
+    CompiledFunction* cf;
+
+    PythonFrameIterator() {}
+
+    // not copyable or movable, since 'cursor' holds an internal pointer to 'ctx'
+    PythonFrameIterator(const PythonFrameIterator&) = delete;
+    void operator=(const PythonFrameIterator&) = delete;
+    PythonFrameIterator(const PythonFrameIterator&&) = delete;
+    void operator=(const PythonFrameIterator&&) = delete;
+
+public:
+    CompiledFunction* getCF() const {
+        assert(cf);
+        return cf;
+    }
+
+    const PythonFrameId& getId() const { return id; }
+
+    static std::unique_ptr<PythonFrameIterator> end() { return std::unique_ptr<PythonFrameIterator>(nullptr); }
+
+    static std::unique_ptr<PythonFrameIterator> begin() {
+        std::unique_ptr<PythonFrameIterator> rtn(new PythonFrameIterator());
+
+        unw_getcontext(&rtn->ctx);
+        unw_init_local(&rtn->cursor, &rtn->ctx);
+
+        bool found = rtn->incr();
+        if (!found)
+            return NULL;
+        return rtn;
+    }
+
+    uint64_t getReg(int dwarf_num) {
+        assert(0 <= dwarf_num && dwarf_num < 16);
+
+        // for x86_64, at least, libunwind seems to use the dwarf numbering
+
+        unw_word_t rtn;
+        int code = unw_get_reg(&cursor, dwarf_num, &rtn);
+        assert(code == 0);
+        return rtn;
+    }
+
+    bool incr() {
+        while (true) {
+            int r = unw_step(&this->cursor);
+
+            if (r <= 0) {
+                return false;
+            }
+
+            unw_word_t ip;
+            unw_get_reg(&this->cursor, UNW_REG_IP, &ip);
+
+            CompiledFunction* cf = getCFForAddress(ip);
+            this->cf = cf;
+            if (cf) {
+                this->id.type = PythonFrameId::COMPILED;
+                this->id.ip = ip;
+
+                unw_word_t bp;
+                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
+
+                return true;
+            }
+
+            // TODO shouldn't need to do this expensive-looking query, if we
+            // knew the bounds of the interpretFunction() function:
+            unw_proc_info_t pip;
+            int code = unw_get_proc_info(&this->cursor, &pip);
+            RELEASE_ASSERT(code == 0, "%d", code);
+
+            if (pip.start_ip == (intptr_t)interpretFunction) {
+                unw_word_t bp;
+                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
+
+                this->id.type = PythonFrameId::INTERPRETED;
+                this->id.bp = bp;
+                return true;
+            }
+
+            // keep unwinding
+        }
+    }
+
+    // Adapter classes to be able to use this in a C++11 range for loop.
+    // (Needed because we do more memory management than typical.)
+    // TODO: maybe the memory management should be handled by the Manager?
+    class Manager {
+    public:
+        class Holder {
+        public:
+            std::unique_ptr<PythonFrameIterator> it;
+
+            Holder(std::unique_ptr<PythonFrameIterator> it) : it(std::move(it)) {}
+
+            bool operator!=(const Holder& rhs) const {
+                assert(rhs.it.get() == NULL); // this is the only intended use case, for comparing to end()
+                return it != rhs.it;
+            }
+
+            Holder& operator++() {
+                assert(it.get());
+
+                bool found = it->incr();
+                if (!found)
+                    it.release();
+                return *this;
+            }
+
+            const PythonFrameIterator& operator*() const {
+                assert(it.get());
+                return *it.get();
+            }
+        };
+
+        Holder begin() { return PythonFrameIterator::begin(); }
+
+        Holder end() { return PythonFrameIterator::end(); }
+    };
+};
+
+PythonFrameIterator::Manager unwindPythonFrames() {
+    return PythonFrameIterator::Manager();
 }
+
+static std::unique_ptr<PythonFrameIterator> getTopPythonFrame() {
+    std::unique_ptr<PythonFrameIterator> fr = PythonFrameIterator::begin();
+    RELEASE_ASSERT(fr != PythonFrameIterator::end(), "no valid python frames??");
+
+    return fr;
+}
+
+static const LineInfo* lineInfoForFrame(const PythonFrameIterator& frame_it) {
+    auto& id = frame_it.getId();
+    switch (id.type) {
+        case PythonFrameId::COMPILED:
+            return frame_it.getCF()->line_table->getLineInfoFor(id.ip);
+        case PythonFrameId::INTERPRETED:
+            return getLineInfoForInterpretedFrame((void*)id.bp);
+    }
+    abort();
+}
+
+std::vector<const LineInfo*> getTracebackEntries() {
+    std::vector<const LineInfo*> entries;
+
+    for (auto& frame_info : unwindPythonFrames()) {
+        entries.push_back(lineInfoForFrame(frame_info));
+    }
+
+    std::reverse(entries.begin(), entries.end());
+    return entries;
+}
+
+const LineInfo* getMostRecentLineInfo() {
+    std::unique_ptr<PythonFrameIterator> frame = getTopPythonFrame();
+    return lineInfoForFrame(*frame);
+}
+
+CompiledFunction* getTopCompiledFunction() {
+    // TODO This is a bad way to do this...
+    const LineInfo* last_entry = getMostRecentLineInfo();
+    assert(last_entry->func.size());
+
+    CompiledFunction* cf = cfForMachineFunctionName(last_entry->func);
+    assert(cf);
+    return cf;
+}
+
+BoxedModule* getCurrentModule() {
+    return getTopCompiledFunction()->clfunc->source->parent_module;
+}
+
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();

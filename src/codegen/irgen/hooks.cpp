@@ -100,6 +100,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
     }
 
     void* compiled = NULL;
+    cf->code = NULL;
     if (effort > EffortLevel::INTERPRETED) {
         Timer _t("to jit the IR");
 #if LLVMREV < 215967
@@ -107,8 +108,13 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
 #else
         g.engine->addModule(std::unique_ptr<llvm::Module>(cf->func->getParent()));
 #endif
-        compiled = (void*)g.engine->getFunctionAddress(cf->func->getName());
+
+        g.cur_cf = cf;
+        void* compiled = (void*)g.engine->getFunctionAddress(cf->func->getName());
+        g.cur_cf = NULL;
         assert(compiled);
+        ASSERT(compiled == cf->code, "cf->code should have gotten filled in");
+
         cf->llvm_code = embedConstantPtr(compiled, cf->func->getType());
 
         long us = _t.end();
@@ -116,31 +122,27 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
         us_jitting.log(us);
         static StatCounter num_jits("num_jits");
         num_jits.log();
-    } else {
-        // HAX just get it for now; this is just to make sure everything works
-        //(void*)g.func_registry.getFunctionAddress(cf->func->getName());
     }
 
-    cf->code = compiled;
     if (VERBOSITY("irgen") >= 1) {
-        printf("Compiled function to %p\n", compiled);
+        printf("Compiled function to %p\n", cf->code);
     }
 
     StackMap* stackmap = parseStackMap();
-    patchpoints::processStackmap(stackmap);
+    patchpoints::processStackmap(cf, stackmap);
 }
 
-static std::unordered_map<std::string, CLFunction*> machine_name_to_clfunction;
-CLFunction* clFunctionForMachineFunctionName(const std::string& machine_name) {
+static std::unordered_map<std::string, CompiledFunction*> machine_name_to_cf;
+CompiledFunction* cfForMachineFunctionName(const std::string& machine_name) {
     assert(machine_name.size());
-    auto r = machine_name_to_clfunction[machine_name];
+    auto r = machine_name_to_cf[machine_name];
     ASSERT(r, "%s", machine_name.c_str());
     return r;
 }
 
-void registerMachineName(const std::string& machine_name, CLFunction* cl) {
-    assert(machine_name_to_clfunction.count(machine_name) == 0);
-    machine_name_to_clfunction[machine_name] = cl;
+void registerMachineName(const std::string& machine_name, CompiledFunction* cf) {
+    assert(machine_name_to_cf.count(machine_name) == 0);
+    machine_name_to_cf[machine_name] = cf;
 }
 
 // Compiles a new version of the function with the given signature and adds it to the list;
@@ -190,7 +192,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     CompiledFunction* cf = doCompile(source, entry, effort, spec, name);
 
-    registerMachineName(cf->func->getName(), f);
+    registerMachineName(cf->func->getName(), cf);
 
     compileIR(cf, effort);
     f->addVersion(cf);

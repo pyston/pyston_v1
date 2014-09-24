@@ -19,7 +19,9 @@
 // over having them spread randomly in different files, this should probably be split again
 // but in a way that makes more sense.
 
+#include <memory>
 #include <stddef.h>
+#include <vector>
 
 #include "llvm/ADT/iterator_range.h"
 #include "Python.h"
@@ -149,6 +151,9 @@ struct FunctionSpecialization {
 
 class BoxedClosure;
 class BoxedGenerator;
+class LineTable;
+class ICInfo;
+
 struct CompiledFunction {
 private:
 public:
@@ -164,7 +169,9 @@ public:
         Box* (*closure_generator_call)(BoxedClosure*, BoxedGenerator*, Box*, Box*, Box*, Box**);
         Box* (*generator_call)(BoxedGenerator*, Box*, Box*, Box*, Box**);
         void* code;
+        uintptr_t code_start;
     };
+    int code_size;
     llvm::Value* llvm_code; // the llvm callable.
 
     EffortLevel::EffortLevel effort;
@@ -172,11 +179,19 @@ public:
     int64_t times_called;
     ICInvalidator dependent_callsites;
 
+    // Unfortunately, can't make this a std::unique_ptr if we want to forward-declare LineTable:
+    LineTable* line_table;
+
+    std::vector<ICInfo*> ics;
+
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
                      llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
                      const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), llvm_code(llvm_code), effort(effort), times_called(0) {}
+          code(code), llvm_code(llvm_code), effort(effort), times_called(0), line_table(nullptr) {}
+
+    // TODO this will need to be implemented eventually, and delete line_table if it exists
+    ~CompiledFunction();
 };
 
 class BoxedModule;
@@ -463,8 +478,6 @@ void setupRuntime();
 void teardownRuntime();
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn);
 BoxedModule* createModule(const std::string& name, const std::string& fn);
-
-std::string getPythonFuncAt(void* ip, void* sp);
 
 // TODO where to put this
 void appendToSysPath(const std::string& path);

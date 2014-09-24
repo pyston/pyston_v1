@@ -42,7 +42,7 @@
 
 namespace pyston {
 
-PystonJITEventListener::PystonJITEventListener() {
+DisassemblerJITEventListener::DisassemblerJITEventListener() {
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     llvm::InitializeNativeTargetDisassembler();
@@ -113,8 +113,8 @@ PystonJITEventListener::PystonJITEventListener() {
     assert(MIA);
 }
 
-void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function& f, void* ptr, size_t size,
-                                                   const llvm::JITEvent_EmittedFunctionDetails& details) {
+void DisassemblerJITEventListener::NotifyFunctionEmitted(const llvm::Function& f, void* ptr, size_t size,
+                                                         const llvm::JITEvent_EmittedFunctionDetails& details) {
     const llvm::MachineFunction& MF = *details.MF; //*const_cast<llvm::MachineFunction*>(details.MF);
     printf("emitted! %p %ld %s\n", ptr, size, f.getName().data());
     // MF.dump();
@@ -140,7 +140,7 @@ void PystonJITEventListener::NotifyFunctionEmitted(const llvm::Function& f, void
     llvm::errs().flush();
 }
 
-void PystonJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+void DisassemblerJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
     llvm::outs() << "An object has been emitted:\n";
 
     llvm::error_code code;

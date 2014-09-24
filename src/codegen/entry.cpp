@@ -250,7 +250,7 @@ void initCodegen() {
 
     if (SHOW_DISASM) {
 #if LLVMREV < 216983
-        llvm::JITEventListener* listener = new PystonJITEventListener();
+        llvm::JITEventListener* listener = new DisassemblerJITEventListener();
         g.jit_listeners.push_back(listener);
         g.engine->RegisterJITEventListener(listener);
 #else

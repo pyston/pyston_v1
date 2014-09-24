@@ -31,8 +31,6 @@ class TargetMachine;
 
 namespace pyston {
 
-class PystonJITEventListener;
-
 class FunctionAddressRegistry {
 private:
     struct FuncInfo {
@@ -57,8 +55,11 @@ llvm::JITEventListener* makeRegistryListener();
 llvm::JITEventListener* makeTracebacksListener();
 
 struct GlobalState {
+    // Much of this section is not thread-safe:
     llvm::LLVMContext& context;
-    llvm::Module* stdlib_module, *cur_module;
+    llvm::Module* stdlib_module;
+    llvm::Module* cur_module;
+    CompiledFunction* cur_cf;
     llvm::TargetMachine* tm;
     llvm::ExecutionEngine* engine;
 
@@ -83,8 +84,6 @@ extern GlobalState g;
 
 // in runtime_hooks.cpp:
 void initGlobalFuncs(GlobalState& g);
-
-const LineInfo* getLineInfoFor(uint64_t inst_addr);
 
 DS_DECLARE_RWLOCK(codegen_rwlock);
 }

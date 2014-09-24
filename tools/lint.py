@@ -123,18 +123,23 @@ def verify_include_order(_, dir, files):
                 sys.exit(1)
             assert len(sections[0]) == len(set(sections[0]))
 
+        dbg = []
         if sections and is_corresponding_header(sections[0]):
+            dbg.append("corresponding")
             del sections[0]
 
         if sections and is_system_section(sections[0]):
+            dbg.append("system")
             check_sorted(sections[0])
             del sections[0]
 
         while sections and is_third_party_section(sections[0]):
+            dbg.append("3rdp")
             check_sorted(sections[0])
             del sections[0]
 
         if sections and is_pyston_section(sections[0]):
+            dbg.append("pyston")
             check_sorted(sections[0])
             for incl in sections[0]:
                 if is_corresponding_header([incl]):
@@ -151,6 +156,7 @@ def verify_include_order(_, dir, files):
             print >>sys.stderr, "- Third party headers"
             print >>sys.stderr, "- Pyston headers"
             print >>sys.stderr, "There should be an extra line between sections but not within sections"
+            print >>sys.stderr, "\ndbg: %s" % dbg
             sys.exit(1)
         assert not sections, fn
 

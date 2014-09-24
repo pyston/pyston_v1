@@ -19,6 +19,7 @@
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
 #include "analysis/type_analysis.h"
+#include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/util.h"

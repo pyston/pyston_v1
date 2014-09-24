@@ -84,7 +84,7 @@ struct StackMap;
 
 namespace patchpoints {
 
-void processStackmap(StackMap* stackmap);
+void processStackmap(CompiledFunction* cf, StackMap* stackmap);
 
 PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder,
                                              bool has_return_value, int size);

@@ -543,7 +543,7 @@ llvm/profile/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(VERB) if [ ! -f $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/profile/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/,$@); fi
 	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/profile/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) CXXFLAGS="-fno-omit-frame-pointer -fno-function-sections" ENABLE_PROFILING=1 ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 $(LLVM_MAKE_ARGS)
 
-$(LLVM_SRC)/_patched: $(wildcard llvm_patches/*) $(wildcard clang_patches/*) $(LLVM_REVISION_FILE)
+$(LLVM_SRC)/_patched: $(wildcard ../llvm_patches/*) $(wildcard ../clang_patches/*) $(LLVM_REVISION_FILE)
 	$(MAKE) llvm_up
 llvm_up:
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ../llvm_patches
@@ -880,8 +880,13 @@ test_cpp_asm:
 	# $(GPP) tests/test.cpp -o test -c -O3
 	objdump -d test | less
 	rm test
+test_cpp_dwarf:
+	$(CLANGPP_EXE) ../test/test.cpp -o test -c -O3 -std=c++11 -g
+	# $(GPP) tests/test.cpp -o test -c -O3
+	objdump -W test | less
+	rm test
 test_cpp_ll:
-	$(CLANGPP_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11
+	$(CLANGPP_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11 -g
 	less test.ll
 	rm test.ll
 

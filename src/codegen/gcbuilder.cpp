@@ -14,6 +14,7 @@
 
 #include "codegen/gcbuilder.h"
 
+#include "codegen/codegen.h"
 #include "codegen/irgen.h"
 #include "core/options.h"
 

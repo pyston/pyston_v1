@@ -173,7 +173,7 @@ public:
     }
 };
 
-GlobalState::GlobalState() : context(llvm::getGlobalContext()){};
+GlobalState::GlobalState() : context(llvm::getGlobalContext()), cur_module(NULL), cur_cf(NULL){};
 
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();

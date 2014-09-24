@@ -18,9 +18,7 @@
 
 #include "llvm/DebugInfo/DIContext.h"
 
-#include "codegen/codegen.h"
-#include "codegen/irgen/hooks.h"
-#include "codegen/llvm_interpreter.h"
+#include "codegen/unwinding.h"
 #include "core/options.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
@@ -45,11 +43,6 @@ void showBacktrace() {
         unw_get_reg(&cursor, UNW_REG_IP, &ip);
         unw_get_reg(&cursor, UNW_REG_SP, &sp);
         printf("ip = %lx, sp = %lx\n", (long)ip, (long)sp);
-
-        std::string py_info = getPythonFuncAt((void*)ip, (void*)sp);
-        if (py_info.size()) {
-            printf("Which is: %s\n", py_info.c_str());
-        }
     }
 }
 
@@ -102,7 +95,6 @@ void unwindExc(Box* exc_obj) {
     abort();
 }
 
-static std::vector<const LineInfo*> getTracebackEntries();
 static gc::GCRootHandle last_exc;
 static std::vector<const LineInfo*> last_tb;
 
@@ -217,58 +209,6 @@ extern "C" void exit(int code) {
 
     libc_exit(code);
     __builtin_unreachable();
-}
-
-static std::vector<const LineInfo*> getTracebackEntries() {
-    std::vector<const LineInfo*> entries;
-
-    unw_cursor_t cursor;
-    unw_context_t uc;
-    unw_word_t ip, bp;
-
-    unw_getcontext(&uc);
-    unw_init_local(&cursor, &uc);
-
-    int code;
-    unw_proc_info_t pip;
-
-    while (unw_step(&cursor) > 0) {
-        unw_get_reg(&cursor, UNW_REG_IP, &ip);
-
-        const LineInfo* line = getLineInfoFor((uint64_t)ip);
-        if (line) {
-            entries.push_back(line);
-        } else {
-            unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
-
-            unw_proc_info_t pip;
-            code = unw_get_proc_info(&cursor, &pip);
-            RELEASE_ASSERT(code == 0, "%d", code);
-
-            if (pip.start_ip == (intptr_t)interpretFunction) {
-                line = getLineInfoForInterpretedFrame((void*)bp);
-                assert(line);
-                entries.push_back(line);
-            }
-        }
-    }
-    std::reverse(entries.begin(), entries.end());
-
-    return entries;
-}
-
-static const LineInfo* getMostRecentLineInfo() {
-    // TODO not very efficient, could stop after the first one:
-    return getTracebackEntries().back();
-}
-
-BoxedModule* getCurrentModule() {
-    const LineInfo* last_entry = getMostRecentLineInfo();
-    assert(last_entry->func.size());
-
-    CLFunction* cl = clFunctionForMachineFunctionName(last_entry->func);
-    assert(cl);
-    return cl->source->parent_module;
 }
 
 void raise0() {

@@ -128,7 +128,8 @@ public:
 };
 
 class PatchpointSetupInfo;
-void registerCompiledPatchpoint(uint8_t* start_addr, PatchpointSetupInfo*, StackInfo stack_info,
+class CompiledFunction;
+void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, PatchpointSetupInfo*, StackInfo stack_info,
                                 std::unordered_set<int> live_outs);
 
 ICInfo* getICInfo(void* rtn_addr);

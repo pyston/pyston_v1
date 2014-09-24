@@ -47,3 +47,6 @@ find_problem.status
 *.pch
 
 compile.log
+
+*.swp
+*.swo

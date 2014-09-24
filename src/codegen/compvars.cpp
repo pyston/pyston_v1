@@ -20,6 +20,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "codegen/codegen.h"
 #include "codegen/gcbuilder.h"
 #include "codegen/irgen.h"
 #include "codegen/irgen/util.h"

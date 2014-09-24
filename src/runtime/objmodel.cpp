@@ -23,6 +23,7 @@
 
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
+#include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/llvm_interpreter.h"

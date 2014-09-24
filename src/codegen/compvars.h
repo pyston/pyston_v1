@@ -18,7 +18,6 @@
 #include <stdint.h>
 #include <vector>
 
-#include "codegen/codegen.h"
 #include "core/ast.h"
 #include "core/types.h"
 
