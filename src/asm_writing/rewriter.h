@@ -193,7 +193,9 @@ public:
             }
         }
         for (std::pair<int32_t, RewriterVar*> p : map_const) {
-            m.emplace(Location(Location::Constant, p.first), p.second);
+            if (p.second != NULL) {
+                m.emplace(Location(Location::Constant, p.first), p.second);
+            }
         }
         return m;
     }
@@ -212,9 +214,14 @@ public:
     void addGuardNotEq(uint64_t val);
     void addAttrGuard(int offset, uint64_t val, bool negate = false);
     RewriterVar* getAttr(int offset, Location loc = Location::any(), assembler::MovType type = assembler::MovType::Q);
+    // getAttrFloat casts to double (maybe I should make that separate?)
+    RewriterVar* getAttrFloat(int offset, Location loc = Location::any());
+    RewriterVar* getAttrDouble(int offset, Location loc = Location::any());
     void setAttr(int offset, RewriterVar* other);
     RewriterVar* cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location loc = Location::any());
     RewriterVar* toBool(Location loc = Location::any());
+
+    template <typename Src, typename Dst> inline RewriterVar* getAttrCast(int offset, Location loc = Location::any());
 
 private:
     Rewriter* rewriter;
@@ -331,7 +338,7 @@ private:
     assembler::Indirect indirectFor(Location l);
     // Spills a specified register.
     // If there are open callee-save registers, takes one of those, otherwise goes on the stack
-    void spillRegister(assembler::Register reg);
+    void spillRegister(assembler::Register reg, Location preserve = Location::any());
     // Similar, but for XMM registers (always go on the stack)
     void spillRegister(assembler::XMMRegister reg);
 
@@ -351,6 +358,7 @@ private:
     void _loadConst(RewriterVar* result, int64_t val, Location loc);
     void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
                const std::vector<RewriterVar*>& args_xmm);
+    void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
     void _allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_elem, RewriterVar* rest, int n_rest);
@@ -361,6 +369,8 @@ private:
     void _addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool negate = false);
     void _getAttr(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any(),
                   assembler::MovType type = assembler::MovType::Q);
+    void _getAttrFloat(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
+    void _getAttrDouble(RewriterVar* result, RewriterVar* var, int offset, Location loc = Location::any());
     void _setAttr(RewriterVar* var, int offset, RewriterVar* other);
     void _cmp(RewriterVar* result, RewriterVar* var1, AST_TYPE::AST_TYPE cmp_type, RewriterVar* var2,
               Location loc = Location::any());
@@ -411,6 +421,7 @@ public:
                       const std::vector<RewriterVar*>& args_xmm = std::vector<RewriterVar*>());
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0);
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);
+    RewriterVar* add(RewriterVar* a, int64_t b, Location dest);
     RewriterVar* allocate(int n);
     RewriterVar* allocateAndCopy(RewriterVar* array, int n);
     RewriterVar* allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest, int n_rest);
@@ -452,6 +463,44 @@ bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst
 std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
                                                     int scratch_offset, int scratch_size,
                                                     const std::unordered_set<int>& live_outs, SpillMap& remapped);
+
+template <> inline RewriterVar* RewriterVar::getAttrCast<bool, bool>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::ZBL);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<char, char>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::SBL);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<int8_t, int64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::SBQ);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<int16_t, int64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::SWQ);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<int32_t, int64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::SLQ);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<int64_t, int64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::Q);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<uint8_t, uint64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::ZBQ);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<uint16_t, uint64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::ZWQ);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<uint32_t, uint64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::ZLQ);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<uint64_t, uint64_t>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::Q);
+}
+template <> inline RewriterVar* RewriterVar::getAttrCast<long long, long long>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::Q);
+}
+template <>
+inline RewriterVar* RewriterVar::getAttrCast<unsigned long long, unsigned long long>(int offset, Location loc) {
+    return getAttr(offset, loc, assembler::MovType::Q);
+}
 }
 
 #endif

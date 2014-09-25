@@ -824,9 +824,14 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force);
     (*Py_TYPE(op)->tp_dealloc)((PyObject *)(op)))
 #endif /* !Py_TRACE_REFS */
 
+
 // Pyston change: made Py_INCREF and Py_DECREF into noops
-#define Py_INCREF(op) (op)
-#define Py_DECREF(op) (op)
+// written in a way that won't give "value not used" warnings. Use this empty
+// method instead:
+static void _Py_do_nothing(PyObject *unused) { }
+
+#define Py_INCREF(op) (_Py_do_nothing((PyObject*)(op)))
+#define Py_DECREF(op) (_Py_do_nothing((PyObject*)(op)))
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
  * and tp_dealloc implementatons.
@@ -873,8 +878,8 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force);
 
 /* Macros to use in case the object pointer may be NULL: */
 // Pyston change: made these noops as well
-#define Py_XINCREF(op) (op)
-#define Py_XDECREF(op) (op)
+#define Py_XINCREF(op) (_Py_do_nothing((PyObject*)(op)))
+#define Py_XDECREF(op) (_Py_do_nothing((PyObject*)(op)))
 
 /*
 These are provided as conveniences to Python runtime embedders, so that

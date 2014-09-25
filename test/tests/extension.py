@@ -1,6 +1,10 @@
-import test
+# expected: fail
+# This test case currently fails because it prints the relative path to the .so
+# module rather than the absolute path.
 
-print test
+import basic_test
+
+print basic_test
 
 # TODO this should work even if we don't keep a reference to l;
 # it doesn't currently always work, but it sometimes works, so it's hard
@@ -8,8 +12,8 @@ print test
 # Instead just weaken the test, and add this TODO to add the harder test back
 # later.
 l = []
-test.store(l)
-print test.load()
+basic_test.store(l)
+print basic_test.load()
 
 class C(object):
     def __init__(self):
@@ -19,4 +23,4 @@ for i in xrange(100000):
     C()
 
 print "This will break"
-print test.load()
+print basic_test.load()

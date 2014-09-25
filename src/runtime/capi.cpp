@@ -934,8 +934,9 @@ extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
     Py_FatalError("unimplemented");
 }
 
-BoxedModule* importTestExtension() {
-    const char* pathname = "../test/test_extension/test.so";
+BoxedModule* importTestExtension(const std::string& name) {
+    std::string pathname_name = "../test/test_extension/" + name + ".pyston.so";
+    const char* pathname = pathname_name.c_str();
     void* handle = dlopen(pathname, RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "%s\n", dlerror());
@@ -943,7 +944,8 @@ BoxedModule* importTestExtension() {
     }
     assert(handle);
 
-    void (*init)() = (void (*)())dlsym(handle, "inittest");
+    std::string initname = "init" + name;
+    void (*init)() = (void (*)())dlsym(handle, initname.c_str());
 
     char* error;
     if ((error = dlerror()) != NULL) {
@@ -955,7 +957,7 @@ BoxedModule* importTestExtension() {
     (*init)();
 
     BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxStrConstant("test");
+    Box* s = boxStrConstant(name.c_str());
     Box* _m = sys_modules->d[s];
     RELEASE_ASSERT(_m, "module failed to initialize properly?");
     assert(_m->cls == module_cls);

@@ -40,6 +40,7 @@
 #include "runtime/float.h"
 #include "runtime/generator.h"
 #include "runtime/iterobject.h"
+#include "runtime/long.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -751,8 +752,34 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
     return NULL;
 }
 
-Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* obj, Box* descr, RewriterVar* r_descr,
-                                        bool for_call, bool* should_bind_out) {
+Box* boxChar(char c) {
+    char d[1];
+    d[0] = c;
+    return new BoxedString(std::string(d, 1));
+}
+
+static Box* noneIfNull(Box* b) {
+    if (b == NULL) {
+        return None;
+    } else {
+        return b;
+    }
+}
+
+static Box* boxStringOrNone(const char* s) {
+    if (s == NULL) {
+        return None;
+    } else {
+        return boxString(std::string(s));
+    }
+}
+
+static Box* boxStringFromCharPtr(const char* s) {
+    return boxString(std::string(s));
+}
+
+Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const std::string& attr_name, Box* obj,
+                                        Box* descr, RewriterVar* r_descr, bool for_call, bool* should_bind_out) {
     // Special case: data descriptor: member descriptor
     if (descr->cls == member_cls) {
         static StatCounter slowpath("slowpath_member_descriptor_get");
@@ -762,61 +789,45 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
         // TODO should also have logic to raise a type error if type of obj is wrong
 
         if (rewrite_args) {
-            // TODO we should use this an index in the lookup rather than hardcoding
-            // the value and guarding on it be the same.
-            RewriterVar* r_offset = r_descr->getAttr(offsetof(BoxedMemberDescriptor, offset), Location::any());
-            r_offset->addGuard(member_desc->offset);
+            // TODO we could use offset as the index in the assembly lookup rather than hardcoding
+            // the value in the assembly and guarding on it be the same.
+            r_descr->addAttrGuard(offsetof(BoxedMemberDescriptor, offset), member_desc->offset);
+
+            // This could be optimized if addAttrGuard supported things < 64 bits
+            static_assert(sizeof(member_desc->type) == 4, "assumed by assembly instruction below");
+            r_descr->getAttr(offsetof(BoxedMemberDescriptor, type), Location::any(), assembler::MovType::ZLQ)
+                ->addGuard(member_desc->type);
         }
 
         switch (member_desc->type) {
-            case BoxedMemberDescriptor::OBJECT: {
+            case BoxedMemberDescriptor::OBJECT_EX: {
                 if (rewrite_args) {
                     rewrite_args->out_rtn = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    rewrite_args->out_rtn->addGuardNotEq(0);
                     rewrite_args->out_success = true;
                 }
 
                 Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
-                RELEASE_ASSERT(rtn, "");
+                if (rtn == NULL) {
+                    raiseExcHelper(AttributeError, "%s", attr_name.c_str());
+                }
                 return rtn;
             }
-            case BoxedMemberDescriptor::BYTE: {
+            case BoxedMemberDescriptor::OBJECT: {
                 if (rewrite_args) {
-                    RewriterVar* r_unboxed_val
-                        = rewrite_args->obj->getAttr(member_desc->offset, Location::forArg(0), assembler::MovType::ZBL);
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxInt, r_unboxed_val);
+                    RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    // TODO would be faster to not use a call
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)noneIfNull, r_interm);
                     rewrite_args->out_success = true;
                 }
 
-                int8_t rtn = reinterpret_cast<int8_t*>(obj)[member_desc->offset];
-                return boxInt(rtn);
+                Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
+                return noneIfNull(rtn);
             }
-            case BoxedMemberDescriptor::BOOL: {
-                if (rewrite_args) {
-                    RewriterVar* r_unboxed_val
-                        = rewrite_args->obj->getAttr(member_desc->offset, Location::forArg(0), assembler::MovType::B);
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxBool, r_unboxed_val);
-                    rewrite_args->out_success = true;
-                }
 
-                bool rtn = reinterpret_cast<bool*>(obj)[member_desc->offset];
-                return boxBool(rtn);
-            }
-            case BoxedMemberDescriptor::INT: {
-                // rewrite_args = NULL;
+            case BoxedMemberDescriptor::DOUBLE: {
                 if (rewrite_args) {
-                    rewrite_args->rewriter->trap();
-                    RewriterVar* r_unboxed_val
-                        = rewrite_args->obj->getAttr(member_desc->offset, Location::forArg(0), assembler::MovType::L);
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxInt, r_unboxed_val);
-                    rewrite_args->out_success = true;
-                }
-
-                int rtn = *reinterpret_cast<int*>((char*)obj + member_desc->offset);
-                return boxInt(rtn);
-            }
-            case BoxedMemberDescriptor::FLOAT: {
-                if (rewrite_args) {
-                    RewriterVar* r_unboxed_val = rewrite_args->obj->getAttr(member_desc->offset, assembler::XMM0);
+                    RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrDouble(member_desc->offset, assembler::XMM0);
                     std::vector<RewriterVar*> normal_args;
                     std::vector<RewriterVar*> float_args;
                     float_args.push_back(r_unboxed_val);
@@ -828,6 +839,69 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
                 double rtn = *reinterpret_cast<double*>((char*)obj + member_desc->offset);
                 return boxFloat(rtn);
             }
+            case BoxedMemberDescriptor::FLOAT: {
+                if (rewrite_args) {
+                    RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrFloat(member_desc->offset, assembler::XMM0);
+                    std::vector<RewriterVar*> normal_args;
+                    std::vector<RewriterVar*> float_args;
+                    float_args.push_back(r_unboxed_val);
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
+                    rewrite_args->out_success = true;
+                }
+
+                float rtn = *reinterpret_cast<float*>((char*)obj + member_desc->offset);
+                return boxFloat((double)rtn);
+            }
+
+#define CASE_INTEGER_TYPE(TYPE, type, boxFn, cast)                                                                     \
+    case BoxedMemberDescriptor::TYPE: {                                                                                \
+        if (rewrite_args) {                                                                                            \
+            RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->offset);              \
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxFn, r_unboxed_val);                  \
+            rewrite_args->out_success = true;                                                                          \
+        }                                                                                                              \
+        type rtn = *reinterpret_cast<type*>((char*)obj + member_desc->offset);                                         \
+        return boxFn((cast)rtn);                                                                                       \
+    }
+                // Note that (a bit confusingly) boxInt takes int64_t, not an int
+                CASE_INTEGER_TYPE(BOOL, bool, boxBool, bool)
+                CASE_INTEGER_TYPE(BYTE, int8_t, boxInt, int64_t)
+                CASE_INTEGER_TYPE(INT, int, boxInt, int64_t)
+                CASE_INTEGER_TYPE(SHORT, short, boxInt, int64_t)
+                CASE_INTEGER_TYPE(LONG, long, boxInt, int64_t)
+                CASE_INTEGER_TYPE(CHAR, char, boxChar, char)
+                CASE_INTEGER_TYPE(UBYTE, uint8_t, PyLong_FromUnsignedLong, unsigned long)
+                CASE_INTEGER_TYPE(USHORT, unsigned short, PyLong_FromUnsignedLong, unsigned long)
+                CASE_INTEGER_TYPE(UINT, unsigned int, PyLong_FromUnsignedLong, unsigned long)
+                CASE_INTEGER_TYPE(ULONG, unsigned long, PyLong_FromUnsignedLong, unsigned long)
+                CASE_INTEGER_TYPE(LONGLONG, long long, PyLong_FromLongLong, long long)
+                CASE_INTEGER_TYPE(ULONGLONG, unsigned long long, PyLong_FromUnsignedLongLong, unsigned long long)
+                CASE_INTEGER_TYPE(PYSSIZET, Py_ssize_t, boxInt, Py_ssize_t)
+
+            case BoxedMemberDescriptor::STRING: {
+                if (rewrite_args) {
+                    RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxStringOrNone, r_interm);
+                    rewrite_args->out_success = true;
+                }
+
+                char* rtn = *reinterpret_cast<char**>((char*)obj + member_desc->offset);
+                return boxStringOrNone(rtn);
+            }
+            case BoxedMemberDescriptor::STRING_INPLACE: {
+                if (rewrite_args) {
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                        false, (void*)boxStringFromCharPtr,
+                        rewrite_args->rewriter->add(rewrite_args->obj, member_desc->offset, rewrite_args->destination));
+                    rewrite_args->out_success = true;
+                }
+
+                rewrite_args = NULL;
+                char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
+                return boxString(std::string(rtn));
+            }
+
             default:
                 RELEASE_ASSERT(0, "%d", member_desc->type);
         }
@@ -1003,7 +1077,8 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
         // Special-case data descriptors (e.g., member descriptors)
-        Box* res = dataDescriptorInstanceSpecialCases(rewrite_args, obj, descr, r_descr, for_call, should_bind_out);
+        Box* res
+            = dataDescriptorInstanceSpecialCases(rewrite_args, attr, obj, descr, r_descr, for_call, should_bind_out);
         if (res) {
             return res;
         }

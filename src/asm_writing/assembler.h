@@ -53,6 +53,16 @@ enum class MovType {
     L,
     B,
     ZBL,
+    SBL,
+    ZWL,
+    SWL,
+    ZBQ,
+    SBQ,
+    ZWQ,
+    SWQ,
+    SLQ,
+
+    ZLQ = L,
 };
 
 class Assembler {
@@ -87,10 +97,28 @@ public:
     void movq(Immediate imm, Indirect dest);
     void mov(Register src, Register dest);
     void mov(Register src, Indirect dest);
-    void mov(Indirect src, Register dest, MovType type = MovType::Q);
     void movsd(XMMRegister src, XMMRegister dest);
     void movsd(XMMRegister src, Indirect dest);
     void movsd(Indirect src, XMMRegister dest);
+
+    void movss(Indirect src, XMMRegister dest);
+    void cvtss2sd(XMMRegister src, XMMRegister dest);
+
+    void mov(Indirect scr, Register dest);
+    void movq(Indirect scr, Register dest);
+    void movl(Indirect scr, Register dest);
+    void movb(Indirect scr, Register dest);
+    void movzbl(Indirect scr, Register dest);
+    void movsbl(Indirect scr, Register dest);
+    void movzwl(Indirect scr, Register dest);
+    void movswl(Indirect scr, Register dest);
+    void movzbq(Indirect scr, Register dest);
+    void movsbq(Indirect scr, Register dest);
+    void movzwq(Indirect scr, Register dest);
+    void movswq(Indirect scr, Register dest);
+    void movslq(Indirect scr, Register dest);
+
+    void mov_generic(Indirect src, Register dest, MovType type);
 
     void push(Register reg);
     void pop(Register reg);

@@ -39,11 +39,11 @@ static PyMethodDef TestMethods[] = {
 };
 
 PyMODINIT_FUNC
-inittest(void)
+initbasic_test(void)
 {
     PyObject *m;
 
-    m = Py_InitModule("test", TestMethods);
+    m = Py_InitModule("basic_test", TestMethods);
     if (m == NULL)
         return;
 }

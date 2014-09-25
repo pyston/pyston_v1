@@ -1,9 +1,10 @@
 from distutils.core import setup, Extension
 
-test_module = Extension("test", sources = ["test.c"])
-
 setup(name="test",
         version="1.0",
         description="test",
-        ext_modules=[test_module],
-        )
+        ext_modules=[
+            Extension("basic_test", sources = ["basic_test.c"]),
+            Extension("descr_test", sources = ["descr_test.c"]),
+        ],
+    )

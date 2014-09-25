@@ -68,7 +68,9 @@ def get_expected_output(fn):
                 pass
 
     # TODO don't suppress warnings globally:
-    p = subprocess.Popen(["python", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = "../test/test_extension/build/lib.linux-x86_64-2.7/"
+    p = subprocess.Popen(["python", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, err = p.communicate()
     code = p.wait()
 

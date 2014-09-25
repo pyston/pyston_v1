@@ -127,7 +127,7 @@ void Location::dump() const {
     RELEASE_ASSERT(0, "%d", type);
 }
 
-static bool isLargeConstant(uint64_t val) {
+static bool isLargeConstant(int64_t val) {
     return (val < (-1L << 31) || val >= (1L << 31) - 1);
 }
 
@@ -147,6 +147,8 @@ void Rewriter::_addGuard(RewriterVar* var, uint64_t val) {
     assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
+
+    assertConsistent();
 }
 
 void RewriterVar::addGuardNotEq(uint64_t val) {
@@ -165,6 +167,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, uint64_t val) {
     assembler->je(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
+
+    assertConsistent();
 }
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
@@ -187,6 +191,8 @@ void Rewriter::_addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool ne
         assembler->jne(assembler::JumpDestination::fromStart(rewrite->getSlotSize()));
 
     var->bumpUse();
+
+    assertConsistent();
 }
 
 RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType type) {
@@ -202,13 +208,47 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
     // in the same register as ptr
     ptr->bumpUse();
 
-    if (dest.type == Location::XMMRegister) {
-        assembler::XMMRegister newvar_reg = result->initializeInXMMReg(dest);
-        assembler->movsd(assembler::Indirect(ptr_reg, offset), newvar_reg);
-    } else {
-        assembler::Register newvar_reg = result->initializeInReg(dest);
-        assembler->mov(assembler::Indirect(ptr_reg, offset), newvar_reg, type);
-    }
+    assembler::Register newvar_reg = result->initializeInReg(dest);
+    assembler->mov_generic(assembler::Indirect(ptr_reg, offset), newvar_reg, type);
+
+    assertConsistent();
+}
+
+RewriterVar* RewriterVar::getAttrDouble(int offset, Location dest) {
+    RewriterVar* result = rewriter->createNewVar();
+    rewriter->addAction([=]() { rewriter->_getAttrDouble(result, this, offset, dest); }, { this }, ActionType::NORMAL);
+    return result;
+}
+
+void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset, Location dest) {
+    assembler::Register ptr_reg = ptr->getInReg();
+
+    ptr->bumpUse();
+
+    assembler::XMMRegister newvar_reg = result->initializeInXMMReg(dest);
+    assembler->movsd(assembler::Indirect(ptr_reg, offset), newvar_reg);
+
+    assertConsistent();
+}
+
+RewriterVar* RewriterVar::getAttrFloat(int offset, Location dest) {
+    RewriterVar* result = rewriter->createNewVar();
+    rewriter->addAction([=]() { rewriter->_getAttrFloat(result, this, offset, dest); }, { this }, ActionType::NORMAL);
+    return result;
+}
+
+void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, Location dest) {
+    assembler::Register ptr_reg = ptr->getInReg();
+
+    ptr->bumpUse();
+
+    assembler::XMMRegister newvar_reg = result->initializeInXMMReg(dest);
+    assembler->movss(assembler::Indirect(ptr_reg, offset), newvar_reg);
+
+    // cast to double
+    assembler->cvtss2sd(newvar_reg, newvar_reg);
+
+    assertConsistent();
 }
 
 RewriterVar* RewriterVar::cmp(AST_TYPE::AST_TYPE cmp_type, RewriterVar* other, Location dest) {
@@ -239,6 +279,8 @@ void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp
         default:
             RELEASE_ASSERT(0, "%d", cmp_type);
     }
+
+    assertConsistent();
 }
 
 RewriterVar* RewriterVar::toBool(Location dest) {
@@ -257,6 +299,8 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
 
     assembler->test(this_reg, this_reg);
     assembler->setnz(result_reg);
+
+    assertConsistent();
 }
 
 void RewriterVar::setAttr(int offset, RewriterVar* val) {
@@ -267,7 +311,7 @@ void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
     assembler::Register ptr_reg = ptr->getInReg();
 
     bool is_immediate;
-    assembler::Immediate imm = ptr->tryGetAsImmediate(&is_immediate);
+    assembler::Immediate imm = val->tryGetAsImmediate(&is_immediate);
 
     if (is_immediate) {
         assembler->movq(imm, assembler::Indirect(ptr_reg, offset));
@@ -280,6 +324,8 @@ void Rewriter::_setAttr(RewriterVar* ptr, int offset, RewriterVar* val) {
 
     ptr->bumpUse();
     val->bumpUse();
+
+    assertConsistent();
 }
 
 void RewriterVar::dump() {
@@ -450,6 +496,8 @@ void Rewriter::_loadConst(RewriterVar* result, int64_t val, Location dest) {
     assembler::Register reg = allocReg(dest);
     assembler->mov(assembler::Immediate(val), reg);
     result->initializeInReg(reg);
+
+    assertConsistent();
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0) {
@@ -494,6 +542,7 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     // TODO figure out why this is here -- what needs to be done differently
     // if can_call_into_python is true?
     // assert(!can_call_into_python);
+    assert(done_guarding);
 
     // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
@@ -530,6 +579,8 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
         assert(var->isInLocation(Location::forArg(i)));
     }
 
+    assertConsistent();
+
     for (int i = 0; i < args_xmm.size(); i++) {
         Location l((assembler::XMMRegister(i)));
         assert(args_xmm[i]->isInLocation(l));
@@ -551,6 +602,8 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     for (RewriterVar* arg_xmm : args_xmm) {
         arg_xmm->bumpUse();
     }
+
+    assertConsistent();
 
     // Spill caller-saved registers:
     for (auto check_reg : caller_save_registers) {
@@ -595,6 +648,8 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
         }
     }
 
+    assertConsistent();
+
 #ifndef NDEBUG
     for (const auto& p : vars_by_location.getAsMap()) {
         Location l = p.first;
@@ -611,6 +666,8 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
 
     assert(vars_by_location.count(assembler::RAX) == 0);
     result->initializeInReg(assembler::RAX);
+
+    assertConsistent();
 }
 
 void Rewriter::abort() {
@@ -851,6 +908,33 @@ Location Rewriter::allocScratch() {
     RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_bytes);
 }
 
+RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
+    RewriterVar* result = createNewVar();
+    addAction([=]() { this->_add(result, a, b, dest); }, { a }, ActionType::NORMAL);
+    return result;
+}
+
+void Rewriter::_add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest) {
+    // TODO better reg alloc (e.g., mov `a` directly to the dest reg)
+
+    assembler::Register newvar_reg = allocReg(dest);
+    assembler::Register a_reg
+        = a->getInReg(Location::any(), /* allow_constant_in_reg */ true, /* otherThan */ newvar_reg);
+    assert(a_reg != newvar_reg);
+
+    result->initializeInReg(newvar_reg);
+
+    assembler->mov(a_reg, newvar_reg);
+
+    // TODO we can't rely on this being true, so we need to support the full version
+    assert(!isLargeConstant(b));
+    assembler->add(assembler::Immediate(b), newvar_reg);
+
+    a->bumpUse();
+
+    assertConsistent();
+}
+
 RewriterVar* Rewriter::allocate(int n) {
     RewriterVar* result = createNewVar();
     addAction([=]() { this->_allocate(result, n); }, {}, ActionType::NORMAL);
@@ -884,6 +968,7 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                     vars_by_location[m] = LOCATION_PLACEHOLDER;
                 }
 
+                assertConsistent();
                 return a;
             }
         } else {
@@ -914,6 +999,8 @@ void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int
     }
 
     array_ptr->bumpUse();
+
+    assertConsistent();
 }
 
 RewriterVar* Rewriter::allocateAndCopyPlus1(RewriterVar* first_elem, RewriterVar* rest_ptr, int n_rest) {
@@ -950,6 +1037,8 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
     }
 
     first_elem->bumpUse();
+
+    assertConsistent();
 }
 
 assembler::Indirect Rewriter::indirectFor(Location l) {
@@ -962,7 +1051,9 @@ assembler::Indirect Rewriter::indirectFor(Location l) {
         return assembler::Indirect(assembler::RSP, l.stack_offset);
 }
 
-void Rewriter::spillRegister(assembler::Register reg) {
+void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
+    assert(preserve.type == Location::Register || preserve.type == Location::AnyReg);
+
     if (!done_guarding) {
         for (int i = 0; i < args.size(); i++) {
             assert(args[i]->arg_loc != Location(reg));
@@ -983,6 +1074,8 @@ void Rewriter::spillRegister(assembler::Register reg) {
         if (!new_reg.isCalleeSave())
             continue;
         if (vars_by_location.count(new_reg))
+            continue;
+        if (Location(new_reg) == preserve)
             continue;
 
         assembler->mov(reg, new_reg);
@@ -1041,7 +1134,7 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
 
         // Spill the register whose next use is farthest in the future
         assert(found);
-        spillRegister(best_reg);
+        spillRegister(best_reg, /* preserve */ otherThan);
         assert(vars_by_location.count(best_reg) == 0);
         return best_reg;
     } else if (dest.type == Location::Register) {
@@ -1118,6 +1211,14 @@ RewriterVar* Rewriter::createNewVar() {
 }
 
 assembler::Register RewriterVar::initializeInReg(Location l) {
+    // TODO um should we check this in more places, or what?
+    // The thing is: if we aren't done guarding, and the register we want to use
+    // is taken by an arg, we can't spill it, so we shouldn't ask to alloc it.
+    if (l.type == Location::Register && !rewriter->done_guarding && rewriter->vars_by_location[l] != NULL
+        && rewriter->vars_by_location[l]->is_arg) {
+        l = Location::any();
+    }
+
     assembler::Register reg = rewriter->allocReg(l);
     l = Location(reg);
 

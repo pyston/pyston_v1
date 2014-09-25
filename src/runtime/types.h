@@ -364,7 +364,21 @@ public:
         BYTE = T_BYTE,
         INT = T_INT,
         OBJECT = T_OBJECT,
+        OBJECT_EX = T_OBJECT_EX,
         FLOAT = T_FLOAT,
+        SHORT = T_SHORT,
+        LONG = T_LONG,
+        DOUBLE = T_DOUBLE,
+        STRING = T_STRING,
+        STRING_INPLACE = T_STRING_INPLACE,
+        CHAR = T_CHAR,
+        UBYTE = T_UBYTE,
+        USHORT = T_USHORT,
+        UINT = T_UINT,
+        ULONG = T_ULONG,
+        LONGLONG = T_LONGLONG,
+        ULONGLONG = T_ULONGLONG,
+        PYSSIZET = T_PYSSIZET
     } type;
 
     int offset;

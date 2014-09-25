@@ -86,10 +86,6 @@ int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item);
 PyObject* PyModule_GetDict(PyObject*);
 PyObject* PyDict_New(void);
 
-#define Py_XDECREF(op) (op)
-#define Py_INCREF(op) (op)
-#define Py_DECREF(op) (op)
-
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str

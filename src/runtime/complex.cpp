@@ -252,9 +252,9 @@ void setupComplex() {
     complex_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)complexStr, STR, 1)));
     complex_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)complexRepr, STR, 1)));
     complex_cls->giveAttr("real",
-                          new BoxedMemberDescriptor(BoxedMemberDescriptor::FLOAT, offsetof(BoxedComplex, real)));
+                          new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, real)));
     complex_cls->giveAttr("imag",
-                          new BoxedMemberDescriptor(BoxedMemberDescriptor::FLOAT, offsetof(BoxedComplex, imag)));
+                          new BoxedMemberDescriptor(BoxedMemberDescriptor::DOUBLE, offsetof(BoxedComplex, imag)));
     complex_cls->freeze();
 }
 

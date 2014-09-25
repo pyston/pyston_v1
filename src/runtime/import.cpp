@@ -84,8 +84,11 @@ static Box* importSub(const std::string* name, Box* parent_module) {
         return module;
     }
 
-    if (*name == "test") {
-        return importTestExtension();
+    if (*name == "basic_test") {
+        return importTestExtension("basic_test");
+    }
+    if (*name == "descr_test") {
+        return importTestExtension("descr_test");
     }
 
     raiseExcHelper(ImportError, "No module named %s", name->c_str());

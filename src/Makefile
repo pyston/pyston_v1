@@ -360,7 +360,7 @@ cpplint:
 check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 	$(MAKE) lint
-	$(MAKE) ext pyston_dbg
+	$(MAKE) ext_python ext_pyston pyston_dbg
 
 	$(MAKE) check_dbg
 
@@ -739,12 +739,12 @@ $(patsubst %, $$1: %/$$1 ;,$(EXTRA_SEARCH_DIRS))
 )
 endef
 
-RUN_DEPS := ext
+RUN_DEPS := ext_pyston
 
 define make_target
 $(eval \
 .PHONY: test$1 check$1
-check$1 test$1: pyston$1 ext
+check$1 test$1: pyston$1 ext_pyston
 	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
@@ -899,12 +899,18 @@ test_cpp_ll:
 	less test.ll
 	rm test.ll
 
-.PHONY: ext
-ext: ../test/test_extension/test.so
-../test/test_extension/test.so: ../test/test_extension/test.o $(BUILD_SYSTEM_DEPS)
+TEST_EXT_MODULE_NAMES := basic_test descr_test
+
+.PHONY: ext_pyston
+ext_pyston: $(TEST_EXT_MODULE_NAMES:%=../test/test_extension/%.pyston.so)
+../test/test_extension/%.pyston.so: ../test/test_extension/%.o $(BUILD_SYSTEM_DEPS)
 	$(CLANG_EXE) -shared $< -o $@ -g
-../test/test_extension/test.o: ../test/test_extension/test.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
+../test/test_extension/%.o: ../test/test_extension/%.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
 	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I../include -c $< -o $@ -g
+
+.PHONY: ext_python
+ext_python: $(TEST_EXT_MODULE_NAMES:%=../test/test_extension/*.c)
+	cd ../test/test_extension; python setup.py build; cd -
 
 $(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@

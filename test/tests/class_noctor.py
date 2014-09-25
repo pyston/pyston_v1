@@ -1,3 +1,6 @@
+# skip-if: sys.version_info.micro >= 4
+# - Error message changed in 2.7.4
+
 # Regression test:
 # If the init function doesn't exist, shouldn't just silently ignore any args
 # that got passed

@@ -132,6 +132,18 @@ extern "C" BoxedLong* boxLong(int64_t n) {
     return rtn;
 }
 
+extern "C" PyObject* PyLong_FromLongLong(long long ival) {
+    BoxedLong* rtn = new BoxedLong(long_cls);
+    mpz_init_set_si(rtn->n, ival);
+    return rtn;
+}
+
+extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) {
+    BoxedLong* rtn = new BoxedLong(long_cls);
+    mpz_init_set_ui(rtn->n, ival);
+    return rtn;
+}
+
 extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
