@@ -43,8 +43,12 @@ public:
     static bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
-        assert(self->xrange->step > 0);
-        return self->cur < self->xrange->stop;
+
+        if (self->xrange->step > 0) {
+            return self->cur < self->xrange->stop;
+        } else {
+            return self->cur > self->xrange->stop;
+        }
     }
 
     static Box* xrangeIteratorHasnext(Box* s) __attribute__((visibility("default"))) {
