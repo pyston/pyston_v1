@@ -454,11 +454,21 @@ llvm_configure:
 	rm -f $(LLVM_BUILD)/Makefile.config
 	$(MAKE) $(LLVM_CONFIGURATION)
 
-LLVM_CONFIGURE_LINE := CXX=$(GPP) $(LLVM_SRC)/configure --enable-targets=host --with-gcc-toolchain=$(GCC_DIR)
+# Put the llvm_configure line in its own file, so that we can force an llvm reconfigure
+# if we change the configuration parameters.
+# (All non-llvm build targets get rebuilt if the main Makefile is touched, but that is too
+# expensive to do for the llvm ones.)
+LLVM_CONFIG_INCL := Makefile.llvmconfig
+# Sets LLVM_CONFIGURE_LINE:
+include $(LLVM_CONFIG_INCL)
+ifeq (,$(LLVM_CONFIGURE_LINE))
+$(error "did not set configure line")
+endif
 ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
 LLVM_CONFIGURE_LINE += --with-intel-jitevents
 endif
-$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure | $(LLVM_SRC)/_patched
+
+$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL) | $(LLVM_SRC)/_patched
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
 	$(LLVM_CONFIGURE_LINE)
