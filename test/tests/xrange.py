@@ -6,3 +6,12 @@
 
 for i in xrange(1000):
     print i
+
+for i in xrange(10, 1, -1):
+    print i
+
+for i in xrange(10, -10, -3):
+    print i
+
+for i in xrange(0):
+    print i
