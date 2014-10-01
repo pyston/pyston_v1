@@ -98,7 +98,7 @@ apt-get install zsh
 `readline` is used for the repl.
 
 ```
-sudo apt-get install readline
+sudo apt-get install libreadline-dev
 ```
 
 ### gmp

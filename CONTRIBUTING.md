@@ -15,6 +15,6 @@ create a temporary commit if you have any unstaged changes.
 ### Projects
 
 If you don't know where to start:
-- Check out the list of [starter projects](https://github.com/dropbox/pyston/wiki/Starter-projects)
+- Check out our [Github issues list](https://github.com/dropbox/pyston/issues), especially those marked ["probably easy"](https://github.com/dropbox/pyston/labels/probably%20easy)
 - Email the [pyston-dev mailing list](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev), or [browse the archives](http://lists.pyston.org/pipermail/pyston-dev/)
 - Join us on [#pyston](http://webchat.freenode.net/?channels=pyston) on freenode.
