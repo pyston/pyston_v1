@@ -98,6 +98,11 @@ void Assembler::emitArith(Immediate imm, Register r, int opcode) {
 
 
 void Assembler::emitByte(uint8_t b) {
+    if (addr >= end_addr) {
+        failed = true;
+        return;
+    }
+
     assert(addr < end_addr);
     *addr = b;
     ++addr;

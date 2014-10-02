@@ -664,6 +664,15 @@ void Rewriter::abort() {
 
 void Rewriter::commit() {
     assert(!finished);
+
+    if (assembler->hasFailed()) {
+        static StatCounter rewriter_assemblyfail("rewriter_assemblyfail");
+        rewriter_assemblyfail.log();
+
+        this->abort();
+        return;
+    }
+
     finished = true;
 
     static StatCounter rewriter_commits("rewriter_commits");

@@ -51,6 +51,7 @@ class Assembler {
 private:
     uint8_t* const start_addr, *const end_addr;
     uint8_t* addr;
+    bool failed; // if the rewrite failed at the assembly-generation level for some reason
 
     static const uint8_t OPCODE_ADD = 0b000, OPCODE_SUB = 0b101;
     static const uint8_t REX_B = 1, REX_X = 2, REX_R = 4, REX_W = 8;
@@ -64,7 +65,9 @@ private:
     void emitArith(Immediate imm, Register reg, int opcode);
 
 public:
-    Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr) {}
+    Assembler(uint8_t* start, int size) : start_addr(start), end_addr(start + size), addr(start_addr), failed(false) {}
+
+    bool hasFailed() { return failed; }
 
     void nop() { emitByte(0x90); }
     void trap() { emitByte(0xcc); }
