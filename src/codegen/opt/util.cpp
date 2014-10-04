@@ -20,11 +20,11 @@
 
 namespace pyston {
 
-bool isAllocCall(const std::string& name) {
+bool isAllocCall(const llvm::StringRef name) {
     if (name == "malloc")
         return true;
 
-    if (name == "_ZN6pyston2gc4Heap10allocSmallEmPPNS0_5BlockES4_")
+    if (name == "_ZN6pyston2gc4Heap10allocSmallEmi")
         return true;
 
     return false;

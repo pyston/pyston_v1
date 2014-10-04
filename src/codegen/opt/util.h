@@ -19,11 +19,12 @@
 
 namespace llvm {
 class CallInst;
+class StringRef;
 }
 
 namespace pyston {
 
-bool isAllocCall(const std::string& name);
+bool isAllocCall(const llvm::StringRef name);
 bool isAllocCall(const llvm::CallInst* CI);
 }
 

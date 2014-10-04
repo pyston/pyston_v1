@@ -212,13 +212,6 @@ public:
             if (isAllocCall(F->getName()))
                 return NoAlias;
 
-            // if (F->getName() == "malloc")
-            // return NoAlias;
-            //
-            // if (F->getName() == "_ZN6pyston2gc4Heap10allocSmallEmPPNS0_5BlockES4_") {
-            // return NoAlias;
-            //}
-
             if (F->getName() == "_ZN6pyston2gc13runCollectionEv") {
                 assert(0);
                 return NoAlias;
