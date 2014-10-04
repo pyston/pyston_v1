@@ -138,7 +138,8 @@ void RewriterVar::addGuard(uint64_t val) {
 void Rewriter::_addGuard(RewriterVar* var, uint64_t val) {
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
-        assembler::Register reg = allocReg(Location::any());
+        assembler::Register reg = allocReg(Location::any(), /* otherThan */ var_reg);
+        assert(reg != var_reg);
         assembler->mov(assembler::Immediate(val), reg);
         assembler->cmp(var_reg, reg);
     } else {
@@ -158,7 +159,8 @@ void RewriterVar::addGuardNotEq(uint64_t val) {
 void Rewriter::_addGuardNotEq(RewriterVar* var, uint64_t val) {
     assembler::Register var_reg = var->getInReg();
     if (isLargeConstant(val)) {
-        assembler::Register reg = allocReg(Location::any());
+        assembler::Register reg = allocReg(Location::any(), /* otherThan */ var_reg);
+        assert(var_reg != reg);
         assembler->mov(assembler::Immediate(val), reg);
         assembler->cmp(var_reg, reg);
     } else {
@@ -211,6 +213,7 @@ void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Locat
     assembler::Register newvar_reg = result->initializeInReg(dest);
     assembler->mov_generic(assembler::Indirect(ptr_reg, offset), newvar_reg, type);
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -228,6 +231,7 @@ void Rewriter::_getAttrDouble(RewriterVar* result, RewriterVar* ptr, int offset,
     assembler::XMMRegister newvar_reg = result->initializeInXMMReg(dest);
     assembler->movsd(assembler::Indirect(ptr_reg, offset), newvar_reg);
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -248,6 +252,7 @@ void Rewriter::_getAttrFloat(RewriterVar* result, RewriterVar* ptr, int offset, 
     // cast to double
     assembler->cvtss2sd(newvar_reg, newvar_reg);
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -280,6 +285,7 @@ void Rewriter::_cmp(RewriterVar* result, RewriterVar* v1, AST_TYPE::AST_TYPE cmp
             RELEASE_ASSERT(0, "%d", cmp_type);
     }
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -300,6 +306,7 @@ void Rewriter::_toBool(RewriterVar* result, RewriterVar* var, Location dest) {
     assembler->test(this_reg, this_reg);
     assembler->setnz(result_reg);
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -497,6 +504,7 @@ void Rewriter::_loadConst(RewriterVar* result, int64_t val, Location dest) {
     assembler->mov(assembler::Immediate(val), reg);
     result->initializeInReg(reg);
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -668,6 +676,8 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     result->initializeInReg(assembler::RAX);
 
     assertConsistent();
+
+    result->releaseIfNoUses();
 }
 
 void Rewriter::abort() {
@@ -680,6 +690,8 @@ void Rewriter::abort() {
 }
 
 void RewriterVar::bumpUse() {
+    rewriter->assertPhaseEmitting();
+
     next_use++;
     assert(next_use <= uses.size());
     if (next_use == uses.size()) {
@@ -695,8 +707,23 @@ void RewriterVar::bumpUse() {
     }
 }
 
+// Call this on the result at the end of the action in which it's created
+// TODO we should have a better way of dealing with variables that have 0 uses
+void RewriterVar::releaseIfNoUses() {
+    rewriter->assertPhaseEmitting();
+
+    if (uses.size() == 0) {
+        assert(next_use == 0);
+        for (Location loc : locations) {
+            rewriter->vars_by_location.erase(loc);
+        }
+        this->locations.clear();
+    }
+}
+
 void Rewriter::commit() {
     assert(!finished);
+    initPhaseEmitting();
 
     if (assembler->hasFailed()) {
         static StatCounter rewriter_assemblyfail("rewriter_assemblyfail");
@@ -720,10 +747,15 @@ void Rewriter::commit() {
 
     // Emit assembly for each action, and set done_guarding when
     // we reach the last guard.
+
+    // Note: If an arg finishes its uses before we're done gurading, we don't release it at that point;
+    // instead, we release it here, at the point when we set done_guarding.
+    // An alternate, maybe cleaner, way to accomplish this would be to add a use for each arg
+    // at each guard in the var's `uses` list.
+
+    // First: check if we're done guarding before we even begin emitting.
     if (last_guard_action == -1) {
         done_guarding = true;
-
-        // maybe we should track this like we do the other uses
         for (RewriterVar* arg : args) {
             if (arg->next_use == arg->uses.size()) {
                 for (Location loc : arg->locations) {
@@ -736,6 +768,7 @@ void Rewriter::commit() {
 
     assertConsistent();
 
+    // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
         actions[i].action();
 
@@ -846,17 +879,6 @@ void Rewriter::commit() {
         assert(var->isInLocation(ru));
     }
 
-    // To make this check work, we need to kill vars which have 0 uses
-    // TODO we should not emit any code for these variables...
-    for (RewriterVar* var : vars) {
-        if (var->uses.size() == 0) {
-            for (Location l : var->locations) {
-                vars_by_location.erase(l);
-            }
-            var->locations.clear();
-        }
-    }
-
     for (RewriterVar* live_out : live_outs) {
         live_out->bumpUse();
     }
@@ -898,6 +920,8 @@ void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
 }
 
 Location Rewriter::allocScratch() {
+    assertPhaseEmitting();
+
     int scratch_bytes = rewrite->getScratchBytes();
     for (int i = 0; i < scratch_bytes; i += 8) {
         Location l(Location::Scratch, i);
@@ -932,6 +956,7 @@ void Rewriter::_add(RewriterVar* result, RewriterVar* a, int64_t b, Location des
 
     a->bumpUse();
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -969,6 +994,7 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                 }
 
                 assertConsistent();
+                result->releaseIfNoUses();
                 return a;
             }
         } else {
@@ -1000,6 +1026,7 @@ void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int
 
     array_ptr->bumpUse();
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -1038,6 +1065,7 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
 
     first_elem->bumpUse();
 
+    result->releaseIfNoUses();
     assertConsistent();
 }
 
@@ -1092,6 +1120,8 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
 }
 
 void Rewriter::spillRegister(assembler::XMMRegister reg) {
+    assertPhaseEmitting();
+
     if (!done_guarding) {
         for (int i = 0; i < args.size(); i++) {
             assert(!args[i]->isInLocation(Location(reg)));
@@ -1111,6 +1141,8 @@ void Rewriter::spillRegister(assembler::XMMRegister reg) {
 }
 
 assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
+    assertPhaseEmitting();
+
     if (dest.type == Location::AnyReg) {
         int best = -1;
         bool found = false;
@@ -1124,9 +1156,9 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
                 if (!done_guarding && var->is_arg && var->arg_loc == Location(reg)) {
                     continue;
                 }
-                if (var->next_use > best) {
+                if (var->uses[var->next_use] > best) {
                     found = true;
-                    best = var->next_use;
+                    best = var->uses[var->next_use];
                     best_reg = reg;
                 }
             }
@@ -1152,6 +1184,8 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
 }
 
 assembler::XMMRegister Rewriter::allocXMMReg(Location dest, Location otherThan) {
+    assertPhaseEmitting();
+
     if (dest.type == Location::AnyReg) {
         for (assembler::XMMRegister reg : allocatable_xmm_regs) {
             if (Location(reg) != otherThan && vars_by_location.count(reg) == 0) {
@@ -1205,12 +1239,16 @@ void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {
 }
 
 RewriterVar* Rewriter::createNewVar() {
+    assertPhaseCollecting();
+
     RewriterVar* var = new RewriterVar(this);
     vars.push_back(var);
     return var;
 }
 
 assembler::Register RewriterVar::initializeInReg(Location l) {
+    rewriter->assertPhaseEmitting();
+
     // TODO um should we check this in more places, or what?
     // The thing is: if we aren't done guarding, and the register we want to use
     // is taken by an arg, we can't spill it, so we shouldn't ask to alloc it.
@@ -1234,6 +1272,8 @@ assembler::Register RewriterVar::initializeInReg(Location l) {
 }
 
 assembler::XMMRegister RewriterVar::initializeInXMMReg(Location l) {
+    rewriter->assertPhaseEmitting();
+
     assembler::XMMRegister reg = rewriter->allocXMMReg(l);
     l = Location(reg);
 
@@ -1255,6 +1295,8 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(rewrite), assembler(rewrite->getAssembler()), return_location(rewrite->returnRegister()),
       added_changing_action(false), last_guard_action(-1), done_guarding(false), ndecisions(0), decision_path(1) {
+    initPhaseCollecting();
+
 #ifndef NDEBUG
     start_vars = RewriterVar::nvars;
 #endif

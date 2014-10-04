@@ -229,9 +229,18 @@ private:
     std::unordered_set<Location> locations;
     bool isInLocation(Location l);
 
+    // uses is a vector of the indices into the Rewriter::actions vector
+    // indicated the actions that use this variable.
+    // During the assembly-emitting phase, next_use is used to keep track of the next
+    // use (so next_use is an index into uses).
+    // Every action that uses a variable should call bumpUse on it when it's "done" with it
+    // Here "done" means that it would be okay to release all of the var's locations and
+    // thus allocate new variables in that same location. To be safe, you can always just
+    // only call bumpUse at the end, but in some cases it may be possible earlier.
     std::vector<int> uses;
     int next_use;
     void bumpUse();
+    void releaseIfNoUses();
     bool isDoneUsing() { return next_use == uses.size(); }
 
     // Indicates if this variable is an arg, and if so, what location the arg is from.
@@ -299,6 +308,17 @@ private:
     bool finished; // committed or aborted
 #ifndef NDEBUG
     int start_vars;
+
+    bool phase_emitting;
+    void initPhaseCollecting() { phase_emitting = false; }
+    void initPhaseEmitting() { phase_emitting = true; }
+    void assertPhaseCollecting() { assert(!phase_emitting && "you should only call this in the collecting phase"); }
+    void assertPhaseEmitting() { assert(phase_emitting && "you should only call this in the assembly-emitting phase"); }
+#else
+    void initPhaseCollecting() {}
+    void initPhaseEmitting() {}
+    void assertPhaseCollecting() {}
+    void assertPhaseEmitting() {}
 #endif
 
     std::vector<int> live_out_regs;
@@ -311,6 +331,7 @@ private:
 
     std::vector<RewriterAction> actions;
     void addAction(const std::function<void()>& action, std::vector<RewriterVar*> const& vars, ActionType type) {
+        assertPhaseCollecting();
         for (RewriterVar* var : vars) {
             assert(var != NULL);
             var->uses.push_back(actions.size());
@@ -327,7 +348,10 @@ private:
     int last_guard_action;
 
     bool done_guarding;
-    bool isDoneGuarding() { return done_guarding; }
+    bool isDoneGuarding() {
+        assertPhaseEmitting();
+        return done_guarding;
+    }
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
