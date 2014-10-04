@@ -881,10 +881,20 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
                                         RewriterVarUsage& r_descr, bool for_call, bool* should_bind_out) {
     // Special case: data descriptor: member descriptor
     if (descr->cls == member_cls) {
+        static StatCounter slowpath("slowpath_member_descriptor_get");
+        slowpath.log();
+
         BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(descr);
         // TODO should also have logic to raise a type error if type of obj is wrong
 
         if (rewrite_args) {
+            // TODO we should use this an index in the lookup rather than hardcoding
+            // the value and guarding on it be the same.
+            RewriterVarUsage r_offset = r_descr.getAttr(offsetof(BoxedMemberDescriptor, offset),
+                                                        RewriterVarUsage::KillFlag::NoKill, Location::any());
+            r_offset.addGuard(member_desc->offset);
+            r_offset.setDoneUsing();
+
             if (rewrite_args->call_done_guarding)
                 rewrite_args->rewriter->setDoneGuarding();
             r_descr.setDoneUsing();
@@ -892,37 +902,70 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* o
 
         switch (member_desc->type) {
             case BoxedMemberDescriptor::OBJECT: {
-                assert(member_desc->offset % sizeof(Box*) == 0);
-                Box* rtn = reinterpret_cast<Box**>(obj)[member_desc->offset / sizeof(Box*)];
-                RELEASE_ASSERT(rtn, "");
-
                 if (rewrite_args) {
                     rewrite_args->out_rtn = rewrite_args->obj.getAttr(
                         member_desc->offset, RewriterVarUsage::KillFlag::Kill, rewrite_args->destination);
                     rewrite_args->out_success = true;
                 }
 
+                Box* rtn = *reinterpret_cast<Box**>((char*)obj + member_desc->offset);
+                RELEASE_ASSERT(rtn, "");
                 return rtn;
             }
             case BoxedMemberDescriptor::BYTE: {
-                // TODO rewriter stuff for these other cases as well
-                rewrite_args = NULL;
+                if (rewrite_args) {
+                    RewriterVarUsage r_unboxed_val
+                        = rewrite_args->obj.getAttr(member_desc->offset, RewriterVarUsage::KillFlag::Kill,
+                                                    Location::forArg(0), assembler::MovType::ZBL);
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(false, (void*)boxInt, std::move(r_unboxed_val));
+                    rewrite_args->out_success = true;
+                }
+
                 int8_t rtn = reinterpret_cast<int8_t*>(obj)[member_desc->offset];
                 return boxInt(rtn);
             }
             case BoxedMemberDescriptor::BOOL: {
-                rewrite_args = NULL;
+                if (rewrite_args) {
+                    RewriterVarUsage r_unboxed_val
+                        = rewrite_args->obj.getAttr(member_desc->offset, RewriterVarUsage::KillFlag::Kill,
+                                                    Location::forArg(0), assembler::MovType::B);
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(false, (void*)boxBool, std::move(r_unboxed_val));
+                    rewrite_args->out_success = true;
+                }
+
                 bool rtn = reinterpret_cast<bool*>(obj)[member_desc->offset];
                 return boxBool(rtn);
             }
             case BoxedMemberDescriptor::INT: {
-                rewrite_args = NULL;
-                int rtn = reinterpret_cast<int*>(obj)[member_desc->offset / sizeof(int)];
+                // rewrite_args = NULL;
+                if (rewrite_args) {
+                    rewrite_args->rewriter->trap();
+                    RewriterVarUsage r_unboxed_val
+                        = rewrite_args->obj.getAttr(member_desc->offset, RewriterVarUsage::KillFlag::Kill,
+                                                    Location::forArg(0), assembler::MovType::L);
+                    rewrite_args->out_rtn
+                        = rewrite_args->rewriter->call(false, (void*)boxInt, std::move(r_unboxed_val));
+                    rewrite_args->out_success = true;
+                }
+
+                int rtn = *reinterpret_cast<int*>((char*)obj + member_desc->offset);
                 return boxInt(rtn);
             }
             case BoxedMemberDescriptor::FLOAT: {
-                rewrite_args = NULL;
-                double rtn = reinterpret_cast<double*>(obj)[member_desc->offset / sizeof(double)];
+                if (rewrite_args) {
+                    RewriterVarUsage r_unboxed_val = rewrite_args->obj.getAttr(
+                        member_desc->offset, RewriterVarUsage::KillFlag::Kill, assembler::XMM0);
+                    std::vector<RewriterVarUsage> normal_args;
+                    std::vector<RewriterVarUsage> float_args;
+                    float_args.push_back(std::move(r_unboxed_val));
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxFloat, std::move(normal_args),
+                                                                         std::move(float_args));
+                    rewrite_args->out_success = true;
+                }
+
+                double rtn = *reinterpret_cast<double*>((char*)obj + member_desc->offset);
                 return boxFloat(rtn);
             }
             default:

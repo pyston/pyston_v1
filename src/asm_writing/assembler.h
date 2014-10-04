@@ -47,6 +47,13 @@ enum ConditionCode {
     COND_GREATER = 0xF,     // ZF=0 && SF==OF: NLE/G
 };
 
+enum class MovType {
+    Q,
+    L,
+    B,
+    ZBL,
+};
+
 class Assembler {
 private:
     uint8_t* const start_addr, *const end_addr;
@@ -79,7 +86,7 @@ public:
     void movq(Immediate imm, Indirect dest);
     void mov(Register src, Register dest);
     void mov(Register src, Indirect dest);
-    void mov(Indirect src, Register dest);
+    void mov(Indirect src, Register dest, MovType type = MovType::Q);
     void movsd(XMMRegister src, XMMRegister dest);
     void movsd(XMMRegister src, Indirect dest);
     void movsd(Indirect src, XMMRegister dest);
