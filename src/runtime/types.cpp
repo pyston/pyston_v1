@@ -1,8 +1,7 @@
 // Copyright (c) 2014 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// you may not use this file except in compliance with the License.  // You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
@@ -386,12 +385,6 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     return boxInstanceMethod(inst, self);
 }
 
-static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
-    RELEASE_ASSERT(self->cls == member_cls, "");
-
-    Py_FatalError("unimplemented");
-}
-
 static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
     RELEASE_ASSERT(self->cls == function_cls, "%s", getTypeName(self)->c_str());
 
@@ -755,10 +748,6 @@ void setupRuntime() {
     module_cls->giveAttr("__str__", module_cls->getattr("__repr__"));
     module_cls->freeze();
 
-    member_cls->giveAttr("__name__", boxStrConstant("member"));
-    member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
-    member_cls->freeze();
-
     closure_cls->giveAttr("__name__", boxStrConstant("closure"));
     closure_cls->freeze();
 
@@ -778,6 +767,7 @@ void setupRuntime() {
     setupClassobj();
     setupSuper();
     setupUnicode();
+    setupDescr();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
@@ -881,6 +871,7 @@ void teardownRuntime() {
     teardownSet();
     teardownTuple();
     teardownFile();
+    teardownDescr();
 
     /*
     // clear all the attributes on the base classes before freeing the classes themselves,
