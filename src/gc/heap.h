@@ -108,8 +108,8 @@ private:
     Block* full_heads[NUM_BUCKETS];
     LargeObj* large_head = NULL;
 
-    GCAllocation* allocSmall(size_t rounded_size, int bucket_idx);
-    GCAllocation* allocLarge(size_t bytes);
+    GCAllocation* __attribute__((__malloc__)) allocSmall(size_t rounded_size, int bucket_idx);
+    GCAllocation* __attribute__((__malloc__)) allocLarge(size_t bytes);
 
     // DS_DEFINE_MUTEX(lock);
     DS_DEFINE_SPINLOCK(lock);
@@ -134,7 +134,7 @@ public:
 
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
 
-    GCAllocation* alloc(size_t bytes) {
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
         GCAllocation* rtn;
         // assert(bytes >= 16);
         if (bytes <= 16)

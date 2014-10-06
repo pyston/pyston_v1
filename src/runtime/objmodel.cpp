@@ -494,21 +494,6 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
     return cur;
 }
 
-Box::Box(BoxedClass* cls) : cls(cls) {
-    // if (TRACK_ALLOCATIONS) {
-    // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
-    // Stats::log(id);
-    //}
-
-    // the only way cls should be NULL is if we're creating the type_cls
-    // object itself:
-    if (cls == NULL) {
-        ASSERT(type_cls == NULL, "should pass a non-null cls here");
-    } else {
-    }
-}
-
-
 HCAttrs* Box::getAttrsPtr() {
     assert(cls->instancesHaveAttrs());
 
