@@ -152,21 +152,14 @@ public:
 
     llvm::CallSite createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
                                     const std::vector<llvm::Value*>& args, ExcInfo exc_info) override {
-        if (exc_info.needsInvoke()) {
-            std::vector<llvm::Type*> arg_types;
-            for (auto v : args)
-                arg_types.push_back(v->getType());
-
-            return createCall(
-                exc_info, embedConstantPtr(func_addr, llvm::FunctionType::get(g.i64, arg_types, false)->getPointerTo()),
-                args);
-        }
+        int64_t pp_id = pp->getPatchpointId();
+        int pp_size = pp->totalSize();
 
         assert(irstate->getEffortLevel() != EffortLevel::INTERPRETED);
 
         std::vector<llvm::Value*> pp_args;
-        pp_args.push_back(getConstantInt(pp->getPatchpointId(), g.i64));
-        pp_args.push_back(getConstantInt(pp->totalSize(), g.i32));
+        pp_args.push_back(getConstantInt(pp_id, g.i64));
+        pp_args.push_back(getConstantInt(pp_size, g.i32));
         pp_args.push_back(embedConstantPtr(func_addr, g.i8->getPointerTo()));
         pp_args.push_back(getConstantInt(args.size(), g.i32));
 

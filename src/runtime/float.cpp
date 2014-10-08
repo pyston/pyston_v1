@@ -39,7 +39,7 @@ extern "C" double PyFloat_AsDouble(PyObject* o) {
 
 template <typename T> static inline void raiseDivZeroExcIfZero(T var) {
     if (var == 0) {
-        raiseExcHelper(ZeroDivisionError, "float divide by zero");
+        raiseExcHelper(ZeroDivisionError, "float division by zero");
     }
 }
 
