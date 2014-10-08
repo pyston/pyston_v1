@@ -1,17 +1,38 @@
-From 4655475f21dcced719f186b43a18c1b07be37116 Mon Sep 17 00:00:00 2001
+From 43ee247e7c1d817438625b7ca217cf08748fc06c Mon Sep 17 00:00:00 2001
 From: Kevin Modzelewski <kevmod@gmail.com>
-Date: Wed, 8 Oct 2014 00:53:51 +0000
+Date: Wed, 8 Oct 2014 10:22:17 +0000
 Subject: [PATCH] Enable invoking the patchpoint intrinsic
 
 ---
+ include/llvm/IR/Intrinsics.td                    |   6 +-
  lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp | 169 +++++++++++++----------
  lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h   |  19 ++-
  lib/IR/Verifier.cpp                              |  10 +-
  test/CodeGen/X86/patchpoint-invoke.ll            |  65 +++++++++
  test/Verifier/invoke.ll                          |   2 +-
- 5 files changed, 182 insertions(+), 83 deletions(-)
+ 6 files changed, 186 insertions(+), 85 deletions(-)
  create mode 100644 test/CodeGen/X86/patchpoint-invoke.ll
 
+diff --git a/include/llvm/IR/Intrinsics.td b/include/llvm/IR/Intrinsics.td
+index e79b48e..1b9339a 100644
+--- a/include/llvm/IR/Intrinsics.td
++++ b/include/llvm/IR/Intrinsics.td
+@@ -483,11 +483,13 @@ def int_experimental_stackmap : Intrinsic<[],
+ def int_experimental_patchpoint_void : Intrinsic<[],
+                                                  [llvm_i64_ty, llvm_i32_ty,
+                                                   llvm_ptr_ty, llvm_i32_ty,
+-                                                  llvm_vararg_ty]>;
++                                                  llvm_vararg_ty],
++                                                  [Throws]>;
+ def int_experimental_patchpoint_i64 : Intrinsic<[llvm_i64_ty],
+                                                 [llvm_i64_ty, llvm_i32_ty,
+                                                  llvm_ptr_ty, llvm_i32_ty,
+-                                                 llvm_vararg_ty]>;
++                                                 llvm_vararg_ty],
++                                                 [Throws]>;
+ 
+ //===-------------------------- Other Intrinsics --------------------------===//
+ //
 diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 index 91b1022..a63c90a 100644
 --- a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
