@@ -235,6 +235,7 @@ git checkout v1.4.0
 ```
 cd ~/pyston_deps
 wget http://www.cmake.org/files/v3.0/cmake-3.0.0.tar.gz
+tar zxvf cmake-3.0.0.tar.gz
 cd cmake-3.0.0
 ./configure
 make -j4
