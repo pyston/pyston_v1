@@ -14,7 +14,7 @@ def verify_include_guard(_, dir, files):
         if file_is_from_cpython(fn):
             continue
 
-        expected_guard = "PYSTON" + fn[1:-2].replace('_', '').replace('/', '_').upper() + "_H"
+        expected_guard = "PYSTON" + fn[1:-2].replace('_', '').replace('-', '').replace('/', '_').upper() + "_H"
         with open(fn) as f:
             while True:
                 l = f.readline()

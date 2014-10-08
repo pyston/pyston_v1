@@ -48,9 +48,9 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step) {
     // This is adapted from CPython's PySlice_GetIndicesEx.
     i64 slicelength;
     if (step < 0)
-        slicelength = (stop - start + 1) / (step)+1;
+        slicelength = (stop - start + 1) / (step) + 1;
     else
-        slicelength = (stop - start - 1) / (step)+1;
+        slicelength = (stop - start - 1) / (step) + 1;
 
     if (slicelength < 0)
         slicelength = 0;
