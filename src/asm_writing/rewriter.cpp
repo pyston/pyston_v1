@@ -24,11 +24,18 @@ namespace pyston {
 
 
 static const assembler::Register allocatable_regs[] = {
-    assembler::RAX, assembler::RCX, assembler::RBX, assembler::RDX,
+    assembler::RAX, assembler::RCX, assembler::RDX,
     // no RSP
     // no RBP
-    assembler::RDI, assembler::RSI, assembler::R8,  assembler::R9,  assembler::R10,
-    assembler::R11, assembler::R12, assembler::R13, assembler::R14, assembler::R15,
+    assembler::RDI, assembler::RSI, assembler::R8,  assembler::R9, assembler::R10, assembler::R11,
+
+    // For now, cannot allocate callee-save registers since we do not restore them properly
+    // at potentially-unwinding callsites.
+    // TODO fix that behavior, or create an unwinder that knows how to unwind through our
+    // inline caches.
+    /*
+    assembler::RBX, assembler::R12, assembler::R13, assembler::R14, assembler::R15,
+    */
 };
 
 
