@@ -99,11 +99,11 @@ llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     return ptr_val;
 }
 
-llvm::Constant* getConstantInt(int n, llvm::Type* t) {
+llvm::Constant* getConstantInt(int64_t n, llvm::Type* t) {
     return llvm::ConstantInt::get(t, n);
 }
 
-llvm::Constant* getConstantInt(int n) {
+llvm::Constant* getConstantInt(int64_t n) {
     return getConstantInt(n, g.i64);
 }
 
