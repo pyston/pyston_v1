@@ -18,7 +18,6 @@
 #include <cstring>
 #include <sstream>
 
-#include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"

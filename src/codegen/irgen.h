@@ -20,7 +20,6 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IRBuilder.h"
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 
 namespace pyston {

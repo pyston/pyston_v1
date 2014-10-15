@@ -18,7 +18,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 
 namespace pyston {

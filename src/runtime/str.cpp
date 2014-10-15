@@ -20,7 +20,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
-#include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/types.h"
 #include "core/util.h"

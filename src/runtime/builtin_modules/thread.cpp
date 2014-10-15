@@ -14,7 +14,6 @@
 
 #include <stddef.h>
 
-#include "codegen/compvars.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"

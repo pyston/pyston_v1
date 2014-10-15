@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/inline/boxing.h"

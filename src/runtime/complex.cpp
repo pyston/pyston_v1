@@ -14,7 +14,6 @@
 
 #include "runtime/complex.h"
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 #include "runtime/float.h"
 #include "runtime/inline/boxing.h"

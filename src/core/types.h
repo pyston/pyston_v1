@@ -92,8 +92,14 @@ enum EffortLevel {
 };
 }
 
+class CompilerType;
 template <class V> class ValuedCompilerType;
 typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;
+ConcreteCompilerType* typeFromClass(BoxedClass*);
+
+extern ConcreteCompilerType* INT, *BOXED_INT, *LONG, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST,
+    *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR, *BOXED_COMPLEX;
+extern CompilerType* UNDEF;
 
 class CompilerVariable;
 template <class V> class ValuedCompilerVariable;

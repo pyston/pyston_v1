@@ -16,7 +16,6 @@
 
 #include <sstream>
 
-#include "codegen/compvars.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
 

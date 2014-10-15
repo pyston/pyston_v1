@@ -18,7 +18,6 @@
 
 #include "llvm/Support/FileSystem.h"
 
-#include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
 #include "core/ast.h"

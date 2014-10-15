@@ -35,7 +35,6 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include "codegen/codegen.h"
-#include "codegen/compvars.h"
 #include "codegen/dis.h"
 #include "codegen/memmgr.h"
 #include "codegen/profiling/profiling.h"

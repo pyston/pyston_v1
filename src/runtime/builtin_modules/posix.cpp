@@ -17,7 +17,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/inline/boxing.h"

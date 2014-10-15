@@ -18,7 +18,6 @@
 #include <gmp.h>
 #include <sstream>
 
-#include "codegen/compvars.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"

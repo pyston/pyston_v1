@@ -24,6 +24,7 @@
 #include "llvm/IR/DebugInfo.h"
 
 #include "codegen/codegen.h"
+#include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/llvm_interpreter.h"
 

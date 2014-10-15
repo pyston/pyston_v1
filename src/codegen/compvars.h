@@ -28,10 +28,6 @@ class OpInfo;
 class CompilerType;
 class IREmitter;
 
-extern ConcreteCompilerType* INT, *BOXED_INT, *LONG, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST,
-    *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR, *BOXED_COMPLEX;
-extern CompilerType* UNDEF;
-
 class CompilerType {
 public:
     virtual ~CompilerType() {}
@@ -348,7 +344,6 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable
 ConcreteCompilerVariable* undefVariable();
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
 
-ConcreteCompilerType* typeFromClass(BoxedClass*);
 CompilerType* typeOfClassobj(BoxedClass*);
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types);
 CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types);

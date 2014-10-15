@@ -19,7 +19,6 @@
 #include "Python.h"
 
 #include "capi/types.h"
-#include "codegen/compvars.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/import.h"

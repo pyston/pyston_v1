@@ -15,7 +15,6 @@
 #include <cmath>
 #include <cstring>
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/objmodel.h"

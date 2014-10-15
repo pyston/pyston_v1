@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "codegen/compvars.h"
 #include "core/types.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"

@@ -21,6 +21,7 @@
 #include "analysis/fpc.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/codegen.h"
+#include "codegen/compvars.h"
 #include "codegen/type_recording.h"
 #include "core/ast.h"
 #include "core/cfg.h"

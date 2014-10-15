@@ -22,7 +22,6 @@
 #include <sstream>
 #include <stdint.h>
 
-#include "codegen/compvars.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"

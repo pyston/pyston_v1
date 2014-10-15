@@ -19,7 +19,6 @@
 #include <cstring>
 #include <ucontext.h>
 
-#include "codegen/compvars.h"
 #include "codegen/llvm_interpreter.h"
 #include "core/ast.h"
 #include "core/common.h"
