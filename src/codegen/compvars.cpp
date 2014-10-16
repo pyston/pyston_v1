@@ -64,6 +64,10 @@ private:
     }
 
 public:
+    void assertMatches(RawInstanceMethod* im) override {
+        assert(obj_type == im->obj->getType() && function_type == im->func->getType());
+    }
+
     static InstanceMethodType* get(CompilerType* obj_type, CompilerType* function_type) {
         InstanceMethodType* rtn = made[std::make_pair(obj_type, function_type)];
         if (rtn == NULL)
@@ -1154,6 +1158,8 @@ private:
 public:
     virtual std::string debugName() { return "class '" + *getNameOfClass(cls) + "'"; }
 
+    void assertMatches(BoxedClass* cls) override { assert(cls == this->cls); }
+
     static KnownClassobjType* fromClass(BoxedClass* cls) {
         KnownClassobjType*& rtn = made[cls];
         if (rtn == NULL) {
@@ -1544,6 +1550,8 @@ class StrConstantType : public ValuedCompilerType<const std::string*> {
 public:
     std::string debugName() { return "str_constant"; }
 
+    void assertMatches(const std::string* v) override {}
+
     virtual ConcreteCompilerType* getConcreteType() { return STR; }
 
     virtual ConcreteCompilerType* getBoxType() { return STR; }
@@ -1720,6 +1728,14 @@ private:
 
 public:
     typedef const std::vector<CompilerVariable*> VEC;
+
+    void assertMatches(const std::vector<CompilerVariable*>* v) override {
+        assert(v->size() == elt_types.size());
+
+        for (int i = 0; i < v->size(); i++) {
+            assert((*v)[i]->getType() == elt_types[i]);
+        }
+    }
 
     std::string debugName() { return name; }
 

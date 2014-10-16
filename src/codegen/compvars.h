@@ -18,6 +18,9 @@
 #include <stdint.h>
 #include <vector>
 
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+
 #include "core/ast.h"
 #include "core/types.h"
 
@@ -52,6 +55,8 @@ enum BinExpType {
 template <class V> class _ValuedCompilerType : public CompilerType {
 public:
     typedef ValuedCompilerVariable<V> VAR;
+
+    virtual void assertMatches(V v) = 0;
 
     virtual CompilerVariable* dup(VAR* v, DupCache& cache) {
         printf("dup not defined for %s\n", debugName().c_str());
@@ -156,6 +161,15 @@ public:
     virtual llvm::Type* llvmType() = 0;
     virtual std::string debugName();
 
+    void assertMatches(llvm::Value* v) override final {
+        if (v->getType() != llvmType()) {
+            v->getType()->dump();
+            llvmType()->dump();
+            fprintf(stderr, "\n");
+        }
+        assert(v->getType() == llvmType());
+    }
+
     virtual bool isFitBy(BoxedClass*) {
         printf("isFitBy not defined for %s\n", debugName().c_str());
         abort();
@@ -253,7 +267,11 @@ protected:
     virtual void grab(IREmitter& emmitter) { type->grab(emmitter, this); }
 
 public:
-    ValuedCompilerVariable(T* type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {}
+    ValuedCompilerVariable(T* type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {
+#ifndef NDEBUG
+        type->assertMatches(value);
+#endif
+    }
     virtual T* getType() { return type; }
     virtual V getValue() { return value; }
 

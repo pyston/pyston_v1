@@ -528,8 +528,7 @@ llvm_install: llvm_release
 
 # Clear OPTIONAL_DIRS and OPTIONAL_PARALLEL_DIRS to make sure that clang doesn't get built+tested
 llvm_test: llvm_test_quick
-	$(MAKE) llvm_test_release
-llvm_test_quick: llvm_test_quick
+llvm_test_quick: llvm_quick llvm/quick/tools/opt
 	$(MAKE) -C $(LLVM_BUILD) OPTIONAL_DIRS= OPTIONAL_PARALLEL_DIRS= ENABLE_OPTIMIZED=1 check
 llvm_test_release: llvm_release
 	$(MAKE) -C $(LLVM_BUILD) OPTIONAL_DIRS= OPTIONAL_PARALLEL_DIRS= ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 check
