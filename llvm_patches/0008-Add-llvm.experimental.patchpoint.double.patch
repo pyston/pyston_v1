@@ -1,0 +1,239 @@
+From 3b888292dab18580ad6f234fd6bc4b92a7f54c46 Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kevmod@gmail.com>
+Date: Thu, 9 Oct 2014 04:37:33 +0000
+Subject: [PATCH] Add llvm.experimental.patchpoint.double
+
+Differential Revision: http://reviews.llvm.org/D5696
+---
+ docs/StackMaps.rst                                |    3 +++
+ include/llvm/IR/Intrinsics.td                     |    5 +++++
+ lib/CodeGen/SelectionDAG/FastISel.cpp             |    8 ++++++-
+ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp  |    4 +++-
+ lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp     |    1 +
+ lib/IR/Verifier.cpp                               |    3 ++-
+ lib/Target/AArch64/AArch64TargetTransformInfo.cpp |    1 +
+ lib/Target/X86/X86TargetTransformInfo.cpp         |    1 +
+ test/CodeGen/X86/anyregcc.ll                      |   24 +++++++++++++++++++--
+ test/CodeGen/X86/patchpoint.ll                    |   18 ++++++++++++++++
+ 10 files changed, 63 insertions(+), 5 deletions(-)
+
+diff --git a/docs/StackMaps.rst b/docs/StackMaps.rst
+index bd0fb94..5f6d83b 100644
+--- a/docs/StackMaps.rst
++++ b/docs/StackMaps.rst
+@@ -192,6 +192,9 @@ Syntax:
+       declare i64
+         @llvm.experimental.patchpoint.i64(i64 <id>, i32 <numBytes>,
+                                           i8* <target>, i32 <numArgs>, ...)
++      declare double
++        @llvm.experimental.patchpoint.double(i64 <id>, i32 <numBytes>,
++                                          i8* <target>, i32 <numArgs>, ...)
+ 
+ Overview:
+ """""""""
+diff --git a/include/llvm/IR/Intrinsics.td b/include/llvm/IR/Intrinsics.td
+index 1b9339a..45eecca 100644
+--- a/include/llvm/IR/Intrinsics.td
++++ b/include/llvm/IR/Intrinsics.td
+@@ -490,6 +490,11 @@ def int_experimental_patchpoint_i64 : Intrinsic<[llvm_i64_ty],
+                                                  llvm_ptr_ty, llvm_i32_ty,
+                                                  llvm_vararg_ty],
+                                                  [Throws]>;
++def int_experimental_patchpoint_double : Intrinsic<[llvm_double_ty],
++                                                [llvm_i64_ty, llvm_i32_ty,
++                                                 llvm_ptr_ty, llvm_i32_ty,
++                                                 llvm_vararg_ty],
++                                                 [Throws]>;
+ 
+ //===-------------------------- Other Intrinsics --------------------------===//
+ //
+diff --git a/lib/CodeGen/SelectionDAG/FastISel.cpp b/lib/CodeGen/SelectionDAG/FastISel.cpp
+index 72390a9..b624a63 100644
+--- a/lib/CodeGen/SelectionDAG/FastISel.cpp
++++ b/lib/CodeGen/SelectionDAG/FastISel.cpp
+@@ -738,7 +738,12 @@ bool FastISel::selectPatchpoint(const CallInst *I) {
+   // Add an explicit result reg if we use the anyreg calling convention.
+   if (IsAnyRegCC && HasDef) {
+     assert(CLI.NumResultRegs == 0 && "Unexpected result register.");
+-    CLI.ResultReg = createResultReg(TLI.getRegClassFor(MVT::i64));
++    if (I->getType()->isIntegerTy(64))
++      CLI.ResultReg = createResultReg(TLI.getRegClassFor(MVT::i64));
++    else if (I->getType()->isDoubleTy())
++      CLI.ResultReg = createResultReg(TLI.getRegClassFor(MVT::f64));
++    else
++      llvm_unreachable("unsupported patchpoint type");
+     CLI.NumResultRegs = 1;
+     Ops.push_back(MachineOperand::CreateReg(CLI.ResultReg, /*IsDef=*/true));
+   }
+@@ -1205,6 +1210,7 @@ bool FastISel::selectIntrinsicCall(const IntrinsicInst *II) {
+     return selectStackmap(II);
+   case Intrinsic::experimental_patchpoint_void:
+   case Intrinsic::experimental_patchpoint_i64:
++  case Intrinsic::experimental_patchpoint_double:
+     return selectPatchpoint(II);
+   }
+ 
+diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
+index a63c90a..dc45bf7 100644
+--- a/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
++++ b/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
+@@ -2026,6 +2026,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
+         break;
+       case Intrinsic::experimental_patchpoint_void:
+       case Intrinsic::experimental_patchpoint_i64:
++      case Intrinsic::experimental_patchpoint_double:
+         visitPatchpoint(ImmutableCallSite(&I), LandingPad);
+         break;
+     }
+@@ -5536,7 +5537,8 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
+     return nullptr;
+   }
+   case Intrinsic::experimental_patchpoint_void:
+-  case Intrinsic::experimental_patchpoint_i64: {
++  case Intrinsic::experimental_patchpoint_i64:
++  case Intrinsic::experimental_patchpoint_double: {
+     visitPatchpoint(ImmutableCallSite(&I), nullptr);
+     return nullptr;
+   }
+diff --git a/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp b/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
+index 31f4b06..ac0e635 100644
+--- a/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
++++ b/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
+@@ -1014,6 +1014,7 @@ static void collectFailStats(const Instruction *I) {
+         NumFastIselFailStackMap++; return;
+       case Intrinsic::experimental_patchpoint_void: // fall-through
+       case Intrinsic::experimental_patchpoint_i64:
++      case Intrinsic::experimental_patchpoint_double:
+         NumFastIselFailPatchPoint++; return;
+       }
+     }
+diff --git a/lib/IR/Verifier.cpp b/lib/IR/Verifier.cpp
+index 5519cac..cec9229 100644
+--- a/lib/IR/Verifier.cpp
++++ b/lib/IR/Verifier.cpp
+@@ -2218,7 +2218,8 @@ void Verifier::visitInstruction(Instruction &I) {
+       Assert1(!F->isIntrinsic() || isa<CallInst>(I) ||
+               F->getIntrinsicID() == Intrinsic::donothing ||
+               F->getIntrinsicID() == Intrinsic::experimental_patchpoint_void ||
+-              F->getIntrinsicID() == Intrinsic::experimental_patchpoint_i64,
++              F->getIntrinsicID() == Intrinsic::experimental_patchpoint_i64 ||
++              F->getIntrinsicID() == Intrinsic::experimental_patchpoint_double,
+               "Cannot invoke an intrinsinc other than"
+               " donothing or patchpoint", &I);
+       Assert1(F->getParent() == M, "Referencing function in another module!",
+diff --git a/lib/Target/AArch64/AArch64TargetTransformInfo.cpp b/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
+index dbdf199..17ea7d0 100644
+--- a/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
++++ b/lib/Target/AArch64/AArch64TargetTransformInfo.cpp
+@@ -280,6 +280,7 @@ unsigned AArch64TTI::getIntImmCost(Intrinsic::ID IID, unsigned Idx,
+     break;
+   case Intrinsic::experimental_patchpoint_void:
+   case Intrinsic::experimental_patchpoint_i64:
++  case Intrinsic::experimental_patchpoint_double:
+     if ((Idx < 4) || (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
+       return TCC_Free;
+     break;
+diff --git a/lib/Target/X86/X86TargetTransformInfo.cpp b/lib/Target/X86/X86TargetTransformInfo.cpp
+index 531e035..c274edf 100644
+--- a/lib/Target/X86/X86TargetTransformInfo.cpp
++++ b/lib/Target/X86/X86TargetTransformInfo.cpp
+@@ -1141,6 +1141,7 @@ unsigned X86TTI::getIntImmCost(Intrinsic::ID IID, unsigned Idx,
+     break;
+   case Intrinsic::experimental_patchpoint_void:
+   case Intrinsic::experimental_patchpoint_i64:
++  case Intrinsic::experimental_patchpoint_double:
+     if ((Idx < 4) || (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
+       return TCC_Free;
+     break;
+diff --git a/test/CodeGen/X86/anyregcc.ll b/test/CodeGen/X86/anyregcc.ll
+index 98ba17c..b81a3ad 100644
+--- a/test/CodeGen/X86/anyregcc.ll
++++ b/test/CodeGen/X86/anyregcc.ll
+@@ -11,11 +11,11 @@
+ ; CHECK-NEXT:   .byte 0
+ ; CHECK-NEXT:   .short 0
+ ; Num Functions
+-; CHECK-NEXT:   .long 8
++; CHECK-NEXT:   .long 9
+ ; Num Constants
+ ; CHECK-NEXT:   .long 0
+ ; Num Callsites
+-; CHECK-NEXT:   .long 8
++; CHECK-NEXT:   .long 9
+ 
+ ; Functions and stack size
+ ; CHECK-NEXT:   .quad _test
+@@ -26,6 +26,8 @@
+ ; CHECK-NEXT:   .quad 24
+ ; CHECK-NEXT:   .quad _property_access3
+ ; CHECK-NEXT:   .quad 24
++; CHECK-NEXT:   .quad _property_access_double
++; CHECK-NEXT:   .quad 8
+ ; CHECK-NEXT:   .quad _anyreg_test1
+ ; CHECK-NEXT:   .quad 56
+ ; CHECK-NEXT:   .quad _anyreg_test2
+@@ -132,6 +134,23 @@ entry:
+   ret i64 %ret
+ }
+ 
++; property access double
++; CHECK-LABEL:  .long   L{{.*}}_property_access_double
++; CHECK-NEXT:   .short  0
++; 2 locations
++; CHECK-NEXT:   .short  1
++; Loc 0: Register <-- this is the return register
++; CHECK-NEXT:   .byte 1
++; CHECK-NEXT:   .byte 16
++; CHECK-NEXT:   .short {{[0-9]+}}
++; CHECK-NEXT:   .long 0
++define double @property_access_double() nounwind ssp uwtable {
++entry:
++  %f = inttoptr i64 12297829382473034410 to i8*
++  %ret = call anyregcc double (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.double(i64 1, i32 15, i8* %f, i32 0)
++  ret double %ret
++}
++
+ ; anyreg_test1
+ ; CHECK-LABEL:  .long   L{{.*}}-_anyreg_test1
+ ; CHECK-NEXT:   .short  0
+@@ -466,3 +485,4 @@ entry:
+ 
+ declare void @llvm.experimental.patchpoint.void(i64, i32, i8*, i32, ...)
+ declare i64 @llvm.experimental.patchpoint.i64(i64, i32, i8*, i32, ...)
++declare double @llvm.experimental.patchpoint.double(i64, i32, i8*, i32, ...)
+diff --git a/test/CodeGen/X86/patchpoint.ll b/test/CodeGen/X86/patchpoint.ll
+index 07148f0..7e2a340 100644
+--- a/test/CodeGen/X86/patchpoint.ll
++++ b/test/CodeGen/X86/patchpoint.ll
+@@ -21,6 +21,23 @@ entry:
+   ret i64 %result
+ }
+ 
++define double @double_patchpoint(double %p1, double %p2, double %p3, double %p4) {
++entry:
++; CHECK-LABEL: double_patchpoint:
++; CHECK:      movabsq $-559038736, %r11
++; CHECK-NEXT: callq *%r11
++; CHECK-NEXT: xchgw %ax, %ax
++; CHECK:      movsd %xmm0, [[SPILL:[^ ]+]]
++; CHECK:      callq *%r11
++; CHECK-NEXT: xchgw %ax, %ax
++; CHECK:      movsd [[SPILL]], %xmm0
++; CHECK:      ret
++  %resolveCall2 = inttoptr i64 -559038736 to i8*
++  %result = tail call double (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.double(i64 2, i32 15, i8* %resolveCall2, i32 4, double %p1, double %p2, double %p3, double %p4)
++  %result2 = tail call double (i64, i32, i8*, i32, ...)* @llvm.experimental.patchpoint.double(i64 2, i32 15, i8* %resolveCall2, i32 4, double %p1, double %p2, double %p3, double %p4)
++  ret double %result
++}
++
+ ; Caller frame metadata with stackmaps. This should not be optimized
+ ; as a leaf function.
+ ;
+@@ -85,3 +102,4 @@ entry:
+ declare void @llvm.experimental.stackmap(i64, i32, ...)
+ declare void @llvm.experimental.patchpoint.void(i64, i32, i8*, i32, ...)
+ declare i64 @llvm.experimental.patchpoint.i64(i64, i32, i8*, i32, ...)
++declare double @llvm.experimental.patchpoint.double(i64, i32, i8*, i32, ...)
+-- 
+1.7.9.5
+
