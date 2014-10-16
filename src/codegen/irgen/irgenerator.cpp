@@ -314,7 +314,7 @@ private:
                                                       converted_flags->getValue() }).getInstruction();
                 assert(v->getType() == g.i1);
 
-                return new ConcreteCompilerVariable(BOOL, v, true);
+                return boolFromI1(emitter, v);
             }
             case AST_LangPrimitive::LANDINGPAD: {
                 // llvm::Function* _personality_func = g.stdlib_module->getFunction("__py_personality_v0");
@@ -374,7 +374,7 @@ private:
                             = llvm::BasicBlock::Create(g.context, "was_defined", irstate->getLLVMFunction());
                         llvm::BasicBlock* join
                             = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
-                        emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), was_defined, join);
+                        emitter.getBuilder()->CreateCondBr(i1FromBool(emitter, is_defined_var), was_defined, join);
 
                         emitter.getBuilder()->SetInsertPoint(was_defined);
                         ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
@@ -777,7 +777,7 @@ private:
                         = llvm::BasicBlock::Create(g.context, "from_global", irstate->getLLVMFunction());
                     llvm::BasicBlock* join = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
 
-                    emitter.getBuilder()->CreateCondBr(is_defined_var->getValue(), from_local, from_global);
+                    emitter.getBuilder()->CreateCondBr(i1FromBool(emitter, is_defined_var), from_local, from_global);
 
                     emitter.getBuilder()->SetInsertPoint(from_local);
                     curblock = from_local;
@@ -801,7 +801,7 @@ private:
                 }
 
                 emitter.createCall(exc_info, g.funcs.assertNameDefined,
-                                   { is_defined_var->getValue(), getStringConstantPtr(node->id + '\0'),
+                                   { i1FromBool(emitter, is_defined_var), getStringConstantPtr(node->id + '\0'),
                                      embedConstantPtr(UnboundLocalError, g.llvm_class_type_ptr),
                                      getConstantInt(true, g.i1) });
 
@@ -941,12 +941,13 @@ private:
             ConcreteCompilerVariable* rtn = operand->nonzero(emitter, getOpInfoForNode(node, exc_info));
             operand->decvref(emitter);
 
-            llvm::Value* v = rtn->getValue();
-            ASSERT(v->getType() == g.i1, "%s %s", operand->getType()->debugName().c_str(),
-                   rtn->getType()->debugName().c_str());
+            assert(rtn->getType() == BOOL);
+            llvm::Value* v = i1FromBool(emitter, rtn);
+            assert(v->getType() == g.i1);
+
             llvm::Value* negated = emitter.getBuilder()->CreateNot(v);
             rtn->decvref(emitter);
-            return new ConcreteCompilerVariable(BOOL, negated, true);
+            return boolFromI1(emitter, negated);
         } else {
             // TODO These are pretty inefficient, but luckily I don't think they're used that often:
             ConcreteCompilerVariable* converted = operand->makeConverted(emitter, operand->getBoxType());
@@ -994,8 +995,7 @@ private:
         }
         if (t == BOXED_BOOL) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, v);
-            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(BOOL, unboxed, true);
-            return rtn;
+            return boolFromI1(emitter, unboxed);
         }
         return new ConcreteCompilerVariable(t, v, grabbed);
     }
@@ -1560,7 +1560,7 @@ private:
 
         if (is_defined_var) {
             emitter.createCall(exc_info, g.funcs.assertNameDefined,
-                               { is_defined_var->getValue(), getStringConstantPtr(target->id + '\0'),
+                               { i1FromBool(emitter, is_defined_var), getStringConstantPtr(target->id + '\0'),
                                  embedConstantPtr(NameError, g.llvm_class_type_ptr),
                                  getConstantInt(local_error_msg, g.i1) });
             _popFake(defined_name);
@@ -1790,7 +1790,7 @@ private:
                nonzero->getType()->debugName().c_str());
         val->decvref(emitter);
 
-        llvm::Value* llvm_nonzero = nonzero->getValue();
+        llvm::Value* llvm_nonzero = i1FromBool(emitter, nonzero);
         llvm::BasicBlock* iftrue = entry_blocks[node->iftrue];
         llvm::BasicBlock* iffalse = entry_blocks[node->iffalse];
 
@@ -2172,7 +2172,7 @@ private:
                     if (is_defined) {
                         _setFake(defined_name, is_defined);
                     } else {
-                        _setFake(defined_name, new ConcreteCompilerVariable(BOOL, getConstantInt(1, g.i1), true));
+                        _setFake(defined_name, makeBool(1));
                     }
                 } else {
                     // printf("is defined in all later paths, so not marking\n");
@@ -2182,7 +2182,7 @@ private:
                 // printf("no st entry, setting undefined\n");
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(*it, myblock);
                 cur = new ConcreteCompilerVariable(phi_type, llvm::UndefValue::get(phi_type->llvmType()), true);
-                _setFake(defined_name, new ConcreteCompilerVariable(BOOL, getConstantInt(0, g.i1), true));
+                _setFake(defined_name, makeBool(0));
             }
         }
 

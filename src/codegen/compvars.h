@@ -366,6 +366,9 @@ CompilerType* typeOfClassobj(BoxedClass*);
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types);
 CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types);
 
+ConcreteCompilerVariable* boolFromI1(IREmitter&, llvm::Value*);
+llvm::Value* i1FromBool(IREmitter&, ConcreteCompilerVariable*);
+
 } // namespace pyston
 
 #endif

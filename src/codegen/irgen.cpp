@@ -367,7 +367,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 if (p.second == INT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i64->getPointerTo());
                 } else if (p.second == BOOL) {
-                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.i1->getPointerTo());
+                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, BOOL->llvmType()->getPointerTo());
                 } else if (p.second == FLOAT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
                 } else {
@@ -633,8 +633,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
                     std::string is_defined_name = "!is_defined_" + s;
-                    llvm::PHINode* phi
-                        = emitter->getBuilder()->CreatePHI(g.i1, block->predecessors.size(), is_defined_name);
+                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(BOOL->llvmType(), block->predecessors.size(),
+                                                                          is_defined_name);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(BOOL, phi, true);
                     generator->giveLocalSymbol(is_defined_name, var);
 

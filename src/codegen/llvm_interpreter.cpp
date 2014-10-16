@@ -550,6 +550,17 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                 }
                 continue;
                 //} else if (llvm::CallInst* ci = llvm::dyn_cast<llvm::CallInst>(inst)) {
+            } else if (llvm::TruncInst* tr = llvm::dyn_cast<llvm::TruncInst>(inst)) {
+                Val r = fetch(tr->getOperand(0), dl, symbols);
+                assert(tr->getType() == g.i1);
+                SET(r.n & 0x1);
+                continue;
+            } else if (llvm::ZExtInst* se = llvm::dyn_cast<llvm::ZExtInst>(inst)) {
+                Val r = fetch(se->getOperand(0), dl, symbols);
+                assert(se->getOperand(0)->getType() == g.i1);
+                assert(se->getType() == g.i64);
+                SET((int64_t)(uint64_t)(uint8_t)r.n);
+                continue;
             } else if (llvm::isa<llvm::CallInst>(inst) || llvm::isa<llvm::InvokeInst>(inst)) {
                 llvm::CallSite cs(inst);
                 llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(inst);

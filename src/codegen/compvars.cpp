@@ -356,8 +356,7 @@ public:
         if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn || op_type == AST_TYPE::Is
             || op_type == AST_TYPE::IsNot) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn);
-            ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(BOOL, unboxed, true);
-            return rtn;
+            return boolFromI1(emitter, unboxed);
         }
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
@@ -593,7 +592,7 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     } else {
         rtn_val = emitter.createCall(info.exc_info, g.funcs.nonzero, var->getValue()).getInstruction();
     }
-    return new ConcreteCompilerVariable(BOOL, rtn_val, true);
+    return boolFromI1(emitter, rtn_val);
 }
 
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure, bool isGenerator,
@@ -824,7 +823,7 @@ public:
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         llvm::Value* cmp = emitter.getBuilder()->CreateICmpNE(var->getValue(), llvm::ConstantInt::get(g.i64, 0, false));
-        return new ConcreteCompilerVariable(BOOL, cmp, true);
+        return boolFromI1(emitter, cmp);
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -913,8 +912,11 @@ public:
             v = emitter.getBuilder()->CreateICmp(cmp_pred, var->getValue(), converted_right->getValue());
         }
         converted_right->decvref(emitter);
-        assert(v->getType() == g.i64 || v->getType() == g.i1);
-        return new ConcreteCompilerVariable(v->getType() == g.i64 ? INT : BOOL, v, true);
+        if (v->getType() == g.i64) {
+            return new ConcreteCompilerVariable(INT, v, true);
+        } else {
+            return boolFromI1(emitter, v);
+        }
     }
 
     virtual ConcreteCompilerType* getBoxType() { return BOXED_INT; }
@@ -1019,7 +1021,7 @@ public:
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
         llvm::Value* cmp = emitter.getBuilder()->CreateFCmpUNE(var->getValue(), llvm::ConstantFP::get(g.double_, 0));
-        return new ConcreteCompilerVariable(BOOL, cmp, true);
+        return boolFromI1(emitter, cmp);
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -1117,8 +1119,11 @@ public:
         converted_right->decvref(emitter);
 
         if (succeeded) {
-            assert(v->getType() == g.double_ || v->getType() == g.i1);
-            return new ConcreteCompilerVariable(v->getType() == g.double_ ? FLOAT : BOOL, v, true);
+            if (v->getType() == g.double_) {
+                return new ConcreteCompilerVariable(FLOAT, v, true);
+            } else {
+                return boolFromI1(emitter, v);
+            }
         }
 
         // TODO duplication with top of function, other functions, etc
@@ -1390,7 +1395,7 @@ public:
         // TODO is it more efficient to unbox here, or should we leave it boxed?
         if (cf->spec->rtn_type == BOXED_BOOL) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, rtn->getValue());
-            return new ConcreteCompilerVariable(BOOL, unboxed, true);
+            return boolFromI1(emitter, unboxed);
         }
         if (cf->spec->rtn_type == BOXED_INT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, rtn->getValue());
@@ -1480,7 +1485,7 @@ public:
             assert(0 && "should have been caught by above case");
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, var->getValue());
             assert(unboxed->getType() == g.i1);
-            return new ConcreteCompilerVariable(BOOL, unboxed, true);
+            return boolFromI1(emitter, unboxed);
         }
 
         return UNKNOWN->nonzero(emitter, info, var);
@@ -1637,9 +1642,18 @@ ConcreteCompilerType* typeFromClass(BoxedClass* c) {
     return NormalObjectType::fromClass(c);
 }
 
+// Due to a temporary LLVM limitation, can represent bools as i64's instead of i1's.
+// #define BOOLS_AS_I64
 class BoolType : public ConcreteCompilerType {
 public:
-    llvm::Type* llvmType() { return g.i1; }
+    std::string debugName() { return "bool"; }
+    llvm::Type* llvmType() {
+#ifdef BOOLS_AS_I64
+        return g.i64;
+#else
+        return g.i1;
+#endif
+    }
 
     virtual bool isFitBy(BoxedClass* c) { return false; }
 
@@ -1667,7 +1681,7 @@ public:
         }
 
         ASSERT(other_type == UNKNOWN || other_type == BOXED_BOOL, "%s", other_type->debugName().c_str());
-        llvm::Value* boxed = emitter.getBuilder()->CreateCall(g.funcs.boxBool, var->getValue());
+        llvm::Value* boxed = emitter.getBuilder()->CreateCall(g.funcs.boxBool, i1FromBool(emitter, var));
         return new ConcreteCompilerVariable(other_type, boxed, true);
     }
 
@@ -1705,7 +1719,7 @@ public:
 };
 ConcreteCompilerType* BOOL = new BoolType();
 ConcreteCompilerVariable* makeBool(bool b) {
-    return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(g.i1, b, false), true);
+    return new ConcreteCompilerVariable(BOOL, llvm::ConstantInt::get(BOOL->llvmType(), b, false), true);
 }
 
 ConcreteCompilerType* BOXED_TUPLE;
@@ -1922,7 +1936,7 @@ public:
     }
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, VAR* var) {
-        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(g.i1), true);
+        return new ConcreteCompilerVariable(BOOL, llvm::UndefValue::get(BOOL->llvmType()), true);
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -1944,6 +1958,28 @@ CompilerType* UNDEF = &_UNDEF;
 
 ConcreteCompilerVariable* undefVariable() {
     return new ConcreteCompilerVariable(&_UNDEF, llvm::UndefValue::get(_UNDEF.llvmType()), true);
+}
+
+ConcreteCompilerVariable* boolFromI1(IREmitter& emitter, llvm::Value* v) {
+#ifdef BOOLS_AS_I64
+    assert(v->getType() == g.i1);
+    assert(BOOL->llvmType() == g.i64);
+    llvm::Value* v2 = emitter.getBuilder()->CreateZExt(v, BOOL->llvmType());
+    return new ConcreteCompilerVariable(BOOL, v2, true);
+#else
+    return new ConcreteCompilerVariable(BOOL, v, true);
+#endif
+}
+
+llvm::Value* i1FromBool(IREmitter& emitter, ConcreteCompilerVariable* v) {
+#ifdef BOOLS_AS_I64
+    assert(v->getType() == BOOL);
+    assert(BOOL->llvmType() == g.i64);
+    llvm::Value* v2 = emitter.getBuilder()->CreateTrunc(v->getValue(), g.i1);
+    return v2;
+#else
+    return v->getValue();
+#endif
 }
 
 
