@@ -17,6 +17,7 @@
 #include <cstring>
 
 #include "core/common.h"
+#include "core/options.h"
 
 namespace pyston {
 namespace assembler {
@@ -31,14 +32,14 @@ void Register::dump() const {
 
 const int dwarf_to_gp[] = {
     // http://www.x86-64.org/documentation/abi.pdf#page=57
-    0,  // 0
-    2,  // 1
+    0,  // 0 -> rax
+    2,  // 1 -> rdx
     1,  // 2 -> rcx
     3,  // 3 -> rbx
-    6,  // 4
-    7,  // 5
+    6,  // 4 -> rsi
+    7,  // 5 -> rdi
     5,  // 6 -> rbp
-    4,  // 7
+    4,  // 7 -> rsp
     8,  // 8 -> r8
     9,  // 9 -> r9
     10, // 10 -> r10
@@ -331,7 +332,6 @@ void Assembler::movsd(XMMRegister src, Indirect dest) {
     int dest_idx = dest.base.regnum;
 
     if (src_idx >= 8) {
-        trap();
         rex |= REX_R;
         src_idx -= 8;
     }
@@ -680,21 +680,21 @@ uint8_t* Assembler::emitCall(void* ptr, Register scratch) {
     return addr;
 }
 
-void Assembler::emitBatchPush(StackInfo stack_info, const std::vector<GenericRegister>& to_push) {
-    assert(stack_info.has_scratch);
+void Assembler::emitBatchPush(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push) {
     int offset = 0;
 
     for (const GenericRegister& r : to_push) {
-        assert(stack_info.scratch_bytes >= offset + 8);
-        Indirect next_slot(RBP, offset + stack_info.scratch_rbp_offset);
+        Indirect next_slot(RBP, offset + scratch_rbp_offset);
 
         if (r.type == GenericRegister::GP) {
             Register gp = r.gp;
             assert(gp.regnum >= 0 && gp.regnum < 16);
+            assert(scratch_size >= offset + 8);
             mov(gp, next_slot);
             offset += 8;
         } else if (r.type == GenericRegister::XMM) {
             XMMRegister reg = r.xmm;
+            assert(scratch_size >= offset + 8);
             movsd(reg, next_slot);
             offset += 8;
         } else {
@@ -703,13 +703,12 @@ void Assembler::emitBatchPush(StackInfo stack_info, const std::vector<GenericReg
     }
 }
 
-void Assembler::emitBatchPop(StackInfo stack_info, const std::vector<GenericRegister>& to_push) {
-    assert(stack_info.has_scratch);
+void Assembler::emitBatchPop(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push) {
     int offset = 0;
 
     for (const GenericRegister& r : to_push) {
-        assert(stack_info.scratch_bytes >= offset + 8);
-        Indirect next_slot(RBP, offset + stack_info.scratch_rbp_offset);
+        assert(scratch_size >= offset + 8);
+        Indirect next_slot(RBP, offset + scratch_rbp_offset);
 
         if (r.type == GenericRegister::GP) {
             Register gp = r.gp;
@@ -742,72 +741,6 @@ void Assembler::emitAnnotation(int num) {
     nop();
     cmp(RAX, Immediate(num));
     nop();
-}
-
-
-
-uint8_t* initializePatchpoint2(uint8_t* start_addr, uint8_t* slowpath_start, uint8_t* end_addr, StackInfo stack_info,
-                               const std::unordered_set<int>& live_outs) {
-    assert(start_addr < slowpath_start);
-    static const int INITIAL_CALL_SIZE = 13;
-    assert(end_addr > slowpath_start + INITIAL_CALL_SIZE);
-#ifndef NDEBUG
-    // if (VERBOSITY()) printf("initializing patchpoint at %p - %p\n", addr, addr + size);
-    // for (int i = 0; i < size; i++) {
-    // printf("%02x ", *(addr + i));
-    //}
-    // printf("\n");
-
-    // Check the exact form of the patchpoint call.
-    // It's important to make sure that the only live registers
-    // are the ones that are used as arguments; ie it wouldn't
-    // matter if the call happened on %r10 instead of %r11,
-    // but it would matter if there wasn't a mov immediately before
-    // the call, since then %r11 would be live and we couldn't
-    // use it as a temporary.
-
-    // mov $imm, %r11:
-    ASSERT(start_addr[0] == 0x49, "%x", start_addr[0]);
-    assert(start_addr[1] == 0xbb);
-    // 8 bytes of the addr
-
-    // callq *%r11:
-    assert(start_addr[10] == 0x41);
-    assert(start_addr[11] == 0xff);
-    assert(start_addr[12] == 0xd3);
-
-    int i = INITIAL_CALL_SIZE;
-    while (*(start_addr + i) == 0x66 || *(start_addr + i) == 0x0f || *(start_addr + i) == 0x2e)
-        i++;
-    assert(*(start_addr + i) == 0x90 || *(start_addr + i) == 0x1f);
-#endif
-
-    void* call_addr = *(void**)&start_addr[2];
-
-    Assembler(start_addr, slowpath_start - start_addr).fillWithNops();
-
-    std::vector<GenericRegister> regs_to_spill;
-    for (int dwarf_regnum : live_outs) {
-        GenericRegister ru = GenericRegister::fromDwarf(dwarf_regnum);
-
-        if (ru.type == GenericRegister::GP) {
-            if (ru.gp == RSP || ru.gp.isCalleeSave())
-                continue;
-        }
-
-        regs_to_spill.push_back(ru);
-    }
-
-    Assembler assem(slowpath_start, end_addr - slowpath_start);
-
-    // if (regs_to_spill.size())
-    // assem.trap();
-    assem.emitBatchPush(stack_info, regs_to_spill);
-    uint8_t* rtn = assem.emitCall(call_addr, R11);
-    assem.emitBatchPop(stack_info, regs_to_spill);
-    assem.fillWithNops();
-
-    return rtn;
 }
 }
 }

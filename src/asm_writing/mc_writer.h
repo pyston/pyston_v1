@@ -51,9 +51,6 @@ public:
     virtual void emitCmp(AST_TYPE::AST_TYPE cmp_type, int lhs_argnum, int rhs_argnum, int dest_argnum) = 0;
     virtual void emitToBool(int argnum, int dest_argnum) = 0;
 };
-
-void initializePatchpoint(uint8_t* addr, int size);
-MCWriter* createMCWriter(uint8_t* addr, int size, int num_temp_regs);
 }
 
 #endif

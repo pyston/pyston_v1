@@ -20,7 +20,6 @@ namespace pyston {
 struct StackInfo {
     int stack_size;
 
-    bool has_scratch;
     int scratch_bytes;
     int scratch_rbp_offset;
 };
@@ -80,6 +79,8 @@ struct XMMRegister {
     bool operator==(const XMMRegister& rhs) const { return regnum == rhs.regnum; }
 
     bool operator!=(const XMMRegister& rhs) const { return !(*this == rhs); }
+
+    void dump() const { printf("XMM%d\n", regnum); }
 };
 
 const XMMRegister XMM0(0);
@@ -128,6 +129,15 @@ struct GenericRegister {
     explicit constexpr GenericRegister() : gp(0), type(None) {}
     constexpr GenericRegister(const Register r) : gp(r), type(GP) {}
     constexpr GenericRegister(const XMMRegister r) : xmm(r), type(XMM) {}
+
+    void dump() const {
+        if (type == GP)
+            gp.dump();
+        else if (type == XMM)
+            xmm.dump();
+        else
+            abort();
+    }
 
     static GenericRegister fromDwarf(int dwarf_regnum);
 };

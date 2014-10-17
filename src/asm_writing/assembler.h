@@ -115,12 +115,13 @@ public:
 
     // Macros:
     uint8_t* emitCall(void* func_addr, Register scratch);
-    void emitBatchPop(StackInfo stack_info, const std::vector<GenericRegister>& to_push);
-    void emitBatchPush(StackInfo stack_info, const std::vector<GenericRegister>& to_push);
+    void emitBatchPop(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push);
+    void emitBatchPush(int scratch_rbp_offset, int scratch_size, const std::vector<GenericRegister>& to_push);
     void fillWithNops();
     void fillWithNopsExcept(int bytes);
     void emitAnnotation(int num);
 
+    uint8_t* curInstPointer() { return addr; }
     bool isExactlyFull() { return addr == end_addr; }
 };
 

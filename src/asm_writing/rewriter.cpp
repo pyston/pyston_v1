@@ -30,7 +30,11 @@ static const assembler::Register allocatable_regs[] = {
     assembler::RDI, assembler::RSI, assembler::R8,  assembler::R9, assembler::R10, assembler::R11,
 
     // For now, cannot allocate callee-save registers since we do not restore them properly
-    // at potentially-unwinding callsites.
+    // at potentially-throwing callsites.
+    // Also, if we wanted to allow spilling of existing values in callee-save registers (which
+    // adding them to this list would by default enable), we would need to somehow tell our frame
+    // introspection code where we spilled them to.
+    //
     // TODO fix that behavior, or create an unwinder that knows how to unwind through our
     // inline caches.
     /*
@@ -1104,4 +1108,84 @@ RewriterVarUsage RewriterVarUsage::addUse() {
 #ifndef NDEBUG
 int RewriterVar::nvars = 0;
 #endif
+
+static const int INITIAL_CALL_SIZE = 13;
+static const int DWARF_RBP_REGNUM = 6;
+void* extractSlowpathFunc(uint8_t* pp_addr) {
+#ifndef NDEBUG
+    // mov $imm, %r11:
+    ASSERT(pp_addr[0] == 0x49, "%x", pp_addr[0]);
+    assert(pp_addr[1] == 0xbb);
+    // 8 bytes of the addr
+
+    // callq *%r11:
+    assert(pp_addr[10] == 0x41);
+    assert(pp_addr[11] == 0xff);
+    assert(pp_addr[12] == 0xd3);
+
+    int i = INITIAL_CALL_SIZE;
+    while (*(pp_addr + i) == 0x66 || *(pp_addr + i) == 0x0f || *(pp_addr + i) == 0x2e)
+        i++;
+    assert(*(pp_addr + i) == 0x90 || *(pp_addr + i) == 0x1f);
+#endif
+
+    void* call_addr = *(void**)&pp_addr[2];
+    return call_addr;
+}
+
+std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
+                                                    int scratch_offset, int scratch_size,
+                                                    const std::unordered_set<int>& live_outs) {
+    assert(start_addr < end_addr);
+
+    int est_slowpath_size = INITIAL_CALL_SIZE;
+
+    std::vector<assembler::GenericRegister> regs_to_spill;
+
+    for (int dwarf_regnum : live_outs) {
+        assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(dwarf_regnum);
+
+        assert(!(ru.type == assembler::GenericRegister::GP && ru.gp == assembler::R11) && "We assume R11 is free!");
+
+        if (ru.type == assembler::GenericRegister::GP) {
+            if (ru.gp == assembler::RSP || ru.gp.isCalleeSave())
+                continue;
+        }
+
+        // Location(ru).dump();
+
+        regs_to_spill.push_back(ru);
+
+        if (ru.type == assembler::GenericRegister::GP)
+            est_slowpath_size += 14; // 7 bytes for a mov with 4-byte displacement, needed twice
+        else if (ru.type == assembler::GenericRegister::XMM)
+            est_slowpath_size += 18; // (up to) 9 bytes for a movsd with 4-byte displacement, needed twice
+        else
+            abort();
+    }
+
+    if (VERBOSITY())
+        printf("Have to spill %ld regs around the slowpath\n", regs_to_spill.size());
+
+    // TODO: some of these registers could already have been pushed via the frame saving code
+
+    uint8_t* slowpath_start = end_addr - est_slowpath_size;
+    ASSERT(slowpath_start >= start_addr, "Used more slowpath space than expected; change ICSetupInfo::totalSize()?");
+
+    assembler::Assembler _a(start_addr, slowpath_start - start_addr);
+    //_a.trap();
+    _a.fillWithNops();
+
+    assembler::Assembler assem(slowpath_start, end_addr - slowpath_start);
+    // if (regs_to_spill.size())
+    // assem.trap();
+    assem.emitBatchPush(scratch_offset, scratch_size, regs_to_spill);
+    uint8_t* rtn = assem.emitCall(slowpath_func, assembler::R11);
+    assem.emitBatchPop(scratch_offset, scratch_size, regs_to_spill);
+
+    assem.fillWithNops();
+    assert(!assem.hasFailed());
+
+    return std::make_pair(slowpath_start, rtn);
+}
 }

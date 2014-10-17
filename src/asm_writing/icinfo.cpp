@@ -122,13 +122,11 @@ int ICSlotRewrite::getFuncStackSize() {
 }
 
 int ICSlotRewrite::getScratchRbpOffset() {
-    assert(ic->stack_info.has_scratch);
     assert(ic->stack_info.scratch_bytes);
     return ic->stack_info.scratch_rbp_offset;
 }
 
 int ICSlotRewrite::getScratchBytes() {
-    assert(ic->stack_info.has_scratch);
     assert(ic->stack_info.scratch_bytes);
     return ic->stack_info.scratch_bytes;
 }
@@ -198,18 +196,18 @@ ICInfo::ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int 
 }
 
 static std::unordered_map<void*, ICInfo*> ics_by_return_addr;
-void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, const ICSetupInfo* pp, StackInfo stack_info,
-                                std::unordered_set<int> live_outs) {
-    int size = pp->totalSize();
-    uint8_t* end_addr = start_addr + size;
-    uint8_t* slowpath_addr = end_addr;
-
-    uint8_t* rtn_addr;
+void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, uint8_t* slowpath_start_addr,
+                                uint8_t* continue_addr, uint8_t* slowpath_rtn_addr, const ICSetupInfo* ic,
+                                StackInfo stack_info, std::unordered_set<int> live_outs) {
+    assert(slowpath_start_addr - start_addr >= ic->num_slots * ic->slot_size);
+    assert(slowpath_rtn_addr > slowpath_start_addr);
+    assert(slowpath_rtn_addr <= start_addr + ic->totalSize());
 
     assembler::GenericRegister return_register;
-    assert(pp->getCallingConvention() == llvm::CallingConv::C
-           || pp->getCallingConvention() == llvm::CallingConv::PreserveAll);
-    if (pp->hasReturnValue()) {
+    assert(ic->getCallingConvention() == llvm::CallingConv::C
+           || ic->getCallingConvention() == llvm::CallingConv::PreserveAll);
+
+    if (ic->hasReturnValue()) {
         static const int DWARF_RAX = 0;
         // It's possible that the return value doesn't get used, in which case
         // we can avoid copying back into RAX at the end
@@ -222,46 +220,29 @@ void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, const
         return_register = assembler::RAX;
     }
 
-    if (pp->getCallingConvention() != llvm::CallingConv::C) {
-        uint8_t* slowpath_start = start_addr + pp->num_slots * pp->slot_size;
-        rtn_addr = initializePatchpoint2(start_addr, slowpath_start, (uint8_t*)end_addr, stack_info, live_outs);
-    } else {
-        // for (int regnum : live_outs) {
-        //// LLVM has a bug where it incorrectly determines the set of liveouts;
-        //// so far it only seems to add additional ones to the set, which should
-        //// hopefully be safe.
-        //// Otherwise, I'd like to test here that it's only the registers
-        //// that we'd expect to be saved...
-        // ASSERT(regnum == 0 || regnum == 3 || regnum == 6 || regnum == 12 || regnum == 13 || regnum == 14 || regnum ==
-        // 15 || regnum == 7, "%d", regnum);
-        //}
-
-        initializePatchpoint(start_addr, size);
-        rtn_addr = slowpath_addr;
-    }
-
     // we can let the user just slide down the nop section, but instead
     // emit jumps to the end.
     // Not sure if this is worth it or not?
-    for (int i = 0; i < pp->num_slots; i++) {
-        uint8_t* start = start_addr + i * pp->slot_size;
-        // std::unique_ptr<MCWriter> writer(createMCWriter(start, pp->slot_size * (pp->num_slots - i), 0));
+    for (int i = 0; i < ic->num_slots; i++) {
+        uint8_t* start = start_addr + i * ic->slot_size;
+        // std::unique_ptr<MCWriter> writer(createMCWriter(start, ic->slot_size * (ic->num_slots - i), 0));
         // writer->emitNop();
         // writer->emitGuardFalse();
 
-        std::unique_ptr<Assembler> writer(new Assembler(start, pp->slot_size));
+        std::unique_ptr<Assembler> writer(new Assembler(start, ic->slot_size));
         writer->nop();
         // writer->trap();
-        writer->jmp(JumpDestination::fromStart(pp->slot_size * (pp->num_slots - i)));
+        // writer->jmp(JumpDestination::fromStart(ic->slot_size * (ic->num_slots - i)));
+        writer->jmp(JumpDestination::fromStart(slowpath_start_addr - start));
     }
 
-    ICInfo* ic = new ICInfo(start_addr, slowpath_addr, stack_info, pp->num_slots, pp->slot_size,
-                            pp->getCallingConvention(), live_outs, return_register, pp->type_recorder);
+    ICInfo* icinfo = new ICInfo(start_addr, continue_addr, stack_info, ic->num_slots, ic->slot_size,
+                                ic->getCallingConvention(), live_outs, return_register, ic->type_recorder);
 
-    ics_by_return_addr[rtn_addr] = ic;
+    ics_by_return_addr[slowpath_rtn_addr] = icinfo;
 
     assert(cf);
-    cf->ics.push_back(ic);
+    cf->ics.push_back(icinfo);
 }
 
 ICInfo* getICInfo(void* rtn_addr) {

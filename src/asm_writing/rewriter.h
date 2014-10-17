@@ -312,6 +312,13 @@ public:
     friend class RewriterVar;
     friend class RewriterVarUsage;
 };
+
+void* extractSlowpathFunc(uint8_t* pp_addr);
+
+// returns (start_of_slowpath, return_addr_of_slowpath_call)
+std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
+                                                    int scratch_offset, int scratch_size,
+                                                    const std::unordered_set<int>& live_outs);
 }
 
 #endif

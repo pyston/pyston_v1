@@ -32,7 +32,7 @@ int ICSetupInfo::totalSize() const {
     int call_size = CALL_ONLY_SIZE;
     if (getCallingConvention() != llvm::CallingConv::C) {
         // 14 bytes per reg that needs to be spilled
-        call_size += 14 * 4;
+        call_size += 14 * 6;
     }
     return num_slots * slot_size + call_size;
 }
@@ -120,15 +120,49 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         uint8_t* start_addr = (uint8_t*)pp->parentFunction()->code + r->offset;
         uint8_t* end_addr = start_addr + pp->patchpointSize();
 
+        // TODO shouldn't have to do it this way
+        void* slowpath_func = extractSlowpathFunc(start_addr);
+
+        //*start_addr = 0xcc;
+        // start_addr++;
+
         const ICSetupInfo* ic = pp->getICInfo();
-        if (ic == NULL)
+        if (ic == NULL) {
+            // We have to be using the C calling convention here, so we don't need to check the live outs
+            // or save them across the call.
+            initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size,
+                                  std::unordered_set<int>());
             continue;
+        }
 
         std::unordered_set<int> live_outs(extractLiveOuts(r, ic->getCallingConvention()));
 
-        registerCompiledPatchpoint(cf, start_addr, ic,
-                                   StackInfo({ stack_size, true, scratch_size, scratch_rbp_offset }),
-                                   std::move(live_outs));
+        if (ic->hasReturnValue()) {
+            assert(ic->getCallingConvention() == llvm::CallingConv::C
+                   || ic->getCallingConvention() == llvm::CallingConv::PreserveAll);
+
+            static const int DWARF_RAX = 0;
+            // It's possible that the return value doesn't get used, in which case
+            // we can avoid copying back into RAX at the end
+            if (live_outs.count(DWARF_RAX)) {
+                live_outs.erase(DWARF_RAX);
+            }
+        }
+
+
+
+        auto _p
+            = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size, live_outs);
+        uint8_t* slowpath_start = _p.first;
+        uint8_t* slowpath_rtn_addr = _p.second;
+
+        ASSERT(slowpath_start - start_addr >= ic->num_slots * ic->slot_size,
+               "Used more slowpath space than expected; change ICSetupInfo::totalSize()?");
+
+        assert(pp->numICStackmapArgs() == 0); // don't do anything with these for now
+
+        registerCompiledPatchpoint(cf, start_addr, slowpath_start, end_addr, slowpath_rtn_addr, ic,
+                                   StackInfo({ stack_size, scratch_size, scratch_rbp_offset }), std::move(live_outs));
     }
 
     for (PatchpointInfo* pp : new_patchpoints) {
