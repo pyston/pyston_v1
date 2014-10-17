@@ -199,7 +199,7 @@ public:
 };
 
 class IREmitter;
-IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock);
+IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,
                                const GuardList& in_guards, bool is_partial);

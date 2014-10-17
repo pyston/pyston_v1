@@ -15,6 +15,7 @@
 #include "codegen/irgen/irgenerator.h"
 
 #include "llvm/IR/Module.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
@@ -100,10 +101,67 @@ private:
     IRGenState* irstate;
     IRBuilder* builder;
     llvm::BasicBlock*& curblock;
+    IRGenerator* irgenerator;
+
+    llvm::CallSite emitCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) {
+        if (exc_info.needsInvoke()) {
+            llvm::BasicBlock* normal_dest
+                = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
+            normal_dest->moveAfter(curblock);
+
+            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_info.exc_dest, args);
+            getBuilder()->SetInsertPoint(normal_dest);
+            curblock = normal_dest;
+            return rtn;
+        } else {
+            return getBuilder()->CreateCall(callee, args);
+        }
+    }
+
+    llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
+                                  const std::vector<llvm::Value*>& args,
+                                  const std::vector<llvm::Value*>& ic_stackmap_args, ExcInfo exc_info) {
+        if (pp == NULL)
+            assert(ic_stackmap_args.size() == 0);
+
+        PatchpointInfo* info = PatchpointInfo::create(currentFunction(), pp, ic_stackmap_args.size());
+        int64_t pp_id = reinterpret_cast<int64_t>(info);
+        int pp_size = pp ? pp->totalSize() : CALL_ONLY_SIZE;
+
+        std::vector<llvm::Value*> pp_args;
+        pp_args.push_back(getConstantInt(pp_id, g.i64)); // pp_id: will fill this in later
+        pp_args.push_back(getConstantInt(pp_size, g.i32));
+        pp_args.push_back(func);
+        pp_args.push_back(getConstantInt(args.size(), g.i32));
+
+        pp_args.insert(pp_args.end(), args.begin(), args.end());
+
+        int num_scratch_bytes = info->scratchSize();
+        llvm::Value* scratch_space = irstate->getScratchSpace(num_scratch_bytes);
+        pp_args.push_back(scratch_space);
+
+        pp_args.insert(pp_args.end(), ic_stackmap_args.begin(), ic_stackmap_args.end());
+
+        llvm::Intrinsic::ID intrinsic_id;
+        if (return_type->isIntegerTy() || return_type->isPointerTy()) {
+            intrinsic_id = llvm::Intrinsic::experimental_patchpoint_i64;
+        } else if (return_type->isVoidTy()) {
+            intrinsic_id = llvm::Intrinsic::experimental_patchpoint_void;
+        } else if (return_type->isDoubleTy()) {
+            intrinsic_id = llvm::Intrinsic::experimental_patchpoint_double;
+        } else {
+            return_type->dump();
+            abort();
+        }
+        llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
+
+        llvm::CallSite rtn = this->emitCall(exc_info, patchpoint, pp_args);
+        return rtn;
+    }
 
 public:
-    explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock)
-        : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock) {
+    explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator)
+        : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock), irgenerator(irgenerator) {
         builder->setEmitter(this);
         builder->SetInsertPoint(curblock);
     }
@@ -122,66 +180,40 @@ public:
 
     CompiledFunction* currentFunction() override { return irstate->getCurFunction(); }
 
-    llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
-        if (exc_info.needsInvoke()) {
-            llvm::BasicBlock* normal_dest
-                = llvm::BasicBlock::Create(g.context, curblock->getName(), irstate->getLLVMFunction());
-            normal_dest->moveAfter(curblock);
-
-            llvm::InvokeInst* rtn = getBuilder()->CreateInvoke(callee, normal_dest, exc_info.exc_dest, args);
-            getBuilder()->SetInsertPoint(normal_dest);
-            curblock = normal_dest;
-            return rtn;
-        } else {
-            return getBuilder()->CreateCall(callee, args);
-        }
+    llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
+        llvm::CallSite cs = this->emitCall(exc_info, callee, args);
+        return cs.getInstruction();
     }
 
-    llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) override {
+    llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) override {
         return createCall(exc_info, callee, std::vector<llvm::Value*>({ arg1 }));
     }
 
-    llvm::CallSite createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) override {
+    llvm::Value* createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) override {
         return createCall(exc_info, callee, { arg1, arg2 });
     }
 
-    llvm::CallSite createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                               llvm::Value* arg3) override {
+    llvm::Value* createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+                             llvm::Value* arg3) override {
         return createCall(exc_info, callee, { arg1, arg2, arg3 });
     }
 
-    llvm::CallSite createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
-                                    const std::vector<llvm::Value*>& args, ExcInfo exc_info) override {
-        int64_t pp_id = pp->getPatchpointId();
-        int pp_size = pp->totalSize();
-
+    llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
+                          ExcInfo exc_info) override {
         assert(irstate->getEffortLevel() != EffortLevel::INTERPRETED);
 
-        std::vector<llvm::Value*> pp_args;
-        pp_args.push_back(getConstantInt(pp_id, g.i64));
-        pp_args.push_back(getConstantInt(pp_size, g.i32));
-        pp_args.push_back(embedConstantPtr(func_addr, g.i8->getPointerTo()));
-        pp_args.push_back(getConstantInt(args.size(), g.i32));
+        std::vector<llvm::Value*> stackmap_args;
 
-        pp_args.insert(pp_args.end(), args.begin(), args.end());
+        llvm::CallSite rtn
+            = emitPatchpoint(pp->hasReturnValue() ? g.i64 : g.void_, pp,
+                             embedConstantPtr(func_addr, g.i8->getPointerTo()), args, stackmap_args, exc_info);
 
-        int num_scratch_bytes = pp->numScratchBytes();
-        if (num_scratch_bytes) {
-            llvm::Value* scratch_space = irstate->getScratchSpace(num_scratch_bytes);
-            pp_args.push_back(scratch_space);
-        }
-
-        llvm::Intrinsic::ID intrinsic_id = pp->hasReturnValue() ? llvm::Intrinsic::experimental_patchpoint_i64
-                                                                : llvm::Intrinsic::experimental_patchpoint_void;
-        llvm::Function* patchpoint = this->getIntrinsic(intrinsic_id);
-
-        llvm::CallSite rtn = this->createCall(exc_info, patchpoint, pp_args);
         rtn.setCallingConv(pp->getCallingConvention());
-        return rtn;
+        return rtn.getInstruction();
     }
 };
-IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock) {
-    return new IREmitterImpl(irstate, curblock);
+IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator) {
+    return new IREmitterImpl(irstate, curblock, irgenerator);
 }
 
 static std::unordered_map<AST_expr*, std::vector<const std::string*>*> made_keyword_storage;
@@ -223,8 +255,8 @@ public:
     IRGeneratorImpl(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                     CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards, const GuardList& in_guards,
                     bool is_partial)
-        : irstate(irstate), curblock(entry_blocks[myblock]), emitter(irstate, curblock), entry_blocks(entry_blocks),
-          myblock(myblock), types(types), out_guards(out_guards), in_guards(in_guards),
+        : irstate(irstate), curblock(entry_blocks[myblock]), emitter(irstate, curblock, this),
+          entry_blocks(entry_blocks), myblock(myblock), types(types), out_guards(out_guards), in_guards(in_guards),
           state(is_partial ? PARTIAL : RUNNING) {}
 
     ~IRGeneratorImpl() { delete emitter.getBuilder(); }
@@ -309,9 +341,9 @@ private:
                 cls->decvref(emitter);
                 flags->decvref(emitter);
 
-                llvm::Value* v = emitter.createCall(exc_info, g.funcs.isinstance,
-                                                    { converted_obj->getValue(), converted_cls->getValue(),
-                                                      converted_flags->getValue() }).getInstruction();
+                llvm::Value* v = emitter.createCall(
+                    exc_info, g.funcs.isinstance,
+                    { converted_obj->getValue(), converted_cls->getValue(), converted_flags->getValue() });
                 assert(v->getType() == g.i1);
 
                 return boolFromI1(emitter, v);
@@ -403,8 +435,7 @@ private:
                 ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
                 obj->decvref(emitter);
 
-                llvm::Value* v
-                    = emitter.createCall(exc_info, g.funcs.getiter, { converted_obj->getValue() }).getInstruction();
+                llvm::Value* v = emitter.createCall(exc_info, g.funcs.getiter, { converted_obj->getValue() });
                 assert(v->getType() == g.llvm_value_type_ptr);
 
                 return new ConcreteCompilerVariable(UNKNOWN, v, true);
@@ -422,7 +453,7 @@ private:
                 assert(name.size());
 
                 llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importFrom, converted_module->getValue(),
-                                                     embedConstantPtr(&name, g.llvm_str_type_ptr)).getInstruction();
+                                                     embedConstantPtr(&name, g.llvm_str_type_ptr));
 
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
@@ -440,9 +471,9 @@ private:
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
                 module->decvref(emitter);
 
-                llvm::Value* r = emitter.createCall2(exc_info, g.funcs.importStar, converted_module->getValue(),
-                                                     embedConstantPtr(irstate->getSourceInfo()->parent_module,
-                                                                      g.llvm_module_type_ptr)).getInstruction();
+                llvm::Value* r = emitter.createCall2(
+                    exc_info, g.funcs.importStar, converted_module->getValue(),
+                    embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
                 converted_module->decvref(emitter);
@@ -463,10 +494,9 @@ private:
 
                 const std::string& module_name = static_cast<AST_Str*>(node->args[2])->s;
 
-                llvm::Value* imported
-                    = emitter.createCall3(exc_info, g.funcs.import, getConstantInt(level, g.i32),
-                                          converted_froms->getValue(),
-                                          embedConstantPtr(&module_name, g.llvm_str_type_ptr)).getInstruction();
+                llvm::Value* imported = emitter.createCall3(exc_info, g.funcs.import, getConstantInt(level, g.i32),
+                                                            converted_froms->getValue(),
+                                                            embedConstantPtr(&module_name, g.llvm_str_type_ptr));
                 ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
 
                 converted_froms->decvref(emitter);
@@ -713,22 +743,20 @@ private:
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, ExcInfo exc_info) {
         bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp = patchpoints::createGetGlobalPatchpoint(
-                emitter.currentFunction(), getOpInfoForNode(node, exc_info).getTypeRecorder());
+            ICSetupInfo* pp = createGetGlobalIC(getOpInfoForNode(node, exc_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
             llvm_args.push_back(embedConstantPtr(&node->id, g.llvm_str_type_ptr));
 
-            llvm::Value* uncasted
-                = emitter.createPatchpoint(pp, (void*)pyston::getGlobal, llvm_args, exc_info).getInstruction();
+            llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, exc_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
             llvm::Value* r
                 = emitter.createCall2(exc_info, g.funcs.getGlobal,
                                       embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
-                                      embedConstantPtr(&node->id, g.llvm_str_type_ptr)).getInstruction();
+                                      embedConstantPtr(&node->id, g.llvm_str_type_ptr));
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         }
     }
@@ -836,7 +864,7 @@ private:
         var->decvref(emitter);
 
         std::vector<llvm::Value*> args{ cvar->getValue() };
-        llvm::Value* rtn = emitter.createCall(exc_info, g.funcs.repr, args).getInstruction();
+        llvm::Value* rtn = emitter.createCall(exc_info, g.funcs.repr, args);
         cvar->decvref(emitter);
         rtn = emitter.getBuilder()->CreateBitCast(rtn, g.llvm_value_type_ptr);
 
@@ -954,7 +982,7 @@ private:
             operand->decvref(emitter);
 
             llvm::Value* rtn = emitter.createCall2(exc_info, g.funcs.unaryop, converted->getValue(),
-                                                   getConstantInt(node->op_type, g.i32)).getInstruction();
+                                                   getConstantInt(node->op_type, g.i32));
             converted->decvref(emitter);
 
             return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
@@ -972,8 +1000,8 @@ private:
         ConcreteCompilerVariable* convertedValue = value->makeConverted(emitter, value->getBoxType());
         value->decvref(emitter);
 
-        llvm::Value* rtn = emitter.createCall2(exc_info, g.funcs.yield, convertedGenerator->getValue(),
-                                               convertedValue->getValue()).getInstruction();
+        llvm::Value* rtn
+            = emitter.createCall2(exc_info, g.funcs.yield, convertedGenerator->getValue(), convertedValue->getValue());
         convertedGenerator->decvref(emitter);
         convertedValue->decvref(emitter);
 
@@ -1302,15 +1330,14 @@ private:
         // patchpoints if it couldn't.
         bool do_patchpoint = ENABLE_ICSETITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp = patchpoints::createSetitemPatchpoint(emitter.currentFunction(),
-                                                                           getEmptyOpInfo(exc_info).getTypeRecorder());
+            ICSetupInfo* pp = createSetitemIC(getEmptyOpInfo(exc_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(converted_target->getValue());
             llvm_args.push_back(converted_slice->getValue());
             llvm_args.push_back(converted_val->getValue());
 
-            emitter.createPatchpoint(pp, (void*)pyston::setitem, llvm_args, exc_info);
+            emitter.createIC(pp, (void*)pyston::setitem, llvm_args, exc_info);
         } else {
             emitter.createCall3(exc_info, g.funcs.setitem, converted_target->getValue(), converted_slice->getValue(),
                                 converted_val->getValue());
@@ -1339,7 +1366,7 @@ private:
         ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
 
         llvm::Value* unpacked = emitter.createCall2(exc_info, g.funcs.unpackIntoArray, converted_val->getValue(),
-                                                    getConstantInt(ntargets, g.i64)).getInstruction();
+                                                    getConstantInt(ntargets, g.i64));
         assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());
         converted_val->decvref(emitter);
 
@@ -1461,7 +1488,7 @@ private:
 
         llvm::Value* classobj
             = emitter.createCall3(exc_info, g.funcs.createUserClass, embedConstantPtr(&node->name, g.llvm_str_type_ptr),
-                                  bases_tuple->getValue(), converted_attr_dict->getValue()).getInstruction();
+                                  bases_tuple->getValue(), converted_attr_dict->getValue());
 
         // Note: createuserClass is free to manufacture non-class objects
         CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
@@ -1508,14 +1535,13 @@ private:
 
         bool do_patchpoint = ENABLE_ICDELITEMS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp = patchpoints::createDelitemPatchpoint(emitter.currentFunction(),
-                                                                           getEmptyOpInfo(exc_info).getTypeRecorder());
+            ICSetupInfo* pp = createDelitemIC(getEmptyOpInfo(exc_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(converted_target->getValue());
             llvm_args.push_back(converted_slice->getValue());
 
-            emitter.createPatchpoint(pp, (void*)pyston::delitem, llvm_args, exc_info);
+            emitter.createIC(pp, (void*)pyston::delitem, llvm_args, exc_info);
         } else {
             emitter.createCall2(exc_info, g.funcs.delitem, converted_target->getValue(), converted_slice->getValue());
         }
@@ -1682,9 +1708,8 @@ private:
 
             // begin code for handling of softspace
             bool new_softspace = (i < nvals - 1) || (!node->nl);
-            llvm::Value* dospace
-                = emitter.createCall(exc_info, g.funcs.softspace,
-                                     { dest->getValue(), getConstantInt(new_softspace, g.i1) }).getInstruction();
+            llvm::Value* dospace = emitter.createCall(exc_info, g.funcs.softspace,
+                                                      { dest->getValue(), getConstantInt(new_softspace, g.i1) });
             assert(dospace->getType() == g.i1);
 
             llvm::BasicBlock* ss_block = llvm::BasicBlock::Create(g.context, "softspace", irstate->getLLVMFunction());
@@ -1705,7 +1730,7 @@ private:
             // end code for handling of softspace
 
 
-            llvm::Value* v = emitter.createCall(exc_info, g.funcs.str, { converted->getValue() }).getInstruction();
+            llvm::Value* v = emitter.createCall(exc_info, g.funcs.str, { converted->getValue() });
             v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
             auto s = new ConcreteCompilerVariable(STR, v, true);
             r = dest->callattr(emitter, getOpInfoForNode(node, exc_info), &write_str, false, ArgPassSpec(1), { s },

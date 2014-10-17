@@ -129,7 +129,8 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
     }
 
     StackMap* stackmap = parseStackMap();
-    patchpoints::processStackmap(cf, stackmap);
+    processStackmap(cf, stackmap);
+    delete stackmap;
 }
 
 static std::unordered_map<std::string, CompiledFunction*> machine_name_to_cf;

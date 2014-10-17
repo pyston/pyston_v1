@@ -198,8 +198,8 @@ ICInfo::ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int 
 }
 
 static std::unordered_map<void*, ICInfo*> ics_by_return_addr;
-void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, PatchpointSetupInfo* pp,
-                                StackInfo stack_info, std::unordered_set<int> live_outs) {
+void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, const ICSetupInfo* pp, StackInfo stack_info,
+                                std::unordered_set<int> live_outs) {
     int size = pp->totalSize();
     uint8_t* end_addr = start_addr + size;
     uint8_t* slowpath_addr = end_addr;

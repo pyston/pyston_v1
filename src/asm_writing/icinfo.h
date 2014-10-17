@@ -127,9 +127,9 @@ public:
     friend class ICSlotRewrite;
 };
 
-class PatchpointSetupInfo;
+class ICSetupInfo;
 class CompiledFunction;
-void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, PatchpointSetupInfo*, StackInfo stack_info,
+void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, const ICSetupInfo*, StackInfo stack_info,
                                 std::unordered_set<int> live_outs);
 
 ICInfo* getICInfo(void* rtn_addr);

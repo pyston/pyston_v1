@@ -27,6 +27,7 @@
 #include "codegen/codegen.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
+#include "codegen/patchpoints.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/thread_utils.h"
@@ -566,31 +567,35 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                 llvm::InvokeInst* invoke = llvm::dyn_cast<llvm::InvokeInst>(inst);
 
                 void* f;
-                int arg_start;
+                int arg_start, num_args;
                 if (cs.getCalledFunction()
                     && (cs.getCalledFunction()->getName() == "llvm.experimental.patchpoint.void"
-                        || cs.getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64")) {
-                    // cs.dump();
-                    assert(0 && "shouldn't be generating patchpoints for interpretation!");
+                        || cs.getCalledFunction()->getName() == "llvm.experimental.patchpoint.i64"
+                        || cs.getCalledFunction()->getName() == "llvm.experimental.patchpoint.double")) {
+// cs.dump();
+#ifndef NDEBUG
+                    // We use size == CALL_ONLY_SIZE to imply that the call isn't patchable
+                    int pp_size = (int64_t)fetch(cs.getArgument(1), dl, symbols).n;
+                    ASSERT(pp_size == CALL_ONLY_SIZE, "shouldn't be generating patchpoints for interpretation");
+#endif
+
                     f = (void*)fetch(cs.getArgument(2), dl, symbols).n;
                     arg_start = 4;
+                    num_args = (int64_t)fetch(cs.getArgument(3), dl, symbols).n;
                 } else {
                     f = (void*)fetch(cs.getCalledValue(), dl, symbols).n;
                     arg_start = 0;
+                    num_args = cs.arg_size();
                 }
 
                 if (VERBOSITY("interpreter") >= 2)
                     printf("calling %s\n", g.func_addr_registry.getFuncNameAtAddress(f, true).c_str());
 
                 std::vector<Val> args;
-                int nargs = cs.arg_size();
-                for (int i = arg_start; i < nargs; i++) {
+                for (int i = arg_start; i < arg_start + num_args; i++) {
                     // cs.getArgument(i)->dump();
                     args.push_back(fetch(cs.getArgument(i), dl, symbols));
                 }
-
-                int npassed_args = nargs - arg_start;
-// printf("%d %d %d\n", nargs, arg_start, npassed_args);
 
 #ifdef TIME_INTERPRETS
                 this_us += _t.end();
@@ -603,7 +608,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                 else
                     mask = 2;
 
-                for (int i = 0; i < npassed_args; i++) {
+                for (int i = arg_start; i < arg_start + num_args; i++) {
                     mask <<= 1;
                     if (cs.getArgument(i)->getType() == g.double_)
                         mask |= 1;
@@ -635,6 +640,9 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
                             break;
                         case 0b1011:
                             r = reinterpret_cast<int64_t (*)(double, double)>(f)(args[0].d, args[1].d);
+                            break;
+                        case 0b1100:
+                            r = reinterpret_cast<double (*)(int64_t, int64_t)>(f)(args[0].n, args[1].n);
                             break;
                         case 0b1111:
                             r = reinterpret_cast<double (*)(double, double)>(f)(args[0].d, args[1].d);

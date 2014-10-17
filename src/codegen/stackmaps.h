@@ -32,7 +32,14 @@ struct StackMap {
 
     struct Record {
         struct __attribute__((__packed__)) Location {
-            uint8_t type;
+            enum LocationType : uint8_t {
+                Register = 0x1,
+                Direct = 0x2,
+                Indirect = 0x3,
+                Constant = 0x4,
+                ConstIndex = 0x5,
+            } type;
+
             uint8_t flags;
             uint16_t regnum;
             int32_t offset;

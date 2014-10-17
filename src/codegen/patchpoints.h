@@ -20,85 +20,102 @@
 
 #include "llvm/IR/CallingConv.h"
 
+#include "codegen/stackmaps.h"
+#include "core/common.h"
+
 namespace pyston {
 
-class TypeRecorder;
-
-namespace patchpoints {
-
-enum PatchpointType {
-    Generic,
-    Callsite,
-    GetGlobal,
-    Getattr,
-    Setattr,
-    Delattr,
-    Getitem,
-    Setitem,
-    Delitem,
-    Binexp,
-    Nonzero,
-};
-}
-
 class CompiledFunction;
+class CompilerType;
+struct StackMap;
+class TypeRecorder;
+class ICSetupInfo;
 
-class PatchpointSetupInfo {
+static const int CALL_ONLY_SIZE = 13;
+
+void processStackmap(CompiledFunction* cf, StackMap* stackmap);
+
+struct PatchpointInfo {
 private:
-    PatchpointSetupInfo(int64_t pp_id, patchpoints::PatchpointType type, int num_slots, int slot_size,
-                        CompiledFunction* parent_cf, bool has_return_value, TypeRecorder* type_recorder)
-        : pp_id(pp_id), type(type), num_slots(num_slots), slot_size(slot_size), has_return_value(has_return_value),
-          parent_cf(parent_cf), type_recorder(type_recorder) {}
+    CompiledFunction* const parent_cf;
+    const ICSetupInfo* icinfo;
+    int num_ic_stackmap_args;
 
-    const int64_t pp_id;
+    PatchpointInfo(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args)
+        : parent_cf(parent_cf), icinfo(icinfo), num_ic_stackmap_args(num_ic_stackmap_args) {}
 
 public:
-    const patchpoints::PatchpointType type;
+    const ICSetupInfo* getICInfo() { return icinfo; }
+
+    int patchpointSize();
+    CompiledFunction* parentFunction() { return parent_cf; }
+
+    int scratchStackmapArg() { return 0; }
+    int scratchSize() { return 80; }
+
+    int icStackmapArgsStart() { return 1; }
+    int numICStackmapArgs() { return num_ic_stackmap_args; }
+
+    int totalStackmapArgs() { return icStackmapArgsStart() + numICStackmapArgs(); }
+
+    static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args);
+};
+
+class ICSetupInfo {
+public:
+    enum ICType {
+        Generic,
+        Callsite,
+        GetGlobal,
+        Getattr,
+        Setattr,
+        Delattr,
+        Getitem,
+        Setitem,
+        Delitem,
+        Binexp,
+        Nonzero,
+    };
+
+private:
+    ICSetupInfo(ICType type, int num_slots, int slot_size, bool has_return_value, TypeRecorder* type_recorder)
+        : type(type), num_slots(num_slots), slot_size(slot_size), has_return_value(has_return_value),
+          type_recorder(type_recorder) {}
+
+public:
+    const ICType type;
 
     const int num_slots, slot_size;
     const bool has_return_value;
-    CompiledFunction* const parent_cf;
     TypeRecorder* const type_recorder;
 
     int totalSize() const;
-    int64_t getPatchpointId() const;
     bool hasReturnValue() const { return has_return_value; }
-
-    int numScratchBytes() const { return 64; }
 
     llvm::CallingConv::ID getCallingConvention() const {
         // The plan is to switch probably everything over to PreseveAll (and potentially AnyReg),
         // but for only switch Getattr so the testing can be localized:
-        if (type == patchpoints::Getattr || type == patchpoints::Setattr)
+        if (type == Getattr || type == Setattr)
             return llvm::CallingConv::PreserveAll;
 
         return llvm::CallingConv::C;
     }
 
-    static PatchpointSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size,
-                                           CompiledFunction* parent_cf, patchpoints::PatchpointType type,
-                                           TypeRecorder* type_recorder);
+    static ICSetupInfo* initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
+                                   TypeRecorder* type_recorder);
 };
 
-struct StackMap;
-
-namespace patchpoints {
-
-void processStackmap(CompiledFunction* cf, StackMap* stackmap);
-
-PatchpointSetupInfo* createGenericPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder,
-                                             bool has_return_value, int size);
-PatchpointSetupInfo* createCallsitePatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder, int num_args);
-PatchpointSetupInfo* createGetGlobalPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createGetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createSetattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createDelattrPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createGetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createSetitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createDelitemPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createBinexpPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-PatchpointSetupInfo* createNonzeroPatchpoint(CompiledFunction* parent_cf, TypeRecorder* type_recorder);
-}
+ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value, int size);
+ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args);
+ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder);
+ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder);
+ICSetupInfo* createSetattrIC(TypeRecorder* type_recorder);
+ICSetupInfo* createDelattrIC(TypeRecorder* type_recorder);
+ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder);
+ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder);
+ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
+ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder);
+ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
 
 } // namespace pyston
 

@@ -52,7 +52,7 @@ public:
     void setEmitter(IREmitter* emitter) { this->emitter = emitter; }
 };
 
-class PatchpointSetupInfo;
+class ICSetupInfo;
 
 class IREmitter {
 public:
@@ -69,13 +69,13 @@ public:
 
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
-    virtual llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) = 0;
-    virtual llvm::CallSite createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) = 0;
-    virtual llvm::CallSite createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) = 0;
-    virtual llvm::CallSite createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
-                                       llvm::Value* arg3) = 0;
-    virtual llvm::CallSite createPatchpoint(const PatchpointSetupInfo* pp, void* func_addr,
-                                            const std::vector<llvm::Value*>& args, ExcInfo exc_info) = 0;
+    virtual llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) = 0;
+    virtual llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) = 0;
+    virtual llvm::Value* createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) = 0;
+    virtual llvm::Value* createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,
+                                     llvm::Value* arg3) = 0;
+    virtual llvm::Value* createIC(const ICSetupInfo* pp, void* func_addr, const std::vector<llvm::Value*>& args,
+                                  ExcInfo exc_info) = 0;
 };
 
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,

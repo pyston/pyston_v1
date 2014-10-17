@@ -204,15 +204,14 @@ public:
         // converted->getValue()->dump(); llvm::errs() << '\n';
         bool do_patchpoint = ENABLE_ICSETATTRS && !info.isInterpreted();
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp
-                = patchpoints::createSetattrPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+            ICSetupInfo* pp = createSetattrIC(info.getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(ptr);
             llvm_args.push_back(converted->getValue());
 
-            emitter.createPatchpoint(pp, (void*)pyston::setattr, llvm_args, info.exc_info);
+            emitter.createIC(pp, (void*)pyston::setattr, llvm_args, info.exc_info);
         } else {
             emitter.createCall3(info.exc_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
         }
@@ -227,14 +226,13 @@ public:
         bool do_patchpoint = false;
 
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp
-                = patchpoints::createDelattrPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+            ICSetupInfo* pp = createDelattrIC(info.getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(ptr);
 
-            emitter.createPatchpoint(pp, (void*)pyston::delattr, llvm_args, info.exc_info);
+            emitter.createIC(pp, (void*)pyston::delattr, llvm_args, info.exc_info);
         } else {
             emitter.createCall2(info.exc_info, g.funcs.delattr, var->getValue(), ptr);
         }
@@ -274,15 +272,14 @@ public:
         bool do_patchpoint = ENABLE_ICGENERICS && !info.isInterpreted();
         llvm::Value* rtn;
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp
-                = patchpoints::createGenericPatchpoint(emitter.currentFunction(), info.getTypeRecorder(), true, 256);
+            ICSetupInfo* pp = createGenericIC(info.getTypeRecorder(), true, 256);
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
 
-            rtn = emitter.createPatchpoint(pp, (void*)pyston::unboxedLen, llvm_args, info.exc_info).getInstruction();
+            rtn = emitter.createIC(pp, (void*)pyston::unboxedLen, llvm_args, info.exc_info);
         } else {
-            rtn = emitter.createCall(info.exc_info, g.funcs.unboxedLen, var->getValue()).getInstruction();
+            rtn = emitter.createCall(info.exc_info, g.funcs.unboxedLen, var->getValue());
         }
         assert(rtn->getType() == g.i64);
         return new ConcreteCompilerVariable(INT, rtn, true);
@@ -295,19 +292,16 @@ public:
         bool do_patchpoint = ENABLE_ICGETITEMS && !info.isInterpreted();
         llvm::Value* rtn;
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp
-                = patchpoints::createGetitemPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+            ICSetupInfo* pp = createGetitemIC(info.getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(converted_slice->getValue());
 
-            llvm::Value* uncasted
-                = emitter.createPatchpoint(pp, (void*)pyston::getitem, llvm_args, info.exc_info).getInstruction();
+            llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getitem, llvm_args, info.exc_info);
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
-            rtn = emitter.createCall2(info.exc_info, g.funcs.getitem, var->getValue(), converted_slice->getValue())
-                      .getInstruction();
+            rtn = emitter.createCall2(info.exc_info, g.funcs.getitem, var->getValue(), converted_slice->getValue());
         }
 
         converted_slice->decvref(emitter);
@@ -335,20 +329,18 @@ public:
         }
 
         if (do_patchpoint) {
-            PatchpointSetupInfo* pp
-                = patchpoints::createBinexpPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+            ICSetupInfo* pp = createBinexpIC(info.getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(converted_rhs->getValue());
             llvm_args.push_back(getConstantInt(op_type, g.i32));
 
-            llvm::Value* uncasted
-                = emitter.createPatchpoint(pp, rt_func_addr, llvm_args, info.exc_info).getInstruction();
+            llvm::Value* uncasted = emitter.createIC(pp, rt_func_addr, llvm_args, info.exc_info);
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
             rtn = emitter.createCall3(info.exc_info, rt_func, var->getValue(), converted_rhs->getValue(),
-                                      getConstantInt(op_type, g.i32)).getInstruction();
+                                      getConstantInt(op_type, g.i32));
         }
 
         converted_rhs->decvref(emitter);
@@ -383,17 +375,16 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 
     bool do_patchpoint = ENABLE_ICGETATTRS && !info.isInterpreted();
     if (do_patchpoint) {
-        PatchpointSetupInfo* pp
-            = patchpoints::createGetattrPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+        ICSetupInfo* pp = createGetattrIC(info.getTypeRecorder());
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createPatchpoint(pp, raw_func, llvm_args, info.exc_info).getInstruction();
+        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.exc_info);
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.createCall2(info.exc_info, llvm_func, var->getValue(), ptr).getInstruction();
+        rtn_val = emitter.createCall2(info.exc_info, llvm_func, var->getValue(), ptr);
     }
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
 }
@@ -483,10 +474,9 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
     if (do_patchpoint) {
         assert(func_addr);
 
-        PatchpointSetupInfo* pp
-            = patchpoints::createCallsitePatchpoint(emitter.currentFunction(), info.getTypeRecorder(), args.size());
+        ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size());
 
-        llvm::Value* uncasted = emitter.createPatchpoint(pp, func_addr, llvm_args, info.exc_info).getInstruction();
+        llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.exc_info);
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
@@ -500,7 +490,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
         // printf("\n");
-        rtn = emitter.createCall(info.exc_info, func, llvm_args).getInstruction();
+        rtn = emitter.createCall(info.exc_info, func, llvm_args);
     }
 
     if (mallocsave) {
@@ -580,17 +570,15 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
     bool do_patchpoint = ENABLE_ICNONZEROS && !info.isInterpreted();
     llvm::Value* rtn_val;
     if (do_patchpoint) {
-        PatchpointSetupInfo* pp
-            = patchpoints::createNonzeroPatchpoint(emitter.currentFunction(), info.getTypeRecorder());
+        ICSetupInfo* pp = createNonzeroIC(info.getTypeRecorder());
 
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
 
-        llvm::Value* uncasted
-            = emitter.createPatchpoint(pp, (void*)pyston::nonzero, llvm_args, info.exc_info).getInstruction();
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::nonzero, llvm_args, info.exc_info);
         rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
     } else {
-        rtn_val = emitter.createCall(info.exc_info, g.funcs.nonzero, var->getValue()).getInstruction();
+        rtn_val = emitter.createCall(info.exc_info, g.funcs.nonzero, var->getValue());
     }
     return boolFromI1(emitter, rtn_val);
 }
@@ -840,13 +828,13 @@ public:
         llvm::Value* v;
         /*if (op_type == AST_TYPE::Mod) {
             v = emitter.createCall2(info.exc_info, g.funcs.mod_i64_i64, var->getValue(), converted_right->getValue())
-                    .getInstruction();
+                    ;
         } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::FloorDiv) {
             v = emitter.createCall2(info.exc_info, g.funcs.div_i64_i64, var->getValue(), converted_right->getValue())
-                    .getInstruction();
+                    ;
         } else if (op_type == AST_TYPE::Pow) {
             v = emitter.createCall2(info.exc_info, g.funcs.pow_i64_i64, var->getValue(), converted_right->getValue())
-                    .getInstruction();
+                    ;
         } else if (exp_type == BinOp || exp_type == AugBinOp) {
             llvm::Instruction::BinaryOps binopcode;
             switch (op_type) {
@@ -1047,16 +1035,16 @@ public:
         bool succeeded = true;
         if (op_type == AST_TYPE::Mod) {
             v = emitter.createCall2(info.exc_info, g.funcs.mod_float_float, var->getValue(),
-                                    converted_right->getValue()).getInstruction();
+                                    converted_right->getValue());
         } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::TrueDiv) {
             v = emitter.createCall2(info.exc_info, g.funcs.div_float_float, var->getValue(),
-                                    converted_right->getValue()).getInstruction();
+                                    converted_right->getValue());
         } else if (op_type == AST_TYPE::FloorDiv) {
             v = emitter.createCall2(info.exc_info, g.funcs.floordiv_float_float, var->getValue(),
-                                    converted_right->getValue()).getInstruction();
+                                    converted_right->getValue());
         } else if (op_type == AST_TYPE::Pow) {
             v = emitter.createCall2(info.exc_info, g.funcs.pow_float_float, var->getValue(),
-                                    converted_right->getValue()).getInstruction();
+                                    converted_right->getValue());
         } else if (exp_type == BinOp || exp_type == AugBinOp) {
             llvm::Instruction::BinaryOps binopcode;
             switch (op_type) {
