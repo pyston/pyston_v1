@@ -31,18 +31,32 @@ struct StackMap;
 class TypeRecorder;
 class ICSetupInfo;
 
-static const int CALL_ONLY_SIZE = 13;
+static const int MAX_FRAME_SPILLS = 9; // TODO this shouldn't have to be larger than the set of non-callee-save args (9)
+                                       // except that will we currently spill the same reg multiple times
+static const int CALL_ONLY_SIZE
+    = 13 + (MAX_FRAME_SPILLS * 9)
+      + 1; // 13 for the call, 9 bytes per spill (7 for GP, 9 for XMM), + 1 if we want to nop/trap
 
 void processStackmap(CompiledFunction* cf, StackMap* stackmap);
 
 struct PatchpointInfo {
+public:
+    struct FrameVarInfo {
+        std::string name;
+        CompilerType* type;
+    };
+
 private:
     CompiledFunction* const parent_cf;
     const ICSetupInfo* icinfo;
     int num_ic_stackmap_args;
+    int num_frame_stackmap_args;
+
+    std::vector<FrameVarInfo> frame_vars;
 
     PatchpointInfo(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args)
-        : parent_cf(parent_cf), icinfo(icinfo), num_ic_stackmap_args(num_ic_stackmap_args) {}
+        : parent_cf(parent_cf), icinfo(icinfo), num_ic_stackmap_args(num_ic_stackmap_args),
+          num_frame_stackmap_args(-1) {}
 
 public:
     const ICSetupInfo* getICInfo() { return icinfo; }
@@ -50,13 +64,29 @@ public:
     int patchpointSize();
     CompiledFunction* parentFunction() { return parent_cf; }
 
+    const std::vector<FrameVarInfo>& getFrameVars() { return frame_vars; }
+
     int scratchStackmapArg() { return 0; }
-    int scratchSize() { return 80; }
+    int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
+
+    void addFrameVar(const std::string& name, CompilerType* type);
+    void setNumFrameArgs(int num_frame_args) {
+        assert(num_frame_stackmap_args == -1);
+        num_frame_stackmap_args = num_frame_args;
+    }
 
     int icStackmapArgsStart() { return 1; }
     int numICStackmapArgs() { return num_ic_stackmap_args; }
 
-    int totalStackmapArgs() { return icStackmapArgsStart() + numICStackmapArgs(); }
+    int frameStackmapArgsStart() { return icStackmapArgsStart() + numICStackmapArgs(); }
+    int numFrameStackmapArgs() {
+        assert(num_frame_stackmap_args >= 0);
+        return num_frame_stackmap_args;
+    }
+
+    void parseLocationMap(StackMap::Record* r, LocationMap* map);
+
+    int totalStackmapArgs() { return frameStackmapArgsStart() + numFrameStackmapArgs(); }
 
     static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args);
 };

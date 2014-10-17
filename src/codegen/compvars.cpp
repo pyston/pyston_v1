@@ -34,6 +34,16 @@
 
 namespace pyston {
 
+void ConcreteCompilerType::serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) {
+#ifndef NDEBUG
+    if (llvmType() == g.i1) {
+        var->getValue()->dump();
+        ASSERT(llvmType() != g.i1, "due to an llvm limitation cannot add these to stackmaps yet");
+    }
+#endif
+    stackmap_args.push_back(var->getValue());
+}
+
 std::string ValuedCompilerType<llvm::Value*>::debugName() {
     std::string rtn;
     llvm::raw_string_ostream os(rtn);
@@ -150,6 +160,18 @@ public:
         }
         return rtn;
     }
+
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override {
+        var->getValue()->obj->serializeToFrame(stackmap_args);
+        var->getValue()->func->serializeToFrame(stackmap_args);
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == numFrameArgs());
+        abort();
+    }
+
+    int numFrameArgs() override { return obj_type->numFrameArgs() + function_type->numFrameArgs(); }
 };
 std::unordered_map<std::pair<CompilerType*, CompilerType*>, InstanceMethodType*> InstanceMethodType::made;
 
@@ -352,6 +374,11 @@ public:
         }
 
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+        return reinterpret_cast<Box*>(vals[0]);
     }
 };
 
@@ -702,6 +729,13 @@ public:
     }
 
     static CompilerType* get(const std::vector<Sig*>& sigs) { return new AbstractFunctionType(sigs); }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == numFrameArgs());
+        abort();
+    }
+
+    int numFrameArgs() override { abort(); }
 };
 
 class IntType : public ConcreteCompilerType {
@@ -908,6 +942,12 @@ public:
     }
 
     virtual ConcreteCompilerType* getBoxType() { return BOXED_INT; }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+
+        return boxInt(vals[0]);
+    }
 } _INT;
 ConcreteCompilerType* INT = &_INT;
 
@@ -1122,6 +1162,13 @@ public:
     }
 
     virtual ConcreteCompilerType* getBoxType() { return BOXED_FLOAT; }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+
+        double d = *reinterpret_cast<const double*>(&vals[0]);
+        return boxFloat(d);
+    }
 } _FLOAT;
 ConcreteCompilerType* FLOAT = &_FLOAT;
 
@@ -1171,6 +1218,15 @@ public:
         assert(is_well_defined);
         return typeFromClass(cls);
     }
+
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override { abort(); }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == numFrameArgs());
+        abort();
+    }
+
+    int numFrameArgs() override { return 0; }
 };
 std::unordered_map<BoxedClass*, KnownClassobjType*> KnownClassobjType::made;
 
@@ -1490,6 +1546,11 @@ public:
     virtual BoxedClass* guaranteedClass() { return cls; }
 
     virtual ConcreteCompilerType* getBoxType() { return this; }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+        return reinterpret_cast<Box*>(vals[0]);
+    }
 };
 std::unordered_map<BoxedClass*, NormalObjectType*> NormalObjectType::made;
 ConcreteCompilerType* STR, *BOXED_INT, *BOXED_FLOAT, *BOXED_BOOL, *NONE;
@@ -1513,12 +1574,15 @@ public:
     }
 
     virtual ConcreteCompilerType* getConcreteType() { return this; }
-    // Shouldn't call this:
-    virtual ConcreteCompilerType* getBoxType() { RELEASE_ASSERT(0, ""); }
+    virtual ConcreteCompilerType* getBoxType() { return this; }
 
     void drop(IREmitter& emitter, VAR* var) override {}
     void grab(IREmitter& emitter, VAR* var) override {}
 
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+        abort();
+    }
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;
 
@@ -1535,6 +1599,11 @@ public:
     }
     virtual void grab(IREmitter& emitter, VAR* var) {
         // pass
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == numFrameArgs());
+        abort();
     }
 } _GENERATOR;
 ConcreteCompilerType* GENERATOR = &_GENERATOR;
@@ -1612,6 +1681,18 @@ public:
         }
         return rtn;
     }
+
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override {
+        stackmap_args.push_back(embedConstantPtr(var->getValue(), g.i8_ptr));
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == numFrameArgs());
+
+        return boxStringPtr(reinterpret_cast<std::string*>(vals[0]));
+    }
+
+    int numFrameArgs() override { return 1; }
 };
 static ValuedCompilerType<const std::string*>* STR_CONSTANT = new StrConstantType();
 
@@ -1622,6 +1703,8 @@ CompilerVariable* makeStr(const std::string* s) {
 class VoidType : public ConcreteCompilerType {
 public:
     llvm::Type* llvmType() { return g.void_; }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override { abort(); }
 };
 ConcreteCompilerType* VOID = new VoidType();
 
@@ -1630,17 +1713,14 @@ ConcreteCompilerType* typeFromClass(BoxedClass* c) {
     return NormalObjectType::fromClass(c);
 }
 
-// Due to a temporary LLVM limitation, can represent bools as i64's instead of i1's.
-// #define BOOLS_AS_I64
 class BoolType : public ConcreteCompilerType {
 public:
     std::string debugName() { return "bool"; }
     llvm::Type* llvmType() {
-#ifdef BOOLS_AS_I64
-        return g.i64;
-#else
-        return g.i1;
-#endif
+        if (BOOLS_AS_I64)
+            return g.i64;
+        else
+            return g.i1;
     }
 
     virtual bool isFitBy(BoxedClass* c) { return false; }
@@ -1704,6 +1784,13 @@ public:
     }
 
     virtual ConcreteCompilerType* getBoxType() { return BOXED_BOOL; }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+        assert(llvmType() == g.i64);
+        bool b = (bool)vals[0];
+        return boxBool(b);
+    }
 };
 ConcreteCompilerType* BOOL = new BoolType();
 ConcreteCompilerVariable* makeBool(bool b) {
@@ -1858,6 +1945,38 @@ public:
         return makeConverted(emitter, var, getConcreteType())
             ->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
     }
+
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override {
+        for (auto v : *var->getValue()) {
+            v->serializeToFrame(stackmap_args);
+        }
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == numFrameArgs());
+
+        BoxedTuple::GCVector elts;
+        int cur_idx = 0;
+        for (auto e : elt_types) {
+            int num_args = e->numFrameArgs();
+            // TODO: inefficient to make these copies
+            FrameVals sub_vals(vals.begin() + cur_idx, vals.begin() + cur_idx + num_args);
+
+            elts.push_back(e->deserializeFromFrame(sub_vals));
+
+            cur_idx += num_args;
+        }
+        assert(cur_idx == vals.size());
+
+        return new BoxedTuple(std::move(elts));
+    }
+
+    int numFrameArgs() override {
+        int rtn = 0;
+        for (auto e : elt_types)
+            rtn += e->numFrameArgs();
+        return rtn;
+    }
 };
 
 CompilerType* makeTupleType(const std::vector<CompilerType*>& elt_types) {
@@ -1941,6 +2060,11 @@ public:
     virtual bool canConvertTo(ConcreteCompilerType* other_type) { return true; }
 
     virtual BoxedClass* guaranteedClass() { return NULL; }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(vals.size() == 1);
+        abort();
+    }
 } _UNDEF;
 CompilerType* UNDEF = &_UNDEF;
 
@@ -1949,25 +2073,25 @@ ConcreteCompilerVariable* undefVariable() {
 }
 
 ConcreteCompilerVariable* boolFromI1(IREmitter& emitter, llvm::Value* v) {
-#ifdef BOOLS_AS_I64
-    assert(v->getType() == g.i1);
-    assert(BOOL->llvmType() == g.i64);
-    llvm::Value* v2 = emitter.getBuilder()->CreateZExt(v, BOOL->llvmType());
-    return new ConcreteCompilerVariable(BOOL, v2, true);
-#else
-    return new ConcreteCompilerVariable(BOOL, v, true);
-#endif
+    if (BOOLS_AS_I64) {
+        assert(v->getType() == g.i1);
+        assert(BOOL->llvmType() == g.i64);
+        llvm::Value* v2 = emitter.getBuilder()->CreateZExt(v, BOOL->llvmType());
+        return new ConcreteCompilerVariable(BOOL, v2, true);
+    } else {
+        return new ConcreteCompilerVariable(BOOL, v, true);
+    }
 }
 
 llvm::Value* i1FromBool(IREmitter& emitter, ConcreteCompilerVariable* v) {
-#ifdef BOOLS_AS_I64
-    assert(v->getType() == BOOL);
-    assert(BOOL->llvmType() == g.i64);
-    llvm::Value* v2 = emitter.getBuilder()->CreateTrunc(v->getValue(), g.i1);
-    return v2;
-#else
-    return v->getValue();
-#endif
+    if (BOOLS_AS_I64) {
+        assert(v->getType() == BOOL);
+        assert(BOOL->llvmType() == g.i64);
+        llvm::Value* v2 = emitter.getBuilder()->CreateTrunc(v->getValue(), g.i1);
+        return v2;
+    } else {
+        return v->getValue();
+    }
 }
 
 

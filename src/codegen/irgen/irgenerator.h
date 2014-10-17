@@ -34,6 +34,7 @@ namespace pyston {
 
 class CFGBlock;
 class GCBuilder;
+class PatchpointInfo;
 class ScopeInfo;
 class TypeAnalysis;
 
@@ -196,6 +197,7 @@ public:
     virtual void run(const CFGBlock* block) = 0;
     virtual EndingState getEndingSymbolTable() = 0;
     virtual void doSafePoint() = 0;
+    virtual void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) = 0;
 };
 
 class IREmitter;

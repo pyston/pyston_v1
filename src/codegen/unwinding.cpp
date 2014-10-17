@@ -27,6 +27,8 @@
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/llvm_interpreter.h"
+#include "codegen/stackmaps.h"
+#include "runtime/types.h"
 
 
 #define UNW_LOCAL_ONLY
@@ -333,7 +335,7 @@ public:
                 return *this;
             }
 
-            const PythonFrameIterator& operator*() const {
+            PythonFrameIterator& operator*() const {
                 assert(it.get());
                 return *it.get();
             }
@@ -395,6 +397,71 @@ CompiledFunction* getTopCompiledFunction() {
 
 BoxedModule* getCurrentModule() {
     return getTopCompiledFunction()->clfunc->source->parent_module;
+}
+
+BoxedDict* getLocals(bool only_user_visible) {
+    BoxedDict* d = new BoxedDict();
+
+    for (PythonFrameIterator& frame_info : unwindPythonFrames()) {
+        if (frame_info.getId().type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = frame_info.getCF();
+            uint64_t ip = frame_info.getId().ip;
+
+            assert(ip > cf->code_start);
+            unsigned offset = ip - cf->code_start;
+
+            assert(cf->location_map);
+            for (const auto& p : cf->location_map->names) {
+                if (only_user_visible && (p.first[0] == '#' || p.first[0] == '!'))
+                    continue;
+
+                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
+                    if (e.offset < offset && offset <= e.offset + e.length) {
+                        const auto& locs = e.locations;
+
+                        llvm::SmallVector<uint64_t, 1> vals;
+                        // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
+
+                        for (auto& loc : locs) {
+                            uint64_t n;
+                            // printf("%d %d %d %d\n", loc.type, loc.flags, loc.regnum, loc.offset);
+                            if (loc.type == StackMap::Record::Location::LocationType::Register) {
+                                // TODO: need to make sure we deal with patchpoints appropriately
+                                n = frame_info.getReg(loc.regnum);
+                            } else if (loc.type == StackMap::Record::Location::LocationType::Indirect) {
+                                uint64_t reg_val = frame_info.getReg(loc.regnum);
+                                uint64_t addr = reg_val + loc.offset;
+                                n = *reinterpret_cast<uint64_t*>(addr);
+                            } else if (loc.type == StackMap::Record::Location::LocationType::Constant) {
+                                n = loc.offset;
+                            } else if (loc.type == StackMap::Record::Location::LocationType::ConstIndex) {
+                                int const_idx = loc.offset;
+                                assert(const_idx >= 0);
+                                assert(const_idx < cf->location_map->constants.size());
+                                n = cf->location_map->constants[const_idx];
+                            } else {
+                                printf("%d %d %d %d\n", loc.type, loc.flags, loc.regnum, loc.offset);
+                                abort();
+                            }
+
+                            vals.push_back(n);
+                        }
+
+                        Box* v = e.type->deserializeFromFrame(vals);
+                        // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
+                        assert(gc::isValidGCObject(v));
+                        d->d[boxString(p.first)] = v;
+                    }
+                }
+            }
+        } else if (frame_info.getId().type == PythonFrameId::INTERPRETED) {
+            return localsForInterpretedFrame((void*)frame_info.getId().bp, only_user_visible);
+        } else {
+            abort();
+        }
+    }
+
+    return d;
 }
 
 

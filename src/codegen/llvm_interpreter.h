@@ -22,6 +22,7 @@ class Function;
 namespace pyston {
 
 class Box;
+class BoxedDict;
 class GCVisitor;
 class LineInfo;
 
@@ -30,6 +31,7 @@ Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generato
 
 void gatherInterpreterRoots(GCVisitor* visitor);
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
+BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
 }
 
 #endif

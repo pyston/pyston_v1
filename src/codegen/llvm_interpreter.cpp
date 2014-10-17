@@ -25,6 +25,7 @@
 #include "llvm/IR/Module.h"
 
 #include "codegen/codegen.h"
+#include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/util.h"
 #include "codegen/patchpoints.h"
@@ -32,6 +33,7 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
+#include "runtime/types.h"
 
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
@@ -228,6 +230,60 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
                                     }
                                 }),
                                 visitor);
+}
+
+BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
+    llvm::Instruction* inst = cur_instruction_map[frame_ptr];
+    assert(inst);
+
+    const SymMap* syms = root_stack_set.get()->back();
+    assert(syms);
+
+    ASSERT(llvm::isa<llvm::CallInst>(inst) || llvm::isa<llvm::InvokeInst>(inst),
+           "trying to unwind from not within a patchpoint!");
+
+    llvm::CallSite CS(inst);
+    llvm::Function* f = CS.getCalledFunction();
+    assert(startswith(f->getName(), "llvm.experimental.patchpoint."));
+
+    llvm::Value* pp_arg = CS.getArgument(0);
+    int64_t pp_id = llvm::cast<llvm::ConstantInt>(pp_arg)->getSExtValue();
+    PatchpointInfo* pp = reinterpret_cast<PatchpointInfo*>(pp_id);
+
+    llvm::DataLayout dl(inst->getParent()->getParent()->getParent());
+
+    BoxedDict* rtn = new BoxedDict();
+
+    int stackmap_args_start = 4 + llvm::cast<llvm::ConstantInt>(CS.getArgument(3))->getZExtValue();
+    assert(CS.arg_size() == stackmap_args_start + pp->totalStackmapArgs());
+
+    // TODO: too much duplication here with other code
+
+    int cur_arg = pp->frameStackmapArgsStart();
+    for (const PatchpointInfo::FrameVarInfo& frame_var : pp->getFrameVars()) {
+        int num_args = frame_var.type->numFrameArgs();
+
+        if (only_user_visible && (frame_var.name[0] == '!' || frame_var.name[0] == '#')) {
+            cur_arg += num_args;
+            continue;
+        }
+
+        llvm::SmallVector<uint64_t, 1> vals;
+
+        for (int i = cur_arg, e = cur_arg + num_args; i < e; i++) {
+            Val r = fetch(CS.getArgument(stackmap_args_start + i), dl, *syms);
+            vals.push_back(r.n);
+        }
+
+        Box* b = frame_var.type->deserializeFromFrame(vals);
+        ASSERT(gc::isValidGCObject(b), "%p", b);
+        rtn->d[boxString(frame_var.name)] = b;
+
+        cur_arg += num_args;
+    }
+    assert(cur_arg - pp->frameStackmapArgsStart() == pp->numFrameStackmapArgs());
+
+    return rtn;
 }
 
 class UnregisterHelper {

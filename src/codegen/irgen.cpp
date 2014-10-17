@@ -650,7 +650,37 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 // Assert that the phi_st is empty, and just create the symbol table from the non-phi st:
                 ASSERT(phi_ending_symbol_tables[pred]->size() == 0, "%d %d", block->idx, pred->idx);
                 assert(ending_symbol_tables.count(pred));
-                generator->copySymbolsFrom(ending_symbol_tables[pred]);
+
+                // Filter out any names set by an invoke statement at the end
+                // of the previous block, if we're in the unwind path.
+                // This definitely doesn't seem like the most elegant way to do this,
+                // but the rest of the analysis frameworks can't (yet) support the idea of
+                // a block flowing differently to its different predecessors.
+                auto pred = block->predecessors[0];
+                auto last_inst = pred->body.back();
+
+                SymbolTable* sym_table = ending_symbol_tables[pred];
+                bool created_new_sym_table = false;
+                if (last_inst->type == AST_TYPE::Invoke) {
+                    auto invoke = ast_cast<AST_Invoke>(last_inst);
+                    if (invoke->exc_dest == block && invoke->stmt->type == AST_TYPE::Assign) {
+                        auto asgn = ast_cast<AST_Assign>(invoke->stmt);
+                        assert(asgn->targets.size() == 1);
+                        if (asgn->targets[0]->type == AST_TYPE::Name) {
+                            auto name = ast_cast<AST_Name>(asgn->targets[0]);
+
+                            // TODO: inneficient
+                            sym_table = new SymbolTable(*sym_table);
+                            assert(sym_table->count(name->id));
+                            sym_table->erase(name->id);
+                            created_new_sym_table = true;
+                        }
+                    }
+                }
+
+                generator->copySymbolsFrom(sym_table);
+                if (created_new_sym_table)
+                    delete sym_table;
             } else {
                 // With multiple predecessors, the symbol tables at the end of each predecessor should be *exactly* the
                 // same.

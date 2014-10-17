@@ -20,6 +20,7 @@
 
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
+#include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
@@ -573,6 +574,10 @@ Box* globals() {
     return makeAttrWrapper(m);
 }
 
+Box* locals() {
+    return getLocals(true /* filter */);
+}
+
 Box* divmod(Box* lhs, Box* rhs) {
     return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
 }
@@ -788,6 +793,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
+    builtins_module->giveAttr("locals", new BoxedFunction(boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false)));
 
     builtins_module->giveAttr("iter", new BoxedFunction(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
 

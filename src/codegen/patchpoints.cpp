@@ -28,11 +28,15 @@
 
 namespace pyston {
 
+void PatchpointInfo::addFrameVar(const std::string& name, CompilerType* type) {
+    frame_vars.push_back(FrameVarInfo({ .name = name, .type = type }));
+}
+
 int ICSetupInfo::totalSize() const {
     int call_size = CALL_ONLY_SIZE;
     if (getCallingConvention() != llvm::CallingConv::C) {
         // 14 bytes per reg that needs to be spilled
-        call_size += 14 * 6;
+        call_size += 14 * 4;
     }
     return num_slots * slot_size + call_size;
 }
@@ -57,6 +61,33 @@ int PatchpointInfo::patchpointSize() {
     }
 
     return CALL_ONLY_SIZE;
+}
+
+void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
+    assert(r->locations.size() == totalStackmapArgs());
+
+    int cur_arg = frameStackmapArgsStart();
+
+    // printf("parsing pp %ld:\n", reinterpret_cast<int64_t>(this));
+
+    for (FrameVarInfo& frame_var : frame_vars) {
+        int num_args = frame_var.type->numFrameArgs();
+
+        llvm::SmallVector<StackMap::Record::Location, 1> locations;
+        locations.append(&r->locations[cur_arg], &r->locations[cur_arg + num_args]);
+
+        // printf("%s %d %d\n", frame_var.name.c_str(), r->locations[cur_arg].type, r->locations[cur_arg].regnum);
+
+        map->names[frame_var.name].locations.push_back(
+            LocationMap::LocationTable::LocationEntry({ ._debug_pp_id = (uint64_t) this,
+                                                        .offset = r->offset,
+                                                        .length = patchpointSize(),
+                                                        .type = frame_var.type,
+                                                        .locations = std::move(locations) }));
+
+        cur_arg += num_args;
+    }
+    assert(cur_arg - frameStackmapArgsStart() == numFrameStackmapArgs());
 }
 
 static int extractScratchOffset(PatchpointInfo* pp, StackMap::Record* r) {
@@ -95,7 +126,21 @@ static std::unordered_set<int> extractLiveOuts(StackMap::Record* r, llvm::Callin
 }
 
 void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
+    // FIXME: this is pretty hacky, that we don't delete the patchpoints here.
+    // We need them currently for the llvm interpreter.
+    // Eventually we'll get rid of that and use an AST interpreter, and then we won't need this hack.
+    if (cf->effort == EffortLevel::INTERPRETED) {
+        assert(!stackmap);
+        new_patchpoints.clear();
+        return;
+    }
+
     int nrecords = stackmap ? stackmap->records.size() : 0;
+
+    assert(cf->location_map == NULL);
+    cf->location_map = new LocationMap();
+    if (stackmap)
+        cf->location_map->constants = stackmap->constants;
 
     for (int i = 0; i < nrecords; i++) {
         StackMap::Record* r = stackmap->records[i];
@@ -126,12 +171,36 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         //*start_addr = 0xcc;
         // start_addr++;
 
+        int nspills = 0;
+        SpillMap frame_remapped;
+        // TODO: if we pass the same llvm::Value as the stackmap args, we will get the same reg.
+        // we shouldn't then spill that multiple times.
+        // we could either deal with it here, or not put the same Value into the patchpoint
+        for (int j = pp->frameStackmapArgsStart(), e = j + pp->numFrameStackmapArgs(); j < e; j++) {
+            StackMap::Record::Location& l = r->locations[j];
+
+            // updates l, start_addr, scratch_rbp_offset, scratch_size:
+            bool spilled = spillFrameArgumentIfNecessary(l, start_addr, end_addr, scratch_rbp_offset, scratch_size,
+                                                         frame_remapped);
+            if (spilled)
+                nspills++;
+        }
+        ASSERT(nspills <= MAX_FRAME_SPILLS, "did %d spills but expected only %d!", nspills, MAX_FRAME_SPILLS);
+
+        assert(scratch_size % sizeof(void*) == 0);
+        assert(scratch_rbp_offset % sizeof(void*) == 0);
+
+        // TODO: is something like this necessary?
+        // llvm::sys::Memory::InvalidateInstructionCache(start, getSlotSize());
+
+        pp->parseLocationMap(r, cf->location_map);
+
         const ICSetupInfo* ic = pp->getICInfo();
         if (ic == NULL) {
             // We have to be using the C calling convention here, so we don't need to check the live outs
             // or save them across the call.
             initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size,
-                                  std::unordered_set<int>());
+                                  std::unordered_set<int>(), frame_remapped);
             continue;
         }
 
@@ -151,8 +220,8 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
 
 
 
-        auto _p
-            = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size, live_outs);
+        auto _p = initializePatchpoint3(slowpath_func, start_addr, end_addr, scratch_rbp_offset, scratch_size,
+                                        live_outs, frame_remapped);
         uint8_t* slowpath_start = _p.first;
         uint8_t* slowpath_rtn_addr = _p.second;
 

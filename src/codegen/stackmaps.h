@@ -16,13 +16,18 @@
 #define PYSTON_CODEGEN_STACKMAPS_H
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
+
+#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
 class JITEventListener;
 }
 
 namespace pyston {
+
+class CompilerType;
 
 struct StackMap {
     struct __attribute__((__packed__)) StackSizeRecord {
@@ -62,6 +67,25 @@ struct StackMap {
     uint32_t header;
     std::vector<uint64_t> constants;
     std::vector<Record*> records;
+};
+
+// TODO this belongs somewhere else?
+class LocationMap {
+public:
+    std::vector<uint64_t> constants;
+    struct LocationTable {
+        struct LocationEntry {
+            uint64_t _debug_pp_id;
+
+            unsigned offset;
+            int length;
+            CompilerType* type;
+            llvm::SmallVector<StackMap::Record::Location, 1> locations;
+        };
+        std::vector<LocationEntry> locations;
+    };
+
+    std::unordered_map<std::string, LocationTable> names;
 };
 
 StackMap* parseStackMap();

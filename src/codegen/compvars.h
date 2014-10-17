@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <vector>
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 
@@ -31,6 +32,8 @@ class OpInfo;
 class CompilerType;
 class IREmitter;
 
+typedef llvm::SmallVector<uint64_t, 1> FrameVals;
+
 class CompilerType {
 public:
     virtual ~CompilerType() {}
@@ -42,6 +45,8 @@ public:
     virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
                                    const std::vector<const std::string*>* keyword_names) = 0;
     virtual BoxedClass* guaranteedClass() = 0;
+    virtual Box* deserializeFromFrame(const FrameVals& vals) = 0;
+    virtual int numFrameArgs() = 0;
 };
 
 typedef std::unordered_map<CompilerVariable*, CompilerVariable*> DupCache;
@@ -152,6 +157,7 @@ public:
         ASSERT((CompilerType*)getConcreteType() != this, "%s", debugName().c_str());
         return getConcreteType()->guaranteedClass();
     }
+    virtual void serializeToFrame(VAR* v, std::vector<llvm::Value*>& stackmap_args) = 0;
 };
 
 template <class V> class ValuedCompilerType : public _ValuedCompilerType<V> { public: };
@@ -180,6 +186,8 @@ public:
     virtual bool canConvertTo(ConcreteCompilerType* other_type) { return other_type == this || other_type == UNKNOWN; }
     virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                                     ConcreteCompilerType* other_type);
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override final;
+    int numFrameArgs() override final { return 1; }
 };
 
 class CompilerVariable {
@@ -254,6 +262,8 @@ public:
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
     virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs,
                                      AST_TYPE::AST_TYPE op_type, BinExpType exp_type) = 0;
+
+    virtual void serializeToFrame(std::vector<llvm::Value*>& stackmap_args) = 0;
 };
 
 template <class V> class ValuedCompilerVariable : public CompilerVariable {
@@ -343,6 +353,10 @@ public:
     }
 
     BoxedClass* guaranteedClass() override { return type->guaranteedClass(); }
+
+    void serializeToFrame(std::vector<llvm::Value*>& stackmap_args) override {
+        type->serializeToFrame(this, stackmap_args);
+    }
 };
 
 // template <>

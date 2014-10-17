@@ -1111,6 +1111,72 @@ int RewriterVar::nvars = 0;
 
 static const int INITIAL_CALL_SIZE = 13;
 static const int DWARF_RBP_REGNUM = 6;
+bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst_addr, uint8_t* inst_end,
+                                   int& scratch_offset, int& scratch_size, SpillMap& remapped) {
+    switch (l.type) {
+        case StackMap::Record::Location::LocationType::Direct:
+        case StackMap::Record::Location::LocationType::Indirect:
+        case StackMap::Record::Location::LocationType::Constant:
+        case StackMap::Record::Location::LocationType::ConstIndex:
+            return false;
+        case StackMap::Record::Location::LocationType::Register: {
+            assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(l.regnum);
+
+            if (!Location(ru).isClobberedByCall())
+                return false;
+
+            auto it = remapped.find(ru);
+            if (it != remapped.end()) {
+                if (VERBOSITY()) {
+                    printf("Already spilled ");
+                    ru.dump();
+                }
+                l = it->second;
+                return false;
+            }
+
+            if (VERBOSITY()) {
+                printf("Spilling reg ");
+                ru.dump();
+            }
+
+            assembler::Assembler assembler(inst_addr, inst_end - inst_addr);
+
+            int bytes_pushed;
+            if (ru.type == assembler::GenericRegister::GP) {
+                auto dest = assembler::Indirect(assembler::RBP, scratch_offset);
+                assembler.mov(ru.gp, dest);
+                bytes_pushed = 8;
+            } else if (ru.type == assembler::GenericRegister::XMM) {
+                auto dest = assembler::Indirect(assembler::RBP, scratch_offset);
+                assembler.movsd(ru.xmm, dest);
+                bytes_pushed = 8;
+            } else {
+                abort();
+            }
+
+            assert(scratch_size >= bytes_pushed);
+            assert(!assembler.hasFailed());
+
+            uint8_t* cur_addr = assembler.curInstPointer();
+            inst_addr = cur_addr;
+
+            l.type = StackMap::Record::Location::LocationType::Indirect;
+            l.regnum = DWARF_RBP_REGNUM;
+            l.offset = scratch_offset;
+
+            scratch_offset += bytes_pushed;
+            scratch_size -= bytes_pushed;
+
+            remapped[ru] = l;
+
+            return true;
+        }
+        default:
+            abort();
+    }
+}
+
 void* extractSlowpathFunc(uint8_t* pp_addr) {
 #ifndef NDEBUG
     // mov $imm, %r11:
@@ -1135,12 +1201,13 @@ void* extractSlowpathFunc(uint8_t* pp_addr) {
 
 std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
                                                     int scratch_offset, int scratch_size,
-                                                    const std::unordered_set<int>& live_outs) {
+                                                    const std::unordered_set<int>& live_outs, SpillMap& remapped) {
     assert(start_addr < end_addr);
 
     int est_slowpath_size = INITIAL_CALL_SIZE;
 
     std::vector<assembler::GenericRegister> regs_to_spill;
+    std::vector<assembler::Register> regs_to_reload;
 
     for (int dwarf_regnum : live_outs) {
         assembler::GenericRegister ru = assembler::GenericRegister::fromDwarf(dwarf_regnum);
@@ -1153,6 +1220,14 @@ std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t
         }
 
         // Location(ru).dump();
+
+        if (ru.type == assembler::GenericRegister::GP && remapped.count(ru)) {
+            // printf("already spilled!\n");
+
+            regs_to_reload.push_back(ru.gp);
+            est_slowpath_size += 7; // 7 bytes for a single mov
+            continue;
+        }
 
         regs_to_spill.push_back(ru);
 
@@ -1182,6 +1257,14 @@ std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t
     assem.emitBatchPush(scratch_offset, scratch_size, regs_to_spill);
     uint8_t* rtn = assem.emitCall(slowpath_func, assembler::R11);
     assem.emitBatchPop(scratch_offset, scratch_size, regs_to_spill);
+
+    for (assembler::Register r : regs_to_reload) {
+        StackMap::Record::Location& l = remapped[r];
+        assert(l.type == StackMap::Record::Location::LocationType::Indirect);
+        assert(l.regnum == DWARF_RBP_REGNUM);
+
+        assem.mov(assembler::Indirect(assembler::RBP, l.offset), r);
+    }
 
     assem.fillWithNops();
     assert(!assem.hasFailed());

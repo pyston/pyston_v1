@@ -15,6 +15,7 @@
 #ifndef PYSTON_ASMWRITING_REWRITER_H
 #define PYSTON_ASMWRITING_REWRITER_H
 
+#include <map>
 #include <memory>
 
 #include "asm_writing/assembler.h"
@@ -315,10 +316,28 @@ public:
 
 void* extractSlowpathFunc(uint8_t* pp_addr);
 
+struct GRCompare {
+    bool operator()(assembler::GenericRegister gr1, assembler::GenericRegister gr2) const {
+        if (gr1.type != gr2.type)
+            return gr1.type < gr2.type;
+
+        if (gr1.type == assembler::GenericRegister::GP)
+            return gr1.gp.regnum < gr2.gp.regnum;
+        if (gr1.type == assembler::GenericRegister::XMM)
+            return gr1.xmm.regnum < gr2.xmm.regnum;
+        abort();
+    }
+};
+typedef std::map<assembler::GenericRegister, StackMap::Record::Location, GRCompare> SpillMap;
+// Spills the stackmap argument and guarantees that it will be readable by the unwinder.
+// Updates the arguments if it did any spilling, and returns whether spilling happened.
+bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst_addr, uint8_t* inst_end,
+                                   int& scratch_offset, int& scratch_size, SpillMap& remapped);
+
 // returns (start_of_slowpath, return_addr_of_slowpath_call)
 std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
                                                     int scratch_offset, int scratch_size,
-                                                    const std::unordered_set<int>& live_outs);
+                                                    const std::unordered_set<int>& live_outs, SpillMap& remapped);
 }
 
 #endif

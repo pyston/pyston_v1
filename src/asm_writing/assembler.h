@@ -18,6 +18,7 @@
 #include <unordered_set>
 
 #include "asm_writing/types.h"
+#include "codegen/stackmaps.h"
 #include "core/ast.h"
 
 namespace pyston {

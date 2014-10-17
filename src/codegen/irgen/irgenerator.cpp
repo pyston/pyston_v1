@@ -142,6 +142,8 @@ private:
 
         pp_args.insert(pp_args.end(), ic_stackmap_args.begin(), ic_stackmap_args.end());
 
+        irgenerator->addFrameStackmapArgs(info, pp_args);
+
         llvm::Intrinsic::ID intrinsic_id;
         if (return_type->isIntegerTy() || return_type->isPointerTy()) {
             intrinsic_id = llvm::Intrinsic::experimental_patchpoint_i64;
@@ -181,8 +183,27 @@ public:
     CompiledFunction* currentFunction() override { return irstate->getCurFunction(); }
 
     llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
-        llvm::CallSite cs = this->emitCall(exc_info, callee, args);
-        return cs.getInstruction();
+        if (ENABLE_FRAME_INTROSPECTION) {
+            llvm::Type* rtn_type = llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(callee->getType())
+                                                                      ->getElementType())->getReturnType();
+
+            llvm::Value* bitcasted = getBuilder()->CreateBitCast(callee, g.i8->getPointerTo());
+            llvm::CallSite cs = emitPatchpoint(rtn_type, NULL, bitcasted, args, {}, exc_info);
+
+            if (rtn_type == cs->getType()) {
+                return cs.getInstruction();
+            } else if (rtn_type == g.i1) {
+                return getBuilder()->CreateTrunc(cs.getInstruction(), rtn_type);
+            } else if (llvm::isa<llvm::PointerType>(rtn_type)) {
+                return getBuilder()->CreateIntToPtr(cs.getInstruction(), rtn_type);
+            } else {
+                cs.getInstruction()->getType()->dump();
+                rtn_type->dump();
+                RELEASE_ASSERT(0, "don't know how to convert those");
+            }
+        } else {
+            return emitCall(exc_info, callee, args).getInstruction();
+        }
     }
 
     llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) override {
@@ -2215,6 +2236,23 @@ private:
     }
 
 public:
+    void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) {
+        int initial_args = stackmap_args.size();
+        if (ENABLE_FRAME_INTROSPECTION) {
+            // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
+            // nice for debugging though.
+            SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
+
+            for (const auto& p : sorted_symbol_table) {
+                CompilerVariable* v = p.second;
+
+                v->serializeToFrame(stackmap_args);
+                pp->addFrameVar(p.first, v->getType());
+            }
+        }
+        pp->setNumFrameArgs(stackmap_args.size() - initial_args);
+    }
+
     EndingState getEndingSymbolTable() override {
         assert(state == FINISHED || state == DEAD);
 
