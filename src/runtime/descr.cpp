@@ -23,10 +23,23 @@ static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
     Py_FatalError("unimplemented");
 }
 
+static Box* propertyNew(Box* cls, Box* fget, Box* fset, Box** args) {
+    RELEASE_ASSERT(cls == property_cls, "");
+    Box* fdel = args[0];
+    Box* doc = args[1];
+
+    return new BoxedProperty(fget, fset, fdel, doc);
+}
+
 void setupDescr() {
     member_cls->giveAttr("__name__", boxStrConstant("member"));
     member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_cls->freeze();
+
+    property_cls->giveAttr("__name__", boxStrConstant("property"));
+    property_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)propertyNew, UNKNOWN, 5, 4, false, false),
+                                                        { None, None, None, None }));
+    property_cls->freeze();
 }
 
 void teardownDescr() {

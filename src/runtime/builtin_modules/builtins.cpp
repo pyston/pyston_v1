@@ -826,5 +826,6 @@ void setupBuiltins() {
     builtins_module->giveAttr("instancemethod", instancemethod_cls);
     builtins_module->giveAttr("complex", complex_cls);
     builtins_module->giveAttr("super", super_cls);
+    builtins_module->giveAttr("property", property_cls);
 }
 }
