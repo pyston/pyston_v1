@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "codegen/compvars.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -31,6 +32,27 @@ static Box* propertyNew(Box* cls, Box* fget, Box* fset, Box** args) {
     return new BoxedProperty(fget, fset, fdel, doc);
 }
 
+static Box* propertySet(Box* self, Box* obj, Box* val) {
+    BoxedProperty* prop = static_cast<BoxedProperty*>(self);
+    Box* func;
+    if (val == NULL) {
+        func = prop->prop_del;
+    } else {
+        func = prop->prop_set;
+    }
+
+    if (func == NULL) {
+        raiseExcHelper(AttributeError, val == NULL ? "can't delete attribute" : "can't set attribute");
+    }
+
+    if (val == NULL) {
+        runtimeCall(func, ArgPassSpec(1), obj, NULL, NULL, NULL, NULL);
+    } else {
+        runtimeCall(func, ArgPassSpec(2), obj, val, NULL, NULL, NULL);
+    }
+    return None;
+}
+
 void setupDescr() {
     member_cls->giveAttr("__name__", boxStrConstant("member"));
     member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
@@ -39,6 +61,8 @@ void setupDescr() {
     property_cls->giveAttr("__name__", boxStrConstant("property"));
     property_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)propertyNew, UNKNOWN, 5, 4, false, false),
                                                         { None, None, None, None }));
+    property_cls->giveAttr("__set__",
+                           new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3, 0, false, false)));
     property_cls->freeze();
 }
 
