@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef PYSTON_CODEGEN_PYPAPARSER_H
+#define PYSTON_CODEGEN_PYPAPARSER_H
+
 namespace pyston {
 class AST_Module;
 AST_Module* pypa_parse(char const* file_path);
 }
+
+#endif // PYSTON_CODEGEN_PYPAPARSER_H

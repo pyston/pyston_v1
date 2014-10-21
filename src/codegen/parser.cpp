@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "codegen/parser.h"
-#include "codegen/pypa-parser.h"
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +24,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "codegen/pypa-parser.h"
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"

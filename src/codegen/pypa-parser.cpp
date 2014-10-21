@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pypa/parser/parser.hh>
-#include <pypa/ast/visitor.hh>
 #include "codegen/pypa-parser.h"
+
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <stdint.h>
+#include <pypa/ast/visitor.hh>
+#include <pypa/parser/parser.hh>
 #include <sys/stat.h>
 
 #include "core/ast.h"
