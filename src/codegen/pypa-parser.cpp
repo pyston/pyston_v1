@@ -30,7 +30,7 @@
 #include "core/util.h"
 
 namespace pypa {
-    bool string_to_double(String const & s, double & result);
+bool string_to_double(String const& s, double& result);
 }
 
 namespace pyston {
@@ -798,11 +798,27 @@ AST_Module* readModule(pypa::AstModule& t) {
     return mod;
 }
 
+void pypaErrorHandler(pypa::Error e) {
+    //    raiseSyntaxError
+    //    void raiseSyntaxError(const char* msg, int lineno, int col_offset, const
+    //    std::string& file, const std::string& func);
+    if (e.type != pypa::ErrorType::SyntaxWarning) {
+        raiseSyntaxError(e.message.c_str(), e.cur.line, e.cur.column, e.file_name, std::string());
+    }
+}
+
 AST_Module* pypa_parse(char const* file_path) {
     pypa::Lexer lexer(file_path);
     pypa::SymbolTablePtr symbols;
     pypa::AstModulePtr module;
-    if (pypa::parse(lexer, module, symbols) && module) {
+    pypa::ParserOptions options;
+
+    options.printerrors = false;
+    options.python3allowed = false;
+    options.python3only = false;
+    options.error_handler = pypaErrorHandler;
+
+    if (pypa::parse(lexer, module, symbols, options) && module) {
         return readModule(*module);
     }
     return nullptr;
