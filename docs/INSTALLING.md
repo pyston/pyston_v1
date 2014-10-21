@@ -108,6 +108,19 @@ sudo apt-get install libreadline-dev
 sudo apt-get install libgmp3-dev
 ```
 
+### libpypa
+
+```
+cd ~/pyston_deps
+git clone git://github.com/vinzenz/pypa
+mkdir pypa-install
+cd pypa
+./autogen.sh
+./configure --prefix=$HOME/pyston_deps/pypa-install CXX=$HOME/pyston_deps/gcc-4.8.2-install/bin/g++
+make -j4
+make install
+```
+
 # Optional dependencies
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:

@@ -137,6 +137,7 @@ COMMON_CXXFLAGS += -Woverloaded-virtual
 COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
+COMMON_CXXFLAGS += -I$(DEPS_DIR)/pypa-install/include
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -151,6 +152,7 @@ COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFA
 
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
+COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
