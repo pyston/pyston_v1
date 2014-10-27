@@ -919,7 +919,7 @@ AST_Module* parse(const char* fn) {
     return ast_cast<AST_Module>(rtn);
 }
 
-#define MAGIC_STRING "a\nci"
+#define MAGIC_STRING "a\ncj"
 #define MAGIC_STRING_LENGTH 4
 #define CHECKSUM_LENGTH 4
 

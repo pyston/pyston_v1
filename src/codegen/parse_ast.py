@@ -135,7 +135,7 @@ def convert(n, f):
         if k.startswith('_'):
             continue
 
-        if k in ("vararg", "kwarg", "asname") and v is None:
+        if k in ("vararg", "kwarg", "asname", "module") and v is None:
             v = ""
         # elif k in ('col_offset', 'lineno'):
             # continue
