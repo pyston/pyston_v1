@@ -1,6 +1,3 @@
-# expected: fail
-# - locals not supported
-
 def f1():
     l = []
     for i in xrange(5):
