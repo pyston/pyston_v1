@@ -787,9 +787,14 @@ private:
 
         auto scope_info = irstate->getScopeInfo();
 
+        bool is_kill = irstate->getSourceInfo()->liveness->isKill(node, myblock);
+        assert(!is_kill || node->id[0] == '#');
+
         if (scope_info->refersToGlobal(node->id)) {
+            assert(!is_kill);
             return _getGlobal(node, exc_info);
         } else if (scope_info->refersToClosure(node->id)) {
+            assert(!is_kill);
             assert(scope_info->takesClosure());
 
             CompilerVariable* closure = _getFake(PASSED_CLOSURE_NAME, false);
@@ -859,7 +864,10 @@ private:
             }
 
             CompilerVariable* rtn = symbol_table[node->id];
-            rtn->incvref();
+            if (is_kill)
+                symbol_table.erase(node->id);
+            else
+                rtn->incvref();
             return rtn;
         }
     }
@@ -2250,7 +2258,9 @@ public:
                 pp->addFrameVar(p.first, v->getType());
             }
         }
-        pp->setNumFrameArgs(stackmap_args.size() - initial_args);
+
+        int num_frame_args = stackmap_args.size() - initial_args;
+        pp->setNumFrameArgs(num_frame_args);
     }
 
     EndingState getEndingSymbolTable() override {

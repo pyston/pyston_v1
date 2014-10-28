@@ -25,6 +25,7 @@ namespace pyston {
 
 class AST_arguments;
 class AST_Jump;
+class AST_Name;
 class CFG;
 class CFGBlock;
 class ScopeInfo;
@@ -52,6 +53,9 @@ private:
 
 public:
     LivenessAnalysis(CFG* cfg);
+
+    // we don't keep track of node->parent_block relationships, so you have to pass both:
+    bool isKill(AST_Name* node, CFGBlock* parent_block);
 
     bool isLiveAtEnd(const std::string& name, CFGBlock* block);
 };

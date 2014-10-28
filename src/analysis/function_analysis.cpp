@@ -32,32 +32,76 @@
 namespace pyston {
 
 class LivenessBBVisitor : public NoopASTVisitor {
-public:
-    enum Status {
-        NONE,
-        USED,
-        KILLED,
+private:
+    struct Status {
+        enum Usage {
+            NONE,
+            USED,
+            DEFINED,
+        };
+
+        Usage first = NONE;
+        Usage second = NONE;
+
+        void addUsage(Usage u) {
+            if (first == NONE)
+                first = u;
+            second = u;
+        }
     };
 
-private:
+    std::unordered_set<AST_Name*> kills;
+    std::unordered_map<int, AST_Name*> last_uses;
+
     std::unordered_map<int, Status> statuses;
     LivenessAnalysis* analysis;
 
-    void _doLoad(const std::string& name) {
-        Status& status = statuses[analysis->getStringIndex(name)];
-        if (status == NONE)
-            status = USED;
+    void _doLoad(const std::string& name, AST_Name* node) {
+        int id = analysis->getStringIndex(name);
+
+        Status& status = statuses[id];
+        status.addUsage(Status::USED);
+
+        last_uses[id] = node;
     }
+
     void _doStore(const std::string& name) {
-        Status& status = statuses[analysis->getStringIndex(name)];
-        if (status == NONE)
-            status = KILLED;
+        int id = analysis->getStringIndex(name);
+
+        Status& status = statuses[id];
+        status.addUsage(Status::DEFINED);
+
+        auto it = last_uses.find(id);
+        if (it != last_uses.end()) {
+            kills.insert(it->second);
+            last_uses.erase(it);
+        }
     }
 
 public:
     LivenessBBVisitor(LivenessAnalysis* analysis) : analysis(analysis) {}
 
-    Status nameStatus(int idx) { return statuses[idx]; }
+    bool firstIsUse(int idx) { return statuses[idx].first == Status::USED; }
+
+    bool firstIsDef(int idx) { return statuses[idx].first == Status::DEFINED; }
+
+    bool isKilledAt(AST_Name* node, bool is_live_at_end) {
+        if (kills.count(node))
+            return true;
+
+        // If it's not live at the end, then the last use is a kill
+        // even though we weren't able to determine that in a single
+        // pass
+        if (!is_live_at_end) {
+            auto it = last_uses.find(analysis->getStringIndex(node->id));
+            if (it != last_uses.end() && node == it->second)
+                return true;
+        }
+
+        return false;
+    }
+
+
 
     bool visit_classdef(AST_ClassDef* node) {
         _doStore(node->name);
@@ -79,7 +123,7 @@ public:
 
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)
-            _doLoad(node->id);
+            _doLoad(node->id, node);
         else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Del)
             _doStore(node->id);
         else {
@@ -121,6 +165,13 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
     us_liveness.log(_t.end());
 }
 
+bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
+    if (node->id[0] != '#')
+        return false;
+
+    return liveness_cache[parent_block]->isKilledAt(node, isLiveAtEnd(node->id, parent_block));
+}
+
 bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
     Timer _t("LivenessAnalysis()", 10);
 
@@ -137,11 +188,9 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
         // Approach:
         // - Find all uses (blocks where the status is USED)
         // - Trace backwards, marking all blocks as live-at-end
-        // - If we hit a block that is KILLED, stop
+        // - If we hit a block that is DEFINED, stop
         for (CFGBlock* b : cfg->blocks) {
-            auto status = liveness_cache[b]->nameStatus(idx);
-
-            if (status != LivenessBBVisitor::USED)
+            if (!liveness_cache[b]->firstIsUse(idx))
                 continue;
 
             std::deque<CFGBlock*> q;
@@ -157,7 +206,7 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
                     continue;
 
                 map[thisblock] = true;
-                if (liveness_cache[thisblock]->nameStatus(idx) != LivenessBBVisitor::KILLED) {
+                if (!liveness_cache[thisblock]->firstIsDef(idx)) {
                     for (CFGBlock* pred : thisblock->predecessors) {
                         q.push_back(pred);
                     }
