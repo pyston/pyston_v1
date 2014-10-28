@@ -711,13 +711,11 @@ private:
     AST_expr* remapIfExp(AST_IfExp* node) {
         std::string rtn_name = nodeName(node);
 
-        AST_expr* test = remapExpr(node->test);
-
         CFGBlock* starting_block = curblock;
         AST_Branch* br = new AST_Branch();
         br->col_offset = node->col_offset;
         br->lineno = node->lineno;
-        br->test = node->test;
+        br->test = remapExpr(node->test);
         push_back(br);
 
         CFGBlock* iftrue = cfg->addBlock();
