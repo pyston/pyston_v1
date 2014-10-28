@@ -290,9 +290,12 @@ extern "C" BoxedTuple* EmptyTuple;
 class BoxedFile : public Box {
 public:
     FILE* f;
+    std::string fname;
+    std::string fmode;
     bool closed;
     bool softspace;
-    BoxedFile(FILE* f) __attribute__((visibility("default"))) : Box(file_cls), f(f), closed(false), softspace(false) {}
+    BoxedFile(FILE* f, std::string fname, std::string fmode) __attribute__((visibility("default")))
+    : Box(file_cls), f(f), fname(fname), fmode(fmode), closed(false), softspace(false) {}
 };
 
 struct PyHasher {
