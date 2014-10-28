@@ -105,11 +105,18 @@ public:
 
     bool visit_classdef(AST_ClassDef* node) {
         _doStore(node->name);
+
+        for (auto e : node->bases)
+            e->accept(this);
+        for (auto e : node->decorator_list)
+            e->accept(this);
+
         return true;
     }
     bool visit_functiondef(AST_FunctionDef* node) {
-        for (auto* d : node->args->defaults)
+        for (auto* d : node->decorator_list)
             d->accept(this);
+        node->args->accept(this);
 
         _doStore(node->name);
         return true;
@@ -124,10 +131,11 @@ public:
     bool visit_name(AST_Name* node) {
         if (node->ctx_type == AST_TYPE::Load)
             _doLoad(node->id, node);
-        else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Del)
+        else if (node->ctx_type == AST_TYPE::Store || node->ctx_type == AST_TYPE::Del
+                 || node->ctx_type == AST_TYPE::Param)
             _doStore(node->id);
         else {
-            assert(0);
+            ASSERT(0, "%d", node->ctx_type);
             abort();
         }
         return true;

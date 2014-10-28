@@ -706,6 +706,8 @@ void AST_Repr::accept(ASTVisitor* v) {
     bool skip = v->visit_repr(this);
     if (skip)
         return;
+
+    value->accept(v);
 }
 
 void* AST_Repr::accept_expr(ExprVisitor* v) {
