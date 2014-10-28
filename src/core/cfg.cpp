@@ -469,6 +469,45 @@ private:
         return rtn;
     }
 
+    // Sometimes we want to refer to the same object twice,
+    // but we require that no AST* object gets reused.
+    // So instead, just create a copy of it.
+    // This is only intended to be used with the primitev types,
+    // ie those that can be used as operands (temp names and constants).
+    AST_expr* _dup(AST_expr* val) {
+        if (val == nullptr)
+            return val;
+
+        if (val->type == AST_TYPE::Name) {
+            AST_Name* orig = ast_cast<AST_Name>(val);
+            AST_Name* made = new AST_Name();
+            made->id = orig->id;
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            made->ctx_type = orig->ctx_type;
+            return made;
+        } else if (val->type == AST_TYPE::Num) {
+            AST_Num* orig = ast_cast<AST_Num>(val);
+            AST_Num* made = new AST_Num();
+            made->num_type = orig->num_type;
+            made->n_int = orig->n_int;
+            made->n_long = orig->n_long;
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            return made;
+        } else if (val->type == AST_TYPE::Str) {
+            AST_Str* orig = ast_cast<AST_Str>(val);
+            AST_Str* made = new AST_Str();
+            made->str_type = orig->str_type;
+            made->s = orig->s;
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            return made;
+        } else {
+            RELEASE_ASSERT(0, "%d", val->type);
+        }
+    }
+
     AST_expr* remapBoolOp(AST_BoolOp* node) {
         std::string name = nodeName(node);
 
@@ -480,7 +519,7 @@ private:
             pushAssign(name, val);
 
             AST_Branch* br = new AST_Branch();
-            br->test = val;
+            br->test = _dup(val);
             push_back(br);
 
             CFGBlock* was_block = curblock;
@@ -617,7 +656,7 @@ private:
 
                 curblock = next_block;
 
-                left = right;
+                left = _dup(right);
             }
 
             AST_Jump* j = new AST_Jump();
@@ -1231,7 +1270,9 @@ public:
         push_back(j);
 
         curblock = unreachable;
-        push_back(j);
+        AST_Jump* j2 = new AST_Jump();
+        j2->target = unreachable;
+        push_back(j2);
         curblock->connectTo(unreachable, true);
 
         curblock = iftrue;
@@ -1243,7 +1284,7 @@ public:
         AST_expr* remapped_value = remapExpr(node->value);
 
         for (AST_expr* target : node->targets) {
-            pushAssign(target, remapped_value);
+            pushAssign(target, _dup(remapped_value));
         }
         return true;
     }
@@ -1293,8 +1334,8 @@ public:
                 remapped_target = s_target;
 
                 AST_Subscript* s_lhs = new AST_Subscript();
-                s_lhs->value = s_target->value;
-                s_lhs->slice = s_target->slice;
+                s_lhs->value = _dup(s_target->value);
+                s_lhs->slice = _dup(s_target->slice);
                 s_lhs->col_offset = s->col_offset;
                 s_lhs->lineno = s->lineno;
                 s_lhs->ctx_type = AST_TYPE::Load;
@@ -1315,7 +1356,7 @@ public:
                 remapped_target = a_target;
 
                 AST_Attribute* a_lhs = new AST_Attribute();
-                a_lhs->value = a_target->value;
+                a_lhs->value = _dup(a_target->value);
                 a_lhs->attr = a->attr;
                 a_lhs->ctx_type = AST_TYPE::Load;
                 a_lhs->col_offset = a->col_offset;
@@ -1395,7 +1436,7 @@ public:
             remapped->col_offset = node->col_offset;
             remapped->lineno = node->lineno;
             // TODO not good to reuse 'dest' like this
-            remapped->dest = dest;
+            remapped->dest = _dup(dest);
 
             if (i < node->values.size() - 1)
                 remapped->nl = false;
@@ -1604,7 +1645,8 @@ public:
         snprintf(itername_buf, 80, "#iter_%p", node);
         pushAssign(itername_buf, iter_call);
 
-        AST_expr* hasnext_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "__hasnext__", true);
+        auto hasnext_attr =
+            [&]() { return makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "__hasnext__", true); };
         AST_expr* next_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load), "next", true);
 
         CFGBlock* test_block = cfg->addBlock();
@@ -1614,7 +1656,7 @@ public:
         curblock->connectTo(test_block);
         curblock = test_block;
 
-        AST_expr* test_call = makeCall(hasnext_attr);
+        AST_expr* test_call = makeCall(hasnext_attr());
         AST_Branch* test_br = makeBranch(remapExpr(test_call));
 
         push_back(test_br);
@@ -1656,7 +1698,7 @@ public:
         popLoop();
 
         if (curblock) {
-            AST_expr* end_call = makeCall(hasnext_attr);
+            AST_expr* end_call = makeCall((hasnext_attr()));
             AST_Branch* end_br = makeBranch(remapExpr(end_call));
             push_back(end_br);
 
@@ -1784,7 +1826,7 @@ public:
                 }
 
                 if (exc_handler->name) {
-                    pushAssign(exc_handler->name, exc_obj);
+                    pushAssign(exc_handler->name, _dup(exc_obj));
                 }
 
                 for (AST_stmt* subnode : exc_handler->body) {
@@ -1971,6 +2013,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     CFGVisitor visitor(source->ast->type, scoping_analysis, rtn);
 
+    bool skip_first = false;
+
     if (source->ast->type == AST_TYPE::ClassDef) {
         // A classdef always starts with "__module__ = __name__"
         Box* module_name = source->parent_module->getattr("__name__", NULL);
@@ -1990,11 +2034,12 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                 doc_assign->value = first_expr->value;
                 doc_assign->lineno = 0;
                 visitor.push_back(doc_assign);
+                skip_first = true;
             }
         }
     }
 
-    for (int i = 0; i < body.size(); i++) {
+    for (int i = (skip_first ? 1 : 0); i < body.size(); i++) {
         body[i]->accept(&visitor);
     }
 
@@ -2086,6 +2131,13 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     }
 
     assert(rtn->getStartingBlock()->idx == 0);
+
+    std::vector<AST*> flattened;
+    for (auto b : rtn->blocks)
+        flatten(b->body, flattened, true);
+
+    std::unordered_set<AST*> deduped(flattened.begin(), flattened.end());
+    assert(deduped.size() == flattened.size());
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path
 #endif

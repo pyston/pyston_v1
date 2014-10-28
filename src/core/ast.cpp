@@ -1735,7 +1735,9 @@ private:
     bool expand_scopes;
 
 public:
-    FlattenVisitor(std::vector<AST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {}
+    FlattenVisitor(std::vector<AST*>* output, bool expand_scopes) : output(output), expand_scopes(expand_scopes) {
+        assert(expand_scopes && "not sure if this works properly");
+    }
 
     virtual bool visit_alias(AST_alias* node) {
         output->push_back(node);
@@ -1825,6 +1827,10 @@ public:
         output->push_back(node);
         return !expand_scopes;
     }
+    virtual bool visit_generatorexp(AST_GeneratorExp* node) {
+        output->push_back(node);
+        return !expand_scopes;
+    }
     virtual bool visit_global(AST_Global* node) {
         output->push_back(node);
         return false;
@@ -1846,6 +1852,10 @@ public:
         return false;
     }
     virtual bool visit_index(AST_Index* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_invoke(AST_Invoke* node) {
         output->push_back(node);
         return false;
     }
