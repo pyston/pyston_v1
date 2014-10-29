@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdio>
 #include <cstring>
 #include <sstream>
 
@@ -26,7 +27,14 @@ namespace pyston {
 
 Box* fileRepr(BoxedFile* self) {
     assert(self->cls == file_cls);
-    RELEASE_ASSERT(0, "");
+
+    void* addr = static_cast<void*>(self->f);
+    std::ostringstream repr;
+
+    repr << "<" << (self->closed ? "closed" : "open") << " file '" << self->fname << "', ";
+    repr << "mode '" << self->fmode << "' at " << addr << ">";
+
+    return boxString(repr.str());
 }
 
 Box* fileRead(BoxedFile* self, Box* _size) {
@@ -154,6 +162,22 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
     return open(s, m);
 }
 
+Box* fileIterNext(BoxedFile* s) {
+    return fileReadline1(s);
+}
+
+bool fileEof(BoxedFile* self) {
+    char ch = fgetc(self->f);
+    ungetc(ch, self->f);
+    return feof(self->f);
+}
+
+Box* fileIterHasNext(Box* s) {
+    assert(s->cls == file_cls);
+    BoxedFile* self = static_cast<BoxedFile*>(s);
+    return boxBool(!fileEof(self));
+}
+
 void setupFile() {
     file_cls->giveAttr("__name__", boxStrConstant("file"));
 
@@ -171,6 +195,10 @@ void setupFile() {
 
     file_cls->giveAttr("__enter__", new BoxedFunction(boxRTFunction((void*)fileEnter, typeFromClass(file_cls), 1)));
     file_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)fileExit, UNKNOWN, 4)));
+
+    file_cls->giveAttr("__iter__", file_cls->getattr("__enter__"));
+    file_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)fileIterHasNext, BOXED_BOOL, 1)));
+    file_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)fileIterNext, STR, 1)));
 
     file_cls->giveAttr("softspace",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::BYTE, offsetof(BoxedFile, softspace)));
