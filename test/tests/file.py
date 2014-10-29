@@ -28,3 +28,14 @@ f = open("/dev/null", 'r')
 print chop(str(f))
 f.close()
 print chop(str(f))
+
+# Support for iteration protocol.
+f = open('/dev/null')
+print iter(f) is f
+f.close()
+
+with open('../README.md') as f:
+    lines = list(f)
+    print lines[:5]
+    print lines[-5:]
+
