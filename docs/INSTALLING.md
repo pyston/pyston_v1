@@ -1,4 +1,4 @@
-Pyston currently only supports installing from source; the following instructions have fairly tested on Ubuntu, somewhat tested as working on other *nix-y platforms, and are extensively verified as not working on Mac.  (Please see issue #165 for discussion on enabling OSX support, which is pretty difficult.)
+Pyston currently only supports installing from source; the following instructions have fairly tested as working on Ubuntu, and are extensively verified as not working on Mac.  (Please see issue #165 for discussion on enabling OSX support, which is pretty difficult.)
 
 The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `src/Makefile`.
 
@@ -112,6 +112,81 @@ sudo apt-get install libgmp3-dev
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:
 
+### CPython headers
+
+We have some extension module tests, in which we compile the extension module code for both Pyston and CPython.
+
+```
+sudo apt-get install python-dev
+```
+
+### gtest
+
+For running the unittests:
+
+```
+cd ~/pyston_deps
+wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
+unzip gtest-1.7.0.zip
+cd gtest-1.7.0
+./configure CXXFLAGS=-fno-omit-frame-pointer
+make -j4
+```
+
+### gdb
+A new version of gdb is highly recommended since debugging a JIT tends to use new features of GDB:
+
+```
+cd ~/pyston_deps
+wget http://ftp.gnu.org/gnu/gdb/gdb-7.6.2.tar.gz
+tar xvf gdb-7.6.2.tar.gz
+cd gdb-7.6.2
+./configure
+make -j4
+cd ~/pyston/src
+echo "GDB := \$(DEPS_DIR)/gdb-7.6.2/gdb/gdb --data-directory \$(DEPS_DIR)/gdb-7.6.2/gdb/data-directory" >> Makefile.local
+```
+
+<!---
+TODO: GDB should be able to determine its data directory.  maybe it should be installed rather that run
+from inside the source dir?
+--->
+
+### gold
+
+gold is highly recommended as a faster linker, and Pyston contains build-system support for automatically using gold if available.  gold may already be installed on your system; you can check by typing `which gold`.  If it's not installed already:
+
+```
+cd ~/pyston_deps
+sudo apt-get install bison
+wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
+tar xvf binutils-2.24.tar.gz
+mkdir binutils-2.24-build
+cd binutils-2.24-build
+../binutils-2.24/configure --enable-gold --enable-plugins --disable-werror
+make all-gold -j4
+```
+
+### perf
+The `perf` tool is the best way we've found to profile JIT'd code; you can find more details in docs/PROFILING.
+
+```
+sudo apt-get install linux-tools
+sudo apt-get install linux-tools-`uname -r`
+# may need to strip off the -generic from that last one
+```
+
+### distcc
+```
+sudo apt-get install distcc distcc-pump
+```
+
+You can then use distcc by doing `make USE_DISTCC=1`
+
+# Misc tools
+
+These are only useful in specific development situations:
+
 ### valgrind
 
 Since Pyston uses a custom memory allocator, it makes use of the valgrind client hooks to help valgrind understand it.  This means that you'll need a copy of the valgrind includes around; I also suggest that if you want to use valgrind, you use a recent version since there are some instructions that LLVM emits that somewhat-recent versions of valgrind don't understand.
@@ -150,73 +225,10 @@ echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/src/Makefile.local
 
 This will link pyston_dbg and pyston_debug against the debug version of libunwind (the release pyston build will still link against the release libunwind); to enable debug output, set the UNW_DEBUG_LEVEL environment variable, ex to 13.
 
-### distcc
-```
-sudo apt-get install distcc distcc-pump
-```
-
-You can then use distcc by doing `make USE_DISTCC=1`
-
-### gtest
-
-For running the unittests:
-
-```
-cd ~/pyston_deps
-wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
-unzip gtest-1.7.0.zip
-cd gtest-1.7.0
-./configure CXXFLAGS=-fno-omit-frame-pointer
-make -j4
-```
-
-### gdb
-A new version of gdb is highly recommended since debugging a JIT tends to use new features of GDB:
-
-```
-cd ~/pyston_deps
-wget http://ftp.gnu.org/gnu/gdb/gdb-7.6.2.tar.gz
-tar xvf gdb-7.6.2.tar.gz
-cd gdb-7.6.2
-./configure
-make -j4
-cd ~/pyston/src
-echo "GDB := \$(DEPS_DIR)/gdb-7.6.2/gdb/gdb --data-directory \$(DEPS_DIR)/gdb-7.6.2/gdb/data-directory" >> Makefile.local
-```
-
-<!---
-TODO: GDB should be able to determine its data directory.  maybe it should be installed rather that run
-from inside the source dir?
---->
-
 ### gperftools (-lprofiler)
 ```
 download from http://code.google.com/p/gperftools/downloads/list
 standard ./configure, make, make install
-```
-
-### gold
-
-gold is highly recommended as a faster linker, and Pyston contains build-system support for automatically using gold if available.  gold may already be installed on your system; you can check by typing `which gold`.  If it's not installed already:
-
-```
-cd ~/pyston_deps
-sudo apt-get install bison
-wget http://ftp.gnu.org/gnu/binutils/binutils-2.24.tar.gz
-tar xvf binutils-2.24.tar.gz
-mkdir binutils-2.24-build
-cd binutils-2.24-build
-../binutils-2.24/configure --enable-gold --enable-plugins --disable-werror
-make all-gold -j4
-```
-
-### perf
-The `perf` tool is the best way we've found to profile JIT'd code; you can find more details in docs/PROFILING.
-
-```
-sudo apt-get install linux-tools
-sudo apt-get install linux-tools-`uname -r`
-# may need to strip off the -generic from that last one
 ```
 
 ### ninja-based LLVM build

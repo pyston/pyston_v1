@@ -910,7 +910,7 @@ ext_pyston: $(TEST_EXT_MODULE_NAMES:%=../test/test_extension/%.pyston.so)
 
 .PHONY: ext_python
 ext_python: $(TEST_EXT_MODULE_NAMES:%=../test/test_extension/*.c)
-	cd ../test/test_extension; python setup.py build; cd -
+	cd ../test/test_extension; python setup.py build
 
 $(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@
