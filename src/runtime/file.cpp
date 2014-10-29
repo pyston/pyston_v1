@@ -26,7 +26,14 @@ namespace pyston {
 
 Box* fileRepr(BoxedFile* self) {
     assert(self->cls == file_cls);
-    RELEASE_ASSERT(0, "");
+
+    void* addr = static_cast<void*>(self->f);
+    std::ostringstream repr;
+
+    repr << "<" << (self->closed ? "closed" : "open") << " file '" << self->fname << "', ";
+    repr << "mode '" << self->fmode << "' at " << addr << ">";
+
+    return boxString(repr.str());
 }
 
 Box* fileRead(BoxedFile* self, Box* _size) {
