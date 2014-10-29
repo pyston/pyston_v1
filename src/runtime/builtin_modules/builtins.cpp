@@ -211,7 +211,7 @@ Box* open(Box* arg1, Box* arg2) {
 
     FILE* f = fopen(fn.c_str(), mode.c_str());
     if (!f)
-        raiseExcHelper(IOError, "[Error %d] %s: '%s'", errno, strerror(errno), fn.c_str());
+        raiseExcHelper(IOError, "[Errno %d] %s: '%s'", errno, strerror(errno), fn.c_str());
 
     return new BoxedFile(f, fn, mode);
 }
