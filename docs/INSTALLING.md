@@ -1,4 +1,4 @@
-Pyston currently only supports installing from source; the following instructions have only been tested on Ubuntu, and currently has some non-trivial build issues on Mac (hopefully will be addressed soon once we get access to a Mac VM).
+Pyston currently only supports installing from source; the following instructions have fairly tested on Ubuntu, somewhat tested as working on other *nix-y platforms, and are extensively verified as not working on Mac.  (Please see issue #165 for discussion on enabling OSX support, which is pretty difficult.)
 
 The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `src/Makefile`.
 
