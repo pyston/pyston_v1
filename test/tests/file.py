@@ -39,3 +39,8 @@ with open('../README.md') as f:
     print lines[:5]
     print lines[-5:]
 
+# Check that opening a non-existent file results in an IOError.
+try:
+   f = open('this-should-definitely-not-exist.txt')
+except IOError as e:
+   print str(e)
