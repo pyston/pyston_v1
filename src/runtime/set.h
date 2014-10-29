@@ -31,9 +31,11 @@ extern "C" Box* createSet();
 
 class BoxedSet : public Box {
 public:
-    std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > s;
+    typedef std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*> > Set;
+    Set s;
 
     BoxedSet(BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls) {}
+    BoxedSet(Set&& s, BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls), s(s) {}
 };
 }
 

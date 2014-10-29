@@ -23,7 +23,9 @@ struct CompiledFunction;
 class CLFunction;
 class OSRExit;
 
+CompiledFunction* compilePartialFuncInternal(OSRExit* exit);
 void* compilePartialFunc(OSRExit*);
+extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction*);
 extern "C" char* reoptCompiledFunc(CompiledFunction*);
 
 class AST_Module;

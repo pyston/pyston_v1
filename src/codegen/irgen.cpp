@@ -986,7 +986,9 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
     os << nameprefix;
     os << "_e" << effort;
     if (entry) {
-        os << "_osr" << entry->backedge->target->idx << "_from_" << entry->cf->func->getName().data();
+        os << "_osr" << entry->backedge->target->idx;
+        if (entry->cf->func)
+            os << "_from_" << entry->cf->func->getName().data();
     }
     os << '_' << num_functions;
     num_functions++;

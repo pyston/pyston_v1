@@ -288,7 +288,6 @@ public:
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
-        assert((source == NULL) == (compiled->func == NULL));
         assert(compiled->spec);
         assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
         assert(compiled->clfunc == NULL);

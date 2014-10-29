@@ -1496,7 +1496,7 @@ private:
             decorators.push_back(evalExpr(d, exc_info));
         }
 
-        CLFunction* cl = _wrapFunction(node, nullptr, node->body);
+        CLFunction* cl = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
 
         // TODO duplication with _createFunction:
         CompilerVariable* created_closure = NULL;
@@ -1628,27 +1628,9 @@ private:
         symbol_table.erase(target->id);
     }
 
-    CLFunction* _wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
-        // Different compilations of the parent scope of a functiondef should lead
-        // to the same CLFunction* being used:
-        static std::unordered_map<AST*, CLFunction*> made;
-
-        CLFunction*& cl = made[node];
-        if (cl == NULL) {
-            SourceInfo* source = irstate->getSourceInfo();
-            SourceInfo* si = new SourceInfo(source->parent_module, source->scoping, node, body);
-            if (args)
-                cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(), args->kwarg.size(),
-                                    si);
-            else
-                cl = new CLFunction(0, 0, 0, 0, si);
-        }
-        return cl;
-    }
-
     CompilerVariable* _createFunction(AST* node, ExcInfo exc_info, AST_arguments* args,
                                       const std::vector<AST_stmt*>& body) {
-        CLFunction* cl = this->_wrapFunction(node, args, body);
+        CLFunction* cl = wrapFunction(node, args, body, irstate->getSourceInfo());
 
         std::vector<ConcreteCompilerVariable*> defaults;
         for (auto d : args->defaults) {
@@ -2455,5 +2437,21 @@ IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*
                                CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,
                                const GuardList& in_guards, bool is_partial) {
     return new IRGeneratorImpl(irstate, entry_blocks, myblock, types, out_guards, in_guards, is_partial);
+}
+
+CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
+    // Different compilations of the parent scope of a functiondef should lead
+    // to the same CLFunction* being used:
+    static std::unordered_map<AST*, CLFunction*> made;
+
+    CLFunction*& cl = made[node];
+    if (cl == NULL) {
+        SourceInfo* si = new SourceInfo(source->parent_module, source->scoping, node, body);
+        if (args)
+            cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.size(), args->kwarg.size(), si);
+        else
+            cl = new CLFunction(0, 0, 0, 0, si);
+    }
+    return cl;
 }
 }

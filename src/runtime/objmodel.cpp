@@ -23,6 +23,7 @@
 
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
+#include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
@@ -2486,7 +2487,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return interpretFunction(chosen_cf->func, num_output_args, closure, generator, oarg1, oarg2, oarg3, oargs);
+        return astInterpretFunction(chosen_cf, num_output_args, closure, generator, oarg1, oarg2, oarg3, oargs);
     }
 
     if (rewrite_args) {

@@ -46,6 +46,7 @@ extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
 extern const std::string PASSED_GENERATOR_NAME;
 
+
 // Class that holds state of the current IR generation, that might not be local
 // to the specific phase or pass we're in.
 // TODO this probably shouldn't be here
@@ -205,6 +206,8 @@ IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRG
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                                CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,
                                const GuardList& in_guards, bool is_partial);
+
+CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
 }
 
 #endif

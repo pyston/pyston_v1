@@ -219,8 +219,8 @@ static void set(SymMap& symbols, const llvm::BasicBlock::iterator& it, Val v) {
 static std::unordered_map<void*, llvm::Instruction*> cur_instruction_map;
 
 typedef std::vector<const SymMap*> root_stack_t;
-threading::PerThreadSet<root_stack_t> root_stack_set;
-
+static threading::PerThreadSet<root_stack_t> root_stack_set;
+/*
 void gatherInterpreterRoots(GCVisitor* visitor) {
     root_stack_set.forEachValue(std::function<void(root_stack_t*, GCVisitor*)>([](root_stack_t* v, GCVisitor* visitor) {
                                     for (const SymMap* sym_map : *v) {
@@ -231,7 +231,8 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
                                 }),
                                 visitor);
 }
-
+*/
+#if 0
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     llvm::Instruction* inst = cur_instruction_map[frame_ptr];
     assert(inst);
@@ -285,6 +286,7 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
 
     return rtn;
 }
+#endif
 
 class UnregisterHelper {
 private:
@@ -302,6 +304,7 @@ public:
 };
 
 static std::unordered_map<llvm::Instruction*, LineInfo*> line_infos;
+/*
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
     llvm::Instruction* cur_instruction = cur_instruction_map[frame_ptr];
     assert(cur_instruction);
@@ -319,7 +322,7 @@ const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
         return it->second;
     }
 }
-
+*/
 void dumpLLVM(llvm::Value* v) {
     v->dump();
 }

@@ -23,6 +23,7 @@
 #include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/IR/DebugInfo.h"
 
+#include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
@@ -307,7 +308,7 @@ public:
             int code = unw_get_proc_info(&this->cursor, &pip);
             RELEASE_ASSERT(code == 0, "%d", code);
 
-            if (pip.start_ip == (intptr_t)interpretFunction) {
+            if (pip.start_ip == (intptr_t)interpretFunction || pip.start_ip == (intptr_t)astInterpretFunction) {
                 unw_word_t bp;
                 unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
 
@@ -401,12 +402,19 @@ CompiledFunction* getTopCompiledFunction() {
     assert(last_entry->func.size());
 
     CompiledFunction* cf = cfForMachineFunctionName(last_entry->func);
-    assert(cf);
     return cf;
 }
 
 BoxedModule* getCurrentModule() {
-    return getTopCompiledFunction()->clfunc->source->parent_module;
+    CompiledFunction* compiledFunction = getTopCompiledFunction();
+    if (compiledFunction)
+        return compiledFunction->clfunc->source->parent_module;
+    else {
+        std::unique_ptr<PythonFrameIterator> frame = getTopPythonFrame();
+        auto& id = frame->getId();
+        assert(id.type == PythonFrameId::INTERPRETED);
+        return getModuleForInterpretedFrame((void*)id.bp);
+    }
 }
 
 BoxedDict* getLocals(bool only_user_visible) {
