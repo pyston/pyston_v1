@@ -32,7 +32,24 @@ static Box* propertyNew(Box* cls, Box* fget, Box* fset, Box** args) {
     return new BoxedProperty(fget, fset, fdel, doc);
 }
 
+static Box* propertyGet(Box* self, Box* obj, Box* type) {
+    RELEASE_ASSERT(self->cls == property_cls, "");
+
+    BoxedProperty* prop = static_cast<BoxedProperty*>(self);
+    if (obj == NULL || obj == None) {
+        return self;
+    }
+
+    if (prop->prop_get == NULL) {
+        raiseExcHelper(AttributeError, "unreadable attribute");
+    }
+
+    return runtimeCall(prop->prop_get, ArgPassSpec(1), obj, NULL, NULL, NULL, NULL);
+}
+
 static Box* propertySet(Box* self, Box* obj, Box* val) {
+    RELEASE_ASSERT(self->cls == property_cls, "");
+
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     Box* func;
     if (val == NULL) {
@@ -61,6 +78,8 @@ void setupDescr() {
     property_cls->giveAttr("__name__", boxStrConstant("property"));
     property_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)propertyNew, UNKNOWN, 5, 4, false, false),
                                                         { None, None, None, None }));
+    property_cls->giveAttr("__get__",
+                           new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3, 0, false, false)));
     property_cls->giveAttr("__set__",
                            new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3, 0, false, false)));
     property_cls->freeze();
