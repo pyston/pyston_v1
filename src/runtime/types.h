@@ -63,6 +63,8 @@ void setupCAPI();
 void teardownCAPI();
 void setupGenerator();
 void setupUnicode();
+void setupDescr();
+void teardownDescr();
 
 void setupSys();
 void setupBuiltins();
@@ -78,7 +80,7 @@ Box* getSysStdout();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
-    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls;
+    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -389,6 +391,17 @@ public:
     BoxedMemberDescriptor(MemberType type, int offset) : Box(member_cls), type(type), offset(offset) {}
     BoxedMemberDescriptor(PyMemberDef* member)
         : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
+};
+
+class BoxedProperty : public Box {
+public:
+    Box* prop_get;
+    Box* prop_set;
+    Box* prop_del;
+    Box* prop_doc;
+
+    BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
+        : Box(property_cls), prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?

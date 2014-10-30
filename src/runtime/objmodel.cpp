@@ -892,6 +892,16 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
         }
     }
 
+    else if (descr->cls == property_cls) {
+        rewrite_args = NULL; // TODO
+
+        BoxedProperty* prop = static_cast<BoxedProperty*>(descr);
+        if (prop->prop_get == NULL || prop->prop_get == None) {
+            raiseExcHelper(AttributeError, "unreadable attribute");
+        }
+        return runtimeCallInternal1(prop->prop_get, NULL, ArgPassSpec(1), obj);
+    }
+
     return NULL;
 }
 

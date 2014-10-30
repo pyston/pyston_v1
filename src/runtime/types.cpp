@@ -1,8 +1,7 @@
 // Copyright (c) 2014 Dropbox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// you may not use this file except in compliance with the License.  // You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
@@ -292,7 +291,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls;
+    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -384,12 +383,6 @@ static Box* functionGet(BoxedFunction* self, Box* inst, Box* owner) {
     if (inst == None)
         return boxUnboundInstanceMethod(self);
     return boxInstanceMethod(inst, self);
-}
-
-static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
-    RELEASE_ASSERT(self->cls == member_cls, "");
-
-    Py_FatalError("unimplemented");
 }
 
 static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
@@ -707,6 +700,7 @@ void setupRuntime() {
     member_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
     closure_cls = new BoxedClass(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
                                  sizeof(BoxedClosure), false);
+    property_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedProperty), false);
     attrwrapper_cls = new BoxedClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
@@ -755,10 +749,6 @@ void setupRuntime() {
     module_cls->giveAttr("__str__", module_cls->getattr("__repr__"));
     module_cls->freeze();
 
-    member_cls->giveAttr("__name__", boxStrConstant("member"));
-    member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
-    member_cls->freeze();
-
     closure_cls->giveAttr("__name__", boxStrConstant("closure"));
     closure_cls->freeze();
 
@@ -778,6 +768,7 @@ void setupRuntime() {
     setupClassobj();
     setupSuper();
     setupUnicode();
+    setupDescr();
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
@@ -881,6 +872,7 @@ void teardownRuntime() {
     teardownSet();
     teardownTuple();
     teardownFile();
+    teardownDescr();
 
     /*
     // clear all the attributes on the base classes before freeing the classes themselves,
