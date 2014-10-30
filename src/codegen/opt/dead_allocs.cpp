@@ -18,6 +18,7 @@
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/PostDominators.h"
@@ -402,11 +403,12 @@ private:
 
         std::unordered_map<BasicBlock*, Value*> seen;
         Value* new_v = getLoadValFromPrevious(li->getPointerOperand(), li->getParent(), seen, chain);
-        assert(new_v);
+        if (!new_v) {
+            new_v = llvm::UndefValue::get(li->getType());
+        }
         if (VERBOSITY("opt") >= 1)
             errs() << "Remapped to: " << *new_v << '\n';
-        li->replaceAllUsesWith(new_v);
-        li->eraseFromParent();
+        llvm::replaceAndRecursivelySimplify(li, new_v);
     }
 
 public:
