@@ -291,7 +291,8 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls;
+    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls, *staticmethod_cls,
+    *classmethod_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -701,6 +702,8 @@ void setupRuntime() {
     closure_cls = new BoxedClass(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
                                  sizeof(BoxedClosure), false);
     property_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedProperty), false);
+    staticmethod_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedStaticmethod), false);
+    classmethod_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedClassmethod), false);
     attrwrapper_cls = new BoxedClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
