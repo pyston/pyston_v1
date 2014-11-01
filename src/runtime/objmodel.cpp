@@ -666,40 +666,108 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
 }
 
 bool isNondataDescriptorInstanceSpecialCase(Box* descr) {
-    return descr->cls == function_cls || descr->cls == method_cls;
+    return descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == staticmethod_cls
+           || descr->cls == classmethod_cls;
 }
 
 Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box* obj, Box* descr, RewriterVar* r_descr,
-                                           bool for_call, bool* should_bind_out) {
-    // Special case: non-data descriptor: function
-    if (descr->cls == function_cls || descr->cls == method_cls) {
+                                           bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+    // Special case: non-data descriptor: function, instancemethod or classmethod
+    // Returns a bound instancemethod
+    if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls) {
+        Box* im_self = NULL, * im_func = NULL;
+        RewriterVar* r_im_self = NULL, * r_im_func = NULL;
+        if (descr->cls == function_cls) {
+            im_self = obj;
+            im_func = descr;
+            if (rewrite_args) {
+                r_im_self = rewrite_args->obj;
+                r_im_func = r_descr;
+            }
+        } else if (descr->cls == classmethod_cls) {
+            static StatCounter slowpath("slowpath_classmethod_get");
+            slowpath.log();
+
+            BoxedClassmethod* cm = static_cast<BoxedClassmethod*>(descr);
+            im_self = obj->cls;
+            if (cm->cm_callable == NULL) {
+                raiseExcHelper(RuntimeError, "uninitialized classmethod object");
+            }
+            im_func = cm->cm_callable;
+
+            if (rewrite_args) {
+                r_im_self = rewrite_args->obj->getAttr(BOX_CLS_OFFSET);
+                r_im_func = r_descr->getAttr(offsetof(BoxedClassmethod, cm_callable));
+                r_im_func->addGuardNotEq(0);
+            }
+        } else if (descr->cls == instancemethod_cls) {
+            static StatCounter slowpath("slowpath_instancemethod_get");
+            slowpath.log();
+
+            BoxedInstanceMethod* im = static_cast<BoxedInstanceMethod*>(descr);
+            if (im->obj != NULL) {
+                if (rewrite_args) {
+                    r_descr->addAttrGuard(offsetof(BoxedInstanceMethod, obj), 0, /* negate */ true);
+                }
+                return descr;
+            } else {
+                // TODO subclass check
+                im_self = obj;
+                im_func = im->func;
+                if (rewrite_args) {
+                    r_descr->addAttrGuard(offsetof(BoxedInstanceMethod, obj), 0, /* negate */ false);
+                    r_im_self = rewrite_args->obj;
+                    r_im_func = r_descr->getAttr(offsetof(BoxedInstanceMethod, func));
+                }
+            }
+        } else {
+            assert(false);
+        }
+
         if (!for_call) {
             if (rewrite_args) {
-                // can't guard after because we make this call... the call is trivial enough
-                // that we can probably work around it if it's important, but otherwise, if
-                // this triggers, just abort rewriting, I guess
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, rewrite_args->obj, r_descr);
+                    = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func);
                 rewrite_args->out_success = true;
             }
-            return boxInstanceMethod(obj, descr);
+            return boxInstanceMethod(im_self, im_func);
         } else {
+            *bind_obj_out = im_self;
             if (rewrite_args) {
-                rewrite_args->out_rtn = r_descr;
+                rewrite_args->out_rtn = r_im_func;
                 rewrite_args->out_success = true;
+                *r_bind_obj_out = r_im_self;
             }
-            *should_bind_out = true;
-            return descr;
+            return im_func;
         }
+    }
+
+    else if (descr->cls == staticmethod_cls) {
+        static StatCounter slowpath("slowpath_staticmethod_get");
+        slowpath.log();
+
+        BoxedStaticmethod* sm = static_cast<BoxedStaticmethod*>(descr);
+        if (sm->sm_callable == NULL) {
+            raiseExcHelper(RuntimeError, "uninitialized staticmethod object");
+        }
+
+        if (rewrite_args) {
+            RewriterVar* r_sm_callable = r_descr->getAttr(offsetof(BoxedStaticmethod, sm_callable));
+            r_sm_callable->addGuardNotEq(0);
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_sm_callable;
+        }
+
+        return sm->sm_callable;
     }
 
     return NULL;
 }
 
 Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls, Box* descr, RewriterVar* r_descr,
-                               bool for_call, bool* should_bind_out) {
+                               bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     // Special case: functions
-    if (descr->cls == function_cls || descr->cls == method_cls) {
+    if (descr->cls == function_cls || descr->cls == instancemethod_cls) {
         if (rewrite_args)
             r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
@@ -716,7 +784,6 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_descr;
         }
-        // leave should_bind_out set to false
         return descr;
     }
 
@@ -764,7 +831,8 @@ static Box* boxStringFromCharPtr(const char* s) {
 }
 
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const std::string& attr_name, Box* obj,
-                                        Box* descr, RewriterVar* r_descr, bool for_call, bool* should_bind_out) {
+                                        Box* descr, RewriterVar* r_descr, bool for_call, Box** bind_obj_out,
+                                        RewriterVar** r_bind_obj_out) {
     // Special case: data descriptor: member descriptor
     if (descr->cls == member_cls) {
         static StatCounter slowpath("slowpath_member_descriptor_get");
@@ -908,7 +976,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
 inline Box* getclsattr_internal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     return getattrInternalGeneral(obj, attr, rewrite_args,
                                   /* cls_only */ true,
-                                  /* for_call */ false, NULL);
+                                  /* for_call */ false, NULL, NULL);
 }
 
 extern "C" Box* getclsattr(Box* obj, const char* attr) {
@@ -976,9 +1044,9 @@ static Box* (*runtimeCall3)(Box*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, ArgPassSpec, Box*, Box*, Box*))runtimeCall;
 
 Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
-                            bool for_call, bool* should_bind_out) {
+                            bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (for_call) {
-        *should_bind_out = false;
+        *bind_obj_out = NULL;
     }
 
     if (obj->cls == closure_cls) {
@@ -1072,8 +1140,8 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
         // Special-case data descriptors (e.g., member descriptors)
-        Box* res
-            = dataDescriptorInstanceSpecialCases(rewrite_args, attr, obj, descr, r_descr, for_call, should_bind_out);
+        Box* res = dataDescriptorInstanceSpecialCases(rewrite_args, attr, obj, descr, r_descr, for_call, bind_obj_out,
+                                                      r_bind_obj_out);
         if (res) {
             return res;
         }
@@ -1192,7 +1260,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
 
             if (val) {
                 Box* res = descriptorClsSpecialCases(rewrite_args, static_cast<BoxedClass*>(obj), val, r_val, for_call,
-                                                     should_bind_out);
+                                                     bind_obj_out, r_bind_obj_out);
                 if (res) {
                     return res;
                 }
@@ -1252,7 +1320,8 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
     // If descr and __get__ exist, then call __get__
     if (descr) {
         // Special cases first
-        Box* res = nondataDescriptorInstanceSpecialCases(rewrite_args, obj, descr, r_descr, for_call, should_bind_out);
+        Box* res = nondataDescriptorInstanceSpecialCases(rewrite_args, obj, descr, r_descr, for_call, bind_obj_out,
+                                                         r_bind_obj_out);
         if (res) {
             return res;
         }
@@ -1318,7 +1387,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     return getattrInternalGeneral(obj, attr, rewrite_args,
                                   /* cls_only */ false,
-                                  /* for_call */ false, NULL);
+                                  /* for_call */ false, NULL, NULL);
 }
 
 extern "C" Box* getattr(Box* obj, const char* attr) {
@@ -1826,26 +1895,27 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
     // Look up the argument. Pass in the arguments to getattrInternalGeneral or getclsattr_general
     // that will shortcut functions by not putting them into instancemethods
-    bool should_bind;
+    Box* bind_obj;
+    RewriterVar* r_bind_obj;
     Box* val;
     RewriterVar* r_val = NULL;
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, Location::any());
-        val = getattrInternalGeneral(obj, *attr, &grewrite_args, scope == CLASS_ONLY, true, &should_bind);
+        val = getattrInternalGeneral(obj, *attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
         if (!grewrite_args.out_success) {
             rewrite_args = NULL;
         } else if (val) {
             r_val = grewrite_args.out_rtn;
         }
     } else {
-        val = getattrInternalGeneral(obj, *attr, NULL, scope == CLASS_ONLY, true, &should_bind);
+        val = getattrInternalGeneral(obj, *attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
     }
 
     if (val == NULL) {
         return val;
     }
 
-    if (should_bind) {
+    if (bind_obj != NULL) {
         if (rewrite_args) {
             r_val->addGuard((int64_t)val);
         }
@@ -1857,7 +1927,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             Box* rtn;
             if (rewrite_args) {
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_val, rewrite_args->destination);
-                srewrite_args.arg1 = rewrite_args->obj;
+                srewrite_args.arg1 = r_bind_obj;
 
                 // should be no-ops:
                 if (npassed_args >= 1)
@@ -1870,7 +1940,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
                 rtn = runtimeCallInternal(val, &srewrite_args, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
                                                                            argspec.has_starargs, argspec.has_kwargs),
-                                          obj, arg1, arg2, NULL, keyword_names);
+                                          bind_obj, arg1, arg2, NULL, keyword_names);
 
                 if (!srewrite_args.out_success) {
                     rewrite_args = NULL;
@@ -1880,7 +1950,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             } else {
                 rtn = runtimeCallInternal(val, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
                                                                  argspec.has_starargs, argspec.has_kwargs),
-                                          obj, arg1, arg2, NULL, keyword_names);
+                                          bind_obj, arg1, arg2, NULL, keyword_names);
             }
 
             if (rewrite_args)
@@ -1896,7 +1966,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             Box* rtn;
             if (rewrite_args) {
                 CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_val, rewrite_args->destination);
-                srewrite_args.arg1 = rewrite_args->obj;
+                srewrite_args.arg1 = r_bind_obj;
                 srewrite_args.arg2 = rewrite_args->arg1;
                 srewrite_args.arg3 = rewrite_args->arg2;
                 srewrite_args.args = rewrite_args->rewriter->allocateAndCopyPlus1(
@@ -1907,7 +1977,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
                 rtn = runtimeCallInternal(val, &srewrite_args, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
                                                                            argspec.has_starargs, argspec.has_kwargs),
-                                          obj, arg1, arg2, new_args, keyword_names);
+                                          bind_obj, arg1, arg2, new_args, keyword_names);
 
                 if (!srewrite_args.out_success) {
                     rewrite_args = NULL;
@@ -1919,7 +1989,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
             } else {
                 rtn = runtimeCallInternal(val, NULL, ArgPassSpec(argspec.num_args + 1, argspec.num_keywords,
                                                                  argspec.has_starargs, argspec.has_kwargs),
-                                          obj, arg1, arg2, new_args, keyword_names);
+                                          bind_obj, arg1, arg2, new_args, keyword_names);
             }
             return rtn;
         }

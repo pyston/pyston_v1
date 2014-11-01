@@ -105,7 +105,7 @@ struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args);
 Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
-                            bool for_call, bool* should_bind_out);
+                            bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
 

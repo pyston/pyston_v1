@@ -128,6 +128,7 @@ void setupDescr() {
                                                  { None, None, None, None }));
     staticmethod_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)staticmethodGet, UNKNOWN, 3, 0, false, false)));
+    staticmethod_cls->freeze();
 
 
     classmethod_cls->giveAttr("__name__", boxStrConstant("classmethod"));
@@ -136,6 +137,7 @@ void setupDescr() {
                                                 { None, None, None, None }));
     classmethod_cls->giveAttr("__get__",
                               new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, 0, false, false)));
+    classmethod_cls->freeze();
 }
 
 void teardownDescr() {
