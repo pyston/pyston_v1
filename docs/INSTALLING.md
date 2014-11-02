@@ -91,7 +91,7 @@ and then repeat the correct process
 ### zsh
 `zsh` is needed when running pyston tests.
 ```
-apt-get install zsh
+sudo apt-get install zsh
 ```
 
 ### readline
