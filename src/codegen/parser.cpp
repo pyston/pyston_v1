@@ -24,6 +24,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "codegen/pypa-parser.h"
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -899,6 +900,10 @@ static std::string getParserCommandLine(const char* fn) {
 AST_Module* parse(const char* fn) {
     Timer _t("parsing");
 
+    if (ENABLE_PYPA_PARSER) {
+        return pypa_parse(fn);
+    }
+
     FILE* fp = popen(getParserCommandLine(fn).c_str(), "r");
 
     BufferedReader* reader = new BufferedReader(fp);
@@ -961,6 +966,10 @@ static void _reparse(const char* fn, const std::string& cache_fn) {
 // on the startup time (40ms -> 10ms).
 AST_Module* caching_parse(const char* fn) {
     Timer _t("parsing");
+
+    if (ENABLE_PYPA_PARSER) {
+        return pypa_parse(fn);
+    }
 
     int code;
     std::string cache_fn = std::string(fn) + "c";

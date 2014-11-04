@@ -93,6 +93,7 @@ TYPE_MAP = {
         _ast.Invert: 84,
         _ast.UAdd: 85,
         _ast.FloorDiv: 86,
+        _ast.Ellipsis: 87,
     }
 
 if sys.version_info >= (2,7):

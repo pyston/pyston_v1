@@ -116,6 +116,7 @@ enum AST_TYPE {
     FloorDiv = 86,
     DictComp = 15,
     Set = 43,
+    Ellipsis = 87,
 
     // Pseudo-nodes that are specific to this compiler:
     Branch = 200,
@@ -394,9 +395,19 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Delete() : AST_stmt(AST_TYPE::Delete){};
+    AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
+};
+
+class AST_Ellipsis : public AST_expr {
+public:
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_Ellipsis() : AST_expr(AST_TYPE::Ellipsis) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Ellipsis;
 };
 
 class AST_Expr : public AST_stmt {
@@ -422,6 +433,19 @@ public:
     AST_ExceptHandler() : AST(AST_TYPE::ExceptHandler) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExceptHandler;
+};
+
+
+class AST_ExtSlice : public AST_expr {
+public:
+    std::vector<AST_expr*> dims;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_ExtSlice() : AST_expr(AST_TYPE::ExtSlice) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExtSlice;
 };
 
 class AST_For : public AST_stmt {
@@ -981,8 +1005,10 @@ public:
     virtual bool visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
@@ -1047,8 +1073,10 @@ public:
     virtual bool visit_delete(AST_Delete* node) { return false; }
     virtual bool visit_dict(AST_Dict* node) { return false; }
     virtual bool visit_dictcomp(AST_DictComp* node) { return false; }
+    virtual bool visit_ellipsis(AST_Ellipsis* node) { return false; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
+    virtual bool visit_extslice(AST_ExtSlice* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
     virtual bool visit_functiondef(AST_FunctionDef* node) { return false; }
     virtual bool visit_generatorexp(AST_GeneratorExp* node) { return false; }
@@ -1103,6 +1131,8 @@ public:
     virtual void* visit_compare(AST_Compare* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dict(AST_Dict* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_generatorexp(AST_GeneratorExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_ifexp(AST_IfExp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_index(AST_Index* node) { RELEASE_ASSERT(0, ""); }
@@ -1185,8 +1215,10 @@ public:
     virtual bool visit_delete(AST_Delete* node);
     virtual bool visit_dict(AST_Dict* node);
     virtual bool visit_dictcomp(AST_DictComp* node);
+    virtual bool visit_ellipsis(AST_Ellipsis* node);
     virtual bool visit_excepthandler(AST_ExceptHandler* node);
     virtual bool visit_expr(AST_Expr* node);
+    virtual bool visit_extslice(AST_ExtSlice* node);
     virtual bool visit_for(AST_For* node);
     virtual bool visit_functiondef(AST_FunctionDef* node);
     virtual bool visit_generatorexp(AST_GeneratorExp* node);

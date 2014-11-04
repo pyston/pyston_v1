@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     bool force_repl = false;
     bool repl = true;
     bool stats = false;
-    while ((code = getopt(argc, argv, "+Oqcdibpjtrsvn")) != -1) {
+    while ((code = getopt(argc, argv, "+Oqcdibpjtrsvnx")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -84,6 +84,8 @@ int main(int argc, char** argv) {
             stats = true;
         } else if (code == 'r') {
             USE_STRIPPED_STDLIB = true;
+        } else if (code == 'x') {
+            ENABLE_PYPA_PARSER = true;
         } else if (code == '?')
             abort();
     }

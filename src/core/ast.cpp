@@ -423,6 +423,16 @@ void* AST_DictComp::accept_expr(ExprVisitor* v) {
     return v->visit_dictcomp(this);
 }
 
+void AST_Ellipsis::accept(ASTVisitor* v) {
+    bool skip = v->visit_ellipsis(this);
+    if (skip)
+        return;
+}
+
+void* AST_Ellipsis::accept_expr(ExprVisitor* v) {
+    return v->visit_ellipsis(this);
+}
+
 void AST_ExceptHandler::accept(ASTVisitor* v) {
     bool skip = v->visit_excepthandler(this);
     if (skip)
@@ -445,6 +455,18 @@ void AST_Expr::accept(ASTVisitor* v) {
 
 void AST_Expr::accept_stmt(StmtVisitor* v) {
     v->visit_expr(this);
+}
+
+
+void AST_ExtSlice::accept(ASTVisitor* v) {
+    bool skip = v->visit_extslice(this);
+    if (skip)
+        return;
+    visitVector(dims, v);
+}
+
+void* AST_ExtSlice::accept_expr(ExprVisitor* v) {
+    return v->visit_extslice(this);
 }
 
 void AST_For::accept(ASTVisitor* v) {
@@ -1196,6 +1218,11 @@ bool PrintVisitor::visit_dictcomp(AST_DictComp* node) {
     return true;
 }
 
+bool PrintVisitor::visit_ellipsis(AST_Ellipsis*) {
+    printf("...");
+    return true;
+}
+
 bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     printf("except");
     if (node->type) {
@@ -1220,6 +1247,15 @@ bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
 
 bool PrintVisitor::visit_expr(AST_Expr* node) {
     return false;
+}
+
+bool PrintVisitor::visit_extslice(AST_ExtSlice* node) {
+    for (int i = 0; i < node->dims.size(); ++i) {
+        if (i > 0)
+            printf(", ");
+        node->dims[i]->accept(this);
+    }
+    return true;
 }
 
 bool PrintVisitor::visit_for(AST_For* node) {
