@@ -85,6 +85,10 @@ if __name__ == "__main__":
             continue
         if "stackmap-sections-for-ELF" in patch_fn and svn_rev >= 214538:
             continue
+        if "Enable-invoking-the-patchpoint-intrinsic" in patch_fn and svn_rev >= 220055:
+            continue
+        if "support-varargs-intrinsics" in patch_fn and svn_rev >= 220205:
+            continue
 
         patch_fn = os.path.abspath(os.path.join(patch_dir, patch_fn))
         code = subprocess.call(["git", "am", patch_fn], cwd=repo)

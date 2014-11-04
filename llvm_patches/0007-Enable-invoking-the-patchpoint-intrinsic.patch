@@ -50,15 +50,15 @@ index 91b1022..a63c90a 100644
 -  } else
 +  } else if (Fn && Fn->isIntrinsic()) {
 +    switch (Fn->getIntrinsicID()) {
-+      default:
-+        llvm_unreachable("Cannot invoke this intrinsic");
-+      case Intrinsic::donothing:
-+        // Ignore invokes to @llvm.donothing: jump directly to the next BB.
-+        break;
-+      case Intrinsic::experimental_patchpoint_void:
-+      case Intrinsic::experimental_patchpoint_i64:
-+        visitPatchpoint(ImmutableCallSite(&I), LandingPad);
-+        break;
++    default:
++      llvm_unreachable("Cannot invoke this intrinsic");
++    case Intrinsic::donothing:
++      // Ignore invokes to @llvm.donothing: jump directly to the next BB.
++      break;
++    case Intrinsic::experimental_patchpoint_void:
++    case Intrinsic::experimental_patchpoint_i64:
++      visitPatchpoint(&I, LandingPad);
++      break;
 +    }
 +  } else {
      LowerCallTo(&I, getValue(Callee), false, LandingPad);
@@ -71,7 +71,7 @@ index 91b1022..a63c90a 100644
    case Intrinsic::experimental_patchpoint_void:
    case Intrinsic::experimental_patchpoint_i64: {
 -    visitPatchpoint(I);
-+    visitPatchpoint(ImmutableCallSite(&I), nullptr);
++    visitPatchpoint(&I);
      return nullptr;
    }
    }
@@ -405,7 +405,7 @@ index 236f1a6..bb7e82e 100644
    void visitVACopy(const CallInst &I);
    void visitStackmap(const CallInst &I);
 -  void visitPatchpoint(const CallInst &I);
-+  void visitPatchpoint(ImmutableCallSite CS, MachineBasicBlock *LandingPad);
++  void visitPatchpoint(ImmutableCallSite CS, MachineBasicBlock *LandingPad = nullptr);
  
    void visitUserOp1(const Instruction &I) {
      llvm_unreachable("UserOp1 should not exist at instruction selection time!");
