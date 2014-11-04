@@ -283,7 +283,7 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
         num_starting_threads++;
     }
 
-    ThreadStartArgs* args = new ThreadStartArgs({ .start_func = start_func, .arg1 = arg1, .arg2 = arg2, .arg3 = arg3 });
+    ThreadStartArgs* args = new ThreadStartArgs({.start_func = start_func, .arg1 = arg1, .arg2 = arg2, .arg3 = arg3 });
 
     pthread_t thread_id;
     int code = pthread_create(&thread_id, NULL, &_thread_start, args);

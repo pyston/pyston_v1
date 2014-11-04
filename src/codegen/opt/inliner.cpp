@@ -172,8 +172,13 @@ public:
                 }
 
                 // We load the bitcode lazily, so check if we haven't yet fully loaded the function:
-                if (f->isMaterializable())
+                if (f->isMaterializable()) {
+#if LLVMREV < 220600
                     f->Materialize();
+#else
+                    f->materialize();
+#endif
+                }
 
                 // It could still be a declaration, though I think the code won't generate this case any more:
                 if (f->isDeclaration())

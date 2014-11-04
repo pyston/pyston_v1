@@ -138,6 +138,7 @@ COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
 COMMON_CXXFLAGS += -I$(DEPS_DIR)/pypa-install/include
+COMMON_CXXFLAGS += -Wno-inconsistent-missing-override
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND

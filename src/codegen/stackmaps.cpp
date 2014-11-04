@@ -180,9 +180,13 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
             llvm::object::section_iterator section(Obj.end_sections());
             code = I->getSection(section);
             assert(!code);
+#if LLVMREV < 219314
             code = section->getSize(stackmap_size);
-            assert(stackmap_size > 0);
             assert(!code);
+#else
+            stackmap_size = section->getSize();
+#endif
+            assert(stackmap_size > 0);
 
             ASSERT(ptr.i8 - start_ptr == stackmap_size, "%ld %ld", ptr.i8 - start_ptr, stackmap_size);
 #endif

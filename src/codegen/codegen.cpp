@@ -151,8 +151,12 @@ public:
             code = I->getSection(section);
             assert(!code);
             bool is_text;
+#if LLVMREV < 219314
             code = section->isText(is_text);
             assert(!code);
+#else
+            is_text = section->isText();
+#endif
             if (!is_text)
                 continue;
 

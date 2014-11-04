@@ -29,7 +29,7 @@
 namespace pyston {
 
 void PatchpointInfo::addFrameVar(const std::string& name, CompilerType* type) {
-    frame_vars.push_back(FrameVarInfo({ .name = name, .type = type }));
+    frame_vars.push_back(FrameVarInfo({.name = name, .type = type }));
 }
 
 int ICSetupInfo::totalSize() const {
@@ -79,11 +79,11 @@ void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
         // printf("%s %d %d\n", frame_var.name.c_str(), r->locations[cur_arg].type, r->locations[cur_arg].regnum);
 
         map->names[frame_var.name].locations.push_back(
-            LocationMap::LocationTable::LocationEntry({ ._debug_pp_id = (uint64_t) this,
-                                                        .offset = r->offset,
-                                                        .length = patchpointSize(),
-                                                        .type = frame_var.type,
-                                                        .locations = std::move(locations) }));
+            LocationMap::LocationTable::LocationEntry({._debug_pp_id = (uint64_t) this,
+                                                       .offset = r->offset,
+                                                       .length = patchpointSize(),
+                                                       .type = frame_var.type,
+                                                       .locations = std::move(locations) }));
 
         cur_arg += num_args;
     }

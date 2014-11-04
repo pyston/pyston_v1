@@ -129,7 +129,7 @@ bool updateTBAA(Function* f) {
     LLVMContext &c = f->getContext();
 
     for (auto it = inst_begin(f), end = inst_end(f); it != end; ++it) {
-        MDNode *tbaa = it->getMetadata(LLVMContext::MD_tbaa);
+        MDNode *tbaa = it->getMDNode(LLVMContext::MD_tbaa);
         if (!tbaa)
             continue;
         //tbaa->dump();
