@@ -138,3 +138,11 @@ try:
     assert 0
 except TypeError, e:
     print 'ok'
+
+# has_key
+
+d = {1:2, 3:4, 'a': 5}
+print d.has_key(1)
+print d.has_key(42)
+print d.has_key('a')
+print d.has_key('b')
