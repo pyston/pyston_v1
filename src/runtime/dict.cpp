@@ -201,6 +201,19 @@ Box* dictNonzero(BoxedDict* self) {
     return boxBool(self->d.size());
 }
 
+Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
+    RELEASE_ASSERT(self->cls == dict_cls, "");
+
+    auto rtn = new BoxedDict();
+    for (Box* e : iterable->pyElements()) {
+        dictSetitem(rtn, e, default_value);
+    }
+
+    return rtn;
+}
+
+
+
 extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "dict.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
@@ -309,6 +322,8 @@ void setupDict() {
     dict_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)dictClear, NONE, 1)));
     dict_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)dictCopy, DICT, 1)));
 
+    dict_cls->giveAttr("fromkeys",
+                       new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None }));
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1)));
     dict_cls->giveAttr("iteritems",
                        new BoxedFunction(boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1)));

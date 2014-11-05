@@ -125,3 +125,16 @@ d = {}
 d.clear()
 print d
 
+# fromkeys
+
+d = {1:2, 3:4}
+
+print sorted(d.fromkeys([1,2]).items())
+print sorted(d.fromkeys([]).items())
+print sorted(d.fromkeys([3,4], 5).items())
+
+try:
+    print d.fromkeys()
+    assert 0
+except TypeError, e:
+    print 'ok'
