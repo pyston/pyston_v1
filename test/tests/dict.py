@@ -146,3 +146,20 @@ print d.has_key(1)
 print d.has_key(42)
 print d.has_key('a')
 print d.has_key('b')
+
+# popitem - actual order is implementation defined
+
+d = {1:2, 3:4, 'a': 5}
+
+l = []
+l.append(d.popitem())
+l.append(d.popitem())
+l.append(d.popitem())
+
+print sorted(l)
+
+try:
+    d.popitem()
+    assert 0
+except KeyError, e:
+    print 'ok'

@@ -171,6 +171,22 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
     return rtn;
 }
 
+Box* dictPopitem(BoxedDict* self) {
+    RELEASE_ASSERT(self->cls == dict_cls, "");
+
+    auto it = self->d.begin();
+    if (it == self->d.end()) {
+        raiseExcHelper(KeyError, "popitem(): dictionary is empty");
+    }
+
+    Box* key = it->first;
+    Box* value = it->second;
+    self->d.erase(it);
+
+    auto rtn = new BoxedTuple({ key, value });
+    return rtn;
+}
+
 Box* dictGet(BoxedDict* self, Box* k, Box* d) {
     assert(self->cls == dict_cls);
 
@@ -337,6 +353,8 @@ void setupDict() {
     dict_cls->giveAttr("iterkeys", dict_cls->getattr("__iter__"));
 
     dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
+    dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));
+
 
     dict_cls->giveAttr("get", new BoxedFunction(boxRTFunction((void*)dictGet, UNKNOWN, 3, 1, false, false), { None }));
 
