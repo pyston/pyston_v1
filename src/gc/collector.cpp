@@ -42,14 +42,21 @@ private:
 
 public:
     TraceStack() {}
-    TraceStack(const TraceStack& rhs) {
-        for (void* p : rhs.v) {
+    TraceStack(const std::vector<void*>& rhs) {
+        for (void* p : rhs) {
+            assert(!isMarked(GCAllocation::fromUserData(p)));
             push(p);
         }
     }
 
     void push(void* p) {
-        v.push_back(p);
+        GCAllocation* al = GCAllocation::fromUserData(p);
+
+        if (!isMarked(al)) {
+            setMark(al);
+
+            v.push_back(p);
+        }
     }
 
     int size() { return v.size(); }
@@ -66,10 +73,10 @@ public:
     }
 };
 
-static TraceStack roots;
+static std::vector<void*> roots;
 void registerPermanentRoot(void* obj) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
-    roots.push(obj);
+    roots.push_back(obj);
 
 #ifndef NDEBUG
     // Check for double-registers.  Wouldn't cause any problems, but we probably shouldn't be doing them.
@@ -181,13 +188,9 @@ static void markPhase() {
         assert(((intptr_t)p) % 8 == 0);
         GCAllocation* al = GCAllocation::fromUserData(p);
 
-        if (isMarked(al)) {
-            continue;
-        }
+        assert(isMarked(al));
 
         // printf("Marking + scanning %p\n", p);
-
-        setMark(al);
 
         GCKind kind_id = al->kind_id;
         if (kind_id == GCKind::UNTRACKED) {

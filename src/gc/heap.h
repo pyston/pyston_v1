@@ -43,16 +43,18 @@ static_assert(sizeof(GCAllocation) <= sizeof(void*),
 
 #define MARK_BIT 0x1
 
+inline bool isMarked(GCAllocation* header) {
+    return (header->gc_flags & MARK_BIT) != 0;
+}
+
 inline void setMark(GCAllocation* header) {
+    assert(!isMarked(header));
     header->gc_flags |= MARK_BIT;
 }
 
 inline void clearMark(GCAllocation* header) {
+    assert(isMarked(header));
     header->gc_flags &= ~MARK_BIT;
-}
-
-inline bool isMarked(GCAllocation* header) {
-    return (header->gc_flags & MARK_BIT) != 0;
 }
 
 #undef MARK_BIT
