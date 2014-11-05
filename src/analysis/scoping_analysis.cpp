@@ -24,9 +24,9 @@ class YieldVisitor : public NoopASTVisitor {
 public:
     YieldVisitor() : containsYield(false) {}
 
-    virtual bool visit_functiondef(AST_FunctionDef*) { return true; }
+    bool visit_functiondef(AST_FunctionDef*) override { return true; }
 
-    virtual bool visit_yield(AST_Yield*) {
+    bool visit_yield(AST_Yield*) override {
         containsYield = true;
         return true;
     }
@@ -55,25 +55,25 @@ static bool isCompilerCreatedName(const std::string& name) {
 
 class ModuleScopeInfo : public ScopeInfo {
 public:
-    virtual ScopeInfo* getParent() { return NULL; }
+    ScopeInfo* getParent() override { return NULL; }
 
-    virtual bool createsClosure() { return false; }
+    bool createsClosure() override { return false; }
 
-    virtual bool takesClosure() { return false; }
+    bool takesClosure() override { return false; }
 
     bool passesThroughClosure() override { return false; }
 
-    virtual bool refersToGlobal(const std::string& name) {
+    bool refersToGlobal(const std::string& name) override {
         if (isCompilerCreatedName(name))
             return false;
 
         // assert(name[0] != '#' && "should test this");
         return true;
     }
-    virtual bool refersToClosure(const std::string name) { return false; }
-    virtual bool saveInClosure(const std::string name) { return false; }
+    bool refersToClosure(const std::string name) override { return false; }
+    bool saveInClosure(const std::string name) override { return false; }
 
-    virtual const std::unordered_set<std::string>& getClassDefLocalNames() { RELEASE_ASSERT(0, ""); }
+    const std::unordered_set<std::string>& getClassDefLocalNames() override { RELEASE_ASSERT(0, ""); }
 };
 
 struct ScopingAnalysis::ScopeNameUsage {
@@ -120,17 +120,19 @@ public:
         assert(usage);
     }
 
-    virtual ~ScopeInfoBase() { delete this->usage; }
+    ~ScopeInfoBase() override { delete this->usage; }
 
-    virtual ScopeInfo* getParent() { return parent; }
+    ScopeInfo* getParent() override { return parent; }
 
-    virtual bool createsClosure() { return usage->referenced_from_nested.size() > 0; }
+    bool createsClosure() override { return usage->referenced_from_nested.size() > 0; }
 
-    virtual bool takesClosure() { return usage->got_from_closure.size() > 0 || usage->passthrough_accesses.size() > 0; }
+    bool takesClosure() override {
+        return usage->got_from_closure.size() > 0 || usage->passthrough_accesses.size() > 0;
+    }
 
     bool passesThroughClosure() override { return usage->passthrough_accesses.size() > 0 && !createsClosure(); }
 
-    virtual bool refersToGlobal(const std::string& name) {
+    bool refersToGlobal(const std::string& name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
@@ -139,20 +141,20 @@ public:
             return true;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
-    virtual bool refersToClosure(const std::string name) {
+    bool refersToClosure(const std::string name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
         return usage->got_from_closure.count(name) != 0;
     }
-    virtual bool saveInClosure(const std::string name) {
+    bool saveInClosure(const std::string name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
         return usage->referenced_from_nested.count(name) != 0;
     }
 
-    virtual const std::unordered_set<std::string>& getClassDefLocalNames() {
+    const std::unordered_set<std::string>& getClassDefLocalNames() override {
         RELEASE_ASSERT(usage->node->type == AST_TYPE::ClassDef, "");
         return usage->written;
     }
@@ -177,7 +179,7 @@ public:
 
     void doRead(const std::string& name) { cur->read.insert(name); }
 
-    virtual bool visit_name(AST_Name* node) {
+    bool visit_name(AST_Name* node) override {
         switch (node->ctx_type) {
             case AST_TYPE::Load:
                 doRead(node->id);
@@ -193,55 +195,55 @@ public:
         return true;
     }
 
-    virtual bool visit_assert(AST_Assert* node) { return false; }
-    virtual bool visit_assign(AST_Assign* node) { return false; }
-    virtual bool visit_augassign(AST_AugAssign* node) { return false; }
-    virtual bool visit_attribute(AST_Attribute* node) { return false; }
-    virtual bool visit_binop(AST_BinOp* node) { return false; }
-    virtual bool visit_boolop(AST_BoolOp* node) { return false; }
-    virtual bool visit_break(AST_Break* node) { return false; }
-    virtual bool visit_call(AST_Call* node) { return false; }
-    virtual bool visit_compare(AST_Compare* node) { return false; }
-    virtual bool visit_comprehension(AST_comprehension* node) { return false; }
-    // virtual bool visit_classdef(AST_ClassDef *node) { return false; }
-    virtual bool visit_continue(AST_Continue* node) { return false; }
-    virtual bool visit_dict(AST_Dict* node) { return false; }
-    virtual bool visit_dictcomp(AST_DictComp* node) { return false; }
-    virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
-    virtual bool visit_expr(AST_Expr* node) { return false; }
-    virtual bool visit_for(AST_For* node) { return false; }
-    // virtual bool visit_functiondef(AST_FunctionDef *node) { return false; }
-    // virtual bool visit_global(AST_Global *node) { return false; }
-    virtual bool visit_if(AST_If* node) { return false; }
-    virtual bool visit_ifexp(AST_IfExp* node) { return false; }
-    virtual bool visit_index(AST_Index* node) { return false; }
-    virtual bool visit_keyword(AST_keyword* node) { return false; }
-    virtual bool visit_list(AST_List* node) { return false; }
-    virtual bool visit_listcomp(AST_ListComp* node) { return false; }
-    // virtual bool visit_module(AST_Module *node) { return false; }
-    // virtual bool visit_name(AST_Name *node) { return false; }
-    virtual bool visit_num(AST_Num* node) { return false; }
-    virtual bool visit_pass(AST_Pass* node) { return false; }
-    virtual bool visit_print(AST_Print* node) { return false; }
-    virtual bool visit_raise(AST_Raise* node) { return false; }
-    virtual bool visit_repr(AST_Repr* node) { return false; }
-    virtual bool visit_return(AST_Return* node) { return false; }
-    virtual bool visit_slice(AST_Slice* node) { return false; }
-    virtual bool visit_str(AST_Str* node) { return false; }
-    virtual bool visit_subscript(AST_Subscript* node) { return false; }
-    virtual bool visit_tryexcept(AST_TryExcept* node) { return false; }
-    virtual bool visit_tryfinally(AST_TryFinally* node) { return false; }
-    virtual bool visit_tuple(AST_Tuple* node) { return false; }
-    virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
-    virtual bool visit_while(AST_While* node) { return false; }
-    virtual bool visit_with(AST_With* node) { return false; }
-    virtual bool visit_yield(AST_Yield* node) { return false; }
+    bool visit_assert(AST_Assert* node) override { return false; }
+    bool visit_assign(AST_Assign* node) override { return false; }
+    bool visit_augassign(AST_AugAssign* node) override { return false; }
+    bool visit_attribute(AST_Attribute* node) override { return false; }
+    bool visit_binop(AST_BinOp* node) override { return false; }
+    bool visit_boolop(AST_BoolOp* node) override { return false; }
+    bool visit_break(AST_Break* node) override { return false; }
+    bool visit_call(AST_Call* node) override { return false; }
+    bool visit_compare(AST_Compare* node) override { return false; }
+    bool visit_comprehension(AST_comprehension* node) override { return false; }
+    // bool visit_classdef(AST_ClassDef *node) override { return false; }
+    bool visit_continue(AST_Continue* node) override { return false; }
+    bool visit_dict(AST_Dict* node) override { return false; }
+    bool visit_dictcomp(AST_DictComp* node) override { return false; }
+    bool visit_excepthandler(AST_ExceptHandler* node) override { return false; }
+    bool visit_expr(AST_Expr* node) override { return false; }
+    bool visit_for(AST_For* node) override { return false; }
+    // bool visit_functiondef(AST_FunctionDef *node) override { return false; }
+    // bool visit_global(AST_Global *node) override { return false; }
+    bool visit_if(AST_If* node) override { return false; }
+    bool visit_ifexp(AST_IfExp* node) override { return false; }
+    bool visit_index(AST_Index* node) override { return false; }
+    bool visit_keyword(AST_keyword* node) override { return false; }
+    bool visit_list(AST_List* node) override { return false; }
+    bool visit_listcomp(AST_ListComp* node) override { return false; }
+    // bool visit_module(AST_Module *node) override { return false; }
+    // bool visit_name(AST_Name *node) override { return false; }
+    bool visit_num(AST_Num* node) override { return false; }
+    bool visit_pass(AST_Pass* node) override { return false; }
+    bool visit_print(AST_Print* node) override { return false; }
+    bool visit_raise(AST_Raise* node) override { return false; }
+    bool visit_repr(AST_Repr* node) override { return false; }
+    bool visit_return(AST_Return* node) override { return false; }
+    bool visit_slice(AST_Slice* node) override { return false; }
+    bool visit_str(AST_Str* node) override { return false; }
+    bool visit_subscript(AST_Subscript* node) override { return false; }
+    bool visit_tryexcept(AST_TryExcept* node) override { return false; }
+    bool visit_tryfinally(AST_TryFinally* node) override { return false; }
+    bool visit_tuple(AST_Tuple* node) override { return false; }
+    bool visit_unaryop(AST_UnaryOp* node) override { return false; }
+    bool visit_while(AST_While* node) override { return false; }
+    bool visit_with(AST_With* node) override { return false; }
+    bool visit_yield(AST_Yield* node) override { return false; }
 
-    virtual bool visit_branch(AST_Branch* node) { return false; }
-    virtual bool visit_jump(AST_Jump* node) { return false; }
+    bool visit_branch(AST_Branch* node) override { return false; }
+    bool visit_jump(AST_Jump* node) override { return false; }
 
 
-    virtual bool visit_delete(AST_Delete* node) {
+    bool visit_delete(AST_Delete* node) override {
         for (auto t : node->targets) {
             if (t->type == AST_TYPE::Name) {
                 doWrite(ast_cast<AST_Name>(t)->id);
@@ -250,7 +252,7 @@ public:
         return false;
     }
 
-    virtual bool visit_global(AST_Global* node) {
+    bool visit_global(AST_Global* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             const std::string& name = node->names[i];
             cur->forced_globals.insert(name);
@@ -258,7 +260,7 @@ public:
         return true;
     }
 
-    virtual bool visit_classdef(AST_ClassDef* node) {
+    bool visit_classdef(AST_ClassDef* node) override {
         if (node == orig_node) {
             for (AST_stmt* s : node->body)
                 s->accept(this);
@@ -276,7 +278,7 @@ public:
         }
     }
 
-    virtual bool visit_functiondef(AST_FunctionDef* node) {
+    bool visit_functiondef(AST_FunctionDef* node) override {
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
@@ -300,7 +302,7 @@ public:
         }
     }
 
-    virtual bool visit_generatorexp(AST_GeneratorExp* node) {
+    bool visit_generatorexp(AST_GeneratorExp* node) override {
         if (node == orig_node) {
             bool first = true;
             for (AST_comprehension* c : node->generators) {
@@ -320,7 +322,7 @@ public:
         return true;
     }
 
-    virtual bool visit_lambda(AST_Lambda* node) {
+    bool visit_lambda(AST_Lambda* node) override {
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
@@ -339,7 +341,7 @@ public:
         return true;
     }
 
-    virtual bool visit_import(AST_Import* node) {
+    bool visit_import(AST_Import* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
             if (alias->asname.size())
@@ -350,7 +352,7 @@ public:
         return true;
     }
 
-    virtual bool visit_importfrom(AST_ImportFrom* node) {
+    bool visit_importfrom(AST_ImportFrom* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
             if (alias->asname.size())

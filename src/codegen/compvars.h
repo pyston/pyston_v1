@@ -165,9 +165,9 @@ template <class V> class ValuedCompilerType : public _ValuedCompilerType<V> { pu
 template <> class ValuedCompilerType<llvm::Value*> : public _ValuedCompilerType<llvm::Value*> {
 public:
     virtual llvm::Type* llvmType() = 0;
-    virtual std::string debugName();
+    std::string debugName() override;
 
-    void assertMatches(llvm::Value* v) override final {
+    void assertMatches(llvm::Value* v) override {
         if (v->getType() != llvmType()) {
             v->getType()->dump();
             llvmType()->dump();
@@ -181,13 +181,13 @@ public:
         abort();
     }
 
-    virtual CompilerVariable* dup(ConcreteCompilerVariable* v, DupCache& cache);
-    virtual ConcreteCompilerType* getConcreteType() { return this; }
-    virtual bool canConvertTo(ConcreteCompilerType* other_type) { return other_type == this || other_type == UNKNOWN; }
-    virtual ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
-                                                    ConcreteCompilerType* other_type);
-    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override final;
-    int numFrameArgs() override final { return 1; }
+    CompilerVariable* dup(ConcreteCompilerVariable* v, DupCache& cache) override;
+    ConcreteCompilerType* getConcreteType() override { return this; }
+    bool canConvertTo(ConcreteCompilerType* other_type) override { return other_type == this || other_type == UNKNOWN; }
+    ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
+                                            ConcreteCompilerType* other_type) override;
+    void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override;
+    int numFrameArgs() override { return 1; }
 };
 
 class CompilerVariable {
@@ -273,8 +273,8 @@ private:
     V value;
 
 protected:
-    virtual void drop(IREmitter& emitter) { type->drop(emitter, this); }
-    virtual void grab(IREmitter& emmitter) { type->grab(emmitter, this); }
+    void drop(IREmitter& emitter) override { type->drop(emitter, this); }
+    void grab(IREmitter& emmitter) override { type->grab(emmitter, this); }
 
 public:
     ValuedCompilerVariable(T* type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {
@@ -282,8 +282,8 @@ public:
         type->assertMatches(value);
 #endif
     }
-    virtual T* getType() { return type; }
-    virtual V getValue() { return value; }
+    T* getType() override { return type; }
+    V getValue() { return value; }
 
     ConcreteCompilerType* getConcreteType() override { return type->getConcreteType(); }
     ConcreteCompilerType* getBoxType() override { return type->getBoxType(); }
@@ -315,20 +315,20 @@ public:
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) override {
         return type->nonzero(emitter, info, this);
     }
-    virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only) {
+    CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only) override {
         return type->getattr(emitter, info, this, attr, cls_only);
     }
-    virtual void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) {
+    void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) override {
         type->setattr(emitter, info, this, attr, v);
     }
 
-    virtual void delattr(IREmitter& emitter, const OpInfo& info, const std::string* attr) {
+    void delattr(IREmitter& emitter, const OpInfo& info, const std::string* attr) override {
         type->delattr(emitter, info, this, attr);
     }
 
-    virtual CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool clsonly,
-                                       struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
-                                       const std::vector<const std::string*>* keyword_names) {
+    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool clsonly,
+                               struct ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+                               const std::vector<const std::string*>* keyword_names) override {
         return type->callattr(emitter, info, this, attr, clsonly, argspec, args, keyword_names);
     }
     CompilerVariable* call(IREmitter& emitter, const OpInfo& info, struct ArgPassSpec argspec,

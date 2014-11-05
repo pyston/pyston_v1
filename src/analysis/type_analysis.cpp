@@ -36,8 +36,8 @@ namespace pyston {
 
 class NullTypeAnalysis : public TypeAnalysis {
 public:
-    virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block);
-    virtual ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block);
+    ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) override;
+    ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) override;
 
     BoxedClass* speculatedExprClass(AST_expr*) override { return NULL; }
 };
@@ -168,7 +168,7 @@ private:
         }
     }
 
-    virtual void* visit_attribute(AST_Attribute* node) {
+    void* visit_attribute(AST_Attribute* node) override {
         CompilerType* t = getType(node->value);
         CompilerType* rtn = t->getattrType(&node->attr, false);
 
@@ -190,7 +190,7 @@ private:
         return rtn;
     }
 
-    virtual void* visit_clsattribute(AST_ClsAttribute* node) {
+    void* visit_clsattribute(AST_ClsAttribute* node) override {
         CompilerType* t = getType(node->value);
         CompilerType* rtn = t->getattrType(&node->attr, true);
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
@@ -207,7 +207,7 @@ private:
         return type == STR || type == INT || type == FLOAT || type == LIST || type == DICT;
     }
 
-    virtual void* visit_augbinop(AST_AugBinOp* node) {
+    void* visit_augbinop(AST_AugBinOp* node) override {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
         if (!hasFixedBinops(left) || !hasFixedBinops(right))
@@ -236,7 +236,7 @@ private:
         return rtn;
     }
 
-    virtual void* visit_binop(AST_BinOp* node) {
+    void* visit_binop(AST_BinOp* node) override {
         CompilerType* left = getType(node->left);
         CompilerType* right = getType(node->right);
         if (!hasFixedBinops(left) || !hasFixedBinops(right))
@@ -265,7 +265,7 @@ private:
         return rtn;
     }
 
-    virtual void* visit_boolop(AST_BoolOp* node) {
+    void* visit_boolop(AST_BoolOp* node) override {
         int n = node->values.size();
 
         CompilerType* rtn = NULL;
@@ -280,7 +280,7 @@ private:
         return rtn;
     }
 
-    virtual void* visit_call(AST_Call* node) {
+    void* visit_call(AST_Call* node) override {
         CompilerType* func = getType(node->func);
 
         std::vector<CompilerType*> arg_types;
@@ -316,7 +316,7 @@ private:
         return rtn_type;
     }
 
-    virtual void* visit_compare(AST_Compare* node) {
+    void* visit_compare(AST_Compare* node) override {
         if (node->ops.size() == 1) {
             CompilerType* left = getType(node->left);
             CompilerType* right = getType(node->comparators[0]);
@@ -342,7 +342,7 @@ private:
         }
     }
 
-    virtual void* visit_dict(AST_Dict* node) {
+    void* visit_dict(AST_Dict* node) override {
         // Get all the sub-types, even though they're not necessary to
         // determine the expression type, so that things like speculations
         // can be processed.
@@ -354,11 +354,11 @@ private:
         return DICT;
     }
 
-    virtual void* visit_index(AST_Index* node) { return getType(node->value); }
+    void* visit_index(AST_Index* node) override { return getType(node->value); }
 
-    virtual void* visit_lambda(AST_Lambda* node) { return typeFromClass(function_cls); }
+    void* visit_lambda(AST_Lambda* node) override { return typeFromClass(function_cls); }
 
-    virtual void* visit_langprimitive(AST_LangPrimitive* node) {
+    void* visit_langprimitive(AST_LangPrimitive* node) override {
         switch (node->opcode) {
             case AST_LangPrimitive::ISINSTANCE:
                 return BOOL;
@@ -377,7 +377,7 @@ private:
         }
     }
 
-    virtual void* visit_list(AST_List* node) {
+    void* visit_list(AST_List* node) override {
         // Get all the sub-types, even though they're not necessary to
         // determine the expression type, so that things like speculations
         // can be processed.
@@ -388,7 +388,7 @@ private:
         return LIST;
     }
 
-    virtual void* visit_name(AST_Name* node) {
+    void* visit_name(AST_Name* node) override {
         if (scope_info->refersToGlobal(node->id)) {
             if (node->id == "xrange") {
                 // printf("TODO guard here and return the classobj\n");
@@ -412,7 +412,7 @@ private:
         return t;
     }
 
-    virtual void* visit_num(AST_Num* node) {
+    void* visit_num(AST_Num* node) override {
         switch (node->num_type) {
             case AST_Num::INT:
                 return INT;
@@ -426,15 +426,15 @@ private:
         abort();
     }
 
-    virtual void* visit_repr(AST_Repr* node) { return STR; }
+    void* visit_repr(AST_Repr* node) override { return STR; }
 
-    virtual void* visit_set(AST_Set* node) { return SET; }
+    void* visit_set(AST_Set* node) override { return SET; }
 
-    virtual void* visit_slice(AST_Slice* node) { return SLICE; }
+    void* visit_slice(AST_Slice* node) override { return SLICE; }
 
-    virtual void* visit_str(AST_Str* node) { return STR; }
+    void* visit_str(AST_Str* node) override { return STR; }
 
-    virtual void* visit_subscript(AST_Subscript* node) {
+    void* visit_subscript(AST_Subscript* node) override {
         CompilerType* val = getType(node->value);
         CompilerType* slice = getType(node->slice);
         static std::string name("__getitem__");
@@ -444,7 +444,7 @@ private:
         return getitem_type->callType(ArgPassSpec(1), args, NULL);
     }
 
-    virtual void* visit_tuple(AST_Tuple* node) {
+    void* visit_tuple(AST_Tuple* node) override {
         std::vector<CompilerType*> elt_types;
         for (int i = 0; i < node->elts.size(); i++) {
             elt_types.push_back(getType(node->elts[i]));
@@ -452,7 +452,7 @@ private:
         return makeTupleType(elt_types);
     }
 
-    virtual void* visit_unaryop(AST_UnaryOp* node) {
+    void* visit_unaryop(AST_UnaryOp* node) override {
         CompilerType* operand = getType(node->operand);
 
         // TODO this isn't the exact behavior
@@ -462,29 +462,29 @@ private:
         return attr_type->callType(ArgPassSpec(0), arg_types, NULL);
     }
 
-    virtual void* visit_yield(AST_Yield*) { return UNKNOWN; }
+    void* visit_yield(AST_Yield*) override { return UNKNOWN; }
 
 
-    virtual void visit_assert(AST_Assert* node) {
+    void visit_assert(AST_Assert* node) override {
         getType(node->test);
         if (node->msg)
             getType(node->msg);
     }
 
-    virtual void visit_assign(AST_Assign* node) {
+    void visit_assign(AST_Assign* node) override {
         CompilerType* t = getType(node->value);
         for (int i = 0; i < node->targets.size(); i++) {
             _doSet(node->targets[i], t);
         }
     }
 
-    virtual void visit_branch(AST_Branch* node) {
+    void visit_branch(AST_Branch* node) override {
         if (EXPAND_UNNEEDED) {
             getType(node->test);
         }
     }
 
-    virtual void visit_classdef(AST_ClassDef* node) {
+    void visit_classdef(AST_ClassDef* node) override {
         for (auto d : node->decorator_list) {
             getType(d);
         }
@@ -499,7 +499,7 @@ private:
         _doSet(node->name, t);
     }
 
-    virtual void visit_delete(AST_Delete* node) {
+    void visit_delete(AST_Delete* node) override {
         for (AST_expr* target : node->targets) {
             switch (target->type) {
                 case AST_TYPE::Subscript:
@@ -517,14 +517,14 @@ private:
         }
     }
 
-    virtual void visit_expr(AST_Expr* node) {
+    void visit_expr(AST_Expr* node) override {
         if (EXPAND_UNNEEDED) {
             if (node->value != NULL)
                 getType(node->value);
         }
     }
 
-    virtual void visit_functiondef(AST_FunctionDef* node) {
+    void visit_functiondef(AST_FunctionDef* node) override {
         for (auto d : node->decorator_list) {
             getType(d);
         }
@@ -536,9 +536,10 @@ private:
         _doSet(node->name, typeFromClass(function_cls));
     }
 
-    virtual void visit_global(AST_Global* node) {}
+    void visit_global(AST_Global* node) override {}
 
-    virtual void visit_alias(AST_alias* node) {
+    // not part of the visitor api:
+    void _visit_alias(AST_alias* node) {
         const std::string* name = &node->name;
         if (node->asname.size())
             name = &node->asname;
@@ -546,22 +547,22 @@ private:
         _doSet(*name, UNKNOWN);
     }
 
-    virtual void visit_import(AST_Import* node) {
+    void visit_import(AST_Import* node) override {
         for (AST_alias* alias : node->names)
-            visit_alias(alias);
+            _visit_alias(alias);
     }
 
-    virtual void visit_importfrom(AST_ImportFrom* node) {
+    void visit_importfrom(AST_ImportFrom* node) override {
         for (AST_alias* alias : node->names)
-            visit_alias(alias);
+            _visit_alias(alias);
     }
 
-    virtual void visit_invoke(AST_Invoke* node) { node->stmt->accept_stmt(this); }
+    void visit_invoke(AST_Invoke* node) override { node->stmt->accept_stmt(this); }
 
-    virtual void visit_jump(AST_Jump* node) {}
-    virtual void visit_pass(AST_Pass* node) {}
+    void visit_jump(AST_Jump* node) override {}
+    void visit_pass(AST_Pass* node) override {}
 
-    virtual void visit_print(AST_Print* node) {
+    void visit_print(AST_Print* node) override {
         if (node->dest)
             getType(node->dest);
 
@@ -572,7 +573,7 @@ private:
         }
     }
 
-    virtual void visit_raise(AST_Raise* node) {
+    void visit_raise(AST_Raise* node) override {
         if (EXPAND_UNNEEDED) {
             if (node->arg0)
                 getType(node->arg0);
@@ -583,14 +584,14 @@ private:
         }
     }
 
-    virtual void visit_return(AST_Return* node) {
+    void visit_return(AST_Return* node) override {
         if (EXPAND_UNNEEDED) {
             if (node->value != NULL)
                 getType(node->value);
         }
     }
 
-    virtual void visit_unreachable(AST_Unreachable* node) {}
+    void visit_unreachable(AST_Unreachable* node) override {}
 
 public:
     static void propagate(CFGBlock* block, const TypeMap& starting, TypeMap& ending, ExprTypeMap& expr_types,
@@ -614,11 +615,11 @@ private:
           speculation(speculation) {}
 
 public:
-    virtual ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) {
+    ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) override {
         assert(block->successors.size() > 0);
         return getTypeAtBlockStart(name, block->successors[0]);
     }
-    virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) {
+    ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) override {
         CompilerType* base = starting_types[block][name];
         ASSERT(base != NULL, "%s %d", name.c_str(), block->idx);
 
@@ -627,7 +628,7 @@ public:
         return rtn;
     }
 
-    virtual BoxedClass* speculatedExprClass(AST_expr* call) { return type_speculations[call]; }
+    BoxedClass* speculatedExprClass(AST_expr* call) override { return type_speculations[call]; }
 
     static bool merge(CompilerType* lhs, CompilerType*& rhs) {
         assert(lhs);

@@ -221,7 +221,7 @@ public:
         return MayAlias;
     }
 
-    virtual AliasResult alias(const Location& LocA, const Location& LocB) {
+    AliasResult alias(const Location& LocA, const Location& LocB) override {
         if (VERBOSITY("opt.aa") >= 2 && depth == 0) {
             cast<Instruction>(LocA.Ptr)->getParent()->dump();
         }
@@ -245,7 +245,7 @@ public:
     // There are multiple (overloaded) "getModRefInfo" functions in AliasAnalysis, and apparently
     // this means you need to add this line:
     using AliasAnalysis::getModRefInfo;
-    virtual ModRefResult getModRefInfo(ImmutableCallSite CS, const Location& Loc) {
+    ModRefResult getModRefInfo(ImmutableCallSite CS, const Location& Loc) override {
         ModRefResult base = AliasAnalysis::getModRefInfo(CS, Loc);
         if (!CS.getCalledFunction())
             return base;
@@ -308,7 +308,7 @@ public:
         return ModRefResult(mask & base);
     }
 
-    virtual void* getAdjustedAnalysisPointer(const void* ID) {
+    void* getAdjustedAnalysisPointer(const void* ID) override {
         if (ID == &AliasAnalysis::ID)
             return (AliasAnalysis*)this;
         return this;

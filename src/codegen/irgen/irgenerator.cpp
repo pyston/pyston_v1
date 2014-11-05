@@ -2244,7 +2244,7 @@ private:
     }
 
 public:
-    void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) {
+    void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
         if (ENABLE_FRAME_INTROSPECTION) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!

@@ -1088,7 +1088,7 @@ public:
         curblock = normal_dest;
     }
 
-    virtual bool visit_classdef(AST_ClassDef* node) {
+    bool visit_classdef(AST_ClassDef* node) override {
         // Remap in place: see note in visit_functiondef for why.
 
         // Decorators are evaluated before the defaults:
@@ -1104,7 +1104,7 @@ public:
         return true;
     }
 
-    virtual bool visit_functiondef(AST_FunctionDef* node) {
+    bool visit_functiondef(AST_FunctionDef* node) override {
         // As much as I don't like it, for now we're remapping these in place.
         // This is because we do certain analyses pre-remapping, and associate the
         // results with the node.  We can either do some refactoring and have a way
@@ -1128,7 +1128,7 @@ public:
         return true;
     }
 
-    virtual bool visit_global(AST_Global* node) {
+    bool visit_global(AST_Global* node) override {
         push_back(node);
         return true;
     }
@@ -1142,7 +1142,7 @@ public:
         }
     }
 
-    virtual bool visit_import(AST_Import* node) {
+    bool visit_import(AST_Import* node) override {
         for (AST_alias* a : node->names) {
             AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
             import->args.push_back(new AST_Num());
@@ -1182,7 +1182,7 @@ public:
         return true;
     }
 
-    virtual bool visit_importfrom(AST_ImportFrom* node) {
+    bool visit_importfrom(AST_ImportFrom* node) override {
         RELEASE_ASSERT(node->level == 0, "");
 
         AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
@@ -1227,7 +1227,7 @@ public:
         return true;
     }
 
-    virtual bool visit_pass(AST_Pass* node) { return true; }
+    bool visit_pass(AST_Pass* node) override { return true; }
 
     bool visit_assert(AST_Assert* node) override {
         AST_Branch* br = new AST_Branch();
@@ -1280,7 +1280,7 @@ public:
         return true;
     }
 
-    virtual bool visit_assign(AST_Assign* node) {
+    bool visit_assign(AST_Assign* node) override {
         AST_expr* remapped_value = remapExpr(node->value);
 
         for (AST_expr* target : node->targets) {
@@ -1289,7 +1289,7 @@ public:
         return true;
     }
 
-    virtual bool visit_augassign(AST_AugAssign* node) {
+    bool visit_augassign(AST_AugAssign* node) override {
         // augassign is pretty tricky; "x" += "y" mostly textually maps to
         // "x" = "x" =+ "y" (using "=+" to represent an augbinop)
         // except that "x" only gets evaluated once.  So it's something like
@@ -1382,7 +1382,7 @@ public:
         return true;
     }
 
-    virtual bool visit_delete(AST_Delete* node) {
+    bool visit_delete(AST_Delete* node) override {
         for (auto t : node->targets) {
             AST_Delete* astdel = new AST_Delete();
             astdel->lineno = node->lineno;
@@ -1418,7 +1418,7 @@ public:
         return true;
     }
 
-    virtual bool visit_expr(AST_Expr* node) {
+    bool visit_expr(AST_Expr* node) override {
         AST_Expr* remapped = new AST_Expr();
         remapped->lineno = node->lineno;
         remapped->col_offset = node->col_offset;
@@ -1427,7 +1427,7 @@ public:
         return true;
     }
 
-    virtual bool visit_print(AST_Print* node) {
+    bool visit_print(AST_Print* node) override {
         AST_expr* dest = remapExpr(node->dest);
 
         int i = 0;
@@ -1464,7 +1464,7 @@ public:
         return true;
     }
 
-    virtual bool visit_return(AST_Return* node) {
+    bool visit_return(AST_Return* node) override {
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda) {
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
@@ -1476,7 +1476,7 @@ public:
         return true;
     }
 
-    virtual bool visit_if(AST_If* node) {
+    bool visit_if(AST_If* node) override {
         if (!curblock)
             return true;
 
@@ -1531,7 +1531,7 @@ public:
         return true;
     }
 
-    virtual bool visit_break(AST_Break* node) {
+    bool visit_break(AST_Break* node) override {
         if (!curblock)
             return true;
 
@@ -1549,7 +1549,7 @@ public:
         return true;
     }
 
-    virtual bool visit_continue(AST_Continue* node) {
+    bool visit_continue(AST_Continue* node) override {
         if (!curblock)
             return true;
 
@@ -1568,7 +1568,7 @@ public:
         return true;
     }
 
-    virtual bool visit_while(AST_While* node) {
+    bool visit_while(AST_While* node) override {
         if (!curblock)
             return true;
 
@@ -1629,7 +1629,7 @@ public:
         return true;
     }
 
-    virtual bool visit_for(AST_For* node) {
+    bool visit_for(AST_For* node) override {
         if (!curblock)
             return true;
 
@@ -1867,7 +1867,7 @@ public:
         return true;
     }
 
-    virtual bool visit_with(AST_With* node) {
+    bool visit_with(AST_With* node) override {
         char ctxmgrname_buf[80];
         snprintf(ctxmgrname_buf, 80, "#ctxmgr_%p", node);
         char exitname_buf[80];
