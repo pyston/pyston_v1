@@ -46,6 +46,12 @@ Box* dictRepr(BoxedDict* self) {
     return boxString(std::string(chars.begin(), chars.end()));
 }
 
+Box* dictClear(BoxedDict* self) {
+    RELEASE_ASSERT(self->cls == dict_cls, "");
+    self->d.clear();
+    return None;
+}
+
 Box* dictCopy(BoxedDict* self) {
     RELEASE_ASSERT(self->cls == dict_cls, "");
 
@@ -300,6 +306,7 @@ void setupDict() {
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));
 
+    dict_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)dictClear, NONE, 1)));
     dict_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)dictCopy, DICT, 1)));
 
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1)));

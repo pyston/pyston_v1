@@ -114,3 +114,14 @@ print d2, d
 d = {}
 print d.__init__((('a', 1), ('b', 2)), b=3)
 print sorted(d.items())
+
+# clear
+d = {1:2, 'a': 'b'}
+d.clear()
+
+print d
+
+d = {}
+d.clear()
+print d
+
