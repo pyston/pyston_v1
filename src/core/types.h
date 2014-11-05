@@ -72,16 +72,26 @@ struct ArgPassSpec {
 };
 static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
 
+namespace gc {
+
+class TraceStack;
 class GCVisitor {
+private:
+    bool isValid(void* p);
+
 public:
-    virtual ~GCVisitor() {}
-    virtual void visit(void* p) = 0;
-    virtual void visitRange(void* const* start, void* const* end) = 0;
-    virtual void visitPotential(void* p) = 0;
-    virtual void visitPotentialRange(void* const* start, void* const* end) = 0;
+    TraceStack* stack;
+    GCVisitor(TraceStack* stack) : stack(stack) {}
+
+    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
+    void visit(void* p);
+    void visitRange(void* const* start, void* const* end);
+    void visitPotential(void* p);
+    void visitPotentialRange(void* const* start, void* const* end);
 };
 
-
+} // namespace gc
+using gc::GCVisitor;
 
 namespace EffortLevel {
 enum EffortLevel {

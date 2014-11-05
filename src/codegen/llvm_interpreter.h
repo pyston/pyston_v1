@@ -21,15 +21,18 @@ class Function;
 
 namespace pyston {
 
+namespace gc {
+class GCVisitor;
+}
+
 class Box;
 class BoxedDict;
-class GCVisitor;
 class LineInfo;
 
 Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
 
-void gatherInterpreterRoots(GCVisitor* visitor);
+void gatherInterpreterRoots(gc::GCVisitor* visitor);
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
 }

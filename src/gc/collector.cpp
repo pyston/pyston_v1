@@ -86,11 +86,11 @@ GCRootHandle::~GCRootHandle() {
 
 
 
-bool TraceStackGCVisitor::isValid(void* p) {
+bool GCVisitor::isValid(void* p) {
     return global_heap.getAllocationFromInteriorPointer(p) != NULL;
 }
 
-void TraceStackGCVisitor::visit(void* p) {
+void GCVisitor::visit(void* p) {
     if (isNonheapRoot(p)) {
         return;
     } else {
@@ -99,21 +99,21 @@ void TraceStackGCVisitor::visit(void* p) {
     }
 }
 
-void TraceStackGCVisitor::visitRange(void* const* start, void* const* end) {
+void GCVisitor::visitRange(void* const* start, void* const* end) {
     while (start < end) {
         visit(*start);
         start++;
     }
 }
 
-void TraceStackGCVisitor::visitPotential(void* p) {
+void GCVisitor::visitPotential(void* p) {
     GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
     if (a) {
         visit(a->user_data);
     }
 }
 
-void TraceStackGCVisitor::visitPotentialRange(void* const* start, void* const* end) {
+void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     while (start < end) {
         visitPotential(*start);
         start++;
@@ -130,7 +130,7 @@ static void markPhase() {
     TraceStack stack(roots);
     collectStackRoots(&stack);
 
-    TraceStackGCVisitor visitor(&stack);
+    GCVisitor visitor(&stack);
 
     for (void* p : nonheap_roots) {
         Box* b = reinterpret_cast<Box*>(p);

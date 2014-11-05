@@ -42,7 +42,7 @@ void collectRoots(void* start, void* end, TraceStack* stack) {
 
     ASSERT((char*)end - (char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
            ((char*)end - (char*)start) * 1.0 / (1 << 30));
-    TraceStackGCVisitor(stack).visitPotentialRange((void**)start, (void**)end);
+    GCVisitor(stack).visitPotentialRange((void**)start, (void**)end);
 }
 
 
@@ -81,7 +81,7 @@ void collectStackRoots(TraceStack* stack) {
     collectLocalStack(stack);
     collectOtherThreadsStacks(stack);
 
-    TraceStackGCVisitor visitor(stack);
+    GCVisitor visitor(stack);
     gatherInterpreterRoots(&visitor);
 }
 }
