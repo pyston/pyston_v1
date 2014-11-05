@@ -21,6 +21,7 @@
 #include "llvm/Support/Memory.h"
 
 #include "core/common.h"
+#include "core/stats.h"
 #include "core/util.h"
 
 // This code was copy-pasted from SectionMemoryManager.cpp;
@@ -33,29 +34,30 @@ namespace pyston {
 class PystonMemoryManager : public RTDyldMemoryManager {
 public:
     PystonMemoryManager() {}
-    virtual ~PystonMemoryManager();
+    ~PystonMemoryManager() override;
 
-    virtual uint8_t* allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName);
+    uint8_t* allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID,
+                                 StringRef SectionName) override;
 
-    virtual uint8_t* allocateDataSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName,
-                                         bool isReadOnly);
+    uint8_t* allocateDataSection(uintptr_t Size, unsigned Alignment, unsigned SectionID, StringRef SectionName,
+                                 bool isReadOnly) override;
 
-    virtual bool finalizeMemory(std::string* ErrMsg = 0);
-
-    virtual void invalidateInstructionCache();
+    bool finalizeMemory(std::string* ErrMsg = 0) override;
 
 private:
+    void invalidateInstructionCache();
+
     struct MemoryGroup {
         SmallVector<sys::MemoryBlock, 16> AllocatedMem;
         SmallVector<sys::MemoryBlock, 16> FreeMem;
         sys::MemoryBlock Near;
     };
 
-    uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment);
+    uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment, StringRef SectionName);
 
     llvm_error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup, unsigned Permissions);
 
-    virtual uint64_t getSymbolAddress(const std::string& Name);
+    uint64_t getSymbolAddress(const std::string& Name) override;
 
     MemoryGroup CodeMem;
     MemoryGroup RWDataMem;
@@ -67,17 +69,18 @@ uint8_t* PystonMemoryManager::allocateDataSection(uintptr_t Size, unsigned Align
     // printf("allocating data section: %ld %d %d %s %d\n", Size, Alignment, SectionID, SectionName.data(), IsReadOnly);
     // assert(SectionName != ".llvm_stackmaps");
     if (IsReadOnly)
-        return allocateSection(RODataMem, Size, Alignment);
-    return allocateSection(RWDataMem, Size, Alignment);
+        return allocateSection(RODataMem, Size, Alignment, SectionName);
+    return allocateSection(RWDataMem, Size, Alignment, SectionName);
 }
 
 uint8_t* PystonMemoryManager::allocateCodeSection(uintptr_t Size, unsigned Alignment, unsigned SectionID,
                                                   StringRef SectionName) {
     // printf("allocating code section: %ld %d %d %s\n", Size, Alignment, SectionID, SectionName.data());
-    return allocateSection(CodeMem, Size, Alignment);
+    return allocateSection(CodeMem, Size, Alignment, SectionName);
 }
 
-uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment) {
+uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t Size, unsigned Alignment,
+                                              StringRef SectionName) {
     if (!Alignment)
         Alignment = 16;
 
@@ -117,6 +120,9 @@ uint8_t* PystonMemoryManager::allocateSection(MemoryGroup& MemGroup, uintptr_t S
         // FIXME: Add error propogation to the interface.
         return NULL;
     }
+
+    std::string stat_name = "mem_section_" + std::string(SectionName);
+    Stats::log(Stats::getStatId(stat_name), MB.size());
 
     // Save this address as the basis for our next request
     MemGroup.Near = MB;
