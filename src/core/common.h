@@ -31,6 +31,9 @@
 #define __has_builtin(x) 0
 #endif
 
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 #define _STRINGIFY(N) #N
 #define STRINGIFY(N) _STRINGIFY(N)
 #define _CAT(A, B) A##B

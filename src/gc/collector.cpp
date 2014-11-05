@@ -36,6 +36,36 @@
 namespace pyston {
 namespace gc {
 
+class TraceStack {
+private:
+    std::vector<void*> v;
+
+public:
+    TraceStack() {}
+    TraceStack(const TraceStack& rhs) {
+        for (void* p : rhs.v) {
+            push(p);
+        }
+    }
+
+    void push(void* p) {
+        v.push_back(p);
+    }
+
+    int size() { return v.size(); }
+
+    void reserve(int num) { v.reserve(num + v.size()); }
+
+    void* pop() {
+        if (v.size()) {
+            void* r = v.back();
+            v.pop_back();
+            return r;
+        }
+        return NULL;
+    }
+};
+
 static TraceStack roots;
 void registerPermanentRoot(void* obj) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
