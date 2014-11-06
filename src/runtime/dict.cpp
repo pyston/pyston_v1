@@ -46,6 +46,12 @@ Box* dictRepr(BoxedDict* self) {
     return boxString(std::string(chars.begin(), chars.end()));
 }
 
+Box* dictClear(BoxedDict* self) {
+    RELEASE_ASSERT(self->cls == dict_cls, "");
+    self->d.clear();
+    return None;
+}
+
 Box* dictCopy(BoxedDict* self) {
     RELEASE_ASSERT(self->cls == dict_cls, "");
 
@@ -165,6 +171,22 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
     return rtn;
 }
 
+Box* dictPopitem(BoxedDict* self) {
+    RELEASE_ASSERT(self->cls == dict_cls, "");
+
+    auto it = self->d.begin();
+    if (it == self->d.end()) {
+        raiseExcHelper(KeyError, "popitem(): dictionary is empty");
+    }
+
+    Box* key = it->first;
+    Box* value = it->second;
+    self->d.erase(it);
+
+    auto rtn = new BoxedTuple({ key, value });
+    return rtn;
+}
+
 Box* dictGet(BoxedDict* self, Box* k, Box* d) {
     assert(self->cls == dict_cls);
 
@@ -194,6 +216,19 @@ Box* dictContains(BoxedDict* self, Box* k) {
 Box* dictNonzero(BoxedDict* self) {
     return boxBool(self->d.size());
 }
+
+Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
+    RELEASE_ASSERT(self->cls == dict_cls, "");
+
+    auto rtn = new BoxedDict();
+    for (Box* e : iterable->pyElements()) {
+        dictSetitem(rtn, e, default_value);
+    }
+
+    return rtn;
+}
+
+
 
 extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!isSubclass(_cls->cls, type_cls))
@@ -300,8 +335,12 @@ void setupDict() {
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));
 
+    dict_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)dictClear, NONE, 1)));
     dict_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)dictCopy, DICT, 1)));
 
+    dict_cls->giveAttr("has_key", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
+    dict_cls->giveAttr("fromkeys",
+                       new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None }));
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1)));
     dict_cls->giveAttr("iteritems",
                        new BoxedFunction(boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1)));
@@ -314,6 +353,8 @@ void setupDict() {
     dict_cls->giveAttr("iterkeys", dict_cls->getattr("__iter__"));
 
     dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
+    dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));
+
 
     dict_cls->giveAttr("get", new BoxedFunction(boxRTFunction((void*)dictGet, UNKNOWN, 3, 1, false, false), { None }));
 
