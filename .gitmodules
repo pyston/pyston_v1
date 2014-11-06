@@ -1,0 +1,7 @@
+[submodule "libunwind"]
+	path = libunwind
+	url = git://git.sv.gnu.org/libunwind.git
+[submodule "libpypa"]
+	path = libpypa
+	url = git@github.com:vinzenz/libpypa.git
+	branch = master
