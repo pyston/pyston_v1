@@ -91,16 +91,16 @@ ifeq ($(NEED_OLD_JIT),1)
 endif
 
 LLVM_CXXFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --cxxflags)
-LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
+LLVM_LDFLAGS := $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Asserts/lib/*)
 
-LLVM_DEBUG_LDFLAGS := $(shell $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
+LLVM_DEBUG_LDFLAGS := $(shell $(LLVM_BUILD)/Debug+Asserts/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_DEBUG_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Debug+Asserts/lib/*)
 
 LLVM_CONFIG_RELEASE := $(LLVM_BUILD)/Release/bin/llvm-config
 ifneq ($(wildcard $(LLVM_CONFIG_RELEASE)),)
 LLVM_RELEASE_CXXFLAGS := $(shell $(LLVM_BUILD)/Release/bin/llvm-config --cxxflags)
-LLVM_RELEASE_LDFLAGS := $(shell $(LLVM_BUILD)/Release/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
+LLVM_RELEASE_LDFLAGS := $(shell $(LLVM_BUILD)/Release/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_RELEASE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release/lib/*)
 else
 LLVM_RELEASE_CXXFLAGS := RELEASE_NOT_BUILT
@@ -122,7 +122,7 @@ endif
 # Note: use lazy-expansion for these profile targets, since calling the profile llvm-config will
 # actually generate a gmon.out file!
 LLVM_PROFILE_CXXFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --cxxflags) -UNDEBUG
-LLVM_PROFILE_LDFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --ldflags --libs $(LLVM_LINK_LIBS))
+LLVM_PROFILE_LDFLAGS = $(shell $(LLVM_BUILD)/Release+Profile/bin/llvm-config --ldflags --system-libs --libs $(LLVM_LINK_LIBS))
 LLVM_PROFILE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Profile/lib/*)
 
 CLANG_EXE := $(LLVM_BIN)/clang
@@ -151,7 +151,7 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
-COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -ldl -lcurses -lm -lunwind -lz -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
+COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
