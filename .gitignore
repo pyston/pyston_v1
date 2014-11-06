@@ -20,6 +20,8 @@ pyston_release
 pyston_grwl
 pyston_grwl_dbg
 pyston_nosync
+/gc
+/analysis
 
 *.cache
 tests/t.py
