@@ -103,7 +103,7 @@ constexpr const size_t sizes[] = {
 };
 #define NUM_BUCKETS (sizeof(sizes) / sizeof(sizes[0]))
 
-class LargeObj;
+struct LargeObj;
 class Heap {
 private:
     Block* heads[NUM_BUCKETS];
@@ -127,7 +127,7 @@ private:
         }
         ~ThreadBlockCache();
     };
-    friend class ThreadBlockCache;
+    friend struct ThreadBlockCache;
     // TODO only use thread caches if we're in GRWL mode?
     threading::PerThreadSet<ThreadBlockCache, Heap*> thread_caches;
 

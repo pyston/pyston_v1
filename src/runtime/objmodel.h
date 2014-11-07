@@ -81,13 +81,13 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 extern "C" Box* getiter(Box* o);
 
-class SetattrRewriteArgs;
+struct SetattrRewriteArgs;
 void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
-class BinopRewriteArgs;
+struct BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
 
-class CallRewriteArgs;
+struct CallRewriteArgs;
 Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
 

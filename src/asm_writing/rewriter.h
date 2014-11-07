@@ -26,7 +26,7 @@ namespace pyston {
 class TypeRecorder;
 
 class ICInfo;
-class ICSlotInfo;
+struct ICSlotInfo;
 class ICSlotRewrite;
 class ICInvalidator;
 

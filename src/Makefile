@@ -203,7 +203,7 @@ CLANG_DEPS := $(CLANGPP_EXE) $(abspath $(dir $(CLANGPP_EXE))/../../built_release
 
 # settings to make clang and ccache play nicely:
 CLANG_CCACHE_FLAGS := -Qunused-arguments
-CLANG_EXTRA_FLAGS := -Wno-mismatched-tags -enable-tbaa -ferror-limit=$(ERROR_LIMIT) $(CLANG_CCACHE_FLAGS)
+CLANG_EXTRA_FLAGS := -enable-tbaa -ferror-limit=$(ERROR_LIMIT) $(CLANG_CCACHE_FLAGS)
 ifeq ($(COLOR),1)
 	CLANG_EXTRA_FLAGS += -fcolor-diagnostics
 else

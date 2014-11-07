@@ -34,7 +34,7 @@ namespace pyston {
 
 class CFGBlock;
 class GCBuilder;
-class PatchpointInfo;
+struct PatchpointInfo;
 class ScopeInfo;
 class TypeAnalysis;
 

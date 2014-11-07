@@ -128,7 +128,7 @@ public:
 };
 
 class ICSetupInfo;
-class CompiledFunction;
+struct CompiledFunction;
 void registerCompiledPatchpoint(CompiledFunction* cf, uint8_t* start_addr, uint8_t* slowpath_start_addr,
                                 uint8_t* continue_addr, uint8_t* slowpath_rtn_addr, const ICSetupInfo*,
                                 StackInfo stack_info, std::unordered_set<int> live_outs);

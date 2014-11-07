@@ -27,7 +27,7 @@ class GCVisitor;
 
 class Box;
 class BoxedDict;
-class LineInfo;
+struct LineInfo;
 
 Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);

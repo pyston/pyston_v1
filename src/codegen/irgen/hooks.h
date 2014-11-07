@@ -19,7 +19,7 @@
 
 namespace pyston {
 
-class CompiledFunction;
+struct CompiledFunction;
 class CLFunction;
 class OSRExit;
 

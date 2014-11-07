@@ -24,7 +24,7 @@ class Function;
 
 namespace pyston {
 
-class StackMap;
+struct StackMap;
 
 class OSREntryDescriptor {
 private:

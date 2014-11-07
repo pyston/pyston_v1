@@ -25,7 +25,7 @@
 
 namespace pyston {
 
-class CompiledFunction;
+struct CompiledFunction;
 class CompilerType;
 struct StackMap;
 class TypeRecorder;

@@ -19,7 +19,6 @@ namespace pyston {
 
 class AST_Module;
 class BoxedModule;
-class CompiledFunction;
 
 void initCodegen();
 void teardownCodegen();
