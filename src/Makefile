@@ -297,10 +297,11 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 	# $(MAKE) pyston_dbg || (clear; $(MAKE) pyston_dbg -j1 ERROR_LIMIT=1)
 
 .PHONY: all _all
-all: llvm
-	@# have to do this in a recursive make so that dependency is enforced:
-	$(MAKE) pyston_all
-pyston_all: pyston_dbg pyston pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o)
+# all: llvm
+	# @# have to do this in a recursive make so that dependency is enforced:
+	# $(MAKE) pyston_all
+# all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
+all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
 
 ALL_HEADERS := $(wildcard */*.h) $(wildcard */*/*.h) $(wildcard ../include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
@@ -316,6 +317,7 @@ $(UNITTEST_DIR)/$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTE
 	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
 dbg_$1_unittests: $(UNITTEST_DIR)/$1
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
+unittests:: $(UNITTEST_DIR)/$1
 run_$1_unittests: $(UNITTEST_DIR)/$1
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/$1 $(ARGS)'
 run_unittests:: run_$1_unittests
