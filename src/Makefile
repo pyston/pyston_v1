@@ -153,6 +153,10 @@ COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFA
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
+
+# Conditionally add libtinfo if available - otherwise nothing will be added
+COMMON_LDFLAGS += `pkg-config tinfo && pkg-config tinfo --libs || echo ""`
+
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
 COMMON_LDFLAGS += -Wl,-E
@@ -269,7 +273,8 @@ CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
 # Not sure if ccache_basedir actually helps at all (I think the generated files make them different?)
 LLVM_BUILD_ENV += CCACHE_DIR=$(HOME)/.ccache_llvm CCACHE_BASEDIR=$(LLVM_SRC)
 
-MAIN_SRCS := $(wildcard codegen/*.cpp) $(wildcard asm_writing/*.cpp) $(wildcard codegen/irgen/*.cpp) $(wildcard codegen/opt/*.cpp) $(wildcard analysis/*.cpp) $(wildcard core/*.cpp) jit.cpp codegen/profiling/profiling.cpp codegen/profiling/dumprof.cpp $(wildcard runtime/*.cpp) $(wildcard runtime/builtin_modules/*.cpp) $(wildcard gc/*.cpp) $(wildcard capi/*.cpp)
+BASE_SRCS := $(wildcard codegen/*.cpp) $(wildcard asm_writing/*.cpp) $(wildcard codegen/irgen/*.cpp) $(wildcard codegen/opt/*.cpp) $(wildcard analysis/*.cpp) $(wildcard core/*.cpp) codegen/profiling/profiling.cpp codegen/profiling/dumprof.cpp $(wildcard runtime/*.cpp) $(wildcard runtime/builtin_modules/*.cpp) $(wildcard gc/*.cpp) $(wildcard capi/*.cpp)
+MAIN_SRCS := $(BASE_SRCS) jit.cpp
 STDLIB_SRCS := $(wildcard runtime/inline/*.cpp)
 SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
@@ -281,6 +286,7 @@ FROM_CPYTHON_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
 OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o)
+ASTPRINT_OBJS := $(STDLIB_OBJS) $(BASE_SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o)
 PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o)
 OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o)
 
@@ -588,6 +594,14 @@ $(TOOLS_DIR)/publicize: $(TOOLS_DIR)/publicize.o $(LLVM_DEPS) $(BUILD_SYSTEM_DEP
 $(TOOLS_DIR)/publicize_release: $(TOOLS_DIR)/publicize.release.o $(LLVM_RELEASE_DEPS) $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Linking $(TOOLS_DIR)/publicize_release
 	$(VERB) $(CXX) $< $(LDFLAGS_RELEASE) -o $@ -lLLVMBitWriter
+
+$(TOOLS_DIR)/astprint: $(TOOLS_DIR)/astprint.cpp $(BUILD_SYSTEM_DEPS) $(LLVM_DEPS) $(ASTPRINT_OBJS)
+	$(ECHO) Linking $(TOOLS_DIR)/astprint
+	$(VERB) $(CXX) $< -o $@ $(LLVM_LIB_DEPS) $(ASTPRINT_OBJS) $(LDFLAGS) $(STDLIB_SRCS:.cpp=.o) $(CXXFLAGS_DBG)
+
+.PHONY: astprint
+
+astprint: $(TOOLS_DIR)/astprint
 
 ## END OF TOOLS
 

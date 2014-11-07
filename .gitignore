@@ -1,4 +1,5 @@
 Makefile.local
+tools/astprint
 tools/demangle
 tools/mcjitcache
 tools/mcjitcache_release
