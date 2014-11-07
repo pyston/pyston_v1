@@ -213,6 +213,33 @@ extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
     v->visit(im->func);
 }
 
+extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
+    BoxedProperty* prop = (BoxedProperty*)b;
+
+    if (prop->prop_get)
+        v->visit(prop->prop_get);
+    if (prop->prop_set)
+        v->visit(prop->prop_set);
+    if (prop->prop_del)
+        v->visit(prop->prop_del);
+    if (prop->prop_doc)
+        v->visit(prop->prop_doc);
+}
+
+extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
+    BoxedStaticmethod* sm = (BoxedStaticmethod*)b;
+
+    if (sm->sm_callable)
+        v->visit(sm->sm_callable);
+}
+
+extern "C" void classmethodGCHandler(GCVisitor* v, Box* b) {
+    BoxedClassmethod* cm = (BoxedClassmethod*)b;
+
+    if (cm->cm_callable)
+        v->visit(cm->cm_callable);
+}
+
 // This probably belongs in list.cpp?
 extern "C" void listGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
@@ -291,7 +318,8 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls;
+    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls, *staticmethod_cls,
+    *classmethod_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -435,6 +463,18 @@ extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
     if (stop == NULL)
         return createSlice(None, start, None);
     return createSlice(start, stop, step);
+}
+
+Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
+    RELEASE_ASSERT(self->cls == instancemethod_cls, "");
+
+    if (self->obj != NULL) {
+        return self;
+    }
+
+    // TODO subclass test
+
+    return new BoxedInstanceMethod(obj, self->func);
 }
 
 Box* instancemethodRepr(BoxedInstanceMethod* self) {
@@ -700,7 +740,10 @@ void setupRuntime() {
     member_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
     closure_cls = new BoxedClass(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
                                  sizeof(BoxedClosure), false);
-    property_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedProperty), false);
+    property_cls = new BoxedClass(type_cls, object_cls, &propertyGCHandler, 0, sizeof(BoxedProperty), false);
+    staticmethod_cls
+        = new BoxedClass(type_cls, object_cls, &staticmethodGCHandler, 0, sizeof(BoxedStaticmethod), false);
+    classmethod_cls = new BoxedClass(type_cls, object_cls, &classmethodGCHandler, 0, sizeof(BoxedClassmethod), false);
     attrwrapper_cls = new BoxedClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
@@ -783,6 +826,8 @@ void setupRuntime() {
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
+    instancemethod_cls->giveAttr(
+        "__get__", new BoxedFunction(boxRTFunction((void*)instancemethodGet, UNKNOWN, 3, 0, false, false)));
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__name__", boxStrConstant("slice"));

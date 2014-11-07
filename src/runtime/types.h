@@ -80,7 +80,8 @@ Box* getSysStdout();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
-    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls;
+    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls,
+    *staticmethod_cls, *classmethod_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -402,6 +403,20 @@ public:
 
     BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
         : Box(property_cls), prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
+};
+
+class BoxedStaticmethod : public Box {
+public:
+    Box* sm_callable;
+
+    BoxedStaticmethod(Box* callable) : Box(staticmethod_cls), sm_callable(callable){};
+};
+
+class BoxedClassmethod : public Box {
+public:
+    Box* cm_callable;
+
+    BoxedClassmethod(Box* callable) : Box(classmethod_cls), cm_callable(callable){};
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?
