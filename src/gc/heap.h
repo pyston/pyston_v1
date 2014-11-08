@@ -69,7 +69,7 @@ static_assert(ATOMS_PER_BLOCK % 64 == 0, "");
 #define BITFIELD_SIZE (ATOMS_PER_BLOCK / 8)
 #define BITFIELD_ELTS (BITFIELD_SIZE / 8)
 
-#define BLOCK_HEADER_SIZE (BITFIELD_SIZE + 2 * sizeof(void*) + sizeof(uint64_t))
+#define BLOCK_HEADER_SIZE (BITFIELD_SIZE + 4 * sizeof(void*))
 #define BLOCK_HEADER_ATOMS ((BLOCK_HEADER_SIZE + ATOM_SIZE - 1) / ATOM_SIZE)
 
 struct Atoms {
@@ -82,6 +82,8 @@ struct Block {
             Block* next, **prev;
             uint64_t size;
             uint64_t isfree[BITFIELD_ELTS];
+            int next_to_check;
+            void* _header_end[0];
         };
         Atoms atoms[ATOMS_PER_BLOCK];
     };
@@ -95,6 +97,8 @@ struct Block {
     static Block* forPointer(void* ptr) { return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE - 1)); }
 };
 static_assert(sizeof(Block) == BLOCK_SIZE, "bad size");
+static_assert(offsetof(Block, _header_end) >= BLOCK_HEADER_SIZE, "bad header size");
+static_assert(offsetof(Block, _header_end) <= BLOCK_HEADER_SIZE, "bad header size");
 
 constexpr const size_t sizes[] = {
     16,  32,  48,  64,  80,  96,  112, 128,  160,  192,  224,  256,

@@ -198,16 +198,20 @@ Heap::ThreadBlockCache::~ThreadBlockCache() {
 }
 
 static GCAllocation* allocFromBlock(Block* b) {
-    int i = 0;
     uint64_t mask = 0;
-    for (; i < BITFIELD_ELTS; i++) {
-        mask = b->isfree[i];
+
+    int elts_scanned = 0;
+    for (; b->next_to_check < BITFIELD_ELTS; b->next_to_check++) {
+        elts_scanned++;
+        mask = b->isfree[b->next_to_check];
         if (mask != 0L) {
             break;
         }
     }
+    int i = b->next_to_check;
 
     if (i == BITFIELD_ELTS) {
+        b->next_to_check = 0;
         return NULL;
     }
 

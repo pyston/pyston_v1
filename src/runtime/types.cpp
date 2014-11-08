@@ -252,9 +252,6 @@ extern "C" void listGCHandler(GCVisitor* v, Box* b) {
         v->visit(l->elts);
     if (size)
         v->visitRange((void**)&l->elts->elts[0], (void**)&l->elts->elts[size]);
-
-    static StatCounter sc("gc_listelts_visited");
-    sc.log(size);
 }
 
 extern "C" void setGCHandler(GCVisitor* v, Box* b) {
