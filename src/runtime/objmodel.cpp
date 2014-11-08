@@ -1912,6 +1912,8 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
     }
 
     if (val == NULL) {
+        if (rewrite_args)
+            rewrite_args->out_success = true;
         return val;
     }
 
