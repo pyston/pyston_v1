@@ -200,20 +200,19 @@ Heap::ThreadBlockCache::~ThreadBlockCache() {
 static GCAllocation* allocFromBlock(Block* b) {
     uint64_t mask = 0;
 
-    int elts_scanned = 0;
-    for (; b->next_to_check < BITFIELD_ELTS; b->next_to_check++) {
-        elts_scanned++;
+    while (true) {
         mask = b->isfree[b->next_to_check];
         if (mask != 0L) {
             break;
         }
+
+        b->next_to_check++;
+        if (b->next_to_check == BITFIELD_ELTS) {
+            b->next_to_check = 0;
+            return NULL;
+        }
     }
     int i = b->next_to_check;
-
-    if (i == BITFIELD_ELTS) {
-        b->next_to_check = 0;
-        return NULL;
-    }
 
     int first = __builtin_ctzll(mask);
     assert(first < 64);
