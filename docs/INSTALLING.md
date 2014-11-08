@@ -208,11 +208,11 @@ To install:
 
 ```
 cd ~/pyston_deps
-wget http://valgrind.org/downloads/valgrind-3.9.0.tar.bz2
-tar xvf valgrind-3.9.0.tar.bz2
-mkdir valgrind-3.9.0-install
-cd valgrind-3.9.0
-./configure --prefix=$HOME/pyston_deps/valgrind-3.9.0-install
+wget http://valgrind.org/downloads/valgrind-3.10.0.tar.bz2
+tar xvf valgrind-3.10.0.tar.bz2
+mkdir valgrind-3.10.0-install
+cd valgrind-3.10.0
+./configure --prefix=$HOME/pyston_deps/valgrind-3.10.0-install
 make -j4
 make install
 sudo apt-get install libc6-dbg
