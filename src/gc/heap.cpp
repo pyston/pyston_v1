@@ -35,7 +35,7 @@ namespace gc {
 
 static unsigned bytesAllocatedSinceCollection;
 static __thread unsigned thread_bytesAllocatedSinceCollection;
-#define ALLOCBYTES_PER_COLLECTION 2000000
+#define ALLOCBYTES_PER_COLLECTION 10000000
 
 void _collectIfNeeded(size_t bytes) {
     thread_bytesAllocatedSinceCollection += bytes;
