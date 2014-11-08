@@ -38,22 +38,22 @@ static __thread unsigned thread_bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 2000000
 
 void _collectIfNeeded(size_t bytes) {
-    if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-        // bytesAllocatedSinceCollection = 0;
-        // threading::GLPromoteRegion _lock;
-        // runCollection();
-
-        threading::GLPromoteRegion _lock;
-        if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
-            runCollection();
-            bytesAllocatedSinceCollection = 0;
-        }
-    }
-
     thread_bytesAllocatedSinceCollection += bytes;
-    if (thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4) {
+    if (unlikely(thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4)) {
         bytesAllocatedSinceCollection += thread_bytesAllocatedSinceCollection;
         thread_bytesAllocatedSinceCollection = 0;
+
+        if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
+            // bytesAllocatedSinceCollection = 0;
+            // threading::GLPromoteRegion _lock;
+            // runCollection();
+
+            threading::GLPromoteRegion _lock;
+            if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
+                runCollection();
+                bytesAllocatedSinceCollection = 0;
+            }
+        }
     }
 }
 
@@ -202,7 +202,7 @@ static GCAllocation* allocFromBlock(Block* b) {
 
     while (true) {
         mask = b->isfree[b->next_to_check];
-        if (mask != 0L) {
+        if (likely(mask != 0L)) {
             break;
         }
 
