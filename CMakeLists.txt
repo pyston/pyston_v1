@@ -7,6 +7,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(DEPS_DIR $ENV{HOME}/pyston_deps)
 
 # set build type to release by default
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release." FORCE)
 endif()
@@ -14,9 +15,11 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
   message(FATAL_ERROR "CMAKE_BUILD_TYPE must be set to Release or Debug")
 endif()
 
+
 option(ENABLE_GIL "threadind use GIL" ON)
 option(ENABLE_GRWL "threadind use GRWL" OFF)
 option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
+option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
 
 # initial clang flags (set here so they're used when building llvm)
@@ -26,6 +29,11 @@ if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
 endif()
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
+endif()
+
+# llvm disable debug info unless ENABLE_LLVM_DEBUG is ON
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
+  set(CMAKE_CXX_FLAGS_DEBUG "-g0" CACHE STRING "" FORCE)
 endif()
 
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
