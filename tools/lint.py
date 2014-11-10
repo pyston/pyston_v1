@@ -32,6 +32,8 @@ def verify_license(_, dir, files):
             s = open(fn).read(1024)
             if file_is_from_cpython(fn):
                 assert "This file is originally from CPython 2.7, with modifications for Pyston" in s, fn
+            elif fn.endswith("/astprint.cpp"):
+                continue
             else:
                 assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
                 assert "Apache License, Version 2.0" in s, fn
