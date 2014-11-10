@@ -230,4 +230,14 @@ PystonMemoryManager::~PystonMemoryManager() {
 llvm::RTDyldMemoryManager* createMemoryManager() {
     return new PystonMemoryManager();
 }
+
+// These functions exist as instance methods of the RTDyldMemoryManager class,
+// but it's tricky to access them since the class has pure-virtual methods.
+void registerEHFrames(uint8_t* addr, uint64_t load_addr, size_t size) {
+    PystonMemoryManager().registerEHFrames(addr, load_addr, size);
+}
+
+void deregisterEHFrames(uint8_t* addr, uint64_t load_addr, size_t size) {
+    PystonMemoryManager().deregisterEHFrames(addr, load_addr, size);
+}
 }

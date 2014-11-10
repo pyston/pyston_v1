@@ -634,6 +634,9 @@ void Assembler::callq(Register r) {
     emitByte(0xd3);
 }
 
+void Assembler::retq() {
+    emitByte(0xc3);
+}
 
 
 void Assembler::cmp(Register reg1, Register reg2) {

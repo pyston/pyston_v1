@@ -73,7 +73,8 @@ void appendToSysPath(const std::string& path) {
 void prependToSysPath(const std::string& path) {
     BoxedList* sys_path = getSysPath();
     static std::string attr = "insert";
-    callattr(sys_path, &attr, false, ArgPassSpec(2), boxInt(0), new BoxedString(path), NULL, NULL, NULL);
+    callattr(sys_path, &attr, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
+             boxInt(0), new BoxedString(path), NULL, NULL, NULL);
 }
 
 static BoxedClass* sys_flags_cls;

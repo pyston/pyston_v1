@@ -26,6 +26,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/classobj.h"
+#include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
@@ -51,21 +52,54 @@ bool IN_SHUTDOWN = false;
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
 
+CallattrIC* BoxedClass::getHasnextIC() {
+    auto ic = hasnext_ic.get();
+    if (!ic) {
+        ic = new CallattrIC();
+        hasnext_ic.reset(ic);
+    }
+    return ic;
+}
+CallattrIC* BoxedClass::getNextIC() {
+    auto ic = next_ic.get();
+    if (!ic) {
+        ic = new CallattrIC();
+        next_ic.reset(ic);
+    }
+    return ic;
+}
+NonzeroIC* BoxedClass::getNonzeroIC() {
+    auto ic = nonzero_ic.get();
+    if (!ic) {
+        ic = new NonzeroIC();
+        nonzero_ic.reset(ic);
+    }
+    return ic;
+}
+
 BoxIterator& BoxIterator::operator++() {
     static std::string hasnext_str("__hasnext__");
     static std::string next_str("next");
 
-    Box* hasnext = callattrInternal(iter, &hasnext_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    assert(iter);
+
+    Box* hasnext = iter->cls->getHasnextIC()->call(iter, &hasnext_str,
+                                                   CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                                                   ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
     if (hasnext) {
-        if (nonzero(hasnext)) {
-            value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        if (hasnext->cls->getNonzeroIC()->call(hasnext)) {
+            value = iter->cls->getNextIC()->call(iter, &next_str,
+                                                 CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                                                 ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
         } else {
             iter = nullptr;
             value = nullptr;
         }
     } else {
         try {
-            value = callattrInternal(iter, &next_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            value = iter->cls->getNextIC()->call(iter, &next_str,
+                                                 CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                                                 ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
         } catch (Box* e) {
             if ((e == StopIteration) || isSubclass(e->cls, StopIteration)) {
                 iter = nullptr;

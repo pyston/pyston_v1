@@ -48,7 +48,11 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" void delattr(Box* obj, const char* attr);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
-extern "C" Box* callattr(Box*, const std::string*, bool, ArgPassSpec, Box*, Box*, Box*, Box**,
+struct CallattrFlags {
+    bool cls_only : 1;
+    bool null_on_nonexistent : 1;
+};
+extern "C" Box* callattr(Box*, const std::string*, CallattrFlags, ArgPassSpec, Box*, Box*, Box*, Box**,
                          const std::vector<const std::string*>*);
 extern "C" BoxedString* str(Box* obj);
 extern "C" BoxedString* repr(Box* obj);
@@ -80,6 +84,8 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 extern "C" Box* getiter(Box* o);
+
+extern "C" void dump(void* p);
 
 struct SetattrRewriteArgs;
 void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);

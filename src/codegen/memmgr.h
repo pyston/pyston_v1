@@ -15,12 +15,18 @@
 #ifndef PYSTON_CODEGEN_MEMMGR_H
 #define PYSTON_CODEGEN_MEMMGR_H
 
+#include <cstddef>
+#include <cstdint>
+
 namespace llvm {
 class RTDyldMemoryManager;
 }
 
 namespace pyston {
+
 llvm::RTDyldMemoryManager* createMemoryManager();
+void registerEHFrames(uint8_t* addr, uint64_t load_addr, size_t size);
+void deregisterEHFrames(uint8_t* addr, uint64_t load_addr, size_t size);
 }
 
 #endif

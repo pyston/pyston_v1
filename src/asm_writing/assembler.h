@@ -129,6 +129,7 @@ public:
     void inc(Indirect mem);
 
     void callq(Register reg);
+    void retq();
 
     void cmp(Register reg1, Register reg2);
     void cmp(Register reg, Immediate imm);

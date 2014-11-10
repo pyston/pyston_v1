@@ -1842,6 +1842,10 @@ extern "C" void dump(void* p) {
         Box* b = (Box*)p;
         printf("Class: %s\n", getFullTypeName(b).c_str());
 
+        if (b->cls == bool_cls) {
+            printf("The %s object\n", b == True ? "True" : "False");
+        }
+
         if (isSubclass(b->cls, type_cls)) {
             printf("Type name: %s\n", getFullNameOfClass(static_cast<BoxedClass*>(b)).c_str());
         }
@@ -2034,8 +2038,10 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
     }
 }
 
-extern "C" Box* callattr(Box* obj, const std::string* attr, bool clsonly, ArgPassSpec argspec, Box* arg1, Box* arg2,
-                         Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
+extern "C" Box* callattr(Box* obj, const std::string* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1,
+                         Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
+    assert(gc::isValidGCObject(obj));
+
     int npassed_args = argspec.totalPassed();
 
     static StatCounter slowpath_callattr("slowpath_callattr");
@@ -2050,7 +2056,7 @@ extern "C" Box* callattr(Box* obj, const std::string* attr, bool clsonly, ArgPas
         __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, "callattr"));
     Box* rtn;
 
-    LookupScope scope = clsonly ? CLASS_ONLY : CLASS_OR_INST;
+    LookupScope scope = flags.cls_only ? CLASS_ONLY : CLASS_OR_INST;
 
     if (rewriter.get()) {
         // TODO feel weird about doing this; it either isn't necessary
@@ -2077,7 +2083,7 @@ extern "C" Box* callattr(Box* obj, const std::string* attr, bool clsonly, ArgPas
         rtn = callattrInternal(obj, attr, scope, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
     }
 
-    if (rtn == NULL) {
+    if (rtn == NULL && !flags.null_on_nonexistent) {
         raiseAttributeError(obj, attr->c_str());
     }
 

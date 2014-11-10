@@ -24,6 +24,7 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/ics.h"
 #include "runtime/inline/xrange.h"
 #include "runtime/list.h"
 #include "runtime/long.h"
@@ -179,9 +180,11 @@ extern "C" Box* sum(Box* container, Box* initial) {
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
 
+    BinopIC pp;
+
     Box* cur = initial;
     for (Box* e : container->pyElements()) {
-        cur = binopInternal(cur, e, AST_TYPE::Add, false, NULL);
+        cur = pp.call(cur, e, AST_TYPE::Add);
     }
     return cur;
 }
@@ -550,7 +553,9 @@ public:
     static Box* next(Box* _self) {
         assert(_self->cls == enumerate_cls);
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
-        return new BoxedTuple({ boxInt(self->idx++), *self->iterator++ });
+        Box* val = *self->iterator;
+        ++self->iterator;
+        return new BoxedTuple({ boxInt(self->idx++), val });
     }
 
     static Box* hasnext(Box* _self) {
@@ -648,16 +653,19 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
         BoxedString* s = str(e);
 
         if (!first) {
-            Box* r = callattr(dest, &write_str, false, ArgPassSpec(1), space_box, NULL, NULL, NULL, NULL);
+            Box* r = callattr(dest, &write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+                              ArgPassSpec(1), space_box, NULL, NULL, NULL, NULL);
             RELEASE_ASSERT(r, "");
         }
         first = false;
 
-        Box* r = callattr(dest, &write_str, false, ArgPassSpec(1), s, NULL, NULL, NULL, NULL);
+        Box* r = callattr(dest, &write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+                          ArgPassSpec(1), s, NULL, NULL, NULL, NULL);
         RELEASE_ASSERT(r, "");
     }
 
-    Box* r = callattr(dest, &write_str, false, ArgPassSpec(1), end, NULL, NULL, NULL, NULL);
+    Box* r = callattr(dest, &write_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+                      ArgPassSpec(1), end, NULL, NULL, NULL, NULL);
     RELEASE_ASSERT(r, "");
 
     return None;
