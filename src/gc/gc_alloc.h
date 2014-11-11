@@ -29,7 +29,7 @@ namespace gc {
 
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
-    bytes += sizeof(GCAllocation);
+    size_t alloc_bytes = bytes + sizeof(GCAllocation);
 
 #ifndef NVALGRIND
 // Adding a redzone will confuse the allocator, so disable it for now.
@@ -40,10 +40,10 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
 #define ENABLE_REDZONES 1
 
     if (ENABLE_REDZONES)
-        bytes += REDZONE_SIZE * 2;
+        alloc_bytes += REDZONE_SIZE * 2;
 #endif
 
-    GCAllocation* alloc = global_heap.alloc(bytes);
+    GCAllocation* alloc = global_heap.alloc(alloc_bytes);
     alloc->kind_id = kind_id;
     alloc->gc_flags = 0;
 
