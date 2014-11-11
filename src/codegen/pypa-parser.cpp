@@ -440,6 +440,14 @@ struct expr_dispatcher {
         return ptr;
     }
 
+    ResultPtr read(pypa::AstSetComp& l) {
+        AST_SetComp* ptr = new AST_SetComp();
+        location(ptr, l);
+        readVector(ptr->generators, l.generators);
+        ptr->elt = readItem(l.element);
+        return ptr;
+    }
+
     ResultPtr read(pypa::AstName& a) {
         AST_Name* ptr = new AST_Name();
         location(ptr, a);
@@ -610,6 +618,17 @@ struct stmt_dispatcher {
         AST_Delete* ptr = new AST_Delete();
         location(ptr, d);
         readVector(ptr->targets, *d.targets);
+        return ptr;
+    }
+
+    ResultPtr read(pypa::AstExec& e) {
+        AST_Exec* ptr = new AST_Exec();
+        location(ptr, e);
+        ptr->expr = readItem(e.body);
+        if (e.globals)
+            ptr->globals = readItem(e.globals);
+        if (e.locals)
+            ptr->locals = readItem(e.locals);
         return ptr;
     }
 

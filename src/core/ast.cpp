@@ -445,6 +445,19 @@ void AST_ExceptHandler::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
+void AST_Exec::accept(ASTVisitor* v) {
+    bool skip = v->visit_exec(this);
+    if (skip)
+        return;
+
+    if (expr)
+        expr->accept(v);
+}
+
+void AST_Exec::accept_stmt(StmtVisitor* v) {
+    v->visit_exec(this);
+}
+
 void AST_Expr::accept(ASTVisitor* v) {
     bool skip = v->visit_expr(this);
     if (skip)
@@ -1245,6 +1258,23 @@ bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
     return true;
 }
 
+bool PrintVisitor::visit_exec(AST_Exec* node) {
+    printf("exec ");
+
+    node->expr->accept(this);
+    if (node->globals) {
+        printf(" in ");
+        node->globals->accept(this);
+
+        if (node->locals) {
+            printf(", ");
+            node->locals->accept(this);
+        }
+    }
+    printf("\n");
+    return true;
+}
+
 bool PrintVisitor::visit_expr(AST_Expr* node) {
     return false;
 }
@@ -1850,6 +1880,10 @@ public:
         return false;
     }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_exec(AST_Exec* node) {
         output->push_back(node);
         return false;
     }

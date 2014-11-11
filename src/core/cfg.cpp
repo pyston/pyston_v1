@@ -1568,6 +1568,8 @@ public:
         return true;
     }
 
+    bool visit_exec(AST_Exec* node) override { raiseExcHelper(SyntaxError, "'exec' currently not supported"); }
+
     bool visit_while(AST_While* node) override {
         if (!curblock)
             return true;
