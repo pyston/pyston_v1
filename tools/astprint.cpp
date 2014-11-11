@@ -20,8 +20,16 @@ int main(int argc, char const ** argv) {
 
     std::string fn = argv[1 + int(argc > 2)];
 
-    AST_Module* m = caching_parse(fn.c_str());
-    PrintVisitor* visitor = new PrintVisitor(4);
-    visitor->visit_module(m);
+    try {
+        AST_Module* m = caching_parse(fn.c_str());
+        PrintVisitor* visitor = new PrintVisitor(4);
+        visitor->visit_module(m);
+    } catch (Box* b) {
+        std::string msg = formatException(b);
+        printLastTraceback();
+        fprintf(stderr, "%s\n", msg.c_str());
+
+        return 1;
+    }
     return 0;
 }
