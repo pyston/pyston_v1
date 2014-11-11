@@ -74,15 +74,7 @@ ExternalProject_Add(libunwind
                     LOG_INSTALL ON)
 
 # libpypa
-ExternalProject_Add(libpypa
-                    PREFIX libpypa
-                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/libpypa
-                    UPDATE_COMMAND autoreconf -ivf
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libpypa/configure --prefix=${CMAKE_BINARY_DIR}/libpypa
-                    LOG_UPDATE ON
-                    LOG_CONFIGURE ON
-                    LOG_BUILD ON
-                    LOG_INSTALL ON)
+add_subdirectory(libpypa)
 
 # valgrind
 if(ENABLE_VALGRIND)
@@ -119,7 +111,6 @@ include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(include)
 
 find_package(LibLZMA REQUIRED)
-link_directories(${CMAKE_BINARY_DIR}/libpypa/lib)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
@@ -130,7 +121,7 @@ add_subdirectory(test/unittests)
 add_subdirectory(tools)
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON_OBJECTS>)
-target_link_libraries(pyston stdlib pthread m readline gmp unwind pypa ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
+target_link_libraries(pyston stdlib pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
 
 # copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lib_python/2.7 ${CMAKE_BINARY_DIR}/lib_python/2.7)

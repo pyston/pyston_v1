@@ -6,7 +6,6 @@ execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 set_source_files_properties(jit.cpp PROPERTIES COMPILE_DEFINITIONS "GITREV=${GITREV}")
 
 include_directories(${CMAKE_BINARY_DIR})
-include_directories(${CMAKE_BINARY_DIR}/libpypa/include)
 include_directories(${CMAKE_BINARY_DIR}/libunwind/include)
 
 file(GLOB ANALYSIS_SRCS analysis/*.cpp)
@@ -21,7 +20,7 @@ file(GLOB RUNTIME_BUILTIN_MODULES_SRCS runtime/builtin_modules/*.cpp)
 file(GLOB RUNTIME_SRCS runtime/*.cpp)
 
 add_library(PYSTON_OBJECTS OBJECT codegen/profiling/profiling.cpp ${ANALYSIS_SRCS} ${ASM_WRITING_SRCS} ${CAPI_SRCS} ${CODEGEN_SRCS} ${CODEGEN_IRGEN_SRCS} ${CODEGEN_OPT_SRCS} ${CORE_SRCS} ${GC_SRCS} ${RUNTIME_BUILTIN_MODULES_SRCS} ${RUNTIME_SRCS})
-add_dependencies(PYSTON_OBJECTS libunwind libpypa ${LLVM_LIBS})
+add_dependencies(PYSTON_OBJECTS libunwind pypa ${LLVM_LIBS})
 add_library(PYSTON_MAIN_OBJECT OBJECT jit.cpp)
 add_dependencies(PYSTON_MAIN_OBJECT ${LLVM_LIBS})
 
