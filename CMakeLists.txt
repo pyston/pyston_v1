@@ -130,7 +130,7 @@ add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_
 # test
 enable_testing()
 add_test(NAME lint COMMAND python ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_test(NAME check_format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 add_test(NAME pyston_defaults COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k ${CMAKE_SOURCE_DIR}/test/tests)
@@ -140,13 +140,13 @@ add_test(NAME pyston_max_compilation_tier COMMAND python ${CMAKE_SOURCE_DIR}/too
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)
 add_custom_target(format ${LLVM_TOOLS_BINARY_DIR}/clang-format -style=file -i ${FORMAT_FILES} DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_custom_target(check_format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # lint
 add_custom_target(lint python ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check_pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston clang-format ext_cpython ext_pyston unittests) 
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston clang-format ext_cpython ext_pyston unittests) 
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
 file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)
