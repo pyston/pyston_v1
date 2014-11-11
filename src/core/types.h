@@ -210,7 +210,10 @@ public:
           code(code), llvm_code(llvm_code), effort(effort), times_called(0), line_table(nullptr),
           location_map(nullptr) {}
 
-    // TODO this will need to be implemented eventually, and delete line_table if it exists
+    // TODO this will need to be implemented eventually; things to delete:
+    // - line_table if it exists
+    // - location_map if it exists
+    // - all entries in ics (after deregistering them)
     ~CompiledFunction();
 };
 

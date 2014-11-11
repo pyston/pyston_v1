@@ -11,8 +11,9 @@ virtualenv codespeed_env
 cd codespeed
 pip install -r requirements
 python manage.py syncdb
-# create admin user
+# create admin user when prompted
 python manage.py migrate
+python manage.py collectstatic
 
 cp sample_project/deploy/apache-reverseproxy.conf /etc/apache2/sites-available/010-speed.pyston.conf
 ln -s /etc/apache2/sites-available/010-speed.pyston.conf /etc/apache2/sites-enabled

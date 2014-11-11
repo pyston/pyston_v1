@@ -27,7 +27,7 @@ private:
     void* addr;
     void* eh_frame_addr;
 
-    ICInfo* icinfo;
+    std::unique_ptr<ICInfo> icinfo;
 
     RuntimeIC(const RuntimeIC&) = delete;
     void operator=(const RuntimeIC&) = delete;

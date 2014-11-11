@@ -15,6 +15,7 @@
 #ifndef PYSTON_ASMWRITING_ICINFO_H
 #define PYSTON_ASMWRITING_ICINFO_H
 
+#include <memory>
 #include <unordered_set>
 #include <vector>
 
@@ -106,13 +107,11 @@ private:
     // for ICSlotRewrite:
     ICSlotInfo* pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
 
-    void* getSlowpathStart();
-
 public:
-    ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size,
-           llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
+    ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
+           int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
            assembler::GenericRegister return_register, TypeRecorder* type_recorder);
-    void* const start_addr, *const continue_addr;
+    void* const start_addr, *const slowpath_rtn_addr, *const continue_addr;
 
     int getSlotSize() { return slot_size; }
     int getNumSlots() { return num_slots; }
@@ -129,9 +128,11 @@ public:
 
 class ICSetupInfo;
 struct CompiledFunction;
-ICInfo* registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr, uint8_t* continue_addr,
-                                   uint8_t* slowpath_rtn_addr, const ICSetupInfo*, StackInfo stack_info,
-                                   std::unordered_set<int> live_outs);
+std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
+                                                   uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
+                                                   const ICSetupInfo*, StackInfo stack_info,
+                                                   std::unordered_set<int> live_outs);
+void deregisterCompiledPatchpoint(ICInfo* ic);
 
 ICInfo* getICInfo(void* rtn_addr);
 }

@@ -184,21 +184,23 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(uint64_t decision_path, const char* debu
 
 
 
-ICInfo::ICInfo(void* start_addr, void* continue_addr, StackInfo stack_info, int num_slots, int slot_size,
-               llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
+ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,
+               int slot_size, llvm::CallingConv::ID calling_conv, const std::unordered_set<int>& live_outs,
                assembler::GenericRegister return_register, TypeRecorder* type_recorder)
     : next_slot_to_try(0), stack_info(stack_info), num_slots(num_slots), slot_size(slot_size),
       calling_conv(calling_conv), live_outs(live_outs.begin(), live_outs.end()), return_register(return_register),
-      type_recorder(type_recorder), failed(false), start_addr(start_addr), continue_addr(continue_addr) {
+      type_recorder(type_recorder), failed(false), start_addr(start_addr), slowpath_rtn_addr(slowpath_rtn_addr),
+      continue_addr(continue_addr) {
     for (int i = 0; i < num_slots; i++) {
         slots.push_back(SlotInfo(this, i));
     }
 }
 
 static std::unordered_map<void*, ICInfo*> ics_by_return_addr;
-ICInfo* registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr, uint8_t* continue_addr,
-                                   uint8_t* slowpath_rtn_addr, const ICSetupInfo* ic, StackInfo stack_info,
-                                   std::unordered_set<int> live_outs) {
+std::unique_ptr<ICInfo> registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_addr,
+                                                   uint8_t* continue_addr, uint8_t* slowpath_rtn_addr,
+                                                   const ICSetupInfo* ic, StackInfo stack_info,
+                                                   std::unordered_set<int> live_outs) {
     assert(slowpath_start_addr - start_addr >= ic->num_slots * ic->slot_size);
     assert(slowpath_rtn_addr > slowpath_start_addr);
     assert(slowpath_rtn_addr <= start_addr + ic->totalSize());
@@ -236,12 +238,17 @@ ICInfo* registerCompiledPatchpoint(uint8_t* start_addr, uint8_t* slowpath_start_
         writer->jmp(JumpDestination::fromStart(slowpath_start_addr - start));
     }
 
-    ICInfo* icinfo = new ICInfo(start_addr, continue_addr, stack_info, ic->num_slots, ic->slot_size,
+    ICInfo* icinfo = new ICInfo(start_addr, slowpath_rtn_addr, continue_addr, stack_info, ic->num_slots, ic->slot_size,
                                 ic->getCallingConvention(), live_outs, return_register, ic->type_recorder);
 
     ics_by_return_addr[slowpath_rtn_addr] = icinfo;
 
-    return icinfo;
+    return std::unique_ptr<ICInfo>(icinfo);
+}
+
+void deregisterCompiledPatchpoint(ICInfo* ic) {
+    assert(ics_by_return_addr.count(ic->slowpath_rtn_addr));
+    ics_by_return_addr.erase(ic->slowpath_rtn_addr);
 }
 
 ICInfo* getICInfo(void* rtn_addr) {

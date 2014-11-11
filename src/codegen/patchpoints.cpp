@@ -230,12 +230,13 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
 
         assert(pp->numICStackmapArgs() == 0); // don't do anything with these for now
 
-        ICInfo* icinfo = registerCompiledPatchpoint(start_addr, slowpath_start, end_addr, slowpath_rtn_addr, ic,
-                                                    StackInfo({ stack_size, scratch_size, scratch_rbp_offset }),
-                                                    std::move(live_outs));
+        std::unique_ptr<ICInfo> icinfo = registerCompiledPatchpoint(
+            start_addr, slowpath_start, end_addr, slowpath_rtn_addr, ic,
+            StackInfo({ stack_size, scratch_size, scratch_rbp_offset }), std::move(live_outs));
 
         assert(cf);
-        cf->ics.push_back(icinfo);
+        // TODO: unsafe.  hard to use a unique_ptr here though.
+        cf->ics.push_back(icinfo.release());
     }
 
     for (PatchpointInfo* pp : new_patchpoints) {

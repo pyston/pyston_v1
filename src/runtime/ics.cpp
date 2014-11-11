@@ -177,6 +177,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
 #endif
         static const int CALL_SIZE = 13;
         static const int EPILOGUE_SIZE = 2;
+
         int patchable_size = num_slots * slot_size;
         int total_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
         addr = malloc(total_size);
@@ -233,6 +234,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
 
 RuntimeIC::~RuntimeIC() {
     if (ENABLE_RUNTIME_ICS) {
+        deregisterCompiledPatchpoint(icinfo.get());
         deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
         free(addr);
         free(eh_frame_addr);
