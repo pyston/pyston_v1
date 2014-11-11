@@ -761,6 +761,22 @@ void* AST_Set::accept_expr(ExprVisitor* v) {
     return v->visit_set(this);
 }
 
+void AST_SetComp::accept(ASTVisitor* v) {
+    bool skip = v->visit_setcomp(this);
+    if (skip)
+        return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    elt->accept(v);
+}
+
+void* AST_SetComp::accept_expr(ExprVisitor* v) {
+    return v->visit_setcomp(this);
+}
+
 void AST_Slice::accept(ASTVisitor* v) {
     bool skip = v->visit_slice(this);
     if (skip)
@@ -1557,6 +1573,17 @@ bool PrintVisitor::visit_set(AST_Set* node) {
     return true;
 }
 
+bool PrintVisitor::visit_setcomp(AST_SetComp* node) {
+    printf("{");
+    node->elt->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
+    }
+    printf("}");
+    return true;
+}
+
 bool PrintVisitor::visit_slice(AST_Slice* node) {
     printf("<slice>(");
     if (node->lower)
@@ -1950,6 +1977,10 @@ public:
         return false;
     }
     virtual bool visit_set(AST_Set* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_setcomp(AST_SetComp* node) {
         output->push_back(node);
         return false;
     }

@@ -228,6 +228,7 @@ public:
     bool visit_raise(AST_Raise* node) override { return false; }
     bool visit_repr(AST_Repr* node) override { return false; }
     bool visit_return(AST_Return* node) override { return false; }
+    bool visit_setcomp(AST_SetComp* node) override { return false; }
     bool visit_slice(AST_Slice* node) override { return false; }
     bool visit_str(AST_Str* node) override { return false; }
     bool visit_subscript(AST_Subscript* node) override { return false; }

@@ -498,6 +498,16 @@ AST_ListComp* read_listcomp(BufferedReader* reader) {
     return rtn;
 }
 
+AST_SetComp* read_setcomp(BufferedReader* reader) {
+    AST_SetComp* rtn = new AST_SetComp();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->elt = readASTExpr(reader);
+    readMiscVector(rtn->generators, reader);
+    rtn->lineno = reader->readULL();
+    return rtn;
+}
+
 AST_Module* read_module(BufferedReader* reader) {
     if (VERBOSITY("parsing") >= 2)
         printf("reading module\n");
@@ -769,6 +779,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_repr(reader);
         case AST_TYPE::Set:
             return read_set(reader);
+        case AST_TYPE::SetComp:
+            return read_setcomp(reader);
         case AST_TYPE::Slice:
             return read_slice(reader);
         case AST_TYPE::Str:
