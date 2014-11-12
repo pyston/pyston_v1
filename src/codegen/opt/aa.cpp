@@ -222,7 +222,7 @@ public:
     }
 
     AliasResult alias(const Location& LocA, const Location& LocB) override {
-        if (VERBOSITY("opt.aa") >= 2 && depth == 0) {
+        if (VERBOSITY("opt.aa") >= 2 && depth == 0 && isa<Instruction>(LocA.Ptr)) {
             cast<Instruction>(LocA.Ptr)->getParent()->dump();
         }
 
