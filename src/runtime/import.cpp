@@ -32,11 +32,77 @@ BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) 
     return module;
 }
 
+static BoxedModule* createAndRunModule(const std::string& name, const std::string& fn, const std::string& module_path) {
+    BoxedModule* module = createModule(name, fn);
+
+    Box* b_path = boxStringPtr(&module_path);
+
+    BoxedList* path_list = new BoxedList();
+    listAppendInternal(path_list, b_path);
+
+    module->setattr("__path__", path_list, NULL);
+    
+    AST_Module* ast = caching_parse(fn.c_str());
+    compileAndRunModule(ast, module);
+    return module;
+}
+
 #if LLVMREV < 210072
 #define LLVM_SYS_FS_EXISTS_CODE_OKAY(code) ((code) == 0)
 #else
 #define LLVM_SYS_FS_EXISTS_CODE_OKAY(code) (!(code))
 #endif
+
+static bool path_exists (const std::string& path) {
+#if LLVMREV < 217625
+    bool exists;
+    llvm_error_code code = llvm::sys::fs::exists(path, exists);
+    assert(LLVM_SYS_FS_EXISTS_CODE_OKAY(code));
+#else
+    bool exists = llvm::sys::fs::exists(path);
+#endif
+    return exists;
+}
+
+static BoxedModule* importPackageFromDirectory(const std::string& name, const std::string& path) {
+    llvm::SmallString<128> joined_path;
+
+    llvm::sys::path::append(joined_path, path, name);
+    std::string dn(joined_path.str());
+
+    llvm::sys::path::append(joined_path, "__init__.py");
+    std::string fn(joined_path.str());
+
+    if (VERBOSITY() >= 2)
+        printf("Searching for %s at %s...\n", name.c_str(), fn.c_str());
+
+    if (!path_exists(fn))
+        return NULL;
+
+    if (VERBOSITY() >= 1)
+        printf("Importing %s from %s\n", name.c_str(), fn.c_str());
+
+
+    return createAndRunModule(name, fn, dn);
+}
+
+static BoxedModule* importFile(const std::string& name, const std::string& path) {
+    llvm::SmallString<128> joined_path;
+
+    llvm::sys::path::append(joined_path, path, name + ".py");
+    std::string fn(joined_path.str());
+
+    if (VERBOSITY() >= 2)
+        printf("Searching for %s at %s...\n", name.c_str(), fn.c_str());
+
+    if (!path_exists(fn))
+        return NULL;
+
+    if (VERBOSITY() >= 1)
+        printf("Importing %s from %s\n", name.c_str(), fn.c_str());
+
+    return createAndRunModule(name, fn);
+}
 
 static Box* importSub(const std::string* name, Box* parent_module) {
     BoxedList* path_list;
@@ -60,28 +126,18 @@ static Box* importSub(const std::string* name, Box* parent_module) {
         BoxedString* p = static_cast<BoxedString*>(_p);
 
         joined_path.clear();
-        llvm::sys::path::append(joined_path, p->s, *name + ".py");
-        std::string fn(joined_path.str());
+        llvm::sys::path::append(joined_path, p->s);
+        std::string dn(joined_path.str());
 
-        if (VERBOSITY() >= 2)
-            printf("Searching for %s at %s...\n", name->c_str(), fn.c_str());
+	BoxedModule* module;
 
-#if LLVMREV < 217625
-        bool exists;
-        llvm_error_code code = llvm::sys::fs::exists(joined_path.str(), exists);
-        assert(LLVM_SYS_FS_EXISTS_CODE_OKAY(code));
-#else
-        bool exists = llvm::sys::fs::exists(joined_path.str());
-#endif
+        module = importPackageFromDirectory(*name, dn);
+        if (module)
+            return module;
 
-        if (!exists)
-            continue;
-
-        if (VERBOSITY() >= 1)
-            printf("Importing %s from %s\n", name->c_str(), fn.c_str());
-
-        BoxedModule* module = createAndRunModule(*name, fn);
-        return module;
+        module = importFile(*name, dn);
+        if (module)
+            return module;
     }
 
     if (*name == "basic_test") {
