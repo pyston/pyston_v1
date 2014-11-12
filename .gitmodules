@@ -4,4 +4,3 @@
 [submodule "libpypa"]
 	path = libpypa
 	url = https://github.com/vinzenz/libpypa.git
-	branch = master
