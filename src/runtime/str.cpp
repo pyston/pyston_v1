@@ -425,7 +425,7 @@ extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
     raiseExcHelper(TypeError, "The basestring type cannot be instantiated");
 }
 
-Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
+Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     assert(self->cls == str_cls);
 
     const std::string& s = self->s;
@@ -439,14 +439,12 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step) {
         assert(-1 <= stop);
     }
 
-    std::vector<char> chars;
-    int cur = start;
-    while ((step > 0 && cur < stop) || (step < 0 && cur > stop)) {
-        chars.push_back(s[cur]);
-        cur += step;
+    std::string chars;
+    if (length > 0) {
+        chars.resize(length);
+        copySlice(&chars[0], &s[0], start, step, length);
     }
-    // TODO too much copying
-    return boxString(std::string(chars.begin(), chars.end()));
+    return boxString(std::move(chars));
 }
 
 Box* strIsAlpha(BoxedString* self) {
@@ -872,9 +870,9 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     } else if (slice->cls == slice_cls) {
         BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
-        i64 start, stop, step;
-        parseSlice(sslice, self->s.size(), &start, &stop, &step);
-        return _strSlice(self, start, stop, step);
+        i64 start, stop, step, length;
+        parseSlice(sslice, self->s.size(), &start, &stop, &step, &length);
+        return _strSlice(self, start, stop, step, length);
     } else {
         raiseExcHelper(TypeError, "string indices must be integers, not %s", getTypeName(slice)->c_str());
     }
