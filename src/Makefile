@@ -143,8 +143,8 @@ ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
 	VALGRIND := false
 else
-	COMMON_CXXFLAGS += -I$(DEPS_DIR)/valgrind-3.9.0/include
-	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.9.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.9.0-install/bin/valgrind
+	COMMON_CXXFLAGS += -I$(DEPS_DIR)/valgrind-3.10.0/include
+	VALGRIND := VALGRIND_LIB=$(DEPS_DIR)/valgrind-3.10.0-install/lib/valgrind $(DEPS_DIR)/valgrind-3.10.0-install/bin/valgrind
 endif
 
 COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$(LLVM_REVISION)
@@ -776,7 +776,7 @@ memcheck$1_%: %.py pyston$1 $$(RUN_DEPS)
 $$(call make_search,memcheck$1_%)
 memcheck_gdb$1_%: %.py pyston$1 $$(RUN_DEPS)
 	set +e; $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
-	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.9.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
+	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.10.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
 $$(call make_search,memcheck_gdb$1_%)
 memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
 	$$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
