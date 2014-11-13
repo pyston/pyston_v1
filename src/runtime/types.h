@@ -167,6 +167,69 @@ template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqua
 class conservative_unordered_map
     : public std::unordered_map<K, V, Hash, KeyEqual, StlCompatAllocator<std::pair<const K, V> > > {};
 
+class BoxedClass : public BoxVar {
+public:
+    PyTypeObject_BODY;
+
+    HCAttrs attrs;
+
+    // If the user sets __getattribute__ or __getattr__, we will have to invalidate
+    // all getattr IC entries that relied on the fact that those functions didn't exist.
+    // Doing this via invalidation means that instance attr lookups don't have
+    // to guard on anything about the class.
+    ICInvalidator dependent_icgetattrs;
+
+    // TODO: these don't actually get deallocated right now
+    std::unique_ptr<CallattrIC> hasnext_ic, next_ic;
+    std::unique_ptr<NonzeroIC> nonzero_ic;
+    CallattrIC* getHasnextIC();
+    CallattrIC* getNextIC();
+    NonzeroIC* getNonzeroIC();
+
+    // Only a single base supported for now.
+    // Is NULL iff this is object_cls
+    BoxedClass* base;
+
+    typedef void (*gcvisit_func)(GCVisitor*, Box*);
+    gcvisit_func gc_visit;
+
+    // Offset of the HCAttrs object or 0 if there are no hcattrs.
+    // Analogous to tp_dictoffset
+    const int attrs_offset;
+
+    bool instancesHaveAttrs() { return attrs_offset != 0; }
+
+    // Whether this class object is constant or not, ie whether or not class-level
+    // attributes can be changed or added.
+    // Does not necessarily imply that the instances of this class are constant,
+    // though for now (is_constant && !hasattrs) does imply that the instances are constant.
+    bool is_constant;
+
+    // Whether this class was defined by the user or is a builtin type.
+    // this is used mostly for debugging.
+    const bool is_user_defined;
+
+    // will need to update this once we support tp_getattr-style overriding:
+    bool hasGenericGetattr() { return true; }
+
+    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+               bool is_user_defined);
+
+    void freeze();
+};
+
+static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
+static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "");
+
+static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, ob_type), "");
+static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
+static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
+static_assert(offsetof(pyston::BoxedClass, dependent_icgetattrs) == offsetof(struct _typeobject, _dep_getattrs), "");
+static_assert(offsetof(pyston::BoxedClass, base) == offsetof(struct _typeobject, _base), "");
+static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
+static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
+
+
 class HiddenClass : public ConservativeGCObject {
 private:
     HiddenClass() {}

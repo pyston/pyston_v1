@@ -25,6 +25,7 @@
 #include "core/util.h"
 #include "gc/heap.h"
 #include "gc/root_finder.h"
+#include "runtime/types.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"

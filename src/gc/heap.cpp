@@ -22,6 +22,7 @@
 #include "core/common.h"
 #include "core/util.h"
 #include "gc/gc_alloc.h"
+#include "runtime/types.h"
 
 #ifndef NVALGRIND
 #include "valgrind.h"

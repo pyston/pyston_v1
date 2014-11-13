@@ -39,6 +39,7 @@
 #include "runtime/classobj.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
+#include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
 #include "runtime/types.h"
