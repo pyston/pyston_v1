@@ -182,9 +182,9 @@ public:
     // TODO: these don't actually get deallocated right now
     std::unique_ptr<CallattrIC> hasnext_ic, next_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
-    CallattrIC* getHasnextIC();
-    CallattrIC* getNextIC();
-    NonzeroIC* getNonzeroIC();
+    Box* callHasnext(Box* obj, bool null_on_nonexistent);
+    Box* callNext(Box* obj);
+    bool callNonzero(Box* obj);
 
     // Only a single base supported for now.
     // Is NULL iff this is object_cls
