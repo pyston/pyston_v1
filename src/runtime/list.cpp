@@ -210,6 +210,8 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
     BoxedList* lv = static_cast<BoxedList*>(v);
 
+    RELEASE_ASSERT(self->elts != lv->elts, "Slice self-assignment currently unsupported");
+
     int delts = lv->size - (stop - start);
     int remaining_elts = self->size - stop;
     self->ensure(delts);

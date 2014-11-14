@@ -24,6 +24,7 @@ class BoxedSlice;
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_end, i64* out_length = nullptr);
 
 template <typename T> void copySlice(T* __restrict__ dst, const T* __restrict__ src, i64 start, i64 step, i64 length) {
+    assert(dst != src);
     if (step == 1) {
         memcpy(dst, &src[start], length * sizeof(T));
     } else {
