@@ -250,13 +250,11 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
 
     // TODO: use createUninitializedString and getWriteableStringContents
     int sz = lhs->s.size();
-    char* buf = new char[sz * n + 1];
+    std::string buf(sz * n, '\0');
     for (int i = 0; i < n; i++) {
-        memcpy(buf + (sz * i), lhs->s.c_str(), sz);
+        memcpy(&buf[sz * i], lhs->s.c_str(), sz);
     }
-    buf[sz * n] = '\0';
-
-    return new BoxedString(buf);
+    return new BoxedString(std::move(buf));
 }
 
 extern "C" Box* strLt(BoxedString* lhs, Box* rhs) {
