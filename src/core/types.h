@@ -404,6 +404,8 @@ public:
     HCAttrs() : hcls(root_hcls), attr_list(nullptr) {}
 };
 
+class BoxedString;
+
 class Box : public PythonGCObject {
 public:
     BoxedClass* cls;
@@ -435,6 +437,12 @@ public:
     Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
     void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
+
+    Box* reprIC();
+    BoxedString* reprICAsString();
+    bool nonzeroIC();
+    Box* hasnextOrNullIC();
+    Box* nextIC();
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 

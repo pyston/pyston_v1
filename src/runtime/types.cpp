@@ -52,7 +52,7 @@ bool IN_SHUTDOWN = false;
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
 
-Box* BoxedClass::callHasnext(Box* obj, bool null_on_nonexistent) {
+Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
     assert(obj->cls == this);
 
     auto ic = hasnext_ic.get();
@@ -66,7 +66,7 @@ Box* BoxedClass::callHasnext(Box* obj, bool null_on_nonexistent) {
                     ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-Box* BoxedClass::callNext(Box* obj) {
+Box* BoxedClass::callNextIC(Box* obj) {
     assert(obj->cls == this);
 
     auto ic = next_ic.get();
@@ -80,7 +80,21 @@ Box* BoxedClass::callNext(Box* obj) {
                     nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-bool BoxedClass::callNonzero(Box* obj) {
+Box* BoxedClass::callReprIC(Box* obj) {
+    assert(obj->cls == this);
+
+    auto ic = repr_ic.get();
+    if (!ic) {
+        ic = new CallattrIC();
+        repr_ic.reset(ic);
+    }
+
+    static std::string repr_str("__repr__");
+    return ic->call(obj, &repr_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
+                    nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+
+bool BoxedClass::callNonzeroIC(Box* obj) {
     assert(obj->cls == this);
 
     auto ic = nonzero_ic.get();
@@ -92,22 +106,46 @@ bool BoxedClass::callNonzero(Box* obj) {
     return ic->call(obj);
 }
 
+Box* Box::reprIC() {
+    return this->cls->callReprIC(this);
+}
+
+BoxedString* Box::reprICAsString() {
+    Box* r = this->reprIC();
+    if (r->cls != str_cls) {
+        raiseExcHelper(TypeError, "__repr__ did not return a string!");
+    }
+    return static_cast<BoxedString*>(r);
+}
+
+bool Box::nonzeroIC() {
+    return this->cls->callNonzeroIC(this);
+}
+
+Box* Box::hasnextOrNullIC() {
+    return this->cls->callHasnextIC(this, true);
+}
+
+Box* Box::nextIC() {
+    return this->cls->callNextIC(this);
+}
+
 BoxIterator& BoxIterator::operator++() {
     static std::string next_str("next");
 
     assert(iter);
 
-    Box* hasnext = iter->cls->callHasnext(iter, true);
+    Box* hasnext = iter->hasnextOrNullIC();
     if (hasnext) {
-        if (hasnext->cls->callNonzero(hasnext)) {
-            value = iter->cls->callNext(iter);
+        if (hasnext->nonzeroIC()) {
+            value = iter->nextIC();
         } else {
             iter = nullptr;
             value = nullptr;
         }
     } else {
         try {
-            value = iter->cls->callNext(iter);
+            value = iter->nextIC();
         } catch (Box* e) {
             if ((e == StopIteration) || isSubclass(e->cls, StopIteration)) {
                 iter = nullptr;
@@ -661,7 +699,7 @@ public:
                 os << ", ";
             first = false;
 
-            BoxedString* v = repr(attrs->attr_list->attrs[p.second]);
+            BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
             os << p.first << ": " << v->s;
         }
         os << "})";
@@ -717,8 +755,7 @@ Box* objectRepr(Box* obj) {
 }
 
 Box* objectStr(Box* obj) {
-    static const std::string repr_str("__repr__");
-    return callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    return obj->reprIC();
 }
 
 bool TRACK_ALLOCATIONS = false;

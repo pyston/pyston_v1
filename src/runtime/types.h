@@ -180,11 +180,12 @@ public:
     ICInvalidator dependent_icgetattrs;
 
     // TODO: these don't actually get deallocated right now
-    std::unique_ptr<CallattrIC> hasnext_ic, next_ic;
+    std::unique_ptr<CallattrIC> hasnext_ic, next_ic, repr_ic;
     std::unique_ptr<NonzeroIC> nonzero_ic;
-    Box* callHasnext(Box* obj, bool null_on_nonexistent);
-    Box* callNext(Box* obj);
-    bool callNonzero(Box* obj);
+    Box* callHasnextIC(Box* obj, bool null_on_nonexistent);
+    Box* callNextIC(Box* obj);
+    Box* callReprIC(Box* obj);
+    bool callNonzeroIC(Box* obj);
 
     // Only a single base supported for now.
     // Is NULL iff this is object_cls
