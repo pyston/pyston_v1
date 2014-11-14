@@ -105,7 +105,7 @@ extern "C" Box* listLen(BoxedList* self) {
     return boxInt(self->size);
 }
 
-Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
+Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step, i64 length) {
     // printf("%ld %ld %ld\n", start, stop, step);
     assert(step != 0);
     if (step > 0) {
@@ -117,17 +117,11 @@ Box* _listSlice(BoxedList* self, i64 start, i64 stop, i64 step) {
     }
 
     BoxedList* rtn = new BoxedList();
-
-    if ((step == 1) && ((stop - start) > 0)) {
-        listAppendArrayInternal(rtn, &self->elts->elts[start], stop - start);
-    } else {
-        int cur = start;
-        while ((step > 0 && cur < stop) || (step < 0 && cur > stop)) {
-            listAppendInternal(rtn, self->elts->elts[cur]);
-            cur += step;
-        }
+    if (length > 0) {
+        rtn->ensure(length);
+        copySlice(&rtn->elts->elts[0], &self->elts->elts[0], start, step, length);
+        rtn->size += length;
     }
-
     return rtn;
 }
 
@@ -165,9 +159,9 @@ extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
 
     assert(self->cls == list_cls);
     assert(slice->cls == slice_cls);
-    i64 start, stop, step;
-    parseSlice(slice, self->size, &start, &stop, &step);
-    return _listSlice(self, start, stop, step);
+    i64 start, stop, step, length;
+    parseSlice(slice, self->size, &start, &stop, &step, &length);
+    return _listSlice(self, start, stop, step, length);
 }
 
 extern "C" Box* listGetitem(BoxedList* self, Box* slice) {

@@ -20,7 +20,7 @@
 
 namespace pyston {
 
-void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_step) {
+void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_step, i64* out_length) {
     BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
     Box* start = sslice->start;
@@ -40,6 +40,9 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
 
     if (step->cls == int_cls) {
         istep = static_cast<BoxedInt*>(step)->n;
+        if (istep == 0) {
+            raiseExcHelper(ValueError, "slice step cannot be zero");
+        }
     }
 
     if (start->cls == int_cls) {
@@ -63,11 +66,6 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
             istop = -1;
     }
 
-    if (istep == 0) {
-        fprintf(stderr, "ValueError: slice step cannot be zero\n");
-        raiseExcHelper(ValueError, "");
-    }
-
     if (istep > 0) {
         if (istart < 0)
             istart = 0;
@@ -83,5 +81,18 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
     *out_start = istart;
     *out_stop = istop;
     *out_step = istep;
+
+    if (out_length) {
+        // This is adapted from CPython's PySlice_GetIndicesEx.
+        if ((istep < 0 && istop >= istart) || (istep > 0 && istart >= istop))
+            *out_length = 0;
+        else if (istep < 0)
+            *out_length = (istop - istart + 1) / istep + 1;
+        else
+            *out_length = (istop - istart - 1) / istep + 1;
+
+        if (*out_length < 0)
+            *out_length = 0;
+    }
 }
 }

@@ -32,7 +32,7 @@ extern "C" Box* createTuple(int64_t nelts, Box** elts) {
     return new BoxedTuple(std::move(velts));
 }
 
-Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step) {
+Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
 
     i64 size = self->elts.size();
     assert(step != 0);
@@ -44,23 +44,10 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step) {
         assert(-1 <= stop);
     }
 
-    // This is adapted from CPython's PySlice_GetIndicesEx.
-    i64 slicelength;
-    if (step < 0)
-        slicelength = (stop - start + 1) / (step) + 1;
-    else
-        slicelength = (stop - start - 1) / (step) + 1;
-
-    if (slicelength < 0)
-        slicelength = 0;
-
     // FIXME: No need to initialize with 0.
-    BoxedTuple::GCVector velts(slicelength, 0);
-
-    i64 curr, i;
-    for (curr = start, i = 0; i < slicelength; curr += step, i++)
-        velts[i] = self->elts[curr];
-
+    BoxedTuple::GCVector velts(length, 0);
+    if (length > 0)
+        copySlice(&velts[0], &self->elts[0], start, step, length);
     return new BoxedTuple(std::move(velts));
 }
 
@@ -94,9 +81,9 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
     assert(self->cls == tuple_cls);
     assert(slice->cls == slice_cls);
 
-    i64 start, stop, step;
-    parseSlice(slice, self->elts.size(), &start, &stop, &step);
-    return _tupleSlice(self, start, stop, step);
+    i64 start, stop, step, length;
+    parseSlice(slice, self->elts.size(), &start, &stop, &step, &length);
+    return _tupleSlice(self, start, stop, step, length);
 }
 
 extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) {

@@ -143,6 +143,8 @@ print t[5:1:-1]
 print t[5:1:-2]
 print t[5:1:-5]
 print t[5:1]
+print t[-1:-1:-5]
+print t[-5:-4:-5]
 
 try:
     t[None]
