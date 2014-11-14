@@ -589,9 +589,13 @@ $(TOOLS_DIR)/astprint: $(TOOLS_DIR)/astprint.cpp $(BUILD_SYSTEM_DEPS) $(LLVM_DEP
 	$(ECHO) Linking $(TOOLS_DIR)/astprint
 	$(VERB) $(CXX) $< -o $@ $(LLVM_LIB_DEPS) $(ASTPRINT_OBJS) $(LDFLAGS) $(STDLIB_SRCS:.cpp=.o) $(CXXFLAGS_DBG)
 
-.PHONY: astprint
+.PHONY: astprint astcompare
 
 astprint: $(TOOLS_DIR)/astprint
+
+astcompare: astprint
+	$(ECHO) Running libpypa vs CPython AST result comparison test
+	$(TOOLS_DIR)/astprint_test.sh && echo "Success" || echo "Failure"
 
 ## END OF TOOLS
 
