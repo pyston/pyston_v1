@@ -1821,6 +1821,7 @@ extern "C" i64 unboxedLen(Box* obj) {
 
 extern "C" void dump(void* p) {
     printf("\n");
+    printf("Raw address: %p\n", p);
     bool is_gc = (gc::global_heap.getAllocationFromInteriorPointer(p) != NULL);
     if (!is_gc) {
         printf("non-gc memory\n");

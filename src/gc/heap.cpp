@@ -312,7 +312,19 @@ static void _freeLargeObj(LargeObj* lobj) {
     assert(r == 0);
 }
 
+static void _doFree(GCAllocation* al) {
+    if (VERBOSITY() >= 2)
+        printf("Freeing %p\n", al->user_data);
+
+    if (al->kind_id == GCKind::PYTHON) {
+        Box* b = (Box*)al->user_data;
+        ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b)->c_str());
+    }
+}
+
 void Heap::free(GCAllocation* al) {
+    _doFree(al);
+
     if (large_arena.contains(al)) {
         LargeObj* lobj = LargeObj::fromAllocation(al);
         _freeLargeObj(lobj);
@@ -392,16 +404,6 @@ GCAllocation* Heap::getAllocationFromInteriorPointer(void* ptr) {
         return NULL;
 
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
-}
-
-static void _doFree(GCAllocation* al) {
-    if (VERBOSITY() >= 2)
-        printf("Freeing %p\n", al->user_data);
-
-    if (al->kind_id == GCKind::PYTHON) {
-        Box* b = (Box*)al->user_data;
-        ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b)->c_str());
-    }
 }
 
 static Block** freeChain(Block** head) {

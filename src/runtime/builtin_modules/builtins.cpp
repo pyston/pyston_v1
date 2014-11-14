@@ -671,6 +671,11 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
+Box* pydump(void* p) {
+    dump(p);
+    return None;
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -749,6 +754,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedFunction(boxRTFunction((void*)trap, UNKNOWN, 0));
     builtins_module->giveAttr("trap", trap_obj);
+    builtins_module->giveAttr("dump", new BoxedFunction(boxRTFunction((void*)pydump, UNKNOWN, 1)));
 
     builtins_module->giveAttr(
         "getattr", new BoxedFunction(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
