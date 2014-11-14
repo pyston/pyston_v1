@@ -816,6 +816,7 @@ AST_Module* pypa_parse(char const* file_path) {
     options.printerrors = false;
     options.python3allowed = false;
     options.python3only = false;
+    options.handle_future_errors = false;
     options.error_handler = pypaErrorHandler;
 
     if (pypa::parse(lexer, module, symbols, options) && module) {
