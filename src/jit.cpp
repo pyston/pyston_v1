@@ -236,15 +236,18 @@ int main(int argc, char** argv) {
                     AST_Name* r = new AST_Name();
                     r->id = "repr";
                     r->ctx_type = AST_TYPE::Load;
+                    r->lineno = 0;
                     c->func = r;
                     c->starargs = NULL;
                     c->kwargs = NULL;
                     c->args.push_back(e->value);
+                    c->lineno = 0;
 
                     AST_Print* p = new AST_Print();
                     p->dest = NULL;
                     p->nl = true;
                     p->values.push_back(c);
+                    p->lineno = 0;
                     m->body[0] = p;
                 }
 
