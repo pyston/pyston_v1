@@ -112,6 +112,7 @@ sudo apt-get install libgmp3-dev
 
 ```
 cd ~/pyston_deps
+sudo apt-get install pkg-config
 git clone git://github.com/vinzenz/pypa
 mkdir pypa-install
 cd pypa
