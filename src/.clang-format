@@ -1,6 +1,7 @@
 BasedOnStyle: WebKit
 
 AccessModifierOffset: -4
+AlignAfterOpenBracket: true # new in clang rev 222284
 AlignTrailingComments: true
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: false

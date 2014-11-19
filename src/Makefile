@@ -155,7 +155,7 @@ COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -lm -lunwin
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
-COMMON_LDFLAGS += `pkg-config tinfo && pkg-config tinfo --libs || echo ""`
+COMMON_LDFLAGS += `pkg-config tinfo 2>/dev/null && pkg-config tinfo --libs || echo ""`
 
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT

@@ -96,7 +96,9 @@ MAKE_CHECK(Unicode, unicode_cls)
 
 #undef MAKE_CHECK
 
-extern "C" { int Py_Py3kWarningFlag; }
+extern "C" {
+int Py_Py3kWarningFlag;
+}
 
 extern "C" PyObject* PyDict_New() {
     return new BoxedDict();

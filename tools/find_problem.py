@@ -6,7 +6,7 @@ import sys
 def test(rev, args):
     subprocess.check_call(["make", "llvm_up", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev])
     subprocess.check_call(["make", "llvm_release", "llvm_quick", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev])
-    code = subprocess.call(["make", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev] + args)
+    code = subprocess.call(["make", "USE_TEST_LLVM=1", "LLVM_REVISION=%d" % rev] + args, stdout=open("%s.out" % rev, "w"), stderr=subprocess.STDOUT)
     return code == 0
 
 def efficiency(rid):

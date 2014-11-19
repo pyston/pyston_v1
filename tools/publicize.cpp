@@ -129,7 +129,11 @@ bool updateTBAA(Function* f) {
     LLVMContext &c = f->getContext();
 
     for (auto it = inst_begin(f), end = inst_end(f); it != end; ++it) {
+#if LLVMREV < 221024 || LLVMREV >= 221711
+        MDNode *tbaa = it->getMetadata(LLVMContext::MD_tbaa);
+#else
         MDNode *tbaa = it->getMDNode(LLVMContext::MD_tbaa);
+#endif
         if (!tbaa)
             continue;
         //tbaa->dump();
