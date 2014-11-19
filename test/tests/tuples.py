@@ -177,3 +177,24 @@ print bool((0,))
 print bool((0, 0))
 
 print (65, (1, 2, 3), 65)
+
+# Multiplying a tuple by an integer
+x = (1, 2, 3)
+print x * -1
+print x * 0
+print x * 1
+print x * 5
+print -1 * x
+print 0 * x
+print 1 * x
+print 5 * x
+
+x = ()
+print x * -1
+print x * 0
+print x * 1
+print x * 5
+print -1 * x
+print 0 * x
+print 1 * x
+print 5 * x

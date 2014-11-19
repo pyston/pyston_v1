@@ -14,6 +14,7 @@
 
 #include "runtime/tuple.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "core/ast.h"
@@ -125,6 +126,30 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     velts.insert(velts.end(), self->elts.begin(), self->elts.end());
     velts.insert(velts.end(), _rhs->elts.begin(), _rhs->elts.end());
     return new BoxedTuple(std::move(velts));
+}
+
+Box* tupleMul(BoxedTuple* self, Box* rhs) {
+    if (rhs->cls != int_cls) {
+        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs)->c_str());
+    }
+
+    int n = static_cast<BoxedInt*>(rhs)->n;
+    int s = self->elts.size();
+
+    if (n < 0)
+        n = 0;
+
+    if (s == 0 || n == 1) {
+        return self;
+    } else {
+        BoxedTuple::GCVector velts(n * s);
+        auto iter = velts.begin();
+        for (int i = 0; i < n; ++i) {
+            std::copy(self->elts.begin(), self->elts.end(), iter);
+            iter += s;
+        }
+        return new BoxedTuple(std::move(velts));
+    }
 }
 
 Box* tupleLen(BoxedTuple* t) {
@@ -389,6 +414,8 @@ void setupTuple() {
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
     tuple_cls->giveAttr("__str__", tuple_cls->getattr("__repr__"));
     tuple_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)tupleAdd, BOXED_TUPLE, 2)));
+    tuple_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
+    tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
 
     tuple_cls->freeze();
 

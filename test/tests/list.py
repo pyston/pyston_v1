@@ -71,3 +71,8 @@ while l:
 l = range(5)
 l.extend(range(5))
 print l
+
+# Repeating a list
+x = [0, 1, 2]
+print 2 * x
+print x * 2
