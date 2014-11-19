@@ -141,15 +141,14 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     // printf("Allocated new block %p\n", rtn);
 
     // Don't think I need to do this:
-    memset(rtn->isfree, 0, sizeof(Block::isfree));
+    rtn->isfree.setAllZero();
+    rtn->next_to_check.reset();
 
     int num_objects = rtn->numObjects();
     int num_lost = rtn->minObjIndex();
     int atoms_per_object = rtn->atomsPerObj();
     for (int i = num_lost * atoms_per_object; i < num_objects * atoms_per_object; i += atoms_per_object) {
-        int idx = i / 64;
-        int bit = i % 64;
-        rtn->isfree[idx] ^= (1L << bit);
+        rtn->isfree.set(i);
         // printf("%d %d\n", idx, bit);
     }
 
@@ -199,29 +198,9 @@ Heap::ThreadBlockCache::~ThreadBlockCache() {
 }
 
 static GCAllocation* allocFromBlock(Block* b) {
-    uint64_t mask = 0;
-
-    while (true) {
-        mask = b->isfree[b->next_to_check];
-        if (likely(mask != 0L)) {
-            break;
-        }
-
-        b->next_to_check++;
-        if (b->next_to_check == BITFIELD_ELTS) {
-            b->next_to_check = 0;
-            return NULL;
-        }
-    }
-    int i = b->next_to_check;
-
-    int first = __builtin_ctzll(mask);
-    assert(first < 64);
-    assert(b->isfree[i] & (1L << first));
-    b->isfree[i] ^= (1L << first);
-    // printf("Marking %d:%d: %p=%lx\n", i, first, &b->isfree[i], b->isfree[i]);
-
-    int idx = first + i * 64;
+    int idx = b->isfree.scanForNext(b->next_to_check);
+    if (idx == -1)
+        return NULL;
 
     void* rtn = &b->atoms[idx];
     return reinterpret_cast<GCAllocation*>(rtn);
@@ -292,11 +271,8 @@ void _freeFrom(GCAllocation* alloc, Block* b) {
     assert(offset % size == 0);
     int atom_idx = offset / ATOM_SIZE;
 
-    int bitmap_idx = atom_idx / 64;
-    int bitmap_bit = atom_idx % 64;
-    uint64_t mask = 1L << bitmap_bit;
-    assert((b->isfree[bitmap_idx] & mask) == 0);
-    b->isfree[bitmap_idx] ^= mask;
+    assert(!b->isfree.isSet(atom_idx));
+    b->isfree.toggle(atom_idx);
 
 #ifndef NVALGRIND
 // VALGRIND_MEMPOOL_FREE(b, ptr);
@@ -397,10 +373,7 @@ GCAllocation* Heap::getAllocationFromInteriorPointer(void* ptr) {
 
     int atom_idx = obj_idx * (size / ATOM_SIZE);
 
-    int bitmap_idx = atom_idx / 64;
-    int bitmap_bit = atom_idx % 64;
-    uint64_t mask = 1L << bitmap_bit;
-    if (b->isfree[bitmap_idx] & mask)
+    if (b->isfree.isSet(atom_idx))
         return NULL;
 
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
@@ -414,11 +387,8 @@ static Block** freeChain(Block** head) {
 
         for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
             int atom_idx = obj_idx * atoms_per_obj;
-            int bitmap_idx = atom_idx / 64;
-            int bitmap_bit = atom_idx % 64;
-            uint64_t mask = 1L << bitmap_bit;
 
-            if (b->isfree[bitmap_idx] & mask)
+            if (b->isfree.isSet(atom_idx))
                 continue;
 
             void* p = &b->atoms[atom_idx];
@@ -430,7 +400,7 @@ static Block** freeChain(Block** head) {
                 _doFree(al);
 
                 // assert(p != (void*)0x127000d960); // the main module
-                b->isfree[bitmap_idx] |= mask;
+                b->isfree.set(atom_idx);
             }
         }
 
@@ -556,11 +526,8 @@ void getChainStatistics(HeapStatistics* stats, Block** head) {
 
         for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
             int atom_idx = obj_idx * atoms_per_obj;
-            int bitmap_idx = atom_idx / 64;
-            int bitmap_bit = atom_idx % 64;
-            uint64_t mask = 1L << bitmap_bit;
 
-            if (b->isfree[bitmap_idx] & mask)
+            if (b->isfree.isSet(atom_idx))
                 continue;
 
             void* p = &b->atoms[atom_idx];

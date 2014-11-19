@@ -60,6 +60,60 @@ inline void clearMark(GCAllocation* header) {
 #undef MARK_BIT
 
 
+template <int N> class Bitmap {
+    static_assert(N % 64 == 0, "");
+
+private:
+    uint64_t data[N / 64];
+
+public:
+    void setAllZero() { memset(data, 0, sizeof(data)); }
+
+    struct Scanner {
+    private:
+        int next_to_check;
+        friend class Bitmap<N>;
+
+    public:
+        void reset() { next_to_check = 0; }
+    };
+
+    bool isSet(int idx) { return (data[idx / 64] >> (idx % 64)) & 1; }
+
+    void set(int idx) { data[idx / 64] |= 1UL << (idx % 64); }
+
+    void toggle(int idx) { data[idx / 64] ^= 1UL << (idx % 64); }
+
+    void clear(int idx) { data[idx / 64] &= ~(1UL << (idx % 64)); }
+
+    int scanForNext(Scanner& sc) {
+        uint64_t mask = 0;
+
+        while (true) {
+            mask = data[sc.next_to_check];
+            if (likely(mask != 0L)) {
+                break;
+            }
+
+            sc.next_to_check++;
+            if (sc.next_to_check == N / 64) {
+                sc.next_to_check = 0;
+                return -1;
+            }
+        }
+
+        int i = sc.next_to_check;
+
+        int first = __builtin_ctzll(mask);
+        assert(first < 64);
+        assert(data[i] & (1L << first));
+        data[i] ^= (1L << first);
+
+        int idx = first + i * 64;
+        return idx;
+    }
+};
+
 
 #define BLOCK_SIZE (4 * 4096)
 #define ATOM_SIZE 16
@@ -81,8 +135,8 @@ struct Block {
         struct {
             Block* next, **prev;
             uint64_t size;
-            uint64_t isfree[BITFIELD_ELTS];
-            int next_to_check;
+            Bitmap<ATOMS_PER_BLOCK> isfree;
+            Bitmap<ATOMS_PER_BLOCK>::Scanner next_to_check;
             void* _header_end[0];
         };
         Atoms atoms[ATOMS_PER_BLOCK];
