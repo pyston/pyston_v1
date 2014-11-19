@@ -153,14 +153,29 @@ extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
     }
 }
 
+extern "C" Box* floatFloorDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
+    assert(lhs->cls == float_cls);
+    assert(rhs->cls == float_cls);
+    raiseDivZeroExcIfZero(rhs->d);
+    return boxFloat(floor(lhs->d / rhs->d));
+}
+
+extern "C" Box* floatFloorDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
+    assert(lhs->cls == float_cls);
+    assert(rhs->cls == int_cls);
+    raiseDivZeroExcIfZero(rhs->n);
+    return boxFloat(floor(lhs->d / rhs->n));
+}
+
 extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls != float_cls) {
+    if (rhs->cls == int_cls) {
+        return floatFloorDivInt(lhs, static_cast<BoxedInt*>(rhs));
+    } else if (rhs->cls == float_cls) {
+        return floatFloorDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
+    } else {
         return NotImplemented;
     }
-    BoxedFloat* rhs_float = static_cast<BoxedFloat*>(rhs);
-    raiseDivZeroExcIfZero(rhs_float->d);
-    return boxFloat(floor(lhs->d / rhs_float->d));
 }
 
 extern "C" Box* floatEqFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
@@ -592,7 +607,7 @@ void setupFloat() {
 
     _addFunc("__div__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatDiv);
     _addFunc("__rdiv__", BOXED_FLOAT, (void*)floatRDivFloat, (void*)floatRDivInt, (void*)floatRDiv);
-    float_cls->giveAttr("__floordiv__", new BoxedFunction(boxRTFunction((void*)floatFloorDiv, UNKNOWN, 2)));
+    _addFunc("__floordiv__", BOXED_FLOAT, (void*)floatFloorDivFloat, (void*)floatFloorDivInt, (void*)floatFloorDiv);
     _addFunc("__truediv__", BOXED_FLOAT, (void*)floatDivFloat, (void*)floatDivInt, (void*)floatTruediv);
 
     _addFunc("__eq__", BOXED_BOOL, (void*)floatEqFloat, (void*)floatEqInt, (void*)floatEq);
