@@ -408,13 +408,13 @@ Makefile.local:
 
 LLVM_CONFIGURATION := $(LLVM_BUILD)/Makefile.config
 # First, specify when we need to rebuild the different targets:
-$(LLVM_BUILD)/built_quick: $(LLVM_SRC)/_patched llvm_configure_if_needed
+$(LLVM_BUILD)/built_quick: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(MAKE) llvm_quick
-$(LLVM_BUILD)/built_debug: $(LLVM_SRC)/_patched llvm_configure_if_needed
+$(LLVM_BUILD)/built_debug: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(MAKE) llvm_debug
-$(LLVM_BUILD)/built_release: $(LLVM_SRC)/_patched llvm_configure_if_needed
+$(LLVM_BUILD)/built_release: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(MAKE) llvm_release
-$(LLVM_BUILD)/built_profile: $(LLVM_SRC)/_patched llvm_configure_if_needed
+$(LLVM_BUILD)/built_profile: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(MAKE) llvm_profile
 # Now, specify that we shouldn't check the timestamps of dependencies until after
 # the llvm rebuild finishes, if one is happening, but do it with order-only
@@ -468,10 +468,6 @@ endif
 ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
 LLVM_CONFIGURE_LINE += --with-intel-jitevents
 endif
-
-.PHONY: llvm_configure_if_needed
-llvm_configure_if_needed: $(LLVM_SRC)/_patched
-	$(MAKE) $(LLVM_CONFIGURATION)
 
 $(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL)
 	mkdir -p $(LLVM_BUILD)
@@ -540,19 +536,19 @@ llvm_test_release: llvm_release
 llvm_test_all: llvm_release
 	$(MAKE) -C $(LLVM_BUILD) ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 check-all
 
-llvm/quick/%: $(LLVM_SRC)/_patched llvm_configure_if_needed
+llvm/quick/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	mkdir -p $(patsubst llvm/quick/%,$(LLVM_BUILD)/%,$@)
 	$(VERB) if [ ! -f $(patsubst llvm/quick/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/quick/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/quick/%,$(LLVM_BUILD)/%/,$@); fi
 	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/quick/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) ENABLE_OPTIMIZED=1 DEBUG_RUNTIME=0 NO_DEBUG_SYMBOLS=1
-llvm/release/%: $(LLVM_SRC)/_patched llvm_configure_if_needed
+llvm/release/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	mkdir -p $(patsubst llvm/release/%,$(LLVM_BUILD)/%,$@)
 	$(VERB) if [ ! -f $(patsubst llvm/release/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/release/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/release/%,$(LLVM_BUILD)/%/,$@); fi
 	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/release/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1
-llvm/debug/%: $(LLVM_SRC)/_patched llvm_configure_if_needed
+llvm/debug/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	mkdir -p $(patsubst llvm/debug/%,$(LLVM_BUILD)/%,$@)
 	$(VERB) if [ ! -f $(patsubst llvm/debug/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/debug/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/debug/%,$(LLVM_BUILD)/%/,$@); fi
 	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/debug/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) DEBUG_RUNTIME=1 DEBUG_SYMBOLS=1 ENABLE_OPTIMIZED=0
-llvm/profile/%: $(LLVM_SRC)/_patched llvm_configure_if_needed
+llvm/profile/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	mkdir -p $(patsubst llvm/profile/%,$(LLVM_BUILD)/%,$@)
 	$(VERB) if [ ! -f $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/profile/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/,$@); fi
 	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/profile/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) CXXFLAGS="-fno-omit-frame-pointer -fno-function-sections" ENABLE_PROFILING=1 ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 $(LLVM_MAKE_ARGS)
@@ -562,6 +558,7 @@ $(LLVM_SRC)/_patched: $(wildcard ../llvm_patches/*) $(wildcard ../clang_patches/
 llvm_up:
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ../llvm_patches
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ../clang_patches
+	$(MAKE) $(LLVM_CONFIGURATION)
 	touch $(LLVM_SRC)/_patched
 
 # end of llvm rules
