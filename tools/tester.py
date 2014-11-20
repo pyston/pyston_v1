@@ -252,6 +252,12 @@ def run_test(fn, check_stats, run_memcheck):
                     if m:
                         statname = m.group(1)
                         raise Exception((l, statname, stats[statname]))
+
+                    m = re.match("""noninit_count\(['"]([\w_]+)['"]\)""", l)
+                    if m:
+                        statname = m.group(1)
+                        raise Exception((l, statname, noninit_count(statname)))
+
                     raise Exception((l, stats))
         else:
             # only can get here if all statchecks passed

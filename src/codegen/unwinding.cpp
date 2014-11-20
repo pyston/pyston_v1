@@ -410,10 +410,10 @@ BoxedModule* getCurrentModule() {
 }
 
 BoxedDict* getLocals(bool only_user_visible) {
-    BoxedDict* d = new BoxedDict();
-
     for (PythonFrameIterator& frame_info : unwindPythonFrames()) {
         if (frame_info.getId().type == PythonFrameId::COMPILED) {
+            BoxedDict* d = new BoxedDict();
+
             CompiledFunction* cf = frame_info.getCF();
             uint64_t ip = frame_info.getId().ip;
 
@@ -464,14 +464,15 @@ BoxedDict* getLocals(bool only_user_visible) {
                     }
                 }
             }
+
+            return d;
         } else if (frame_info.getId().type == PythonFrameId::INTERPRETED) {
             return localsForInterpretedFrame((void*)frame_info.getId().bp, only_user_visible);
         } else {
             abort();
         }
     }
-
-    return d;
+    RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }
 
 

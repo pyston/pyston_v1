@@ -1860,6 +1860,10 @@ extern "C" void dump(void* p) {
             printf("%ld elements\n", static_cast<BoxedTuple*>(b)->elts.size());
         }
 
+        if (isSubclass(b->cls, int_cls)) {
+            printf("Int value: %ld\n", static_cast<BoxedInt*>(b)->n);
+        }
+
         return;
     }
 

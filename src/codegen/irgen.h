@@ -70,6 +70,7 @@ public:
     virtual llvm::Function* getIntrinsic(llvm::Intrinsic::ID) = 0;
 
     virtual llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) = 0;
+    virtual llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee) = 0;
     virtual llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) = 0;
     virtual llvm::Value* createCall2(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2) = 0;
     virtual llvm::Value* createCall3(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1, llvm::Value* arg2,

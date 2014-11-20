@@ -206,6 +206,10 @@ public:
         }
     }
 
+    llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee) override {
+        return createCall(exc_info, callee, std::vector<llvm::Value*>());
+    }
+
     llvm::Value* createCall(ExcInfo exc_info, llvm::Value* callee, llvm::Value* arg1) override {
         return createCall(exc_info, callee, std::vector<llvm::Value*>({ arg1 }));
     }
@@ -1720,8 +1724,9 @@ private:
             dest = d->makeConverted(emitter, d->getConcreteType());
             d->decvref(emitter);
         } else {
-            dest = new ConcreteCompilerVariable(typeFromClass(file_cls),
-                                                embedConstantPtr(getSysStdout(), g.llvm_value_type_ptr), true);
+            llvm::Value* sys_stdout_val = emitter.createCall(exc_info, g.funcs.getSysStdout);
+            dest = new ConcreteCompilerVariable(UNKNOWN, sys_stdout_val, true);
+            // TODO: speculate that sys.stdout is a file?
         }
         assert(dest);
 

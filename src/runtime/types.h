@@ -75,7 +75,7 @@ void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
 BoxedList* getSysPath();
-Box* getSysStdout();
+extern "C" Box* getSysStdout();
 
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,

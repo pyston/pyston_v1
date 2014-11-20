@@ -101,6 +101,7 @@ void force() {
 
     FORCE(printFloat);
     FORCE(listAppendInternal);
+    FORCE(getSysStdout);
 
     FORCE(runtimeCall);
     FORCE(callattr);

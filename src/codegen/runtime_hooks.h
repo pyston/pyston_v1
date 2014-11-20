@@ -41,7 +41,7 @@ struct GlobalFuncs {
 
     llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *assertNameDefined, *assertFail;
-    llvm::Value* printFloat, *listAppendInternal;
+    llvm::Value* printFloat, *listAppendInternal, *getSysStdout;
     llvm::Value* runtimeCall0, *runtimeCall1, *runtimeCall2, *runtimeCall3, *runtimeCall, *runtimeCallN;
     llvm::Value* callattr0, *callattr1, *callattr2, *callattr3, *callattr, *callattrN;
     llvm::Value* reoptCompiledFunc, *compilePartialFunc;
