@@ -156,7 +156,7 @@ COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lu
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
-COMMON_LDFLAGS += `pkg-config tinfo && pkg-config tinfo --libs || echo ""`
+COMMON_LDFLAGS += `pkg-config tinfo 2>/dev/null && pkg-config tinfo --libs || echo ""`
 
 # Make sure that we put all symbols in the dynamic symbol table so that MCJIT can load them;
 # TODO should probably do the linking before MCJIT
@@ -195,6 +195,7 @@ LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 
 BUILD_SYSTEM_DEPS := Makefile Makefile.local $(wildcard build_system/*)
 CLANG_DEPS := $(CLANGPP_EXE) $(abspath $(dir $(CLANGPP_EXE))/../../built_release)
+$(CLANGPP_EXE) $(CLANG_EXE): $(abspath $(dir $(CLANGPP_EXE))/../../built_release)
 
 # settings to make clang and ccache play nicely:
 CLANG_CCACHE_FLAGS := -Qunused-arguments
@@ -469,7 +470,7 @@ ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
 LLVM_CONFIGURE_LINE += --with-intel-jitevents
 endif
 
-$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL) | $(LLVM_SRC)/_patched
+$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL)
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
 	$(LLVM_CONFIGURE_LINE)
@@ -782,7 +783,7 @@ memcheck$1_%: %.py pyston$1 $$(RUN_DEPS)
 $$(call make_search,memcheck$1_%)
 memcheck_gdb$1_%: %.py pyston$1 $$(RUN_DEPS)
 	set +e; $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
-	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.9.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
+	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.10.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
 $$(call make_search,memcheck_gdb$1_%)
 memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
 	$$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
