@@ -29,12 +29,14 @@ class Box;
 class BoxedDict;
 struct LineInfo;
 
+#if 0
 Box* interpretFunction(llvm::Function* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
 
 void gatherInterpreterRoots(gc::GCVisitor* visitor);
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
+#endif
 }
 
 #endif

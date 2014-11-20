@@ -12,28 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_CODEGEN_IRGEN_HOOKS_H
-#define PYSTON_CODEGEN_IRGEN_HOOKS_H
-
-#include <string>
+#ifndef PYSTON_CODEGEN_ASTINTERPRETER_H
+#define PYSTON_CODEGEN_ASTINTERPRETER_H
 
 namespace pyston {
 
-struct CompiledFunction;
-class CLFunction;
-class OSRExit;
+namespace gc {
+class GCVisitor;
+}
 
-CompiledFunction* compilePartialFuncInternal(OSRExit* exit);
-void* compilePartialFunc(OSRExit*);
-extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction*);
-extern "C" char* reoptCompiledFunc(CompiledFunction*);
-
-class AST_Module;
+class Box;
+class BoxedDict;
 class BoxedModule;
-void compileAndRunModule(AST_Module* m, BoxedModule* bm);
+struct CompiledFunction;
+struct LineInfo;
 
-// will we always want to generate unique function names? (ie will this function always be reasonable?)
-CompiledFunction* cfForMachineFunctionName(const std::string&);
+Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
+                          Box** args);
+
+const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
+BoxedModule* getModuleForInterpretedFrame(void* frame_ptr);
+
+void gatherInterpreterRoots(gc::GCVisitor* visitor);
+BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);
 }
 
 #endif

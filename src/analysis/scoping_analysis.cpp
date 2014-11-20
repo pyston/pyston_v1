@@ -70,8 +70,8 @@ public:
         // assert(name[0] != '#' && "should test this");
         return true;
     }
-    bool refersToClosure(const std::string name) override { return false; }
-    bool saveInClosure(const std::string name) override { return false; }
+    bool refersToClosure(const std::string& name) override { return false; }
+    bool saveInClosure(const std::string& name) override { return false; }
 
     const std::unordered_set<std::string>& getClassDefLocalNames() override { RELEASE_ASSERT(0, ""); }
 };
@@ -141,13 +141,13 @@ public:
             return true;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
-    bool refersToClosure(const std::string name) override {
+    bool refersToClosure(const std::string& name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
         return usage->got_from_closure.count(name) != 0;
     }
-    bool saveInClosure(const std::string name) override {
+    bool saveInClosure(const std::string& name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;

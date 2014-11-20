@@ -279,7 +279,7 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
 }
 
 static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, const std::string& name, CFGBlock* block) {
-    if (startswith(name, "!is_defined"))
+    if (isIsDefinedName(name))
         return BOOL;
     else if (name == PASSED_GENERATOR_NAME)
         return GENERATOR;
@@ -329,9 +329,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         // llvm::BranchInst::Create(llvm_entry_blocks[entry_descriptor->backedge->target->idx], entry_block);
 
         llvm::BasicBlock* osr_entry_block_end = osr_entry_block;
-        llvm::BasicBlock* osr_unbox_block_end = osr_unbox_block;
         std::unique_ptr<IREmitter> entry_emitter(createIREmitter(irstate, osr_entry_block_end));
-        std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate, osr_unbox_block_end));
+        std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate, osr_unbox_block));
 
         CFGBlock* target_block = entry_descriptor->backedge->target;
 
@@ -409,8 +408,29 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 }
                 ASSERT(speculated_class, "%s", phi_type->debugName().c_str());
 
-                ASSERT(entry_descriptor->args.count("!is_defined_" + p.first) == 0,
-                       "This class-check-creating behavior will segfault if the argument wasn't actually defined!");
+                assert(p.first[0] != '!');
+
+                std::string is_defined_name = getIsDefinedName(p.first);
+                llvm::BasicBlock* defined_join = nullptr, * defined_prev = nullptr, * defined_check = nullptr;
+                if (entry_descriptor->args.count(is_defined_name)) {
+                    // relying on the fact that we are iterating over the names in order
+                    // and the fake names precede the real names:
+                    assert(osr_syms->count(is_defined_name));
+
+                    ConcreteCompilerVariable* is_defined_var = (*osr_syms)[is_defined_name];
+                    assert(is_defined_var->getType() == BOOL);
+                    llvm::Value* is_defined_i1 = i1FromBool(*entry_emitter, is_defined_var);
+
+                    defined_check = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+                    defined_join = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+
+                    llvm::BranchInst* br
+                        = entry_emitter->getBuilder()->CreateCondBr(is_defined_i1, defined_check, defined_join);
+                    defined_prev = osr_entry_block_end;
+
+                    osr_entry_block_end = defined_check;
+                    entry_emitter->getBuilder()->SetInsertPoint(defined_check);
+                }
 
                 llvm::Value* type_check = ConcreteCompilerVariable(p.second, from_arg, true)
                                               .makeClassCheck(*entry_emitter, speculated_class);
@@ -420,6 +440,18 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                     guard_val = type_check;
                 }
                 // entry_emitter->getBuilder()->CreateCall(g.funcs.my_assert, type_check);
+
+                if (defined_join) {
+                    entry_emitter->getBuilder()->CreateBr(defined_join);
+
+                    osr_entry_block_end = defined_join;
+                    entry_emitter->getBuilder()->SetInsertPoint(defined_join);
+
+                    auto guard_phi = entry_emitter->getBuilder()->CreatePHI(g.i1, 2);
+                    guard_phi->addIncoming(getConstantInt(0, g.i1), defined_prev);
+                    guard_phi->addIncoming(guard_val, defined_check);
+                    guard_val = guard_phi;
+                }
 
                 if (speculated_class == int_cls) {
                     v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
@@ -621,25 +653,32 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 into_hax.insert(b2);
             }
 
-            const PhiAnalysis::RequiredSet& names = source->phis->getAllRequiredFor(block);
+
+            std::unordered_set<std::string> names;
+            for (const auto& s : source->phis->getAllRequiredFor(block)) {
+                names.insert(s);
+                if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
+                    names.insert(getIsDefinedName(s));
+                }
+            }
+
+            if (source->getScopeInfo()->createsClosure())
+                names.insert(CREATED_CLOSURE_NAME);
+
+            if (source->getScopeInfo()->takesClosure())
+                names.insert(PASSED_CLOSURE_NAME);
+
+            if (source->getScopeInfo()->takesGenerator())
+                names.insert(PASSED_GENERATOR_NAME);
+
             for (const auto& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());
-                ConcreteCompilerType* type = types->getTypeAtBlockStart(s, block);
+                ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s);
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi, true);
                 generator->giveLocalSymbol(s, var);
 
                 (*phis)[s] = std::make_pair(type, phi);
-
-                if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
-                    std::string is_defined_name = "!is_defined_" + s;
-                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(BOOL->llvmType(), block->predecessors.size(),
-                                                                          is_defined_name);
-                    ConcreteCompilerVariable* var = new ConcreteCompilerVariable(BOOL, phi, true);
-                    generator->giveLocalSymbol(is_defined_name, var);
-
-                    (*phis)[is_defined_name] = std::make_pair(BOOL, phi);
-                }
             }
         } else {
             assert(pred);
@@ -746,7 +785,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
                 continue;
 
-            // printf("%d %d %ld %ld\n", i, b2->idx, phi_ending_symbol_tables[b2]->size(), phis->size());
+            // printf("%d %d %ld %ld\n", b->idx, b2->idx, phi_ending_symbol_tables[b2]->size(), phis->size());
             compareKeyset(phi_ending_symbol_tables[b2], phis);
             assert(phi_ending_symbol_tables[b2]->size() == phis->size());
         }
@@ -762,12 +801,17 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
             llvm::BasicBlock* off_ramp = llvm::BasicBlock::Create(g.context, "deopt_ramp", irstate->getLLVMFunction());
             offramps.push_back(off_ramp);
-            llvm::BasicBlock* off_ramp_end = off_ramp;
-            IREmitter* emitter = createIREmitter(irstate, off_ramp_end);
+            IREmitter* emitter = createIREmitter(irstate, offramps[offramps.size() - 1]);
             emitters.push_back(emitter);
 
             block_guards[i]->branch->setSuccessor(1, off_ramp);
         }
+
+        // Can't always add the phi incoming value right away, since we may have to create more
+        // basic blocks as part of type coercion.
+        // Intsead, just make a record of the phi node, value, and the location of the from-BB,
+        // which we won't read until after all new BBs have been added.
+        std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&> > phi_args;
 
         for (PHITable::iterator it = phis->begin(); it != phis->end(); it++) {
             llvm::PHINode* llvm_phi = it->second.second;
@@ -796,12 +840,33 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 llvm_phi->addIncoming(v->getValue(), osr_unbox_block);
             }
 
+            std::string is_defined_name = getIsDefinedName(it->first);
+
             for (int i = 0; i < block_guards.size(); i++) {
                 GuardList::BlockEntryGuard* guard = block_guards[i];
                 IREmitter* emitter = emitters[i];
 
-                ASSERT(phis->count("!is_defined_" + it->first) == 0,
-                       "This class-check-creating behavior will segfault if the argument wasn't actually defined!");
+                auto is_defined_it = guard->symbol_table.find(is_defined_name);
+                ConcreteCompilerVariable* is_defined_var = nullptr;
+                if (is_defined_it != guard->symbol_table.end()) {
+                    auto var = is_defined_it->second;
+                    assert(var->getType() == BOOL);
+                    is_defined_var = static_cast<ConcreteCompilerVariable*>(var);
+                }
+
+                llvm::BasicBlock* defined_prev = nullptr, * defined_convert = nullptr, * defined_join = nullptr;
+                if (is_defined_var) {
+                    defined_prev = offramps[i];
+
+                    defined_convert = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+                    defined_join = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+
+                    llvm::Value* is_defined_val = i1FromBool(*emitter, is_defined_var);
+                    emitter->getBuilder()->CreateCondBr(is_defined_val, defined_convert, defined_join);
+
+                    offramps[i] = defined_convert;
+                    emitter->getBuilder()->SetInsertPoint(defined_convert);
+                }
 
                 CompilerVariable* unconverted = guard->symbol_table[it->first];
                 ConcreteCompilerVariable* v;
@@ -854,12 +919,30 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 ASSERT(it->second.first == v->getType(), "");
                 assert(it->second.first->llvmType() == v->getValue()->getType());
-                llvm_phi->addIncoming(v->getValue(), offramps[i]);
+
+                llvm::Value* val = v->getValue();
+
+                if (defined_prev) {
+                    emitter->getBuilder()->CreateBr(defined_join);
+                    auto prev = offramps[i];
+
+                    offramps[i] = defined_join;
+                    emitter->getBuilder()->SetInsertPoint(defined_join);
+
+                    auto phi = emitter->getBuilder()->CreatePHI(it->second.first->llvmType(), 2);
+                    phi->addIncoming(llvm::UndefValue::get(phi->getType()), defined_prev);
+                    phi->addIncoming(val, prev);
+                    val = phi;
+                }
+
+                phi_args.emplace_back(llvm_phi, val, offramps[i]);
 
                 // TODO not sure if this is right:
                 unconverted->decvref(*emitter);
-                delete v;
             }
+        }
+        for (auto t : phi_args) {
+            std::get<0>(t)->addIncoming(std::get<1>(t), std::get<2>(t));
         }
 
         for (int i = 0; i < block_guards.size(); i++) {
@@ -986,7 +1069,9 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
     os << nameprefix;
     os << "_e" << effort;
     if (entry) {
-        os << "_osr" << entry->backedge->target->idx << "_from_" << entry->cf->func->getName().data();
+        os << "_osr" << entry->backedge->target->idx;
+        if (entry->cf->func)
+            os << "_from_" << entry->cf->func->getName().data();
     }
     os << '_' << num_functions;
     num_functions++;

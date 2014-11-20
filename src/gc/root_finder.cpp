@@ -21,8 +21,8 @@
 #include <setjmp.h>
 #include <vector>
 
+#include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
-#include "codegen/llvm_interpreter.h"
 #include "core/common.h"
 #include "core/threading.h"
 #include "gc/collector.h"

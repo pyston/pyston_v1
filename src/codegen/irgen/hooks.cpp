@@ -20,6 +20,7 @@
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
 #include "asm_writing/icinfo.h"
+#include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen.h"
@@ -137,7 +138,6 @@ static std::unordered_map<std::string, CompiledFunction*> machine_name_to_cf;
 CompiledFunction* cfForMachineFunctionName(const std::string& machine_name) {
     assert(machine_name.size());
     auto r = machine_name_to_cf[machine_name];
-    ASSERT(r, "%s", machine_name.c_str());
     return r;
 }
 
@@ -185,17 +185,29 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
-        assert(source->ast);
         source->cfg = computeCFG(source, source->body);
-        source->liveness = computeLivenessInfo(source->cfg);
-        source->phis = computeRequiredPhis(source->arg_names, source->cfg, source->liveness, source->getScopeInfo());
     }
 
-    CompiledFunction* cf = doCompile(source, entry, effort, spec, name);
+    if (effort != EffortLevel::INTERPRETED) {
+        if (source->liveness == NULL)
+            source->liveness = computeLivenessInfo(source->cfg);
 
-    registerMachineName(cf->func->getName(), cf);
+        if (source->phis == NULL)
+            source->phis
+                = computeRequiredPhis(source->arg_names, source->cfg, source->liveness, source->getScopeInfo());
+    }
 
-    compileIR(cf, effort);
+
+
+    CompiledFunction* cf = 0;
+    if (effort == EffortLevel::INTERPRETED) {
+        cf = new CompiledFunction(0, spec, true, NULL, NULL, effort, 0);
+    } else {
+        cf = doCompile(source, entry, effort, spec, name);
+        registerMachineName(cf->func->getName(), cf);
+        compileIR(cf, effort);
+    }
+
     f->addVersion(cf);
     assert(f->versions.size());
 
@@ -252,10 +264,6 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ScopingAnalysis* scoping = runScopingAnalysis(m);
 
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
-        si->cfg = computeCFG(si, m->body);
-        si->liveness = computeLivenessInfo(si->cfg);
-        si->phis = computeRequiredPhis(si->arg_names, si->cfg, si->liveness, si->getScopeInfo());
-
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
         EffortLevel::EffortLevel effort = initialEffort();
@@ -265,7 +273,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     }
 
     if (cf->is_interpreted)
-        interpretFunction(cf->func, 0, NULL, NULL, NULL, NULL, NULL, NULL);
+        astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL);
     else
         ((void (*)())cf->code)();
 }
@@ -311,7 +319,7 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel
 }
 
 static StatCounter stat_osrexits("OSR exits");
-void* compilePartialFunc(OSRExit* exit) {
+CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     assert(exit);
@@ -334,11 +342,16 @@ void* compilePartialFunc(OSRExit* exit) {
         assert(compiled = new_cf);
     }
 
-    return new_cf->code;
+    return new_cf;
 }
 
+void* compilePartialFunc(OSRExit* exit) {
+    return compilePartialFuncInternal(exit)->code;
+}
+
+
 static StatCounter stat_reopt("reopts");
-extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
+extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
     if (VERBOSITY("irgen") >= 1)
         printf("In reoptCompiledFunc, %p, %ld\n", cf, cf->times_called);
     stat_reopt.log();
@@ -347,7 +360,12 @@ extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
     assert(cf->clfunc->versions.size());
     CompiledFunction* new_cf = _doReopt(cf, (EffortLevel::EffortLevel(cf->effort + 1)));
     assert(!new_cf->is_interpreted);
-    return (char*)new_cf->code;
+    return new_cf;
+}
+
+
+extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
+    return (char*)reoptCompiledFuncInternal(cf)->code;
 }
 
 CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs) {
