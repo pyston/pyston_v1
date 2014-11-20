@@ -279,7 +279,7 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
 }
 
 static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, const std::string& name, CFGBlock* block) {
-    if (startswith(name, "!is_defined"))
+    if (isIsDefinedName(name))
         return BOOL;
     else if (name == PASSED_GENERATOR_NAME)
         return GENERATOR;
@@ -410,7 +410,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 assert(p.first[0] != '!');
 
-                std::string is_defined_name = "!is_defined_" + p.first;
+                std::string is_defined_name = getIsDefinedName(p.first);
                 llvm::BasicBlock* defined_join = nullptr, * defined_prev = nullptr, * defined_check = nullptr;
                 if (entry_descriptor->args.count(is_defined_name)) {
                     // relying on the fact that we are iterating over the names in order
@@ -658,7 +658,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             for (const auto& s : source->phis->getAllRequiredFor(block)) {
                 names.insert(s);
                 if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
-                    names.insert("!is_defined_" + s);
+                    names.insert(getIsDefinedName(s));
                 }
             }
 
@@ -840,7 +840,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 llvm_phi->addIncoming(v->getValue(), osr_unbox_block);
             }
 
-            std::string is_defined_name = "!is_defined_" + it->first;
+            std::string is_defined_name = getIsDefinedName(it->first);
 
             for (int i = 0; i < block_guards.size(); i++) {
                 GuardList::BlockEntryGuard* guard = block_guards[i];

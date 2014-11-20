@@ -36,8 +36,8 @@ public:
     virtual void setTakesGenerator(bool b = true) { isGeneratorValue = b; }
 
     virtual bool refersToGlobal(const std::string& name) = 0;
-    virtual bool refersToClosure(const std::string name) = 0;
-    virtual bool saveInClosure(const std::string name) = 0;
+    virtual bool refersToClosure(const std::string& name) = 0;
+    virtual bool saveInClosure(const std::string& name) = 0;
 
     // Get the names set within a classdef that should be forwarded on to
     // the metaclass constructor.

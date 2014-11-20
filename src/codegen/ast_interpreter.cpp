@@ -14,15 +14,19 @@
 
 #include "codegen/ast_interpreter.h"
 
+#include <llvm/ADT/StringMap.h>
 #include <unordered_map>
 
 #include "analysis/function_analysis.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/codegen.h"
+#include "codegen/compvars.h"
+#include "codegen/irgen.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/irgen/irgenerator.h"
 #include "codegen/irgen/util.h"
 #include "codegen/osrentry.h"
+#include "core/ast.h"
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/stats.h"
@@ -32,19 +36,112 @@
 #include "runtime/import.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/long.h"
+#include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-typedef std::vector<const ASTInterpreter::SymMap*> root_stack_t;
-static threading::PerThreadSet<root_stack_t> root_stack_set;
+#define OSR_THRESHOLD 100
+#define REOPT_THRESHOLD 100
 
+union Value {
+    bool b;
+    int64_t n;
+    double d;
+    Box* o;
+
+    Value(bool b) : b(b) {}
+    Value(int64_t n = 0) : n(n) {}
+    Value(double d) : d(d) {}
+    Value(Box* o) : o(o) {}
+};
+
+class ASTInterpreter {
+public:
+    typedef llvm::StringMap<Box*> SymMap;
+
+    ASTInterpreter(CompiledFunction* compiled_function, void* frame_addr);
+    ~ASTInterpreter();
+
+    void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
+                       Box** args);
+    Value execute(CFGBlock* block = 0);
+
+private:
+    Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
+    Value doBinOp(Box* left, Box* right, int op, BinExpType exp_type);
+    void doStore(AST_expr* node, Value value);
+    void doStore(const std::string& name, Value value);
+    void eraseDeadSymbols();
+
+    Value visit_assert(AST_Assert* node);
+    Value visit_assign(AST_Assign* node);
+    Value visit_binop(AST_BinOp* node);
+    Value visit_call(AST_Call* node);
+    Value visit_classDef(AST_ClassDef* node);
+    Value visit_compare(AST_Compare* node);
+    Value visit_delete(AST_Delete* node);
+    Value visit_functionDef(AST_FunctionDef* node);
+    Value visit_global(AST_Global* node);
+    Value visit_module(AST_Module* node);
+    Value visit_print(AST_Print* node);
+    Value visit_raise(AST_Raise* node);
+    Value visit_return(AST_Return* node);
+    Value visit_stmt(AST_stmt* node);
+    Value visit_unaryop(AST_UnaryOp* node);
+
+    Value visit_attribute(AST_Attribute* node);
+    Value visit_dict(AST_Dict* node);
+    Value visit_expr(AST_expr* node);
+    Value visit_expr(AST_Expr* node);
+    Value visit_index(AST_Index* node);
+    Value visit_lambda(AST_Lambda* node);
+    Value visit_list(AST_List* node);
+    Value visit_name(AST_Name* node);
+    Value visit_num(AST_Num* node);
+    Value visit_repr(AST_Repr* node);
+    Value visit_set(AST_Set* node);
+    Value visit_slice(AST_Slice* node);
+    Value visit_str(AST_Str* node);
+    Value visit_subscript(AST_Subscript* node);
+    Value visit_tuple(AST_Tuple* node);
+    Value visit_yield(AST_Yield* node);
+
+
+    // pseudo
+    Value visit_augBinOp(AST_AugBinOp* node);
+    Value visit_branch(AST_Branch* node);
+    Value visit_clsAttribute(AST_ClsAttribute* node);
+    Value visit_invoke(AST_Invoke* node);
+    Value visit_jump(AST_Jump* node);
+    Value visit_langPrimitive(AST_LangPrimitive* node);
+
+    void* frame_addr;
+    CompiledFunction* compiled_func;
+    SourceInfo* source_info;
+    ScopeInfo* scope_info;
+
+    SymMap sym_table;
+    CFGBlock* next_block, *current_block;
+    AST* current_inst;
+    Box* last_exception;
+    BoxedClosure* passed_closure, *created_closure;
+    BoxedGenerator* generator;
+    unsigned edgecount;
+
+public:
+    LineInfo* getCurrentLineInfo();
+    BoxedModule* getParentModule() { return source_info->parent_module; }
+    const SymMap& getSymbolTable() { return sym_table; }
+};
+
+static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
 static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
                           Box* arg3, Box** args) {
-    if (unlikely(cf->times_called > 100)) {
+    if (unlikely(cf->times_called > REOPT_THRESHOLD)) {
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
             return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
@@ -58,12 +155,11 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
 
     ++cf->times_called;
 
-    ASTInterpreter interpreter(cf);
-    s_interpreterMap[__builtin_frame_address(0)] = &interpreter;
+    void* frame_addr = __builtin_frame_address(0);
+    ASTInterpreter interpreter(cf, frame_addr);
+
     interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
     Value v = interpreter.execute();
-
-    s_interpreterMap.erase(__builtin_frame_address(0));
 
     return v.o ? v.o : None;
 }
@@ -71,23 +167,26 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
 const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
-    SourceInfo* info = interpreter->source_info;
-    LineInfo* line_info = new LineInfo(interpreter->current_inst->lineno, interpreter->current_inst->col_offset,
-                                       info->parent_module->fn, info->getName());
+    return interpreter->getCurrentLineInfo();
+}
+
+LineInfo* ASTInterpreter::getCurrentLineInfo() {
+    LineInfo* line_info = new LineInfo(current_inst->lineno, current_inst->col_offset, source_info->parent_module->fn,
+                                       source_info->getName());
     return line_info;
 }
 
 BoxedModule* getModuleForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
-    return interpreter->source_info->parent_module;
+    return interpreter->getParentModule();
 }
 
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
     BoxedDict* rtn = new BoxedDict();
-    for (auto&& l : interpreter->sym_table) {
+    for (auto&& l : interpreter->getSymbolTable()) {
         if (only_user_visible && (l.getKey()[0] == '!' || l.getKey()[0] == '#'))
             continue;
 
@@ -97,31 +196,31 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
 }
 
 void gatherInterpreterRoots(GCVisitor* visitor) {
-    root_stack_set.forEachValue(std::function<void(root_stack_t*, GCVisitor*)>([](root_stack_t* v, GCVisitor* visitor) {
-                                    for (const ASTInterpreter::SymMap* sym_map : *v) {
-                                        for (const auto& p2 : *sym_map) {
-                                            visitor->visitPotential(p2.second);
-                                        }
-                                    }
-                                }),
-                                visitor);
+    for (const auto& p : s_interpreterMap) {
+        for (const auto& p2 : p.second->getSymbolTable()) {
+            visitor->visitPotential(p2.second);
+        }
+    }
 }
 
 
-ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
-    : source_info(compiled_function->clfunc->source), next_block(0), current_block(0), current_inst(0),
-      last_exception(0), passed_closure(0), created_closure(0), generator(0), scope_info(0),
-      compiled_func(compiled_function), edgecount(0) {
+ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function, void* frame_addr)
+    : frame_addr(frame_addr), compiled_func(compiled_function), source_info(compiled_function->clfunc->source),
+      scope_info(0), next_block(0), current_block(0), current_inst(0), last_exception(0), passed_closure(0),
+      created_closure(0), generator(0), edgecount(0) {
+
+    s_interpreterMap[frame_addr] = this;
+
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
         source_info->cfg = computeCFG(f->source, f->source->body);
 
     scope_info = source_info->getScopeInfo();
-    root_stack_set.get()->push_back(&sym_table);
 }
 
 ASTInterpreter::~ASTInterpreter() {
-    root_stack_set.get()->pop_back();
+    assert(s_interpreterMap[frame_addr] == this);
+    s_interpreterMap.erase(frame_addr);
 }
 
 void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGenerator* _generator, Box* arg1, Box* arg2,
@@ -283,7 +382,7 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
 Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (ENABLE_OSR && node->target->idx < current_block->idx && compiled_func) {
         ++edgecount;
-        if (edgecount > 10) {
+        if (edgecount > OSR_THRESHOLD) {
             eraseDeadSymbols();
 
             OSRExit exit(compiled_func, OSREntryDescriptor::create(compiled_func, node));
@@ -298,7 +397,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
                 if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
                     bool is_defined = it != sym_table.end();
-                    sorted_symbol_table["!is_defined_" + name] = (Box*)is_defined;
+                    sorted_symbol_table[getIsDefinedName(name)] = (Box*)is_defined;
                     sorted_symbol_table[name] = is_defined ? it->getValue() : NULL;
                 } else {
                     ASSERT(it != sym_table.end(), "%s", name.c_str());
@@ -307,24 +406,26 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             }
 
             if (generator)
-                sorted_symbol_table["!passed_generator"] = generator; // TODO use PASSED_GENERATOR_NAME instead
+                sorted_symbol_table[PASSED_GENERATOR_NAME] = generator;
 
             if (passed_closure)
-                sorted_symbol_table["!passed_closure"] = passed_closure; // TODO use PASSED_CLOSURE_NAME instead
+                sorted_symbol_table[PASSED_CLOSURE_NAME] = passed_closure;
 
             if (created_closure)
-                sorted_symbol_table["!created_closure"] = created_closure; // TODO use CREATED_CLOSURE_NAME instead
+                sorted_symbol_table[CREATED_CLOSURE_NAME] = created_closure;
 
             std::vector<Box*> arg_array;
             for (auto& it : sorted_symbol_table) {
-                if (startswith(it.first, "!is_defined"))
+                if (isIsDefinedName(it.first))
                     exit.entry->args[it.first] = BOOL;
-                else if (it.first == "!passed_generator") // TODO use PASSED_GENERATOR_NAME
+                else if (it.first == PASSED_GENERATOR_NAME)
                     exit.entry->args[it.first] = GENERATOR;
-                else if (it.first == "!passed_closure" || it.first == "!created_closure") // TODO don't hardcode
+                else if (it.first == PASSED_CLOSURE_NAME || it.first == CREATED_CLOSURE_NAME)
                     exit.entry->args[it.first] = CLOSURE;
-                else
+                else {
+                    assert(it.first[0] != '!');
                     exit.entry->args[it.first] = UNKNOWN;
+                }
                 arg_array.push_back(it.second);
             }
 

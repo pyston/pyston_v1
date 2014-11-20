@@ -256,6 +256,14 @@ const std::string CREATED_CLOSURE_NAME = "!created_closure";
 const std::string PASSED_CLOSURE_NAME = "!passed_closure";
 const std::string PASSED_GENERATOR_NAME = "!passed_generator";
 
+std::string getIsDefinedName(const std::string& name) {
+    return "!is_defined_" + name;
+}
+
+bool isIsDefinedName(const std::string& name) {
+    return startswith(name, "!is_defined_");
+}
+
 class IRGeneratorImpl : public IRGenerator {
 private:
     IRGenState* irstate;
@@ -411,8 +419,8 @@ private:
                     if (p.first[0] == '!' || p.first[0] == '#')
                         continue;
 
-                    ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(
-                        _getFake(_getFakeName("is_defined", p.first.c_str()), true));
+                    ConcreteCompilerVariable* is_defined_var
+                        = static_cast<ConcreteCompilerVariable*>(_getFake(getIsDefinedName(p.first), true));
 
                     static const std::string setitem_str("__setitem__");
                     if (!is_defined_var) {
@@ -822,7 +830,7 @@ private:
                 return undefVariable();
             }
 
-            std::string defined_name = _getFakeName("is_defined", node->id.c_str());
+            std::string defined_name = getIsDefinedName(node->id);
             ConcreteCompilerVariable* is_defined_var
                 = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
@@ -1272,12 +1280,6 @@ private:
         return rtn;
     }
 
-    static std::string _getFakeName(const char* prefix, const char* token) {
-        char buf[40];
-        snprintf(buf, 40, "!%s_%s", prefix, token);
-        return std::string(buf);
-    }
-
     void _setFake(std::string name, CompilerVariable* val) {
         assert(name[0] == '!');
         CompilerVariable*& cur = symbol_table[name];
@@ -1326,8 +1328,8 @@ private:
             val->incvref();
 
             // Clear out the is_defined name since it is now definitely defined:
-            assert(!startswith(name, "!is_defined"));
-            std::string defined_name = _getFakeName("is_defined", name.c_str());
+            assert(!isIsDefinedName(name));
+            std::string defined_name = getIsDefinedName(name);
             _popFake(defined_name, true);
 
             if (scope_info->saveInClosure(name)) {
@@ -1614,7 +1616,7 @@ private:
             return;
         }
 
-        std::string defined_name = _getFakeName("is_defined", target->id.c_str());
+        std::string defined_name = getIsDefinedName(target->id);
         ConcreteCompilerVariable* is_defined_var = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
         if (is_defined_var) {
@@ -2141,7 +2143,7 @@ private:
     }
 
     bool allowableFakeEndingSymbol(const std::string& name) {
-        return startswith(name, "!is_defined") || name == PASSED_CLOSURE_NAME || name == CREATED_CLOSURE_NAME
+        return isIsDefinedName(name) || name == PASSED_CLOSURE_NAME || name == CREATED_CLOSURE_NAME
                || name == PASSED_GENERATOR_NAME;
     }
 
@@ -2159,7 +2161,7 @@ private:
                 continue;
             }
 
-            // ASSERT(it->first[0] != '!' || startswith(it->first, "!is_defined"), "left a fake variable in the real
+            // ASSERT(it->first[0] != '!' || isIsDefinedName(it->first), "left a fake variable in the real
             // symbol table? '%s'", it->first.c_str());
 
             if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
@@ -2200,7 +2202,7 @@ private:
             assert(!scope_info->refersToGlobal(*it));
             CompilerVariable*& cur = symbol_table[*it];
 
-            std::string defined_name = _getFakeName("is_defined", it->c_str());
+            std::string defined_name = getIsDefinedName(*it);
 
             if (cur != NULL) {
                 // printf("defined on this path; ");
@@ -2291,7 +2293,7 @@ public:
                 assert(it->second->getVrefs() == 1);
                 // this conversion should have already happened... should refactor this.
                 ConcreteCompilerType* ending_type;
-                if (startswith(it->first, "!is_defined")) {
+                if (isIsDefinedName(it->first)) {
                     assert(it->second->getType() == BOOL);
                     ending_type = BOOL;
                 } else if (it->first == PASSED_CLOSURE_NAME) {

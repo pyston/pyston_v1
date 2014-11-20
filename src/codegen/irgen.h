@@ -79,6 +79,13 @@ public:
                                   ExcInfo exc_info) = 0;
 };
 
+extern const std::string CREATED_CLOSURE_NAME;
+extern const std::string PASSED_CLOSURE_NAME;
+extern const std::string PASSED_GENERATOR_NAME;
+
+std::string getIsDefinedName(const std::string& name);
+bool isIsDefinedName(const std::string& name);
+
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
                             EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
 
