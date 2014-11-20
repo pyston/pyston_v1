@@ -7,6 +7,7 @@ set_source_files_properties(jit.cpp PROPERTIES COMPILE_DEFINITIONS "GITREV=${GIT
 
 include_directories(${CMAKE_BINARY_DIR})
 include_directories(${CMAKE_BINARY_DIR}/libunwind/include)
+include_directories(${CMAKE_SOURCE_DIR}/libpypa/src)
 
 file(GLOB ANALYSIS_SRCS analysis/*.cpp)
 file(GLOB ASM_WRITING_SRCS asm_writing/*.cpp)
