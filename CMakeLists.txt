@@ -15,9 +15,8 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
   message(FATAL_ERROR "CMAKE_BUILD_TYPE must be set to Release or Debug")
 endif()
 
-
-option(ENABLE_GIL "threadind use GIL" ON)
-option(ENABLE_GRWL "threadind use GRWL" OFF)
+option(ENABLE_GIL "threading use GIL" ON)
+option(ENABLE_GRWL "threading use GRWL" OFF)
 option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
 option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
@@ -126,6 +125,10 @@ target_link_libraries(pyston stdlib pthread m readline gmp unwind pypa double-co
 # copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lib_python/2.7 ${CMAKE_BINARY_DIR}/lib_python/2.7)
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
+
+add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
+                  DEPENDS astprint
+                  COMMENT "Running libpypa vs CPython AST result comparison test")
 
 # test
 enable_testing()
