@@ -84,8 +84,9 @@ class PhiAnalysis {
 public:
     typedef std::unordered_set<std::string> RequiredSet;
 
-private:
     DefinednessAnalysis definedness;
+
+private:
     LivenessAnalysis* liveness;
     std::unordered_map<CFGBlock*, const RequiredSet> required_phis;
 
@@ -97,6 +98,7 @@ public:
     const RequiredSet& getAllRequiredAfter(CFGBlock* block);
     const RequiredSet& getAllRequiredFor(CFGBlock* block);
     bool isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block);
+    bool isPotentiallyUndefinedAt(const std::string& name, CFGBlock* block);
 };
 
 LivenessAnalysis* computeLivenessInfo(CFG*);

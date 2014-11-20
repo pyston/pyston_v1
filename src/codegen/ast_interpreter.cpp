@@ -110,8 +110,8 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
     : source_info(compiled_function->clfunc->source), next_block(0), current_block(0), current_inst(0),
-      last_exception(0), passed_closure(0), created_closure(0), generator(0), scope_info(0), compiled_func(0),
-      edgecount(0) {
+      last_exception(0), passed_closure(0), created_closure(0), generator(0), scope_info(0),
+      compiled_func(compiled_function), edgecount(0) {
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
         source_info->cfg = computeCFG(f->source, f->source->body);
@@ -283,18 +283,48 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
 Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (ENABLE_OSR && node->target->idx < current_block->idx && compiled_func) {
         ++edgecount;
-        if (0 && edgecount > 10) {
+        if (edgecount > 10) {
             eraseDeadSymbols();
 
             OSRExit exit(compiled_func, OSREntryDescriptor::create(compiled_func, node));
 
             std::map<std::string, Box*> sorted_symbol_table;
-            for (auto& l : sym_table)
-                sorted_symbol_table[l.getKey()] = l.getValue();
+
+            auto phis = compiled_func->clfunc->source->phis;
+            for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
+                auto it = sym_table.find(name);
+                if (!compiled_func->clfunc->source->liveness->isLiveAtEnd(name, current_block))
+                    continue;
+
+                if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
+                    bool is_defined = it != sym_table.end();
+                    sorted_symbol_table["!is_defined_" + name] = (Box*)is_defined;
+                    sorted_symbol_table[name] = is_defined ? it->getValue() : NULL;
+                } else {
+                    ASSERT(it != sym_table.end(), "%s", name.c_str());
+                    sorted_symbol_table[it->getKey()] = it->getValue();
+                }
+            }
+
+            if (generator)
+                sorted_symbol_table["!passed_generator"] = generator; // TODO use PASSED_GENERATOR_NAME instead
+
+            if (passed_closure)
+                sorted_symbol_table["!passed_closure"] = passed_closure; // TODO use PASSED_CLOSURE_NAME instead
+
+            if (created_closure)
+                sorted_symbol_table["!created_closure"] = created_closure; // TODO use CREATED_CLOSURE_NAME instead
 
             std::vector<Box*> arg_array;
             for (auto& it : sorted_symbol_table) {
-                exit.entry->args[it.first] = UNKNOWN;
+                if (startswith(it.first, "!is_defined"))
+                    exit.entry->args[it.first] = BOOL;
+                else if (it.first == "!passed_generator") // TODO use PASSED_GENERATOR_NAME
+                    exit.entry->args[it.first] = GENERATOR;
+                else if (it.first == "!passed_closure" || it.first == "!created_closure") // TODO don't hardcode
+                    exit.entry->args[it.first] = CLOSURE;
+                else
+                    exit.entry->args[it.first] = UNKNOWN;
                 arg_array.push_back(it.second);
             }
 
@@ -303,12 +333,6 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             Box* arg2 = arg_array.size() >= 2 ? arg_array[1] : 0;
             Box* arg3 = arg_array.size() >= 3 ? arg_array[2] : 0;
             Box** args = arg_array.size() >= 4 ? &arg_array[3] : 0;
-            if (passed_closure && generator)
-                return partial_func->closure_generator_call(passed_closure, generator, arg1, arg2, arg3, args);
-            else if (passed_closure)
-                return partial_func->closure_call(passed_closure, arg1, arg2, arg3, args);
-            else if (generator)
-                return partial_func->generator_call(generator, arg1, arg2, arg3, args);
             return partial_func->call(arg1, arg2, arg3, args);
         }
     }
@@ -460,13 +484,17 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         defaults.push_back(visit_expr(d).o);
     defaults.push_back(0);
 
-    struct {
-        Box** ptr;
-        size_t s;
-    } d;
+    // FIXME: Using initializer_list is pretty annoying since you're not supposed to create them:
+    union {
+        struct {
+            Box** ptr;
+            size_t s;
+        } d;
+        std::initializer_list<Box*> il = {};
+    } u;
 
-    d.ptr = &defaults[0];
-    d.s = defaults.size() - 1;
+    u.d.ptr = &defaults[0];
+    u.d.s = defaults.size() - 1;
 
     ScopeInfo* scope_info_node = source_info->scoping->getScopeInfoForNode(node);
     bool is_generator = scope_info_node->takesGenerator();
@@ -482,7 +510,7 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         assert(closure);
     }
 
-    return boxCLFunction(cl, closure, is_generator, *(std::initializer_list<Box*>*)(void*)&d);
+    return boxCLFunction(cl, closure, is_generator, u.il);
 }
 
 Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {

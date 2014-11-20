@@ -459,7 +459,13 @@ bool PhiAnalysis::isPotentiallyUndefinedAfter(const std::string& name, CFGBlock*
     if (block->successors.size() != 1)
         return false;
 
-    for (CFGBlock* pred : block->successors[0]->predecessors) {
+    return isPotentiallyUndefinedAt(name, block->successors[0]);
+}
+
+bool PhiAnalysis::isPotentiallyUndefinedAt(const std::string& name, CFGBlock* block) {
+    assert(!startswith(name, "!"));
+
+    for (CFGBlock* pred : block->predecessors) {
         DefinednessAnalysis::DefinitionLevel dlevel = definedness.isDefinedAtEnd(name, pred);
         if (dlevel != DefinednessAnalysis::Defined)
             return true;
