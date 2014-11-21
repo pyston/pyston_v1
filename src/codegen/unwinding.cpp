@@ -384,7 +384,9 @@ std::vector<const LineInfo*> getTracebackEntries() {
     std::vector<const LineInfo*> entries;
 
     for (auto& frame_info : unwindPythonFrames()) {
-        entries.push_back(lineInfoForFrame(frame_info));
+        const LineInfo* line_info = lineInfoForFrame(frame_info);
+        if (line_info)
+            entries.push_back(line_info);
     }
 
     std::reverse(entries.begin(), entries.end());

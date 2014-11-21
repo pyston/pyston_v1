@@ -141,6 +141,13 @@ static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
                           Box* arg3, Box** args) {
+    // The ASTInterpreter ctor registers this frame so that we can introspect it.
+    // Currently we have to do that even if we are about to immediately reopt
+    // and we won't actually end up interpreting anything.
+    // TODO don't make "astInterpretFunction() == interpreter-is-running"?
+    void* frame_addr = __builtin_frame_address(0);
+    ASTInterpreter interpreter(cf, frame_addr);
+
     if (unlikely(cf->times_called > REOPT_THRESHOLD)) {
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
@@ -155,9 +162,6 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
 
     ++cf->times_called;
 
-    void* frame_addr = __builtin_frame_address(0);
-    ASTInterpreter interpreter(cf, frame_addr);
-
     interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
     Value v = interpreter.execute();
 
@@ -171,6 +175,9 @@ const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
 }
 
 LineInfo* ASTInterpreter::getCurrentLineInfo() {
+    if (!current_inst)
+        return NULL;
+
     LineInfo* line_info = new LineInfo(current_inst->lineno, current_inst->col_offset, source_info->parent_module->fn,
                                        source_info->getName());
     return line_info;
