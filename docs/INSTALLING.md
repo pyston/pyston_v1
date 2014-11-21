@@ -1,6 +1,6 @@
 Pyston currently only supports installing from source; the following instructions have fairly tested as working on Ubuntu, and are extensively verified as not working on Mac.  (Please see issue #165 for discussion on enabling OSX support, which is pretty difficult.)
 
-The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `src/Makefile`.
+The build instructions assume that you will put the Pyston source code in `~/pyston` and put the dependencies in `~/pyston_deps`.  Barring any bugs, you should be free to put them anywhere you'd like, though the instructions in this file would have to be altered before following.  Also, if you want to change the dependency dir, you'll have to change the value of the the `DEPS_DIR` variable in `Makefile`.
 
 
 ### Prerequisites
@@ -11,7 +11,7 @@ Start off by making the relevant directories:
 
 ```
 mkdir ~/pyston_deps
-git clone https://github.com/dropbox/pyston.git ~/pyston
+git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
 ```
 
 ### Compiler for clang
@@ -48,13 +48,13 @@ sudo apt-get install libncurses5-dev zlib1g-dev liblzma-dev
 
 ### LLVM + clang
 
-LLVM and clang depend on a pretty modern compiler; the steps below assume you installed GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in src/Makefile) that I haven't tested.
+LLVM and clang depend on a pretty modern compiler; the steps below assume you installed GCC 4.8.2 as described above.  It should be possible to build using clang >= 3.1, such as what you might find on a Mac, but that will require changes to the way LLVM is configured (specified in Makefile) that I haven't tested.
 
 ```
 cd ~/pyston_deps
 git clone http://llvm.org/git/llvm.git llvm-trunk
 git clone http://llvm.org/git/clang.git llvm-trunk/tools/clang
-cd ~/pyston/src
+cd ~/pyston
 make llvm_up
 make llvm_configure
 make llvm -j4
@@ -121,6 +121,10 @@ make -j4
 make install
 ```
 
+---
+
+At this point you should be able to run `make check` (in the `~/pyston` directory) and pass the tests.
+
 # Optional dependencies
 
 There are a number of optional dependencies that the build system knows about, but aren't strictly necessary for building and running Pyston.  Most of them are related to developing and debugging:
@@ -156,7 +160,7 @@ tar xvf gdb-7.6.2.tar.gz
 cd gdb-7.6.2
 ./configure
 make -j4
-cd ~/pyston/src
+cd ~/pyston
 echo "GDB := \$(DEPS_DIR)/gdb-7.6.2/gdb/gdb --data-directory \$(DEPS_DIR)/gdb-7.6.2/gdb/data-directory" >> Makefile.local
 ```
 
@@ -216,7 +220,7 @@ cd valgrind-3.10.0
 make -j4
 make install
 sudo apt-get install libc6-dbg
-cd ~/pyston/src
+cd ~/pyston
 echo "ENABLE_VALGRIND := 1" >> Makefile.local
 ```
 
@@ -232,7 +236,7 @@ cd libunwind-trunk-debug
 CFLAGS="-g -O0" CXXFLAGS="-g -O0" ./configure --prefix=$HOME/pyston_deps/libunwind-trunk-debug-install --enable-shared=0 --enable-debug --enable-debug-frame
 make -j4
 make install
-echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/src/Makefile.local
+echo "USE_DEBUG_LIBUNWIND := 1" >> ~/pyston/Makefile.local
 ```
 
 This will link pyston_dbg and pyston_debug against the debug version of libunwind (the release pyston build will still link against the release libunwind); to enable debug output, set the UNW_DEBUG_LEVEL environment variable, ex to 13.
@@ -272,3 +276,25 @@ cd llvm-trunk-cmake
 CXX=g++ CC=gcc PATH=~/pyston_deps/gcc-4.8.2-install/bin:$PATH:~/pyston_deps/ninja CMAKE_MAKE_PROGRAM=~/pyston_deps/ninja/ninja ~/pyston_deps/cmake-3.0.0/bin/cmake ../llvm-trunk -G Ninja -DLLVM_TARGETS_TO_BUILD=host -DCMAKE_BUILD_TYPE=RELEASE -DLLVM_ENABLE_ASSERTIONS=ON
 ~/pyston_deps/ninja/ninja # runs in parallel
 ```
+
+
+# (Experimental) CMake build system
+
+To use the toolchain from this document, do:
+
+```
+mkdir ~/pyston-build
+cd ~/pyston-build
+CC=~/pyston_deps/gcc-4.8.2-install/bin/gcc CXX=~/pyston_deps/gcc-4.8.2-install/bin/g++ ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_MAKE_PROGRAM=$HOME/pyston_deps/ninja/ninja -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64"
+~/pyston_deps/ninja/ninja check-pyston
+```
+
+If you have a new enough system-provided toolchain, you can do:
+
+```
+mkdir ~/pyston-build
+cd ~/pyston-build
+CC=gcc CXX=g++ cmake -GNinja ~/pyston
+ninja check-pyston
+```
+
