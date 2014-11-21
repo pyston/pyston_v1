@@ -66,7 +66,7 @@ ExternalProject_Add(libunwind
                     PREFIX libunwind
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
                     UPDATE_COMMAND autoreconf -i
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} CFLAGS=${LIBUNWIND_FLAGS} CXXFLAGS=${LIBUNWIND_FLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure CFLAGS=${LIBUNWIND_FLAGS} CXXFLAGS=${LIBUNWIND_FLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
