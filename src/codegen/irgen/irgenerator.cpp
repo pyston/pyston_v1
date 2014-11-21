@@ -1877,8 +1877,8 @@ private:
 
         // Emitting the actual OSR:
         emitter.getBuilder()->SetInsertPoint(onramp);
-        OSRExit* exit
-            = new OSRExit(irstate->getCurFunction(), OSREntryDescriptor::create(irstate->getCurFunction(), osr_key));
+        OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCurFunction(), osr_key);
+        OSRExit* exit = new OSRExit(irstate->getCurFunction(), entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
                                                                      embedConstantPtr(exit, g.i8->getPointerTo()));
 
@@ -1966,7 +1966,7 @@ private:
                 emitter.getBuilder()->CreateStore(val, ptr);
             }
 
-            ConcreteCompilerType*& t = exit->entry->args[p.first];
+            ConcreteCompilerType*& t = entry->args[p.first];
             if (t == NULL)
                 t = var->getType();
             else

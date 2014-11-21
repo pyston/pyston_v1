@@ -281,6 +281,7 @@ void initCodegen() {
 #endif
         //"--print-after-all",
         //"--print-machineinstrs",
+        //"--optimize-regalloc=false", // use the "fast" register allocator
     };
     int num_llvm_args = sizeof(llvm_args) / sizeof(llvm_args[0]);
     llvm::cl::ParseCommandLineOptions(num_llvm_args, llvm_args, "<you should never see this>\n");

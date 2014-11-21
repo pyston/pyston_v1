@@ -45,9 +45,9 @@ class OSRExit {
 private:
 public:
     CompiledFunction* const parent_cf;
-    OSREntryDescriptor* entry;
+    const OSREntryDescriptor* entry;
 
-    OSRExit(CompiledFunction* parent_cf, OSREntryDescriptor* entry) : parent_cf(parent_cf), entry(entry) {}
+    OSRExit(CompiledFunction* parent_cf, const OSREntryDescriptor* entry) : parent_cf(parent_cf), entry(entry) {}
 };
 }
 

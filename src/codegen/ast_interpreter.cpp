@@ -385,7 +385,15 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
         if (edgecount > OSR_THRESHOLD) {
             eraseDeadSymbols();
 
-            OSRExit exit(compiled_func, OSREntryDescriptor::create(compiled_func, node));
+            const OSREntryDescriptor* found_entry = nullptr;
+            for (auto& p : compiled_func->clfunc->osr_versions) {
+                if (p.first->cf != compiled_func)
+                    continue;
+                if (p.first->backedge != node)
+                    continue;
+
+                found_entry = p.first;
+            }
 
             std::map<std::string, Box*> sorted_symbol_table;
 
@@ -414,18 +422,29 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             if (created_closure)
                 sorted_symbol_table[CREATED_CLOSURE_NAME] = created_closure;
 
+            if (found_entry == nullptr) {
+                OSREntryDescriptor* entry = OSREntryDescriptor::create(compiled_func, node);
+
+                for (auto& it : sorted_symbol_table) {
+                    if (isIsDefinedName(it.first))
+                        entry->args[it.first] = BOOL;
+                    else if (it.first == PASSED_GENERATOR_NAME)
+                        entry->args[it.first] = GENERATOR;
+                    else if (it.first == PASSED_CLOSURE_NAME || it.first == CREATED_CLOSURE_NAME)
+                        entry->args[it.first] = CLOSURE;
+                    else {
+                        assert(it.first[0] != '!');
+                        entry->args[it.first] = UNKNOWN;
+                    }
+                }
+
+                found_entry = entry;
+            }
+
+            OSRExit exit(compiled_func, found_entry);
+
             std::vector<Box*> arg_array;
             for (auto& it : sorted_symbol_table) {
-                if (isIsDefinedName(it.first))
-                    exit.entry->args[it.first] = BOOL;
-                else if (it.first == PASSED_GENERATOR_NAME)
-                    exit.entry->args[it.first] = GENERATOR;
-                else if (it.first == PASSED_CLOSURE_NAME || it.first == CREATED_CLOSURE_NAME)
-                    exit.entry->args[it.first] = CLOSURE;
-                else {
-                    assert(it.first[0] != '!');
-                    exit.entry->args[it.first] = UNKNOWN;
-                }
                 arg_array.push_back(it.second);
             }
 
