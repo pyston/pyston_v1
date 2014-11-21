@@ -41,7 +41,7 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
     listAppendInternal(path_list, b_path);
 
     module->setattr("__path__", path_list, NULL);
-    
+
     AST_Module* ast = caching_parse(fn.c_str());
     compileAndRunModule(ast, module);
     return module;
@@ -53,7 +53,7 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
 #define LLVM_SYS_FS_EXISTS_CODE_OKAY(code) (!(code))
 #endif
 
-static bool path_exists (const std::string& path) {
+static bool pathExists(const std::string& path) {
 #if LLVMREV < 217625
     bool exists;
     llvm_error_code code = llvm::sys::fs::exists(path, exists);
@@ -76,7 +76,7 @@ static BoxedModule* importPackageFromDirectory(const std::string& name, const st
     if (VERBOSITY() >= 2)
         printf("Searching for %s at %s...\n", name.c_str(), fn.c_str());
 
-    if (!path_exists(fn))
+    if (!pathExists(fn))
         return NULL;
 
     if (VERBOSITY() >= 1)
@@ -95,7 +95,7 @@ static BoxedModule* importFile(const std::string& name, const std::string& path)
     if (VERBOSITY() >= 2)
         printf("Searching for %s at %s...\n", name.c_str(), fn.c_str());
 
-    if (!path_exists(fn))
+    if (!pathExists(fn))
         return NULL;
 
     if (VERBOSITY() >= 1)
@@ -129,15 +129,17 @@ static Box* importSub(const std::string* name, Box* parent_module) {
         llvm::sys::path::append(joined_path, p->s);
         std::string dn(joined_path.str());
 
-	BoxedModule* module;
+        BoxedModule* module;
 
         module = importPackageFromDirectory(*name, dn);
-        if (module)
-            return module;
+        if (!module)
+            module = importFile(*name, dn);
 
-        module = importFile(*name, dn);
-        if (module)
+        if (module) {
+            if (parent_module)
+                parent_module->setattr(*name, module, NULL);
             return module;
+        }
     }
 
     if (*name == "basic_test") {
