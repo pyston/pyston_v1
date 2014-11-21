@@ -119,7 +119,6 @@ int main(int argc, char** argv) {
 
     llvm::SmallString<128> stdlib_dir(self_path);
     llvm::sys::path::remove_filename(stdlib_dir); // executable name
-    llvm::sys::path::remove_filename(stdlib_dir); // "src/" dir
     llvm::sys::path::append(stdlib_dir, "lib_python");
     llvm::sys::path::append(stdlib_dir, "2.7");
     appendToSysPath(stdlib_dir.c_str());

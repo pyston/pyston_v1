@@ -1,0 +1,168 @@
+cmake_minimum_required(VERSION 2.8)
+project(pyston)
+
+include(ExternalProject)
+
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+set(DEPS_DIR $ENV{HOME}/pyston_deps)
+
+# set build type to release by default
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release." FORCE)
+endif()
+if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+  message(FATAL_ERROR "CMAKE_BUILD_TYPE must be set to Release or Debug")
+endif()
+
+option(ENABLE_GIL "threading use GIL" ON)
+option(ENABLE_GRWL "threading use GRWL" OFF)
+option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
+option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
+option(ENABLE_VALGRIND "pyston valgrind support" OFF)
+
+# initial clang flags (set here so they're used when building llvm)
+set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics" CACHE STRING "Clang specific C and CXX flags")
+if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CLANG_FLAGS}")
+endif()
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
+endif()
+
+# llvm disable debug info unless ENABLE_LLVM_DEBUG is ON
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
+  set(CMAKE_CXX_FLAGS_DEBUG "-g0" CACHE STRING "" FORCE)
+endif()
+
+execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+# llvm and clang patches
+add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
+
+# llvm
+set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
+#set(LLVM_EXTERNAL_CLANG_SOURCE_DIR "${CMAKE_SOURCE_DIR}/clang" CACHE String "Clang directory")
+#add_subdirectory(llvm EXCLUDE_FROM_ALL)
+if(ENABLE_INTEL_JIT_EVENTS)
+  set(LLVM_USE_INTEL_JITEVENTS "ON" CACHE STRING "Enable building support for the Intel JIT Events API")
+  set(INTEL_JIT_EVENTS_LIB "inteljitevents")
+  add_definitions(-DENABLE_INTEL_JIT_EVENTS=1)
+endif()
+add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm)
+set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
+include(LLVMConfig)
+llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader ipo irreader debuginfo instrumentation ${INTEL_JIT_EVENTS_LIB})
+
+# libunwind
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+  set(LIBUNWIND_FLAGS "-g -O0")
+  set(LIBUNWIND_DEBUG "--enable-debug")
+  set(LIBUNWIND_DEBUG_FRAME "--enable-debug-frame")
+endif()
+ExternalProject_Add(libunwind
+                    PREFIX libunwind
+                    SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
+                    UPDATE_COMMAND autoreconf -i
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} CFLAGS=${LIBUNWIND_FLAGS} CXXFLAGS=${LIBUNWIND_FLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
+                    LOG_UPDATE ON
+                    LOG_CONFIGURE ON
+                    LOG_BUILD ON
+                    LOG_INSTALL ON)
+
+# libpypa
+add_subdirectory(libpypa)
+
+# valgrind
+if(ENABLE_VALGRIND)
+  find_package(Valgrind REQUIRED)
+  include_directories(${VALGRIND_INCLUDE_DIR})
+  message(STATUS "Including valgrind ${VALGRIND_INCLUDE_DIR}")
+else()
+  add_definitions(-DNVALGRIND)
+endif()
+
+if(ENABLE_GRWL)
+  add_definitions(-DTHREADING_USE_GIL=0 -DTHREADING_USE_GRWL=1)
+else()
+  add_definitions(-DTHREADING_USE_GIL=1 -DTHREADING_USE_GRWL=0)
+endif()
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -Wreturn-type -Wno-sign-compare -Wno-unused -Wno-sign-compare -Wno-unused-parameter -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++11 -fno-rtti -fexceptions -fvisibility-inlines-hidden -ffunction-sections -fdata-sections -Woverloaded-virtual -Wno-invalid-offsetof -Wcast-qual -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wmissing-include-dirs -Wstrict-overflow=5 -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wmissing-field-initializers -Wredundant-decls -Winline -Wint-to-pointer-cast -Wlong-long -Wvla")
+
+set(CLANG_FLAGS "${CLANG_FLAGS} -Wimplicit-int -Wstrict-prototypes -Wold-style-definition -Wnested-externs -Wpointer-to-int-cast -Wno-mismatched-tags -Wno-extern-c-compat")
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
+endif()
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-long-long -Wno-aggregate-return -Wno-inline -Wno-redundant-decls -Wno-strict-overflow")
+endif()
+
+add_definitions(${LLVM_DEFINITIONS})
+add_definitions(-DDEFAULT_PYTHON_MAJOR_VERSION=2 -DDEFAULT_PYTHON_MINOR_VERSION=7 -DDEFAULT_PYTHON_MICRO_VERSION=6) # Python 2.7.6
+add_definitions(-DLLVMREV=${LLVMREV})
+
+include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(include)
+
+find_package(LibLZMA REQUIRED)
+link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
+link_directories(${LLVM_LIBRARY_DIRS})
+
+add_subdirectory(lib_python)
+add_subdirectory(src)
+add_subdirectory(test/test_extension)
+add_subdirectory(test/unittests)
+add_subdirectory(tools)
+
+add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON_OBJECTS>)
+target_link_libraries(pyston stdlib pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
+
+# copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
+add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lib_python/2.7 ${CMAKE_BINARY_DIR}/lib_python/2.7)
+add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
+
+add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
+                  DEPENDS astprint
+                  COMMENT "Running libpypa vs CPython AST result comparison test")
+
+# test
+enable_testing()
+add_test(NAME lint COMMAND python ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME gc_unittest COMMAND gc_unittest)
+add_test(NAME analysis_unittest COMMAND analysis_unittest)
+add_test(NAME pyston_defaults COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_disable_interpreter COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_max_compilation_tier COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -a -O -k ${CMAKE_SOURCE_DIR}/test/tests)
+
+# format
+file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)
+add_custom_target(format ${LLVM_TOOLS_BINARY_DIR}/clang-format -style=file -i ${FORMAT_FILES} DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+
+# lint
+add_custom_target(lint python ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+
+# check
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston clang-format ext_cpython ext_pyston unittests) 
+
+# {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
+file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)
+foreach(RUNTARGET ${RUNTARGETS})
+  get_filename_component(BASEFILENAME ${RUNTARGET} NAME_WE)
+  add_custom_target(run_${BASEFILENAME} ./pyston -q ${RUNTARGET} DEPENDS pyston)
+  add_custom_target(dbg_${BASEFILENAME} gdb --ex "set confirm off" --ex "handle SIGUSR2 pass nostop noprint" --ex run --ex "bt 20" --args ./pyston -q ${RUNTARGET} DEPENDS pyston)
+  add_custom_target(perf_${BASEFILENAME} perf record -g -- ./pyston -q -p ${RUNTARGET}
+                    COMMAND perf report -v -n -g flat,1000 | bash ${CMAKE_SOURCE_DIR}/tools/cumulate.sh | less -S)
+
+  if(ENABLE_VALGRIND)
+    add_custom_target(memcheck_${BASEFILENAME} valgrind --tool=memcheck --leak-check=no --db-attach=yes ./pyston ${RUNTARGET} DEPENDS pyston)
+    add_custom_target(memleaks_${BASEFILENAME} valgrind --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston ${RUNTARGET} DEPENDS pyston)
+    add_custom_target(cachegrind_${BASEFILENAME} valgrind --tool=cachegrind ./pyston ${RUNTARGET} DEPENDS pyston)
+  endif()
+endforeach()

@@ -937,7 +937,7 @@ extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
 }
 
 BoxedModule* importTestExtension(const std::string& name) {
-    std::string pathname_name = "../test/test_extension/" + name + ".pyston.so";
+    std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
     const char* pathname = pathname_name.c_str();
     void* handle = dlopen(pathname, RTLD_NOW);
     if (!handle) {

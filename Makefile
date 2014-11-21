@@ -4,7 +4,7 @@
 USE_TEST_LLVM := 0
 DEPS_DIR := $(HOME)/pyston_deps
 
-LLVM_REVISION_FILE := ../llvm_revision.txt
+LLVM_REVISION_FILE := llvm_revision.txt
 LLVM_REVISION := $(shell cat $(LLVM_REVISION_FILE))
 
 USE_CLANG  := 1
@@ -45,8 +45,9 @@ FORCE_TRUNK_BINARIES := 0
 -include Makefile.local
 
 
-TOOLS_DIR := ../tools
-TESTS_DIR := ../test/tests
+TOOLS_DIR := ./tools
+TEST_DIR := ./test
+TESTS_DIR := ./test/tests
 
 GPP := $(GCC_DIR)/bin/g++
 GCC := $(GCC_DIR)/bin/gcc
@@ -128,7 +129,7 @@ LLVM_PROFILE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Profile/lib/*)
 CLANG_EXE := $(LLVM_BIN)/clang
 CLANGPP_EXE := $(LLVM_BIN)/clang++
 
-COMMON_CFLAGS := -g -Werror -Wreturn-type -Wall -Wno-sign-compare -Wno-unused -I. -I../include -fno-omit-frame-pointer
+COMMON_CFLAGS := -g -Werror -Wreturn-type -Wall -Wno-sign-compare -Wno-unused -Isrc -I./include -fno-omit-frame-pointer
 COMMON_CFLAGS += -Wextra -Wno-sign-compare
 COMMON_CFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS := $(COMMON_CFLAGS)
@@ -151,7 +152,7 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
-COMMON_LDFLAGS := -B../tools/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
+COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
@@ -264,15 +265,15 @@ CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
 # Not sure if ccache_basedir actually helps at all (I think the generated files make them different?)
 LLVM_BUILD_ENV += CCACHE_DIR=$(HOME)/.ccache_llvm CCACHE_BASEDIR=$(LLVM_SRC)
 
-BASE_SRCS := $(wildcard codegen/*.cpp) $(wildcard asm_writing/*.cpp) $(wildcard codegen/irgen/*.cpp) $(wildcard codegen/opt/*.cpp) $(wildcard analysis/*.cpp) $(wildcard core/*.cpp) codegen/profiling/profiling.cpp codegen/profiling/dumprof.cpp $(wildcard runtime/*.cpp) $(wildcard runtime/builtin_modules/*.cpp) $(wildcard gc/*.cpp) $(wildcard capi/*.cpp)
-MAIN_SRCS := $(BASE_SRCS) jit.cpp
-STDLIB_SRCS := $(wildcard runtime/inline/*.cpp)
+BASE_SRCS := $(wildcard src/codegen/*.cpp) $(wildcard src/asm_writing/*.cpp) $(wildcard src/codegen/irgen/*.cpp) $(wildcard src/codegen/opt/*.cpp) $(wildcard src/analysis/*.cpp) $(wildcard src/core/*.cpp) src/codegen/profiling/profiling.cpp src/codegen/profiling/dumprof.cpp $(wildcard src/runtime/*.cpp) $(wildcard src/runtime/builtin_modules/*.cpp) $(wildcard src/gc/*.cpp) $(wildcard src/capi/*.cpp)
+MAIN_SRCS := $(BASE_SRCS) src/jit.cpp
+STDLIB_SRCS := $(wildcard src/runtime/inline/*.cpp)
 SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
 STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c $(EXTRA_STDMODULE_SRCS)
-FROM_CPYTHON_SRCS := $(addprefix ../lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(wildcard capi/*.c)
+FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(wildcard src/capi/*.c)
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
@@ -281,10 +282,10 @@ ASTPRINT_OBJS := $(STDLIB_OBJS) $(BASE_SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o)
 PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o)
 OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o)
 
-OPTIONAL_SRCS := codegen/profiling/oprofile.cpp codegen/profiling/pprof.cpp
+OPTIONAL_SRCS := src/codegen/profiling/oprofile.cpp src/codegen/profiling/pprof.cpp
 TOOL_SRCS := $(wildcard $(TOOLS_DIR)/*.cpp)
 
-UNITTEST_DIR := ../test/unittests
+UNITTEST_DIR := $(TEST_DIR)/unittests
 UNITTEST_SRCS := $(wildcard $(UNITTEST_DIR)/*.cpp)
 
 NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
@@ -300,23 +301,23 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
 all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
 
-ALL_HEADERS := $(wildcard */*.h) $(wildcard */*/*.h) $(wildcard ../include/*.h)
+ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard ./include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
 
-NON_ENTRY_OBJS := $(filter-out jit.o,$(OBJS))
+NON_ENTRY_OBJS := $(filter-out src/jit.o,$(OBJS))
 
 define add_unittest
 $(eval \
-$(UNITTEST_DIR)/$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/$1.o
+$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/$1.o
 	$(ECHO) Linking $$@
 	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
-dbg_$1_unittests: $(UNITTEST_DIR)/$1
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$(UNITTEST_DIR)/$1 --gtest_break_on_failure $(ARGS)'
-unittests:: $(UNITTEST_DIR)/$1
-run_$1_unittests: $(UNITTEST_DIR)/$1
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$(UNITTEST_DIR)/$1 $(ARGS)'
+dbg_$1_unittests: $1
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1 --gtest_break_on_failure $(ARGS)'
+unittests:: $1
+run_$1_unittests: $1
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$1 $(ARGS)'
 run_unittests:: run_$1_unittests
 )
 endef
@@ -338,10 +339,10 @@ endef
 
 .PHONY: format check_format
 format:
-	find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
+	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
 check_format:
 	$(ECHO) checking formatting...
-	$(VERB) $(TOOLS_DIR)/check_format.sh $(LLVM_BIN)/clang-format
+	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
 
 .PHONY: analyze
 analyze:
@@ -353,9 +354,9 @@ analyze:
 .PHONY: lint cpplint
 lint:
 	$(ECHO) linting...
-	$(VERB) python ../tools/lint.py
+	$(VERB) cd src && python ../tools/lint.py
 cpplint:
-	$(VERB) python ../tools/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
+	$(VERB) cd src && python $(TOOLS_DIR)/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
 
 .PHONY: check quick_check
 check:
@@ -553,11 +554,11 @@ llvm/profile/%: $(LLVM_SRC)/_patched $(LLVM_CONFIGURATION)
 	$(VERB) if [ ! -f $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/Makefile,$@) ]; then cp $(patsubst llvm/profile/%,$(LLVM_SRC)/%/Makefile,$@) $(patsubst llvm/profile/%,$(LLVM_BUILD)/%/,$@); fi
 	$(LLVM_BUILD_ENV) $(MAKE) -C $(patsubst llvm/profile/%,$(LLVM_BUILD)/%,$@) $(LLVM_BUILD_VARS) CXXFLAGS="-fno-omit-frame-pointer -fno-function-sections" ENABLE_PROFILING=1 ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 $(LLVM_MAKE_ARGS)
 
-$(LLVM_SRC)/_patched: $(wildcard ../llvm_patches/*) $(wildcard ../clang_patches/*) $(LLVM_REVISION_FILE)
+$(LLVM_SRC)/_patched: $(wildcard ./llvm_patches/*) $(wildcard ./clang_patches/*) $(LLVM_REVISION_FILE)
 	$(MAKE) llvm_up
 llvm_up:
-	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ../llvm_patches
-	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ../clang_patches
+	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ./llvm_patches
+	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ./clang_patches
 	$(MAKE) $(LLVM_CONFIGURATION)
 	touch $(LLVM_SRC)/_patched
 
@@ -602,7 +603,7 @@ astcompare: astprint
 ## END OF TOOLS
 
 
-CODEGEN_SRCS := $(wildcard codegen/*.cpp) $(wildcard codegen/*/*.cpp)
+CODEGEN_SRCS := $(wildcard src/codegen/*.cpp) $(wildcard src/codegen/*/*.cpp)
 
 # args: suffix (ex: ".release"), CXXFLAGS
 define make_compile_config
@@ -617,8 +618,8 @@ $$(SRCS:.cpp=$1.o.bc): CXXFLAGS:=$2
 	$$(ECHO) Compiling $$@
 	$$(VERB) rm -f $$@-*
 	$$(VERB) $$(CLANGPP_EXE) $$(CXXFLAGS) -MMD -MP -MF $$<.d -x c++-header $$< -o $$@
-$$(CODEGEN_SRCS:.cpp=$1.o): CXXFLAGS += -include codegen/irgen$1.h
-$$(CODEGEN_SRCS:.cpp=$1.o): codegen/irgen$1.h.pch
+$$(CODEGEN_SRCS:.cpp=$1.o): CXXFLAGS += -include src/codegen/irgen$1.h
+$$(CODEGEN_SRCS:.cpp=$1.o): src/codegen/irgen$1.h.pch
 
 $$(NONSTDLIB_SRCS:.cpp=$1.o): %$1.o: %.cpp $$(BUILD_SYSTEM_DEPS)
 	$$(ECHO) Compiling $$@
@@ -732,11 +733,11 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
 
--include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ../lib_python/2.7_Modules/*.d)
+-include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ./lib_python/2.7_Modules/*.d)
 
 .PHONY: clean
 clean:
-	@ find . $(TOOLS_DIR) ../test ../lib_python/2.7_Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
+	@ find . $(TOOLS_DIR) $(TEST_DIR) ./lib_python/2.7_Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data
@@ -745,10 +746,10 @@ clean:
 # ex instead of saying "make tests/run_1", I can just write "make run_1"
 define make_search
 $(eval \
-$1: ../test/tests/$1 ;
-$1: ../microbenchmarks/$1 ;
-$1: ../minibenchmarks/$1 ;
-$1: ../benchmarks/$1 ;
+$1: $(TEST_DIR)/tests/$1 ;
+$1: ./microbenchmarks/$1 ;
+$1: ./minibenchmarks/$1 ;
+$1: ./benchmarks/$1 ;
 $(patsubst %, $$1: %/$$1 ;,$(EXTRA_SEARCH_DIRS))
 )
 endef
@@ -759,10 +760,10 @@ define make_target
 $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: pyston$1 ext_pyston
-	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
-	python ../tools/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
+	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
+	python $(TOOLS_DIR)/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
+	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
+	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
@@ -896,36 +897,36 @@ wdbg_%:
 
 .PHONY: test_asm test_cpp_asm
 test_asm:
-	$(CLANGPP_EXE) ../test/test.s -c -o test
+	$(CLANGPP_EXE) $(TEST_DIR)/test.s -c -o test
 	objdump -d test | less
 	@ rm test
 test_cpp_asm:
-	$(CLANGPP_EXE) ../test/test.cpp -o test -c -O3 -std=c++11
+	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test -c -O3 -std=c++11
 	# $(GPP) tests/test.cpp -o test -c -O3
 	objdump -d test | less
 	rm test
 test_cpp_dwarf:
-	$(CLANGPP_EXE) ../test/test.cpp -o test -c -O3 -std=c++11 -g
+	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test -c -O3 -std=c++11 -g
 	# $(GPP) tests/test.cpp -o test -c -O3
 	objdump -W test | less
 	rm test
 test_cpp_ll:
-	$(CLANGPP_EXE) ../test/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11 -g
+	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11 -g
 	less test.ll
 	rm test.ll
 
 TEST_EXT_MODULE_NAMES := basic_test descr_test
 
 .PHONY: ext_pyston
-ext_pyston: $(TEST_EXT_MODULE_NAMES:%=../test/test_extension/%.pyston.so)
-../test/test_extension/%.pyston.so: ../test/test_extension/%.o $(BUILD_SYSTEM_DEPS)
+ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
+$(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o $(BUILD_SYSTEM_DEPS)
 	$(CLANG_EXE) -shared $< -o $@ -g
-../test/test_extension/%.o: ../test/test_extension/%.c $(wildcard ../include/*.h) $(BUILD_SYSTEM_DEPS)
-	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I../include -c $< -o $@ -g
+$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h) $(BUILD_SYSTEM_DEPS)
+	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I./include -c $< -o $@ -g
 
 .PHONY: ext_python
-ext_python: $(TEST_EXT_MODULE_NAMES:%=../test/test_extension/*.c)
-	cd ../test/test_extension; python setup.py build
+ext_python: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+	cd $(TEST_DIR)/test_extension; python setup.py build
 
 $(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@

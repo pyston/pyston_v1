@@ -889,9 +889,6 @@ static std::string getParserCommandLine(const char* fn) {
     // Start by removing the binary name, because the "pyston" binary will break the logic below
     llvm::sys::path::remove_filename(parse_ast_fn);
 
-    while (llvm::sys::path::filename(parse_ast_fn) != "pyston") {
-        llvm::sys::path::remove_filename(parse_ast_fn);
-    }
     llvm::sys::path::append(parse_ast_fn, "src/codegen/parse_ast.py");
 
     return std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
