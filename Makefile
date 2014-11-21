@@ -732,6 +732,13 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
+.PHONY: pyston_dbg_cmake pyston_release_cmake
+pyston_dbg_cmake:
+	ninja -C $(HOME)/pyston-build-dbg pyston
+	ln -Sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
+pyston_release_cmake:
+	ninja -C $(HOME)/pyston-build-release pyston
+	ln -Sf $(HOME)/pyston-build-release/pyston pyston_release
 
 -include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ./lib_python/2.7_Modules/*.d)
 
