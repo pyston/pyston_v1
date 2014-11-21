@@ -285,11 +285,20 @@ To use the toolchain from this document, do:
 ```
 mkdir ~/pyston-build
 cd ~/pyston-build
-CC=~/pyston_deps/gcc-4.8.2-install/bin/gcc CXX=~/pyston_deps/gcc-4.8.2-install/bin/g++ ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_MAKE_PROGRAM=$HOME/pyston_deps/ninja/ninja -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64"
+CC=~/pyston_deps/gcc-4.8.2-install/bin/gcc CXX=~/pyston_deps/gcc-4.8.2-install/bin/g++ ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_MAKE_PROGRAM=$HOME/pyston_deps/ninja/ninja -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
 ~/pyston_deps/ninja/ninja check-pyston
 ```
 
-If you have a new enough system-provided toolchain, you can do:
+On Ubuntu 12.04, you need a new cmake in order to use ninja, but can install ninja using `sudo apt-get install ninja-build`.  Then:
+
+```
+mkdir ~/pyston-build
+cd ~/pyston-build
+CC=~/pyston_deps/gcc-4.8.2-install/bin/gcc CXX=~/pyston_deps/gcc-4.8.2-install/bin/g++ ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
+ninja check-pyston
+```
+
+If your system provides a new enough GCC and cmake, you can just do:
 
 ```
 mkdir ~/pyston-build
