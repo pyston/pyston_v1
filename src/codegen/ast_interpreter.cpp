@@ -43,7 +43,7 @@
 namespace pyston {
 
 #define OSR_THRESHOLD 100
-#define REOPT_THRESHOLD 100
+#define REOPT_THRESHOLD 10
 
 union Value {
     bool b;

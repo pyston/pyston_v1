@@ -53,6 +53,8 @@ void EscapeAnalysis::getAnalysisUsage(llvm::AnalysisUsage& info) const {
 }
 
 bool EscapeAnalysis::runOnFunction(Function& F) {
+    return false; // This analysis is currently broken and not maintained
+
     if (VERBOSITY("opt") >= 1)
         outs() << "Running escape analysis on " << F.getName() << '\n';
 
