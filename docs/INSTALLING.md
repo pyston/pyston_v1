@@ -123,7 +123,7 @@ make install
 
 ---
 
-At this point you should be able to run `make check` (in the `~/pyston` directory) and pass the tests.
+At this point you should be able to run `make check` (in the `~/pyston` directory) and pass the tests.  See the main README for more information about available targets and options.
 
 # Optional dependencies
 

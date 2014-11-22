@@ -72,9 +72,7 @@ int main(int argc, char** argv) {
             SHOW_DISASM = true;
         else if (code == 'i')
             force_repl = true;
-        else if (code == 'b') {
-            BENCH = true;
-        } else if (code == 'n') {
+        else if (code == 'n') {
             ENABLE_INTERPRETER = false;
         } else if (code == 'p') {
             PROFILE = true;
@@ -84,6 +82,8 @@ int main(int argc, char** argv) {
             stats = true;
         } else if (code == 'r') {
             USE_STRIPPED_STDLIB = true;
+        } else if (code == 'b') {
+            USE_REGALLOC_BASIC = true;
         } else if (code == 'x') {
             ENABLE_PYPA_PARSER = true;
         } else if (code == '?')
@@ -141,56 +141,15 @@ int main(int argc, char** argv) {
         llvm::sys::path::remove_filename(path);
         prependToSysPath(path.str());
 
-        int num_iterations = 1;
-        if (BENCH)
-            num_iterations = 1000;
+        try {
+            main_module = createAndRunModule("__main__", fn);
+        } catch (Box* b) {
+            std::string msg = formatException(b);
+            printLastTraceback();
+            fprintf(stderr, "%s\n", msg.c_str());
 
-        for (int i = 0; i < num_iterations; i++) {
-            try {
-                main_module = createAndRunModule("__main__", fn);
-            } catch (Box* b) {
-                std::string msg = formatException(b);
-                printLastTraceback();
-                fprintf(stderr, "%s\n", msg.c_str());
-
-                return 1;
-            }
+            return 1;
         }
-    }
-
-    if (repl && BENCH) {
-        if (!main_module) {
-            main_module = createModule("__main__", "<bench>");
-        } else {
-            main_module->fn = "<bench>";
-        }
-
-        timeval start, end;
-        gettimeofday(&start, NULL);
-        const int MAX_RUNS = 1000;
-        const int MAX_TIME = 30;
-        int run = 0;
-        while (true) {
-            run++;
-
-            AST_Module* m = new AST_Module();
-            compileAndRunModule(m, main_module);
-
-            if (run >= MAX_RUNS) {
-                printf("Quitting after %d iterations\n", run);
-                break;
-            }
-            gettimeofday(&end, NULL);
-            if (end.tv_sec - start.tv_sec > MAX_TIME) {
-                printf("Quitting after %d seconds (%d iterations)\n", MAX_TIME, run);
-                break;
-            }
-        }
-        gettimeofday(&end, NULL);
-        long ms = 1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
-        printf("%ldms (%.2fms per)\n", ms, 1.0 * ms / run);
-
-        repl = force_repl;
     }
 
     if (repl) {

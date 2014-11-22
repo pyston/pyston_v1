@@ -86,7 +86,8 @@ For a full list, please check out the (Makefile)[https://github.com/dropbox/pyst
 <dt>-v</dt>
   <dd>Increase verbosity by 1</dd>
   
-  <dd>Pyston by default runs at verbosity 1, which contains a good amount of debugging information.  Verbosity 0 contains no debugging information, and should produce the same results as other runtimes.</dd>
+<dt>-s</dt>
+  <dd>Print out the internal stats at exit.</dd>
   
 <dt>-n</dt>
   <dd>Disable the Pyston interpreter.  This is mostly used for debugging, to force the use of higher compilation tiers in situations they wouldn't typically be used.</dd>
@@ -94,20 +95,19 @@ For a full list, please check out the (Makefile)[https://github.com/dropbox/pyst
 <dt>-O</dt>
   <dd>Force Pyston to always run at the highest compilation tier.  This doesn't always produce the fastest running time due to the lack of type recording from lower compilation tiers, but similar to -n can help test the code generator.</dd>
   
-<dt>-d</dt>
-  <dd>In addition to showing the generated LLVM IR, show the generated assembly code.</dd>
-  
 <dt>-i</dt>
   <dd>Go into the repl after executing the given script.</dd>
-  
-<dt>-b</dt>
-  <dd>Benchmark mode: do whatever it would have been done, but do it 1000 times.</dd>
-  
-<dt>-p</dt>
-  <dd>Emit profiling information: at exit, Pyston will emit a dump of the code it generated for consumption by other tools.</dd>
-  
+
 <dt>-r</dt>
   <dd>Use a stripped stdlib.  When running pyston_dbg, the default is to use a stdlib with full debugging symbols enabled.  Passing -r changes this behavior to load a slimmer, stripped stdlib.</dd>
+
+<dt>-b</dt>
+  <dd>Experimental: use the LLVM "basic" register allocator.</dd>
+
+<dt>-x</dt>
+  <dd>Experimental: use the pypa parser.</dd>
+
+There are also some lesser-used flags; see src/jit.cpp for more details.
 
 ---
 ## Technical features

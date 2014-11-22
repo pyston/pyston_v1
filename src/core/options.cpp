@@ -28,13 +28,13 @@ int MAX_OPT_ITERATIONS = 1;
 
 bool FORCE_OPTIMIZE = false;
 bool SHOW_DISASM = false;
-bool BENCH = false;
 bool PROFILE = false;
 bool DUMPJIT = false;
 bool TRAP = false;
 bool USE_STRIPPED_STDLIB = true; // always true
 bool ENABLE_INTERPRETER = true;
 bool ENABLE_PYPA_PARSER = false;
+bool USE_REGALLOC_BASIC = false;
 
 static bool _GLOBAL_ENABLE = 1;
 bool ENABLE_ICS = 1 && _GLOBAL_ENABLE;

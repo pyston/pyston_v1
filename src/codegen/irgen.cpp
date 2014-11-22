@@ -1221,15 +1221,6 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         // fflush(stdout);
     }
 
-#ifndef NDEBUG
-    if (!BENCH) {
-        // Calling verifyFunction() confuses the profiler, which will end up attributing
-        // a large amount of runtime to it since the call stack looks very similar to
-        // the (expensive) case of compiling the function.
-        llvm::verifyFunction(*f);
-    }
-#endif
-
     irgen_us += _t2.split();
     static StatCounter us_irgen("us_compiling_irgen");
     us_irgen.log(irgen_us);

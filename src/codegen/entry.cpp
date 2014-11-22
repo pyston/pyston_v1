@@ -44,6 +44,11 @@
 #include "core/util.h"
 #include "runtime/types.h"
 
+/*
+ * Include this file to force the linking of non-default algorithms, such as the "basic" register allocator
+ */
+#include "llvm/CodeGen/LinkAllCodegenComponents.h"
+
 namespace pyston {
 
 GlobalState g;
@@ -265,26 +270,31 @@ void initCodegen() {
     // signal(SIGFPE, &handle_sigfpe);
     signal(SIGINT, &handle_sigint);
 
+
     // There are some parts of llvm that are only configurable through command line args,
     // so construct a fake argc/argv pair and pass it to the llvm command line machinery:
-    const char* llvm_args[] = {
-        "fake_name", "--enable-patchpoint-liveness",
+    std::vector<const char*> llvm_args = { "fake_name" };
 
-// Enabling and debugging fast-isel:
-//"--fast-isel",
-//"--fast-isel-verbose",
-////"--fast-isel-abort",
+    llvm_args.push_back("--enable-patchpoint-liveness");
+    if (0) {
+        // Enabling and debugging fast-isel:
+        // llvm_args.push_back("--fast-isel");
+        // llvm_args.push_back("--fast-isel-verbose");
+        ////llvm_args.push_back("--fast-isel-abort");
+    }
+
 #ifndef NDEBUG
-//"--debug-only=debug-ir",
-//"--debug-only=regalloc",
-//"--debug-only=stackmaps",
+// llvm_args.push_back("--debug-only=debug-ir");
+// llvm_args.push_back("--debug-only=regalloc");
+// llvm_args.push_back("--debug-only=stackmaps");
 #endif
-        //"--print-after-all",
-        //"--print-machineinstrs",
-        //"--optimize-regalloc=false", // use the "fast" register allocator
-    };
-    int num_llvm_args = sizeof(llvm_args) / sizeof(llvm_args[0]);
-    llvm::cl::ParseCommandLineOptions(num_llvm_args, llvm_args, "<you should never see this>\n");
+
+    // llvm_args.push_back("--print-after-all");
+    // llvm_args.push_back("--print-machineinstrs");
+    if (USE_REGALLOC_BASIC)
+        llvm_args.push_back("--regalloc=basic");
+
+    llvm::cl::ParseCommandLineOptions(llvm_args.size(), &llvm_args[0], "<you should never see this>\n");
 }
 
 void teardownCodegen() {
