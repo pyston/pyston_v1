@@ -37,6 +37,11 @@ except TypeError, e:
     print e
 
 try:
+    f(2.0, 1)
+except TypeError, e:
+    print e
+
+try:
     f(2, -2)
 except ValueError, e:
     print e
