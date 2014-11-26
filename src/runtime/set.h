@@ -35,7 +35,10 @@ public:
     Set s;
 
     BoxedSet(BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls) {}
-    BoxedSet(Set&& s, BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls), s(s) {}
+
+    template <typename T>
+    __attribute__((visibility("default"))) BoxedSet(T&& s, BoxedClass* cls)
+        : Box(cls), s(std::forward<T>(s)) {}
 };
 }
 
