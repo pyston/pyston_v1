@@ -106,6 +106,9 @@ Box* boxString(std::string&& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
 
+Box* boxUnicode(const std::string& s);
+Box* boxUnicode(std::string&& s);
+
 // creates an uninitialized string of length n; useful for directly constructing into the string and avoiding copies:
 BoxedString* createUninitializedString(ssize_t n);
 // Gets a writeable pointer to the contents of a string.
@@ -326,7 +329,12 @@ public:
 };
 
 class BoxedUnicode : public Box {
-    // TODO implementation
+public:
+    std::string s;
+
+    BoxedUnicode(const char* s, size_t n) __attribute__((visibility("default"))) : Box(unicode_cls), s(s, n) {}
+    BoxedUnicode(const std::string&& s) __attribute__((visibility("default"))) : Box(unicode_cls), s(std::move(s)) {}
+    BoxedUnicode(const std::string& s) __attribute__((visibility("default"))) : Box(unicode_cls), s(s) {}
 };
 
 class BoxedInstanceMethod : public Box {

@@ -984,7 +984,10 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
 }
 
 Value ASTInterpreter::visit_str(AST_Str* node) {
-    return boxString(node->s);
+    if (node->str_type == AST_Str::STR)
+        return boxString(node->s);
+    else
+        return boxUnicode(node->s);
 }
 
 Value ASTInterpreter::visit_name(AST_Name* node) {

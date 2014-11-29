@@ -154,7 +154,7 @@ def convert(n, f):
         elif isinstance(v, str):
             _print_str(v, f)
         elif isinstance(v, unicode):
-            _print_str(v.encode("ascii"), f)
+            _print_str(v.encode("utf-8"), f)
         elif isinstance(v, bool):
             f.write(struct.pack("B", v))
         elif isinstance(v, int):

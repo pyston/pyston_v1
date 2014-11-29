@@ -47,6 +47,14 @@ Box* boxString(std::string&& s) {
     return new BoxedString(std::move(s));
 }
 
+Box* boxUnicode(const std::string& s) {
+    return new BoxedUnicode(s);
+}
+
+Box* boxUnicode(std::string&& s) {
+    return new BoxedUnicode(std::move(s));
+}
+
 extern "C" double unboxFloat(Box* b) {
     ASSERT(b->cls == float_cls, "%s", getTypeName(b)->c_str());
     BoxedFloat* f = (BoxedFloat*)b;
