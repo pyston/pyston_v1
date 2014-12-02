@@ -285,7 +285,7 @@ To use the toolchain from this document, do:
 ```
 mkdir ~/pyston-build
 cd ~/pyston-build
-CC=~/pyston_deps/gcc-4.8.2-install/bin/gcc CXX=~/pyston_deps/gcc-4.8.2-install/bin/g++ ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_MAKE_PROGRAM=$HOME/pyston_deps/ninja/ninja -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
+CC="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/gcc" CXX="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/g++" ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_MAKE_PROGRAM=$HOME/pyston_deps/ninja/ninja -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
 ~/pyston_deps/ninja/ninja check-pyston
 ```
 
@@ -294,7 +294,7 @@ On Ubuntu 12.04, you need a new cmake in order to use ninja, but can install nin
 ```
 mkdir ~/pyston-build
 cd ~/pyston-build
-CC=~/pyston_deps/gcc-4.8.2-install/bin/gcc CXX=~/pyston_deps/gcc-4.8.2-install/bin/g++ ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
+CC="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/gcc" CXX="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/g++" ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
 ninja check-pyston
 ```
 
@@ -303,7 +303,10 @@ If your system provides a new enough GCC and cmake, you can just do:
 ```
 mkdir ~/pyston-build
 cd ~/pyston-build
-CC=gcc CXX=g++ cmake -GNinja ~/pyston
+CC='ccache gcc' CXX='ccache g++' cmake -GNinja ~/pyston
 ninja check-pyston
 ```
+
+Other important options:
+- `-DCMAKE_BUILD_TYPE=Debug` (or Release, but defaults to Release I believe)
 

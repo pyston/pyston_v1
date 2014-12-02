@@ -713,9 +713,6 @@ endef
 
 
 # Finally, link it all together:
-$(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
-$(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
-$(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl_dbg,stdlib.grwl_dbg.bc.o $(SRCS:.cpp=.grwl_dbg.o),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_nosync,stdlib.nosync.bc.o $(SRCS:.cpp=.nosync.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
@@ -732,13 +729,20 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
-.PHONY: pyston_dbg_cmake pyston_release_cmake
-pyston_dbg_cmake:
-	ninja -C $(HOME)/pyston-build-dbg pyston
-	ln -Sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
-pyston_release_cmake:
-	ninja -C $(HOME)/pyston-build-release pyston
-	ln -Sf $(HOME)/pyston-build-release/pyston pyston_release
+ifneq ($(USE_CMAKE),1)
+$(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
+$(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
+$(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
+
+else
+.PHONY: pyston_dbg pyston_release
+pyston_dbg:
+	ninja -C $(HOME)/pyston-build-dbg pyston $(NINJAFLAGS)
+	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
+pyston_release:
+	ninja -C $(HOME)/pyston-build-release pyston $(NINJAFLAGS)
+	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
+endif
 
 -include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ./lib_python/2.7_Modules/*.d)
 
