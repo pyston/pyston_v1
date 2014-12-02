@@ -41,6 +41,9 @@ ENABLE_INTEL_JIT_EVENTS := 0
 # to disk space concerns.
 FORCE_TRUNK_BINARIES := 0
 
+USE_CMAKE := 0
+NINJA := ninja
+
 # Put any overrides in here:
 -include Makefile.local
 
@@ -737,10 +740,10 @@ $(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 else
 .PHONY: pyston_dbg pyston_release
 pyston_dbg:
-	ninja -C $(HOME)/pyston-build-dbg pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-dbg pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
 pyston_release:
-	ninja -C $(HOME)/pyston-build-release pyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-release pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 
