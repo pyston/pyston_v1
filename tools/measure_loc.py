@@ -1,69 +1,146 @@
-# Simple "active LOC" analyzer
-# It measures which lines get executed and how long they take to execute,
-# and calculates the number of lines that represent 99% (configurable) of the total runtime.
-#
-# this kind of "works" but ends up saying that most lines do a constant amount of work, since the tracer work dominates
-# - ie it will say that a simple line "None" will end up being just as expensive as any other
-# Also, I think the location needs to be updated on "call" and "return" events
+"""
+Simple "active LOC" analyzer
 
-import os.path
-import runpy
+Runs a program, and using a sampling profiler, outputs some statistics about how many
+lines of code contribute to the majority of the runtime.
+
+For example:
+$ python tools/measure_loc.py minibenchmarks/fannkuch_med.py
+[...]
+Found 36 unique lines with 116480 samples
+minibenchmarks/fannkuch_med.py:28                   48244 41.4%   1 41.4%
+minibenchmarks/fannkuch_med.py:36                   18703 16.1%   2 57.5%
+minibenchmarks/fannkuch_med.py:30                   8835  7.6%   3 65.1%
+minibenchmarks/fannkuch_med.py:37                   6388  5.5%   4 70.5%
+minibenchmarks/fannkuch_med.py:29                   5348  4.6%   5 75.1%
+minibenchmarks/fannkuch_med.py:27                   4562  3.9%   6 79.1%
+minibenchmarks/fannkuch_med.py:20                   3599  3.1%   7 82.1%
+minibenchmarks/fannkuch_med.py:21                   2985  2.6%   8 84.7%
+minibenchmarks/fannkuch_med.py:26                   2984  2.6%   9 87.3%
+minibenchmarks/fannkuch_med.py:23                   2835  2.4%  10 89.7%
+minibenchmarks/fannkuch_med.py:24                   2781  2.4%  11 92.1%
+minibenchmarks/fannkuch_med.py:40                   2089  1.8%  12 93.9%
+minibenchmarks/fannkuch_med.py:38                   2038  1.7%  13 95.6%
+minibenchmarks/fannkuch_med.py:35                   1990  1.7%  14 97.3%
+minibenchmarks/fannkuch_med.py:19                   1769  1.5%  15 98.9%
+minibenchmarks/fannkuch_med.py:39                   1108  1.0%  16 99.8%
+minibenchmarks/fannkuch_med.py:42                   179  0.2%  17 100.0%
+minibenchmarks/fannkuch_med.py:49                   10  0.0%  18 100.0%
+minibenchmarks/fannkuch_med.py:51                    7  0.0%  19 100.0%
+/usr/lib/python2.7/runpy.py:220                      3  0.0%  20 100.0%
+(and 16 more -- see measure_loc.pkl)
+Picked 2 lines out of 36 to reach 57.48%
+Picked 5 lines out of 36 to reach 75.14%
+Picked 11 lines out of 36 to reach 92.09%
+Picked 16 lines out of 36 to reach 99.81%
+
+
+By default, this tool reports lines of code by the amount of time that was spent on them.
+There is also a mode to change the accounting to "number of times the line executed";
+use the python_trace_counter instead of python_sampler (you have to modify the script).
+"""
+
+
+import os
+import os
 import sys
-import time
 
-class Tracer(object):
-    def __init__(self):
-        self.times = {}
-        self.start = None
-        self.cur = None
+import cPickle
+import runpy
+import signal
 
-    def log(self, loc):
-        start = self.start
-        now = self.now
-        if start is None:
-            return
+class SamplingProfiler(object):
+    # Copied + modified from https://github.com/bdarnell/plop/blob/master/plop/collector.py
+    MODES = {
+        'prof': (signal.ITIMER_PROF, signal.SIGPROF),
+        'virtual': (signal.ITIMER_VIRTUAL, signal.SIGVTALRM),
+        'real': (signal.ITIMER_REAL, signal.SIGALRM),
+        }
 
-        cur = self.cur
-        self.times[cur] = self.times.get(cur, 0) + (now - start) - 0.000000
-        self.cur = loc
+    def __init__(self, sighandler, dumper, mode, interval=0.0001):
+        self.sighandler = sighandler
+        self.dumper = dumper
+        self.mode = mode
+        self.interval = interval
 
-    def trace(self, frame, event, arg):
-        self.now = time.time()
-        if event == "line":
-            loc = frame.f_code.co_filename, frame.f_lineno
-            # print loc
-            self.log(loc)
-            self.start = time.time()
+    def start(self):
+        timer, sig = SamplingProfiler.MODES[self.mode]
 
-        return self.trace
+        signal.signal(sig, signal_handler)
+        signal.setitimer(timer, self.interval, self.interval)
 
-if __name__ == "__main__":
-    old_sys_argv = sys.argv
+    def stop(self):
+        timer, sig = SamplingProfiler.MODES[self.mode]
+        signal.setitimer(timer, 0, 0)
+        signal.signal(sig, signal.SIG_DFL)
+        return self.dumper()
+
+class TracingProfiler(object):
+    def __init__(self, tracefunc, dumper):
+        self.tracefunc = tracefunc
+        self.dumper = dumper
+
+    def start(self):
+        sys.settrace(self.tracefunc)
+
+    def stop(self):
+        sys.settrace(None)
+        return self.dumper()
+
+times = {}
+def signal_handler(sig, frame):
+    loc = frame.f_code.co_filename, frame.f_lineno
+    times[loc] = times.get(loc, 0) + 1
+
+def trace_count(frame, event, arg):
+    if event == "line":
+        loc = frame.f_code.co_filename, frame.f_lineno
+        times[loc] = times.get(loc, 0) + 1
+
+    return trace_count
+
+def get_times():
+    return times.items()
+
+def run(sampler, kind):
     fn = sys.argv[1]
-    args = sys.argv[2:]
+
+    if fn == '-m':
+        module = sys.argv[2]
+        args = sys.argv[3:]
+    else:
+        args = sys.argv[2:]
     sys.argv = [sys.argv[0]] + args
 
-    t = Tracer()
-
-    sys.settrace(t.trace)
-
-    assert sys.path[0] == os.path.abspath(os.path.dirname(__file__))
     sys.path[0] = os.path.abspath(os.path.dirname(fn))
 
+    sampler.start()
+
     # del sys.modules["__main__"] # do we need this?
-    runpy.run_path(fn, run_name="__main__")
-    sys.settrace(None)
+    if fn == '-m':
+        runpy.run_module(module, run_name="__main__")
+    else:
+        runpy.run_path(fn, run_name="__main__")
 
+    times = sampler.stop()
 
-    times = t.times.items()
     times.sort(key=lambda (l, t): t, reverse=True)
+    with open("measure_loc.pkl", "w") as f:
+        cPickle.dump(times, f)
 
     total = 0.0
     for l, t in times:
         total += t
-    print total, len(times)
+    if kind == "time":
+        print "Found %d unique lines for a total of %.2fs" % (len(times), total)
+    else:
+        print "Found %d unique lines with %d samples" % (len(times), total)
 
-    FRACTION = 0.99
+    FRACTIONS = [0.5, 0.75, 0.9, 0.99, 1]
+    frac_counts = []
+    frac_fracs = []
+    frac_idx = 0
+    DISPLAY_THRESH = 20
 
     sofar = 0.0
     total_lines = 0
@@ -71,9 +148,31 @@ if __name__ == "__main__":
         if not l:
             continue
         fn, lineno = l
-        print "%s:%s  %f" % (fn, lineno, t)
         total_lines += 1
         sofar += t
-        if sofar >= total * FRACTION:
-            break
-    print total_lines
+        if total_lines <= DISPLAY_THRESH:
+            if kind == "time":
+                print ("%s:%s" % (fn, lineno)).ljust(50), "%.4fs %4.1f%% % 3d %4.1f%%" % (t, t / total * 100, total_lines, sofar / total * 100.0)
+            else:
+                print ("%s:%s" % (fn, lineno)).ljust(50), "% 3d %4.1f%% % 3d %4.1f%%" % (t, t / total * 100, total_lines, sofar / total * 100.0)
+        if sofar >= total * FRACTIONS[frac_idx]:
+            if FRACTIONS[frac_idx] == 1:
+                break
+
+            frac_counts.append(total_lines)
+            frac_fracs.append(sofar)
+            frac_idx += 1
+
+    if len(times) > DISPLAY_THRESH:
+        print "(and %d more -- see measure_loc.pkl)" % (len(times) - DISPLAY_THRESH)
+
+    assert len(frac_counts) == len(FRACTIONS) -1
+    for i in xrange(len(frac_counts)):
+        print "Picked %d lines out of %d to reach %.2f%%" % (frac_counts[i], len(times), frac_fracs[i] / total * 100.0)
+
+python_sampler = SamplingProfiler(signal_handler, get_times, "real", interval=0.00001)
+python_trace_counter = TracingProfiler(trace_count, get_times)
+
+if __name__ == "__main__":
+    run(python_sampler, "count")
+    # run(python_trace_counter, "count")
