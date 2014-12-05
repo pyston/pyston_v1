@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
         } else if (code == 'r') {
             USE_STRIPPED_STDLIB = true;
         } else if (code == 'b') {
-            USE_REGALLOC_BASIC = true;
+            USE_REGALLOC_BASIC = false;
         } else if (code == 'x') {
             ENABLE_PYPA_PARSER = true;
         } else if (code == '?')

@@ -102,7 +102,7 @@ For a full list, please check out the (Makefile)[https://github.com/dropbox/pyst
   <dd>Use a stripped stdlib.  When running pyston_dbg, the default is to use a stdlib with full debugging symbols enabled.  Passing -r changes this behavior to load a slimmer, stripped stdlib.</dd>
 
 <dt>-b</dt>
-  <dd>Experimental: use the LLVM "basic" register allocator.</dd>
+  <dd>Use the default LLVM register allocator instead of the "basic" register allocator.</dd>
 
 <dt>-x</dt>
   <dd>Experimental: use the pypa parser.</dd>

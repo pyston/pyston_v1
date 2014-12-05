@@ -122,6 +122,11 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
         us_jitting.log(us);
         static StatCounter num_jits("num_jits");
         num_jits.log();
+
+        if (VERBOSITY() >= 1&& us > 100000) {
+            printf("Took %.1fs to compile %s\n", us * 0.000001, cf->func->getName().str().c_str());
+            printf("Has %ld basic blocks\n", cf->func->getBasicBlockList().size());
+        }
     }
 
     if (VERBOSITY("irgen") >= 1) {
