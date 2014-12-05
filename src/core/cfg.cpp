@@ -1145,6 +1145,9 @@ public:
     bool visit_import(AST_Import* node) override {
         for (AST_alias* a : node->names) {
             AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
+            import->lineno = node->lineno;
+            import->col_offset = node->col_offset;
+
             import->args.push_back(new AST_Num());
             static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
             static_cast<AST_Num*>(import->args[0])->n_int = -1;
@@ -1186,6 +1189,9 @@ public:
         RELEASE_ASSERT(node->level == 0, "");
 
         AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
+        import->lineno = node->lineno;
+        import->col_offset = node->col_offset;
+
         import->args.push_back(new AST_Num());
         static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
         static_cast<AST_Num*>(import->args[0])->n_int = node->level;
