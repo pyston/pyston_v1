@@ -751,7 +751,7 @@ endif
 
 .PHONY: clean
 clean:
-	@ find . $(TOOLS_DIR) $(TEST_DIR) ./lib_python/2.7_Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
+	@ find src $(TOOLS_DIR) $(TEST_DIR) ./lib_python/2.7_Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data

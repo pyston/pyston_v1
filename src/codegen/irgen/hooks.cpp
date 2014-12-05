@@ -26,7 +26,6 @@
 #include "codegen/irgen.h"
 #include "codegen/irgen/future.h"
 #include "codegen/irgen/util.h"
-#include "codegen/llvm_interpreter.h"
 #include "codegen/osrentry.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"

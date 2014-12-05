@@ -27,7 +27,6 @@
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
-#include "codegen/llvm_interpreter.h"
 #include "codegen/stackmaps.h"
 #include "runtime/types.h"
 
