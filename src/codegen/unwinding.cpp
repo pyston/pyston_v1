@@ -307,7 +307,7 @@ public:
             int code = unw_get_proc_info(&this->cursor, &pip);
             RELEASE_ASSERT(code == 0, "%d", code);
 
-            if (pip.start_ip == (intptr_t)astInterpretFunction) {
+            if (pip.start_ip == (intptr_t)interpreter_instr_addr) {
                 unw_word_t bp;
                 unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
 

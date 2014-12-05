@@ -61,12 +61,11 @@ class ASTInterpreter {
 public:
     typedef llvm::StringMap<Box*> SymMap;
 
-    ASTInterpreter(CompiledFunction* compiled_function, void* frame_addr);
-    ~ASTInterpreter();
+    ASTInterpreter(CompiledFunction* compiled_function);
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
-    Value execute(CFGBlock* block = 0);
+    static Value execute(ASTInterpreter& interpreter, AST* start_at = NULL);
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -117,7 +116,6 @@ private:
     Value visit_jump(AST_Jump* node);
     Value visit_langPrimitive(AST_LangPrimitive* node);
 
-    void* frame_addr;
     CompiledFunction* compiled_func;
     SourceInfo* source_info;
     ScopeInfo* scope_info;
@@ -136,18 +134,13 @@ public:
     const SymMap& getSymbolTable() { return sym_table; }
 };
 
+const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
+
 static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
 static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
                           Box* arg3, Box** args) {
-    // The ASTInterpreter ctor registers this frame so that we can introspect it.
-    // Currently we have to do that even if we are about to immediately reopt
-    // and we won't actually end up interpreting anything.
-    // TODO don't make "astInterpretFunction() == interpreter-is-running"?
-    void* frame_addr = __builtin_frame_address(0);
-    ASTInterpreter interpreter(cf, frame_addr);
-
     if (unlikely(cf->times_called > REOPT_THRESHOLD)) {
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
@@ -161,9 +154,10 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     }
 
     ++cf->times_called;
+    ASTInterpreter interpreter(cf);
 
     interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
-    Value v = interpreter.execute();
+    Value v = ASTInterpreter::execute(interpreter);
 
     return v.o ? v.o : None;
 }
@@ -211,23 +205,16 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
 }
 
 
-ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function, void* frame_addr)
-    : frame_addr(frame_addr), compiled_func(compiled_function), source_info(compiled_function->clfunc->source),
-      scope_info(0), next_block(0), current_block(0), current_inst(0), last_exception(0), passed_closure(0),
-      created_closure(0), generator(0), edgecount(0) {
-
-    s_interpreterMap[frame_addr] = this;
+ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
+    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), next_block(0),
+      current_block(0), current_inst(0), last_exception(0), passed_closure(0), created_closure(0), generator(0),
+      edgecount(0) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
         source_info->cfg = computeCFG(f->source, f->source->body);
 
     scope_info = source_info->getScopeInfo();
-}
-
-ASTInterpreter::~ASTInterpreter() {
-    assert(s_interpreterMap[frame_addr] == this);
-    s_interpreterMap.erase(frame_addr);
 }
 
 void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGenerator* _generator, Box* arg1, Box* arg2,
@@ -260,19 +247,37 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     }
 }
 
-Value ASTInterpreter::execute(CFGBlock* block) {
-    if (!block)
-        block = source_info->cfg->getStartingBlock();
+namespace {
+class RegisterHelper {
+private:
+    void* frame_addr;
+
+public:
+    RegisterHelper(ASTInterpreter* interpreter, void* frame_addr) : frame_addr(frame_addr) {
+        s_interpreterMap[frame_addr] = interpreter;
+    }
+    ~RegisterHelper() {
+        assert(s_interpreterMap.count(frame_addr));
+        s_interpreterMap.erase(frame_addr);
+    }
+};
+}
+
+Value ASTInterpreter::execute(ASTInterpreter& interpreter, AST* start_at) {
+    assert(start_at == NULL);
+
+    void* frame_addr = __builtin_frame_address(0);
+    RegisterHelper frame_registerer(&interpreter, frame_addr);
 
     Value v;
-    next_block = block;
-    while (next_block) {
-        current_block = next_block;
-        next_block = 0;
+    interpreter.next_block = interpreter.source_info->cfg->getStartingBlock();
+    while (interpreter.next_block) {
+        interpreter.current_block = interpreter.next_block;
+        interpreter.next_block = 0;
 
-        for (AST_stmt* s : current_block->body) {
-            current_inst = s;
-            v = visit_stmt(s);
+        for (AST_stmt* s : interpreter.current_block->body) {
+            interpreter.current_inst = s;
+            v = interpreter.visit_stmt(s);
         }
     }
     return v;

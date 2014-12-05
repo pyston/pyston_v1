@@ -21,11 +21,14 @@ namespace gc {
 class GCVisitor;
 }
 
+class AST;
 class Box;
 class BoxedDict;
 class BoxedModule;
 struct CompiledFunction;
 struct LineInfo;
+
+extern const void* interpreter_instr_addr;
 
 Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                           Box** args);
