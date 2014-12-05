@@ -29,7 +29,8 @@ cd gcc-4.8.2-build
 ../gcc-4.8.2/configure --disable-bootstrap --enable-languages=c,c++ --prefix=$HOME/pyston_deps/gcc-4.8.2-install
 # full configuration:
 # ../gcc-4.8.2/configure --prefix=$HOME/pyston_deps/gcc-4.8.2-install
-make -j4
+# Specifying LIBRARY_PATH is a workaround to get gcc to compile on newer Ubuntus with multiarch
+LIBRARY_PATH=/usr/lib32 make -j4
 make check
 make install
 ```
