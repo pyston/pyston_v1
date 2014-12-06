@@ -289,6 +289,51 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, const std:
         return types->getTypeAtBlockStart(name, block);
 }
 
+llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var, llvm::Type* rtn_type,
+                                        llvm::BasicBlock*& cur_block, IREmitter& emitter, bool speculate_undefined,
+                                        std::function<llvm::Value*(IREmitter&)> when_defined,
+                                        std::function<llvm::Value*(IREmitter&)> when_undefined) {
+    if (!is_defined_var)
+        return when_defined(emitter);
+
+    assert(is_defined_var->getType() == BOOL);
+    llvm::Value* is_defined_i1 = i1FromBool(emitter, is_defined_var);
+
+    llvm::BasicBlock* ifdefined_block = emitter.createBasicBlock();
+    ifdefined_block->moveAfter(cur_block);
+    llvm::BasicBlock* join_block = emitter.createBasicBlock();
+    join_block->moveAfter(ifdefined_block);
+    llvm::BasicBlock* undefined_block;
+
+    llvm::Value* val_if_undefined;
+    if (speculate_undefined) {
+        val_if_undefined = when_undefined(emitter);
+        undefined_block = cur_block;
+        emitter.getBuilder()->CreateCondBr(is_defined_i1, ifdefined_block, join_block);
+    } else {
+        undefined_block = emitter.createBasicBlock();
+        undefined_block->moveAfter(cur_block);
+        emitter.getBuilder()->CreateCondBr(is_defined_i1, ifdefined_block, undefined_block);
+
+        cur_block = undefined_block;
+        emitter.getBuilder()->SetInsertPoint(undefined_block);
+        val_if_undefined = when_undefined(emitter);
+        emitter.getBuilder()->CreateBr(join_block);
+    }
+
+    cur_block = ifdefined_block;
+    emitter.getBuilder()->SetInsertPoint(ifdefined_block);
+    llvm::Value* val_if_defined = when_defined(emitter);
+    emitter.getBuilder()->CreateBr(join_block);
+
+    cur_block = join_block;
+    emitter.getBuilder()->SetInsertPoint(join_block);
+    auto phi = emitter.getBuilder()->CreatePHI(rtn_type, 2);
+    phi->addIncoming(val_if_undefined, undefined_block);
+    phi->addIncoming(val_if_defined, ifdefined_block);
+    return phi;
+}
+
 static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_guards, const GuardList& in_guards,
                     TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor, const BlockSet& full_blocks,
                     const BlockSet& partial_blocks) {
@@ -314,12 +359,12 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         llvm_entry_blocks[block] = llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction());
     }
 
-    llvm::BasicBlock* osr_entry_block = NULL; // the function entry block, where we add the type guards
-    llvm::BasicBlock* osr_unbox_block = NULL; // the block after type guards where we up/down-convert things
-    ConcreteSymbolTable* osr_syms = NULL;     // syms after conversion
+    llvm::BasicBlock* osr_entry_block = NULL;     // the function entry block, where we add the type guards
+    llvm::BasicBlock* osr_unbox_block_end = NULL; // the block after type guards where we up/down-convert things
+    ConcreteSymbolTable* osr_syms = NULL;         // syms after conversion
     if (entry_descriptor != NULL) {
-        osr_unbox_block = llvm::BasicBlock::Create(g.context, "osr_unbox", irstate->getLLVMFunction(),
-                                                   &irstate->getLLVMFunction()->getEntryBlock());
+        llvm::BasicBlock* osr_unbox_block = llvm::BasicBlock::Create(g.context, "osr_unbox", irstate->getLLVMFunction(),
+                                                                     &irstate->getLLVMFunction()->getEntryBlock());
         osr_entry_block = llvm::BasicBlock::Create(g.context, "osr_entry", irstate->getLLVMFunction(),
                                                    &irstate->getLLVMFunction()->getEntryBlock());
         assert(&irstate->getLLVMFunction()->getEntryBlock() == osr_entry_block);
@@ -329,8 +374,9 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         // llvm::BranchInst::Create(llvm_entry_blocks[entry_descriptor->backedge->target->idx], entry_block);
 
         llvm::BasicBlock* osr_entry_block_end = osr_entry_block;
+        osr_unbox_block_end = osr_unbox_block;
         std::unique_ptr<IREmitter> entry_emitter(createIREmitter(irstate, osr_entry_block_end));
-        std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate, osr_unbox_block));
+        std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate, osr_unbox_block_end));
 
         CFGBlock* target_block = entry_descriptor->backedge->target;
 
@@ -411,47 +457,34 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 assert(p.first[0] != '!');
 
                 std::string is_defined_name = getIsDefinedName(p.first);
-                llvm::BasicBlock* defined_join = nullptr, * defined_prev = nullptr, * defined_check = nullptr;
+                llvm::Value* prev_guard_val = NULL;
+
+                ConcreteCompilerVariable* is_defined_var = NULL;
                 if (entry_descriptor->args.count(is_defined_name)) {
                     // relying on the fact that we are iterating over the names in order
                     // and the fake names precede the real names:
                     assert(osr_syms->count(is_defined_name));
 
-                    ConcreteCompilerVariable* is_defined_var = (*osr_syms)[is_defined_name];
+                    is_defined_var = (*osr_syms)[is_defined_name];
                     assert(is_defined_var->getType() == BOOL);
-                    llvm::Value* is_defined_i1 = i1FromBool(*entry_emitter, is_defined_var);
-
-                    defined_check = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-                    defined_join = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-
-                    llvm::BranchInst* br
-                        = entry_emitter->getBuilder()->CreateCondBr(is_defined_i1, defined_check, defined_join);
-                    defined_prev = osr_entry_block_end;
-
-                    osr_entry_block_end = defined_check;
-                    entry_emitter->getBuilder()->SetInsertPoint(defined_check);
                 }
 
-                llvm::Value* type_check = ConcreteCompilerVariable(p.second, from_arg, true)
-                                              .makeClassCheck(*entry_emitter, speculated_class);
-                if (guard_val) {
-                    guard_val = entry_emitter->getBuilder()->CreateAnd(guard_val, type_check);
-                } else {
-                    guard_val = type_check;
-                }
-                // entry_emitter->getBuilder()->CreateCall(g.funcs.my_assert, type_check);
-
-                if (defined_join) {
-                    entry_emitter->getBuilder()->CreateBr(defined_join);
-
-                    osr_entry_block_end = defined_join;
-                    entry_emitter->getBuilder()->SetInsertPoint(defined_join);
-
-                    auto guard_phi = entry_emitter->getBuilder()->CreatePHI(g.i1, 2);
-                    guard_phi->addIncoming(getConstantInt(0, g.i1), defined_prev);
-                    guard_phi->addIncoming(guard_val, defined_check);
-                    guard_val = guard_phi;
-                }
+                guard_val = handlePotentiallyUndefined(
+                    is_defined_var, g.i1, osr_entry_block_end, *entry_emitter, true,
+                    [speculated_class, guard_val, &p, from_arg](IREmitter& emitter) {
+                        llvm::Value* type_check = ConcreteCompilerVariable(p.second, from_arg, true)
+                                                      .makeClassCheck(emitter, speculated_class);
+                        // printf("Making osr entry guard to make sure that %s is a %s (given as a
+                        // %s)\n", p.first.c_str(),
+                        // getNameOfClass(speculated_class)->c_str(),
+                        // p.second->debugName().c_str());
+                        if (guard_val) {
+                            return emitter.getBuilder()->CreateAnd(guard_val, type_check);
+                        } else {
+                            return type_check;
+                        }
+                    },
+                    [guard_val](IREmitter& emitter) { return getConstantInt(0, g.i1); });
 
                 if (speculated_class == int_cls) {
                     v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
@@ -837,7 +870,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 assert(v->isGrabbed());
 
                 ASSERT(it->second.first == v->getType(), "");
-                llvm_phi->addIncoming(v->getValue(), osr_unbox_block);
+                llvm_phi->addIncoming(v->getValue(), osr_unbox_block_end);
             }
 
             std::string is_defined_name = getIsDefinedName(it->first);
@@ -854,86 +887,65 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                     is_defined_var = static_cast<ConcreteCompilerVariable*>(var);
                 }
 
-                llvm::BasicBlock* defined_prev = nullptr, * defined_convert = nullptr, * defined_join = nullptr;
-                if (is_defined_var) {
-                    defined_prev = offramps[i];
+                CompilerVariable* unconverted = NULL;
+                llvm::Value* val = handlePotentiallyUndefined(
+                    is_defined_var, it->second.first->llvmType(), offramps[i], *emitter, true,
+                    [=, &unconverted](IREmitter& emitter) {
+                        unconverted = guard->symbol_table[it->first];
+                        ConcreteCompilerVariable* v;
+                        if (unconverted->canConvertTo(it->second.first)) {
+                            v = unconverted->makeConverted(emitter, it->second.first);
+                            assert(v);
+                            assert(v->isGrabbed());
+                        } else {
+                            // This path is for handling the case that we did no type analysis in the previous tier,
+                            // but in this tier we know that even in the deopt branch with no speculations, that
+                            // the type is more refined than what we got from the previous tier.
+                            //
+                            // We're going to blindly assume that we're right about what the type should be.
+                            assert(unconverted->getType() == UNKNOWN);
+                            assert(strcmp(bb_type, "deopt") == 0);
 
-                    defined_convert = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
-                    defined_join = llvm::BasicBlock::Create(g.context, "", irstate->getLLVMFunction());
+                            ConcreteCompilerVariable* converted = unconverted->makeConverted(emitter, UNKNOWN);
 
-                    llvm::Value* is_defined_val = i1FromBool(*emitter, is_defined_var);
-                    emitter->getBuilder()->CreateCondBr(is_defined_val, defined_convert, defined_join);
+                            if (it->second.first->llvmType() == g.llvm_value_type_ptr) {
+                                v = new ConcreteCompilerVariable(it->second.first, converted->getValue(), true);
+                            } else if (it->second.first == FLOAT) {
+                                llvm::Value* unboxed
+                                    = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, converted->getValue());
+                                v = new ConcreteCompilerVariable(FLOAT, unboxed, true);
+                            } else if (it->second.first == INT) {
+                                llvm::Value* unboxed
+                                    = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, converted->getValue());
+                                v = new ConcreteCompilerVariable(INT, unboxed, true);
+                            } else {
+                                printf("%s\n", it->second.first->debugName().c_str());
+                                abort();
+                            }
 
-                    offramps[i] = defined_convert;
-                    emitter->getBuilder()->SetInsertPoint(defined_convert);
-                }
+                            converted->decvref(emitter);
 
-                CompilerVariable* unconverted = guard->symbol_table[it->first];
-                ConcreteCompilerVariable* v;
-                if (unconverted->canConvertTo(it->second.first)) {
-                    v = unconverted->makeConverted(*emitter, it->second.first);
-                    assert(v);
-                    assert(v->isGrabbed());
-                } else {
-                    // This path is for handling the case that we did no type analysis in the previous tier,
-                    // but in this tier we know that even in the deopt branch with no speculations, that
-                    // the type is more refined than what we got from the previous tier.
-                    //
-                    // We're going to blindly assume that we're right about what the type should be.
-                    assert(unconverted->getType() == UNKNOWN);
-                    assert(strcmp(bb_type, "deopt") == 0);
-
-                    ConcreteCompilerVariable* converted = unconverted->makeConverted(*emitter, UNKNOWN);
-
-                    if (it->second.first->llvmType() == g.llvm_value_type_ptr) {
-                        v = new ConcreteCompilerVariable(it->second.first, converted->getValue(), true);
-                    } else if (it->second.first == FLOAT) {
-                        llvm::Value* unboxed
-                            = emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, converted->getValue());
-                        v = new ConcreteCompilerVariable(FLOAT, unboxed, true);
-                    } else if (it->second.first == INT) {
-                        llvm::Value* unboxed
-                            = emitter->getBuilder()->CreateCall(g.funcs.unboxInt, converted->getValue());
-                        v = new ConcreteCompilerVariable(INT, unboxed, true);
-                    } else {
-                        printf("%s\n", it->second.first->debugName().c_str());
-                        abort();
-                    }
-
-                    converted->decvref(*emitter);
-
-                    /*
-                    if (speculated_class == int_cls) {
-                        v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
-                        (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(*unbox_emitter);
-                    } else if (speculated_class == float_cls) {
-                        v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
-                        (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(*unbox_emitter);
-                    } else {
-                        assert(phi_type == typeFromClass(speculated_class));
-                        v = from_arg;
-                    }
-                    */
-                }
+                            /*
+                        if (speculated_class == int_cls) {
+                            v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
+                            (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(*unbox_emitter);
+                        } else if (speculated_class == float_cls) {
+                            v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
+                            (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(*unbox_emitter);
+                        } else {
+                            assert(phi_type == typeFromClass(speculated_class));
+                            v = from_arg;
+                        }
+                        */
+                        }
 
 
-                ASSERT(it->second.first == v->getType(), "");
-                assert(it->second.first->llvmType() == v->getValue()->getType());
+                        ASSERT(it->second.first == v->getType(), "");
+                        assert(it->second.first->llvmType() == v->getValue()->getType());
 
-                llvm::Value* val = v->getValue();
-
-                if (defined_prev) {
-                    emitter->getBuilder()->CreateBr(defined_join);
-                    auto prev = offramps[i];
-
-                    offramps[i] = defined_join;
-                    emitter->getBuilder()->SetInsertPoint(defined_join);
-
-                    auto phi = emitter->getBuilder()->CreatePHI(it->second.first->llvmType(), 2);
-                    phi->addIncoming(llvm::UndefValue::get(phi->getType()), defined_prev);
-                    phi->addIncoming(val, prev);
-                    val = phi;
-                }
+                        return v->getValue();
+                    },
+                    [=](IREmitter& emitter) { return llvm::UndefValue::get(it->second.first->llvmType()); });
 
                 phi_args.emplace_back(llvm_phi, val, offramps[i]);
 

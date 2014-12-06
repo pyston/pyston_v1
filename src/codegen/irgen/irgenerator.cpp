@@ -118,6 +118,10 @@ private:
         }
     }
 
+    llvm::BasicBlock* createBasicBlock(const char* name) override {
+        return llvm::BasicBlock::Create(g.context, name, irstate->getLLVMFunction());
+    }
+
     llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
                                   const std::vector<llvm::Value*>& ic_stackmap_args, UnwindInfo unw_info) {
@@ -837,33 +841,15 @@ private:
             if (is_defined_var) {
                 // classdefs have different scoping rules than functions:
                 if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
-                    llvm::BasicBlock* from_local
-                        = llvm::BasicBlock::Create(g.context, "from_local", irstate->getLLVMFunction());
-                    llvm::BasicBlock* from_global
-                        = llvm::BasicBlock::Create(g.context, "from_global", irstate->getLLVMFunction());
-                    llvm::BasicBlock* join = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
+                    llvm::Value* v = handlePotentiallyUndefined(
+                        is_defined_var, g.llvm_value_type_ptr, curblock, emitter, false,
+                        [=](IREmitter& emitter) {
+                            CompilerVariable* local = symbol_table[node->id];
+                            return local->makeConverted(emitter, local->getBoxType())->getValue();
+                        },
+                        [=](IREmitter& emitter) { return _getGlobal(node, unw_info)->getValue(); });
 
-                    emitter.getBuilder()->CreateCondBr(i1FromBool(emitter, is_defined_var), from_local, from_global);
-
-                    emitter.getBuilder()->SetInsertPoint(from_local);
-                    curblock = from_local;
-                    CompilerVariable* local = symbol_table[node->id];
-                    ConcreteCompilerVariable* converted_local = local->makeConverted(emitter, local->getBoxType());
-                    // don't decvref local here, because are manufacturing a new vref
-                    emitter.getBuilder()->CreateBr(join);
-
-                    emitter.getBuilder()->SetInsertPoint(from_global);
-                    curblock = from_global;
-                    ConcreteCompilerVariable* global = _getGlobal(node, unw_info);
-                    emitter.getBuilder()->CreateBr(join);
-
-                    emitter.getBuilder()->SetInsertPoint(join);
-                    curblock = join;
-                    llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2, node->id);
-                    phi->addIncoming(converted_local->getValue(), from_local);
-                    phi->addIncoming(global->getValue(), from_global);
-
-                    return new ConcreteCompilerVariable(UNKNOWN, phi, true);
+                    return new ConcreteCompilerVariable(UNKNOWN, v, true);
                 }
 
                 emitter.createCall(unw_info, g.funcs.assertNameDefined,

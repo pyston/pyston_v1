@@ -68,6 +68,7 @@ public:
     virtual IRBuilder* getBuilder() = 0;
     virtual GCBuilder* getGC() = 0;
     virtual CompiledFunction* currentFunction() = 0;
+    virtual llvm::BasicBlock* createBasicBlock(const char* name = "") = 0;
 
     virtual llvm::Value* getScratch(int num_bytes) = 0;
     virtual void releaseScratch(llvm::Value*) = 0;
@@ -95,6 +96,25 @@ bool isIsDefinedName(const std::string& name);
 
 CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
                             EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
+
+// A common pattern is to branch based off whether a variable is defined but only if it is
+// potentially-undefined.  If it is potentially-undefined, we have to generate control-flow
+// that branches on the is_defined variable and then generate different code on those two paths;
+// if the variable is guaranteed to be defined, we just want to emit the when_defined version.
+//
+// I suppose we could always emit both and let the LLVM optimizer fix it up for us, but for now
+// do it the hard (and hopefully faster) way.
+//
+// - is_defined_var is allowed to be NULL, signifying that the variable is always defined.
+//   Otherwise it should be a BOOL variable that signifies if the variable is defined or not.
+// - speculate_undefined means whether or not we should execute the when_undefined code generator
+//   in the current block (the one that we're in when calling this function); if set to true we will
+//   avoid generating a BB for the undefined case, which is useful if the "codegen" just returns
+//   an existing value or a constant.
+llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var, llvm::Type* rtn_type,
+                                        llvm::BasicBlock*& cur_block, IREmitter& emitter, bool speculate_undefined,
+                                        std::function<llvm::Value*(IREmitter&)> when_defined,
+                                        std::function<llvm::Value*(IREmitter&)> when_undefined);
 
 class TypeRecorder;
 class OpInfo {
