@@ -13,6 +13,7 @@ install:
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - cmake -GNinja $TRAVIS_BUILD_DIR
+  - cd ~/pyston-build && ninja llvm_up
 
 script:
-  - cd ~/pyston-build && ninja llvm_up && ninja -j4
+  - cd ~/pyston-build && ninja -j4 && ninja lint check-format run_raytrace
