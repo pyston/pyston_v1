@@ -15,11 +15,22 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
   message(FATAL_ERROR "CMAKE_BUILD_TYPE must be set to Release or Debug")
 endif()
 
+option(ENABLE_CCACHE "enable caching compiler output" ON)
 option(ENABLE_GIL "threading use GIL" ON)
 option(ENABLE_GRWL "threading use GRWL" OFF)
 option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
 option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
+
+# automatically use ccache if found
+if(ENABLE_CCACHE)
+  find_program(CCACHE ccache)
+  if(CCACHE)
+    message(STATUS "found ccache ${CCACHE}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE})
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ${CCACHE})
+  endif()
+endif()
 
 # initial clang flags (set here so they're used when building llvm)
 set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics" CACHE STRING "Clang specific C and CXX flags")
