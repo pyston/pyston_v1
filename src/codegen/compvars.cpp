@@ -232,9 +232,9 @@ public:
             llvm_args.push_back(ptr);
             llvm_args.push_back(converted->getValue());
 
-            emitter.createIC(pp, (void*)pyston::setattr, llvm_args, info.exc_info);
+            emitter.createIC(pp, (void*)pyston::setattr, llvm_args, info.unw_info);
         } else {
-            emitter.createCall3(info.exc_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
+            emitter.createCall3(info.unw_info, g.funcs.setattr, var->getValue(), ptr, converted->getValue());
         }
         converted->decvref(emitter);
     }
@@ -254,9 +254,9 @@ public:
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(ptr);
 
-            emitter.createIC(pp, (void*)pyston::delattr, llvm_args, info.exc_info);
+            emitter.createIC(pp, (void*)pyston::delattr, llvm_args, info.unw_info);
         } else {
-            emitter.createCall2(info.exc_info, g.funcs.delattr, var->getValue(), ptr);
+            emitter.createCall2(info.unw_info, g.funcs.delattr, var->getValue(), ptr);
         }
     }
 
@@ -299,9 +299,9 @@ public:
             std::vector<llvm::Value*> llvm_args;
             llvm_args.push_back(var->getValue());
 
-            rtn = emitter.createIC(pp, (void*)pyston::unboxedLen, llvm_args, info.exc_info);
+            rtn = emitter.createIC(pp, (void*)pyston::unboxedLen, llvm_args, info.unw_info);
         } else {
-            rtn = emitter.createCall(info.exc_info, g.funcs.unboxedLen, var->getValue());
+            rtn = emitter.createCall(info.unw_info, g.funcs.unboxedLen, var->getValue());
         }
         assert(rtn->getType() == g.i64);
         return new ConcreteCompilerVariable(INT, rtn, true);
@@ -320,10 +320,10 @@ public:
             llvm_args.push_back(var->getValue());
             llvm_args.push_back(converted_slice->getValue());
 
-            llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getitem, llvm_args, info.exc_info);
+            llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getitem, llvm_args, info.unw_info);
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
-            rtn = emitter.createCall2(info.exc_info, g.funcs.getitem, var->getValue(), converted_slice->getValue());
+            rtn = emitter.createCall2(info.unw_info, g.funcs.getitem, var->getValue(), converted_slice->getValue());
         }
 
         converted_slice->decvref(emitter);
@@ -358,10 +358,10 @@ public:
             llvm_args.push_back(converted_rhs->getValue());
             llvm_args.push_back(getConstantInt(op_type, g.i32));
 
-            llvm::Value* uncasted = emitter.createIC(pp, rt_func_addr, llvm_args, info.exc_info);
+            llvm::Value* uncasted = emitter.createIC(pp, rt_func_addr, llvm_args, info.unw_info);
             rtn = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
         } else {
-            rtn = emitter.createCall3(info.exc_info, rt_func, var->getValue(), converted_rhs->getValue(),
+            rtn = emitter.createCall3(info.unw_info, rt_func, var->getValue(), converted_rhs->getValue(),
                                       getConstantInt(op_type, g.i32));
         }
 
@@ -408,10 +408,10 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
         llvm_args.push_back(var->getValue());
         llvm_args.push_back(ptr);
 
-        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.exc_info);
+        llvm::Value* uncasted = emitter.createIC(pp, raw_func, llvm_args, info.unw_info);
         rtn_val = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
     } else {
-        rtn_val = emitter.createCall2(info.exc_info, llvm_func, var->getValue(), ptr);
+        rtn_val = emitter.createCall2(info.unw_info, llvm_func, var->getValue(), ptr);
     }
     return new ConcreteCompilerVariable(UNKNOWN, rtn_val, true);
 }
@@ -503,7 +503,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
 
         ICSetupInfo* pp = createCallsiteIC(info.getTypeRecorder(), args.size());
 
-        llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.exc_info);
+        llvm::Value* uncasted = emitter.createIC(pp, func_addr, llvm_args, info.unw_info);
 
         assert(llvm::cast<llvm::FunctionType>(llvm::cast<llvm::PointerType>(func->getType())->getElementType())
                    ->getReturnType() == g.llvm_value_type_ptr);
@@ -517,7 +517,7 @@ static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, l
         //}
         // printf("%ld %ld\n", llvm_args.size(), args.size());
         // printf("\n");
-        rtn = emitter.createCall(info.exc_info, func, llvm_args);
+        rtn = emitter.createCall(info.unw_info, func, llvm_args);
     }
 
     if (mallocsave) {
@@ -602,10 +602,10 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
         std::vector<llvm::Value*> llvm_args;
         llvm_args.push_back(var->getValue());
 
-        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::nonzero, llvm_args, info.exc_info);
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::nonzero, llvm_args, info.unw_info);
         rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
     } else {
-        rtn_val = emitter.createCall(info.exc_info, g.funcs.nonzero, var->getValue());
+        rtn_val = emitter.createCall(info.unw_info, g.funcs.nonzero, var->getValue());
     }
     return boolFromI1(emitter, rtn_val);
 }
@@ -804,13 +804,13 @@ public:
 
     void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                  CompilerVariable* v) override {
-        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+        llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                   getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
         call.setDoesNotReturn();
     }
 
     void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr) override {
-        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+        llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                   getStringConstantPtr("int\0"), getStringConstantPtr(*attr + '\0'));
         call.setDoesNotReturn();
     }
@@ -838,7 +838,7 @@ public:
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
         llvm::CallSite call
-            = emitter.createCall(info.exc_info, g.funcs.raiseNotIterableError, getStringConstantPtr("int"));
+            = emitter.createCall(info.unw_info, g.funcs.raiseNotIterableError, getStringConstantPtr("int"));
         call.setDoesNotReturn();
         return new ConcreteCompilerVariable(INT, llvm::UndefValue::get(g.i64), true);
     }
@@ -861,13 +861,13 @@ public:
         ConcreteCompilerVariable* converted_right = rhs->makeConverted(emitter, INT);
         llvm::Value* v;
         /*if (op_type == AST_TYPE::Mod) {
-            v = emitter.createCall2(info.exc_info, g.funcs.mod_i64_i64, var->getValue(), converted_right->getValue())
+            v = emitter.createCall2(info.unw_info, g.funcs.mod_i64_i64, var->getValue(), converted_right->getValue())
                     ;
         } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::FloorDiv) {
-            v = emitter.createCall2(info.exc_info, g.funcs.div_i64_i64, var->getValue(), converted_right->getValue())
+            v = emitter.createCall2(info.unw_info, g.funcs.div_i64_i64, var->getValue(), converted_right->getValue())
                     ;
         } else if (op_type == AST_TYPE::Pow) {
-            v = emitter.createCall2(info.exc_info, g.funcs.pow_i64_i64, var->getValue(), converted_right->getValue())
+            v = emitter.createCall2(info.unw_info, g.funcs.pow_i64_i64, var->getValue(), converted_right->getValue())
                     ;
         } else if (exp_type == BinOp || exp_type == AugBinOp) {
             llvm::Instruction::BinaryOps binopcode;
@@ -1022,13 +1022,13 @@ public:
 
     void setattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                  CompilerVariable* v) override {
-        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+        llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                   getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
         call.setDoesNotReturn();
     }
 
     void delattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr) override {
-        llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+        llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                   getStringConstantPtr("float\0"), getStringConstantPtr(*attr + '\0'));
         call.setDoesNotReturn();
     }
@@ -1074,16 +1074,16 @@ public:
         llvm::Value* v;
         bool succeeded = true;
         if (op_type == AST_TYPE::Mod) {
-            v = emitter.createCall2(info.exc_info, g.funcs.mod_float_float, var->getValue(),
+            v = emitter.createCall2(info.unw_info, g.funcs.mod_float_float, var->getValue(),
                                     converted_right->getValue());
         } else if (op_type == AST_TYPE::Div || op_type == AST_TYPE::TrueDiv) {
-            v = emitter.createCall2(info.exc_info, g.funcs.div_float_float, var->getValue(),
+            v = emitter.createCall2(info.unw_info, g.funcs.div_float_float, var->getValue(),
                                     converted_right->getValue());
         } else if (op_type == AST_TYPE::FloorDiv) {
-            v = emitter.createCall2(info.exc_info, g.funcs.floordiv_float_float, var->getValue(),
+            v = emitter.createCall2(info.unw_info, g.funcs.floordiv_float_float, var->getValue(),
                                     converted_right->getValue());
         } else if (op_type == AST_TYPE::Pow) {
-            v = emitter.createCall2(info.exc_info, g.funcs.pow_float_float, var->getValue(),
+            v = emitter.createCall2(info.unw_info, g.funcs.pow_float_float, var->getValue(),
                                     converted_right->getValue());
         } else if (exp_type == BinOp || exp_type == AugBinOp) {
             llvm::Instruction::BinaryOps binopcode;
@@ -1300,7 +1300,7 @@ public:
         if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
-                llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(*getNameOfClass(cls) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
@@ -1349,7 +1349,7 @@ public:
         Box* rtattr = cls->getattr(*attr);
         if (rtattr == NULL) {
             if (raise_on_missing) {
-                llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(*getNameOfClass(cls) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
@@ -1912,7 +1912,7 @@ public:
                     rtn->incvref();
                     return rtn;
                 } else {
-                    llvm::CallSite call = emitter.createCall2(info.exc_info, g.funcs.raiseAttributeErrorStr,
+                    llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                               getStringConstantPtr(debugName() + '\0'),
                                                               getStringConstantPtr("__getitem__\0"));
                     call.setDoesNotReturn();
