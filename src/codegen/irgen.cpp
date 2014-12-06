@@ -484,14 +484,26 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                             return type_check;
                         }
                     },
-                    [guard_val](IREmitter& emitter) { return getConstantInt(0, g.i1); });
+                    [guard_val](IREmitter& emitter) { return guard_val ? guard_val : getConstantInt(1, g.i1); });
 
                 if (speculated_class == int_cls) {
-                    v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
-                    (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(*unbox_emitter);
+                    v = handlePotentiallyUndefined(
+                        is_defined_var, INT->llvmType(), osr_unbox_block_end, *unbox_emitter, true,
+                        [from_arg](IREmitter& emitter) {
+                            auto v = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
+                            (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(emitter);
+                            return v;
+                        },
+                        [](IREmitter& emitter) { return llvm::UndefValue::get(INT->llvmType()); });
                 } else if (speculated_class == float_cls) {
-                    v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
-                    (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(*unbox_emitter);
+                    v = handlePotentiallyUndefined(
+                        is_defined_var, FLOAT->llvmType(), osr_unbox_block_end, *unbox_emitter, true,
+                        [from_arg](IREmitter& emitter) {
+                            auto v = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
+                            (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(emitter);
+                            return v;
+                        },
+                        [](IREmitter& emitter) { return llvm::UndefValue::get(FLOAT->llvmType()); });
                 } else {
                     assert(phi_type == typeFromClass(speculated_class));
                     v = from_arg;
