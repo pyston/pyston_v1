@@ -1,12 +1,16 @@
 language: cpp
 compiler:
   - clang
+  - gcc
 
 install:
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
   - sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
   - sudo apt-get -qq update
-  - sudo apt-get install -yqq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev clang-3.4 libstdc++-4.8-dev texlive-extra-utils
+  - sudo apt-get install -yqq git cmake ninja-build libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils
+  - if [ "$CXX" = "clang++" ]; then sudo apt-get install -qq clang-3.4 libstdc++-4.8-dev; fi
+  - if [ "$CXX" = "g++" ]; then sudo apt-get install -qq g++-4.8; fi
+  - if [ "$CXX" = "g++" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi
   - git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
   - git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
   - git config --global user.email "you@example.com"
@@ -17,3 +21,7 @@ install:
 
 script:
   - cd ~/pyston-build && ninja -j4 && ninja lint check-format run_raytrace
+
+os:
+  - linux
+# - osx
