@@ -1,0 +1,18 @@
+language: cpp
+compiler:
+  - clang
+
+install:
+  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+  - sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
+  - sudo apt-get -qq update
+  - sudo apt-get install -yqq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev clang-3.4 libstdc++-4.8-dev texlive-extra-utils
+  - git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
+  - git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
+  - git config --global user.email "you@example.com"
+  - git config --global user.name "Your Name"
+  - mkdir ~/pyston-build && cd ~/pyston-build
+  - cmake -GNinja $TRAVIS_BUILD_DIR
+
+script:
+  - cd ~/pyston-build && ninja llvm_up && ninja -j4
