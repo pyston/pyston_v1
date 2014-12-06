@@ -25,3 +25,8 @@ script:
 os:
   - linux
 # - osx
+
+notifications:
+  irc:
+    channels:
+      - "chat.freenode.net#pyston"
