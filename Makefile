@@ -473,7 +473,7 @@ ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
 LLVM_CONFIGURE_LINE += --with-intel-jitevents
 endif
 
-$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL)
+$(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL) | $(LLVM_SRC)/_patched
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
 	$(LLVM_CONFIGURE_LINE)
@@ -562,7 +562,6 @@ $(LLVM_SRC)/_patched: $(wildcard ./llvm_patches/*) $(wildcard ./clang_patches/*)
 llvm_up:
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC) $(LLVM_REVISION) ./llvm_patches
 	python $(TOOLS_DIR)/git_svn_gotorev.py $(LLVM_SRC)/tools/clang $(LLVM_REVISION) ./clang_patches
-	$(MAKE) $(LLVM_CONFIGURATION)
 	touch $(LLVM_SRC)/_patched
 
 # end of llvm rules
