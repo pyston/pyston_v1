@@ -65,7 +65,7 @@ public:
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
-    static Value execute(ASTInterpreter& interpreter, AST* start_at = NULL);
+    static Value execute(ASTInterpreter& interpreter, AST_stmt* start_at = NULL);
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -122,15 +122,19 @@ private:
 
     SymMap sym_table;
     CFGBlock* next_block, *current_block;
-    AST* current_inst;
+    AST_stmt* current_inst;
     Box* last_exception;
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
 
 public:
-    LineInfo* getCurrentLineInfo();
-    BoxedModule* getParentModule() { return source_info->parent_module; }
+    AST_stmt* getCurrentStatement() {
+        assert(current_inst);
+        return current_inst;
+    }
+
+    CompiledFunction* getCF() { return compiled_func; }
     const SymMap& getSymbolTable() { return sym_table; }
 };
 
@@ -162,25 +166,26 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
-    assert(interpreter);
-    return interpreter->getCurrentLineInfo();
+Box* astInterpretFrom(CompiledFunction* cf, AST_stmt* start_at, BoxedDict* locals) {
+    assert(locals->d.size() == 0);
+
+    ASTInterpreter interpreter(cf);
+
+    Value v = ASTInterpreter::execute(interpreter, start_at);
+
+    return v.o ? v.o : None;
 }
 
-LineInfo* ASTInterpreter::getCurrentLineInfo() {
-    if (!current_inst)
-        return NULL;
-
-    LineInfo* line_info = new LineInfo(current_inst->lineno, current_inst->col_offset, source_info->parent_module->fn,
-                                       source_info->getName());
-    return line_info;
-}
-
-BoxedModule* getModuleForInterpretedFrame(void* frame_ptr) {
+AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
-    return interpreter->getParentModule();
+    return interpreter->getCurrentStatement();
+}
+
+CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getCF();
 }
 
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
@@ -263,7 +268,7 @@ public:
 };
 }
 
-Value ASTInterpreter::execute(ASTInterpreter& interpreter, AST* start_at) {
+Value ASTInterpreter::execute(ASTInterpreter& interpreter, AST_stmt* start_at) {
     assert(start_at == NULL);
 
     void* frame_addr = __builtin_frame_address(0);

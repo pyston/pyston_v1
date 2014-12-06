@@ -21,10 +21,9 @@ namespace gc {
 class GCVisitor;
 }
 
-class AST;
+class AST_stmt;
 class Box;
 class BoxedDict;
-class BoxedModule;
 struct CompiledFunction;
 struct LineInfo;
 
@@ -32,9 +31,10 @@ extern const void* interpreter_instr_addr;
 
 Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                           Box** args);
+Box* astInterpretFrom(CompiledFunction* cf, AST_stmt* start_at, BoxedDict* locals);
 
-const LineInfo* getLineInfoForInterpretedFrame(void* frame_ptr);
-BoxedModule* getModuleForInterpretedFrame(void* frame_ptr);
+AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
+CompiledFunction* getCFForInterpretedFrame(void* frame_ptr);
 
 void gatherInterpreterRoots(gc::GCVisitor* visitor);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);

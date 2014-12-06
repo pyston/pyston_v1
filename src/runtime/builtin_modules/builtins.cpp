@@ -18,6 +18,7 @@
 
 #include "llvm/Support/FileSystem.h"
 
+#include "codegen/ast_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
 #include "codegen/unwinding.h"
@@ -583,6 +584,13 @@ Box* locals() {
     return getLocals(true /* filter */);
 }
 
+Box* deopt() {
+    auto locals = getLocals(false /* filter */);
+    auto execution_point = getExecutionPoint();
+
+    return astInterpretFrom(execution_point.cf, execution_point.current_stmt, locals);
+}
+
 Box* divmod(Box* lhs, Box* rhs) {
     return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
 }
@@ -808,6 +816,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
     builtins_module->giveAttr("locals", new BoxedFunction(boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false)));
+    builtins_module->giveAttr("deopt", new BoxedFunction(boxRTFunction((void*)deopt, UNKNOWN, 0, 0, false, false)));
 
     builtins_module->giveAttr("iter", new BoxedFunction(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
 

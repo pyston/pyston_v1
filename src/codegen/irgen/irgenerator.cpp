@@ -142,7 +142,7 @@ private:
 
         pp_args.insert(pp_args.end(), ic_stackmap_args.begin(), ic_stackmap_args.end());
 
-        irgenerator->addFrameStackmapArgs(info, pp_args);
+        irgenerator->addFrameStackmapArgs(info, unw_info.current_stmt, pp_args);
 
         llvm::Intrinsic::ID intrinsic_id;
         if (return_type->isIntegerTy() || return_type->isPointerTy()) {
@@ -1336,7 +1336,7 @@ private:
                 CompilerVariable* closure = _getFake(CREATED_CLOSURE_NAME, false);
                 assert(closure);
 
-                closure->setattr(emitter, getEmptyOpInfo(UnwindInfo::none()), &name, val);
+                closure->setattr(emitter, getEmptyOpInfo(unw_info), &name, val);
             }
         }
     }
@@ -2055,7 +2055,7 @@ private:
         endBlock(DEAD);
     }
 
-    void doStmt(AST* node, UnwindInfo unw_info) {
+    void doStmt(AST_stmt* node, UnwindInfo unw_info) {
         // printf("%d stmt: %d\n", node->type, node->lineno);
         if (node->lineno) {
             emitter.getBuilder()->SetCurrentDebugLocation(
@@ -2113,7 +2113,7 @@ private:
             case AST_TYPE::Invoke: {
                 assert(!unw_info.needsInvoke());
                 AST_Invoke* invoke = ast_cast<AST_Invoke>(node);
-                doStmt(invoke->stmt, UnwindInfo(entry_blocks[invoke->exc_dest]));
+                doStmt(invoke->stmt, UnwindInfo(node, entry_blocks[invoke->exc_dest]));
 
                 assert(state == RUNNING || state == DEAD);
                 if (state == RUNNING) {
@@ -2234,8 +2234,14 @@ private:
     }
 
 public:
-    void addFrameStackmapArgs(PatchpointInfo* pp, std::vector<llvm::Value*>& stackmap_args) override {
+    void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,
+                              std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
+
+        assert(INT->llvmType() == g.i64);
+        stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));
+        pp->addFrameVar("!current_stmt", INT);
+
         if (ENABLE_FRAME_INTROSPECTION) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
             // nice for debugging though.
@@ -2406,16 +2412,16 @@ public:
         if (arg_names.args) {
             int i = 0;
             for (; i < arg_names.args->size(); i++) {
-                loadArgument((*arg_names.args)[i], arg_types[i], python_parameters[i], UnwindInfo::none());
+                loadArgument((*arg_names.args)[i], arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
             }
 
             if (arg_names.vararg->size()) {
-                loadArgument(*arg_names.vararg, arg_types[i], python_parameters[i], UnwindInfo::none());
+                loadArgument(*arg_names.vararg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
                 i++;
             }
 
             if (arg_names.kwarg->size()) {
-                loadArgument(*arg_names.kwarg, arg_types[i], python_parameters[i], UnwindInfo::none());
+                loadArgument(*arg_names.kwarg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
                 i++;
             }
 
@@ -2424,12 +2430,11 @@ public:
     }
 
     void run(const CFGBlock* block) override {
-        UnwindInfo unw_info = UnwindInfo::none();
         for (int i = 0; i < block->body.size(); i++) {
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
-            doStmt(block->body[i], unw_info);
+            doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
     }
 

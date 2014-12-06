@@ -21,19 +21,6 @@
 
 namespace pyston {
 
-class LineTable {
-public:
-    std::vector<std::pair<uint64_t, LineInfo> > entries;
-
-    const LineInfo* getLineInfoFor(uint64_t addr) {
-        for (int i = entries.size() - 1; i >= 0; i--) {
-            if (entries[i].first < addr)
-                return &entries[i].second;
-        }
-        abort();
-    }
-};
-
 std::vector<const LineInfo*> getTracebackEntries();
 const LineInfo* getMostRecentLineInfo();
 class BoxedModule;
@@ -42,6 +29,12 @@ BoxedModule* getCurrentModule();
 CompiledFunction* getCFForAddress(uint64_t addr);
 class BoxedDict;
 BoxedDict* getLocals(bool only_user_visible);
+
+struct ExecutionPoint {
+    CompiledFunction* cf;
+    AST_stmt* current_stmt;
+};
+ExecutionPoint getExecutionPoint();
 }
 
 #endif

@@ -167,7 +167,6 @@ struct FunctionSpecialization {
 
 class BoxedClosure;
 class BoxedGenerator;
-class LineTable;
 class ICInfo;
 class LocationMap;
 
@@ -196,9 +195,6 @@ public:
     int64_t times_called;
     ICInvalidator dependent_callsites;
 
-    // Unfortunately, can't make this a std::unique_ptr if we want to forward-declare LineTable:
-    LineTable* line_table;
-
     LocationMap* location_map; // only meaningful if this is a compiled frame
 
     std::vector<ICInfo*> ics;
@@ -207,8 +203,7 @@ public:
                      llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
                      const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), llvm_code(llvm_code), effort(effort), times_called(0), line_table(nullptr),
-          location_map(nullptr) {}
+          code(code), llvm_code(llvm_code), effort(effort), times_called(0), location_map(nullptr) {}
 
     // TODO this will need to be implemented eventually; things to delete:
     // - line_table if it exists

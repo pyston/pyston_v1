@@ -138,18 +138,6 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
     delete stackmap;
 }
 
-static std::unordered_map<std::string, CompiledFunction*> machine_name_to_cf;
-CompiledFunction* cfForMachineFunctionName(const std::string& machine_name) {
-    assert(machine_name.size());
-    auto r = machine_name_to_cf[machine_name];
-    return r;
-}
-
-void registerMachineName(const std::string& machine_name, CompiledFunction* cf) {
-    assert(machine_name_to_cf.count(machine_name) == 0);
-    machine_name_to_cf[machine_name] = cf;
-}
-
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
@@ -208,7 +196,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         cf = new CompiledFunction(0, spec, true, NULL, NULL, effort, 0);
     } else {
         cf = doCompile(source, entry, effort, spec, name);
-        registerMachineName(cf->func->getName(), cf);
         compileIR(cf, effort);
     }
 

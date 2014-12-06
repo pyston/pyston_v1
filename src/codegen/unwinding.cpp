@@ -101,8 +101,6 @@ public:
         std::unique_ptr<llvm::DIContext> Context(llvm::DIContext::getDWARFContext(*Obj.getObjectFile()));
 
         assert(g.cur_cf);
-        assert(!g.cur_cf->line_table);
-        LineTable* line_table = g.cur_cf->line_table = new LineTable();
 
         llvm_error_code ec;
         for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
@@ -141,11 +139,6 @@ public:
                 g.cur_cf->code_start = Addr;
                 g.cur_cf->code_size = Size;
                 cf_registry.registerCF(g.cur_cf);
-
-                for (const auto& p : lines) {
-                    line_table->entries.push_back(std::make_pair(
-                        p.first, LineInfo(p.second.Line, p.second.Column, p.second.FileName, p.second.FunctionName)));
-                }
             }
         }
 
@@ -236,8 +229,9 @@ private:
     unw_context_t ctx;
     unw_cursor_t cursor;
     CompiledFunction* cf;
+    bool cur_is_osr;
 
-    PythonFrameIterator() {}
+    PythonFrameIterator() : cf(NULL), cur_is_osr(false) {}
 
     // not copyable or movable, since 'cursor' holds an internal pointer to 'ctx'
     PythonFrameIterator(const PythonFrameIterator&) = delete;
@@ -249,6 +243,55 @@ public:
     CompiledFunction* getCF() const {
         assert(cf);
         return cf;
+    }
+
+    uint64_t readLocation(const StackMap::Record::Location& loc) {
+        if (loc.type == StackMap::Record::Location::LocationType::Register) {
+            // TODO: need to make sure we deal with patchpoints appropriately
+            return getReg(loc.regnum);
+        } else if (loc.type == StackMap::Record::Location::LocationType::Indirect) {
+            uint64_t reg_val = getReg(loc.regnum);
+            uint64_t addr = reg_val + loc.offset;
+            return *reinterpret_cast<uint64_t*>(addr);
+        } else if (loc.type == StackMap::Record::Location::LocationType::Constant) {
+            return loc.offset;
+        } else if (loc.type == StackMap::Record::Location::LocationType::ConstIndex) {
+            int const_idx = loc.offset;
+            assert(const_idx >= 0);
+            assert(const_idx < cf->location_map->constants.size());
+            return getCF()->location_map->constants[const_idx];
+        } else {
+            printf("%d %d %d %d\n", loc.type, loc.flags, loc.regnum, loc.offset);
+            abort();
+        }
+    }
+
+    AST_stmt* getCurrentStatement() {
+        if (id.type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = getCF();
+            uint64_t ip = getId().ip;
+
+            assert(ip > cf->code_start);
+            unsigned offset = ip - cf->code_start;
+
+            assert(cf->location_map);
+            const LocationMap::LocationTable& table = cf->location_map->names["!current_stmt"];
+            assert(table.locations.size());
+
+            // printf("Looking for something at offset %d (total ip: %lx)\n", offset, ip);
+            for (const LocationMap::LocationTable::LocationEntry& e : table.locations) {
+                // printf("(%d, %d]\n", e.offset, e.offset + e.length);
+                if (e.offset < offset && offset <= e.offset + e.length) {
+                    // printf("Found it\n");
+                    assert(e.locations.size() == 1);
+                    return reinterpret_cast<AST_stmt*>(readLocation(e.locations[0]));
+                }
+            }
+            abort();
+        } else if (id.type == PythonFrameId::INTERPRETED) {
+            return getCurrentStatementForInterpretedFrame((void*)id.bp);
+        }
+        abort();
     }
 
     const PythonFrameId& getId() const { return id; }
@@ -279,6 +322,8 @@ public:
     }
 
     bool incr() {
+        bool was_osr = cur_is_osr;
+
         while (true) {
             int r = unw_step(&this->cursor);
 
@@ -289,14 +334,20 @@ public:
             unw_word_t ip;
             unw_get_reg(&this->cursor, UNW_REG_IP, &ip);
 
-            CompiledFunction* cf = getCFForAddress(ip);
-            this->cf = cf;
+            cf = getCFForAddress(ip);
             if (cf) {
                 this->id.type = PythonFrameId::COMPILED;
                 this->id.ip = ip;
 
                 unw_word_t bp;
                 unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
+
+                cur_is_osr = (bool)cf->entry_descriptor;
+                if (was_osr) {
+                    // Skip the frame we just found if the previous one was its OSR
+                    // TODO this will break if we start collapsing the OSR frames
+                    return incr();
+                }
 
                 return true;
             }
@@ -313,6 +364,15 @@ public:
 
                 this->id.type = PythonFrameId::INTERPRETED;
                 this->id.bp = bp;
+                cf = getCFForInterpretedFrame((void*)bp);
+
+                cur_is_osr = (bool)cf->entry_descriptor;
+                if (was_osr) {
+                    // Skip the frame we just found if the previous one was its OSR
+                    // TODO this will break if we start collapsing the OSR frames
+                    return incr();
+                }
+
                 return true;
             }
 
@@ -368,15 +428,12 @@ static std::unique_ptr<PythonFrameIterator> getTopPythonFrame() {
     return fr;
 }
 
-static const LineInfo* lineInfoForFrame(const PythonFrameIterator& frame_it) {
-    auto& id = frame_it.getId();
-    switch (id.type) {
-        case PythonFrameId::COMPILED:
-            return frame_it.getCF()->line_table->getLineInfoFor(id.ip);
-        case PythonFrameId::INTERPRETED:
-            return getLineInfoForInterpretedFrame((void*)id.bp);
-    }
-    abort();
+static const LineInfo* lineInfoForFrame(PythonFrameIterator& frame_it) {
+    AST_stmt* current_stmt = frame_it.getCurrentStatement();
+    auto* cf = frame_it.getCF();
+    assert(cf);
+    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, cf->clfunc->source->parent_module->fn,
+                        cf->clfunc->source->getName());
 }
 
 std::vector<const LineInfo*> getTracebackEntries() {
@@ -398,24 +455,20 @@ const LineInfo* getMostRecentLineInfo() {
 }
 
 CompiledFunction* getTopCompiledFunction() {
-    // TODO This is a bad way to do this...
-    const LineInfo* last_entry = getMostRecentLineInfo();
-    assert(last_entry->func.size());
-
-    CompiledFunction* cf = cfForMachineFunctionName(last_entry->func);
-    return cf;
+    return getTopPythonFrame()->getCF();
 }
 
 BoxedModule* getCurrentModule() {
     CompiledFunction* compiledFunction = getTopCompiledFunction();
-    if (compiledFunction)
-        return compiledFunction->clfunc->source->parent_module;
-    else {
-        std::unique_ptr<PythonFrameIterator> frame = getTopPythonFrame();
-        auto& id = frame->getId();
-        assert(id.type == PythonFrameId::INTERPRETED);
-        return getModuleForInterpretedFrame((void*)id.bp);
-    }
+    assert(compiledFunction);
+    return compiledFunction->clfunc->source->parent_module;
+}
+
+ExecutionPoint getExecutionPoint() {
+    auto frame = getTopPythonFrame();
+    auto cf = frame->getCF();
+    auto current_stmt = frame->getCurrentStatement();
+    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
 }
 
 BoxedDict* getLocals(bool only_user_visible) {
@@ -442,28 +495,7 @@ BoxedDict* getLocals(bool only_user_visible) {
                         // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
 
                         for (auto& loc : locs) {
-                            uint64_t n;
-                            // printf("%d %d %d %d\n", loc.type, loc.flags, loc.regnum, loc.offset);
-                            if (loc.type == StackMap::Record::Location::LocationType::Register) {
-                                // TODO: need to make sure we deal with patchpoints appropriately
-                                n = frame_info.getReg(loc.regnum);
-                            } else if (loc.type == StackMap::Record::Location::LocationType::Indirect) {
-                                uint64_t reg_val = frame_info.getReg(loc.regnum);
-                                uint64_t addr = reg_val + loc.offset;
-                                n = *reinterpret_cast<uint64_t*>(addr);
-                            } else if (loc.type == StackMap::Record::Location::LocationType::Constant) {
-                                n = loc.offset;
-                            } else if (loc.type == StackMap::Record::Location::LocationType::ConstIndex) {
-                                int const_idx = loc.offset;
-                                assert(const_idx >= 0);
-                                assert(const_idx < cf->location_map->constants.size());
-                                n = cf->location_map->constants[const_idx];
-                            } else {
-                                printf("%d %d %d %d\n", loc.type, loc.flags, loc.regnum, loc.offset);
-                                abort();
-                            }
-
-                            vals.push_back(n);
+                            vals.push_back(frame_info.readLocation(loc));
                         }
 
                         Box* v = e.type->deserializeFromFrame(vals);

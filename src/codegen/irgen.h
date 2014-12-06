@@ -25,18 +25,23 @@
 namespace pyston {
 
 class AST_expr;
+class AST_stmt;
 class GCBuilder;
 class IREmitter;
 
 struct UnwindInfo {
 public:
+    AST_stmt* current_stmt;
     llvm::BasicBlock* exc_dest;
 
     bool needsInvoke() { return exc_dest != NULL; }
 
-    UnwindInfo(llvm::BasicBlock* exc_dest) : exc_dest(exc_dest) {}
+    UnwindInfo(AST_stmt* current_stmt, llvm::BasicBlock* exc_dest) : current_stmt(current_stmt), exc_dest(exc_dest) {}
 
-    static UnwindInfo none() { return UnwindInfo(NULL); }
+    // Risky!  This means that we can't unwind from this location, and should be used in the
+    // rare case that there are language-specific reasons that the statement should not unwind
+    // (ex: loading function arguments into the appropriate scopes).
+    static UnwindInfo cantUnwind() { return UnwindInfo(NULL, NULL); }
 };
 
 // TODO get rid of this
