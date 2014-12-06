@@ -30,3 +30,4 @@ notifications:
   irc:
     channels:
       - "chat.freenode.net#pyston"
+    on_success: [change]
