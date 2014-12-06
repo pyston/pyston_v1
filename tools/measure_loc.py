@@ -41,13 +41,12 @@ use the python_trace_counter instead of python_sampler (you have to modify the s
 """
 
 
-import os
-import os
-import sys
-
 import cPickle
+import os
 import runpy
 import signal
+import sys
+import traceback
 
 class SamplingProfiler(object):
     # Copied + modified from https://github.com/bdarnell/plop/blob/master/plop/collector.py
@@ -124,6 +123,7 @@ def run(sampler, kind):
             runpy.run_path(fn, run_name="__main__")
     except KeyboardInterrupt:
         print "Interrupted!"
+        traceback.print_exc()
 
     times = sampler.stop()
 
@@ -175,7 +175,13 @@ def run(sampler, kind):
 
 python_sampler = SamplingProfiler(signal_handler, get_times, "real", interval=0.00001)
 python_trace_counter = TracingProfiler(trace_count, get_times)
+try:
+    import measure_loc_ext
+    cext_trace_timer = TracingProfiler(measure_loc_ext.trace, lambda: measure_loc_ext.get_times().items())
+except ImportError:
+    print "(extension module not available)"
 
 if __name__ == "__main__":
     run(python_sampler, "count")
     # run(python_trace_counter, "count")
+    # run(cext_trace_timer, "time")
