@@ -117,10 +117,13 @@ def run(sampler, kind):
     sampler.start()
 
     # del sys.modules["__main__"] # do we need this?
-    if fn == '-m':
-        runpy.run_module(module, run_name="__main__")
-    else:
-        runpy.run_path(fn, run_name="__main__")
+    try:
+        if fn == '-m':
+            runpy.run_module(module, run_name="__main__")
+        else:
+            runpy.run_path(fn, run_name="__main__")
+    except KeyboardInterrupt:
+        print "Interrupted!"
 
     times = sampler.stop()
 
