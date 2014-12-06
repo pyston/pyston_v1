@@ -1,7 +1,7 @@
 language: cpp
 compiler:
   - clang
-  - gcc
+# - gcc
 
 install:
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
@@ -20,7 +20,7 @@ install:
   - cd ~/pyston-build && ninja llvm_up
 
 script:
-  - cd ~/pyston-build && ninja lint check-format && ninja -j2 && ninja run_raytrace
+  - cd ~/pyston-build && ninja lint check-format && ninja -j4 && ninja run_raytrace
 
 os:
   - linux
