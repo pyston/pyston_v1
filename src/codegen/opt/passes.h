@@ -16,6 +16,7 @@
 #define PYSTON_CODEGEN_OPT_PASSES_H
 
 namespace llvm {
+class BasicBlockPass;
 class FunctionPass;
 class ImmutablePass;
 }
@@ -25,6 +26,8 @@ llvm::ImmutablePass* createPystonAAPass();
 llvm::FunctionPass* createMallocsNonNullPass();
 llvm::FunctionPass* createConstClassesPass();
 llvm::FunctionPass* createDeadAllocsPass();
+llvm::FunctionPass* createRemoveUnnecessaryBoxingPass();
+llvm::BasicBlockPass* createRemoveDuplicateBoxingPass();
 }
 
 #endif

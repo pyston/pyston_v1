@@ -90,6 +90,11 @@ static void optimizeIR(llvm::Function* f, EffortLevel::EffortLevel effort) {
     fpm.add(new llvm::DataLayoutPass());
 #endif
 
+    if (ENABLE_PYSTON_PASSES) {
+        fpm.add(createRemoveUnnecessaryBoxingPass());
+        fpm.add(createRemoveDuplicateBoxingPass());
+    }
+
     if (ENABLE_INLINING && effort >= EffortLevel::MAXIMAL)
         fpm.add(makeFPInliner(275));
     fpm.add(llvm::createCFGSimplificationPass());

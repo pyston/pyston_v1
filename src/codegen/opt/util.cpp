@@ -14,6 +14,7 @@
 
 #include "codegen/opt/util.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
@@ -39,5 +40,14 @@ bool isAllocCall(const llvm::CallInst* CI) {
         return false;
 
     return isAllocCall(Callee->getName());
+}
+
+void* getCalledFuncAddr(const llvm::CallInst* CI) {
+    if (const llvm::ConstantExpr* CE = llvm::dyn_cast<const llvm::ConstantExpr>(CI->getCalledValue())) {
+        llvm::PointerType* PT = llvm::dyn_cast<llvm::PointerType>(CE->getType());
+        if (CE->isCast() && CE->getOpcode() == llvm::Instruction::IntToPtr && PT)
+            return (void*)llvm::cast<llvm::ConstantInt>(CE->getOperand(0))->getSExtValue();
+    }
+    return 0;
 }
 }

@@ -26,6 +26,7 @@ namespace pyston {
 
 bool isAllocCall(const llvm::StringRef name);
 bool isAllocCall(const llvm::CallInst* CI);
+void* getCalledFuncAddr(const llvm::CallInst* CI);
 }
 
 #endif
