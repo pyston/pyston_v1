@@ -83,6 +83,7 @@ class TracingProfiler(object):
         sys.settrace(self.tracefunc)
 
     def stop(self):
+        assert sys.gettrace() == self.tracefunc, "Problem!  Someone/something removed our tracer.  It's now: %r" % sys.gettrace()
         sys.settrace(None)
         return self.dumper()
 
