@@ -24,8 +24,6 @@
 namespace pyston {
 namespace threading {
 
-pid_t gettid();
-
 template <typename T> class _LockedRegion {
 private:
     T* const mutex;

@@ -30,14 +30,22 @@
 namespace pyston {
 namespace threading {
 
-// Linux specific: TODO should be in a plat/linux/ directory?
-pid_t gettid() {
-    pid_t tid = syscall(SYS_gettid);
-    assert(tid > 0);
-    return tid;
+static std::atomic<pyston_tid_t> tid_counter(0);
+static pthread_key_t tid_key;
+static pthread_once_t key_once = PTHREAD_ONCE_INIT;
+
+static void make_key() {
+    pthread_key_create(&tid_key, NULL);
 }
-int tgkill(int tgid, int tid, int sig) {
-    return syscall(SYS_tgkill, tgid, tid, sig);
+
+void allocate_tid() {
+    pthread_once(&key_once, make_key);
+    pyston_tid_t tid = tid_counter.fetch_add(1);
+    pthread_setspecific(tid_key, (void*)tid);
+}
+
+pyston_tid_t gettid() {
+    return (pyston_tid_t)pthread_getspecific(tid_key);
 }
 
 PthreadFastMutex threading_lock;
@@ -101,7 +109,7 @@ public:
 
     friend void* getStackTop();
 };
-static std::unordered_map<pid_t, ThreadStateInternal*> current_threads;
+static std::unordered_map<pyston_tid_t, ThreadStateInternal*> current_threads;
 
 // TODO could optimize these by keeping a __thread local reference to current_threads[gettid()]
 void* getStackBottom() {
@@ -127,7 +135,7 @@ void popGenerator() {
 static int signals_waiting(0);
 static std::vector<ThreadState> thread_states;
 
-static void pushThreadState(pid_t tid, ucontext_t* context) {
+static void pushThreadState(pthread_t tid, ucontext_t* context) {
 #if STACK_GROWS_DOWN
     void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
     void* stack_end = current_threads[tid]->stack_bottom;
@@ -165,10 +173,9 @@ std::vector<ThreadState> getAllThreadStates() {
     // If they did save their state (as indicated by current_threads[tid]->isValid), then we use that.
     // Otherwise, we send them a signal and use the signal handler to look at their thread state.
 
-    pid_t tgid = getpid();
-    pid_t mytid = gettid();
+    pyston_tid_t mytid = gettid();
     for (auto& pair : current_threads) {
-        pid_t tid = pair.first;
+        pyston_tid_t tid = pair.first;
         ThreadStateInternal* state = pair.second;
 
         if (tid == mytid)
@@ -185,7 +192,7 @@ std::vector<ThreadState> getAllThreadStates() {
             continue;
         }
 
-        tgkill(tgid, tid, SIGUSR2);
+        pthread_kill(state->pthread_id, SIGUSR2);
     }
 
     // TODO shouldn't busy-wait:
@@ -206,9 +213,9 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
 
     ucontext_t* context = static_cast<ucontext_t*>(_context);
 
-    pid_t tid = gettid();
+    pyston_tid_t tid = gettid();
     if (VERBOSITY() >= 2) {
-        printf("in thread_context_dump, tid=%d\n", tid);
+        printf("in thread_context_dump, tid=%lu\n", tid);
         printf("%p %p %p\n", context, &context, context->uc_mcontext.fpregs);
         printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
@@ -223,6 +230,7 @@ struct ThreadStartArgs {
 };
 
 static void* _thread_start(void* _arg) {
+    allocate_tid();
     ThreadStartArgs* arg = static_cast<ThreadStartArgs*>(_arg);
     auto start_func = arg->start_func;
     Box* arg1 = arg->arg1;
@@ -230,7 +238,7 @@ static void* _thread_start(void* _arg) {
     Box* arg3 = arg->arg3;
     delete arg;
 
-    pid_t tid = gettid();
+    pyston_tid_t tid = gettid();
     {
         LOCK_REGION(&threading_lock);
 
@@ -258,7 +266,7 @@ static void* _thread_start(void* _arg) {
         num_starting_threads--;
 
         if (VERBOSITY() >= 2)
-            printf("child initialized; tid=%d\n", gettid());
+            printf("child initialized; tid=%lu\n", gettid());
     }
 
     threading::GLReadRegion _glock;
@@ -271,7 +279,7 @@ static void* _thread_start(void* _arg) {
 
         current_threads.erase(gettid());
         if (VERBOSITY() >= 2)
-            printf("thread tid=%d exited\n", gettid());
+            printf("thread tid=%lu exited\n", gettid());
     }
 
     return rtn;
@@ -339,8 +347,11 @@ static void* find_stack() {
     return NULL; /* not found =^P */
 }
 
+
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
+
+    allocate_tid();
 
     current_threads[gettid()] = new ThreadStateInternal(find_stack(), pthread_self());
 

@@ -16,7 +16,7 @@
 
 #include <algorithm>
 
-#include "core/thread_utils.h"
+#include "core/threading.h"
 
 namespace pyston {
 
@@ -28,7 +28,7 @@ StatCounter::StatCounter(const std::string& name) : id(Stats::getStatId(name)) {
 
 StatPerThreadCounter::StatPerThreadCounter(const std::string& name) {
     char buf[80];
-    snprintf(buf, 80, "%s_t%d", name.c_str(), threading::gettid());
+    snprintf(buf, 80, "%s_t%lu", name.c_str(), threading::gettid());
     id = Stats::getStatId(buf);
 }
 
