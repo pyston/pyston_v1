@@ -34,11 +34,25 @@ double floattime() {
     return (double)t.tv_sec + t.tv_usec*0.000001;
 }
 
+static double time_to_log = 0.0;
+// Run calibrate.py and divide the time accounted to calibrate.py:2 by the loop count (10M)
+#define CALIBRATION_CONSTANT 0.0000001
+
 static PyObject *
 trace(PyObject *self, PyObject *args)
 {
-    if (next_time)
-        *next_time += (floattime() - prev_time);
+    bool log = false;
+    if (next_time) {
+        double f = (floattime() - prev_time);
+        f -= CALIBRATION_CONSTANT;
+        *next_time += f;
+
+        time_to_log -= f;
+        if (time_to_log < 0) {
+            time_to_log = 0.1;
+            log = true;
+        }
+    }
 
     PyObject* _frame;
     char* event;
@@ -51,7 +65,8 @@ trace(PyObject *self, PyObject *args)
 
     PyObject* fn = frame->f_code->co_filename;
     char* fn_str = PyString_AsString(fn);
-    //printf("'%s': %s:%d (%p)\n", event, fn_str, frame->f_lineno, frame->f_back);
+    if (log)
+        printf("'%s': %s:%d (%p)\n", event, fn_str, frame->f_lineno, frame->f_back);
 
     if (strcmp(event, "call") == 0) {
         Position p(fn_str, frame->f_lineno);

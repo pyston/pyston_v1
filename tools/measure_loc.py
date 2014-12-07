@@ -124,6 +124,9 @@ def run(sampler, kind):
     except KeyboardInterrupt:
         print "Interrupted!"
         traceback.print_exc()
+    except:
+        print "ERROR!"
+        traceback.print_exc()
 
     times = sampler.stop()
 
