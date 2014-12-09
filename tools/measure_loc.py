@@ -46,6 +46,7 @@ import os
 import runpy
 import signal
 import sys
+import time
 import traceback
 
 class SamplingProfiler(object):
@@ -74,23 +75,44 @@ class SamplingProfiler(object):
         signal.signal(sig, signal.SIG_DFL)
         return self.dumper()
 
+# Try to prevent / notice if someone else sets a debugger.
+# (Note: removing sys.settrace is not sufficient since one can set
+# frame.f_trace)
+sys_settrace = sys.settrace
+sys.settrace = None
+import bdb
+bdb.Bdb.set_trace = None
+bdb.set_trace = None
+import pdb
+pdb.set_trace = None
+pdb.Pdb.set_trace = None
+
 class TracingProfiler(object):
     def __init__(self, tracefunc, dumper):
         self.tracefunc = tracefunc
         self.dumper = dumper
 
     def start(self):
-        sys.settrace(self.tracefunc)
+        sys_settrace(self.tracefunc)
 
     def stop(self):
         assert sys.gettrace() == self.tracefunc, "Problem!  Someone/something removed our tracer.  It's now: %r" % sys.gettrace()
-        sys.settrace(None)
+        sys_settrace(None)
         return self.dumper()
 
 times = {}
+start_time = time.time()
+SKIP_WARMUP = 0
 def signal_handler(sig, frame):
-    loc = frame.f_code.co_filename, frame.f_lineno
-    times[loc] = times.get(loc, 0) + 1
+    if time.time() >= start_time + SKIP_WARMUP:
+        print "Starting sampling"
+        def real_signal_handler(sig, frame):
+            loc = frame.f_code.co_filename, frame.f_lineno
+            times[loc] = times.get(loc, 0) + 1
+
+        signal.signal(sig, real_signal_handler)
+        real_signal_handler(sig, frame)
+    return
 
 def trace_count(frame, event, arg):
     if event == "line":
@@ -125,10 +147,13 @@ def run(sampler, kind):
     except KeyboardInterrupt:
         print "Interrupted!"
         traceback.print_exc()
+    except SystemExit:
+        pass
     except:
         print "ERROR!"
         traceback.print_exc()
 
+    print "Stopping timer and tallying statistics..."
     times = sampler.stop()
 
     times.sort(key=lambda (l, t): t, reverse=True)
@@ -177,7 +202,7 @@ def run(sampler, kind):
     for i in xrange(len(frac_counts)):
         print "Picked %d lines out of %d to reach %.2f%%" % (frac_counts[i], len(times), frac_fracs[i] / total * 100.0)
 
-python_sampler = SamplingProfiler(signal_handler, get_times, "real", interval=0.00001)
+python_sampler = SamplingProfiler(signal_handler, get_times, "real", interval=0.0001)
 python_trace_counter = TracingProfiler(trace_count, get_times)
 try:
     import measure_loc_ext
@@ -186,6 +211,9 @@ except ImportError:
     print "(extension module not available)"
 
 if __name__ == "__main__":
-    run(python_sampler, "count")
+    if sys.argv[1] == '-t':
+        del sys.argv[1]
+        run(cext_trace_timer, "time")
+    else:
+        run(python_sampler, "count")
     # run(python_trace_counter, "count")
-    # run(cext_trace_timer, "time")

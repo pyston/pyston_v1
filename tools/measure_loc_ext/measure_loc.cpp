@@ -25,6 +25,7 @@ typedef std::pair<const char*, int> Position;
 static std::unordered_map<Position, double> times;
 static double* next_time = NULL;
 static double prev_time;
+static double start_time;
 
 static std::vector<Position> call_stack;
 
@@ -38,12 +39,23 @@ static double time_to_log = 0.0;
 // Run calibrate.py and divide the time accounted to calibrate.py:2 by the loop count (10M)
 #define CALIBRATION_CONSTANT 0.0000001
 
+// Some benchmarks remove their warmup time from their results, so make sure to match that:
+#define WARMUP_TIME 0
+
 static PyObject *
 trace(PyObject *self, PyObject *args)
 {
+    double curtime = floattime();
+#if WARMUP_TIME > 0
+    if (curtime < start_time + WARMUP_TIME) {
+        Py_INCREF(trace_func);
+        return trace_func;
+    }
+#endif
+
     bool log = false;
     if (next_time) {
-        double f = (floattime() - prev_time);
+        double f = (curtime - prev_time);
         f -= CALIBRATION_CONSTANT;
         *next_time += f;
 
@@ -120,6 +132,7 @@ static PyMethodDef MeasureLocMethods[] = {
 PyMODINIT_FUNC
 initmeasure_loc_ext(void)
 {
+    start_time = floattime();
     PyObject *m;
 
     m = Py_InitModule("measure_loc_ext", MeasureLocMethods);
