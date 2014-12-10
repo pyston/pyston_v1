@@ -91,3 +91,13 @@ def f13():
     except Exception, e:
         print repr(e.message)
 f13()
+
+def f14():
+    # Multiple non-bare except clauses:
+    try:
+        1/0
+    except ZeroDivisionError:
+        pass
+    except Exception:
+        pass
+f14()

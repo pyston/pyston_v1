@@ -1813,7 +1813,7 @@ public:
                     AST_expr* handled_type = remapExpr(exc_handler->type);
 
                     AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::ISINSTANCE);
-                    is_caught_here->args.push_back(exc_obj);
+                    is_caught_here->args.push_back(_dup(exc_obj));
                     is_caught_here->args.push_back(handled_type);
                     is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
 
