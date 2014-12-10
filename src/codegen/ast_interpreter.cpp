@@ -136,6 +136,7 @@ public:
 
     CompiledFunction* getCF() { return compiled_func; }
     const SymMap& getSymbolTable() { return sym_table; }
+    void gcVisit(GCVisitor* visitor);
 };
 
 const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
@@ -201,11 +202,22 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     return rtn;
 }
 
+void ASTInterpreter::gcVisit(GCVisitor* visitor) {
+    for (const auto& p2 : getSymbolTable()) {
+        visitor->visitPotential(p2.second);
+    }
+
+    if (passed_closure)
+        visitor->visit(passed_closure);
+    if (created_closure)
+        visitor->visit(created_closure);
+    if (generator)
+        visitor->visit(generator);
+}
+
 void gatherInterpreterRoots(GCVisitor* visitor) {
     for (const auto& p : s_interpreterMap) {
-        for (const auto& p2 : p.second->getSymbolTable()) {
-            visitor->visitPotential(p2.second);
-        }
+        p.second->gcVisit(visitor);
     }
 }
 
@@ -633,11 +645,22 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
     u.d.ptr = &defaults[0];
     u.d.s = defaults.size() - 1;
 
-    ScopeInfo* scope_info_node = source_info->scoping->getScopeInfoForNode(node);
-    bool is_generator = scope_info_node->takesGenerator();
+    bool takes_closure;
+    // Optimization: when compiling a module, it's nice to not have to run analyses into the
+    // entire module's source code.
+    // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
+    // but we're only using it here to figure out if that function takes a closure.
+    // Top level functions never take a closure, so we can skip the analysis.
+    if (source_info->ast->type == AST_TYPE::Module)
+        takes_closure = false;
+    else {
+        takes_closure = source_info->scoping->getScopeInfoForNode(node)->takesClosure();
+    }
+
+    bool is_generator = cl->source->is_generator;
 
     BoxedClosure* closure = 0;
-    if (scope_info_node->takesClosure()) {
+    if (takes_closure) {
         if (scope_info->createsClosure()) {
             closure = created_closure;
         } else {

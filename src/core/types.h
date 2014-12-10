@@ -222,6 +222,7 @@ public:
     CFG* cfg;
     LivenessAnalysis* liveness;
     PhiAnalysis* phis;
+    bool is_generator;
 
     ScopeInfo* getScopeInfo();
 
@@ -245,9 +246,7 @@ public:
 
     const std::string getName();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body)
-        : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), phis(NULL), arg_names(ast),
-          body(body) {}
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;

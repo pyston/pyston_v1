@@ -718,7 +718,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             if (source->getScopeInfo()->takesClosure())
                 names.insert(PASSED_CLOSURE_NAME);
 
-            if (source->getScopeInfo()->takesGenerator())
+            if (source->is_generator)
                 names.insert(PASSED_GENERATOR_NAME);
 
             for (const auto& s : names) {
@@ -1138,7 +1138,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         if (source->getScopeInfo()->takesClosure())
             llvm_arg_types.push_back(g.llvm_closure_type_ptr);
 
-        if (source->getScopeInfo()->takesGenerator())
+        if (source->is_generator)
             llvm_arg_types.push_back(g.llvm_generator_type_ptr);
 
         for (int i = 0; i < nargs; i++) {

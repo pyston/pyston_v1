@@ -448,13 +448,11 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::FunctionDef:
             case AST_TYPE::Lambda: {
                 ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage);
-                scopeInfo->setTakesGenerator(containsYield(node));
                 this->scopes[node] = scopeInfo;
                 break;
             }
             case AST_TYPE::GeneratorExp: {
                 ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage);
-                scopeInfo->setTakesGenerator(true);
                 this->scopes[node] = scopeInfo;
                 break;
             }

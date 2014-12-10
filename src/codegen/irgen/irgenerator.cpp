@@ -502,7 +502,7 @@ private:
                 assert(node->args[0]->type == AST_TYPE::Name);
 
                 RELEASE_ASSERT(irstate->getSourceInfo()->ast->type == AST_TYPE::Module,
-                               "import * not supported in functions");
+                               "import * not supported in functions (yet)");
 
                 CompilerVariable* module = evalExpr(node->args[0], unw_info);
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
@@ -1642,8 +1642,7 @@ private:
             takes_closure = irstate->getScopeInfoForNode(node)->takesClosure();
         }
 
-        // TODO: this lines disables the optimization mentioned above...
-        bool is_generator = irstate->getScopeInfoForNode(node)->takesGenerator();
+        bool is_generator = cl->source->is_generator;
 
         if (takes_closure) {
             if (irstate->getScopeInfo()->createsClosure()) {
@@ -2362,7 +2361,7 @@ public:
             _setFake(CREATED_CLOSURE_NAME, new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true));
         }
 
-        if (scope_info->takesGenerator()) {
+        if (irstate->getSourceInfo()->is_generator) {
             _setFake(PASSED_GENERATOR_NAME, new ConcreteCompilerVariable(GENERATOR, AI, true));
             ++AI;
         }
