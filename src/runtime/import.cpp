@@ -115,7 +115,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     } else {
         path_list = static_cast<BoxedList*>(parent_module->getattr("__path__", NULL));
         if (path_list == NULL || path_list->cls != list_cls) {
-            raiseExcHelper(ImportError, "No module named %s", name.c_str());
+            return NULL;
         }
     }
 
@@ -150,7 +150,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
         return importTestExtension("descr_test");
     }
 
-    raiseExcHelper(ImportError, "No module named %s", name.c_str());
+    return NULL;
 }
 
 static Box* import(const std::string* name, bool return_first) {
@@ -178,6 +178,8 @@ static Box* import(const std::string* name, bool return_first) {
         } else {
             std::string small_name = std::string(*name, l, r - l);
             last_module = importSub(small_name, prefix_name, last_module);
+            if (!last_module)
+                raiseExcHelper(ImportError, "No module named %s", small_name.c_str());
         }
 
         if (l == 0) {
@@ -190,7 +192,46 @@ static Box* import(const std::string* name, bool return_first) {
     return return_first ? first_module : last_module;
 }
 
+// Named the same thing as the CPython method:
+static void ensure_fromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
+    if (module->getattr("__path__") == NULL) {
+        // If it's not a package, then there's no sub-importing to do
+        return;
+    }
+
+    for (Box* _s : fromlist->pyElements()) {
+        assert(_s->cls == str_cls);
+        BoxedString* s = static_cast<BoxedString*>(_s);
+
+        if (s->s[0] == '*') {
+            // If __all__ contains a '*', just skip it:
+            if (recursive)
+                continue;
+
+            Box* all = module->getattr("__all__");
+            if (all) {
+                ensure_fromlist(module, all, module_name, true);
+            }
+            continue;
+        }
+
+        Box* attr = module->getattr(s->s);
+        if (attr != NULL)
+            continue;
+
+        // Just want to import it and add it to the modules list for now:
+        importSub(s->s, module_name + '.' + s->s, module);
+    }
+}
+
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
-    return import(module_name, from_imports == None);
+    Box* module = import(module_name, from_imports == None);
+    assert(module);
+
+    if (from_imports != None) {
+        ensure_fromlist(module, from_imports, *module_name, false);
+    }
+
+    return module;
 }
 }

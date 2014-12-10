@@ -24,3 +24,11 @@ except ImportError, e:
     # We print: "No module named distutils7"
     # print e
     print "(Caught import error)"
+
+
+import test_package
+print hasattr(test_package, 'import_target')
+from test_package import import_target
+print hasattr(test_package, 'import_target')
+import sys
+print sys.modules['test_package.import_target'].__name__

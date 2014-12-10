@@ -27,8 +27,8 @@ except NameError:
 try:
     from import_target_bad_all import *
     assert 0
-except AttributeError:
-    pass
+except AttributeError, e:
+    print e
 
 from import_target_custom_all import *
 print z
