@@ -435,6 +435,19 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExceptHandler;
 };
 
+class AST_Exec : public AST_stmt {
+public:
+    AST_expr* body;
+    AST_expr* globals;
+    AST_expr* locals;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void accept_stmt(StmtVisitor* v);
+
+    AST_Exec() : AST_stmt(AST_TYPE::Exec) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Exec;
+};
 
 class AST_ExtSlice : public AST_expr {
 public:
@@ -1007,6 +1020,7 @@ public:
     virtual bool visit_dictcomp(AST_DictComp* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_ellipsis(AST_Ellipsis* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_exec(AST_Exec* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
@@ -1075,6 +1089,7 @@ public:
     virtual bool visit_dictcomp(AST_DictComp* node) { return false; }
     virtual bool visit_ellipsis(AST_Ellipsis* node) { return false; }
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
+    virtual bool visit_exec(AST_Exec* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
     virtual bool visit_extslice(AST_ExtSlice* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
@@ -1164,6 +1179,7 @@ public:
     virtual void visit_classdef(AST_ClassDef* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_delete(AST_Delete* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_continue(AST_Continue* node) { RELEASE_ASSERT(0, ""); }
+    virtual void visit_exec(AST_Exec* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
@@ -1217,6 +1233,7 @@ public:
     virtual bool visit_dictcomp(AST_DictComp* node);
     virtual bool visit_ellipsis(AST_Ellipsis* node);
     virtual bool visit_excepthandler(AST_ExceptHandler* node);
+    virtual bool visit_exec(AST_Exec* node);
     virtual bool visit_expr(AST_Expr* node);
     virtual bool visit_extslice(AST_ExtSlice* node);
     virtual bool visit_for(AST_For* node);

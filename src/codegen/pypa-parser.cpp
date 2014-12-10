@@ -613,6 +613,17 @@ struct stmt_dispatcher {
         return ptr;
     }
 
+    ResultPtr read(pypa::AstExec& e) {
+        AST_Exec* ptr = new AST_Exec();
+        location(ptr, e);
+        ptr->body = readItem(e.body);
+        if (e.globals)
+            ptr->globals = readItem(e.globals);
+        if (e.locals)
+            ptr->locals = readItem(e.locals);
+        return ptr;
+    }
+
     ResultPtr read(pypa::AstExpressionStatement& e) {
         AST_Expr* ptr = new AST_Expr();
         location(ptr, e);

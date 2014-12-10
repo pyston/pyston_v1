@@ -352,6 +352,18 @@ AST_ExceptHandler* read_excepthandler(BufferedReader* reader) {
     return rtn;
 }
 
+AST_Exec* read_exec(BufferedReader* reader) {
+    AST_Exec* rtn = new AST_Exec();
+
+    rtn->body = readASTExpr(reader);
+    rtn->col_offset = readColOffset(reader);
+    rtn->globals = readASTExpr(reader);
+    rtn->lineno = reader->readULL();
+    rtn->locals = readASTExpr(reader);
+
+    return rtn;
+}
+
 AST_Expr* read_expr(BufferedReader* reader) {
     AST_Expr* rtn = new AST_Expr();
 
@@ -813,6 +825,8 @@ AST_stmt* readASTStmt(BufferedReader* reader) {
             return read_continue(reader);
         case AST_TYPE::Delete:
             return read_delete(reader);
+        case AST_TYPE::Exec:
+            return read_exec(reader);
         case AST_TYPE::Expr:
             return read_expr(reader);
         case AST_TYPE::For:
