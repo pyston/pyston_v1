@@ -774,8 +774,7 @@ $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: pyston$1 ext_pyston
 	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python $(TOOLS_DIR)/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
+	python $(TOOLS_DIR)/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
 	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
