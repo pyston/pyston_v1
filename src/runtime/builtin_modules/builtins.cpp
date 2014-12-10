@@ -368,7 +368,14 @@ Box* hasattr(Box* obj, Box* _str) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* attr = getattrInternal(obj, str->s, NULL);
+    Box* attr;
+    try {
+        attr = getattrInternal(obj, str->s, NULL);
+    } catch (Box* e) {
+        if (isSubclass(e->cls, Exception))
+            return False;
+        throw;
+    }
 
     Box* rtn = attr ? True : False;
     return rtn;
@@ -444,7 +451,7 @@ extern "C" {
 BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *AttributeError, *GeneratorExit, *TypeError,
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
-    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError;
+    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -735,6 +742,8 @@ void setupBuiltins() {
     MemoryError = makeBuiltinException(StandardError, "MemoryError");
     BufferError = makeBuiltinException(StandardError, "BufferError");
     /*NotImplementedError=*/makeBuiltinException(RuntimeError, "NotImplementedError");
+    KeyboardInterrupt = makeBuiltinException(BaseException, "KeyboardInterrupt");
+    SystemExit = makeBuiltinException(BaseException, "SystemExit");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
