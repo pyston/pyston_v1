@@ -85,9 +85,8 @@ Box* superNew(Box* _cls, Box* _type, Box* inst) {
     BoxedClass* ob_type = NULL;
     if (inst != NULL) {
         if (!isSubclass(inst->cls, type)) {
-            // The "inst" object can be a subtype of "type"/
-            RELEASE_ASSERT(isSubclass(inst->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(inst), type),
-                           "unimplemented");
+            RELEASE_ASSERT(!(isSubclass(inst->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(inst), type)),
+                           "super(cls, subcls) is unimplemented");
             raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
         }
 
