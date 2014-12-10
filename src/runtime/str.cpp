@@ -754,6 +754,22 @@ Box* strTitle(BoxedString* self) {
     return boxString(s);
 }
 
+// TODO implement "deletechars".  can also pass deletechars or None for 'table'
+Box* strTranslate(BoxedString* self, BoxedString* table) {
+    RELEASE_ASSERT(self->cls == str_cls, "");
+    RELEASE_ASSERT(table->cls == str_cls, "");
+
+    std::ostringstream oss;
+
+    if (table->s.size() != 256)
+        raiseExcHelper(ValueError, "translation table must be 256 characters long");
+
+    for (unsigned char c : self->s) {
+        oss << table->s[c];
+    }
+    return boxString(oss.str());
+}
+
 Box* strLower(BoxedString* self) {
     assert(self->cls == str_cls);
     return boxString(llvm::StringRef(self->s).lower());
@@ -1054,6 +1070,8 @@ void setupStr() {
 
     str_cls->giveAttr("capitalize", new BoxedFunction(boxRTFunction((void*)strCapitalize, STR, 1)));
     str_cls->giveAttr("title", new BoxedFunction(boxRTFunction((void*)strTitle, STR, 1)));
+
+    str_cls->giveAttr("translate", new BoxedFunction(boxRTFunction((void*)strTranslate, STR, 2)));
 
     str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
 

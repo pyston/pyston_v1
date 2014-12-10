@@ -62,3 +62,9 @@ for i in ["", "a", "ab", "aa"]:
         print i, j, i.startswith(j), j.startswith(i), i.endswith(j), j.endswith(i), i.find(j), j.find(i), i.rfind(j), j.rfind(i)
 
 print "bananananananas".replace("anan", "an")
+
+translation_map = [chr(c) for c in xrange(256)]
+for c in "aeiou":
+    translation_map[ord(c)] = c.upper()
+translation_map = ''.join(translation_map)
+print "hello world".translate(translation_map)
