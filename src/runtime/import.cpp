@@ -64,7 +64,8 @@ static bool pathExists(const std::string& path) {
     return exists;
 }
 
-static BoxedModule* importPackageFromDirectory(const std::string& name, const std::string& path) {
+static BoxedModule* importPackageFromDirectory(const std::string& name, const std::string& full_name,
+                                               const std::string& path) {
     llvm::SmallString<128> joined_path;
 
     llvm::sys::path::append(joined_path, path, name);
@@ -83,10 +84,10 @@ static BoxedModule* importPackageFromDirectory(const std::string& name, const st
         printf("Importing %s from %s\n", name.c_str(), fn.c_str());
 
 
-    return createAndRunModule(name, fn, dn);
+    return createAndRunModule(full_name, fn, dn);
 }
 
-static BoxedModule* importFile(const std::string& name, const std::string& path) {
+static BoxedModule* importFile(const std::string& name, const std::string& full_name, const std::string& path) {
     llvm::SmallString<128> joined_path;
 
     llvm::sys::path::append(joined_path, path, name + ".py");
@@ -101,10 +102,10 @@ static BoxedModule* importFile(const std::string& name, const std::string& path)
     if (VERBOSITY() >= 1)
         printf("Importing %s from %s\n", name.c_str(), fn.c_str());
 
-    return createAndRunModule(name, fn);
+    return createAndRunModule(full_name, fn);
 }
 
-static Box* importSub(const std::string* name, Box* parent_module) {
+static Box* importSub(const std::string& name, const std::string& full_name, Box* parent_module) {
     BoxedList* path_list;
     if (parent_module == NULL) {
         path_list = getSysPath();
@@ -114,7 +115,7 @@ static Box* importSub(const std::string* name, Box* parent_module) {
     } else {
         path_list = static_cast<BoxedList*>(parent_module->getattr("__path__", NULL));
         if (path_list == NULL || path_list->cls != list_cls) {
-            raiseExcHelper(ImportError, "No module named %s", name->c_str());
+            raiseExcHelper(ImportError, "No module named %s", name.c_str());
         }
     }
 
@@ -131,25 +132,25 @@ static Box* importSub(const std::string* name, Box* parent_module) {
 
         BoxedModule* module;
 
-        module = importPackageFromDirectory(*name, dn);
+        module = importPackageFromDirectory(name, full_name, dn);
         if (!module)
-            module = importFile(*name, dn);
+            module = importFile(name, full_name, dn);
 
         if (module) {
             if (parent_module)
-                parent_module->setattr(*name, module, NULL);
+                parent_module->setattr(name, module, NULL);
             return module;
         }
     }
 
-    if (*name == "basic_test") {
+    if (name == "basic_test") {
         return importTestExtension("basic_test");
     }
-    if (*name == "descr_test") {
+    if (name == "descr_test") {
         return importTestExtension("descr_test");
     }
 
-    raiseExcHelper(ImportError, "No module named %s", name->c_str());
+    raiseExcHelper(ImportError, "No module named %s", name.c_str());
 }
 
 static Box* import(const std::string* name, bool return_first) {
@@ -176,7 +177,7 @@ static Box* import(const std::string* name, bool return_first) {
             last_module = sys_modules->d[s];
         } else {
             std::string small_name = std::string(*name, l, r - l);
-            last_module = importSub(&small_name, last_module);
+            last_module = importSub(small_name, prefix_name, last_module);
         }
 
         if (l == 0) {
