@@ -355,7 +355,7 @@ AST_ExceptHandler* read_excepthandler(BufferedReader* reader) {
 AST_Exec* read_exec(BufferedReader* reader) {
     AST_Exec* rtn = new AST_Exec();
 
-    rtn->expr = readASTExpr(reader);
+    rtn->body = readASTExpr(reader);
     rtn->col_offset = readColOffset(reader);
     rtn->globals = readASTExpr(reader);
     rtn->lineno = reader->readULL();

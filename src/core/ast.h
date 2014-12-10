@@ -437,7 +437,7 @@ public:
 
 class AST_Exec : public AST_stmt {
 public:
-    AST_expr* expr;
+    AST_expr* body;
     AST_expr* globals;
     AST_expr* locals;
 

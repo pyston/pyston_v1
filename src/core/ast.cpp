@@ -450,8 +450,8 @@ void AST_Exec::accept(ASTVisitor* v) {
     if (skip)
         return;
 
-    if (expr)
-        expr->accept(v);
+    if (body)
+        body->accept(v);
 }
 
 void AST_Exec::accept_stmt(StmtVisitor* v) {
@@ -1261,7 +1261,7 @@ bool PrintVisitor::visit_excepthandler(AST_ExceptHandler* node) {
 bool PrintVisitor::visit_exec(AST_Exec* node) {
     printf("exec ");
 
-    node->expr->accept(this);
+    node->body->accept(this);
     if (node->globals) {
         printf(" in ");
         node->globals->accept(this);
