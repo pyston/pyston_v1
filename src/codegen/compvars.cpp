@@ -1374,7 +1374,8 @@ public:
             return NULL;
 
         RELEASE_ASSERT(cl->num_args == cl->numReceivedArgs(), "");
-        RELEASE_ASSERT(args.size() + 1 >= cl->num_args - cl->num_defaults && args.size() + 1 <= cl->num_args, "");
+        RELEASE_ASSERT(args.size() + 1 >= cl->num_args - cl->num_defaults && args.size() + 1 <= cl->num_args, "%d",
+                       info.unw_info.current_stmt->lineno);
 
         CompiledFunction* cf = NULL;
         bool found = false;

@@ -754,10 +754,12 @@ Box* strTitle(BoxedString* self) {
     return boxString(s);
 }
 
-// TODO implement "deletechars".  can also pass deletechars or None for 'table'
-Box* strTranslate(BoxedString* self, BoxedString* table) {
+Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_chars) {
     RELEASE_ASSERT(self->cls == str_cls, "");
     RELEASE_ASSERT(table->cls == str_cls, "");
+    RELEASE_ASSERT(delete_chars == NULL || delete_chars->cls == str_cls, "");
+
+    RELEASE_ASSERT(delete_chars == NULL || delete_chars->s.size() == 0, "delete_chars not supported yet");
 
     std::ostringstream oss;
 
@@ -1071,7 +1073,8 @@ void setupStr() {
     str_cls->giveAttr("capitalize", new BoxedFunction(boxRTFunction((void*)strCapitalize, STR, 1)));
     str_cls->giveAttr("title", new BoxedFunction(boxRTFunction((void*)strTitle, STR, 1)));
 
-    str_cls->giveAttr("translate", new BoxedFunction(boxRTFunction((void*)strTranslate, STR, 2)));
+    str_cls->giveAttr("translate",
+                      new BoxedFunction(boxRTFunction((void*)strTranslate, STR, 3, 1, false, false), { NULL }));
 
     str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
 

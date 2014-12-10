@@ -68,3 +68,4 @@ for c in "aeiou":
     translation_map[ord(c)] = c.upper()
 translation_map = ''.join(translation_map)
 print "hello world".translate(translation_map)
+print "hello world".translate(translation_map, "")
