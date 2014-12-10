@@ -48,6 +48,8 @@ public:
     }
 };
 
+static const std::string class_str("__class__");
+
 Box* superGetattribute(Box* _s, Box* _attr) {
     RELEASE_ASSERT(_s->cls == super_cls, "");
     BoxedSuper* s = static_cast<BoxedSuper*>(_s);
@@ -59,7 +61,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
 
     if (!skip) {
         // Looks like __class__ is supposed to be "super", not the class of the the proxied object.
-        skip = (attr->s == "__class__");
+        skip = (attr->s == class_str);
     }
 
     if (!skip) {
@@ -67,35 +69,59 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         Box* r = typeLookup(s->type->base, attr->s, NULL);
 
         if (r) {
-            return processDescriptor(r, s->obj, s->obj_type);
+            return processDescriptor(r, (s->obj == s->obj_type ? None : s->obj), s->obj_type);
         }
     }
 
     RELEASE_ASSERT(0, "should call the equivalent of objectGetattr here");
 }
 
-// TODO I think this functionality is supposed to be in the __init__ function:
-Box* superNew(Box* _cls, Box* _type, Box* inst) {
+Box* superRepr(Box* _s) {
+    RELEASE_ASSERT(_s->cls == super_cls, "");
+    BoxedSuper* s = static_cast<BoxedSuper*>(_s);
+
+    if (s->obj_type) {
+        return boxString("<super: <class '" + (s->type ? *getNameOfClass(s->type) : "NULL") + "'>, <"
+                         + *getNameOfClass(s->obj_type) + " object>>");
+    } else {
+        return boxString("<super: <class '" + (s->type ? *getNameOfClass(s->type) : "NULL") + "'>, <NULL>>");
+    }
+}
+
+
+// Ported from the CPython version:
+BoxedClass* supercheck(BoxedClass* type, Box* obj) {
+    if (isSubclass(obj->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(obj), type))
+        return static_cast<BoxedClass*>(obj);
+
+    if (isSubclass(obj->cls, type)) {
+        return obj->cls;
+    }
+
+    Box* class_attr = obj->getattr(class_str);
+    if (class_attr && isSubclass(class_attr->cls, type_cls) && class_attr != obj->cls) {
+        Py_FatalError("warning: this path never tested"); // blindly copied from CPython
+        return static_cast<BoxedClass*>(class_attr);
+    }
+
+    raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
+}
+
+// TODO This functionality is supposed to be in the __init__ function:
+Box* superNew(Box* _cls, Box* _type, Box* obj) {
     RELEASE_ASSERT(_cls == super_cls, "");
 
     if (!isSubclass(_type->cls, type_cls))
         raiseExcHelper(TypeError, "must be type, not %s", getTypeName(_type)->c_str());
     BoxedClass* type = static_cast<BoxedClass*>(_type);
 
-    BoxedClass* ob_type = NULL;
-    if (inst != NULL) {
-        if (!isSubclass(inst->cls, type)) {
-            RELEASE_ASSERT(!(isSubclass(inst->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(inst), type)),
-                           "super(cls, subcls) is unimplemented");
-            raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
-        }
+    BoxedClass* obj_type = NULL;
+    if (obj == None)
+        obj = NULL;
+    if (obj != NULL)
+        obj_type = supercheck(type, obj);
 
-        ob_type = inst->cls;
-    }
-
-    // TODO the actual behavior for ob_type looks more complex
-
-    return new BoxedSuper(type, inst, ob_type);
+    return new BoxedSuper(type, obj, obj_type);
 }
 
 void setupSuper() {
@@ -104,6 +130,7 @@ void setupSuper() {
     super_cls->giveAttr("__name__", boxStrConstant("super"));
 
     super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
+    super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
 
     super_cls->giveAttr("__new__",
                         new BoxedFunction(boxRTFunction((void*)superNew, UNKNOWN, 3, 1, false, false), { NULL }));
