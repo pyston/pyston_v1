@@ -41,7 +41,8 @@ typedef struct {
     Py_ssize_t allocated;
 } PyListObject;
 #endif
-typedef void PyListObject;
+struct _PyListObject;
+typedef struct _PyListObject PyListObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) list_cls;

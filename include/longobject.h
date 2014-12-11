@@ -13,7 +13,8 @@ extern "C" {
 #if 0
 typedef struct _longobject PyLongObject; /* Revealed in longintrepr.h */
 #endif
-typedef void PyLongObject;
+struct _PyLongObject;
+typedef struct _PyLongObject PyLongObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) long_cls;

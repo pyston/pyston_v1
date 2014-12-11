@@ -29,7 +29,8 @@ typedef struct {
     long ob_ival;
 } PyIntObject;
 #endif
-typedef void PyIntObject;
+struct _PyIntObject;
+typedef struct _PyIntObject PyIntObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) int_cls;

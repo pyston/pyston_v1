@@ -35,4 +35,7 @@
 #define Py_USING_UNICODE 1
 #define Py_UNICODE_SIZE 4
 
+// Added this for some Pyston modifications:
+#define MAX_PYSTRING_SIZE (PY_SSIZE_T_MAX/2 - (1<<20))
+
 #endif /*Py_PYCONFIG_H*/

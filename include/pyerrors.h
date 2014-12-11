@@ -8,6 +8,8 @@ extern "C" {
 
 /* Error objects */
 
+// Pyston change: these are not our object formats
+#if 0
 typedef struct {
     PyObject_HEAD
     PyObject *dict;
@@ -72,6 +74,8 @@ typedef struct {
     PyObject *winerror;
 } PyWindowsErrorObject;
 #endif
+#endif
+// (Pyston TODO: add opaque definitions of those names)
 
 /* Error handling definitions */
 

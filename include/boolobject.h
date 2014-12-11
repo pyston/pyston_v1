@@ -9,7 +9,10 @@ extern "C" {
 #endif
 
 
-typedef PyIntObject PyBoolObject;
+// Pyston change: Try to avoid having to support mixing ints and bools
+// typedef PyIntObject PyBoolObject;
+struct _PyBoolObject;
+typedef struct _PyBoolObject PyBoolObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) bool_cls;

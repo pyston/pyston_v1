@@ -936,6 +936,22 @@ extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" Py_ssize_t PyUnicode_GET_SIZE(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_ssize_t PyUnicode_GET_DATA_SIZE(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" Py_UNICODE* PyUnicode_AS_UNICODE(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" const char* PyUnicode_AS_DATA(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
 BoxedModule* importTestExtension(const std::string& name) {
     std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
     const char* pathname = pathname_name.c_str();

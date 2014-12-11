@@ -39,6 +39,8 @@ struct wrapperbase {
 
 /* Various kinds of descriptor objects */
 
+// Pyston change: these are not our object layouts
+#if 0
 #define PyDescr_COMMON \
     PyObject_HEAD \
     PyTypeObject *d_type; \
@@ -68,11 +70,17 @@ typedef struct {
     struct wrapperbase *d_base;
     void *d_wrapped; /* This can be any function pointer */
 } PyWrapperDescrObject;
+#endif
+// (Pyston TODO: add opaque definitions of those names)
 
+// Pyston change: these are not static objects any more
+#if 0
 PyAPI_DATA(PyTypeObject) PyWrapperDescr_Type;
 PyAPI_DATA(PyTypeObject) PyDictProxy_Type;
 PyAPI_DATA(PyTypeObject) PyGetSetDescr_Type;
 PyAPI_DATA(PyTypeObject) PyMemberDescr_Type;
+#endif
+// (Pyston TODO: add #defines to our names)
 
 PyAPI_FUNC(PyObject *) PyDescr_NewMethod(PyTypeObject *, PyMethodDef *);
 PyAPI_FUNC(PyObject *) PyDescr_NewClassMethod(PyTypeObject *, PyMethodDef *);

@@ -141,7 +141,9 @@ static char table_a2b_base64[] = {
 #define BASE64_PAD '='
 
 /* Max binary chunk size; limited only by available memory */
-#define BASE64_MAXBIN (PY_SSIZE_T_MAX/2 - sizeof(PyStringObject) - 3)
+// Pyston change: remove hardcoded assumptions about way strings are represented
+//#define BASE64_MAXBIN (PY_SSIZE_T_MAX/2 - sizeof(PyStringObject) - 3)
+#define BASE64_MAXBIN (MAX_PYSTRING_SIZE - 3)
 
 static unsigned char table_b2a_base64[] =
 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

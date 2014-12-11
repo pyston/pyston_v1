@@ -34,7 +34,8 @@ typedef struct {
      */
 } PyTupleObject;
 #endif
-//typedef void PyTupleObject;
+struct _PyTupleObject;
+typedef struct _PyTupleObject PyTupleObject;
 
 PyAPI_DATA(PyTypeObject) PyTuple_Type;
 

@@ -20,7 +20,8 @@ typedef struct {
     double ob_fval;
 } PyFloatObject;
 #endif
-typedef void PyFloatObject;
+struct _PyFloatObject;
+typedef struct _PyFloatObject PyFloatObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) float_cls;
@@ -62,7 +63,7 @@ PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double);
    speed. */
 PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyFloat_AS_DOUBLE(op) PyFloat_AsDouble(op)
+#define PyFloat_AS_DOUBLE(op) PyFloat_AsDouble((PyObject*)op)
 //#define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
 
 /* Write repr(v) into the char buffer argument, followed by null byte.  The

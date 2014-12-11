@@ -303,7 +303,6 @@ public:
     BoxedString(const std::string&& s) __attribute__((visibility("default"))) : Box(str_cls), s(std::move(s)) {}
     BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(str_cls), s(s) {}
 };
-static_assert(sizeof(BoxedString) == sizeof(PyStringObject), "");
 
 class BoxedUnicode : public Box {
     // TODO implementation
