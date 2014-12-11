@@ -52,6 +52,7 @@
 #include "tupleobject.h"
 #include "methodobject.h"
 #include "pycapsule.h"
+#include "sliceobject.h"
 #include "iterobject.h"
 #include "descrobject.h"
 #include "warnings.h"
