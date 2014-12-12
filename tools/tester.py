@@ -235,7 +235,7 @@ def run_test(fn, check_stats, run_memcheck):
 
     if check_stats:
         def noninit_count(s):
-            return stats[s] - stats.get("_init_" + s, 0)
+            return stats.get(s, 0) - stats.get("_init_" + s, 0)
 
         for l in statchecks:
             test = eval(l)

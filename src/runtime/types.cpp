@@ -396,7 +396,7 @@ extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
     *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls, *staticmethod_cls,
-    *classmethod_cls;
+    *classmethod_cls, *attrwrapper_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -590,6 +590,20 @@ Box* sliceRepr(BoxedSlice* self) {
     return new BoxedString(std::move(s));
 }
 
+extern "C" bool PySlice_Check(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
+                                  Py_ssize_t* step) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PySlice_GetIndicesEx(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
+                                    Py_ssize_t* step, Py_ssize_t* slicelength) {
+    Py_FatalError("unimplemented");
+}
+
 Box* typeRepr(BoxedClass* self) {
     if (isUserDefined(self)) {
         std::ostringstream os;
@@ -647,7 +661,6 @@ CLFunction* unboxRTFunction(Box* b) {
 // A dictionary-like wrapper around the attributes array.
 // Not sure if this will be enough to satisfy users who expect __dict__
 // or PyModule_GetDict to return real dicts.
-BoxedClass* attrwrapper_cls;
 class AttrWrapper : public Box {
 private:
     Box* b;

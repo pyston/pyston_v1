@@ -451,7 +451,8 @@ extern "C" {
 BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *AttributeError, *GeneratorExit, *TypeError,
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
-    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit;
+    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
+    *SystemError;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -744,6 +745,7 @@ void setupBuiltins() {
     /*NotImplementedError=*/makeBuiltinException(RuntimeError, "NotImplementedError");
     KeyboardInterrupt = makeBuiltinException(BaseException, "KeyboardInterrupt");
     SystemExit = makeBuiltinException(BaseException, "SystemExit");
+    SystemError = makeBuiltinException(StandardError, "SystemError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);

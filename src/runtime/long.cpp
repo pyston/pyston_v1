@@ -68,8 +68,31 @@ extern "C" long PyLong_AsLong(PyObject* vv) {
     return mpz_get_si(l->n);
 }
 
-extern "C" long PyLong_AsLongAndOverflow(PyObject*, int*) {
-    Py_FatalError("unimplemented");
+extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) {
+    // Ported from CPython; original comment:
+    /* This version by Tim Peters */
+
+    *overflow = 0;
+    if (vv == NULL) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    if (PyInt_Check(vv))
+        return PyInt_AsLong(vv);
+
+    if (PyLong_Check(vv)) {
+        BoxedLong* l = static_cast<BoxedLong*>(vv);
+        if (mpz_fits_slong_p(l->n)) {
+            return mpz_get_si(l->n);
+        } else {
+            *overflow = mpz_sgn(l->n);
+            return -1;
+        }
+    }
+
+    // TODO CPython tries to go through tp_as_number
+    Py_FatalError("unsupported case");
 }
 
 extern "C" double PyLong_AsDouble(PyObject* vv) {

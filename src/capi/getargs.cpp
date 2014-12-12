@@ -114,7 +114,17 @@ static int vgetargs1(PyObject* _tuple, const char* fmt, va_list* ap, int flags) 
                         }
 
                         *p = arg;
+                    } else if (fmt && *fmt == '&') {
+                        // Copied from CPython:
+                        typedef int (*converter)(PyObject*, void*);
+                        converter convert = va_arg(*ap, converter);
+                        void* addr = va_arg(*ap, void*);
+                        fmt++;
+                        if (!(*convert)(arg, addr)) {
+                            Py_FatalError("unsupported error case");
+                        }
                     } else {
+                        RELEASE_ASSERT(*fmt != '?', "unsupported");
                         PyObject** p = (PyObject**)va_arg(*ap, PyObject**);
                         *p = arg;
                     }

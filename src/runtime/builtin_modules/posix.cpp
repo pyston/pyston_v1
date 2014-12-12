@@ -29,7 +29,7 @@ BoxedModule* posix_module;
 
 namespace posix {
 
-Box* urandom(Box* _n) {
+static Box* urandom(Box* _n) {
     RELEASE_ASSERT(_n->cls == int_cls, "");
 
     int64_t n = static_cast<BoxedInt*>(_n)->n;
@@ -52,12 +52,18 @@ Box* urandom(Box* _n) {
 
     return r;
 }
+
+static Box* posix_getuid() {
+    return boxInt(getuid());
 }
+
+} // namespace posix
 
 void setupPosix() {
     posix_module = createModule("posix", "__builtin__");
 
     posix_module->giveAttr("urandom", new BoxedFunction(boxRTFunction((void*)posix::urandom, STR, 1)));
+    posix_module->giveAttr("getuid", new BoxedFunction(boxRTFunction((void*)posix::posix_getuid, BOXED_INT, 0)));
 
     posix_module->giveAttr("error", OSError);
 }

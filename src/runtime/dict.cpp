@@ -118,6 +118,61 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
     return pos;
 }
 
+extern "C" PyObject* PyDict_New() {
+    return new BoxedDict();
+}
+
+// We don't assume that dicts passed to PyDict are necessarily dicts, since there are a couple places
+// that we provide dict-like objects instead of proper dicts.
+// The performance should hopefully be comparable to the CPython fast case, since we can use
+// runtimeICs.
+extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
+    ASSERT(mp->cls == dict_cls || mp->cls == attrwrapper_cls, "%s", getTypeName(mp)->c_str());
+
+    assert(mp);
+    Box* b = static_cast<Box*>(mp);
+    Box* key = static_cast<Box*>(_key);
+    Box* item = static_cast<Box*>(_item);
+
+    try {
+        // TODO should demote GIL?
+        setitem(b, key, item);
+    } catch (Box* b) {
+        abort();
+    }
+    return 0;
+}
+
+extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) {
+    Box* key_s;
+    try {
+        key_s = boxStrConstant(key);
+    } catch (Box* b) {
+        abort();
+    }
+
+    return PyDict_SetItem(mp, key_s, item);
+}
+
+extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) {
+    ASSERT(dict->cls == dict_cls || dict->cls == attrwrapper_cls, "%s", getTypeName(dict)->c_str());
+    try {
+        return getitem(dict, key);
+    } catch (Box* b) {
+        abort();
+    }
+}
+
+extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) {
+    Box* key_s;
+    try {
+        key_s = boxStrConstant(key);
+    } catch (Box* b) {
+        abort();
+    }
+    return PyDict_GetItem(dict, key_s);
+}
+
 Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
     // printf("Starting setitem\n");
     Box*& pos = self->d[k];

@@ -100,33 +100,6 @@ extern "C" {
 int Py_Py3kWarningFlag;
 }
 
-extern "C" PyObject* PyDict_New() {
-    return new BoxedDict();
-}
-
-extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
-    Box* b = static_cast<Box*>(mp);
-    Box* key = static_cast<Box*>(_key);
-    Box* item = static_cast<Box*>(_item);
-
-    static std::string setitem_str("__setitem__");
-    Box* r;
-    try {
-        // TODO should demote GIL?
-        r = callattrInternal(b, &setitem_str, CLASS_ONLY, NULL, ArgPassSpec(2), key, item, NULL, NULL, NULL);
-    } catch (Box* b) {
-        fprintf(stderr, "Error: uncaught error would be propagated to C code!\n");
-        Py_FatalError("unimplemented");
-    }
-
-    RELEASE_ASSERT(r, "");
-    return 0;
-}
-
-extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) {
-    return PyDict_SetItem(mp, boxStrConstant(key), item);
-}
-
 BoxedClass* capifunc_cls;
 
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
@@ -497,6 +470,10 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
 }
 
 extern "C" PyObject* PyObject_GetIter(PyObject*) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyObject_Repr(PyObject*) {
     Py_FatalError("unimplemented");
 }
 

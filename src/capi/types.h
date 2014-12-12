@@ -60,7 +60,7 @@ public:
         } else {
             RELEASE_ASSERT(0, "0x%x", self->ml_flags);
         }
-        assert(rtn);
+        RELEASE_ASSERT(rtn, "need to throw an exception");
         return rtn;
     }
 };
