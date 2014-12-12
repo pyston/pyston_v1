@@ -192,6 +192,17 @@ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
     return self->tp_new(subtype, new_args, kwds);
 }
 
+static void add_operators(PyTypeObject* cls) {
+    if (cls->tp_new) {
+        cls->giveAttr("__new__",
+                      new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, cls, "__new__", (PyCFunction)tp_new_wrapper));
+    }
+
+    if (cls->tp_call) {
+        cls->giveAttr("__call__", new BoxedWrapperDescriptor(&call_wrapper, cls));
+    }
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) {
     gc::registerNonheapRootObject(cls);
 
@@ -255,18 +266,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     if (!cls->tp_new && base != object_cls)
         cls->tp_new = base->tp_new;
 
-    if (cls->tp_new) {
-        cls->giveAttr("__new__",
-                      new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, cls, "__new__", (PyCFunction)tp_new_wrapper));
-    }
-
-    if (cls->tp_call) {
-        cls->giveAttr("__call__", new BoxedWrapperDescriptor(&call_wrapper, cls));
-    }
-
     if (!cls->tp_alloc) {
         cls->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
     }
+
+    add_operators(cls);
 
     for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
         cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method, cls));
