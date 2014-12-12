@@ -19,13 +19,19 @@
 
 namespace pyston {
 
+typedef PyObject* (*wrapperfunc)(PyObject* self, PyObject* args, void* wrapped);
+typedef PyObject* (*wrapperfunc_kwds)(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds);
+
 struct wrapper_def {
     const char* name;
     int offset;
+    void* function;      // "generic" handler that gets put in the tp_* slot which proxies to the python version
+    wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
     int flags;
 };
 
 extern BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
+
 class BoxedCApiFunction : public Box {
 private:
     int ml_flags;
@@ -94,13 +100,16 @@ public:
         assert(kwds->cls == dict_cls);
 
         int flags = self->descr->wrapper->flags;
+        wrapperfunc wrapper = self->descr->wrapper->wrapper;
+        assert(self->descr->wrapper->offset > 0);
         char* ptr = (char*)self->descr->type + self->descr->wrapper->offset;
+        void* wrapped = *reinterpret_cast<void**>(ptr);
 
         if (flags & PyWrapperFlag_KEYWORDS) {
-            PyCFunctionWithKeywords f = *(PyCFunctionWithKeywords*)ptr;
-            return f(self->obj, args, kwds);
+            wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
+            return (*wk)(self->obj, args, wrapped, kwds);
         } else {
-            abort();
+            return (*wrapper)(self->obj, args, wrapped);
         }
         abort();
     }

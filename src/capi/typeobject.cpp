@@ -27,6 +27,31 @@ extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
 }
 
+static int check_num_args(PyObject* ob, int n) {
+    if (!PyTuple_CheckExact(ob)) {
+        PyErr_SetString(PyExc_SystemError, "PyArg_UnpackTuple() argument list is not a tuple");
+        return 0;
+    }
+    if (n == PyTuple_GET_SIZE(ob))
+        return 1;
+    PyErr_Format(PyExc_TypeError, "expected %d arguments, got %zd", n, PyTuple_GET_SIZE(ob));
+    return 0;
+}
+
+static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) {
+    ternaryfunc func = (ternaryfunc)wrapped;
+
+    return (*func)(self, args, kwds);
+}
+
+static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
+    unaryfunc func = (unaryfunc)wrapped;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    return (*func)(self);
+}
+
 PyObject* Py_CallPythonNew(PyTypeObject* self, PyObject* args, PyObject* kwds) {
     try {
         Py_FatalError("this function is untested");
@@ -53,6 +78,13 @@ PyObject* Py_CallPythonCall(PyObject* self, PyObject* args, PyObject* kwds) {
     }
 }
 
+PyObject* Py_CallPythonRepr(PyObject* self) {
+    try {
+        Py_FatalError("unimplemented");
+    } catch (Box* e) {
+        abort();
+    }
+}
 
 bool update_slot(BoxedClass* self, const std::string& attr) {
     if (attr == "__new__") {
@@ -64,6 +96,14 @@ bool update_slot(BoxedClass* self, const std::string& attr) {
     if (attr == "__call__") {
         self->tp_call = &Py_CallPythonCall;
         // TODO update subclasses
+
+        return true;
+    }
+
+    if (attr == "__repr__") {
+        self->tp_repr = &Py_CallPythonRepr;
+        // TODO update subclasses
+
         return true;
     }
 
@@ -83,9 +123,19 @@ void fixup_slot_dispatchers(BoxedClass* self) {
     } else if (self->tp_call != Py_CallPythonCall) {
         ASSERT(0, "need to set __call__?");
     }
+
+    if (!self->tp_repr) {
+        self->tp_repr = &PyObject_Repr;
+    } else if (self->tp_repr != Py_CallPythonRepr) {
+        ASSERT(0, "need to set __repr__?");
+    }
 }
 
-wrapper_def call_wrapper = { "__call__", offsetof(PyTypeObject, tp_call), PyWrapperFlag_KEYWORDS };
+
+wrapper_def call_wrapper = { "__call__", offsetof(PyTypeObject, tp_call), (void*)&Py_CallPythonCall,
+                             (wrapperfunc)wrap_call, PyWrapperFlag_KEYWORDS };
+wrapper_def repr_wrapper
+    = { "__repr__", offsetof(PyTypeObject, tp_repr), (void*)&Py_CallPythonRepr, wrap_unaryfunc, 0 };
 
 PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
     RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
@@ -105,6 +155,7 @@ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
     return self->tp_new(subtype, new_args, kwds);
 }
 
+
 static void add_operators(PyTypeObject* cls) {
     if (cls->tp_new) {
         cls->giveAttr("__new__",
@@ -114,10 +165,14 @@ static void add_operators(PyTypeObject* cls) {
     if (cls->tp_call) {
         cls->giveAttr("__call__", new BoxedWrapperDescriptor(&call_wrapper, cls));
     }
+
+    if (cls->tp_repr) {
+        cls->giveAttr("__repr__", new BoxedWrapperDescriptor(&repr_wrapper, cls));
+    }
 }
 
-extern "C" int PyType_IsSubtype(PyTypeObject*, PyTypeObject*) {
-    Py_FatalError("unimplemented");
+extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) {
+    return isSubclass(a, b);
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) {
@@ -128,7 +183,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_getattr == NULL, "");
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
-    RELEASE_ASSERT(cls->tp_repr == NULL, "");
     RELEASE_ASSERT(cls->tp_as_number == NULL, "");
     RELEASE_ASSERT(cls->tp_as_sequence == NULL, "");
     RELEASE_ASSERT(cls->tp_as_mapping == NULL, "");
@@ -140,14 +194,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
 
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
-    // RELEASE_ASSERT(cls->tp_traverse == NULL, "");
-    // RELEASE_ASSERT(cls->tp_clear == NULL, "");
 
     RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");
-    RELEASE_ASSERT(cls->tp_dict == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_init == NULL, "");
@@ -162,8 +213,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
 
-// I think it is safe to ignore tp_weaklistoffset for now:
+// I think it is safe to ignore these for for now:
 // RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
+// RELEASE_ASSERT(cls->tp_traverse == NULL, "");
+// RELEASE_ASSERT(cls->tp_clear == NULL, "");
 
 #define INITIALIZE(a) new (&(a)) decltype(a)
     INITIALIZE(cls->attrs);
@@ -173,6 +226,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     BoxedClass* base = cls->base = object_cls;
     if (!cls->cls)
         cls->cls = cls->base->cls;
+
+    assert(cls->tp_dict == NULL);
+    cls->tp_dict = makeAttrWrapper(cls);
 
     assert(cls->tp_name);
     cls->giveAttr("__name__", boxStrConstant(cls->tp_name));
