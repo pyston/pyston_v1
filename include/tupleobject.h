@@ -37,7 +37,9 @@ typedef struct {
 struct _PyTupleObject;
 typedef struct _PyTupleObject PyTupleObject;
 
-PyAPI_DATA(PyTypeObject) PyTuple_Type;
+// Pyston change: this is no longer a static object
+PyAPI_DATA(PyTypeObject*) tuple_cls;
+#define PyTuple_Type (*tuple_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyTuple_Check(PyObject*);
