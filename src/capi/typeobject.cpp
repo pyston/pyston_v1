@@ -97,45 +97,47 @@ static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noe
     return NULL;
 }
 
-PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
-    try {
-        // TODO: runtime ICs?
-        Box* new_attr = typeLookup(self, _new_str, NULL);
-        assert(new_attr);
-        new_attr = processDescriptor(new_attr, None, self);
+static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) {
+    lenfunc func = (lenfunc)wrapped;
+    Py_ssize_t res;
 
-        return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
-    } catch (Box* e) {
-        abort();
-    }
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    return PyInt_FromLong((long)res);
 }
 
-PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
-    try {
-        Py_FatalError("this function is untested");
+static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrapped) {
+    objobjargproc func = (objobjargproc)wrapped;
+    int res;
+    PyObject* key, *value;
 
-        // TODO: runtime ICs?
-        return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
-    } catch (Box* e) {
-        abort();
-    }
+    if (!PyArg_UnpackTuple(args, "", 2, 2, &key, &value))
+        return NULL;
+    res = (*func)(self, key, value);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
-PyObject* slot_tp_repr(PyObject* self) noexcept {
-    try {
-        return repr(self);
-    } catch (Box* e) {
-        abort();
-    }
+static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) {
+    objobjargproc func = (objobjargproc)wrapped;
+    int res;
+    PyObject* key;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    key = PyTuple_GET_ITEM(args, 0);
+    res = (*func)(self, key, NULL);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
-PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
-    try {
-        return getitem(self, boxInt(i));
-    } catch (Box* e) {
-        abort();
-    }
-}
 
 static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) {
     PyObject* res;
@@ -180,6 +182,64 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
     return retval;
 }
 
+
+PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
+    try {
+        // TODO: runtime ICs?
+        Box* new_attr = typeLookup(self, _new_str, NULL);
+        assert(new_attr);
+        new_attr = processDescriptor(new_attr, None, self);
+
+        return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    try {
+        Py_FatalError("this function is untested");
+
+        // TODO: runtime ICs?
+        return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+PyObject* slot_tp_repr(PyObject* self) noexcept {
+    try {
+        return repr(self);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
+    try {
+        return getitem(self, boxInt(i));
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+static Py_ssize_t slot_sq_length(PyObject* self) {
+    static PyObject* len_str;
+    PyObject* res = call_method(self, "__len__", &len_str, "()");
+    Py_ssize_t len;
+
+    if (res == NULL)
+        return -1;
+    len = PyInt_AsSsize_t(res);
+    Py_DECREF(res);
+    if (len < 0) {
+        if (!PyErr_Occurred())
+            PyErr_SetString(PyExc_ValueError, "__len__() should return >= 0");
+        return -1;
+    }
+    return len;
+}
+
 // Copied from CPython:
 #define SLOT0(FUNCNAME, OPSTR)                                                                                         \
     static PyObject* FUNCNAME(PyObject* self) noexcept {                                                               \
@@ -193,7 +253,24 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
         return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
     }
 
+#define slot_mp_length slot_sq_length
+
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
+
+static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) {
+    PyObject* res;
+    static PyObject* delitem_str, *setitem_str;
+
+    if (value == NULL)
+        res = call_method(self, "__delitem__", &delitem_str, "(O)", key);
+    else
+        res = call_method(self, "__setitem__", &setitem_str, "(OO)", key, value);
+    if (res == NULL)
+        return -1;
+    Py_DECREF(res);
+    return 0;
+}
+
 
 typedef wrapper_def slotdef;
 
@@ -266,7 +343,11 @@ static slotdef slotdefs[] = {
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
+    MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
+    MPSLOT("__setitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_objobjargproc,
+           "x.__setitem__(i, y) <==> x[i]=y"),
+    MPSLOT("__delitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_delitem, "x.__delitem__(y) <==> del x[y]"),
 
     // SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     /* Heap types defining __add__/__mul__ have sq_concat/sq_repeat == NULL.
@@ -400,7 +481,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
     RELEASE_ASSERT(cls->tp_as_number == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_mapping == NULL, "");
     RELEASE_ASSERT(cls->tp_hash == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");

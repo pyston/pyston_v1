@@ -4,10 +4,17 @@
 import slots_test
 
 for i in xrange(3):
-    t = slots_test.SlotsTester(i + 5)
+    t = slots_test.SlotsTesterSeq(i + 5)
     print t, repr(t), t(), t[2]
 
-print slots_test.SlotsTester.set_through_tpdict, slots_test.SlotsTester(5).set_through_tpdict
+# print slots_test.SlotsTesterSeq.__doc__
+print slots_test.SlotsTesterSeq.set_through_tpdict, slots_test.SlotsTesterSeq(5).set_through_tpdict
+
+for i in xrange(3):
+    t = slots_test.SlotsTesterMap(i + 5)
+    print len(t), t[2]
+    t[1] = 5
+    del t[2]
 
 class C(object):
     def __repr__(self):
