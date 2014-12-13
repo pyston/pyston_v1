@@ -159,11 +159,7 @@ static void update_one_slot(BoxedClass* self, const slotdef& p) {
     // TODO: CPython version is significantly more sophisticated
     void** ptr = slotptr(self, p.offset);
     if (!ptr) {
-        if (typeLookup(self, p.name, NULL)) {
-            printf("Warning: should probably allocate the tp_as_sequence object\n");
-            // assert(0 && "it is ok for this to be NULL (CPython handles that case) but I don't think it should
-            // happen?");
-        }
+        assert(!typeLookup(self, p.name, NULL) && "I don't think this case should happen? CPython handles it though");
         return;
     }
 

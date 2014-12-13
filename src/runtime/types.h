@@ -173,6 +173,13 @@ class conservative_unordered_map
 
 class BoxedClass : public BoxVar {
 public:
+    typedef void (*gcvisit_func)(GCVisitor*, Box*);
+
+protected:
+    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+               bool is_user_defined);
+
+public:
     PyTypeObject_BODY;
 
     HCAttrs attrs;
@@ -195,7 +202,6 @@ public:
     // Is NULL iff this is object_cls
     BoxedClass* base;
 
-    typedef void (*gcvisit_func)(GCVisitor*, Box*);
     gcvisit_func gc_visit;
 
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
@@ -217,10 +223,19 @@ public:
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
-    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-               bool is_user_defined);
-
     void freeze();
+};
+
+class BoxedHeapClass : public BoxedClass {
+public:
+    PyNumberMethods as_number;
+    PyMappingMethods as_mapping;
+    PySequenceMethods as_sequence;
+    PyBufferProcs as_buffer;
+    PyObject* ht_name, *ht_slots;
+
+    BoxedHeapClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+                   bool is_user_defined);
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
@@ -233,6 +248,13 @@ static_assert(offsetof(pyston::BoxedClass, dependent_icgetattrs) == offsetof(str
 static_assert(offsetof(pyston::BoxedClass, base) == offsetof(struct _typeobject, _base), "");
 static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
 static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
+
+static_assert(offsetof(pyston::BoxedHeapClass, base) == offsetof(PyHeapTypeObject, ht_type._base), "");
+static_assert(offsetof(pyston::BoxedHeapClass, as_number) == offsetof(PyHeapTypeObject, as_number), "");
+static_assert(offsetof(pyston::BoxedHeapClass, as_mapping) == offsetof(PyHeapTypeObject, as_mapping), "");
+static_assert(offsetof(pyston::BoxedHeapClass, as_sequence) == offsetof(PyHeapTypeObject, as_sequence), "");
+static_assert(offsetof(pyston::BoxedHeapClass, as_buffer) == offsetof(PyHeapTypeObject, as_buffer), "");
+static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 
 
 class HiddenClass : public ConservativeGCObject {

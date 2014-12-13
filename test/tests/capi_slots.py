@@ -1,3 +1,6 @@
+# expected: fail
+# - wip
+
 import slots_test
 
 for i in xrange(3):

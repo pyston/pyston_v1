@@ -216,7 +216,7 @@ void setupSet() {
     set_cls->giveAttr("__name__", boxStrConstant("set"));
     frozenset_cls->giveAttr("__name__", boxStrConstant("frozenset"));
 
-    set_iterator_cls = new BoxedClass(type_cls, object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false);
+    set_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));

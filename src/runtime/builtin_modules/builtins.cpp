@@ -497,7 +497,7 @@ Box* exceptionRepr(Box* b) {
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
     BoxedClass* cls
-        = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
+        = new BoxedHeapClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
     cls->giveAttr("__name__", boxStrConstant(name));
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
@@ -521,7 +521,7 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
     try {
         BoxedClass* base = Exception;
         BoxedClass* cls
-            = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
+            = new BoxedHeapClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
 
         char* dot_pos = strchr(name, '.');
         RELEASE_ASSERT(dot_pos, "");
@@ -702,7 +702,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
-    notimplemented_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
+    notimplemented_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
@@ -795,7 +795,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
 
-    enumerate_cls = new BoxedClass(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
+    enumerate_cls
+        = new BoxedHeapClass(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
     enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
     enumerate_cls->giveAttr(
         "__new__",
