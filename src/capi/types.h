@@ -19,7 +19,21 @@
 
 namespace pyston {
 
-extern BoxedClass* capifunc_cls;
+typedef PyObject* (*wrapperfunc)(PyObject* self, PyObject* args, void* wrapped);
+typedef PyObject* (*wrapperfunc_kwds)(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds);
+
+struct wrapper_def {
+    const char* name;
+    int offset;
+    void* function;      // "generic" handler that gets put in the tp_* slot which proxies to the python version
+    wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
+    // exists in CPython: const char* doc
+    int flags;
+    // exists in CPython: PyObject *name_strobj
+};
+
+extern BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;
+
 class BoxedCApiFunction : public Box {
 private:
     int ml_flags;
@@ -64,6 +78,64 @@ public:
         return rtn;
     }
 };
-}
+
+class BoxedWrapperDescriptor : public Box {
+public:
+    const wrapper_def* wrapper;
+    BoxedClass* type;
+    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type)
+        : Box(wrapperdescr_cls), wrapper(wrapper), type(type) {}
+
+    static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+};
+
+class BoxedWrapperObject : public Box {
+public:
+    BoxedWrapperDescriptor* descr;
+    Box* obj;
+
+    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : Box(wrapperobject_cls), descr(descr), obj(obj) {}
+
+    static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
+        assert(self->cls == wrapperobject_cls);
+        assert(args->cls == tuple_cls);
+        assert(kwds->cls == dict_cls);
+
+        int flags = self->descr->wrapper->flags;
+        wrapperfunc wrapper = self->descr->wrapper->wrapper;
+        assert(self->descr->wrapper->offset > 0);
+        char* ptr = (char*)self->descr->type + self->descr->wrapper->offset;
+        void* wrapped = *reinterpret_cast<void**>(ptr);
+
+        if (flags & PyWrapperFlag_KEYWORDS) {
+            wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
+            return (*wk)(self->obj, args, wrapped, kwds);
+        } else {
+            return (*wrapper)(self->obj, args, wrapped);
+        }
+        abort();
+    }
+};
+
+class BoxedMethodDescriptor : public Box {
+public:
+    PyMethodDef* method;
+    BoxedClass* type;
+
+    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : Box(method_cls), method(method), type(type) {}
+
+    static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
+        RELEASE_ASSERT(self->cls == method_cls, "");
+
+        if (inst == None)
+            return self;
+        // CPython apparently returns a "builtin_function_or_method" object
+        return boxInstanceMethod(inst, self);
+    }
+
+    static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);
+};
+
+} // namespace pyston
 
 #endif

@@ -28,57 +28,6 @@
 namespace pyston {
 
 BoxedClass* method_cls;
-class BoxedMethodDescriptor : public Box {
-public:
-    PyMethodDef* method;
-    BoxedClass* type;
-
-    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : Box(method_cls), method(method), type(type) {}
-
-    static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
-        RELEASE_ASSERT(self->cls == method_cls, "");
-
-        if (inst == None)
-            return self;
-        // CPython apparently returns a "builtin_function_or_method" object
-        return boxInstanceMethod(inst, self);
-    }
-
-    static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args) {
-        BoxedDict* kwargs = static_cast<BoxedDict*>(_args[0]);
-
-        assert(self->cls == method_cls);
-        assert(varargs->cls == tuple_cls);
-        assert(kwargs->cls == dict_cls);
-
-        if (!isSubclass(obj->cls, self->type))
-            raiseExcHelper(TypeError, "descriptor '%s' requires a '%s' object but received a '%s'",
-                           self->method->ml_name, getFullNameOfClass(self->type).c_str(), getFullTypeName(obj).c_str());
-
-        threading::GLPromoteRegion _gil_lock;
-
-        int ml_flags = self->method->ml_flags;
-        Box* rtn;
-        if (ml_flags == METH_NOARGS) {
-            assert(varargs->elts.size() == 0);
-            assert(kwargs->d.size() == 0);
-            rtn = (Box*)self->method->ml_meth(obj, NULL);
-        } else if (ml_flags == METH_VARARGS) {
-            assert(kwargs->d.size() == 0);
-            rtn = (Box*)self->method->ml_meth(obj, varargs);
-        } else if (ml_flags == (METH_VARARGS | METH_KEYWORDS)) {
-            rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(obj, varargs, kwargs);
-        } else if (ml_flags == METH_O) {
-            assert(kwargs->d.size() == 0);
-            assert(varargs->elts.size() == 1);
-            rtn = (Box*)self->method->ml_meth(obj, varargs->elts[0]);
-        } else {
-            RELEASE_ASSERT(0, "0x%x", ml_flags);
-        }
-        assert(rtn);
-        return rtn;
-    }
-};
 
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
     extern "C" bool Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
@@ -102,10 +51,6 @@ int Py_Py3kWarningFlag;
 
 BoxedClass* capifunc_cls;
 
-extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
-    v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
-}
-
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
     RELEASE_ASSERT(nitems == 0, "unimplemented");
     RELEASE_ASSERT(cls->tp_itemsize == 0, "unimplemented");
@@ -118,48 +63,6 @@ extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
 }
 
 BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
-struct wrapper_def {
-    const char* name;
-    int offset;
-    int flags;
-};
-
-wrapper_def call_wrapper = { "__call__", offsetof(PyTypeObject, tp_call), PyWrapperFlag_KEYWORDS };
-
-class BoxedWrapperDescriptor : public Box {
-public:
-    const wrapper_def* wrapper;
-    BoxedClass* type;
-    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type)
-        : Box(wrapperdescr_cls), wrapper(wrapper), type(type) {}
-
-    static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
-};
-
-class BoxedWrapperObject : public Box {
-public:
-    BoxedWrapperDescriptor* descr;
-    Box* obj;
-
-    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : Box(wrapperobject_cls), descr(descr), obj(obj) {}
-
-    static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
-        assert(self->cls == wrapperobject_cls);
-        assert(args->cls == tuple_cls);
-        assert(kwds->cls == dict_cls);
-
-        int flags = self->descr->wrapper->flags;
-        char* ptr = (char*)self->descr->type + self->descr->wrapper->offset;
-
-        if (flags & PyWrapperFlag_KEYWORDS) {
-            PyCFunctionWithKeywords f = *(PyCFunctionWithKeywords*)ptr;
-            return f(self->obj, args, kwds);
-        } else {
-            abort();
-        }
-        abort();
-    }
-};
 
 Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == wrapperdescr_cls, "");
@@ -172,128 +75,6 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
                        getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
 
     return new BoxedWrapperObject(self, inst);
-}
-
-PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
-    RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
-
-    // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
-
-    RELEASE_ASSERT(args->cls == tuple_cls, "");
-    RELEASE_ASSERT(kwds->cls == dict_cls, "");
-    RELEASE_ASSERT(args->elts.size() >= 1, "");
-
-    BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
-    RELEASE_ASSERT(isSubclass(subtype->cls, type_cls), "");
-    RELEASE_ASSERT(isSubclass(subtype, self), "");
-
-    BoxedTuple* new_args = new BoxedTuple(BoxedTuple::GCVector(args->elts.begin() + 1, args->elts.end()));
-
-    return self->tp_new(subtype, new_args, kwds);
-}
-
-extern "C" int PyType_Ready(PyTypeObject* cls) {
-    gc::registerNonheapRootObject(cls);
-
-    // unhandled fields:
-    RELEASE_ASSERT(cls->tp_print == NULL, "");
-    RELEASE_ASSERT(cls->tp_getattr == NULL, "");
-    RELEASE_ASSERT(cls->tp_setattr == NULL, "");
-    RELEASE_ASSERT(cls->tp_compare == NULL, "");
-    RELEASE_ASSERT(cls->tp_repr == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_number == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_sequence == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_mapping == NULL, "");
-    RELEASE_ASSERT(cls->tp_hash == NULL, "");
-    RELEASE_ASSERT(cls->tp_str == NULL, "");
-    RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
-    RELEASE_ASSERT(cls->tp_setattro == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
-
-    int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
-    RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
-    // RELEASE_ASSERT(cls->tp_traverse == NULL, "");
-    // RELEASE_ASSERT(cls->tp_clear == NULL, "");
-
-    RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
-    RELEASE_ASSERT(cls->tp_iter == NULL, "");
-    RELEASE_ASSERT(cls->tp_iternext == NULL, "");
-    RELEASE_ASSERT(cls->tp_base == NULL, "");
-    RELEASE_ASSERT(cls->tp_dict == NULL, "");
-    RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
-    RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
-    RELEASE_ASSERT(cls->tp_init == NULL, "");
-    RELEASE_ASSERT(cls->tp_alloc == NULL, "");
-    RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
-    RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
-    RELEASE_ASSERT(cls->tp_base == NULL, "");
-    RELEASE_ASSERT(cls->tp_mro == NULL, "");
-    RELEASE_ASSERT(cls->tp_cache == NULL, "");
-    RELEASE_ASSERT(cls->tp_subclasses == NULL, "");
-    RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
-    RELEASE_ASSERT(cls->tp_del == NULL, "");
-    RELEASE_ASSERT(cls->tp_version_tag == 0, "");
-
-// I think it is safe to ignore tp_weaklistoffset for now:
-// RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
-
-#define INITIALIZE(a) new (&(a)) decltype(a)
-    INITIALIZE(cls->attrs);
-    INITIALIZE(cls->dependent_icgetattrs);
-#undef INITIALIZE
-
-    BoxedClass* base = cls->base = object_cls;
-    if (!cls->cls)
-        cls->cls = cls->base->cls;
-
-    assert(cls->tp_name);
-    cls->giveAttr("__name__", boxStrConstant(cls->tp_name));
-    // tp_name
-    // tp_basicsize, tp_itemsize
-    // tp_doc
-
-    if (!cls->tp_new && base != object_cls)
-        cls->tp_new = base->tp_new;
-
-    if (cls->tp_new) {
-        cls->giveAttr("__new__",
-                      new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, cls, "__new__", (PyCFunction)tp_new_wrapper));
-    }
-
-    if (cls->tp_call) {
-        cls->giveAttr("__call__", new BoxedWrapperDescriptor(&call_wrapper, cls));
-    }
-
-    if (!cls->tp_alloc) {
-        cls->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
-    }
-
-    for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
-        cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method, cls));
-    }
-
-    for (PyMemberDef* member = cls->tp_members; member && member->name; ++member) {
-        cls->giveAttr(member->name, new BoxedMemberDescriptor(member));
-    }
-
-    if (cls->tp_getset) {
-        if (VERBOSITY())
-            printf("warning: ignoring tp_getset for now\n");
-    }
-
-    cls->gc_visit = &conservativeGCHandler;
-
-    // TODO not sure how we can handle extension types that manually
-    // specify a dict...
-    RELEASE_ASSERT(cls->tp_dictoffset == 0, "");
-    // this should get automatically initialized to 0 on this path:
-    assert(cls->attrs_offset == 0);
-
-    return 0;
-}
-
-extern "C" int PyType_IsSubtype(PyTypeObject*, PyTypeObject*) {
-    Py_FatalError("unimplemented");
 }
 
 // copied from CPython's getargs.c:
@@ -473,8 +254,12 @@ extern "C" PyObject* PyObject_GetIter(PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_Repr(PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyObject_Repr(PyObject* obj) {
+    try {
+        return repr(obj);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) {
@@ -550,6 +335,10 @@ extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
 extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) {
     Py_FatalError("unimplemented");
 }
+
+extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) {
+    Py_FatalError("unimplemented");
+};
 
 extern "C" int PySequence_Check(PyObject*) {
     Py_FatalError("unimplemented");

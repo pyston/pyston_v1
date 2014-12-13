@@ -6,5 +6,6 @@ setup(name="test",
         ext_modules=[
             Extension("basic_test", sources = ["basic_test.c"]),
             Extension("descr_test", sources = ["descr_test.c"]),
+            Extension("slots_test", sources = ["slots_test.c"]),
         ],
     )

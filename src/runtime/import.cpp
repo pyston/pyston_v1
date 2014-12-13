@@ -143,12 +143,12 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
         }
     }
 
-    if (name == "basic_test") {
+    if (name == "basic_test")
         return importTestExtension("basic_test");
-    }
-    if (name == "descr_test") {
+    if (name == "descr_test")
         return importTestExtension("descr_test");
-    }
+    if (name == "slots_test")
+        return importTestExtension("slots_test");
 
     return NULL;
 }

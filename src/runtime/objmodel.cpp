@@ -23,6 +23,7 @@
 
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
+#include "capi/typeobject.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
@@ -332,45 +333,11 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     return &elts[0];
 }
 
-PyObject* Py_CallPythonNew(PyTypeObject* self, PyObject* args, PyObject* kwds) {
-    try {
-        Py_FatalError("this function is untested");
-
-        Box* new_attr = typeLookup(self, _new_str, NULL);
-        assert(new_attr);
-        new_attr = processDescriptor(new_attr, None, self);
-        return runtimeCallInternal(new_attr, NULL, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
-    } catch (Box* e) {
-        abort();
-    }
-}
-
-PyObject* Py_CallPythonCall(PyObject* self, PyObject* args, PyObject* kwds) {
-    try {
-        Py_FatalError("this function is untested");
-
-        return runtimeCallInternal(self, NULL, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
-    } catch (Box* e) {
-        abort();
-    }
-}
-
 void BoxedClass::freeze() {
     assert(!is_constant);
     assert(getattr("__name__")); // otherwise debugging will be very hard
 
-    // This will probably share a lot in common with Py_TypeReady:
-    if (!tp_new) {
-        this->tp_new = &Py_CallPythonNew;
-    } else if (tp_new != Py_CallPythonNew) {
-        ASSERT(0, "need to set __new__?");
-    }
-
-    if (!tp_call) {
-        this->tp_call = &Py_CallPythonCall;
-    } else if (tp_call != Py_CallPythonCall) {
-        ASSERT(0, "need to set __call__?");
-    }
+    fixup_slot_dispatchers(this);
 
     is_constant = true;
 }
@@ -1485,19 +1452,9 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         if (attr == "__base__" && self->getattr("__base__"))
             raiseExcHelper(TypeError, "readonly attribute");
 
-        if (attr == "__new__") {
-            self->tp_new = &Py_CallPythonNew;
-            // TODO update subclasses
-
+        bool touched_slot = update_slot(self, attr);
+        if (touched_slot)
             rewrite_args = NULL;
-        }
-
-        if (attr == "__call__") {
-            self->tp_call = &Py_CallPythonCall;
-            // TODO update subclasses
-
-            rewrite_args = NULL;
-        }
     }
 
     Box* _set_ = NULL;
@@ -3332,10 +3289,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
     made->setattr("__name__", name, NULL);
 
-    // TODO this function (typeNew) should probably call PyType_Ready
-
+    // TODO should this function (typeNew) call PyType_Ready?
     made->tp_new = base->tp_new;
     made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
+    fixup_slot_dispatchers(made);
 
     return made;
 }

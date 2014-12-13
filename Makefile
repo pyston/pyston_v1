@@ -928,7 +928,7 @@ test_cpp_ll:
 	less test.ll
 	rm test.ll
 
-TEST_EXT_MODULE_NAMES := basic_test descr_test
+TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 
 .PHONY: ext_pyston
 ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
