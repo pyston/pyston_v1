@@ -24,6 +24,7 @@
 #include "llvm/ADT/StringRef.h"
 
 #include "core/common.h"
+#include "core/types.h"
 
 namespace pyston {
 

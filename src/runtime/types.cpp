@@ -841,6 +841,7 @@ void setupRuntime() {
     attrwrapper_cls = new BoxedHeapClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
+    UNICODE = typeFromClass(unicode_cls);
     BOXED_INT = typeFromClass(int_cls);
     BOXED_FLOAT = typeFromClass(float_cls);
     BOXED_BOOL = typeFromClass(bool_cls);

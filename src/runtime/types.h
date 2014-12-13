@@ -328,13 +328,15 @@ public:
     BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(str_cls), s(s) {}
 };
 
+typedef std::basic_string<Py_UNICODE> unicode_string;
+
 class BoxedUnicode : public Box {
 public:
-    std::string s;
+    unicode_string s;
 
-    BoxedUnicode(const char* s, size_t n) __attribute__((visibility("default"))) : Box(unicode_cls), s(s, n) {}
-    BoxedUnicode(const std::string&& s) __attribute__((visibility("default"))) : Box(unicode_cls), s(std::move(s)) {}
-    BoxedUnicode(const std::string& s) __attribute__((visibility("default"))) : Box(unicode_cls), s(s) {}
+    BoxedUnicode(const Py_UNICODE* s, size_t n) __attribute__((visibility("default"))) : Box(unicode_cls), s(s, n) {}
+    BoxedUnicode(const unicode_string&& s) __attribute__((visibility("default"))) : Box(unicode_cls), s(std::move(s)) {}
+    BoxedUnicode(const unicode_string& s) __attribute__((visibility("default"))) : Box(unicode_cls), s(s) {}
 };
 
 class BoxedInstanceMethod : public Box {

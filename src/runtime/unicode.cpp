@@ -13,6 +13,9 @@
 // limitations under the License.
 
 #include "runtime/types.h"
+#include "unicodeobject.h"
+
+extern "C" PyObject *unicodeescape_string(const Py_UNICODE *, Py_ssize_t, int);
 
 namespace pyston {
 
@@ -364,6 +367,17 @@ extern "C" Py_UNICODE _PyUnicode_ToUppercase(Py_UNICODE ch) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" Box* unicodeUnicode(BoxedString* self) {
+    assert(self->cls == unicode_cls);
+
+    return self;
+}
+
+extern "C" Box* unicodeRepr(BoxedUnicode* self) {
+    assert(self->cls == unicode_cls);
+    return unicodeescape_string(self->s.c_str(), self->s.size(), 1);
+}
+
 // From CPython, unicodeobject.c
 // Used by Py_UNICODE_ISSPACE in unicodeobject.h
 /* Fast detection of the most frequent whitespace characters */
@@ -388,6 +402,9 @@ extern "C" const unsigned char _Py_ascii_whitespace[]
 
 void setupUnicode() {
     unicode_cls->giveAttr("__name__", boxStrConstant("unicode"));
+
+    unicode_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)unicodeRepr, UNICODE, 1)));
+    unicode_cls->giveAttr("__unicode__", new BoxedFunction(boxRTFunction((void*)unicodeUnicode, UNICODE, 1)));
 
     unicode_cls->freeze();
 }

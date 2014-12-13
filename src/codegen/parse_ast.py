@@ -1,4 +1,5 @@
 import _ast
+import codecs
 import struct
 import sys
 from types import NoneType
@@ -154,7 +155,7 @@ def convert(n, f):
         elif isinstance(v, str):
             _print_str(v, f)
         elif isinstance(v, unicode):
-            _print_str(v.encode("utf-8"), f)
+            _print_str(v.encode("utf-32"), f)  # "Wide" build of Python 2.7
         elif isinstance(v, bool):
             f.write(struct.pack("B", v))
         elif isinstance(v, int):
@@ -177,7 +178,7 @@ if __name__ == "__main__":
     import time
     start = time.time()
     fn = sys.argv[1]
-    s = open(fn).read()
+    s = codecs.open(fn, 'r', 'utf-8').read()
     m = compile(s, fn, "exec", _ast.PyCF_ONLY_AST)
 
     convert(m, sys.stdout)

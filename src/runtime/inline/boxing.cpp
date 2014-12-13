@@ -48,12 +48,25 @@ Box* boxString(std::string&& s) {
 }
 
 Box* boxUnicode(const std::string& s) {
-    return new BoxedUnicode(s);
+    // This can be done without iterating over the string if we're a
+    // bit more clever about how the AST_Str node handles unicode
+    // data.
+    const char *past_bom = s.c_str() + 4;
+    size_t wide_len = s.size() / 4 - 1;
+    std::vector<Py_UNICODE> wchars;
+
+    for (int i = 0; i < wide_len; ++i) {
+        wchars.push_back(*((const Py_UNICODE *)past_bom));
+        past_bom += 4;
+    }
+
+    unicode_string unicode(wchars.begin(), wchars.end());
+    return new BoxedUnicode(std::move(unicode));
 }
 
-Box* boxUnicode(std::string&& s) {
-    return new BoxedUnicode(std::move(s));
-}
+// Box* boxUnicode(std::string&& s) {
+//     return new BoxedUnicode(std::move(s));
+// }
 
 extern "C" double unboxFloat(Box* b) {
     ASSERT(b->cls == float_cls, "%s", getTypeName(b)->c_str());
