@@ -322,7 +322,10 @@ extern "C" int PyObject_Not(PyObject* o) {
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
     try {
-        return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
+        if (kw)
+            return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
+        else
+            return runtimeCall(callable_object, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
     } catch (Box* b) {
         Py_FatalError("unimplemented");
     }

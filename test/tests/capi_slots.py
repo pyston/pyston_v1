@@ -14,6 +14,10 @@ class C(object):
         print "__repr__()"
         return "<C object>"
 
+    def __getitem__(self, idx):
+        print "__getitem__", idx
+        return idx - 5
+
 slots_test.call_funcs(C())
 
 # Test to make sure that updating an existing class also updates the tp_* slots:

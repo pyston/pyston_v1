@@ -142,6 +142,30 @@ call_funcs(PyObject* _module, PyObject* args) {
         printf("tp_call doesnt exist\n");
     }
 
+    if (cls->tp_as_mapping) {
+        printf("tp_as_mapping exists\n");
+        if (cls->tp_as_mapping->mp_subscript) {
+            PyObject* rtn = cls->tp_as_mapping->mp_subscript(obj, PyInt_FromLong(1));
+            printf("mp_subscript exists and returned\n");
+            Py_DECREF(rtn);
+        } else {
+            printf("mp_subscript does not exist\n");
+        }
+    } else {
+        printf("tp_as_mapping doesnt exist\n");
+    }
+
+    if (cls->tp_as_sequence) {
+        printf("tp_as_sequence exists\n");
+        if (cls->tp_as_sequence->sq_item) {
+            PyObject* rtn = cls->tp_as_sequence->sq_item(obj, 1);
+            printf("sq_item exists and returned\n");
+            Py_DECREF(rtn);
+        }
+    } else {
+        printf("tp_as_sequence doesnt exist\n");
+    }
+
     Py_DECREF(obj);
 
     Py_RETURN_NONE;

@@ -52,6 +52,16 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
     return (*func)(self);
 }
 
+static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) {
+    binaryfunc func = (binaryfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    return (*func)(self, other);
+}
+
 static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
     Py_ssize_t i;
 
@@ -127,6 +137,64 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     }
 }
 
+static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) {
+    PyObject* res;
+
+    // TODO: CPython uses the attrobj as a cache
+    Box* obj = typeLookup(self->cls, attrstr, NULL);
+    if (obj)
+        return processDescriptor(obj, self, self->cls);
+    return obj;
+}
+
+// Copied from CPython:
+static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, const char* format, ...) noexcept {
+    va_list va;
+    PyObject* args, * func = 0, *retval;
+    va_start(va, format);
+
+    func = lookup_maybe(o, name, nameobj);
+    if (func == NULL) {
+        va_end(va);
+        if (!PyErr_Occurred())
+            PyErr_SetObject(PyExc_AttributeError, *nameobj);
+        return NULL;
+    }
+
+    if (format && *format)
+        args = Py_VaBuildValue(format, va);
+    else
+        args = PyTuple_New(0);
+
+    va_end(va);
+
+    if (args == NULL)
+        return NULL;
+
+    assert(PyTuple_Check(args));
+    retval = PyObject_Call(func, args, NULL);
+
+    Py_DECREF(args);
+    Py_DECREF(func);
+
+    return retval;
+}
+
+// Copied from CPython:
+#define SLOT0(FUNCNAME, OPSTR)                                                                                         \
+    static PyObject* FUNCNAME(PyObject* self) noexcept {                                                               \
+        static PyObject* cache_str;                                                                                    \
+        return call_method(self, OPSTR, &cache_str, "()");                                                             \
+    }
+
+#define SLOT1(FUNCNAME, OPSTR, ARG1TYPE, ARGCODES)                                                                     \
+    static PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1) noexcept {                                                \
+        static PyObject* cache_str;                                                                                    \
+        return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
+    }
+
+SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
+
 typedef wrapper_def slotdef;
 
 static void** slotptr(BoxedClass* type, int offset) {
@@ -197,6 +265,8 @@ static slotdef slotdefs[] = {
     FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+
+    MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
 
     // SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     /* Heap types defining __add__/__mul__ have sq_concat/sq_repeat == NULL.
