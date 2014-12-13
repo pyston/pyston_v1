@@ -45,7 +45,29 @@ slots_tester_call(slots_tester_object *obj, PyObject *args, PyObject *kw)
     return PyInt_FromLong(obj->n);
 }
 
+static PyObject*
+slots_tester_item(slots_tester_object *obj, Py_ssize_t i)
+{
+    if (i < 0 || i >= 5) {
+        PyErr_SetString(PyExc_IndexError, "tuple index out of range");
+        return NULL;
+    }
+    return PyInt_FromLong(i + obj->n);
+}
+
 PyDoc_STRVAR(slots_tester_doc, "slots_tester doc");
+
+static PySequenceMethods slots_tester_as_sequence = {
+    (lenfunc)0,
+    (binaryfunc)0,           /* sq_concat */
+    (ssizeargfunc)0,         /* sq_repeat */
+    (ssizeargfunc)slots_tester_item,               /* sq_item */
+    (ssizessizeargfunc)0,         /* sq_slice */
+    0,                                          /* sq_ass_item */
+    0,                                          /* sq_ass_slice */
+    (objobjproc)0,             /* sq_contains */
+};
+
 
 static PyTypeObject slots_tester = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -60,7 +82,7 @@ static PyTypeObject slots_tester = {
     0,                                  /* tp_compare */
     (reprfunc)slots_tester_repr,        /* tp_repr */
     0,                                  /* tp_as_number */
-    0,                                  /* tp_as_sequence */
+    &slots_tester_as_sequence,          /* tp_as_sequence */
     0,                                  /* tp_as_mapping */
     0,                                  /* tp_hash */
     (ternaryfunc)slots_tester_call,     /* tp_call */
