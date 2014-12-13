@@ -83,8 +83,9 @@ class BoxedWrapperDescriptor : public Box {
 public:
     const wrapper_def* wrapper;
     BoxedClass* type;
-    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type)
-        : Box(wrapperdescr_cls), wrapper(wrapper), type(type) {}
+    void* wrapped;
+    BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type, void* wrapped)
+        : Box(wrapperdescr_cls), wrapper(wrapper), type(type), wrapped(wrapped) {}
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
 };
@@ -104,14 +105,12 @@ public:
         int flags = self->descr->wrapper->flags;
         wrapperfunc wrapper = self->descr->wrapper->wrapper;
         assert(self->descr->wrapper->offset > 0);
-        char* ptr = (char*)self->descr->type + self->descr->wrapper->offset;
-        void* wrapped = *reinterpret_cast<void**>(ptr);
 
         if (flags & PyWrapperFlag_KEYWORDS) {
             wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-            return (*wk)(self->obj, args, wrapped, kwds);
+            return (*wk)(self->obj, args, self->descr->wrapped, kwds);
         } else {
-            return (*wrapper)(self->obj, args, wrapped);
+            return (*wrapper)(self->obj, args, self->descr->wrapped);
         }
         abort();
     }

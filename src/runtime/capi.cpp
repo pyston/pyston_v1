@@ -699,7 +699,12 @@ extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) {
 }
 
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(o->cls != long_cls, "unhandled");
+
+    RELEASE_ASSERT(o->cls == int_cls, "??");
+    int64_t n = static_cast<BoxedInt*>(o)->n;
+    static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
+    return n;
 }
 
 extern "C" Py_ssize_t PyUnicode_GET_SIZE(PyObject*) {

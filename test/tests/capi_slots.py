@@ -16,5 +16,5 @@ slots_test.call_funcs(C())
 # Test to make sure that updating an existing class also updates the tp_* slots:
 def repr2(self):
     return "repr2()"
-C.repr2 = repr2
+C.__repr__ = repr2
 slots_test.call_funcs(C())

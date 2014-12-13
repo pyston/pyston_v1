@@ -52,6 +52,41 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
     return (*func)(self);
 }
 
+static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
+    Py_ssize_t i;
+
+    i = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
+    if (i == -1 && PyErr_Occurred())
+        return -1;
+    if (i < 0) {
+        PySequenceMethods* sq = Py_TYPE(self)->tp_as_sequence;
+        if (sq && sq->sq_length) {
+            Py_ssize_t n = (*sq->sq_length)(self);
+            if (n < 0)
+                return -1;
+            i += n;
+        }
+    }
+    return i;
+}
+
+static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    ssizeargfunc func = (ssizeargfunc)wrapped;
+    PyObject* arg;
+    Py_ssize_t i;
+
+    if (PyTuple_GET_SIZE(args) == 1) {
+        arg = PyTuple_GET_ITEM(args, 0);
+        i = getindex(self, arg);
+        if (i == -1 && PyErr_Occurred())
+            return NULL;
+        return (*func)(self, i);
+    }
+    check_num_args(args, 1);
+    assert(PyErr_Occurred());
+    return NULL;
+}
+
 PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     try {
         // TODO: runtime ICs?
@@ -79,6 +114,14 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
 PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
         return repr(self);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
+    try {
+        return getitem(self, boxInt(i));
     } catch (Box* e) {
         abort();
     }
@@ -115,7 +158,14 @@ static void** slotptr(BoxedClass* type, int offset) {
 static void update_one_slot(BoxedClass* self, const slotdef& p) {
     // TODO: CPython version is significantly more sophisticated
     void** ptr = slotptr(self, p.offset);
-    assert(ptr && "it is ok for this to be NULL (CPython handles that case) but I don't think it should happen?");
+    if (!ptr) {
+        if (typeLookup(self, p.name, NULL)) {
+            printf("Warning: should probably allocate the tp_as_sequence object\n");
+            // assert(0 && "it is ok for this to be NULL (CPython handles that case) but I don't think it should
+            // happen?");
+        }
+        return;
+    }
 
     if (typeLookup(self, p.name, NULL))
         *ptr = p.function;
@@ -152,33 +202,31 @@ static slotdef slotdefs[] = {
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
-#if 0
-    SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
+    // SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     /* Heap types defining __add__/__mul__ have sq_concat/sq_repeat == NULL.
        The logic in abstract.c always falls back to nb_add/nb_multiply in
        this case.  Defining both the nb_* and the sq_* slots to call the
        user-defined methods has unexpected side-effects, as shown by
        test_descr.notimplemented() */
-    SQSLOT("__add__", sq_concat, NULL, wrap_binaryfunc, "x.__add__(y) <==> x+y"),
-    SQSLOT("__mul__", sq_repeat, NULL, wrap_indexargfunc, "x.__mul__(n) <==> x*n"),
-    SQSLOT("__rmul__", sq_repeat, NULL, wrap_indexargfunc, "x.__rmul__(n) <==> n*x"),
+    // SQSLOT("__add__", sq_concat, NULL, wrap_binaryfunc, "x.__add__(y) <==> x+y"),
+    // SQSLOT("__mul__", sq_repeat, NULL, wrap_indexargfunc, "x.__mul__(n) <==> x*n"),
+    // SQSLOT("__rmul__", sq_repeat, NULL, wrap_indexargfunc, "x.__rmul__(n) <==> n*x"),
     SQSLOT("__getitem__", sq_item, slot_sq_item, wrap_sq_item, "x.__getitem__(y) <==> x[y]"),
-    SQSLOT("__getslice__", sq_slice, slot_sq_slice, wrap_ssizessizeargfunc, "x.__getslice__(i, j) <==> x[i:j]\n\
-           \n\
-           Use of negative indices is not supported."),
-    SQSLOT("__setitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_setitem, "x.__setitem__(i, y) <==> x[i]=y"),
-    SQSLOT("__delitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_delitem, "x.__delitem__(y) <==> del x[y]"),
-    SQSLOT("__setslice__", sq_ass_slice, slot_sq_ass_slice, wrap_ssizessizeobjargproc,
-           "x.__setslice__(i, j, y) <==> x[i:j]=y\n\
-           \n\
-           Use  of negative indices is not supported."),
-    SQSLOT("__delslice__", sq_ass_slice, slot_sq_ass_slice, wrap_delslice, "x.__delslice__(i, j) <==> del x[i:j]\n\
-           \n\
-           Use of negative indices is not supported."),
-    SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
-    SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
-    SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
-#endif
+    //SQSLOT("__getslice__", sq_slice, slot_sq_slice, wrap_ssizessizeargfunc, "x.__getslice__(i, j) <==> x[i:j]\n\
+           //\n\
+           //Use of negative indices is not supported."),
+    // SQSLOT("__setitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_setitem, "x.__setitem__(i, y) <==> x[i]=y"),
+    // SQSLOT("__delitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_delitem, "x.__delitem__(y) <==> del x[y]"),
+    // SQSLOT("__setslice__", sq_ass_slice, slot_sq_ass_slice, wrap_ssizessizeobjargproc,
+    //"x.__setslice__(i, j, y) <==> x[i:j]=y\n\
+           //\n\
+           //Use  of negative indices is not supported."),
+    //SQSLOT("__delslice__", sq_ass_slice, slot_sq_ass_slice, wrap_delslice, "x.__delslice__(i, j) <==> del x[i:j]\n\
+           //\n\
+           //Use of negative indices is not supported."),
+    // SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
+    // SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
+    // SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
 };
 
 static void init_slotdefs() {
@@ -266,7 +314,7 @@ static void add_operators(BoxedClass* cls) {
             continue;
         // TODO PyObject_HashNotImplemented
 
-        cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls));
+        cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls, *ptr));
     }
 
     if (cls->tp_new)
@@ -286,7 +334,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
     RELEASE_ASSERT(cls->tp_as_number == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_sequence == NULL, "");
     RELEASE_ASSERT(cls->tp_as_mapping == NULL, "");
     RELEASE_ASSERT(cls->tp_hash == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
@@ -314,6 +361,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
+
+    if (cls->tp_as_sequence) {
+        printf("Warning: found tp_as_sequence, but not all sequence slotdefs defined\n");
+    }
 
 // I think it is safe to ignore these for for now:
 // RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");
