@@ -52,6 +52,21 @@ def set_ulimits():
     MAX_MEM_MB = 100
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
+EXTMODULE_DIR = os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/"
+_extmodule_mtime = None
+def get_extmodule_mtime():
+    global _extmodule_mtime
+    if _extmodule_mtime is not None:
+        return _extmodule_mtime
+
+    rtn = 0
+    for fn in os.listdir(EXTMODULE_DIR):
+        if not fn.endswith(".so"):
+            continue
+        rtn = max(rtn, os.stat(os.path.join(EXTMODULE_DIR, fn)).st_mtime)
+    _extmodule_mtime = rtn
+    return rtn
+
 def get_expected_output(fn):
     sys.stdout.flush()
     assert fn.endswith(".py")
@@ -61,7 +76,8 @@ def get_expected_output(fn):
 
     cache_fn = fn[:-3] + ".expected_cache"
     if os.path.exists(cache_fn):
-        if os.stat(cache_fn).st_mtime > os.stat(fn).st_mtime:
+        cache_mtime = os.stat(cache_fn).st_mtime
+        if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_extmodule_mtime():
             try:
                 return cPickle.load(open(cache_fn))
             except EOFError:
@@ -69,7 +85,7 @@ def get_expected_output(fn):
 
     # TODO don't suppress warnings globally:
     env = dict(os.environ)
-    env["PYTHONPATH"] = os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/"
+    env["PYTHONPATH"] = EXTMODULE_DIR
     p = subprocess.Popen(["python", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, err = p.communicate()
     code = p.wait()
@@ -208,7 +224,7 @@ def run_test(fn, check_stats, run_memcheck):
             out_fd, out_fn = tempfile.mkstemp(prefix="received_")
             os.fdopen(exp_fd, 'w').write(expected_out)
             os.fdopen(out_fd, 'w').write(out)
-            p = subprocess.Popen(["diff", "-C2", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
+            p = subprocess.Popen(["diff", "-u", "-a", exp_fn, out_fn], stdout=subprocess.PIPE, preexec_fn=set_ulimits)
             diff = p.stdout.read()
             assert p.wait() in (0, 1)
             os.unlink(exp_fn)

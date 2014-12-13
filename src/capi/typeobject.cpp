@@ -54,8 +54,6 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
 
 PyObject* Py_CallPythonNew(PyTypeObject* self, PyObject* args, PyObject* kwds) {
     try {
-        Py_FatalError("this function is untested");
-
         // TODO: runtime ICs?
         Box* new_attr = typeLookup(self, _new_str, NULL);
         assert(new_attr);
@@ -80,7 +78,7 @@ PyObject* Py_CallPythonCall(PyObject* self, PyObject* args, PyObject* kwds) {
 
 PyObject* Py_CallPythonRepr(PyObject* self) {
     try {
-        Py_FatalError("unimplemented");
+        return repr(self);
     } catch (Box* e) {
         abort();
     }
@@ -144,6 +142,15 @@ void fixup_slot_dispatchers(BoxedClass* self) {
 
     for (const slotdef& p : slotdefs) {
         update_one_slot(self, p);
+    }
+
+    // TODO: CPython handles this by having the __name__ attribute wrap (via a getset object)
+    // the tp_name field, whereas we're (needlessly?) doing the opposite.
+    if (!self->tp_name) {
+        Box* b = self->getattr("__name__");
+        assert(b);
+        assert(b->cls == str_cls);
+        self->tp_name = static_cast<BoxedString*>(b)->s.c_str();
     }
 }
 

@@ -254,8 +254,12 @@ extern "C" PyObject* PyObject_GetIter(PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_Repr(PyObject*) {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyObject_Repr(PyObject* obj) {
+    try {
+        return repr(obj);
+    } catch (Box* b) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) {
@@ -331,6 +335,10 @@ extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
 extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) {
     Py_FatalError("unimplemented");
 }
+
+extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) {
+    Py_FatalError("unimplemented");
+};
 
 extern "C" int PySequence_Check(PyObject*) {
     Py_FatalError("unimplemented");

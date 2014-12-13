@@ -90,7 +90,43 @@ static PyTypeObject slots_tester = {
     0,                                  /* tp_free */
 };
 
+// Tests the correctness of the CAPI slots when the attributes get set in Python code:
+static PyObject *
+call_funcs(PyObject* _module, PyObject* args) {
+    PyObject* obj;
+    if (!PyArg_ParseTuple(args, "O", &obj))
+        return NULL;
+
+    printf("\n");
+
+    PyTypeObject* cls = Py_TYPE(obj);
+    printf("Received a %s object\n", cls->tp_name);
+
+    if (cls->tp_repr) {
+        PyObject* rtn = cls->tp_repr(obj);
+        printf("tp_repr exists and returned: '%s'\n", PyString_AsString(rtn));
+        Py_DECREF(rtn);
+    }
+
+    if (cls->tp_new) {
+        PyObject* rtn = cls->tp_new(cls, PyTuple_New(0), PyDict_New());
+        printf("tp_new exists and returned an object of type: '%s'\n", Py_TYPE(rtn)->tp_name);
+        Py_DECREF(rtn);
+    }
+
+    if (cls->tp_call) {
+        printf("tp_call exists\n");
+    } else {
+        printf("tp_call doesnt exist\n");
+    }
+
+    Py_DECREF(obj);
+
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef SlotsMethods[] = {
+    {"call_funcs", call_funcs, METH_VARARGS, "Call slotted functions."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
