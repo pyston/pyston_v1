@@ -125,7 +125,7 @@ Box* superNew(Box* _cls, Box* _type, Box* obj) {
 }
 
 void setupSuper() {
-    super_cls = new BoxedClass(type_cls, object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false);
+    super_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false);
 
     super_cls->giveAttr("__name__", boxStrConstant("super"));
 

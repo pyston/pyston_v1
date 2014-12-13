@@ -389,6 +389,20 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
         gc::registerPermanentRoot(this);
 }
 
+BoxedHeapClass::BoxedHeapClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                               int instance_size, bool is_user_defined)
+    : BoxedClass(metaclass, base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(NULL),
+      ht_slots(NULL) {
+
+    tp_as_number = &as_number;
+    tp_as_mapping = &as_mapping;
+    tp_as_sequence = &as_sequence;
+    tp_as_buffer = &as_buffer;
+
+    // just make sure these get zero-initialized:
+    assert(as_sequence.sq_item == NULL);
+}
+
 std::string getFullNameOfClass(BoxedClass* cls) {
     Box* b = cls->getattr("__name__");
     assert(b);
@@ -3272,10 +3286,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     BoxedClass* made;
 
     if (base->instancesHaveAttrs()) {
-        made = new BoxedClass(cls, base, NULL, base->attrs_offset, base->tp_basicsize, true);
+        made = new BoxedHeapClass(cls, base, NULL, base->attrs_offset, base->tp_basicsize, true);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = new BoxedClass(cls, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
+        made = new BoxedHeapClass(cls, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
     }
 
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));

@@ -322,7 +322,10 @@ extern "C" int PyObject_Not(PyObject* o) {
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
     try {
-        return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
+        if (kw)
+            return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
+        else
+            return runtimeCall(callable_object, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
     } catch (Box* b) {
         Py_FatalError("unimplemented");
     }
@@ -699,7 +702,12 @@ extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) {
 }
 
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(o->cls != long_cls, "unhandled");
+
+    RELEASE_ASSERT(o->cls == int_cls, "??");
+    int64_t n = static_cast<BoxedInt*>(o)->n;
+    static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
+    return n;
 }
 
 extern "C" Py_ssize_t PyUnicode_GET_SIZE(PyObject*) {
@@ -753,7 +761,7 @@ BoxedModule* importTestExtension(const std::string& name) {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
+    capifunc_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
     capifunc_cls->giveAttr("__repr__",
@@ -765,7 +773,7 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 
-    method_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
+    method_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
     method_cls->giveAttr("__name__", boxStrConstant("method"));
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
@@ -773,13 +781,13 @@ void setupCAPI() {
                                                                      0, true, true)));
     method_cls->freeze();
 
-    wrapperdescr_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
+    wrapperdescr_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
     wrapperdescr_cls->giveAttr("__name__", boxStrConstant("wrapper_descriptor"));
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->freeze();
 
-    wrapperobject_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
+    wrapperobject_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
     wrapperobject_cls->giveAttr("__name__", boxStrConstant("method-wrapper"));
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));

@@ -241,10 +241,10 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
 }
 
 void setupClassobj() {
-    classobj_cls = new BoxedClass(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
-                                  sizeof(BoxedClassobj), false);
-    instance_cls = new BoxedClass(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
-                                  sizeof(BoxedInstance), false);
+    classobj_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
+                                      sizeof(BoxedClassobj), false);
+    instance_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
+                                      sizeof(BoxedInstance), false);
 
     classobj_cls->giveAttr("__name__", boxStrConstant("classobj"));
 
