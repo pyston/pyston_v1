@@ -903,8 +903,11 @@ PyAPI_DATA(PyObject*) None;
 Py_NotImplemented is a singleton used to signal that an operation is
 not implemented for a given type combination.
 */
-PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
-#define Py_NotImplemented (&_Py_NotImplementedStruct)
+// Pyston change:
+//PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
+//#define Py_NotImplemented (&_Py_NotImplementedStruct)
+PyAPI_DATA(PyObject*) NotImplemented; /* Don't use this directly */
+#define Py_NotImplemented NotImplemented
 
 /* Rich comparison opcodes */
 #define Py_LT 0

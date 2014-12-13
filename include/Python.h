@@ -59,7 +59,12 @@
 
 #include "pyerrors.h"
 
+#include "pystate.h"
+
+#include "pyarena.h"
 #include "modsupport.h"
+#include "pythonrun.h"
+#include "ceval.h"
 #include "import.h"
 
 #include "abstract.h"

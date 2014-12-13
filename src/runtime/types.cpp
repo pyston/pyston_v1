@@ -43,6 +43,7 @@ extern "C" void init_sre();
 extern "C" void initmath();
 extern "C" void initoperator();
 extern "C" void initbinascii();
+extern "C" void initpwd();
 
 namespace pyston {
 
@@ -594,10 +595,6 @@ Box* sliceRepr(BoxedSlice* self) {
     return new BoxedString(std::move(s));
 }
 
-extern "C" bool PySlice_Check(PyObject*) {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                   Py_ssize_t* step) {
     Py_FatalError("unimplemented");
@@ -966,6 +963,7 @@ void setupRuntime() {
     initmath();
     initoperator();
     initbinascii();
+    initpwd();
 
     setupSysEnd();
 

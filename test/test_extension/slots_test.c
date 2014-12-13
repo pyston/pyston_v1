@@ -28,6 +28,21 @@ slots_tester_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)obj;
 }
 
+static long slots_tester_seq_hash(slots_tester_object* obj) {
+    printf("slots_tester_seq.__hash__\n");
+    return obj->n ^ 1;
+}
+
+static PyObject* slots_tester_seq_richcmp(slots_tester_object* lhs, PyObject* rhs, int op) {
+    printf("slots_tester_seq.richcmp(%d, %d)\n", lhs->n, op);
+
+    Py_RETURN_TRUE;
+    if (op % 2)
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
+
 static PyObject *
 slots_tester_seq_repr(slots_tester_object *obj)
 {
@@ -84,7 +99,7 @@ static PyTypeObject slots_tester_seq = {
     0,                                  /* tp_as_number */
     &slots_tester_seq_as_sequence,          /* tp_as_sequence */
     0,                                  /* tp_as_mapping */
-    0,                                  /* tp_hash */
+    (hashfunc)slots_tester_seq_hash, /* tp_hash */
     (ternaryfunc)slots_tester_seq_call,     /* tp_call */
     0,                                  /* tp_str */
     0,                                  /* tp_getattro */
@@ -94,7 +109,7 @@ static PyTypeObject slots_tester_seq = {
     slots_tester_seq_doc,                   /* tp_doc */
     0,                                  /* tp_traverse */
     0,                                  /* tp_clear */
-    0,                                  /* tp_richcompare */
+    (richcmpfunc)slots_tester_seq_richcmp, /* tp_richcompare */
     0,                                  /* tp_weaklistoffset */
     0,                                  /* tp_iter */
     0,                                  /* tp_iternext */

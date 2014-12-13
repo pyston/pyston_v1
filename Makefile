@@ -142,7 +142,6 @@ COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
 COMMON_CXXFLAGS += -I$(DEPS_DIR)/pypa-install/include
-COMMON_CXXFLAGS += -Wno-comment
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -214,6 +213,7 @@ CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
 EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include
 EXT_CFLAGS += -Wno-missing-field-initializers
+EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits
 ifneq ($(USE_CLANG),0)
 	EXT_CFLAGS += $(CLANG_EXTRA_FLAGS)
 endif
@@ -276,7 +276,7 @@ SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
-STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c $(EXTRA_STDMODULE_SRCS)
+STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c $(EXTRA_STDMODULE_SRCS)
 STDOBJECT_SRCS := structseq.c $(EXTRA_STDOBJECT_SRCS)
 FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(addprefix lib_python/2.7_Objects/,$(STDOBJECT_SRCS)) $(wildcard src/capi/*.c)
 

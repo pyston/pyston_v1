@@ -28,8 +28,8 @@ Don't forget to apply Py_INCREF() when returning either!!! */
 //PyAPI_DATA(PyIntObject) _Py_ZeroStruct, _Py_TrueStruct;
 PyAPI_DATA(PyObject) *True, *False;
 /* Use these macros */
-#define Py_False ((PyObject *) True)
-#define Py_True ((PyObject *) False)
+#define Py_False ((PyObject *) False)
+#define Py_True ((PyObject *) True)
 
 /* Macros for returning Py_True or Py_False, respectively */
 #define Py_RETURN_TRUE return Py_INCREF(Py_True), Py_True

@@ -38,11 +38,46 @@ static int check_num_args(PyObject* ob, int n) {
     return 0;
 }
 
+static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) {
+    hashfunc func = (hashfunc)wrapped;
+    long res;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    return PyInt_FromLong(res);
+}
+
 static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) {
     ternaryfunc func = (ternaryfunc)wrapped;
 
     return (*func)(self, args, kwds);
 }
+
+static PyObject* wrap_richcmpfunc(PyObject* self, PyObject* args, void* wrapped, int op) {
+    richcmpfunc func = (richcmpfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    return (*func)(self, other, op);
+}
+
+#undef RICHCMP_WRAPPER
+#define RICHCMP_WRAPPER(NAME, OP)                                                                                      \
+    static PyObject* richcmp_##NAME(PyObject* self, PyObject* args, void* wrapped) {                                   \
+        return wrap_richcmpfunc(self, args, wrapped, OP);                                                              \
+    }
+
+RICHCMP_WRAPPER(lt, Py_LT)
+RICHCMP_WRAPPER(le, Py_LE)
+RICHCMP_WRAPPER(eq, Py_EQ)
+RICHCMP_WRAPPER(ne, Py_NE)
+RICHCMP_WRAPPER(gt, Py_GT)
+RICHCMP_WRAPPER(ge, Py_GE)
 
 static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
     unaryfunc func = (unaryfunc)wrapped;
@@ -244,7 +279,7 @@ static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) {
 
 
 
-static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) {
+static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
     PyObject* res;
 
     // TODO: CPython uses the attrobj as a cache
@@ -252,6 +287,13 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     if (obj)
         return processDescriptor(obj, self, self->cls);
     return obj;
+}
+
+static PyObject* lookup_method(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
+    PyObject* res = lookup_maybe(self, attrstr, attrobj);
+    if (res == NULL && !PyErr_Occurred())
+        PyErr_SetObject(PyExc_AttributeError, *attrobj);
+    return res;
 }
 
 // Copied from CPython:
@@ -288,17 +330,49 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
 }
 
 
-PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
+PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
-        // TODO: runtime ICs?
-        Box* new_attr = typeLookup(self, _new_str, NULL);
-        assert(new_attr);
-        new_attr = processDescriptor(new_attr, None, self);
-
-        return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
+        return repr(self);
     } catch (Box* e) {
         abort();
     }
+}
+
+static long slot_tp_hash(PyObject* self) noexcept {
+    PyObject* func;
+    static PyObject* hash_str, *eq_str, *cmp_str;
+    long h;
+
+    func = lookup_method(self, "__hash__", &hash_str);
+
+    if (func != NULL && func != Py_None) {
+        PyObject* res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        if (res == NULL)
+            return -1;
+        if (PyLong_Check(res))
+            h = PyLong_Type.tp_hash(res);
+        else
+            h = PyInt_AsLong(res);
+        Py_DECREF(res);
+    } else {
+        Py_XDECREF(func); /* may be None */
+        PyErr_Clear();
+        func = lookup_method(self, "__eq__", &eq_str);
+        if (func == NULL) {
+            PyErr_Clear();
+            func = lookup_method(self, "__cmp__", &cmp_str);
+        }
+        if (func != NULL) {
+            Py_DECREF(func);
+            return PyObject_HashNotImplemented(self);
+        }
+        PyErr_Clear();
+        h = _Py_HashPointer((void*)self);
+    }
+    if (h == -1 && !PyErr_Occurred())
+        h = -2;
+    return h;
 }
 
 PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
@@ -312,9 +386,59 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
     }
 }
 
-PyObject* slot_tp_repr(PyObject* self) noexcept {
+static const char* name_op[] = {
+    "__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__",
+};
+
+static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) {
+    PyObject* func, *args, *res;
+    static PyObject* op_str[6];
+
+    func = lookup_method(self, name_op[op], &op_str[op]);
+    if (func == NULL) {
+        PyErr_Clear();
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    args = PyTuple_Pack(1, other);
+    if (args == NULL)
+        res = NULL;
+    else {
+        res = PyObject_Call(func, args, NULL);
+        Py_DECREF(args);
+    }
+    Py_DECREF(func);
+    return res;
+}
+
+static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) {
+    PyObject* res;
+
+    if (Py_TYPE(self)->tp_richcompare == slot_tp_richcompare) {
+        res = half_richcompare(self, other, op);
+        if (res != Py_NotImplemented)
+            return res;
+        Py_DECREF(res);
+    }
+    if (Py_TYPE(other)->tp_richcompare == slot_tp_richcompare) {
+        res = half_richcompare(other, self, _Py_SwappedOp[op]);
+        if (res != Py_NotImplemented) {
+            return res;
+        }
+        Py_DECREF(res);
+    }
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     try {
-        return repr(self);
+        // TODO: runtime ICs?
+        Box* new_attr = typeLookup(self, _new_str, NULL);
+        assert(new_attr);
+        new_attr = processDescriptor(new_attr, None, self);
+
+        return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
     } catch (Box* e) {
         abort();
     }
@@ -483,15 +607,22 @@ static void** slotptr(BoxedClass* type, int offset) {
 static void update_one_slot(BoxedClass* self, const slotdef& p) {
     // TODO: CPython version is significantly more sophisticated
     void** ptr = slotptr(self, p.offset);
+    Box* attr = typeLookup(self, p.name, NULL);
+
     if (!ptr) {
-        assert(!typeLookup(self, p.name, NULL) && "I don't think this case should happen? CPython handles it though");
+        assert(!attr && "I don't think this case should happen? CPython handles it though");
         return;
     }
 
-    if (typeLookup(self, p.name, NULL))
-        *ptr = p.function;
-    else
+    if (attr) {
+        if (attr == None && ptr == (void**)&self->tp_hash) {
+            *ptr = (void*)&PyObject_HashNotImplemented;
+        } else {
+            *ptr = p.function;
+        }
+    } else {
         *ptr = NULL;
+    }
 }
 
 // Copied from CPython:
@@ -519,8 +650,15 @@ static void update_one_slot(BoxedClass* self, const slotdef& p) {
 
 static slotdef slotdefs[] = {
     TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
+    TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
     FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
            PyWrapperFlag_KEYWORDS),
+    TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
+    TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
+    TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
+    TPSLOT("__ne__", tp_richcompare, slot_tp_richcompare, richcmp_ne, "x.__ne__(y) <==> x!=y"),
+    TPSLOT("__gt__", tp_richcompare, slot_tp_richcompare, richcmp_gt, "x.__gt__(y) <==> x>y"),
+    TPSLOT("__ge__", tp_richcompare, slot_tp_richcompare, richcmp_ge, "x.__ge__(y) <==> x>=y"),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
@@ -639,9 +777,12 @@ static void add_operators(BoxedClass* cls) {
             continue;
         if (cls->getattr(p.name))
             continue;
-        // TODO PyObject_HashNotImplemented
 
-        cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls, *ptr));
+        if (*ptr == PyObject_HashNotImplemented) {
+            cls->giveAttr(p.name, None);
+        } else {
+            cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls, *ptr));
+        }
     }
 
     if (cls->tp_new)
@@ -661,7 +802,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
     RELEASE_ASSERT(cls->tp_as_number == NULL, "");
-    RELEASE_ASSERT(cls->tp_hash == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL, "");
@@ -670,7 +810,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
 
-    RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");

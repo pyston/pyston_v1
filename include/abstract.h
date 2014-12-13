@@ -847,10 +847,15 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
+     // Pyston change: made this a function:
+    bool _PyIndex_Check(PyObject* o);
+#define PyIndex_Check(obj) _PyIndex_Check((PyObject*)(obj))
+#if 0
 #define PyIndex_Check(obj) \
    ((obj)->ob_type->tp_as_number != NULL && \
     PyType_HasFeature((obj)->ob_type, Py_TPFLAGS_HAVE_INDEX) && \
     (obj)->ob_type->tp_as_number->nb_index != NULL)
+#endif
 
      PyAPI_FUNC(PyObject *) PyNumber_Index(PyObject *o);
 

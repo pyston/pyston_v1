@@ -38,12 +38,18 @@ MAKE_CHECK(Long, long_cls)
 MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)
 MAKE_CHECK(Dict, dict_cls)
+MAKE_CHECK(Slice, slice_cls)
 
 #ifdef Py_USING_UNICODE
 MAKE_CHECK(Unicode, unicode_cls)
 #endif
 
 #undef MAKE_CHECK
+
+extern "C" bool _PyIndex_Check(PyObject* op) {
+    // TODO this is wrong (the CPython version checks for things that can be coerced to a number):
+    return PyInt_Check(op);
+}
 
 extern "C" {
 int Py_Py3kWarningFlag;
@@ -299,12 +305,33 @@ extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) 
     Py_FatalError("unimplemented");
 }
 
+extern "C" {
+int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
+}
+
 extern "C" long PyObject_Hash(PyObject* o) {
     try {
         return hash(o)->n;
     } catch (Box* b) {
         Py_FatalError("unimplemented");
     }
+}
+
+extern "C" long PyObject_HashNotImplemented(PyObject* self) {
+    PyErr_Format(PyExc_TypeError, "unhashable type: '%.200s'", Py_TYPE(self)->tp_name);
+    return -1;
+}
+
+extern "C" long _Py_HashPointer(void* p) {
+    long x;
+    size_t y = (size_t)p;
+    /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
+       excessive hash collisions for dicts and sets */
+    y = (y >> 4) | (y << (8 * SIZEOF_VOID_P - 4));
+    x = (long)y;
+    if (x == -1)
+        x = -2;
+    return x;
 }
 
 extern "C" int PyObject_IsTrue(PyObject* o) {
@@ -318,6 +345,30 @@ extern "C" int PyObject_IsTrue(PyObject* o) {
 
 extern "C" int PyObject_Not(PyObject* o) {
     Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) {
+    PyObject* result;
+
+    if (arg == NULL) {
+        arg = PyTuple_New(0);
+        if (arg == NULL)
+            return NULL;
+    } else if (!PyTuple_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "argument list must be a tuple");
+        return NULL;
+    } else
+        Py_INCREF(arg);
+
+    if (kw != NULL && !PyDict_Check(kw)) {
+        PyErr_SetString(PyExc_TypeError, "keyword list must be a dictionary");
+        Py_DECREF(arg);
+        return NULL;
+    }
+
+    result = PyObject_Call(func, arg, kw);
+    Py_DECREF(arg);
+    return result;
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
