@@ -214,6 +214,7 @@ CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
 EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include
 EXT_CFLAGS += -Wno-missing-field-initializers
+EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits
 ifneq ($(USE_CLANG),0)
 	EXT_CFLAGS += $(CLANG_EXTRA_FLAGS)
 endif
@@ -276,7 +277,7 @@ SRCS := $(MAIN_SRCS) $(STDLIB_SRCS)
 STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
-STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c $(EXTRA_STDMODULE_SRCS)
+STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c $(EXTRA_STDMODULE_SRCS)
 STDOBJECT_SRCS := structseq.c $(EXTRA_STDOBJECT_SRCS)
 FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(addprefix lib_python/2.7_Objects/,$(STDOBJECT_SRCS)) $(wildcard src/capi/*.c)
 
