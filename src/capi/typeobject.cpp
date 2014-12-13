@@ -38,6 +38,18 @@ static int check_num_args(PyObject* ob, int n) {
     return 0;
 }
 
+static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) {
+    hashfunc func = (hashfunc)wrapped;
+    long res;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    return PyInt_FromLong(res);
+}
+
 static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) {
     ternaryfunc func = (ternaryfunc)wrapped;
 
@@ -244,7 +256,7 @@ static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) {
 
 
 
-static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) {
+static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
     PyObject* res;
 
     // TODO: CPython uses the attrobj as a cache
@@ -252,6 +264,13 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     if (obj)
         return processDescriptor(obj, self, self->cls);
     return obj;
+}
+
+static PyObject* lookup_method(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
+    PyObject* res = lookup_maybe(self, attrstr, attrobj);
+    if (res == NULL && !PyErr_Occurred())
+        PyErr_SetObject(PyExc_AttributeError, *attrobj);
+    return res;
 }
 
 // Copied from CPython:
@@ -318,6 +337,43 @@ PyObject* slot_tp_repr(PyObject* self) noexcept {
     } catch (Box* e) {
         abort();
     }
+}
+
+static long slot_tp_hash(PyObject* self) noexcept {
+    PyObject* func;
+    static PyObject* hash_str, *eq_str, *cmp_str;
+    long h;
+
+    func = lookup_method(self, "__hash__", &hash_str);
+
+    if (func != NULL && func != Py_None) {
+        PyObject* res = PyEval_CallObject(func, NULL);
+        Py_DECREF(func);
+        if (res == NULL)
+            return -1;
+        if (PyLong_Check(res))
+            h = PyLong_Type.tp_hash(res);
+        else
+            h = PyInt_AsLong(res);
+        Py_DECREF(res);
+    } else {
+        Py_XDECREF(func); /* may be None */
+        PyErr_Clear();
+        func = lookup_method(self, "__eq__", &eq_str);
+        if (func == NULL) {
+            PyErr_Clear();
+            func = lookup_method(self, "__cmp__", &cmp_str);
+        }
+        if (func != NULL) {
+            Py_DECREF(func);
+            return PyObject_HashNotImplemented(self);
+        }
+        PyErr_Clear();
+        h = _Py_HashPointer((void*)self);
+    }
+    if (h == -1 && !PyErr_Occurred())
+        h = -2;
+    return h;
 }
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
@@ -483,15 +539,22 @@ static void** slotptr(BoxedClass* type, int offset) {
 static void update_one_slot(BoxedClass* self, const slotdef& p) {
     // TODO: CPython version is significantly more sophisticated
     void** ptr = slotptr(self, p.offset);
+    Box* attr = typeLookup(self, p.name, NULL);
+
     if (!ptr) {
-        assert(!typeLookup(self, p.name, NULL) && "I don't think this case should happen? CPython handles it though");
+        assert(!attr && "I don't think this case should happen? CPython handles it though");
         return;
     }
 
-    if (typeLookup(self, p.name, NULL))
-        *ptr = p.function;
-    else
+    if (attr) {
+        if (attr == None && ptr == (void**)&self->tp_hash) {
+            *ptr = (void*)&PyObject_HashNotImplemented;
+        } else {
+            *ptr = p.function;
+        }
+    } else {
         *ptr = NULL;
+    }
 }
 
 // Copied from CPython:
@@ -519,6 +582,7 @@ static void update_one_slot(BoxedClass* self, const slotdef& p) {
 
 static slotdef slotdefs[] = {
     TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
+    TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
     FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
@@ -639,9 +703,12 @@ static void add_operators(BoxedClass* cls) {
             continue;
         if (cls->getattr(p.name))
             continue;
-        // TODO PyObject_HashNotImplemented
 
-        cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls, *ptr));
+        if (*ptr == PyObject_HashNotImplemented) {
+            cls->giveAttr(p.name, None);
+        } else {
+            cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls, *ptr));
+        }
     }
 
     if (cls->tp_new)
@@ -661,7 +728,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
     RELEASE_ASSERT(cls->tp_as_number == NULL, "");
-    RELEASE_ASSERT(cls->tp_hash == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL, "");

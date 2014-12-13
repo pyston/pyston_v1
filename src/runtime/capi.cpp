@@ -307,6 +307,23 @@ extern "C" long PyObject_Hash(PyObject* o) {
     }
 }
 
+extern "C" long PyObject_HashNotImplemented(PyObject* self) {
+    PyErr_Format(PyExc_TypeError, "unhashable type: '%.200s'", Py_TYPE(self)->tp_name);
+    return -1;
+}
+
+extern "C" long _Py_HashPointer(void* p) {
+    long x;
+    size_t y = (size_t)p;
+    /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
+       excessive hash collisions for dicts and sets */
+    y = (y >> 4) | (y << (8 * SIZEOF_VOID_P - 4));
+    x = (long)y;
+    if (x == -1)
+        x = -2;
+    return x;
+}
+
 extern "C" int PyObject_IsTrue(PyObject* o) {
     try {
         return nonzero(o);
@@ -318,6 +335,30 @@ extern "C" int PyObject_IsTrue(PyObject* o) {
 
 extern "C" int PyObject_Not(PyObject* o) {
     Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) {
+    PyObject* result;
+
+    if (arg == NULL) {
+        arg = PyTuple_New(0);
+        if (arg == NULL)
+            return NULL;
+    } else if (!PyTuple_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "argument list must be a tuple");
+        return NULL;
+    } else
+        Py_INCREF(arg);
+
+    if (kw != NULL && !PyDict_Check(kw)) {
+        PyErr_SetString(PyExc_TypeError, "keyword list must be a dictionary");
+        Py_DECREF(arg);
+        return NULL;
+    }
+
+    result = PyObject_Call(func, arg, kw);
+    Py_DECREF(arg);
+    return result;
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
