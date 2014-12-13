@@ -38,12 +38,18 @@ MAKE_CHECK(Long, long_cls)
 MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)
 MAKE_CHECK(Dict, dict_cls)
+MAKE_CHECK(Slice, slice_cls)
 
 #ifdef Py_USING_UNICODE
 MAKE_CHECK(Unicode, unicode_cls)
 #endif
 
 #undef MAKE_CHECK
+
+extern "C" bool _PyIndex_Check(PyObject* op) {
+    // TODO this is wrong (the CPython version checks for things that can be coerced to a number):
+    return PyInt_Check(op);
+}
 
 extern "C" {
 int Py_Py3kWarningFlag;
@@ -297,6 +303,10 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) {
 
 extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) {
     Py_FatalError("unimplemented");
+}
+
+extern "C" {
+int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
 }
 
 extern "C" long PyObject_Hash(PyObject* o) {

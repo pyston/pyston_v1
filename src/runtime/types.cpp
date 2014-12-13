@@ -595,10 +595,6 @@ Box* sliceRepr(BoxedSlice* self) {
     return new BoxedString(std::move(s));
 }
 
-extern "C" bool PySlice_Check(PyObject*) {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                   Py_ssize_t* step) {
     Py_FatalError("unimplemented");

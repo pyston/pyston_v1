@@ -56,6 +56,29 @@ static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObje
     return (*func)(self, args, kwds);
 }
 
+static PyObject* wrap_richcmpfunc(PyObject* self, PyObject* args, void* wrapped, int op) {
+    richcmpfunc func = (richcmpfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    return (*func)(self, other, op);
+}
+
+#undef RICHCMP_WRAPPER
+#define RICHCMP_WRAPPER(NAME, OP)                                                                                      \
+    static PyObject* richcmp_##NAME(PyObject* self, PyObject* args, void* wrapped) {                                   \
+        return wrap_richcmpfunc(self, args, wrapped, OP);                                                              \
+    }
+
+RICHCMP_WRAPPER(lt, Py_LT)
+RICHCMP_WRAPPER(le, Py_LE)
+RICHCMP_WRAPPER(eq, Py_EQ)
+RICHCMP_WRAPPER(ne, Py_NE)
+RICHCMP_WRAPPER(gt, Py_GT)
+RICHCMP_WRAPPER(ge, Py_GE)
+
 static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
     unaryfunc func = (unaryfunc)wrapped;
 
@@ -307,30 +330,6 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
 }
 
 
-PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
-    try {
-        // TODO: runtime ICs?
-        Box* new_attr = typeLookup(self, _new_str, NULL);
-        assert(new_attr);
-        new_attr = processDescriptor(new_attr, None, self);
-
-        return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
-    } catch (Box* e) {
-        abort();
-    }
-}
-
-PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
-    try {
-        Py_FatalError("this function is untested");
-
-        // TODO: runtime ICs?
-        return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
-    } catch (Box* e) {
-        abort();
-    }
-}
-
 PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
         return repr(self);
@@ -374,6 +373,75 @@ static long slot_tp_hash(PyObject* self) noexcept {
     if (h == -1 && !PyErr_Occurred())
         h = -2;
     return h;
+}
+
+PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    try {
+        Py_FatalError("this function is untested");
+
+        // TODO: runtime ICs?
+        return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+static const char* name_op[] = {
+    "__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__",
+};
+
+static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) {
+    PyObject* func, *args, *res;
+    static PyObject* op_str[6];
+
+    func = lookup_method(self, name_op[op], &op_str[op]);
+    if (func == NULL) {
+        PyErr_Clear();
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    args = PyTuple_Pack(1, other);
+    if (args == NULL)
+        res = NULL;
+    else {
+        res = PyObject_Call(func, args, NULL);
+        Py_DECREF(args);
+    }
+    Py_DECREF(func);
+    return res;
+}
+
+static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) {
+    PyObject* res;
+
+    if (Py_TYPE(self)->tp_richcompare == slot_tp_richcompare) {
+        res = half_richcompare(self, other, op);
+        if (res != Py_NotImplemented)
+            return res;
+        Py_DECREF(res);
+    }
+    if (Py_TYPE(other)->tp_richcompare == slot_tp_richcompare) {
+        res = half_richcompare(other, self, _Py_SwappedOp[op]);
+        if (res != Py_NotImplemented) {
+            return res;
+        }
+        Py_DECREF(res);
+    }
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
+    try {
+        // TODO: runtime ICs?
+        Box* new_attr = typeLookup(self, _new_str, NULL);
+        assert(new_attr);
+        new_attr = processDescriptor(new_attr, None, self);
+
+        return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
+    } catch (Box* e) {
+        abort();
+    }
 }
 
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
@@ -585,6 +653,12 @@ static slotdef slotdefs[] = {
     TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
     FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
            PyWrapperFlag_KEYWORDS),
+    TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
+    TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
+    TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
+    TPSLOT("__ne__", tp_richcompare, slot_tp_richcompare, richcmp_ne, "x.__ne__(y) <==> x!=y"),
+    TPSLOT("__gt__", tp_richcompare, slot_tp_richcompare, richcmp_gt, "x.__gt__(y) <==> x>y"),
+    TPSLOT("__ge__", tp_richcompare, slot_tp_richcompare, richcmp_ge, "x.__ge__(y) <==> x>=y"),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
@@ -736,7 +810,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
 
-    RELEASE_ASSERT(cls->tp_richcompare == NULL, "");
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");
