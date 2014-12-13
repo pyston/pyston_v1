@@ -1,5 +1,4 @@
-# expected: fail
-# - wip
+# allow-warning: converting unicode literal to str
 
 import pwd
 import os

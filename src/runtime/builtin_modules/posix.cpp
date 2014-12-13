@@ -57,7 +57,32 @@ static Box* posix_getuid() {
     return boxInt(getuid());
 }
 
+extern "C" {
+extern char** environ;
+}
+
+static Box* convertEnviron() {
+    assert(environ);
+
+    BoxedDict* d = new BoxedDict();
+    // Ported from CPython:
+    for (char** e = environ; *e != NULL; e++) {
+        char* p = strchr(*e, '=');
+        if (p == NULL)
+            continue;
+        Box* k = PyString_FromStringAndSize(*e, (int)(p - *e));
+        Box* v = PyString_FromString(p + 1);
+
+        Box*& cur_v = d->d[k];
+        if (cur_v == NULL)
+            cur_v = v;
+    }
+    return d;
+}
+
 } // namespace posix
+
+using namespace posix;
 
 void setupPosix() {
     posix_module = createModule("posix", "__builtin__");
@@ -66,6 +91,7 @@ void setupPosix() {
     posix_module->giveAttr("getuid", new BoxedFunction(boxRTFunction((void*)posix::posix_getuid, BOXED_INT, 0)));
 
     posix_module->giveAttr("error", OSError);
+    posix_module->giveAttr("environ", convertEnviron());
 }
 }
 
