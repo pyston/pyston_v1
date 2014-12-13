@@ -1,6 +1,3 @@
-# expected: fail
-# - wip
-
 import slots_test
 
 for i in xrange(3):
@@ -24,6 +21,10 @@ class C(object):
     def __getitem__(self, idx):
         print "__getitem__", idx
         return idx - 5
+
+    def __len__(self):
+        print "__len__"
+        return 3
 
 slots_test.call_funcs(C())
 

@@ -80,6 +80,31 @@ static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
     return i;
 }
 
+static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) {
+    lenfunc func = (lenfunc)wrapped;
+    Py_ssize_t res;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    return PyInt_FromLong((long)res);
+}
+
+static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped) {
+    ssizeargfunc func = (ssizeargfunc)wrapped;
+    PyObject* o;
+    Py_ssize_t i;
+
+    if (!PyArg_UnpackTuple(args, "", 1, 1, &o))
+        return NULL;
+    i = PyNumber_AsSsize_t(o, PyExc_OverflowError);
+    if (i == -1 && PyErr_Occurred())
+        return NULL;
+    return (*func)(self, i);
+}
+
 static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizeargfunc func = (ssizeargfunc)wrapped;
     PyObject* arg;
@@ -97,16 +122,95 @@ static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noe
     return NULL;
 }
 
-static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) {
-    lenfunc func = (lenfunc)wrapped;
-    Py_ssize_t res;
+static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wrapped) {
+    ssizessizeargfunc func = (ssizessizeargfunc)wrapped;
+    Py_ssize_t i, j;
 
-    if (!check_num_args(args, 0))
+    if (!PyArg_ParseTuple(args, "nn", &i, &j))
         return NULL;
-    res = (*func)(self);
+    return (*func)(self, i, j);
+}
+
+static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) {
+    ssizeobjargproc func = (ssizeobjargproc)wrapped;
+    Py_ssize_t i;
+    int res;
+    PyObject* arg, *value;
+
+    if (!PyArg_UnpackTuple(args, "", 2, 2, &arg, &value))
+        return NULL;
+    i = getindex(self, arg);
+    if (i == -1 && PyErr_Occurred())
+        return NULL;
+    res = (*func)(self, i, value);
     if (res == -1 && PyErr_Occurred())
         return NULL;
-    return PyInt_FromLong((long)res);
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) {
+    ssizeobjargproc func = (ssizeobjargproc)wrapped;
+    Py_ssize_t i;
+    int res;
+    PyObject* arg;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    arg = PyTuple_GET_ITEM(args, 0);
+    i = getindex(self, arg);
+    if (i == -1 && PyErr_Occurred())
+        return NULL;
+    res = (*func)(self, i, NULL);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void* wrapped) {
+    ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
+    Py_ssize_t i, j;
+    int res;
+    PyObject* value;
+
+    if (!PyArg_ParseTuple(args, "nnO", &i, &j, &value))
+        return NULL;
+    res = (*func)(self, i, j, value);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) {
+    ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
+    Py_ssize_t i, j;
+    int res;
+
+    if (!PyArg_ParseTuple(args, "nn", &i, &j))
+        return NULL;
+    res = (*func)(self, i, j, NULL);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+/* XXX objobjproc is a misnomer; should be objargpred */
+static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) {
+    objobjproc func = (objobjproc)wrapped;
+    int res;
+    PyObject* value;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    value = PyTuple_GET_ITEM(args, 0);
+    res = (*func)(self, value);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    else
+        return PyBool_FromLong(res);
 }
 
 static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrapped) {
@@ -137,6 +241,7 @@ static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) {
     Py_INCREF(Py_None);
     return Py_None;
 }
+
 
 
 static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) {
@@ -238,6 +343,81 @@ static Py_ssize_t slot_sq_length(PyObject* self) {
         return -1;
     }
     return len;
+}
+
+static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) {
+    static PyObject* getslice_str;
+
+    if (PyErr_WarnPy3k("in 3.x, __getslice__ has been removed; "
+                       "use __getitem__",
+                       1) < 0)
+        return NULL;
+    return call_method(self, "__getslice__", &getslice_str, "nn", i, j);
+}
+
+static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) {
+    PyObject* res;
+    static PyObject* delitem_str, *setitem_str;
+
+    if (value == NULL)
+        res = call_method(self, "__delitem__", &delitem_str, "(n)", index);
+    else
+        res = call_method(self, "__setitem__", &setitem_str, "(nO)", index, value);
+    if (res == NULL)
+        return -1;
+    Py_DECREF(res);
+    return 0;
+}
+
+static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObject* value) {
+    PyObject* res;
+    static PyObject* delslice_str, *setslice_str;
+
+    if (value == NULL) {
+        if (PyErr_WarnPy3k("in 3.x, __delslice__ has been removed; "
+                           "use __delitem__",
+                           1) < 0)
+            return -1;
+        res = call_method(self, "__delslice__", &delslice_str, "(nn)", i, j);
+    } else {
+        if (PyErr_WarnPy3k("in 3.x, __setslice__ has been removed; "
+                           "use __setitem__",
+                           1) < 0)
+            return -1;
+        res = call_method(self, "__setslice__", &setslice_str, "(nnO)", i, j, value);
+    }
+    if (res == NULL)
+        return -1;
+    Py_DECREF(res);
+    return 0;
+}
+
+static int slot_sq_contains(PyObject* self, PyObject* value) {
+    PyObject* func, *res, *args;
+    int result = -1;
+
+    static PyObject* contains_str;
+
+    func = lookup_maybe(self, "__contains__", &contains_str);
+    if (func != NULL) {
+        args = PyTuple_Pack(1, value);
+        if (args == NULL)
+            res = NULL;
+        else {
+            res = PyObject_Call(func, args, NULL);
+            Py_DECREF(args);
+        }
+        Py_DECREF(func);
+        if (res != NULL) {
+            result = PyObject_IsTrue(res);
+            Py_DECREF(res);
+        }
+    } else if (!PyErr_Occurred()) {
+        /* Possible results: -1 and 1 */
+        Py_FatalError("unimplemented");
+        // result = (int)_PySequence_IterSearch(self, value, PY_ITERSEARCH_CONTAINS);
+    }
+    return result;
 }
 
 // Copied from CPython:
@@ -349,31 +529,31 @@ static slotdef slotdefs[] = {
            "x.__setitem__(i, y) <==> x[i]=y"),
     MPSLOT("__delitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_delitem, "x.__delitem__(y) <==> del x[y]"),
 
-    // SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
+    SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     /* Heap types defining __add__/__mul__ have sq_concat/sq_repeat == NULL.
        The logic in abstract.c always falls back to nb_add/nb_multiply in
        this case.  Defining both the nb_* and the sq_* slots to call the
        user-defined methods has unexpected side-effects, as shown by
        test_descr.notimplemented() */
-    // SQSLOT("__add__", sq_concat, NULL, wrap_binaryfunc, "x.__add__(y) <==> x+y"),
-    // SQSLOT("__mul__", sq_repeat, NULL, wrap_indexargfunc, "x.__mul__(n) <==> x*n"),
-    // SQSLOT("__rmul__", sq_repeat, NULL, wrap_indexargfunc, "x.__rmul__(n) <==> n*x"),
+    SQSLOT("__add__", sq_concat, NULL, wrap_binaryfunc, "x.__add__(y) <==> x+y"),
+    SQSLOT("__mul__", sq_repeat, NULL, wrap_indexargfunc, "x.__mul__(n) <==> x*n"),
+    SQSLOT("__rmul__", sq_repeat, NULL, wrap_indexargfunc, "x.__rmul__(n) <==> n*x"),
     SQSLOT("__getitem__", sq_item, slot_sq_item, wrap_sq_item, "x.__getitem__(y) <==> x[y]"),
-    //SQSLOT("__getslice__", sq_slice, slot_sq_slice, wrap_ssizessizeargfunc, "x.__getslice__(i, j) <==> x[i:j]\n\
-           //\n\
-           //Use of negative indices is not supported."),
-    // SQSLOT("__setitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_setitem, "x.__setitem__(i, y) <==> x[i]=y"),
-    // SQSLOT("__delitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_delitem, "x.__delitem__(y) <==> del x[y]"),
-    // SQSLOT("__setslice__", sq_ass_slice, slot_sq_ass_slice, wrap_ssizessizeobjargproc,
-    //"x.__setslice__(i, j, y) <==> x[i:j]=y\n\
-           //\n\
-           //Use  of negative indices is not supported."),
-    //SQSLOT("__delslice__", sq_ass_slice, slot_sq_ass_slice, wrap_delslice, "x.__delslice__(i, j) <==> del x[i:j]\n\
-           //\n\
-           //Use of negative indices is not supported."),
-    // SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
-    // SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
-    // SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
+    SQSLOT("__getslice__", sq_slice, slot_sq_slice, wrap_ssizessizeargfunc, "x.__getslice__(i, j) <==> x[i:j]\n\
+           \n\
+           Use of negative indices is not supported."),
+    SQSLOT("__setitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_setitem, "x.__setitem__(i, y) <==> x[i]=y"),
+    SQSLOT("__delitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_delitem, "x.__delitem__(y) <==> del x[y]"),
+    SQSLOT("__setslice__", sq_ass_slice, slot_sq_ass_slice, wrap_ssizessizeobjargproc,
+           "x.__setslice__(i, j, y) <==> x[i:j]=y\n\
+           \n\
+           Use  of negative indices is not supported."),
+    SQSLOT("__delslice__", sq_ass_slice, slot_sq_ass_slice, wrap_delslice, "x.__delslice__(i, j) <==> del x[i:j]\n\
+           \n\
+           Use of negative indices is not supported."),
+    SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
+    SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
+    SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
 };
 
 static void init_slotdefs() {
@@ -507,10 +687,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
-
-    if (cls->tp_as_sequence) {
-        printf("Warning: found tp_as_sequence, but not all sequence slotdefs defined\n");
-    }
 
 // I think it is safe to ignore these for for now:
 // RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");

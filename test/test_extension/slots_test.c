@@ -209,12 +209,19 @@ call_funcs(PyObject* _module, PyObject* args) {
 
     if (cls->tp_as_mapping) {
         printf("tp_as_mapping exists\n");
-        if (cls->tp_as_mapping->mp_subscript) {
-            PyObject* rtn = cls->tp_as_mapping->mp_subscript(obj, PyInt_FromLong(1));
+        PyMappingMethods* map = cls->tp_as_mapping;
+
+        if (map->mp_subscript) {
+            PyObject* rtn = map->mp_subscript(obj, PyInt_FromLong(1));
             printf("mp_subscript exists and returned\n");
             Py_DECREF(rtn);
         } else {
             printf("mp_subscript does not exist\n");
+        }
+
+        if (map->mp_length) {
+            Py_ssize_t rtn = map->mp_length(obj);
+            printf("mp_length exists and returned %ld\n", rtn);
         }
     } else {
         printf("tp_as_mapping doesnt exist\n");
@@ -222,7 +229,14 @@ call_funcs(PyObject* _module, PyObject* args) {
 
     if (cls->tp_as_sequence) {
         printf("tp_as_sequence exists\n");
-        if (cls->tp_as_sequence->sq_item) {
+        PySequenceMethods* seq = cls->tp_as_sequence;
+
+        if (seq->sq_length) {
+            Py_ssize_t rtn = seq->sq_length(obj);
+            printf("sq_length exists and returned %ld\n", rtn);
+        }
+
+        if (seq->sq_item) {
             PyObject* rtn = cls->tp_as_sequence->sq_item(obj, 1);
             printf("sq_item exists and returned\n");
             Py_DECREF(rtn);
