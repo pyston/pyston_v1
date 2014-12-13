@@ -18,6 +18,7 @@
 
 #include "llvm/Support/FileSystem.h"
 
+#include "capi/typeobject.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
@@ -528,6 +529,8 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
 
         cls->giveAttr("__module__", boxStrConstantSize(name, dot_pos - name));
         cls->giveAttr("__name__", boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1));
+        // TODO Not sure if this should be called here
+        fixup_slot_dispatchers(cls);
         return cls;
     } catch (Box* e) {
         abort();

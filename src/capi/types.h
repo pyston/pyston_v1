@@ -27,7 +27,9 @@ struct wrapper_def {
     int offset;
     void* function;      // "generic" handler that gets put in the tp_* slot which proxies to the python version
     wrapperfunc wrapper; // "wrapper" that ends up getting called by the Python-visible WrapperDescr
+    // exists in CPython: const char* doc
     int flags;
+    // exists in CPython: PyObject *name_strobj
 };
 
 extern BoxedClass* capifunc_cls, *wrapperdescr_cls, *wrapperobject_cls;

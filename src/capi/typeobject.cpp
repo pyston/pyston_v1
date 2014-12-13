@@ -86,58 +86,68 @@ PyObject* Py_CallPythonRepr(PyObject* self) {
     }
 }
 
+typedef wrapper_def slotdef;
+
+static void** slotptr(BoxedClass* self, int offset) {
+    // TODO handle indices into the indirected portions (tp_as_sequence, etc)
+    char* ptr = reinterpret_cast<char*>(self);
+    return reinterpret_cast<void**>(ptr + offset);
+}
+
+static void update_one_slot(BoxedClass* self, const slotdef& p) {
+    // TODO: CPython version is significantly more sophisticated
+    void** ptr = slotptr(self, p.offset);
+    assert(ptr);
+
+    if (typeLookup(self, p.name, NULL))
+        *ptr = p.function;
+    else
+        *ptr = NULL;
+}
+
+static slotdef slotdefs[] = {
+    { "__repr__", offsetof(PyTypeObject, tp_repr), (void*)&Py_CallPythonRepr, wrap_unaryfunc, 0 },
+    { "__call__", offsetof(PyTypeObject, tp_call), (void*)&Py_CallPythonCall, (wrapperfunc)wrap_call,
+      PyWrapperFlag_KEYWORDS },
+    { "__new__", offsetof(PyTypeObject, tp_new), (void*)&Py_CallPythonNew, NULL, 0 },
+};
+
+static void init_slotdefs() {
+    static bool initialized = false;
+    if (initialized)
+        return;
+
+    for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
+        if (i > 0) {
+            ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name);
+            // CPython interns the name here
+        }
+    }
+
+    initialized = true;
+}
+
 bool update_slot(BoxedClass* self, const std::string& attr) {
-    if (attr == "__new__") {
-        self->tp_new = &Py_CallPythonNew;
-        // TODO update subclasses
-        return true;
+    bool updated = false;
+    for (const slotdef& p : slotdefs) {
+        if (p.name == attr) {
+            // TODO update subclasses;
+            update_one_slot(self, p);
+            updated = true;
+        }
     }
-
-    if (attr == "__call__") {
-        self->tp_call = &Py_CallPythonCall;
-        // TODO update subclasses
-
-        return true;
-    }
-
-    if (attr == "__repr__") {
-        self->tp_repr = &Py_CallPythonRepr;
-        // TODO update subclasses
-
-        return true;
-    }
-
-    return false;
+    return updated;
 }
 
 void fixup_slot_dispatchers(BoxedClass* self) {
-    // This will probably share a lot in common with Py_TypeReady:
-    if (!self->tp_new) {
-        self->tp_new = &Py_CallPythonNew;
-    } else if (self->tp_new != Py_CallPythonNew) {
-        ASSERT(0, "need to set __new__?");
-    }
+    init_slotdefs();
 
-    if (!self->tp_call) {
-        self->tp_call = &Py_CallPythonCall;
-    } else if (self->tp_call != Py_CallPythonCall) {
-        ASSERT(0, "need to set __call__?");
-    }
-
-    if (!self->tp_repr) {
-        self->tp_repr = &PyObject_Repr;
-    } else if (self->tp_repr != Py_CallPythonRepr) {
-        ASSERT(0, "need to set __repr__?");
+    for (const slotdef& p : slotdefs) {
+        update_one_slot(self, p);
     }
 }
 
-
-wrapper_def call_wrapper = { "__call__", offsetof(PyTypeObject, tp_call), (void*)&Py_CallPythonCall,
-                             (wrapperfunc)wrap_call, PyWrapperFlag_KEYWORDS };
-wrapper_def repr_wrapper
-    = { "__repr__", offsetof(PyTypeObject, tp_repr), (void*)&Py_CallPythonRepr, wrap_unaryfunc, 0 };
-
-PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
+static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
     RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
 
     // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
@@ -155,20 +165,34 @@ PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
     return self->tp_new(subtype, new_args, kwds);
 }
 
+static void add_tp_new_wrapper(BoxedClass* type) {
+    if (type->getattr("__new__"))
+        return;
 
-static void add_operators(PyTypeObject* cls) {
-    if (cls->tp_new) {
-        cls->giveAttr("__new__",
-                      new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, cls, "__new__", (PyCFunction)tp_new_wrapper));
+    type->giveAttr("__new__",
+                   new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
+}
+
+static void add_operators(BoxedClass* cls) {
+    init_slotdefs();
+
+    for (const slotdef& p : slotdefs) {
+        if (!p.wrapper)
+            continue;
+
+        void** ptr = slotptr(cls, p.offset);
+
+        if (!ptr || !*ptr)
+            continue;
+        if (cls->getattr(p.name))
+            continue;
+        // TODO PyObject_HashNotImplemented
+
+        cls->giveAttr(p.name, new BoxedWrapperDescriptor(&p, cls));
     }
 
-    if (cls->tp_call) {
-        cls->giveAttr("__call__", new BoxedWrapperDescriptor(&call_wrapper, cls));
-    }
-
-    if (cls->tp_repr) {
-        cls->giveAttr("__repr__", new BoxedWrapperDescriptor(&repr_wrapper, cls));
-    }
+    if (cls->tp_new)
+        add_tp_new_wrapper(cls);
 }
 
 extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) {
@@ -243,7 +267,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
         cls->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
     }
 
-    add_operators(cls);
+    try {
+        add_operators(cls);
+    } catch (Box* b) {
+        abort();
+    }
 
     for (PyMethodDef* method = cls->tp_methods; method && method->ml_name; ++method) {
         cls->giveAttr(method->ml_name, new BoxedMethodDescriptor(method, cls));

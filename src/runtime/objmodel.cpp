@@ -3289,10 +3289,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
     made->setattr("__name__", name, NULL);
 
-    // TODO this function (typeNew) should probably call PyType_Ready
-
+    // TODO should this function (typeNew) call PyType_Ready?
     made->tp_new = base->tp_new;
     made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
+    fixup_slot_dispatchers(made);
 
     return made;
 }
