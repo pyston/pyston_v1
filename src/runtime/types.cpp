@@ -503,6 +503,10 @@ static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
     return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
 }
 
+static Box* functionNonzero(BoxedFunction* self) {
+    return True;
+}
+
 extern "C" {
 Box* None = NULL;
 Box* NotImplemented = NULL;
@@ -910,6 +914,7 @@ void setupRuntime() {
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
+    function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->freeze();
 
     instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));

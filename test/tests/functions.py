@@ -11,3 +11,5 @@ def g():
 
 print type(f).__call__(f)
 print type(f).__call__(g)
+
+print bool(f)
