@@ -686,7 +686,7 @@ public:
 
             for (; i < arg_names.args->size(); i++) {
                 AST_expr* arg = (*arg_names.args)[i];
-                assert(arg->type == AST_TYPE::Name);
+                RELEASE_ASSERT(arg->type == AST_TYPE::Name, "");
                 AST_Name* arg_name = ast_cast<AST_Name>(arg);
                 initial_types[arg_name->id] = unboxedType(arg_types[i]);
             }

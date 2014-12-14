@@ -15,18 +15,29 @@
 #ifndef PYSTON_EXTINCLUDE_PYTHON_H
 #define PYSTON_EXTINCLUDE_PYTHON_H
 
-#include <assert.h>
-#include <errno.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <limits.h>
-
 // These include orders come from CPython:
 #include "patchlevel.h"
 #include "pyconfig.h"
+
+#include <limits.h>
+
+#include <stdio.h>
+
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
+#ifdef HAVE_STDDEF_H
+#include <stddef.h>
+#endif
+
+#include <assert.h>
+
+// CPython doesn't seem to include this but I'm not sure how they get the definition of 'bool':
+#include <stdbool.h>
 
 #include "pyport.h"
 
@@ -47,10 +58,12 @@
 #include "complexobject.h"
 #endif
 #include "stringobject.h"
+#include "bytesobject.h"
 #include "listobject.h"
 #include "dictobject.h"
 #include "tupleobject.h"
 #include "methodobject.h"
+#include "fileobject.h"
 #include "pycapsule.h"
 #include "sliceobject.h"
 #include "iterobject.h"
@@ -65,6 +78,7 @@
 #include "modsupport.h"
 #include "pythonrun.h"
 #include "ceval.h"
+#include "intrcheck.h"
 #include "import.h"
 
 #include "abstract.h"

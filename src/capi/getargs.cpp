@@ -144,6 +144,16 @@ extern "C" int PyArg_VaParse(PyObject* _tuple, const char* fmt, va_list ap) {
     return vgetargs1(_tuple, fmt, &lva, 0);
 }
 
+extern "C" int _PyArg_Parse_SizeT(PyObject* args, char* format, ...) {
+    int retval;
+    va_list va;
+
+    va_start(va, format);
+    retval = vgetargs1(args, format, &va, FLAG_COMPAT | FLAG_SIZE_T);
+    va_end(va);
+    return retval;
+}
+
 extern "C" int PyArg_ParseTuple(PyObject* _tuple, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);

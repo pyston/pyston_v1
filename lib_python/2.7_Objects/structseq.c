@@ -1,3 +1,5 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
+
 /* Implementation helper: a struct that looks like a tuple.  See timemodule
    and posixmodule for example uses. */
 

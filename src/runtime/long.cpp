@@ -32,6 +32,18 @@ namespace pyston {
 
 BoxedClass* long_cls;
 
+extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) {
+    Py_FatalError("unimplemented");
+}
+
 static int64_t asSignedLong(BoxedLong* self) {
     assert(self->cls == long_cls);
     if (!mpz_fits_slong_p(self->n))

@@ -953,6 +953,8 @@ void setupRuntime() {
 
     setupCAPI();
 
+    PyType_Ready(&PyCapsule_Type);
+
     initerrno();
     init_sha();
     init_sha256();

@@ -38,6 +38,17 @@
 
 namespace pyston {
 
+extern "C" {
+// Copied from CPython:
+#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+const char* Py_FileSystemDefaultEncoding = "mbcs";
+#elif defined(__APPLE__)
+const char* Py_FileSystemDefaultEncoding = "utf-8";
+#else
+const char* Py_FileSystemDefaultEncoding = NULL; /* use default */
+#endif
+}
+
 extern "C" Box* trap() {
     raise(SIGTRAP);
 
@@ -453,7 +464,7 @@ BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *Attribu
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
     *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
-    *SystemError;
+    *SystemError, *NotImplementedError;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -745,10 +756,10 @@ void setupBuiltins() {
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
     MemoryError = makeBuiltinException(StandardError, "MemoryError");
     BufferError = makeBuiltinException(StandardError, "BufferError");
-    /*NotImplementedError=*/makeBuiltinException(RuntimeError, "NotImplementedError");
     KeyboardInterrupt = makeBuiltinException(BaseException, "KeyboardInterrupt");
     SystemExit = makeBuiltinException(BaseException, "SystemExit");
     SystemError = makeBuiltinException(StandardError, "SystemError");
+    NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
