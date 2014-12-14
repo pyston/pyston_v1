@@ -137,8 +137,8 @@ add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${L
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 add_test(NAME pyston_defaults COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k ${CMAKE_SOURCE_DIR}/test/tests)
-add_test(NAME pyston_disable_interpreter COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
 add_test(NAME pyston_max_compilation_tier COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -a -O -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_experimental_pypa_parser COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -a -x -R ./pyston -j4 -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
 
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)
