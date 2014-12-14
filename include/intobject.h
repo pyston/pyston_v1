@@ -63,7 +63,7 @@ PyAPI_FUNC(long) PyInt_GetMax(void);
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyInt_AS_LONG(op) PyInt_FromLong(op)
+#define PyInt_AS_LONG(op) PyInt_AsLong((PyObject*)op)
 //#define PyInt_AS_LONG(op) (((PyIntObject *)(op))->ob_ival)
 
 /* These aren't really part of the Int object, but they're handy; the protos

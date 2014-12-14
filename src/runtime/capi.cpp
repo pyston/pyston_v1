@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -775,6 +776,220 @@ extern "C" Py_UNICODE* PyUnicode_AS_UNICODE(PyObject*) {
 
 extern "C" const char* PyUnicode_AS_DATA(PyObject*) {
     Py_FatalError("unimplemented");
+}
+
+extern "C" const char* PyUnicode_GetDefaultEncoding(void) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyErr_SetFromErrnoWithFilename(PyObject* exc, const char* filename) {
+    PyObject* name = filename ? PyString_FromString(filename) : NULL;
+    PyObject* result = PyErr_SetFromErrnoWithFilenameObject(exc, name);
+    Py_XDECREF(name);
+    return result;
+}
+
+extern "C" PyObject* PyErr_SetFromErrnoWithFilenameObject(PyObject* exc, PyObject* filenameObject) {
+    PyObject* v;
+    const char* s;
+    int i = errno;
+#ifdef PLAN9
+    char errbuf[ERRMAX];
+#endif
+#ifdef MS_WINDOWS
+    char* s_buf = NULL;
+    char s_small_buf[28]; /* Room for "Windows Error 0xFFFFFFFF" */
+#endif
+#ifdef EINTR
+    if (i == EINTR && PyErr_CheckSignals())
+        return NULL;
+#endif
+#ifdef PLAN9
+    rerrstr(errbuf, sizeof errbuf);
+    s = errbuf;
+#else
+    if (i == 0)
+        s = "Error"; /* Sometimes errno didn't get set */
+    else
+#ifndef MS_WINDOWS
+        s = strerror(i);
+#else
+    {
+        /* Note that the Win32 errors do not lineup with the
+           errno error.  So if the error is in the MSVC error
+           table, we use it, otherwise we assume it really _is_
+           a Win32 error code
+        */
+        if (i > 0 && i < _sys_nerr) {
+            s = _sys_errlist[i];
+        } else {
+            int len = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
+                                    | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                    NULL, /* no message source */
+                                    i, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                                    /* Default language */
+                                    (LPTSTR)&s_buf, 0, /* size not used */
+                                    NULL);             /* no args */
+            if (len == 0) {
+                /* Only ever seen this in out-of-mem
+                   situations */
+                sprintf(s_small_buf, "Windows Error 0x%X", i);
+                s = s_small_buf;
+                s_buf = NULL;
+            } else {
+                s = s_buf;
+                /* remove trailing cr/lf and dots */
+                while (len > 0 && (s[len - 1] <= ' ' || s[len - 1] == '.'))
+                    s[--len] = '\0';
+            }
+        }
+    }
+#endif /* Unix/Windows */
+#endif /* PLAN 9*/
+    if (filenameObject != NULL)
+        v = Py_BuildValue("(isO)", i, s, filenameObject);
+    else
+        v = Py_BuildValue("(is)", i, s);
+    if (v != NULL) {
+        PyErr_SetObject(exc, v);
+        Py_DECREF(v);
+    }
+#ifdef MS_WINDOWS
+    LocalFree(s_buf);
+#endif
+    return NULL;
+}
+
+extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) {
+    int rc;
+    va_list va;
+
+    va_start(va, format);
+    rc = PyOS_vsnprintf(str, size, format, va);
+    va_end(va);
+    return rc;
+}
+
+extern "C" int PyOS_vsnprintf(char* str, size_t size, const char* format, va_list va) {
+    int len; /* # bytes written, excluding \0 */
+#ifdef HAVE_SNPRINTF
+#define _PyOS_vsnprintf_EXTRA_SPACE 1
+#else
+#define _PyOS_vsnprintf_EXTRA_SPACE 512
+    char* buffer;
+#endif
+    assert(str != NULL);
+    assert(size > 0);
+    assert(format != NULL);
+    /* We take a size_t as input but return an int.  Sanity check
+     * our input so that it won't cause an overflow in the
+     * vsnprintf return value or the buffer malloc size.  */
+    if (size > INT_MAX - _PyOS_vsnprintf_EXTRA_SPACE) {
+        len = -666;
+        goto Done;
+    }
+
+#ifdef HAVE_SNPRINTF
+    len = vsnprintf(str, size, format, va);
+#else
+    /* Emulate it. */
+    buffer = (char*)PyMem_MALLOC(size + _PyOS_vsnprintf_EXTRA_SPACE);
+    if (buffer == NULL) {
+        len = -666;
+        goto Done;
+    }
+
+    len = vsprintf(buffer, format, va);
+    if (len < 0)
+        /* ignore the error */;
+
+    else if ((size_t)len >= size + _PyOS_vsnprintf_EXTRA_SPACE)
+        Py_FatalError("Buffer overflow in PyOS_snprintf/PyOS_vsnprintf");
+
+    else {
+        const size_t to_copy = (size_t)len < size ? (size_t)len : size - 1;
+        assert(to_copy < size);
+        memcpy(str, buffer, to_copy);
+        str[to_copy] = '\0';
+    }
+    PyMem_FREE(buffer);
+#endif
+Done:
+    if (size > 0)
+        str[size - 1] = '\0';
+    return len;
+#undef _PyOS_vsnprintf_EXTRA_SPACE
+}
+
+extern "C" void PyOS_AfterFork(void) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" {
+static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
+    int fd;
+    Py_ssize_t n;
+
+    if (size <= 0)
+        return 0;
+
+    Py_BEGIN_ALLOW_THREADS fd = ::open("/dev/urandom", O_RDONLY);
+    Py_END_ALLOW_THREADS if (fd < 0) {
+        if (errno == ENOENT || errno == ENXIO || errno == ENODEV || errno == EACCES)
+            PyErr_SetString(PyExc_NotImplementedError, "/dev/urandom (or equivalent) not found");
+        else
+            PyErr_SetFromErrno(PyExc_OSError);
+        return -1;
+    }
+
+    Py_BEGIN_ALLOW_THREADS do {
+        do {
+            n = read(fd, buffer, (size_t)size);
+        } while (n < 0 && errno == EINTR);
+        if (n <= 0)
+            break;
+        buffer += n;
+        size -= (Py_ssize_t)n;
+    }
+    while (0 < size)
+        ;
+    Py_END_ALLOW_THREADS
+
+        if (n <= 0) {
+        /* stop on error or if read(size) returned 0 */
+        if (n < 0)
+            PyErr_SetFromErrno(PyExc_OSError);
+        else
+            PyErr_Format(PyExc_RuntimeError, "Failed to read %zi bytes from /dev/urandom", size);
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    return 0;
+}
+}
+
+extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) {
+    if (size < 0) {
+        PyErr_Format(PyExc_ValueError, "negative argument not allowed");
+        return -1;
+    }
+    if (size == 0)
+        return 0;
+
+#ifdef MS_WINDOWS
+    return win32_urandom((unsigned char*)buffer, size, 1);
+#else
+#ifdef __VMS
+    return vms_urandom((unsigned char*)buffer, size, 1);
+#else
+    return dev_urandom_python((char*)buffer, size);
+#endif
+#endif
 }
 
 BoxedModule* importTestExtension(const std::string& name) {

@@ -44,6 +44,7 @@ extern "C" void initmath();
 extern "C" void initoperator();
 extern "C" void initbinascii();
 extern "C" void initpwd();
+extern "C" void initposix();
 
 namespace pyston {
 
@@ -949,9 +950,10 @@ void setupRuntime() {
     setupBuiltins();
     setupTime();
     setupThread();
-    setupPosix();
 
     setupCAPI();
+
+    PyType_Ready(&PyCapsule_Type);
 
     initerrno();
     init_sha();
@@ -964,6 +966,7 @@ void setupRuntime() {
     initoperator();
     initbinascii();
     initpwd();
+    initposix();
 
     setupSysEnd();
 

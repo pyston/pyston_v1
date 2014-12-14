@@ -159,8 +159,14 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) {
     try {
         return getitem(dict, key);
     } catch (Box* b) {
+        if (isSubclass(b->cls, KeyError))
+            return NULL;
         abort();
     }
+}
+
+extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) {
+    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) {

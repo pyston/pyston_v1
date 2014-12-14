@@ -31,6 +31,10 @@
 
 namespace pyston {
 
+extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" long PyInt_AsLong(PyObject* op) {
     RELEASE_ASSERT(op->cls == int_cls, "");
     return static_cast<BoxedInt*>(op)->n;

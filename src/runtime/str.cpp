@@ -31,6 +31,10 @@
 
 namespace pyston {
 
+extern "C" PyObject* PyString_FromFormat(const char* format, ...) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
 

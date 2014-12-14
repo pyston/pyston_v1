@@ -399,8 +399,10 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_
     tp_as_sequence = &as_sequence;
     tp_as_buffer = &as_buffer;
 
-    // just make sure these get zero-initialized:
-    assert(as_sequence.sq_item == NULL);
+    memset(&as_number, 0, sizeof(as_number));
+    memset(&as_mapping, 0, sizeof(as_mapping));
+    memset(&as_sequence, 0, sizeof(as_sequence));
+    memset(&as_buffer, 0, sizeof(as_buffer));
 }
 
 std::string getFullNameOfClass(BoxedClass* cls) {

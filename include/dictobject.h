@@ -92,7 +92,11 @@ struct _dictobject {
     PyDictEntry ma_smalltable[PyDict_MINSIZE];
 };
 #endif
+PyAPI_DATA(PyTypeObject*) list_cls;
+#define PyList_Type (*list_cls)
 
+// Pyston change: these are no longer static objects:
+#if 0
 PyAPI_DATA(PyTypeObject) PyDict_Type;
 PyAPI_DATA(PyTypeObject) PyDictIterKey_Type;
 PyAPI_DATA(PyTypeObject) PyDictIterValue_Type;
@@ -100,6 +104,21 @@ PyAPI_DATA(PyTypeObject) PyDictIterItem_Type;
 PyAPI_DATA(PyTypeObject) PyDictKeys_Type;
 PyAPI_DATA(PyTypeObject) PyDictItems_Type;
 PyAPI_DATA(PyTypeObject) PyDictValues_Type;
+#endif
+PyAPI_DATA(PyTypeObject*) dict_cls;
+#define PyDict_Type (*dict_cls)
+PyAPI_DATA(PyTypeObject*) dictiterkey_cls;
+#define PyDictIterKey_Type (*dictiterkey_cls)
+PyAPI_DATA(PyTypeObject*) dictitervalue_cls;
+#define PyDictIterValue_Type (*dictitervalue_cls)
+PyAPI_DATA(PyTypeObject*) dictiteritem_cls;
+#define PyDictIterItem_Type (*dictiteritem_cls)
+PyAPI_DATA(PyTypeObject*) dictkeys_cls;
+#define PyDictKeys_Type (*dictkeys_cls)
+PyAPI_DATA(PyTypeObject*) dictitems_cls;
+#define PyDictItems_Type (*dictitems_cls)
+PyAPI_DATA(PyTypeObject*) dictvalues_cls;
+#define PyDictValues_Type (*dictvalues_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyDict_Check(PyObject*);

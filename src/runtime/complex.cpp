@@ -30,6 +30,10 @@ extern "C" Box* createPureImaginary(double i) {
     return new BoxedComplex(0.0, i);
 }
 
+extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) {
+    Py_FatalError("unimplemented");
+}
+
 // addition
 
 extern "C" Box* complexAddComplex(BoxedComplex* lhs, BoxedComplex* rhs) {

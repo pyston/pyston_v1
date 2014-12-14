@@ -178,6 +178,18 @@ Box* fileIterHasNext(Box* s) {
     return boxBool(!fileEof(self));
 }
 
+extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int _PyFile_SanitizeMode(char* mode) {
+    Py_FatalError("unimplemented");
+}
+
 void setupFile() {
     file_cls->giveAttr("__name__", boxStrConstant("file"));
 
