@@ -278,7 +278,8 @@ STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
 STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c $(EXTRA_STDMODULE_SRCS)
 STDOBJECT_SRCS := structseq.c capsule.c $(EXTRA_STDOBJECT_SRCS)
-FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(addprefix lib_python/2.7_Objects/,$(STDOBJECT_SRCS)) $(wildcard src/capi/*.c)
+STDPYTHON_SRCS := pyctype.c $(EXTRA_STDPYTHON_SRCS)
+FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(addprefix lib_python/2.7_Objects/,$(STDOBJECT_SRCS)) $(addprefix lib_python/2.7_Python/,$(STDPYTHON_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
