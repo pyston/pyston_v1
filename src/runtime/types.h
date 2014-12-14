@@ -70,7 +70,6 @@ void setupSys();
 void setupBuiltins();
 void setupTime();
 void setupThread();
-void setupPosix();
 void setupSysEnd();
 
 BoxedDict* getSysModulesDict();
