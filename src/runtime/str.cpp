@@ -31,6 +31,46 @@
 
 namespace pyston {
 
+/* helper macro to fixup start/end slice values */
+inline void adjust_indices(int& start, int& end, const int& len) {
+    if (end > len)
+        end = len;
+    else if (end < 0) {
+        end += len;
+        if (end < 0)
+            end = 0;
+    }
+    if (start < 0) {
+        start += len;
+        if (start < 0)
+            start = 0;
+    }
+}
+
+int internalStrFind(const std::string& str, const std::string& sub, int start, int end) {
+    adjust_indices(start, end, (int)str.size());
+
+    std::string::size_type result = str.find(sub, start);
+
+    if (result == std::string::npos || (result + sub.size() > (std::string::size_type)end)) {
+        return -1;
+    }
+
+    return (int)result;
+}
+
+int internalStrRfind(const std::string& str, const std::string& sub, int start, int end) {
+    adjust_indices(start, end, (int)str.size());
+
+    std::string::size_type result = str.rfind(sub, end);
+
+    if (result == std::string::npos || result < (std::string::size_type)start
+        || (result + sub.size() > (std::string::size_type)end))
+        return -1;
+
+    return (int)result;
+}
+
 extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
 
@@ -939,30 +979,49 @@ Box* strIter(BoxedString* self) {
     return new BoxedStringIterator(self);
 }
 
-int64_t strCount2Unboxed(BoxedString* self, Box* elt) {
+Box* strCount(BoxedString* self, Box* elt, Box* startbox, Box** args) {
     assert(self->cls == str_cls);
 
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
+    Box* endbox = args[0];
 
-    const std::string& s = self->s;
+    if (elt->cls != str_cls) {
+        raiseExcHelper(TypeError, "expected a character buffer object");
+    } else if (startbox->cls != int_cls && startbox->cls != none_cls) {
+        raiseExcHelper(TypeError, "slice indices must be integers or None or have an __index__ method");
+    } else if (endbox->cls != int_cls && endbox->cls != none_cls) {
+        raiseExcHelper(TypeError, "slice indices must be integers or None or have an __index__ method");
+    }
+
+    const std::string& str = self->s;
     const std::string& pattern = static_cast<BoxedString*>(elt)->s;
 
-    int found = 0;
-    size_t start = 0;
-    while (start < s.size()) {
-        size_t next = s.find(pattern, start);
-        if (next == std::string::npos)
+    std::size_t found = 0;
+    int start = 0, end = INT32_MAX;
+
+    if (startbox->cls == int_cls) {
+        start = static_cast<BoxedInt*>(startbox)->n;
+    }
+    if (endbox->cls == int_cls) {
+        end = static_cast<BoxedInt*>(endbox)->n;
+    }
+
+    while (1) {
+        start = internalStrFind(str, pattern, start, end);
+        if (start < 0)
             break;
 
-        found++;
-        start = next + pattern.size();
-    }
-    return found;
-}
+        if (pattern.size() != 0) {
+            start = internalStrFind(str, pattern, start, end);
 
-Box* strCount2(BoxedString* self, Box* elt) {
-    return boxInt(strCount2Unboxed(self, elt));
+            start += pattern.size();
+        } else {
+            ++start;
+        }
+
+        found++;
+    }
+
+    return boxInt(found);
 }
 
 extern "C" PyObject* PyString_FromString(const char* s) {
@@ -1111,9 +1170,8 @@ void setupStr() {
     str_cls->giveAttr(
         "rsplit", new BoxedFunction(boxRTFunction((void*)strRsplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
 
-    CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
-    addRTFunction(count, (void*)strCount2, BOXED_INT);
-    str_cls->giveAttr("count", new BoxedFunction(count));
+    str_cls->giveAttr("count",
+                      new BoxedFunction(boxRTFunction((void*)strCount, BOXED_INT, 4, 2, true, false), { None, None }));
 
     str_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false),
                                                    { boxStrConstant("") }));
