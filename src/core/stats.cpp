@@ -28,7 +28,7 @@ StatCounter::StatCounter(const std::string& name) : id(Stats::getStatId(name)) {
 
 StatPerThreadCounter::StatPerThreadCounter(const std::string& name) {
     char buf[80];
-    snprintf(buf, 80, "%s_t%d", name.c_str(), threading::gettid());
+    snprintf(buf, 80, "%s_t%ld", name.c_str(), pthread_self());
     id = Stats::getStatId(buf);
 }
 

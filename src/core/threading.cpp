@@ -32,16 +32,6 @@
 namespace pyston {
 namespace threading {
 
-// Linux specific: TODO should be in a plat/linux/ directory?
-pid_t gettid() {
-    pid_t tid = syscall(SYS_gettid);
-    assert(tid > 0);
-    return tid;
-}
-int tgkill(int tgid, int tid, int sig) {
-    return syscall(SYS_tgkill, tgid, tid, sig);
-}
-
 PthreadFastMutex threading_lock;
 
 // Certain thread examination functions won't be valid for a brief
@@ -103,15 +93,15 @@ public:
 
     friend void* getStackTop();
 };
-static std::unordered_map<pid_t, ThreadStateInternal*> current_threads;
+static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 
-// TODO could optimize these by keeping a __thread local reference to current_threads[gettid()]
+// TODO could optimize these by keeping a __thread local reference to current_threads[pthread_self()]
 void* getStackBottom() {
-    return current_threads[gettid()]->stack_bottom;
+    return current_threads[pthread_self()]->stack_bottom;
 }
 
 void* getStackTop() {
-    ThreadStateInternal* state = current_threads[gettid()];
+    ThreadStateInternal* state = current_threads[pthread_self()];
     int depth = state->generator_depth;
     if (depth == 0) {
         return __builtin_frame_address(0);
@@ -120,16 +110,16 @@ void* getStackTop() {
 }
 
 void pushGenerator(ucontext_t* prev_context) {
-    current_threads[gettid()]->pushGenerator(prev_context);
+    current_threads[pthread_self()]->pushGenerator(prev_context);
 }
 void popGenerator() {
-    current_threads[gettid()]->popGenerator();
+    current_threads[pthread_self()]->popGenerator();
 }
 
 static int signals_waiting(0);
 static std::vector<ThreadState> thread_states;
 
-static void pushThreadState(pid_t tid, ucontext_t* context) {
+static void pushThreadState(pthread_t tid, ucontext_t* context) {
 #if STACK_GROWS_DOWN
     void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
     void* stack_end = current_threads[tid]->stack_bottom;
@@ -167,10 +157,9 @@ std::vector<ThreadState> getAllThreadStates() {
     // If they did save their state (as indicated by current_threads[tid]->isValid), then we use that.
     // Otherwise, we send them a signal and use the signal handler to look at their thread state.
 
-    pid_t tgid = getpid();
-    pid_t mytid = gettid();
+    pthread_t mytid = pthread_self();
     for (auto& pair : current_threads) {
-        pid_t tid = pair.first;
+        pthread_t tid = pair.first;
         ThreadStateInternal* state = pair.second;
 
         if (tid == mytid)
@@ -187,7 +176,7 @@ std::vector<ThreadState> getAllThreadStates() {
             continue;
         }
 
-        tgkill(tgid, tid, SIGUSR2);
+        pthread_kill(tid, SIGUSR2);
     }
 
     // TODO shouldn't busy-wait:
@@ -208,9 +197,9 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
 
     ucontext_t* context = static_cast<ucontext_t*>(_context);
 
-    pid_t tid = gettid();
+    pthread_t tid = pthread_self();
     if (VERBOSITY() >= 2) {
-        printf("in thread_context_dump, tid=%d\n", tid);
+        printf("in thread_context_dump, tid=%ld\n", tid);
         printf("%p %p %p\n", context, &context, context->uc_mcontext.fpregs);
         printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
@@ -232,11 +221,10 @@ static void* _thread_start(void* _arg) {
     Box* arg3 = arg->arg3;
     delete arg;
 
-    pid_t tid = gettid();
+    pthread_t current_thread = pthread_self();
+
     {
         LOCK_REGION(&threading_lock);
-
-        pthread_t current_thread = pthread_self();
 
         pthread_attr_t thread_attrs;
         int code = pthread_getattr_np(current_thread, &thread_attrs);
@@ -255,25 +243,25 @@ static void* _thread_start(void* _arg) {
 #else
         void* stack_bottom = stack_start;
 #endif
-        current_threads[tid] = new ThreadStateInternal(stack_bottom, current_thread);
+        current_threads[current_thread] = new ThreadStateInternal(stack_bottom, current_thread);
 
         num_starting_threads--;
 
         if (VERBOSITY() >= 2)
-            printf("child initialized; tid=%d\n", gettid());
+            printf("child initialized; tid=%ld\n", current_thread);
     }
 
     threading::GLReadRegion _glock;
 
     void* rtn = start_func(arg1, arg2, arg3);
-    current_threads[tid]->assertNoGenerators();
+    current_threads[current_thread]->assertNoGenerators();
 
     {
         LOCK_REGION(&threading_lock);
 
-        current_threads.erase(gettid());
+        current_threads.erase(current_thread);
         if (VERBOSITY() >= 2)
-            printf("thread tid=%d exited\n", gettid());
+            printf("thread tid=%ld exited\n", current_thread);
     }
 
     return rtn;
@@ -351,7 +339,7 @@ static void* find_stack() {
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
 
-    current_threads[gettid()] = new ThreadStateInternal(find_stack(), pthread_self());
+    current_threads[pthread_self()] = new ThreadStateInternal(find_stack(), pthread_self());
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -365,11 +353,10 @@ void registerMainThread() {
 }
 
 void finishMainThread() {
-    current_threads[gettid()]->assertNoGenerators();
+    current_threads[pthread_self()]->assertNoGenerators();
 
     // TODO maybe this is the place to wait for non-daemon threads?
 }
-
 
 // For the "AllowThreads" regions, let's save the thread state at the beginning of the region.
 // This means that the thread won't get interrupted by the signals we would otherwise need to
@@ -385,7 +372,8 @@ extern "C" void beginAllowThreads() {
     {
         LOCK_REGION(&threading_lock);
 
-        ThreadStateInternal* state = current_threads[gettid()];
+        ThreadStateInternal* state = current_threads[pthread_self()];
+        assert(state);
         state->saveCurrent();
     }
 }
@@ -393,7 +381,9 @@ extern "C" void beginAllowThreads() {
 extern "C" void endAllowThreads() {
     {
         LOCK_REGION(&threading_lock);
-        current_threads[gettid()]->popCurrent();
+        ThreadStateInternal* state = current_threads[pthread_self()];
+        assert(state);
+        state->popCurrent();
     }
 
 

@@ -37,7 +37,7 @@ void registerMainThread();
 void finishMainThread();
 
 struct ThreadState {
-    pid_t tid; // useful mostly for debugging
+    pthread_t tid; // useful mostly for debugging
     ucontext_t* ucontext;
 
     // start and end (start < end) of the threads main stack.
@@ -45,7 +45,7 @@ struct ThreadState {
     // in a generator, but those generators will be tracked separately.
     void* stack_start, *stack_end;
 
-    ThreadState(pid_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
+    ThreadState(pthread_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
         : tid(tid), ucontext(ucontext), stack_start(stack_start), stack_end(stack_end) {}
 };
 // Gets a ThreadState per thread, not including the thread calling this function.
