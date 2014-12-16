@@ -981,7 +981,7 @@ BoxedModule* createModule(const std::string& name, const std::string& fn) {
 
     BoxedDict* d = getSysModulesDict();
     Box* b_name = boxStringPtr(&name);
-    assert(d->d.count(b_name) == 0);
+    ASSERT(d->d.count(b_name) == 0, "%s", name.c_str());
     d->d[b_name] = module;
 
     module->giveAttr("__doc__", None);

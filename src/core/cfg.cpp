@@ -65,6 +65,7 @@ static AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, in
 class CFGVisitor : public ASTVisitor {
 private:
     AST_TYPE::AST_TYPE root_type;
+    FutureFlags future_flags;
     CFG* cfg;
     CFGBlock* curblock;
     ScopingAnalysis* scoping_analysis;
@@ -996,8 +997,8 @@ private:
     }
 
 public:
-    CFGVisitor(AST_TYPE::AST_TYPE root_type, ScopingAnalysis* scoping_analysis, CFG* cfg)
-        : root_type(root_type), cfg(cfg), scoping_analysis(scoping_analysis) {
+    CFGVisitor(AST_TYPE::AST_TYPE root_type, FutureFlags future_flags, ScopingAnalysis* scoping_analysis, CFG* cfg)
+        : root_type(root_type), future_flags(future_flags), cfg(cfg), scoping_analysis(scoping_analysis) {
         curblock = cfg->addBlock();
         curblock->info = "entry";
     }
@@ -1194,7 +1195,15 @@ public:
 
         import->args.push_back(new AST_Num());
         static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
-        static_cast<AST_Num*>(import->args[0])->n_int = node->level;
+
+        // I don't quite understand this but this is what CPython does:
+        int level;
+        if (node->level == 0 && !(future_flags & FF_ABSOLUTE_IMPORT))
+            level = -1;
+        else
+            level = node->level;
+        static_cast<AST_Num*>(import->args[0])->n_int = level;
+
         import->args.push_back(new AST_Tuple());
         static_cast<AST_Tuple*>(import->args[1])->ctx_type = AST_TYPE::Load;
         for (int i = 0; i < node->names.size(); i++) {
@@ -2019,7 +2028,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     ScopingAnalysis* scoping_analysis = source->scoping;
 
-    CFGVisitor visitor(source->ast->type, scoping_analysis, rtn);
+    CFGVisitor visitor(source->ast->type, source->parent_module->future_flags, scoping_analysis, rtn);
 
     bool skip_first = false;
 

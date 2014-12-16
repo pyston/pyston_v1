@@ -838,7 +838,7 @@ Box* strEndswith(BoxedString* self, Box* elt) {
     return boxBool(endswith(self->s, sub->s));
 }
 
-Box* strFind(BoxedString* self, Box* elt) {
+Box* strFind(BoxedString* self, Box* elt, Box* _start) {
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'",
                        getTypeName(elt)->c_str());
@@ -846,9 +846,21 @@ Box* strFind(BoxedString* self, Box* elt) {
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
 
+    if (_start->cls != int_cls) {
+        raiseExcHelper(TypeError, "'start' must be an int for now");
+        // Real error message:
+        // raiseExcHelper(TypeError, "slice indices must be integers or None or have an __index__ method");
+    }
+
+    int64_t start = static_cast<BoxedInt*>(_start)->n;
+    if (start < 0) {
+        start += self->s.size();
+        start = std::max(0L, start);
+    }
+
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
-    size_t r = self->s.find(sub->s);
+    size_t r = self->s.find(sub->s, start);
     if (r == std::string::npos)
         return boxInt(-1);
     return boxInt(r);
@@ -1085,7 +1097,8 @@ void setupStr() {
     str_cls->giveAttr("startswith", new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 2)));
     str_cls->giveAttr("endswith", new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 2)));
 
-    str_cls->giveAttr("find", new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 2)));
+    str_cls->giveAttr("find",
+                      new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 3, 1, false, false), { boxInt(0) }));
     str_cls->giveAttr("rfind", new BoxedFunction(boxRTFunction((void*)strRfind, BOXED_INT, 2)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));

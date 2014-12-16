@@ -939,6 +939,17 @@ $(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o $(BUILD_S
 $(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h) $(BUILD_SYSTEM_DEPS)
 	$(CLANG_EXE) -O2 -fPIC -Wimplicit -I./include -c $< -o $@ -g
 
+.PHONY: ext_pyston_selfhost dbg_ext_pyston_selfhost ext_pyston_selfhost_release
+ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_dbg setup.py build
+	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
+dbg_ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 $(GDB) $(GDB_CMDS) --args ../../pyston_dbg setup.py build
+	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
+ext_pyston_selfhost_release: pyston_release $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_release setup.py build
+	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
+
 .PHONY: ext_python
 ext_python: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
 	cd $(TEST_DIR)/test_extension; python setup.py build

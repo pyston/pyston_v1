@@ -34,7 +34,15 @@ PyAPI_DATA(int) Py_HashRandomizationFlag;
    PYTHONPATH and PYTHONHOME from the environment */
 #define Py_GETENV(s) (Py_IgnoreEnvironmentFlag ? NULL : getenv(s))
 
-PyAPI_FUNC(void) Py_FatalError(const char *message) __attribute__((__noreturn__));
+// Pyston change: make Py_FatalError a macro so that it can access linenumber info, similar to assert:
+//PyAPI_FUNC(void) Py_FatalError(const char *message) __attribute__((__noreturn__));
+#define _STRINGIFY(N) #N
+#define STRINGIFY(N) _STRINGIFY(N)
+#define Py_FatalError(message)                                                                                          \
+do {                                                                                                                    \
+    fprintf(stderr, __FILE__ ":" STRINGIFY(__LINE__) ": %s: Fatal Python error: %s\n", __PRETTY_FUNCTION__, message);   \
+    abort();                                                                                                            \
+} while (0)
 
 #ifdef __cplusplus
 }
