@@ -5892,10 +5892,23 @@ posix_popen(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "s|si:popen", &name, &mode, &bufsize))
         return NULL;
     /* Strip mode of binary or text modifiers */
+
+    // Pyston change: disable -Warray-bounds since we are running into this bug
+    // (strcmp() is a macro that expands to look like it checks rhs[3]):
+    // https://gcc.gnu.org/ml/gcc-help/2009-10/msg00189.html
+    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=35903
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warray-bounds"
+#endif
     if (strcmp(mode, "rb") == 0 || strcmp(mode, "rt") == 0)
         mode = "r";
     else if (strcmp(mode, "wb") == 0 || strcmp(mode, "wt") == 0)
         mode = "w";
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
     Py_BEGIN_ALLOW_THREADS
     fp = popen(name, mode);
     Py_END_ALLOW_THREADS
