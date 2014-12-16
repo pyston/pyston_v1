@@ -136,7 +136,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     }
                     os << '%';
                     break;
-                } else if (c == 's') {
+                } else if (c == 's' || c == 'r') {
                     RELEASE_ASSERT(ndot == 0, "");
                     RELEASE_ASSERT(nzero == 0, "");
                     RELEASE_ASSERT(nspace == 0, "");
@@ -148,7 +148,11 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                         elt_num++;
                     }
 
-                    BoxedString* s = str(val_to_use);
+                    BoxedString* s;
+                    if (c == 's')
+                        s = str(val_to_use);
+                    else
+                        s = repr(val_to_use);
                     os << s->s;
                     break;
                 } else if (c == 'c') {

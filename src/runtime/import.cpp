@@ -192,6 +192,10 @@ static Box* import(const std::string* name, bool return_first) {
     return return_first ? first_module : last_module;
 }
 
+extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) {
+    Py_FatalError("unimplemented");
+}
+
 // Named the same thing as the CPython method:
 static void ensure_fromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
     if (module->getattr("__path__") == NULL) {

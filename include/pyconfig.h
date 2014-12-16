@@ -38,6 +38,11 @@
 #define Py_UNICODE_SIZE 4
 
 // Copied from a CPython ./configure run on a Linux machine:
+// TODO copy these more systematically
+#define HAVE_WAIT3 1
+#define HAVE_WAIT4 1
+#define HAVE_WAITPID 1
+
 #define HAVE_ALLOCA_H 1
 #define HAVE_ASM_TYPES_H 1
 #define HAVE_CURSES_H 1
