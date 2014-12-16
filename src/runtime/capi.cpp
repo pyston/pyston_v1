@@ -915,7 +915,14 @@ Done:
 }
 
 extern "C" void PyOS_AfterFork(void) {
-    Py_FatalError("unimplemented");
+    // TODO CPython does a number of things after a fork:
+    // - clears pending signals
+    // - updates the cached "main_pid"
+    // - reinitialize and reacquire the GIL
+    // - reinitialize the import lock
+    // - change the definition of the main thread to the current thread
+    // - call threading._after_fork
+    // Also see PyEval_ReInitThreads
 }
 
 extern "C" {

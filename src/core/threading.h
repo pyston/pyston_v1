@@ -28,6 +28,8 @@ class Box;
 
 namespace threading {
 
+bool threadWasStarted();
+
 // returns a thread id (currently, the pthread_t id)
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
 

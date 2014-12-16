@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
     const char* fn = NULL;
 
     threading::registerMainThread();
-    threading::GLReadRegion _glock;
+    threading::acquireGLRead();
 
     {
         Timer _t("for initCodegen");
@@ -221,6 +221,11 @@ int main(int argc, char** argv) {
     }
 
     threading::finishMainThread();
+
+    // Acquire the GIL to make sure we stop the other threads, since we will tear down
+    // data structures they are potentially running on.
+    // Note: we will purposefully not release the GIL on exiting.
+    threading::promoteGL();
 
     _t.split("joinRuntime");
 

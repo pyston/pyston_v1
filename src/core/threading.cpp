@@ -277,7 +277,14 @@ static void* _thread_start(void* _arg) {
     return rtn;
 }
 
+static bool thread_was_started = false;
+bool threadWasStarted() {
+    return thread_was_started;
+}
+
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3) {
+    thread_was_started = true;
+
     {
         LOCK_REGION(&threading_lock);
         num_starting_threads++;

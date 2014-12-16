@@ -20,6 +20,7 @@
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
+#include "core/threading.h"
 
 namespace pyston {
 
@@ -432,7 +433,8 @@ public:
 
         // This check isn't thread safe and should be fine to remove if it causes
         // issues (along with the nvars/start_vars accounting)
-        ASSERT(RewriterVar::nvars == start_vars, "%d %d", RewriterVar::nvars, start_vars);
+        ASSERT(threading::threadWasStarted() || RewriterVar::nvars == start_vars, "%d %d", RewriterVar::nvars,
+               start_vars);
     }
 
     Location getReturnDestination();
