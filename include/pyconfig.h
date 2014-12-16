@@ -37,6 +37,8 @@
 #define Py_USING_UNICODE 1
 #define Py_UNICODE_SIZE 4
 
+#define WITH_THREAD
+
 // Copied from a CPython ./configure run on a Linux machine:
 // TODO copy these more systematically
 #define HAVE_WAIT3 1

@@ -129,12 +129,18 @@ PyAPI_FUNC(void) PyEval_AcquireThread(PyThreadState *tstate);
 PyAPI_FUNC(void) PyEval_ReleaseThread(PyThreadState *tstate);
 PyAPI_FUNC(void) PyEval_ReInitThreads(void);
 
+// Pyston change: add our internal API here that doesn't make reference to PyThreadState.
+// If anyone goes out of their way to use the PyThreadState* APIs directly, we should
+// fail instead of assuming that they didn't care about the PyThreadState.
+PyAPI_FUNC(void) beginAllowThreads(void);
+PyAPI_FUNC(void) endAllowThreads(void);
+
+// Pyston change: switch these to use our internal API
 #define Py_BEGIN_ALLOW_THREADS { \
-                        PyThreadState *_save; \
-                        _save = PyEval_SaveThread();
-#define Py_BLOCK_THREADS        PyEval_RestoreThread(_save);
-#define Py_UNBLOCK_THREADS      _save = PyEval_SaveThread();
-#define Py_END_ALLOW_THREADS    PyEval_RestoreThread(_save); \
+                        beginAllowThreads();
+#define Py_BLOCK_THREADS        endAllowThreads();
+#define Py_UNBLOCK_THREADS      beginAllowThreads();
+#define Py_END_ALLOW_THREADS    endAllowThreads(); \
                  }
 
 #else /* !WITH_THREAD */

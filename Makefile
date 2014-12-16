@@ -245,6 +245,7 @@ ifneq ($(USE_CLANG),0)
 endif
 
 ifeq ($(USE_CCACHE),1)
+	CC := ccache $(CC)
 	CXX := ccache $(CXX)
 	CXX_PROFILE := ccache $(CXX_PROFILE)
 	CLANG_CXX := ccache $(CLANG_CXX)
@@ -308,7 +309,7 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
 
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard ./include/*.h)
-tags: $(SRCS) $(OPTIONAL_SRCS) $(ALL_HEADERS)
+tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
 

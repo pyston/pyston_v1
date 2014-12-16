@@ -21,6 +21,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "Python.h"
+
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -375,7 +377,7 @@ void finishMainThread() {
 // It adds some perf overhead I suppose, though I haven't measured it.
 // It also means that you're not allowed to do that much inside an AllowThreads region...
 // TODO maybe we should let the client decide which way to handle it
-GLAllowThreadsReadRegion::GLAllowThreadsReadRegion() {
+extern "C" void beginAllowThreads() {
     // I don't think it matters whether the GL release happens before or after the state
     // saving; do it before, then, to reduce the amount we hold the GL:
     releaseGLRead();
@@ -388,7 +390,7 @@ GLAllowThreadsReadRegion::GLAllowThreadsReadRegion() {
     }
 }
 
-GLAllowThreadsReadRegion::~GLAllowThreadsReadRegion() {
+extern "C" void endAllowThreads() {
     {
         LOCK_REGION(&threading_lock);
         current_threads[gettid()]->popCurrent();
@@ -397,7 +399,6 @@ GLAllowThreadsReadRegion::~GLAllowThreadsReadRegion() {
 
     acquireGLRead();
 }
-
 
 #if THREADING_USE_GIL
 #if THREADING_USE_GRWL

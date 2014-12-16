@@ -114,10 +114,13 @@ MAKE_REGION(GLPromoteRegion, promoteGL, demoteGL);
 // MAKE_REGION(GLWriteReleaseRegion, releaseGLWrite, acquireGLWrite);
 #undef MAKE_REGION
 
+extern "C" void beginAllowThreads();
+extern "C" void endAllowThreads();
+
 class GLAllowThreadsReadRegion {
 public:
-    GLAllowThreadsReadRegion();
-    ~GLAllowThreadsReadRegion();
+    GLAllowThreadsReadRegion() { beginAllowThreads(); }
+    ~GLAllowThreadsReadRegion() { endAllowThreads(); }
 };
 
 
