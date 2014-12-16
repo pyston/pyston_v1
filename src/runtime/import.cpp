@@ -201,6 +201,10 @@ extern "C" int _PyImport_ReleaseLock() {
     return 1;
 }
 
+extern "C" void _PyImport_ReInitLock() {
+    // TODO: currently no import lock!
+}
+
 extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) {
     Py_FatalError("unimplemented");
 }

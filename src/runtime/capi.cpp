@@ -923,6 +923,16 @@ extern "C" void PyOS_AfterFork(void) {
     // - change the definition of the main thread to the current thread
     // - call threading._after_fork
     // Also see PyEval_ReInitThreads
+
+    // Should we disable finalizers after a fork?
+    // In CPython, I think all garbage from other threads will never be freed and
+    // their destructors never run.  I think for us, we will presumably collect it
+    // and run the finalizers.  It's probably just safer to run no finalizers?
+
+    // Our handling right now is pretty minimal... you better just call exec().
+
+    PyEval_ReInitThreads();
+    _PyImport_ReInitLock();
 }
 
 extern "C" {
