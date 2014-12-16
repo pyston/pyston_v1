@@ -15,11 +15,33 @@ if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Release" AND NOT ${CMAKE_BUILD_TYPE} STREQU
   message(FATAL_ERROR "CMAKE_BUILD_TYPE must be set to Release or Debug")
 endif()
 
+option(ENABLE_CCACHE "enable caching compiler output" ON)
 option(ENABLE_GIL "threading use GIL" ON)
+option(ENABLE_GOLD "enable the gold linker" ON)
 option(ENABLE_GRWL "threading use GRWL" OFF)
 option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
 option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
+
+# automatically use ccache if found
+if(ENABLE_CCACHE)
+  find_program(CCACHE ccache)
+  if(CCACHE)
+    message(STATUS "found ccache ${CCACHE}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE})
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ${CCACHE})
+  endif()
+endif()
+
+# automatically use the gold linker if found
+if(ENABLE_GOLD)
+  find_program(GOLD_LINKER ld.gold)
+  if(GOLD_LINKER)
+    message(STATUS "found the gold linker ${GOLD_LINKER}")
+    set(CMAKE_LINKER "${GOLD_LINKER}")
+    set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -B${CMAKE_SOURCE_DIR}/tools/build_system")
+  endif()
+endif()
 
 # initial clang flags (set here so they're used when building llvm)
 set(CLANG_FLAGS "-Qunused-arguments -fcolor-diagnostics" CACHE STRING "Clang specific C and CXX flags")
@@ -32,7 +54,7 @@ endif()
 
 # llvm disable debug info unless ENABLE_LLVM_DEBUG is ON
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
-  set(CMAKE_CXX_FLAGS_DEBUG "-g0" CACHE STRING "" FORCE)
+  set(CMAKE_CXX_FLAGS_DEBUG "-O3" CACHE STRING "" FORCE)
 endif()
 
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)

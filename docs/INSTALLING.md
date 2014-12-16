@@ -290,24 +290,58 @@ CC="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/gcc" CXX="ccache $HOME/pyston
 ~/pyston_deps/ninja/ninja check-pyston
 ```
 
-On Ubuntu 12.04, you need a new cmake in order to use ninja, but can install ninja using `sudo apt-get install ninja-build`.  Then:
-
-```
-mkdir ~/pyston-build
-cd ~/pyston-build
-CC="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/gcc" CXX="ccache $HOME/pyston_deps/gcc-4.8.2-install/bin/g++" ~/pyston_deps/cmake-3.0.0/bin/cmake -GNinja ~/pyston -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,$HOME/pyston_deps/gcc-4.8.2-install/lib64" -DGCC_INSTALL_PREFIX=~/pyston_deps/gcc-4.8.2-install
-ninja check-pyston
-```
-
 If your system provides a new enough GCC and cmake, you can just do:
 
 ```
-mkdir ~/pyston-build
-cd ~/pyston-build
-CC='ccache gcc' CXX='ccache g++' cmake -GNinja ~/pyston
+mkdir ~/pyston-build && cd ~/pyston-build
+cmake -GNinja ~/pyston
 ninja check-pyston
 ```
 
+**Ubuntu 12.04**
+```
+sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
+sudo apt-get -qq update
+
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.4 libstdc++-4.8-dev
+
+git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
+
+git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
+git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
+
+mkdir ~/pyston-build && cd ~/pyston-build
+CC='clang' CXX='clang++' cmake -GNinja ~/pyston
+
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+ninja llvm_up
+
+ninja check-pyston # run the test suite
+```
+
+**Ubuntu 14.04**
+```
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.5
+
+git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
+
+git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
+git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
+
+mkdir ~/pyston-build && cd ~/pyston-build
+CC='clang' CXX='clang++' cmake -GNinja ~/pyston
+
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+ninja llvm_up
+
+ninja check-pyston # run the test suite
+```
+
 Other important options:
-- `-DCMAKE_BUILD_TYPE=Debug` (or Release, but defaults to Release I believe)
+- `-DCMAKE_BUILD_TYPE=Debug` (defaults to Release)
+- `-DENABLE_LLVM_DEBUG=1` for full LLVM debug
+- `-DENABLE_CCACHE=0` to disable ccache
 
