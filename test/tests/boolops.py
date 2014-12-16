@@ -26,6 +26,9 @@ class C(object):
     def __repr__(self):
         return "<C object>"
 
+print hash(True) == hash(False)
+print int(True), int(False)
+
 c = C("hello") # This object has an invalid __nonzero__ return type
 if 0:
     print bool(c) # this will fail

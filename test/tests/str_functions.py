@@ -69,3 +69,6 @@ for c in "aeiou":
 translation_map = ''.join(translation_map)
 print "hello world".translate(translation_map)
 print "hello world".translate(translation_map, "")
+
+for i in xrange(-10, 10):
+    print i, "aaaaa".find("a", i)

@@ -26,6 +26,7 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/classobj.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
 #include "runtime/inline/xrange.h"
@@ -339,6 +340,10 @@ Box* isinstance_func(Box* obj, Box* cls) {
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
+    if (parent->cls == classobj_cls) {
+        Py_FatalError("don't handle issubclass for old style classes yet");
+    }
+
     RELEASE_ASSERT(child->cls == type_cls, "");
     // TODO parent can also be a tuple of classes
     RELEASE_ASSERT(parent->cls == type_cls, "");

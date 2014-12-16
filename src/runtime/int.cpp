@@ -680,6 +680,8 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
         double d = static_cast<BoxedFloat*>(val)->d;
 
         rtn->n = d;
+    } else if (val->cls == bool_cls) {
+        rtn->n = (val == True);
     } else {
         fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
                 getTypeName(val)->c_str());
