@@ -67,13 +67,12 @@ add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
 #set(LLVM_EXTERNAL_CLANG_SOURCE_DIR "${CMAKE_SOURCE_DIR}/clang" CACHE String "Clang directory")
-#add_subdirectory(llvm EXCLUDE_FROM_ALL)
 if(ENABLE_INTEL_JIT_EVENTS)
   set(LLVM_USE_INTEL_JITEVENTS "ON" CACHE STRING "Enable building support for the Intel JIT Events API")
   set(INTEL_JIT_EVENTS_LIB "inteljitevents")
   add_definitions(-DENABLE_INTEL_JIT_EVENTS=1)
 endif()
-add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm)
+add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
 set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
 include(LLVMConfig)
 llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader ipo irreader debuginfo instrumentation ${INTEL_JIT_EVENTS_LIB})
@@ -113,7 +112,7 @@ else()
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -Wreturn-type -Wno-sign-compare -Wno-unused -Wno-sign-compare -Wno-unused-parameter -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++11 -fPIC -fno-rtti -fexceptions -fvisibility-inlines-hidden -ffunction-sections -fdata-sections -Woverloaded-virtual -Wno-invalid-offsetof -Wcast-qual -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wmissing-include-dirs -Wstrict-overflow=5 -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wmissing-field-initializers -Wredundant-decls -Winline -Wint-to-pointer-cast -Wlong-long -Wvla")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++11 -fPIC -fno-rtti -fexceptions -fvisibility-inlines-hidden -ffunction-sections -fdata-sections -Woverloaded-virtual -Wno-invalid-offsetof -Wcast-qual -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wmissing-include-dirs -Wstrict-overflow=5 -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wmissing-field-initializers -Wredundant-decls -Winline -Wint-to-pointer-cast -Wlong-long -Wvla -Wno-attributes")
 
 set(CLANG_FLAGS "${CLANG_FLAGS} -Wimplicit-int -Wstrict-prototypes -Wold-style-definition -Wnested-externs -Wpointer-to-int-cast -Wno-mismatched-tags -Wno-extern-c-compat")
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -141,7 +140,7 @@ add_subdirectory(test/test_extension)
 add_subdirectory(test/unittests)
 add_subdirectory(tools)
 
-add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON_OBJECTS>)
+add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
 target_link_libraries(pyston stdlib pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
 
 # copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
@@ -159,8 +158,8 @@ add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${L
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 add_test(NAME pyston_defaults COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k ${CMAKE_SOURCE_DIR}/test/tests)
-add_test(NAME pyston_disable_interpreter COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
 add_test(NAME pyston_max_compilation_tier COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -a -O -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_experimental_pypa_parser COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -a -x -R ./pyston -j4 -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
 
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)

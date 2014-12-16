@@ -1,4 +1,4 @@
-# skip-if: sys.version_info.micro >= 4
+# skip-if: sys.version_info.micro < 4
 # - Error message changed in 2.7.4
 
 # object.__new__ doesn't complain if __init__ is overridden:
