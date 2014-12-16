@@ -132,13 +132,6 @@ extern "C" void PyBuffer_Release(Py_buffer* view) {
     view->obj = NULL;
 }
 
-// Not sure why we need another declaration here:
-extern "C" void Py_FatalError(const char* msg) __attribute__((__noreturn__));
-extern "C" void Py_FatalError(const char* msg) {
-    fprintf(stderr, "\nFatal Python error: %s\n", msg);
-    abort();
-}
-
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) {
     Py_FatalError("unimplemented");
 }
