@@ -27,6 +27,7 @@
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/ics.h"
+#include "runtime/import.h"
 #include "runtime/inline/xrange.h"
 #include "runtime/list.h"
 #include "runtime/long.h"
@@ -343,6 +344,14 @@ Box* issubclass_func(Box* child, Box* parent) {
     RELEASE_ASSERT(parent->cls == type_cls, "");
 
     return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
+}
+
+Box* bltinImport(Box* arg) {
+    if (arg->cls != str_cls) {
+        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(arg)->c_str());
+    }
+
+    return import(-1, new BoxedTuple({}), &static_cast<BoxedString*>(arg)->s);
 }
 
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
@@ -805,6 +814,7 @@ void setupBuiltins() {
     Box* issubclass_obj = new BoxedFunction(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
+    builtins_module->giveAttr("__import__", new BoxedFunction(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
 
     enumerate_cls
         = new BoxedHeapClass(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);

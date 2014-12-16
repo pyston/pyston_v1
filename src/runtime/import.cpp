@@ -106,6 +106,11 @@ static BoxedModule* importFile(const std::string& name, const std::string& full_
 }
 
 static Box* importSub(const std::string& name, const std::string& full_name, Box* parent_module) {
+    Box* boxed_name = boxStringPtr(&full_name);
+    BoxedDict* sys_modules = getSysModulesDict();
+    if (sys_modules->d.find(boxed_name) != sys_modules->d.end())
+        return sys_modules->d[boxed_name];
+
     BoxedList* path_list;
     if (parent_module == NULL) {
         path_list = getSysPath();
@@ -172,15 +177,10 @@ static Box* import(const std::string* name, bool return_first) {
         }
 
         std::string prefix_name = std::string(*name, 0, r);
-        Box* s = boxStringPtr(&prefix_name);
-        if (sys_modules->d.find(s) != sys_modules->d.end()) {
-            last_module = sys_modules->d[s];
-        } else {
-            std::string small_name = std::string(*name, l, r - l);
-            last_module = importSub(small_name, prefix_name, last_module);
-            if (!last_module)
-                raiseExcHelper(ImportError, "No module named %s", small_name.c_str());
-        }
+        std::string small_name = std::string(*name, l, r - l);
+        last_module = importSub(small_name, prefix_name, last_module);
+        if (!last_module)
+            raiseExcHelper(ImportError, "No module named %s", small_name.c_str());
 
         if (l == 0) {
             first_module = last_module;
@@ -225,6 +225,8 @@ static void ensure_fromlist(Box* module, Box* fromlist, const std::string& modul
 }
 
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
+    RELEASE_ASSERT(level == -1, "");
+
     Box* module = import(module_name, from_imports == None);
     assert(module);
 

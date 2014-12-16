@@ -27,3 +27,5 @@ print import_nested_target.y
 print z
 print y
 print __name__
+
+print __import__("import_target") is import_target
