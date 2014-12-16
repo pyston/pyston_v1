@@ -317,14 +317,21 @@ NON_ENTRY_OBJS := $(filter-out src/jit.o,$(OBJS))
 
 define add_unittest
 $(eval \
-$1: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/$1.o
+ifneq ($(USE_CMAKE),1)
+$1_unittest: $(GTEST_DIR)/src/gtest-all.o $(NON_ENTRY_OBJS) $(BUILD_SYSTEM_DEPS) $(UNITTEST_DIR)/$1.o
 	$(ECHO) Linking $$@
 	$(VERB) $(CXX) $(NON_ENTRY_OBJS) $(GTEST_DIR)/src/gtest-all.o $(GTEST_DIR)/src/gtest_main.o $(UNITTEST_DIR)/$1.o $(LDFLAGS) -o $$@
-dbg_$1_unittests: $1
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1 --gtest_break_on_failure $(ARGS)'
-unittests:: $1
-run_$1_unittests: $1
-	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$1 $(ARGS)'
+else
+.PHONY: $1_unittest
+$1_unittest:
+	$(NINJA) -C $(HOME)/pyston-build-dbg $1_unittest $(NINJAFLAGS)
+	ln -sf $(HOME)/pyston-build-dbg/$1_unittest .
+endif
+dbg_$1_unittests: $1_unittest
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time $(GDB) $(GDB_CMDS) --args ./$1_unittest --gtest_break_on_failure $(ARGS)'
+unittests:: $1_unittest
+run_$1_unittests: $1_unittest
+	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./$1_unittest $(ARGS)'
 run_unittests:: run_$1_unittests
 )
 endef
@@ -757,6 +764,7 @@ clean:
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data
+	@ rm -f *_unittest
 
 # A helper function that lets me run subdirectory rules from the top level;
 # ex instead of saying "make tests/run_1", I can just write "make run_1"
@@ -934,9 +942,9 @@ TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 
 .PHONY: ext_pyston
 ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
-$(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o $(BUILD_SYSTEM_DEPS)
+$(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o
 	gcc -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
-$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h) $(BUILD_SYSTEM_DEPS)
+$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h)
 	gcc -pthread -fno-strict-aliasing -DNDEBUG -g -fwrapv -O2 -Wall -Wstrict-prototypes -fPIC -Wimplicit -I./include -c $< -o $@
 
 .PHONY: ext_pyston_selfhost dbg_ext_pyston_selfhost ext_pyston_selfhost_release
