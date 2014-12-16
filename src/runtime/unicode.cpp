@@ -18,6 +18,16 @@ namespace pyston {
 
 // capi stuff
 
+static std::string unicode_default_encoding = "ascii";
+extern "C" const char* PyUnicode_GetDefaultEncoding(void) {
+    return unicode_default_encoding.c_str();
+}
+
+extern "C" int PyUnicode_SetDefaultEncoding(const char* encoding) {
+    unicode_default_encoding = encoding;
+    return 0;
+}
+
 extern "C" int PyUnicode_ClearFreeList() {
     Py_FatalError("unimplemented");
 }

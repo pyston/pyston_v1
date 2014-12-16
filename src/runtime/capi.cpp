@@ -771,10 +771,6 @@ extern "C" const char* PyUnicode_AS_DATA(PyObject*) {
     Py_FatalError("unimplemented");
 }
 
-extern "C" const char* PyUnicode_GetDefaultEncoding(void) {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) {
     Py_FatalError("unimplemented");
 }
