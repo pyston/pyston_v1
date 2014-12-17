@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <sstream>
 #include <stdint.h>
 
 #include "asm_writing/icinfo.h"
@@ -2313,7 +2314,16 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         Box* ovarargs = new BoxedTuple(unused_positional);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        raiseExcHelper(TypeError, "<function>() takes at most %d argument%s (%d given)", f->num_args,
+        std::string name = "<unknown function>";
+        if (f->source)
+            name = f->source->getName();
+        else if (f->versions.size()) {
+            std::ostringstream oss;
+            oss << "<function at " << f->versions[0]->code << ">";
+            name = oss.str();
+        }
+
+        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", name.c_str(), f->num_args,
                        (f->num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
     }
 

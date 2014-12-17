@@ -482,7 +482,7 @@ BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *Attribu
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
-    return exceptionNew2(cls, boxStrConstant(""));
+    return exceptionNew(cls, EmptyTuple);
 }
 
 class BoxedException : public Box {
@@ -492,11 +492,29 @@ public:
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
-    assert(cls->tp_basicsize == sizeof(BoxedException));
-    Box* r = new BoxedException(cls);
-    // TODO: maybe this should be a MemberDescriptor?
-    r->giveAttr("message", message);
-    return r;
+    return exceptionNew(cls, new BoxedTuple({ message }));
+}
+
+Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
+    if (!isSubclass(cls->cls, type_cls))
+        raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls)->c_str());
+
+    if (!isSubclass(cls, BaseException))
+        raiseExcHelper(TypeError, "BaseException.__new__(%s): %s is not a subtype of BaseException",
+                       getNameOfClass(cls)->c_str(), getNameOfClass(cls)->c_str());
+
+    assert(cls->tp_basicsize >= sizeof(BoxedException));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    memset((char*)mem + sizeof(BoxedException), 0, cls->tp_basicsize - sizeof(BoxedException));
+    BoxedException* rtn = ::new (mem) BoxedException(cls);
+    initUserAttrs(rtn, cls);
+
+    // TODO: this should be a MemberDescriptor and set during init
+    if (args->elts.size() == 1)
+        rtn->giveAttr("message", args->elts[0]);
+    else
+        rtn->giveAttr("message", boxStrConstant(""));
+    return rtn;
 }
 
 Box* exceptionStr(Box* b) {
@@ -520,15 +538,16 @@ Box* exceptionRepr(Box* b) {
     return boxString(*getTypeName(b) + "(" + message_s->s + ",)");
 }
 
-static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
-    BoxedClass* cls
-        = new BoxedHeapClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
+static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
+    if (size == 0)
+        size = base->tp_basicsize;
+
+    BoxedClass* cls = new BoxedHeapClass(type_cls, base, NULL, offsetof(BoxedException, attrs), size, false);
     cls->giveAttr("__name__", boxStrConstant(name));
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {
-        cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew2, UNKNOWN, 2, 1, false, false),
-                                                   { boxStrConstant("") }));
+        cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)exceptionNew, UNKNOWN, 1, 0, true, true)));
         cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)exceptionStr, STR, 1)));
         cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)exceptionRepr, STR, 1)));
     }
@@ -720,6 +739,23 @@ Box* pydump(void* p) {
     return None;
 }
 
+class BoxedEnvironmentError : public BoxedException {
+public:
+    // Box* args, *message, *myerrno, *strerror, *filename;
+    Box* myerrno, *strerror, *filename;
+
+    static Box* __init__(BoxedEnvironmentError* self, Box* errno_, Box* strerror, Box** _args) {
+        Box* filename = _args[0];
+
+        RELEASE_ASSERT(isSubclass(self->cls, EnvironmentError), "");
+
+        self->myerrno = errno_;
+        self->strerror = strerror;
+        self->filename = filename;
+        return None;
+    }
+};
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -740,7 +776,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1)));
     builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1)));
 
-    BaseException = makeBuiltinException(object_cls, "BaseException");
+    BaseException = makeBuiltinException(object_cls, "BaseException", sizeof(BoxedException));
     Exception = makeBuiltinException(BaseException, "Exception");
     StandardError = makeBuiltinException(Exception, "StandardError");
     AssertionError = makeBuiltinException(StandardError, "AssertionError");
@@ -751,7 +787,7 @@ void setupBuiltins() {
     LookupError = makeBuiltinException(StandardError, "LookupError");
     KeyError = makeBuiltinException(LookupError, "KeyError");
     IndexError = makeBuiltinException(LookupError, "IndexError");
-    EnvironmentError = makeBuiltinException(StandardError, "EnvironmentError");
+    EnvironmentError = makeBuiltinException(StandardError, "EnvironmentError", sizeof(BoxedEnvironmentError));
     IOError = makeBuiltinException(EnvironmentError, "IOError");
     OSError = makeBuiltinException(EnvironmentError, "OSError");
     ArithmeticError = makeBuiltinException(StandardError, "ArithmeticError");
@@ -774,6 +810,10 @@ void setupBuiltins() {
     SystemExit = makeBuiltinException(BaseException, "SystemExit");
     SystemError = makeBuiltinException(StandardError, "SystemError");
     NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
+
+    EnvironmentError->giveAttr(
+        "__init__",
+        new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 1, false, false), { None }));
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);

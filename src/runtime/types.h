@@ -217,7 +217,7 @@ public:
 
     // Whether this class was defined by the user or is a builtin type.
     // this is used mostly for debugging.
-    const bool is_user_defined;
+    bool is_user_defined;
 
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
@@ -539,6 +539,7 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* exceptionNew1(BoxedClass* cls);
 Box* exceptionNew2(BoxedClass* cls, Box* message);
+Box* exceptionNew(BoxedClass* cls, BoxedTuple* args);
 
 extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
