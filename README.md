@@ -1,4 +1,4 @@
-# Pyston
+# Pyston [![Build Status](https://travis-ci.org/dropbox/pyston.svg?branch=master)](https://travis-ci.org/dropbox/pyston/builds)
 
 Pyston is a new, under-development Python implementation built using LLVM and modern JIT techniques with the goal of achieving good performance.
 
@@ -51,6 +51,9 @@ $ make check -j4
 
 And see that hopefully all of the tests pass.
 > If you see that the tests do not pass, please email pyston-dev.
+
+All pull requests are built and tested by travis-ci.org running Ubuntu 12.04.
+See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/builds).
 
 ### Running Pyston
 
