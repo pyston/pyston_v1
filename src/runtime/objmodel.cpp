@@ -248,6 +248,10 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
+bool isInstance(Box* obj, BoxedClass* cls) {
+    return isSubclass(obj->cls, cls);
+}
+
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
     // TODO the class is allowed to override this using __subclasscheck__
     while (child) {

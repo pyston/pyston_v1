@@ -143,6 +143,13 @@ void setupSys() {
     sys_module->giveAttr("prefix", boxStrConstant("/usr"));
     sys_module->giveAttr("exec_prefix", boxStrConstant("/usr"));
 
+    sys_module->giveAttr("copyright",
+                         boxStrConstant("Copyright 2014 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
+                                        "Python Software Foundation.\nAll Rights Reserved.\n\nCopyright (c) 2000 "
+                                        "BeOpen.com.\nAll Rights Reserved.\n\nCopyright (c) 1995-2001 Corporation for "
+                                        "National Research Initiatives.\nAll Rights Reserved.\n\nCopyright (c) "
+                                        "1991-1995 Stichting Mathematisch Centrum, Amsterdam.\nAll Rights Reserved."));
+
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
 

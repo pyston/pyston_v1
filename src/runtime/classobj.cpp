@@ -215,10 +215,22 @@ Box* instanceNonzero(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    Box* nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
+    Box* nonzero_func = NULL;
+    try {
+        nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
+    } catch (Box* b) {
+        if (!isInstance(b, AttributeError))
+            throw;
+    }
 
-    if (nonzero_func == NULL)
-        nonzero_func = _instanceGetattribute(inst, boxStrConstant("__len__"), false);
+    if (nonzero_func == NULL) {
+        try {
+            nonzero_func = _instanceGetattribute(inst, boxStrConstant("__len__"), false);
+        } catch (Box* b) {
+            if (!isInstance(b, AttributeError))
+                throw;
+        }
+    }
 
     if (nonzero_func) {
         return runtimeCall(nonzero_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);

@@ -6,3 +6,4 @@ import os.path
 print sys.version[:3]
 print os.path.exists(sys.executable)
 print sys.prefix, sys.exec_prefix
+print sys.copyright[-200:]

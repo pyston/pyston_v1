@@ -115,6 +115,8 @@ print issubclass(OldStyleClass, OldStyleClass)
 class GetattrTest:
     def __getattr__(self, attr):
         print "getattr", attr
+        if attr.startswith("__"):
+            raise AttributeError(attr)
         return 1
 
 g = GetattrTest()
@@ -123,3 +125,4 @@ print g.a
 print g.b
 print g.__class__
 print g.__dict__.items()
+print bool(g)
