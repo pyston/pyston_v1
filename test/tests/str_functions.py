@@ -72,3 +72,7 @@ print "hello world".translate(translation_map, "")
 
 for i in xrange(-10, 10):
     print i, "aaaaa".find("a", i)
+
+print "hello world".partition("hi")
+print "hello world".partition("hello")
+print "hello world".partition("o")

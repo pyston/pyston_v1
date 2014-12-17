@@ -637,6 +637,21 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
     return rtn;
 }
 
+Box* strPartition(BoxedString* self, BoxedString* sep) {
+    RELEASE_ASSERT(self->cls == str_cls, "");
+    RELEASE_ASSERT(sep->cls == str_cls, "");
+
+    size_t found_idx = self->s.find(sep->s);
+    if (found_idx == std::string::npos)
+        return new BoxedTuple({ self, boxStrConstant(""), boxStrConstant("") });
+
+
+    return new BoxedTuple({ boxStrConstantSize(self->s.c_str(), found_idx),
+                            boxStrConstantSize(self->s.c_str() + found_idx, sep->s.size()),
+                            boxStrConstantSize(self->s.c_str() + found_idx + sep->s.size(),
+                                               self->s.size() - found_idx - sep->s.size()) });
+}
+
 Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     assert(self->cls == str_cls);
     if (_max_split->cls != int_cls)
@@ -1104,6 +1119,8 @@ void setupStr() {
     str_cls->giveAttr("find",
                       new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 3, 1, false, false), { boxInt(0) }));
     str_cls->giveAttr("rfind", new BoxedFunction(boxRTFunction((void*)strRfind, BOXED_INT, 2)));
+
+    str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));
