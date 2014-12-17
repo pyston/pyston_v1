@@ -111,3 +111,13 @@ print issubclass(OldStyleClass, object)
 
 print isinstance(OldStyleClass(), OldStyleClass)
 print issubclass(OldStyleClass, OldStyleClass)
+
+class GetattrTest:
+    def __getattr__(self, attr):
+        print "getattr", attr
+        return 1
+
+g = GetattrTest()
+g.b = 2
+print g.a
+print g.b

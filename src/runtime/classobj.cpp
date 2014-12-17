@@ -155,7 +155,11 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
 
     static const std::string getattr_str("__getattr__");
     Box* getattr = classLookup(inst->inst_cls, getattr_str);
-    RELEASE_ASSERT(getattr == NULL, "unimplemented");
+
+    if (getattr) {
+        getattr = processDescriptor(getattr, inst, inst->inst_cls);
+        return runtimeCall(getattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
+    }
 
     if (!raise_on_missing)
         return NULL;
