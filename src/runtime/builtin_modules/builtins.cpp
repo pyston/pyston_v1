@@ -99,6 +99,12 @@ extern "C" Box* dir(Box* obj) {
     return result;
 }
 
+extern "C" Box* vars(Box* obj) {
+    RELEASE_ASSERT(obj, "Don't support 0-arg vars() calls yet");
+
+    return makeAttrWrapper(obj);
+}
+
 extern "C" Box* abs_(Box* x) {
     if (x->cls == int_cls) {
         i64 n = static_cast<BoxedInt*>(x)->n;
@@ -919,6 +925,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
     builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
+    builtins_module->giveAttr("vars",
+                              new BoxedFunction(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);

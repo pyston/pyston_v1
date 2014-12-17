@@ -51,3 +51,7 @@ def G():
     yield "A"; yield "B"; yield "C"
 print list(enumerate(G()))
 
+class C(object):
+    def __init__(self):
+        self.a = 1
+print vars(C()).items()
