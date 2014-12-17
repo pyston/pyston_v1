@@ -121,3 +121,5 @@ g = GetattrTest()
 g.b = 2
 print g.a
 print g.b
+print g.__class__
+print g.__dict__.items()

@@ -142,6 +142,13 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // TODO: special handling for accessing __dict__ and __class__
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            return makeAttrWrapper(inst);
+
+        if (attr->s == "__class__")
+            return inst->inst_cls;
+    }
 
     Box* r = inst->getattr(attr->s);
     if (r)
