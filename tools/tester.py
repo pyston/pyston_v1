@@ -122,7 +122,8 @@ def run_test(fn, check_stats, run_memcheck):
     r = fn.rjust(FN_JUST_SIZE)
 
     statchecks = []
-    jit_args = ["-csrq"] + EXTRA_JIT_ARGS
+    jit_args = ["-crq"] + EXTRA_JIT_ARGS
+    collect_stats = True
     expected = "success"
     allow_warnings = []
     for l in open(fn):
@@ -150,6 +151,14 @@ def run_test(fn, check_stats, run_memcheck):
                 return r + "    (skipped due to 'skip-if: %s')" % skip_if[:30]
         elif l.startswith("# allow-warning:"):
             allow_warnings.append("Warning: " + l.split(':', 1)[1].strip())
+        elif l.startswith("# no-collect-stats"):
+            collect_stats = False
+
+    if TEST_PYPY:
+        collect_stats = False
+
+    if collect_stats:
+        jit_args = ['-s'] + jit_args
 
     assert expected in ("success", "fail", "statfail"), expected
 
@@ -167,17 +176,19 @@ def run_test(fn, check_stats, run_memcheck):
     code = p.wait()
     elapsed = time.time() - start
 
-    stats = {}
     if allow_warnings:
         out_lines = []
         for l in out.split('\n'):
             for regex in allow_warnings:
-                if re.match(l, regex):
+                if re.match(regex, l):
                     break
             else:
                 out_lines.append(l)
         out = "\n".join(out_lines)
-    if code == 0 and not TEST_PYPY:
+
+    stats = None
+    if code == 0 and collect_stats:
+        stats = {}
         assert out.count("Stats:") == 1
         out, stats_str = out.split("Stats:")
         for l in stats_str.strip().split('\n'):
