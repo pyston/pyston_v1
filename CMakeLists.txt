@@ -135,6 +135,7 @@ link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
 add_subdirectory(lib_python)
+add_subdirectory(lib_pyston)
 add_subdirectory(src)
 add_subdirectory(test/test_extension)
 add_subdirectory(test/unittests)
