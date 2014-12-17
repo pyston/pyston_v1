@@ -163,3 +163,34 @@ try:
     assert 0
 except KeyError, e:
     print 'ok'
+
+d = {}
+d.update({1:2, 3:4})
+print sorted(d.items())
+print sorted(dict(d).items())
+
+class CustomMapping(object):
+    def __init__(self):
+        self.n = 0
+
+    def keys(self):
+        print "keys()"
+        return [1, 3, 7]
+
+    def __getitem__(self, key):
+        print key
+        self.n += 1
+        return self.n
+
+print sorted(dict(CustomMapping()).items())
+cm = CustomMapping()
+def custom_keys():
+    print "custom_keys()"
+    return [2, 4, 2]
+cm.keys = custom_keys
+print sorted(dict(cm).items())
+
+d = {}
+d.update({'c':3}, a=1, b=2)
+print sorted(d.items())
+

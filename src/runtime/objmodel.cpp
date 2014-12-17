@@ -1841,6 +1841,10 @@ extern "C" void dump(void* p) {
             printf("Int value: %ld\n", static_cast<BoxedInt*>(b)->n);
         }
 
+        if (isSubclass(b->cls, list_cls)) {
+            printf("%ld elements\n", static_cast<BoxedList*>(b)->size);
+        }
+
         return;
     }
 

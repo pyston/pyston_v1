@@ -123,6 +123,12 @@ int main(int argc, char** argv) {
     llvm::sys::path::append(stdlib_dir, "2.7");
     appendToSysPath(stdlib_dir.c_str());
 
+    // go from ./lib_python/2.7 to ./lib_pyston
+    llvm::sys::path::remove_filename(stdlib_dir);
+    llvm::sys::path::remove_filename(stdlib_dir);
+    llvm::sys::path::append(stdlib_dir, "lib_pyston");
+    appendToSysPath(stdlib_dir.c_str());
+
     // end of argument parsing
 
     _t.split("to run");

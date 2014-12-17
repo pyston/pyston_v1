@@ -305,6 +305,72 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     return new BoxedDict();
 }
 
+void dictMerge(BoxedDict* self, Box* other) {
+    if (other->cls == dict_cls) {
+        for (const auto& p : static_cast<BoxedDict*>(other)->d)
+            self->d[p.first] = p.second;
+        return;
+    }
+
+    static const std::string keys_str("keys");
+    Box* keys = callattr(other, &keys_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = true }),
+                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    assert(keys);
+
+    for (Box* k : keys->pyElements()) {
+        self->d[k] = getitem(other, k);
+    }
+}
+
+void dictMergeFromSeq2(BoxedDict* self, Box* other) {
+    int idx = 0;
+
+    // raises if not iterable
+    for (const auto& element : other->pyElements()) {
+
+        // should this check subclasses? anyway to check if something is iterable...
+        if (element->cls == list_cls) {
+            BoxedList* list = static_cast<BoxedList*>(element);
+            if (list->size != 2)
+                raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", idx,
+                               list->size);
+
+            self->d[list->elts->elts[0]] = list->elts->elts[1];
+        } else if (element->cls == tuple_cls) {
+            BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
+            if (tuple->elts.size() != 2)
+                raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", idx,
+                               tuple->elts.size());
+
+            self->d[tuple->elts[0]] = tuple->elts[1];
+        } else
+            raiseExcHelper(TypeError, "cannot convert dictionary update sequence element #%d to a sequence", idx);
+
+        idx++;
+    }
+}
+
+Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
+    assert(args->cls == tuple_cls);
+    assert(kwargs);
+    assert(kwargs->cls == dict_cls);
+
+    RELEASE_ASSERT(args->elts.size() <= 1, ""); // should throw a TypeError
+    if (args->elts.size()) {
+        Box* arg = args->elts[0];
+        if (getattrInternal(arg, "keys", NULL)) {
+            dictMerge(self, arg);
+        } else {
+            dictMergeFromSeq2(self, arg);
+        }
+    }
+
+    if (kwargs->d.size())
+        dictMerge(self, kwargs);
+
+    return None;
+}
+
 extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     int args_sz = args->elts.size();
     int kwargs_sz = kwargs->d.size();
@@ -313,34 +379,7 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     if (args_sz > 1)
         raiseExcHelper(TypeError, "dict expected at most 1 arguments, got %d", args_sz);
 
-    // handle positional argument first as iterable
-    if (args_sz == 1) {
-        int idx = 0;
-
-        // raises if not iterable
-        for (const auto& element : args->elts[0]->pyElements()) {
-
-            // should this check subclasses? anyway to check if something is iterable...
-            if (element->cls == list_cls) {
-                BoxedList* list = static_cast<BoxedList*>(element);
-                if (list->size != 2)
-                    raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required",
-                                   idx, list->size);
-
-                self->d[list->elts->elts[0]] = list->elts->elts[1];
-            } else if (element->cls == tuple_cls) {
-                BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
-                if (tuple->elts.size() != 2)
-                    raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required",
-                                   idx, tuple->elts.size());
-
-                self->d[tuple->elts[0]] = tuple->elts[1];
-            } else
-                raiseExcHelper(TypeError, "cannot convert dictionary update sequence element #%d to a sequence", idx);
-
-            idx++;
-        }
-    }
+    dictUpdate(self, args, kwargs);
 
     // handle keyword arguments by merging (possibly over positional entries per CPy)
     assert(kwargs->cls == dict_cls);
@@ -395,6 +434,8 @@ void setupDict() {
 
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));
+
+    dict_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)dictUpdate, NONE, 1, 0, true, true)));
 
     dict_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)dictClear, NONE, 1)));
     dict_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)dictCopy, DICT, 1)));
