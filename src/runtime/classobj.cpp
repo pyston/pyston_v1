@@ -25,19 +25,19 @@ namespace pyston {
 
 BoxedClass* classobj_cls, *instance_cls;
 
-bool classIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
+bool classobjIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
     if (child == parent)
         return true;
 
     for (auto e : child->bases->elts) {
-        if (e->cls == classobj_cls && classIssubclass(static_cast<BoxedClassobj*>(e), parent))
+        if (e->cls == classobj_cls && classobjIssubclass(static_cast<BoxedClassobj*>(e), parent))
             return true;
     }
     return false;
 }
 
 bool instanceIsinstance(BoxedInstance* obj, BoxedClassobj* cls) {
-    return classIssubclass(obj->inst_cls, cls);
+    return classobjIssubclass(obj->inst_cls, cls);
 }
 
 static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {

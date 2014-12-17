@@ -27,6 +27,7 @@ class BoxedInstance;
 extern BoxedClass* classobj_cls, *instance_cls;
 
 bool instanceIsinstance(BoxedInstance* obj, BoxedClassobj* cls);
+bool classobjIssubclass(BoxedClassobj* child, BoxedClassobj* parent);
 
 class BoxedClassobj : public Box {
 public:

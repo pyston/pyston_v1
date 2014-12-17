@@ -102,3 +102,12 @@ print isinstance(D(), C)
 
 print str(f)[:26]
 print repr(f)[:26]
+
+
+class OldStyleClass:
+    pass
+
+print issubclass(OldStyleClass, object)
+
+print isinstance(OldStyleClass(), OldStyleClass)
+print issubclass(OldStyleClass, OldStyleClass)

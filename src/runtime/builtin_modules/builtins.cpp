@@ -340,13 +340,21 @@ Box* isinstance_func(Box* obj, Box* cls) {
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
-    if (parent->cls == classobj_cls) {
-        Py_FatalError("don't handle issubclass for old style classes yet");
+    if (child->cls != type_cls && child->cls != classobj_cls)
+        raiseExcHelper(TypeError, "issubclass() arg 1 must be a class");
+
+    RELEASE_ASSERT(parent->cls != tuple_cls, "unsupported");
+
+    if (child->cls == classobj_cls) {
+        if (parent->cls != classobj_cls)
+            return False;
+
+        return boxBool(classobjIssubclass(static_cast<BoxedClassobj*>(child), static_cast<BoxedClassobj*>(parent)));
     }
 
-    RELEASE_ASSERT(child->cls == type_cls, "");
-    // TODO parent can also be a tuple of classes
-    RELEASE_ASSERT(parent->cls == type_cls, "");
+    assert(child->cls == type_cls);
+    if (parent->cls != type_cls)
+        return False;
 
     return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
 }
