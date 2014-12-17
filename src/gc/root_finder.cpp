@@ -47,11 +47,20 @@ void collectRoots(void* start, void* end, TraceStack* stack) {
 
 
 void collectOtherThreadsStacks(TraceStack* stack) {
+    GCVisitor v(stack);
+
     std::vector<threading::ThreadGCState> threads = threading::getAllThreadStates();
 
     for (threading::ThreadGCState& tstate : threads) {
         collectRoots(tstate.stack_start, tstate.stack_end, stack);
         collectRoots(tstate.ucontext, tstate.ucontext + 1, stack);
+
+        if (tstate.thread_state->curexc_type)
+            v.visit(tstate.thread_state->curexc_type);
+        if (tstate.thread_state->curexc_value)
+            v.visit(tstate.thread_state->curexc_value);
+        if (tstate.thread_state->curexc_traceback)
+            v.visit(tstate.thread_state->curexc_traceback);
     }
 }
 
@@ -75,6 +84,14 @@ static void collectLocalStack(TraceStack* stack) {
 #else
     collectRoots(stack_bottom, stack_top, stack);
 #endif
+
+    GCVisitor v(stack);
+    if (threading::cur_thread_state.curexc_type)
+        v.visit(threading::cur_thread_state.curexc_type);
+    if (threading::cur_thread_state.curexc_value)
+        v.visit(threading::cur_thread_state.curexc_value);
+    if (threading::cur_thread_state.curexc_traceback)
+        v.visit(threading::cur_thread_state.curexc_traceback);
 }
 
 void collectStackRoots(TraceStack* stack) {

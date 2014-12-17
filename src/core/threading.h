@@ -28,7 +28,13 @@ class Box;
 
 namespace threading {
 
+// Whether or not a second thread was ever started:
 bool threadWasStarted();
+
+struct ThreadState {
+    Box* curexc_type, *curexc_value, *curexc_traceback;
+};
+extern __thread ThreadState cur_thread_state;
 
 // returns a thread id (currently, the pthread_t id)
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
@@ -45,8 +51,10 @@ struct ThreadGCState {
     // in a generator, but those generators will be tracked separately.
     void* stack_start, *stack_end;
 
-    ThreadGCState(pthread_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
-        : tid(tid), ucontext(ucontext), stack_start(stack_start), stack_end(stack_end) {}
+    ThreadState* thread_state;
+
+    ThreadGCState(pthread_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end, ThreadState* thread_state)
+        : tid(tid), ucontext(ucontext), stack_start(stack_start), stack_end(stack_end), thread_state(thread_state) {}
 };
 // Gets a ThreadGCState per thread, not including the thread calling this function.
 // For this call to make sense, the threads all should be blocked;

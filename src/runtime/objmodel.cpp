@@ -3336,22 +3336,40 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     if (argspec.has_starargs) {
         rewrite_args = NULL;
 
-        assert(argspec.num_args == 0); // doesn't need to be true, but assumed here
-        Box* starargs = arg1;
+        Box* starargs;
+        if (argspec.num_args == 0)
+            starargs = arg1;
+        else if (argspec.num_args == 1)
+            starargs = arg2;
+        else
+            abort();
+
         assert(starargs->cls == tuple_cls);
         BoxedTuple* targs = static_cast<BoxedTuple*>(starargs);
 
         int n = targs->elts.size();
-        if (n >= 1)
-            arg1 = targs->elts[0];
-        if (n >= 2)
-            arg2 = targs->elts[1];
-        if (n >= 3)
-            arg3 = targs->elts[2];
-        if (n >= 4)
-            args = &targs->elts[3];
 
-        argspec = ArgPassSpec(n);
+        if (argspec.num_args == 0) {
+            if (n >= 1)
+                arg1 = targs->elts[0];
+            if (n >= 2)
+                arg2 = targs->elts[1];
+            if (n >= 3)
+                arg3 = targs->elts[2];
+            if (n >= 4)
+                args = &targs->elts[3];
+        } else if (argspec.num_args == 1) {
+            if (n >= 1)
+                arg2 = targs->elts[0];
+            if (n >= 2)
+                arg3 = targs->elts[1];
+            if (n >= 3)
+                args = &targs->elts[2];
+        } else {
+            abort(); // unhandled
+        }
+
+        argspec = ArgPassSpec(n + argspec.num_args);
     }
 
     Box* _cls = arg1;
