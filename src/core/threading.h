@@ -36,7 +36,7 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
 void registerMainThread();
 void finishMainThread();
 
-struct ThreadState {
+struct ThreadGCState {
     pthread_t tid; // useful mostly for debugging
     ucontext_t* ucontext;
 
@@ -45,13 +45,13 @@ struct ThreadState {
     // in a generator, but those generators will be tracked separately.
     void* stack_start, *stack_end;
 
-    ThreadState(pthread_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
+    ThreadGCState(pthread_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end)
         : tid(tid), ucontext(ucontext), stack_start(stack_start), stack_end(stack_end) {}
 };
-// Gets a ThreadState per thread, not including the thread calling this function.
+// Gets a ThreadGCState per thread, not including the thread calling this function.
 // For this call to make sense, the threads all should be blocked;
 // as a corollary, this thread is very much not thread safe.
-std::vector<ThreadState> getAllThreadStates();
+std::vector<ThreadGCState> getAllThreadStates();
 
 // Get the stack "bottom" (ie first pushed data.  For stacks that grow down, this
 // will be the highest address).
