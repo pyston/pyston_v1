@@ -14,6 +14,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
+
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 #include "core/types.h"
 #include "gc/collector.h"
@@ -99,6 +103,14 @@ public:
     }
 };
 
+static std::string generateVersionString() {
+    std::ostringstream oss;
+    oss << PYTHON_VERSION_MAJOR << '.' << PYTHON_VERSION_MINOR << '.' << PYTHON_VERSION_MICRO;
+    oss << '\n';
+    oss << "[Pyston " << PYSTON_VERSION_MAJOR << '.' << PYSTON_VERSION_MINOR << "]";
+    return oss.str();
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerPermanentRoot(sys_modules_dict);
@@ -122,6 +134,16 @@ void setupSys() {
 
     sys_module->giveAttr("platform", boxStrConstant("unknown")); // seems like a reasonable, if poor, default
 
+    llvm::SmallString<128> main_fn;
+    // TODO supposed to pass argv0, main_addr to this function:
+    main_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
+    sys_module->giveAttr("executable", boxString(main_fn.str()));
+
+    // TODO: should configure this in a better way
+    sys_module->giveAttr("prefix", boxStrConstant("/usr"));
+    sys_module->giveAttr("exec_prefix", boxStrConstant("/usr"));
+
+    sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
