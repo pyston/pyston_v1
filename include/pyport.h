@@ -271,6 +271,21 @@ typedef ssize_t         Py_ssize_t;
 #endif
 #endif
 
+#if defined(_MSC_VER)
+#define Py_MEMCPY(target, source, length) do {                          \
+        size_t i_, n_ = (length);                                       \
+        char *t_ = (void*) (target);                                    \
+        const char *s_ = (void*) (source);                              \
+        if (n_ >= 16)                                                   \
+            memcpy(t_, s_, n_);                                         \
+        else                                                            \
+            for (i_ = 0; i_ < n_; i_++)                                 \
+                t_[i_] = s_[i_];                                        \
+    } while (0)
+#else
+#define Py_MEMCPY memcpy
+#endif
+
 
 #endif /* Py_PYPORT_H */
 

@@ -80,3 +80,4 @@ print "hello world".partition("o")
 print "hello world"[False:True:True]
 
 print "{hello}".format(hello="world")
+print "%.3s" % "hello world"
