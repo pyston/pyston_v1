@@ -768,6 +768,90 @@ public:
         self->filename = filename;
         return None;
     }
+
+    static PyObject* __str__(BoxedEnvironmentError* self) noexcept {
+        PyObject* rtnval = NULL;
+
+        if (self->filename) {
+            PyObject* fmt;
+            PyObject* repr;
+            PyObject* tuple;
+
+            fmt = PyString_FromString("[Errno %s] %s: %s");
+            if (!fmt)
+                return NULL;
+
+            repr = PyObject_Repr(self->filename);
+            if (!repr) {
+                Py_DECREF(fmt);
+                return NULL;
+            }
+            tuple = PyTuple_New(3);
+            if (!tuple) {
+                Py_DECREF(repr);
+                Py_DECREF(fmt);
+                return NULL;
+            }
+
+            if (self->myerrno) {
+                Py_INCREF(self->myerrno);
+                PyTuple_SET_ITEM(tuple, 0, self->myerrno);
+            } else {
+                Py_INCREF(Py_None);
+                PyTuple_SET_ITEM(tuple, 0, Py_None);
+            }
+            if (self->strerror) {
+                Py_INCREF(self->strerror);
+                PyTuple_SET_ITEM(tuple, 1, self->strerror);
+            } else {
+                Py_INCREF(Py_None);
+                PyTuple_SET_ITEM(tuple, 1, Py_None);
+            }
+
+            PyTuple_SET_ITEM(tuple, 2, repr);
+
+            rtnval = PyString_Format(fmt, tuple);
+
+            Py_DECREF(fmt);
+            Py_DECREF(tuple);
+        } else if (self->myerrno && self->strerror) {
+            PyObject* fmt;
+            PyObject* tuple;
+
+            fmt = PyString_FromString("[Errno %s] %s");
+            if (!fmt)
+                return NULL;
+
+            tuple = PyTuple_New(2);
+            if (!tuple) {
+                Py_DECREF(fmt);
+                return NULL;
+            }
+
+            if (self->myerrno) {
+                Py_INCREF(self->myerrno);
+                PyTuple_SET_ITEM(tuple, 0, self->myerrno);
+            } else {
+                Py_INCREF(Py_None);
+                PyTuple_SET_ITEM(tuple, 0, Py_None);
+            }
+            if (self->strerror) {
+                Py_INCREF(self->strerror);
+                PyTuple_SET_ITEM(tuple, 1, self->strerror);
+            } else {
+                Py_INCREF(Py_None);
+                PyTuple_SET_ITEM(tuple, 1, Py_None);
+            }
+
+            rtnval = PyString_Format(fmt, tuple);
+
+            Py_DECREF(fmt);
+            Py_DECREF(tuple);
+        } else
+            rtnval = exceptionStr(self);
+
+        return rtnval;
+    }
 };
 
 void setupBuiltins() {
@@ -827,7 +911,15 @@ void setupBuiltins() {
 
     EnvironmentError->giveAttr(
         "__init__",
-        new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 1, false, false), { None }));
+        new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 1, false, false), { NULL }));
+    EnvironmentError->giveAttr(
+        "errno", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedEnvironmentError, myerrno)));
+    EnvironmentError->giveAttr("strerror", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
+                                                                     offsetof(BoxedEnvironmentError, strerror)));
+    EnvironmentError->giveAttr("filename", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
+                                                                     offsetof(BoxedEnvironmentError, filename)));
+    EnvironmentError->giveAttr("__str__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__str__, UNKNOWN, 1)));
 
     repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);

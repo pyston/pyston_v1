@@ -16,9 +16,15 @@ print os.path.expanduser("~") == os.environ["HOME"]
 print os.path.isfile("/dev/null")
 print os.path.isfile("/should_not_exist!")
 
-OSError(1, 2, 3)
+e = OSError(1, 2, 3)
+print e
+print e.errno
+print e.strerror
+print e.filename
+print OSError(1, 2).filename
 
-try:
-    os.execvp("aoeuaoeu", ['aoeuaoeu'])
-except OSError, e:
-    print e
+# This part needs sys.exc_info() and the three-arg raise statement
+# try:
+    # os.execvp("aoeuaoeu", ['aoeuaoeu'])
+# except OSError, e:
+    # print e
