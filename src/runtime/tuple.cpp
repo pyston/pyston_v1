@@ -108,7 +108,7 @@ extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t hi
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
-    if (slice->cls == int_cls)
+    if (isSubclass(slice->cls, int_cls))
         return tupleGetitemInt(self, static_cast<BoxedInt*>(slice));
     else if (slice->cls == slice_cls)
         return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
@@ -289,7 +289,7 @@ Box* tupleHash(BoxedTuple* self) {
     int64_t rtn = 3527539;
     for (Box* e : self->elts) {
         BoxedInt* h = hash(e);
-        assert(h->cls == int_cls);
+        assert(isSubclass(h->cls, int_cls));
         rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
     }
 

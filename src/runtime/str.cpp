@@ -163,7 +163,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                         elt_num++;
                     }
 
-                    RELEASE_ASSERT(val_to_use->cls == int_cls, "unsupported");
+                    RELEASE_ASSERT(isSubclass(val_to_use->cls, int_cls), "unsupported");
                     RELEASE_ASSERT(nspace == 0, "unsupported");
                     RELEASE_ASSERT(ndot == 0, "unsupported");
                     RELEASE_ASSERT(nzero == 0, "unsupported");
@@ -183,7 +183,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                         elt_num++;
                     }
 
-                    RELEASE_ASSERT(val_to_use->cls == int_cls, "unsupported");
+                    RELEASE_ASSERT(isSubclass(val_to_use->cls, int_cls), "unsupported");
 
                     std::ostringstream fmt("");
                     fmt << '%';
@@ -210,7 +210,7 @@ extern "C" Box* strMod(BoxedString* lhs, Box* rhs) {
                     double d;
                     if (val_to_use->cls == float_cls) {
                         d = static_cast<BoxedFloat*>(val_to_use)->d;
-                    } else if (val_to_use->cls == int_cls) {
+                    } else if (isSubclass(val_to_use->cls, int_cls)) {
                         d = static_cast<BoxedInt*>(val_to_use)->n;
                     } else {
                         RELEASE_ASSERT(0, "unsupported");
@@ -251,8 +251,6 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
     int n;
     if (isSubclass(rhs->cls, int_cls))
         n = static_cast<BoxedInt*>(rhs)->n;
-    else if (isSubclass(rhs->cls, bool_cls))
-        n = static_cast<BoxedBool*>(rhs)->b;
     else
         return NotImplemented;
 
@@ -622,7 +620,7 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
 
     Box* _count = _args[0];
 
-    RELEASE_ASSERT(_count->cls == int_cls, "an integer is required");
+    RELEASE_ASSERT(isSubclass(_count->cls, int_cls), "an integer is required");
     BoxedInt* count = static_cast<BoxedInt*>(_count);
 
     RELEASE_ASSERT(count->n < 0, "'count' argument unsupported");
@@ -696,7 +694,7 @@ Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
 Box* strRsplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     // TODO: implement this for real
     // for now, just forward rsplit() to split() in the cases they have to return the same value
-    assert(_max_split->cls == int_cls);
+    assert(isSubclass(_max_split->cls, int_cls));
     RELEASE_ASSERT(_max_split->n <= 0, "");
     return strSplit(self, sep, _max_split);
 }
@@ -834,7 +832,7 @@ Box* strContains(BoxedString* self, Box* elt) {
 Box* strStartswith(BoxedString* self, Box* elt) {
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
-                       getTypeName(elt)->c_str());
+                       getTypeName(self)->c_str());
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -847,7 +845,7 @@ Box* strStartswith(BoxedString* self, Box* elt) {
 Box* strEndswith(BoxedString* self, Box* elt) {
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
-                       getTypeName(elt)->c_str());
+                       getTypeName(self)->c_str());
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -860,7 +858,7 @@ Box* strEndswith(BoxedString* self, Box* elt) {
 Box* strFind(BoxedString* self, Box* elt, Box* _start) {
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'",
-                       getTypeName(elt)->c_str());
+                       getTypeName(self)->c_str());
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -888,7 +886,7 @@ Box* strFind(BoxedString* self, Box* elt, Box* _start) {
 Box* strRfind(BoxedString* self, Box* elt) {
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'rfind' requires a 'str' object but received a '%s'",
-                       getTypeName(elt)->c_str());
+                       getTypeName(self)->c_str());
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -905,7 +903,7 @@ Box* strRfind(BoxedString* self, Box* elt) {
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     assert(self->cls == str_cls);
 
-    if (slice->cls == int_cls) {
+    if (isSubclass(slice->cls, int_cls)) {
         BoxedInt* islice = static_cast<BoxedInt*>(slice);
         int64_t n = islice->n;
         int size = self->s.size();

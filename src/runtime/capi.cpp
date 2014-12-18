@@ -283,7 +283,8 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
     try {
         return getitem(o, key);
     } catch (Box* b) {
-        Py_FatalError("unimplemented");
+        PyErr_SetObject(b->cls, b);
+        return NULL;
     }
 }
 
@@ -488,13 +489,16 @@ void checkAndThrowCAPIException() {
         RELEASE_ASSERT(threading::cur_thread_state.curexc_traceback == NULL, "unsupported");
 
         // This doesn't seem like the right behavior...
-        if (value->cls == tuple_cls) {
-            BoxedTuple* args = static_cast<BoxedTuple*>(value);
-            value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(0, 0, true, false), args, NULL,
-                                NULL, NULL, NULL);
+        if (value->cls != threading::cur_thread_state.curexc_type) {
+            if (value->cls == tuple_cls)
+                value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(0, 0, true, false), value,
+                                    NULL, NULL, NULL, NULL);
+            else
+                value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(1), value, NULL, NULL, NULL,
+                                    NULL);
         }
-        RELEASE_ASSERT(value->cls == threading::cur_thread_state.curexc_type, "unsupported");
 
+        RELEASE_ASSERT(value->cls == threading::cur_thread_state.curexc_type, "unsupported");
         PyErr_Clear();
         throw value;
     }
@@ -766,7 +770,7 @@ extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) {
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
     RELEASE_ASSERT(o->cls != long_cls, "unhandled");
 
-    RELEASE_ASSERT(o->cls == int_cls, "??");
+    RELEASE_ASSERT(isSubclass(o->cls, int_cls), "??");
     int64_t n = static_cast<BoxedInt*>(o)->n;
     static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
     return n;

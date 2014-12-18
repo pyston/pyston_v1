@@ -54,7 +54,7 @@
 #define ATTRLIST_KIND_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->gc_header.kind_id) - (char*)0x1)
 #define INSTANCEMETHOD_FUNC_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->func) - (char*)0x1)
 #define INSTANCEMETHOD_OBJ_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->obj) - (char*)0x1)
-#define BOOL_B_OFFSET ((char*)&(((BoxedBool*)0x01)->b) - (char*)0x1)
+#define BOOL_B_OFFSET ((char*)&(((BoxedBool*)0x01)->n) - (char*)0x1)
 #define INT_N_OFFSET ((char*)&(((BoxedInt*)0x01)->n) - (char*)0x1)
 
 namespace pyston {
@@ -209,18 +209,14 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
     // TODO fix this
     Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Eq, NULL);
     assert(cmp->cls == bool_cls);
-    BoxedBool* b = static_cast<BoxedBool*>(cmp);
-    bool rtn = b->b;
-    return rtn;
+    return cmp == True;
 }
 
 bool PyLt::operator()(Box* lhs, Box* rhs) const {
     // TODO fix this
     Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Lt, NULL);
     assert(cmp->cls == bool_cls);
-    BoxedBool* b = static_cast<BoxedBool*>(cmp);
-    bool rtn = b->b;
-    return rtn;
+    return cmp == True;
 }
 
 extern "C" bool softspace(Box* b, bool newval) {
@@ -1568,13 +1564,14 @@ extern "C" bool nonzero(Box* obj) {
     }
 
     if (obj->cls == bool_cls) {
+        // TODO: is it faster to compare to True? (especially since it will be a constant we can embed in the rewrite)
         if (rewriter.get()) {
             RewriterVar* b = r_obj->getAttr(BOOL_B_OFFSET, rewriter->getReturnDestination());
             rewriter->commitReturning(b);
         }
 
         BoxedBool* bool_obj = static_cast<BoxedBool*>(obj);
-        return bool_obj->b;
+        return bool_obj->n;
     } else if (obj->cls == int_cls) {
         if (rewriter.get()) {
             // TODO should do:
@@ -1623,7 +1620,7 @@ extern "C" bool nonzero(Box* obj) {
     Box* r = runtimeCall0(func, ArgPassSpec(0));
     if (r->cls == bool_cls) {
         BoxedBool* b = static_cast<BoxedBool*>(r);
-        bool rtn = b->b;
+        bool rtn = b->n;
         return rtn;
     } else if (r->cls == int_cls) {
         BoxedInt* b = static_cast<BoxedInt*>(r);

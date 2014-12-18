@@ -26,24 +26,12 @@ extern "C" PyObject* PyBool_FromLong(long n) {
     return boxBool(n != 0);
 }
 
-extern "C" Box* boolInvert(BoxedBool* v) {
-    return boxInt(~v->b);
-}
-
-extern "C" Box* boolPos(BoxedBool* v) {
-    return boxInt(v->b ? 1 : 0);
-}
-
-extern "C" Box* boolNeg(BoxedBool* v) {
-    return boxInt(v->b ? -1 : 0);
-}
-
 extern "C" Box* boolNonzero(BoxedBool* v) {
     return v;
 }
 
 extern "C" Box* boolRepr(BoxedBool* v) {
-    if (v->b)
+    if (v == True)
         return boxStrConstant("True");
     return boxStrConstant("False");
 }
@@ -62,9 +50,6 @@ extern "C" Box* boolNew(Box* cls, Box* val) {
 void setupBool() {
     bool_cls->giveAttr("__name__", boxStrConstant("bool"));
 
-    bool_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)boolInvert, BOXED_INT, 1)));
-    bool_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)boolPos, BOXED_INT, 1)));
-    bool_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)boolNeg, BOXED_INT, 1)));
     bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
     bool_cls->giveAttr("__str__", bool_cls->getattr("__repr__"));

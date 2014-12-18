@@ -1,4 +1,5 @@
-# expected: fail
-# - C API exceptions are not yet supported
 import math
-print math.sqrt(-1)
+try:
+    print math.sqrt(-1)
+except ValueError, e:
+    print e

@@ -30,22 +30,22 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
     Box* step = sslice->step;
     assert(step);
 
-    RELEASE_ASSERT(start->cls == int_cls || start->cls == none_cls, "");
-    RELEASE_ASSERT(stop->cls == int_cls || stop->cls == none_cls, "");
-    RELEASE_ASSERT(step->cls == int_cls || step->cls == none_cls, "");
+    RELEASE_ASSERT(isSubclass(start->cls, int_cls) || start->cls == none_cls, "");
+    RELEASE_ASSERT(isSubclass(stop->cls, int_cls) || stop->cls == none_cls, "");
+    RELEASE_ASSERT(isSubclass(step->cls, int_cls) || step->cls == none_cls, "");
 
     int64_t istart;
     int64_t istop;
     int64_t istep = 1;
 
-    if (step->cls == int_cls) {
+    if (isSubclass(step->cls, int_cls)) {
         istep = static_cast<BoxedInt*>(step)->n;
         if (istep == 0) {
             raiseExcHelper(ValueError, "slice step cannot be zero");
         }
     }
 
-    if (start->cls == int_cls) {
+    if (isSubclass(start->cls, int_cls)) {
         istart = static_cast<BoxedInt*>(start)->n;
         if (istart < 0)
             istart = size + istart;
@@ -55,7 +55,7 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
         else
             istart = size - 1;
     }
-    if (stop->cls == int_cls) {
+    if (isSubclass(stop->cls, int_cls)) {
         istop = static_cast<BoxedInt*>(stop)->n;
         if (istop < 0)
             istop = size + istop;

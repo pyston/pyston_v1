@@ -140,7 +140,7 @@ extern "C" Box* listGetitemUnboxed(BoxedList* self, int64_t n) {
 }
 
 extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
-    assert(slice->cls == int_cls);
+    assert(isSubclass(slice->cls, int_cls));
     return listGetitemUnboxed(self, slice->n);
 }
 
@@ -166,7 +166,7 @@ extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
 
 extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
     assert(self->cls == list_cls);
-    if (slice->cls == int_cls) {
+    if (isSubclass(slice->cls, int_cls)) {
         return listGetitemInt(self, static_cast<BoxedInt*>(slice));
     } else if (slice->cls == slice_cls) {
         return listGetitemSlice(self, static_cast<BoxedSlice*>(slice));
@@ -181,7 +181,7 @@ extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
     LOCK_REGION(self->lock.asRead());
 
     assert(self->cls == list_cls);
-    assert(slice->cls == int_cls);
+    assert(isSubclass(slice->cls, int_cls));
     int64_t n = slice->n;
     if (n < 0)
         n = self->size + n;
@@ -229,7 +229,7 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
 
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     assert(self->cls == list_cls);
-    if (slice->cls == int_cls) {
+    if (isSubclass(slice->cls, int_cls)) {
         return listSetitemInt(self, static_cast<BoxedInt*>(slice), v);
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
@@ -276,7 +276,7 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
 
     Box* rtn;
 
-    if (slice->cls == int_cls) {
+    if (isSubclass(slice->cls, int_cls)) {
         rtn = listDelitemInt(self, static_cast<BoxedInt*>(slice));
     } else if (slice->cls == slice_cls) {
         rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));

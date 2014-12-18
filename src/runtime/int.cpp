@@ -36,12 +36,12 @@ extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) {
 }
 
 extern "C" long PyInt_AsLong(PyObject* op) {
-    RELEASE_ASSERT(op->cls == int_cls, "");
+    RELEASE_ASSERT(isSubclass(op->cls, int_cls), "");
     return static_cast<BoxedInt*>(op)->n;
 }
 
 extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) {
-    RELEASE_ASSERT(op->cls == int_cls, "");
+    RELEASE_ASSERT(isSubclass(op->cls, int_cls), "");
     return static_cast<BoxedInt*>(op)->n;
 }
 
@@ -207,13 +207,13 @@ extern "C" i1 ge_i64_i64(i64 lhs, i64 rhs) {
 
 
 extern "C" Box* intAddInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return add_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n + rhs->d);
 }
@@ -221,7 +221,7 @@ extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'",
-                       getTypeName(rhs)->c_str());
+                       getTypeName(lhs)->c_str());
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -235,13 +235,16 @@ extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxInt(lhs->n & rhs->n);
 }
 
 extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -250,13 +253,16 @@ extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intOrInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxInt(lhs->n | rhs->n);
 }
 
 extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -265,13 +271,16 @@ extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intXorInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxInt(lhs->n ^ rhs->n);
 }
 
 extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -280,13 +289,13 @@ extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intDivInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return div_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
@@ -296,8 +305,11 @@ extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -307,13 +319,13 @@ extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intFloordivInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return div_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
@@ -323,8 +335,11 @@ extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         return intFloordivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intFloordivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -334,8 +349,8 @@ extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
 
     if (rhs->n == 0) {
         raiseExcHelper(ZeroDivisionError, "division by zero");
@@ -344,7 +359,7 @@ extern "C" Box* intTruedivInt(BoxedInt* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
 
     if (rhs->d == 0) {
@@ -354,8 +369,11 @@ extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 }
 
 extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__truediv__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         return intTruedivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return intTruedivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -365,28 +383,35 @@ extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intEqInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->n == rhs->n);
 }
 
 extern "C" Box* intEq(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls != int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
+        BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
+        return boxBool(lhs->n == rhs_int->n);
+    } else {
         return NotImplemented;
     }
-    BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
-    return boxBool(lhs->n == rhs_int->n);
 }
 
 extern "C" Box* intNeInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->n != rhs->n);
 }
 
 extern "C" Box* intNe(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -395,13 +420,16 @@ extern "C" Box* intNe(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intLtInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->n < rhs->n);
 }
 
 extern "C" Box* intLt(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -410,13 +438,16 @@ extern "C" Box* intLt(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intLeInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->n <= rhs->n);
 }
 
 extern "C" Box* intLe(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -425,13 +456,16 @@ extern "C" Box* intLe(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intGtInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->n > rhs->n);
 }
 
 extern "C" Box* intGt(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -440,13 +474,16 @@ extern "C" Box* intGt(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intGeInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->n >= rhs->n);
 }
 
 extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -455,8 +492,8 @@ extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
 
     if (rhs->n < 0)
         raiseExcHelper(ValueError, "negative shift count");
@@ -466,7 +503,10 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -475,13 +515,16 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return boxInt(mod_i64_i64(lhs->n, rhs->n));
 }
 
 extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -490,7 +533,10 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__divmod__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     Box* divResult = intDiv(lhs, rhs);
 
     if (divResult == NotImplemented) {
@@ -509,20 +555,23 @@ extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
 
 
 extern "C" Box* intMulInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return mul_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n * rhs->d);
 }
 
 extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intMulInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
@@ -534,21 +583,24 @@ extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intPowInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
     return pow_i64_i64(lhs->n, rhs_int->n);
 }
 
 extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
     return boxFloat(pow(lhs->n, rhs->d));
 }
 
 extern "C" Box* intPow(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intPowInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
@@ -560,8 +612,8 @@ extern "C" Box* intPow(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
 
     if (rhs->n < 0)
         raiseExcHelper(ValueError, "negative shift count");
@@ -570,7 +622,10 @@ extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
 }
 
 extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -579,20 +634,23 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intSubInt(BoxedInt* lhs, BoxedInt* rhs) {
-    assert(lhs->cls == int_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
+    assert(isSubclass(rhs->cls, int_cls));
     return sub_i64_i64(lhs->n, rhs->n);
 }
 
 extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat* rhs) {
-    assert(lhs->cls == int_cls);
+    assert(isSubclass(lhs->cls, int_cls));
     assert(rhs->cls == float_cls);
     return boxFloat(lhs->n - rhs->d);
 }
 
 extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
-    assert(lhs->cls == int_cls);
-    if (rhs->cls == int_cls) {
+    if (!isSubclass(lhs->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'int' object but received a '%s'",
+                       getTypeName(lhs)->c_str());
+
+    if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
         return intSubInt(lhs, rhs_int);
     } else if (rhs->cls == float_cls) {
@@ -604,7 +662,10 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
 }
 
 extern "C" Box* intInvert(BoxedInt* v) {
-    assert(v->cls == int_cls);
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__invert__' requires a 'int' object but received a '%s'",
+                       getTypeName(v)->c_str());
+
     return boxInt(~v->n);
 }
 
@@ -619,7 +680,10 @@ extern "C" Box* intPos(BoxedInt* v) {
 }
 
 extern "C" Box* intNeg(BoxedInt* v) {
-    assert(v->cls == int_cls);
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'int' object but received a '%s'",
+                       getTypeName(v)->c_str());
+
 
 // It's possible for this to overflow:
 #if PYSTON_INT_MIN < -PYSTON_INT_MAX
@@ -634,7 +698,10 @@ extern "C" Box* intNeg(BoxedInt* v) {
 }
 
 extern "C" Box* intNonzero(BoxedInt* v) {
-    assert(v->cls == int_cls);
+    if (!isSubclass(v->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__nonzer__' requires a 'int' object but received a '%s'",
+                       getTypeName(v)->c_str());
+
     return boxBool(v->n != 0);
 }
 
@@ -649,8 +716,13 @@ extern "C" BoxedString* intRepr(BoxedInt* v) {
 }
 
 extern "C" Box* intHash(BoxedInt* self) {
-    assert(self->cls == int_cls);
-    return self;
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'int' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
+    if (self->cls == int_cls)
+        return self;
+    return boxInt(self->n);
 }
 
 extern "C" Box* intNew(Box* _cls, Box* val) {
@@ -667,7 +739,7 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
     BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
     initUserAttrs(rtn, cls);
 
-    if (val->cls == int_cls) {
+    if (isSubclass(val->cls, int_cls)) {
         rtn->n = static_cast<BoxedInt*>(val)->n;
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
@@ -680,8 +752,6 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
         double d = static_cast<BoxedFloat*>(val)->d;
 
         rtn->n = d;
-    } else if (val->cls == bool_cls) {
-        rtn->n = (val == True);
     } else {
         fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
                 getTypeName(val)->c_str());
@@ -698,9 +768,9 @@ extern "C" Box* intInit(BoxedInt* self, Box* val, Box* args) {
 static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* float_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_if, v_iu;
     assert(BOXED_INT);
+    v_ii.push_back(UNKNOWN);
     v_ii.push_back(BOXED_INT);
-    v_ii.push_back(BOXED_INT);
-    v_if.push_back(BOXED_INT);
+    v_if.push_back(UNKNOWN);
     v_if.push_back(BOXED_FLOAT);
     // Only the unknown version can accept non-ints (ex if you access the function directly ex via int.__add__)
     v_iu.push_back(UNKNOWN);
@@ -716,9 +786,9 @@ static void _addFuncIntFloatUnknown(const char* name, void* int_func, void* floa
 static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type, void* int_func, void* boxed_func) {
     std::vector<ConcreteCompilerType*> v_ii, v_iu;
     assert(BOXED_INT);
+    v_ii.push_back(UNKNOWN);
     v_ii.push_back(BOXED_INT);
-    v_ii.push_back(BOXED_INT);
-    v_iu.push_back(BOXED_INT);
+    v_iu.push_back(UNKNOWN);
     v_iu.push_back(UNKNOWN);
 
     CLFunction* cl = createRTFunction(2, 0, false, false);

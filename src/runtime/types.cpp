@@ -825,8 +825,8 @@ void setupRuntime() {
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    bool_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedBool), false);
     int_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedInt), false);
+    bool_cls = new BoxedHeapClass(type_cls, int_cls, NULL, 0, sizeof(BoxedBool), false);
     complex_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedComplex), false);
     // TODO we're leaking long memory!
     long_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedLong), false);

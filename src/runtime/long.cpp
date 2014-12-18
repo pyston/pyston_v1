@@ -215,7 +215,7 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
         int r = mpz_init_set_str(rtn->n, s->s.c_str(), base);
         RELEASE_ASSERT(r == 0, "");
     } else {
-        if (val->cls == int_cls) {
+        if (isSubclass(val->cls, int_cls)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
             const std::string& s = static_cast<BoxedString*>(val)->s;

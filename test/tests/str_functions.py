@@ -76,3 +76,5 @@ for i in xrange(-10, 10):
 print "hello world".partition("hi")
 print "hello world".partition("hello")
 print "hello world".partition("o")
+
+print "hello world"[False:True:True]

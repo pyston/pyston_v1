@@ -35,7 +35,7 @@ Box* timeTime() {
 
 Box* timeSleep(Box* arg) {
     double secs;
-    if (arg->cls == int_cls)
+    if (isSubclass(arg->cls, int_cls))
         secs = static_cast<BoxedInt*>(arg)->n;
     else if (arg->cls == float_cls)
         secs = static_cast<BoxedFloat*>(arg)->d;

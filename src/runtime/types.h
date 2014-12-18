@@ -308,11 +308,9 @@ public:
     BoxedComplex(double r, double i) __attribute__((visibility("default"))) : Box(complex_cls), real(r), imag(i) {}
 };
 
-class BoxedBool : public Box {
+class BoxedBool : public BoxedInt {
 public:
-    bool b;
-
-    BoxedBool(bool b) __attribute__((visibility("default"))) : Box(bool_cls), b(b) {}
+    BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(bool_cls, b ? 1 : 0) {}
 };
 
 class BoxedString : public Box {

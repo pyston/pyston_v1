@@ -106,7 +106,7 @@ extern "C" Box* vars(Box* obj) {
 }
 
 extern "C" Box* abs_(Box* x) {
-    if (x->cls == int_cls) {
+    if (isSubclass(x->cls, int_cls)) {
         i64 n = static_cast<BoxedInt*>(x)->n;
         return boxInt(n >= 0 ? n : -n);
     } else if (x->cls == float_cls) {
@@ -267,22 +267,22 @@ extern "C" Box* ord(Box* arg) {
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
-        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
 
         istart = 0;
         istop = static_cast<BoxedInt*>(start)->n;
         istep = 1;
     } else if (step == NULL) {
-        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
 
         istart = static_cast<BoxedInt*>(start)->n;
         istop = static_cast<BoxedInt*>(stop)->n;
         istep = 1;
     } else {
-        RELEASE_ASSERT(start->cls == int_cls, "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(stop->cls == int_cls, "%s", getTypeName(stop)->c_str());
-        RELEASE_ASSERT(step->cls == int_cls, "%s", getTypeName(step)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step)->c_str());
 
         istart = static_cast<BoxedInt*>(start)->n;
         istop = static_cast<BoxedInt*>(stop)->n;
@@ -607,7 +607,7 @@ public:
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
-        RELEASE_ASSERT(start->cls == int_cls, "");
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "");
         int64_t idx = static_cast<BoxedInt*>(start)->n;
 
         llvm::iterator_range<BoxIterator> range = obj->pyElements();

@@ -1269,7 +1269,10 @@ public:
     void drop(IREmitter& emitter, VAR* var) override { emitter.getGC()->dropPointer(emitter, var->getValue()); }
     void grab(IREmitter& emitter, VAR* var) override { emitter.getGC()->grabPointer(emitter, var->getValue()); }
 
-    bool isFitBy(BoxedClass* c) override { return c == cls; }
+    bool isFitBy(BoxedClass* c) override {
+        // I don't think it's ok to accept subclasses
+        return c == cls;
+    }
 
     CompilerType* getattrType(const std::string* attr, bool cls_only) override {
         if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {

@@ -30,7 +30,7 @@ extern "C" PyObject* PyFloat_FromDouble(double d) {
 extern "C" double PyFloat_AsDouble(PyObject* o) {
     if (o->cls == float_cls)
         return static_cast<BoxedFloat*>(o)->d;
-    else if (o->cls == int_cls)
+    else if (isSubclass(o->cls, int_cls))
         return static_cast<BoxedInt*>(o)->n;
     Py_FatalError("unimplemented");
     return 0.0;
@@ -77,13 +77,13 @@ extern "C" Box* floatAddFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatAddInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(lhs->d + rhs->n);
 }
 
 extern "C" Box* floatAdd(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatAddInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatAddFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -101,14 +101,14 @@ extern "C" Box* floatDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     raiseDivZeroExcIfZero(rhs->n);
     return boxFloat(lhs->d / rhs->n);
 }
 
 extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -119,7 +119,7 @@ extern "C" Box* floatDiv(BoxedFloat* lhs, Box* rhs) {
 
 extern "C" Box* floatTruediv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -137,14 +137,14 @@ extern "C" Box* floatRDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatRDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     raiseDivZeroExcIfZero(lhs->d);
     return boxFloat(rhs->n / lhs->d);
 }
 
 extern "C" Box* floatRDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatRDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatRDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -162,14 +162,14 @@ extern "C" Box* floatFloorDivFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatFloorDivInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     raiseDivZeroExcIfZero(rhs->n);
     return boxFloat(floor(lhs->d / rhs->n));
 }
 
 extern "C" Box* floatFloorDiv(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatFloorDivInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatFloorDivFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -186,13 +186,13 @@ extern "C" Box* floatEqFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatEqInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->d == rhs->n);
 }
 
 extern "C" Box* floatEq(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatEqInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatEqFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -209,13 +209,13 @@ extern "C" Box* floatNeFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatNeInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->d != rhs->n);
 }
 
 extern "C" Box* floatNe(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatNeInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatNeFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -232,13 +232,13 @@ extern "C" Box* floatLtFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatLtInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->d < rhs->n);
 }
 
 extern "C" Box* floatLt(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatLtInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatLtFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -255,13 +255,13 @@ extern "C" Box* floatLeFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatLeInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->d <= rhs->n);
 }
 
 extern "C" Box* floatLe(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatLeInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatLeFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -278,13 +278,13 @@ extern "C" Box* floatGtFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatGtInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->d > rhs->n);
 }
 
 extern "C" Box* floatGt(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatGtInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatGtFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -301,13 +301,13 @@ extern "C" Box* floatGeFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatGeInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxBool(lhs->d >= rhs->n);
 }
 
 extern "C" Box* floatGe(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatGeInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatGeFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -324,13 +324,13 @@ extern "C" Box* floatModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatModInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(mod_float_float(lhs->d, rhs->n));
 }
 
 extern "C" Box* floatMod(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatModInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatModFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -347,13 +347,13 @@ extern "C" Box* floatRModFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatRModInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(mod_float_float(rhs->n, lhs->d));
 }
 
 extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatRModInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatRModFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -370,13 +370,13 @@ extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(pow(lhs->d, rhs->n));
 }
 
 extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatPowInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatPowFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -393,13 +393,13 @@ extern "C" Box* floatMulFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatMulInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(lhs->d * rhs->n);
 }
 
 extern "C" Box* floatMul(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatMulInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatMulFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -416,13 +416,13 @@ extern "C" Box* floatSubFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatSubInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(lhs->d - rhs->n);
 }
 
 extern "C" Box* floatSub(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatSubInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -439,13 +439,13 @@ extern "C" Box* floatRSubFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* floatRSubInt(BoxedFloat* lhs, BoxedInt* rhs) {
     assert(lhs->cls == float_cls);
-    assert(rhs->cls == int_cls);
+    assert(isSubclass(rhs->cls, int_cls));
     return boxFloat(rhs->n - lhs->d);
 }
 
 extern "C" Box* floatRSub(BoxedFloat* lhs, Box* rhs) {
     assert(lhs->cls == float_cls);
-    if (rhs->cls == int_cls) {
+    if (isSubclass(rhs->cls, int_cls)) {
         return floatRSubInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
         return floatRSubFloat(lhs, static_cast<BoxedFloat*>(rhs));
@@ -549,7 +549,7 @@ Box* floatNew(BoxedClass* cls, Box* a) {
 
     if (a->cls == float_cls) {
         return a;
-    } else if (a->cls == int_cls) {
+    } else if (isSubclass(a->cls, int_cls)) {
         return boxFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(a)->s;
