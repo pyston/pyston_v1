@@ -352,6 +352,8 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
     tp_basicsize = instance_size;
 
+    tp_flags |= Py_TPFLAGS_HEAPTYPE;
+
     if (metaclass == NULL) {
         assert(type_cls == NULL);
     } else {
