@@ -249,6 +249,8 @@ ifeq ($(USE_CCACHE),1)
 	CXX := ccache $(CXX)
 	CXX_PROFILE := ccache $(CXX_PROFILE)
 	CLANG_CXX := ccache $(CLANG_CXX)
+	CXX_ENV += CCACHE_CPP2=yes
+	CC_ENV += CCACHE_CPP2=yes
 	ifeq ($(USE_DISTCC),1)
 		CXX_ENV += CCACHE_PREFIX=distcc
 	endif
@@ -266,6 +268,7 @@ ifeq ($(USE_CCACHE),1)
 endif
 CXX := $(CXX_ENV) $(CXX)
 CXX_PROFILE := $(CXX_ENV) $(CXX_PROFILE)
+CC := $(CC_ENV) $(CC)
 CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
 # Not sure if ccache_basedir actually helps at all (I think the generated files make them different?)
 LLVM_BUILD_ENV += CCACHE_DIR=$(HOME)/.ccache_llvm CCACHE_BASEDIR=$(LLVM_SRC)
