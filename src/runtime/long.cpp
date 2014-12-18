@@ -113,6 +113,10 @@ extern "C" double PyLong_AsDouble(PyObject* vv) {
     return mpz_get_d(l->n);
 }
 
+extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL, int newstyle) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyLong_FromDouble(double v) {
     Py_FatalError("unimplemented");
 }
@@ -128,6 +132,23 @@ extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
     mpz_init_set_ui(rtn->n, ival);
     return rtn;
 }
+
+#define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
+#define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
+
+extern "C" PyObject* PyLong_FromSsize_t(Py_ssize_t ival) {
+    Py_ssize_t bytes = ival;
+    int one = 1;
+    return _PyLong_FromByteArray((unsigned char*)&bytes, SIZEOF_SIZE_T, IS_LITTLE_ENDIAN, 1);
+}
+
+extern "C" PyObject* PyLong_FromSize_t(size_t ival) {
+    size_t bytes = ival;
+    int one = 1;
+    return _PyLong_FromByteArray((unsigned char*)&bytes, SIZEOF_SIZE_T, IS_LITTLE_ENDIAN, 0);
+}
+
+#undef IS_LITTLE_ENDIAN
 
 extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) {
     Py_FatalError("unimplemented");

@@ -7,13 +7,15 @@
 extern "C" {
 #endif
 
-PyAPI_DATA(PyTypeObject) PySeqIter_Type;
+// Pyston change: this is no longer a static object
+//PyAPI_DATA(PyTypeObject) PySeqIter_Type;
 
 #define PySeqIter_Check(op) (Py_TYPE(op) == &PySeqIter_Type)
 
 PyAPI_FUNC(PyObject *) PySeqIter_New(PyObject *);
 
-PyAPI_DATA(PyTypeObject) PyCallIter_Type;
+// Pyston change: this is no longer a static object
+//PyAPI_DATA(PyTypeObject) PyCallIter_Type;
 
 #define PyCallIter_Check(op) (Py_TYPE(op) == &PyCallIter_Type)
 

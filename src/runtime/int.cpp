@@ -58,6 +58,10 @@ extern "C" PyObject* PyInt_FromLong(long n) {
     return boxInt(n);
 }
 
+extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) {
+    Py_FatalError("unimplemented");
+}
+
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
 // If we don't have fast overflow-checking builtins, provide some slow variants:

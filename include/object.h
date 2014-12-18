@@ -495,8 +495,9 @@ PyAPI_FUNC(int) PyType_IsSubtype(PyTypeObject *, PyTypeObject *);
 PyAPI_DATA(PyTypeObject*) type_cls;
 #define PyType_Type (*type_cls)
 
-PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */
-PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
+// Pyston change: this is no longer a static object
+//PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */
+//PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) PyType_Check(PyObject*);
@@ -511,7 +512,8 @@ PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t);
 PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
                                                PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *);
-PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, char *, PyObject **);
+// Pyston change: modified this to take a const char*
+PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, const char *, PyObject **);
 PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
 PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
 

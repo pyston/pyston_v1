@@ -34,6 +34,22 @@ extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" double PyComplex_RealAsDouble(PyObject* op) {
+    if (PyComplex_Check(op)) {
+        return static_cast<BoxedComplex*>(op)->real;
+    } else {
+        return PyFloat_AsDouble(op);
+    }
+}
+
+extern "C" double PyComplex_ImagAsDouble(PyObject* op) {
+    if (PyComplex_Check(op)) {
+        return static_cast<BoxedComplex*>(op)->imag;
+    } else {
+        return 0.0;
+    }
+}
+
 // addition
 
 extern "C" Box* complexAddComplex(BoxedComplex* lhs, BoxedComplex* rhs) {

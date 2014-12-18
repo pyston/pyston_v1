@@ -36,6 +36,13 @@
 #define HAVE_EXPM1 1
 #define Py_USING_UNICODE 1
 #define Py_UNICODE_SIZE 4
+#define HAVE_UINT32_T 1
+#define HAVE_UINT64_T 1
+#define HAVE_UINTPTR_T 1
+#define HAVE_INT32_T 1
+#define HAVE_INT64_T 1
+
+#define DOUBLE_IS_LITTLE_ENDIAN_IEEE754 1
 
 #define WITH_THREAD
 

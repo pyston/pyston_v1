@@ -23,7 +23,9 @@
 
 namespace pyston {
 
+extern "C" {
 BoxedClass* classobj_cls, *instance_cls;
+}
 
 bool classobjIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
     if (child == parent)

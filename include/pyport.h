@@ -15,6 +15,96 @@ typedef ssize_t         Py_ssize_t;
 
 // Pyston change: the rest of these have just been copied from CPython's pyport.h, in an arbitrary order:
 
+#if defined(_MSC_VER)
+#if defined(PY_LOCAL_AGGRESSIVE)
+/* enable more aggressive optimization for visual studio */
+#pragma optimize("agtw", on)
+#endif
+/* ignore warnings if the compiler decides not to inline a function */
+#pragma warning(disable: 4710)
+/* fastest possible local call under MSVC */
+#define Py_LOCAL(type) static type __fastcall
+#define Py_LOCAL_INLINE(type) static __inline type __fastcall
+#elif defined(USE_INLINE)
+#define Py_LOCAL(type) static type
+#define Py_LOCAL_INLINE(type) static inline type
+#else
+#define Py_LOCAL(type) static type
+#define Py_LOCAL_INLINE(type) static type
+#endif
+
+/*  The functions _Py_dg_strtod and _Py_dg_dtoa in Python/dtoa.c (which are
+ *  required to support the short float repr introduced in Python 3.1) require
+ *  that the floating-point unit that's being used for arithmetic operations
+ *  on C doubles is set to use 53-bit precision.  It also requires that the
+ *  FPU rounding mode is round-half-to-even, but that's less often an issue.
+ *
+ *  If your FPU isn't already set to 53-bit precision/round-half-to-even, and
+ *  you want to make use of _Py_dg_strtod and _Py_dg_dtoa, then you should
+ *
+ *     #define HAVE_PY_SET_53BIT_PRECISION 1
+ *
+ *  and also give appropriate definitions for the following three macros:
+ *
+ *    _PY_SET_53BIT_PRECISION_START : store original FPU settings, and
+ *        set FPU to 53-bit precision/round-half-to-even
+ *    _PY_SET_53BIT_PRECISION_END : restore original FPU settings
+ *    _PY_SET_53BIT_PRECISION_HEADER : any variable declarations needed to
+ *        use the two macros above.
+ *
+ * The macros are designed to be used within a single C function: see
+ * Python/pystrtod.c for an example of their use.
+ */
+
+/* get and set x87 control word for gcc/x86 */
+#ifdef HAVE_GCC_ASM_FOR_X87
+#define HAVE_PY_SET_53BIT_PRECISION 1
+/* _Py_get/set_387controlword functions are defined in Python/pymath.c */
+#define _Py_SET_53BIT_PRECISION_HEADER                          \
+    unsigned short old_387controlword, new_387controlword
+#define _Py_SET_53BIT_PRECISION_START                                   \
+    do {                                                                \
+        old_387controlword = _Py_get_387controlword();                  \
+        new_387controlword = (old_387controlword & ~0x0f00) | 0x0200; \
+        if (new_387controlword != old_387controlword)                   \
+            _Py_set_387controlword(new_387controlword);                 \
+    } while (0)
+#define _Py_SET_53BIT_PRECISION_END                             \
+    if (new_387controlword != old_387controlword)               \
+        _Py_set_387controlword(old_387controlword)
+#endif
+
+/* get and set x87 control word for VisualStudio/x86 */
+#if defined(_MSC_VER) && !defined(_WIN64) /* x87 not supported in 64-bit */
+#define HAVE_PY_SET_53BIT_PRECISION 1
+#define _Py_SET_53BIT_PRECISION_HEADER \
+    unsigned int old_387controlword, new_387controlword, out_387controlword
+/* We use the __control87_2 function to set only the x87 control word.
+   The SSE control word is unaffected. */
+#define _Py_SET_53BIT_PRECISION_START                                   \
+    do {                                                                \
+        __control87_2(0, 0, &old_387controlword, NULL);                 \
+        new_387controlword =                                            \
+          (old_387controlword & ~(_MCW_PC | _MCW_RC)) | (_PC_53 | _RC_NEAR); \
+        if (new_387controlword != old_387controlword)                   \
+            __control87_2(new_387controlword, _MCW_PC | _MCW_RC,        \
+                          &out_387controlword, NULL);                   \
+    } while (0)
+#define _Py_SET_53BIT_PRECISION_END                                     \
+    do {                                                                \
+        if (new_387controlword != old_387controlword)                   \
+            __control87_2(old_387controlword, _MCW_PC | _MCW_RC,        \
+                          &out_387controlword, NULL);                   \
+    } while (0)
+#endif
+
+/* default definitions are empty */
+#ifndef HAVE_PY_SET_53BIT_PRECISION
+#define _Py_SET_53BIT_PRECISION_HEADER
+#define _Py_SET_53BIT_PRECISION_START
+#define _Py_SET_53BIT_PRECISION_END
+#endif
+
 /* Py_DEPRECATED(version)
  * Declare a variable, type, or function deprecated.
  * Usage:
@@ -136,6 +226,51 @@ typedef ssize_t         Py_ssize_t;
 #define PY_SSIZE_T_MAX ((Py_ssize_t)(((size_t)-1)>>1))
 /* Smallest negative value of type Py_ssize_t. */
 #define PY_SSIZE_T_MIN (-PY_SSIZE_T_MAX-1)
+
+#ifdef uint32_t
+#define HAVE_UINT32_T 1
+#endif
+
+#ifdef HAVE_UINT32_T
+#ifndef PY_UINT32_T
+#define PY_UINT32_T uint32_t
+#endif
+#endif
+
+/* Macros for a 64-bit unsigned integer type; used for type 'twodigits' in the
+ * long integer implementation, when 30-bit digits are enabled.
+ */
+#ifdef uint64_t
+#define HAVE_UINT64_T 1
+#endif
+
+#ifdef HAVE_UINT64_T
+#ifndef PY_UINT64_T
+#define PY_UINT64_T uint64_t
+#endif
+#endif
+
+/* Signed variants of the above */
+#ifdef int32_t
+#define HAVE_INT32_T 1
+#endif
+
+#ifdef HAVE_INT32_T
+#ifndef PY_INT32_T
+#define PY_INT32_T int32_t
+#endif
+#endif
+
+#ifdef int64_t
+#define HAVE_INT64_T 1
+#endif
+
+#ifdef HAVE_INT64_T
+#ifndef PY_INT64_T
+#define PY_INT64_T int64_t
+#endif
+#endif
+
 
 #endif /* Py_PYPORT_H */
 

@@ -78,3 +78,5 @@ print "hello world".partition("hello")
 print "hello world".partition("o")
 
 print "hello world"[False:True:True]
+
+print "{hello}".format(hello="world")

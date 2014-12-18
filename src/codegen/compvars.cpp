@@ -1366,9 +1366,8 @@ public:
             return NULL;
         BoxedFunction* rtattr_func = static_cast<BoxedFunction*>(rtattr);
 
-        RELEASE_ASSERT(!argspec.has_starargs, "");
-        RELEASE_ASSERT(!argspec.has_kwargs, "");
-        RELEASE_ASSERT(argspec.num_keywords == 0, "");
+        if (argspec.num_keywords || argspec.has_starargs || argspec.has_kwargs)
+            return NULL;
 
         CLFunction* cl = rtattr_func->f;
         assert(cl);
