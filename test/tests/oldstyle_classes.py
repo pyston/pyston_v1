@@ -102,3 +102,27 @@ print isinstance(D(), C)
 
 print str(f)[:26]
 print repr(f)[:26]
+
+
+class OldStyleClass:
+    pass
+
+print issubclass(OldStyleClass, object)
+
+print isinstance(OldStyleClass(), OldStyleClass)
+print issubclass(OldStyleClass, OldStyleClass)
+
+class GetattrTest:
+    def __getattr__(self, attr):
+        print "getattr", attr
+        if attr.startswith("__"):
+            raise AttributeError(attr)
+        return 1
+
+g = GetattrTest()
+g.b = 2
+print g.a
+print g.b
+print g.__class__
+print g.__dict__.items()
+print bool(g)

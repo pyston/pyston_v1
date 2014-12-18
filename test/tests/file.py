@@ -34,7 +34,7 @@ f = open('/dev/null')
 print iter(f) is f
 f.close()
 
-with open('../README.md') as f:
+with open('README.md') as f:
     lines = list(f)
     print lines[:5]
     print lines[-5:]
@@ -44,3 +44,8 @@ try:
    f = open('this-should-definitely-not-exist.txt')
 except IOError as e:
    print str(e)
+
+f = open("/dev/null", "w")
+f.write("hello world")
+print f.flush()
+f.close()

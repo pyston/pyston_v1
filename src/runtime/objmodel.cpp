@@ -248,6 +248,10 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
+bool isInstance(Box* obj, BoxedClass* cls) {
+    return isSubclass(obj->cls, cls);
+}
+
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
     // TODO the class is allowed to override this using __subclasscheck__
     while (child) {
@@ -2136,6 +2140,17 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     return chosen_cf;
 }
 
+static std::string getFunctionName(CLFunction* f) {
+    if (f->source)
+        return f->source->getName();
+    else if (f->versions.size()) {
+        std::ostringstream oss;
+        oss << "<function at " << f->versions[0]->code << ">";
+        return oss.str();
+    }
+    return "<unknown function>";
+}
+
 static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bool>& params_filled,
                          const std::string& kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
                          BoxedDict* okwargs) {
@@ -2316,17 +2331,9 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         Box* ovarargs = new BoxedTuple(unused_positional);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
-        std::string name = "<unknown function>";
-        if (f->source)
-            name = f->source->getName();
-        else if (f->versions.size()) {
-            std::ostringstream oss;
-            oss << "<function at " << f->versions[0]->code << ">";
-            name = oss.str();
-        }
-
-        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", name.c_str(), f->num_args,
-                       (f->num_args == 1 ? "" : "s"), argspec.num_args + argspec.num_keywords + varargs.size());
+        raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", getFunctionName(f).c_str(),
+                       f->num_args, (f->num_args == 1 ? "" : "s"),
+                       argspec.num_args + argspec.num_keywords + varargs.size());
     }
 
     ////
@@ -2341,7 +2348,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     const std::vector<AST_expr*>* arg_names = f->source ? f->source->arg_names.args : NULL;
     if (arg_names == nullptr && argspec.num_keywords && !f->takes_kwargs) {
-        raiseExcHelper(TypeError, "<function @%p>() doesn't take keyword arguments", f->versions[0]->code);
+        raiseExcHelper(TypeError, "%s() doesn't take keyword arguments", getFunctionName(f).c_str());
     }
 
     if (argspec.num_keywords)
@@ -2374,7 +2381,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         for (auto& p : d_kwargs->d) {
             if (p.first->cls != str_cls)
-                raiseExcHelper(TypeError, "<function>() keywords must be strings");
+                raiseExcHelper(TypeError, "%s() keywords must be strings", getFunctionName(f).c_str());
 
             BoxedString* s = static_cast<BoxedString*>(p.first);
 
@@ -2385,8 +2392,8 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
                 Box*& v = okwargs->d[p.first];
                 if (v) {
-                    raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
-                                   s->s.c_str());
+                    raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'",
+                                   getFunctionName(f).c_str(), s->s.c_str());
                 }
                 v = p.second;
             }
@@ -2399,7 +2406,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         if (params_filled[i])
             continue;
         // TODO not right error message
-        raiseExcHelper(TypeError, "<function>() did not get a value for positional argument %d", i);
+        raiseExcHelper(TypeError, "%s() did not get a value for positional argument %d", getFunctionName(f).c_str(), i);
     }
 
     RewriterVar* r_defaults_array = NULL;
@@ -3336,22 +3343,40 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     if (argspec.has_starargs) {
         rewrite_args = NULL;
 
-        assert(argspec.num_args == 0); // doesn't need to be true, but assumed here
-        Box* starargs = arg1;
+        Box* starargs;
+        if (argspec.num_args == 0)
+            starargs = arg1;
+        else if (argspec.num_args == 1)
+            starargs = arg2;
+        else
+            abort();
+
         assert(starargs->cls == tuple_cls);
         BoxedTuple* targs = static_cast<BoxedTuple*>(starargs);
 
         int n = targs->elts.size();
-        if (n >= 1)
-            arg1 = targs->elts[0];
-        if (n >= 2)
-            arg2 = targs->elts[1];
-        if (n >= 3)
-            arg3 = targs->elts[2];
-        if (n >= 4)
-            args = &targs->elts[3];
 
-        argspec = ArgPassSpec(n);
+        if (argspec.num_args == 0) {
+            if (n >= 1)
+                arg1 = targs->elts[0];
+            if (n >= 2)
+                arg2 = targs->elts[1];
+            if (n >= 3)
+                arg3 = targs->elts[2];
+            if (n >= 4)
+                args = &targs->elts[3];
+        } else if (argspec.num_args == 1) {
+            if (n >= 1)
+                arg2 = targs->elts[0];
+            if (n >= 2)
+                arg3 = targs->elts[1];
+            if (n >= 3)
+                args = &targs->elts[2];
+        } else {
+            abort(); // unhandled
+        }
+
+        argspec = ArgPassSpec(n + argspec.num_args);
     }
 
     Box* _cls = arg1;

@@ -99,6 +99,12 @@ extern "C" Box* dir(Box* obj) {
     return result;
 }
 
+extern "C" Box* vars(Box* obj) {
+    RELEASE_ASSERT(obj, "Don't support 0-arg vars() calls yet");
+
+    return makeAttrWrapper(obj);
+}
+
 extern "C" Box* abs_(Box* x) {
     if (x->cls == int_cls) {
         i64 n = static_cast<BoxedInt*>(x)->n;
@@ -340,13 +346,21 @@ Box* isinstance_func(Box* obj, Box* cls) {
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
-    if (parent->cls == classobj_cls) {
-        Py_FatalError("don't handle issubclass for old style classes yet");
+    if (child->cls != type_cls && child->cls != classobj_cls)
+        raiseExcHelper(TypeError, "issubclass() arg 1 must be a class");
+
+    RELEASE_ASSERT(parent->cls != tuple_cls, "unsupported");
+
+    if (child->cls == classobj_cls) {
+        if (parent->cls != classobj_cls)
+            return False;
+
+        return boxBool(classobjIssubclass(static_cast<BoxedClassobj*>(child), static_cast<BoxedClassobj*>(parent)));
     }
 
-    RELEASE_ASSERT(child->cls == type_cls, "");
-    // TODO parent can also be a tuple of classes
-    RELEASE_ASSERT(parent->cls == type_cls, "");
+    assert(child->cls == type_cls);
+    if (parent->cls != type_cls)
+        return False;
 
     return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
 }
@@ -911,6 +925,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
     builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
     builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
+    builtins_module->giveAttr("vars",
+                              new BoxedFunction(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);

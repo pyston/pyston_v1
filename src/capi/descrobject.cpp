@@ -48,7 +48,9 @@ Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, Boxe
     } else {
         RELEASE_ASSERT(0, "0x%x", ml_flags);
     }
-    assert(rtn);
+
+    checkAndThrowCAPIException();
+    assert(rtn && "should have set + thrown an exception!");
     return rtn;
 }
 }

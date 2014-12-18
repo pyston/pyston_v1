@@ -13,4 +13,7 @@ print type(os.stat("/dev/null"))
 
 print os.path.expanduser("~") == os.environ["HOME"]
 
+print os.path.isfile("/dev/null")
+print os.path.isfile("/should_not_exist!")
+
 OSError(1, 2, 3)

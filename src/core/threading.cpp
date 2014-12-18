@@ -32,6 +32,9 @@
 namespace pyston {
 namespace threading {
 
+__thread ThreadState cur_thread_state
+    = { NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
+
 PthreadFastMutex threading_lock;
 
 // Certain thread examination functions won't be valid for a brief
@@ -128,7 +131,7 @@ static void pushThreadState(pthread_t tid, ucontext_t* context) {
     void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
 #endif
     assert(stack_start < stack_end);
-    thread_states.push_back(ThreadGCState(tid, context, stack_start, stack_end));
+    thread_states.push_back(ThreadGCState(tid, context, stack_start, stack_end, &cur_thread_state));
 }
 
 std::vector<ThreadGCState> getAllThreadStates() {
@@ -252,6 +255,7 @@ static void* _thread_start(void* _arg) {
     }
 
     threading::GLReadRegion _glock;
+    assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
     current_threads[current_thread]->assertNoGenerators();
@@ -350,6 +354,8 @@ void registerMainThread() {
     int code = sigaction(SIGUSR2, &act, &oldact);
     if (code)
         err(1, NULL);
+
+    assert(!PyErr_Occurred());
 }
 
 void finishMainThread() {

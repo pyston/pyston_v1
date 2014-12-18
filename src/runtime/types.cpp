@@ -28,6 +28,7 @@
 #include "runtime/classobj.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
+#include "runtime/list.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
@@ -726,6 +727,20 @@ public:
         Box* r = self->b->getattr(key->s);
         return r ? True : False;
     }
+
+    static Box* items(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        BoxedList* rtn = new BoxedList();
+
+        HCAttrs* attrs = self->b->getAttrsPtr();
+        for (const auto& p : attrs->hcls->attr_offsets) {
+            BoxedTuple* t = new BoxedTuple({ boxString(p.first), attrs->attr_list->attrs[p.second] });
+            listAppend(rtn, t);
+        }
+        return rtn;
+    }
 };
 
 Box* makeAttrWrapper(Box* b) {
@@ -937,6 +952,7 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
     attrwrapper_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules

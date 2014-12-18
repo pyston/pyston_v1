@@ -94,8 +94,7 @@ Box* fileWrite(BoxedFile* self, Box* val) {
     assert(self->cls == file_cls);
 
     if (self->closed) {
-        fprintf(stderr, "IOError: file is closed\n");
-        raiseExcHelper(IOError, "");
+        raiseExcHelper(IOError, "file is closed");
     }
 
 
@@ -127,6 +126,16 @@ Box* fileWrite(BoxedFile* self, Box* val) {
         fprintf(stderr, "TypeError: expected a character buffer object\n");
         raiseExcHelper(TypeError, "");
     }
+}
+
+Box* fileFlush(BoxedFile* self) {
+    RELEASE_ASSERT(self->cls == file_cls, "");
+
+    if (self->closed)
+        raiseExcHelper(IOError, "file is closed");
+
+    fflush(self->f);
+    return None;
 }
 
 Box* fileClose(BoxedFile* self) {
@@ -199,6 +208,7 @@ void setupFile() {
     CLFunction* readline = boxRTFunction((void*)fileReadline1, STR, 1);
     file_cls->giveAttr("readline", new BoxedFunction(readline));
 
+    file_cls->giveAttr("flush", new BoxedFunction(boxRTFunction((void*)fileFlush, NONE, 1)));
     file_cls->giveAttr("write", new BoxedFunction(boxRTFunction((void*)fileWrite, NONE, 2)));
     file_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)fileClose, NONE, 1)));
 

@@ -15,6 +15,7 @@
 #ifndef PYSTON_CAPI_TYPES_H
 #define PYSTON_CAPI_TYPES_H
 
+#include "runtime/capi.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -74,7 +75,9 @@ public:
         } else {
             RELEASE_ASSERT(0, "0x%x", self->ml_flags);
         }
-        RELEASE_ASSERT(rtn, "need to throw an exception");
+
+        checkAndThrowCAPIException();
+        assert(rtn && "should have set + thrown an exception!");
         return rtn;
     }
 };
@@ -106,13 +109,17 @@ public:
         wrapperfunc wrapper = self->descr->wrapper->wrapper;
         assert(self->descr->wrapper->offset > 0);
 
+        Box* rtn;
         if (flags & PyWrapperFlag_KEYWORDS) {
             wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
-            return (*wk)(self->obj, args, self->descr->wrapped, kwds);
+            rtn = (*wk)(self->obj, args, self->descr->wrapped, kwds);
         } else {
-            return (*wrapper)(self->obj, args, self->descr->wrapped);
+            rtn = (*wrapper)(self->obj, args, self->descr->wrapped);
         }
-        abort();
+
+        checkAndThrowCAPIException();
+        assert(rtn && "should have set + thrown an exception!");
+        return rtn;
     }
 };
 

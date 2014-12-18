@@ -15,12 +15,14 @@
 #ifndef PYSTON_RUNTIME_CAPI_H
 #define PYSTON_RUNTIME_CAPI_H
 
-#include <cstring>
+#include <string>
 
 namespace pyston {
 
 class BoxedModule;
 BoxedModule* importTestExtension(const std::string&);
+
+void checkAndThrowCAPIException();
 }
 
 #endif

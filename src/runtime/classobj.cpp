@@ -25,19 +25,19 @@ namespace pyston {
 
 BoxedClass* classobj_cls, *instance_cls;
 
-bool classIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
+bool classobjIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
     if (child == parent)
         return true;
 
     for (auto e : child->bases->elts) {
-        if (e->cls == classobj_cls && classIssubclass(static_cast<BoxedClassobj*>(e), parent))
+        if (e->cls == classobj_cls && classobjIssubclass(static_cast<BoxedClassobj*>(e), parent))
             return true;
     }
     return false;
 }
 
 bool instanceIsinstance(BoxedInstance* obj, BoxedClassobj* cls) {
-    return classIssubclass(obj->inst_cls, cls);
+    return classobjIssubclass(obj->inst_cls, cls);
 }
 
 static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
@@ -142,6 +142,13 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
     // TODO: special handling for accessing __dict__ and __class__
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            return makeAttrWrapper(inst);
+
+        if (attr->s == "__class__")
+            return inst->inst_cls;
+    }
 
     Box* r = inst->getattr(attr->s);
     if (r)
@@ -155,7 +162,11 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
 
     static const std::string getattr_str("__getattr__");
     Box* getattr = classLookup(inst->inst_cls, getattr_str);
-    RELEASE_ASSERT(getattr == NULL, "unimplemented");
+
+    if (getattr) {
+        getattr = processDescriptor(getattr, inst, inst->inst_cls);
+        return runtimeCall(getattr, ArgPassSpec(1), _attr, NULL, NULL, NULL, NULL);
+    }
 
     if (!raise_on_missing)
         return NULL;
@@ -204,10 +215,22 @@ Box* instanceNonzero(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
 
-    Box* nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
+    Box* nonzero_func = NULL;
+    try {
+        nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
+    } catch (Box* b) {
+        if (!isInstance(b, AttributeError))
+            throw;
+    }
 
-    if (nonzero_func == NULL)
-        nonzero_func = _instanceGetattribute(inst, boxStrConstant("__len__"), false);
+    if (nonzero_func == NULL) {
+        try {
+            nonzero_func = _instanceGetattribute(inst, boxStrConstant("__len__"), false);
+        } catch (Box* b) {
+            if (!isInstance(b, AttributeError))
+                throw;
+        }
+    }
 
     if (nonzero_func) {
         return runtimeCall(nonzero_func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
