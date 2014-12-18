@@ -96,7 +96,9 @@ PyAPI_FUNC(PyObject *) PyDictProxy_New(PyObject *);
 PyAPI_FUNC(PyObject *) PyWrapper_New(PyObject *, PyObject *);
 
 
-PyAPI_DATA(PyTypeObject) PyProperty_Type;
+// Pyston change: this is no longer a static object
+//PyAPI_DATA(PyTypeObject) PyProperty_Type;
+
 #ifdef __cplusplus
 }
 #endif

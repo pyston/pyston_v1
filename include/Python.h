@@ -63,6 +63,7 @@
 #include "dictobject.h"
 #include "tupleobject.h"
 #include "methodobject.h"
+#include "classobject.h"
 #include "fileobject.h"
 #include "pycapsule.h"
 #include "sliceobject.h"
@@ -84,6 +85,8 @@
 #include "abstract.h"
 
 #include "pyctype.h"
+#include "pystrtod.h"
+#include "dtoa.h"
 
 // directly from CPython:
 /* Argument must be a char or an int in [-128, 127] or [0, 255]. */

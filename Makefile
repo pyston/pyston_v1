@@ -249,6 +249,8 @@ ifeq ($(USE_CCACHE),1)
 	CXX := ccache $(CXX)
 	CXX_PROFILE := ccache $(CXX_PROFILE)
 	CLANG_CXX := ccache $(CLANG_CXX)
+	CXX_ENV += CCACHE_CPP2=yes
+	CC_ENV += CCACHE_CPP2=yes
 	ifeq ($(USE_DISTCC),1)
 		CXX_ENV += CCACHE_PREFIX=distcc
 	endif
@@ -266,6 +268,7 @@ ifeq ($(USE_CCACHE),1)
 endif
 CXX := $(CXX_ENV) $(CXX)
 CXX_PROFILE := $(CXX_ENV) $(CXX_PROFILE)
+CC := $(CC_ENV) $(CC)
 CLANG_CXX := $(CXX_ENV) $(CLANG_CXX)
 # Not sure if ccache_basedir actually helps at all (I think the generated files make them different?)
 LLVM_BUILD_ENV += CCACHE_DIR=$(HOME)/.ccache_llvm CCACHE_BASEDIR=$(LLVM_SRC)
@@ -278,8 +281,8 @@ STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 
 STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c $(EXTRA_STDMODULE_SRCS)
-STDOBJECT_SRCS := structseq.c capsule.c $(EXTRA_STDOBJECT_SRCS)
-STDPYTHON_SRCS := pyctype.c getargs.c $(EXTRA_STDPYTHON_SRCS)
+STDOBJECT_SRCS := structseq.c capsule.c stringobject.c $(EXTRA_STDOBJECT_SRCS)
+STDPYTHON_SRCS := pyctype.c getargs.c formatter_string.c pystrtod.c dtoa.c $(EXTRA_STDPYTHON_SRCS)
 FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(addprefix lib_python/2.7_Objects/,$(STDOBJECT_SRCS)) $(addprefix lib_python/2.7_Python/,$(STDPYTHON_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
@@ -916,7 +919,7 @@ watch: watch_pyston_dbg
 watch_vim:
 	$(MAKE) watch WATCH_ARGS='COLOR=0 USE_DISTCC=0 -j1 2>&1 | tee compile.log'
 wdbg_%:
-	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_CMDS="--ex quit"
+	$(MAKE) $(patsubst wdbg_%,watch_dbg_%,$@) GDB_POST_CMDS="--ex quit"
 
 .PHONY: test_asm test_cpp_asm
 test_asm:

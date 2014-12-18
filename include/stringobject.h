@@ -58,8 +58,9 @@ typedef struct _PyStringObject PyStringObject;
 #define SSTATE_INTERNED_MORTAL 1
 #define SSTATE_INTERNED_IMMORTAL 2
 
-PyAPI_DATA(PyTypeObject) PyBaseString_Type;
-// Pyston change: this is no longer a static object
+// Pyston change: these are no longer a static object
+PyAPI_DATA(PyTypeObject*) basestring_cls;
+#define PyBaseString_Type (*basestring_cls)
 PyAPI_DATA(PyTypeObject*) str_cls;
 #define PyString_Type (*str_cls)
 
@@ -101,8 +102,8 @@ PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void);
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyString_AS_STRING(op) PyString_AsString(op)
-#define PyString_GET_SIZE(op)  PyString_Size(op)
+#define PyString_AS_STRING(op) PyString_AsString((PyObject*)op)
+#define PyString_GET_SIZE(op)  PyString_Size((PyObject*)op)
 //#define PyString_AS_STRING(op) (((PyStringObject *)(op))->ob_sval)
 //#define PyString_GET_SIZE(op)  Py_SIZE(op)
 

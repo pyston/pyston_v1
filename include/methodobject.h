@@ -12,7 +12,8 @@ extern "C" {
    not Python methods in user-defined classes.  See classobject.h
    for the latter. */
 
-PyAPI_DATA(PyTypeObject) PyCFunction_Type;
+// Pyston change: this is no longer a static object
+//PyAPI_DATA(PyTypeObject) PyCFunction_Type;
 
 #define PyCFunction_Check(op) (Py_TYPE(op) == &PyCFunction_Type)
 

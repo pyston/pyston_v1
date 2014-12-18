@@ -492,7 +492,7 @@ BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *Attribu
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
     *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
-    *SystemError, *NotImplementedError;
+    *SystemError, *NotImplementedError, *PendingDeprecationWarning;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -815,7 +815,6 @@ void setupBuiltins() {
     SyntaxError = makeBuiltinException(StandardError, "SyntaxError");
     OverflowError = makeBuiltinException(ArithmeticError, "OverflowError");
     /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
-    /*PendingDeprecationWarning =*/makeBuiltinException(Warning, "PendingDeprecationWarning");
     DeprecationWarning = makeBuiltinException(Warning, "DeprecationWarning");
     /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
     MemoryError = makeBuiltinException(StandardError, "MemoryError");
@@ -824,6 +823,7 @@ void setupBuiltins() {
     SystemExit = makeBuiltinException(BaseException, "SystemExit");
     SystemError = makeBuiltinException(StandardError, "SystemError");
     NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
+    PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
 
     EnvironmentError->giveAttr(
         "__init__",

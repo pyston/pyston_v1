@@ -46,6 +46,7 @@ typedef struct {
     Py_complex cval;
 } PyComplexObject;     
 #endif
+typedef struct _PyComplexObject PyComplexObject;
 
 // Pyston change: this is not a static object any more
 // PyAPI_DATA(PyTypeObject) PyComplex_Type;

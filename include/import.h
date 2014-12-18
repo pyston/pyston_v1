@@ -49,7 +49,8 @@ struct _inittab {
     void (*initfunc)(void);
 };
 
-PyAPI_DATA(PyTypeObject) PyNullImporter_Type;
+// Pyston change: this is no longer a static object
+//PyAPI_DATA(PyTypeObject) PyNullImporter_Type;
 PyAPI_DATA(struct _inittab *) PyImport_Inittab;
 
 PyAPI_FUNC(int) PyImport_AppendInittab(const char *name, void (*initfunc)(void));

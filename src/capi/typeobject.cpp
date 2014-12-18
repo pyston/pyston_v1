@@ -289,6 +289,11 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     return obj;
 }
 
+extern "C" PyObject* _PyObject_LookupSpecial(PyObject* self, const char* attrstr, PyObject** attrobj) {
+    assert(!PyInstance_Check(self));
+    return lookup_maybe(self, attrstr, attrobj);
+}
+
 static PyObject* lookup_method(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
     PyObject* res = lookup_maybe(self, attrstr, attrobj);
     if (res == NULL && !PyErr_Occurred())

@@ -24,6 +24,7 @@
 #include "core/types.h"
 #include "core/util.h"
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/dict.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -650,6 +651,18 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
                                                self->s.size() - found_idx - sep->s.size()) });
 }
 
+extern "C" PyObject* do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
+
+Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
+    assert(args->cls == tuple_cls);
+    assert(kwargs->cls == dict_cls);
+
+    Box* rtn = do_string_format(self, args, kwargs);
+    checkAndThrowCAPIException();
+    assert(rtn);
+    return rtn;
+}
+
 Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     assert(self->cls == str_cls);
     if (_max_split->cls != int_cls)
@@ -1039,7 +1052,13 @@ extern "C" Py_ssize_t PyString_Size(PyObject* s) {
 }
 
 extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) {
-    Py_FatalError("unimplemented");
+    // This is only allowed to be called when there is only one user of the string (ie a refcount of 1 in CPython)
+
+    assert(pv);
+    assert((*pv)->cls == str_cls);
+    BoxedString* s = static_cast<BoxedString*>(*pv);
+    s->s.resize(newsize, '\0');
+    return 0;
 }
 
 static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) {
@@ -1119,6 +1138,8 @@ void setupStr() {
     str_cls->giveAttr("rfind", new BoxedFunction(boxRTFunction((void*)strRfind, BOXED_INT, 2)));
 
     str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
+
+    str_cls->giveAttr("format", new BoxedFunction(boxRTFunction((void*)strFormat, UNKNOWN, 1, 0, true, true)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
     str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));
