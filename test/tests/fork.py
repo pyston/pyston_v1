@@ -6,11 +6,15 @@ import time
 import os
 
 counter = 0
+done = 0
 def daemon_thread():
     global counter
     while True:
         for i in xrange(100):
             counter += 1
+        if done:
+            counter = 0
+            break
         time.sleep(0.0)
 
 start_new_thread(daemon_thread, ())
@@ -33,6 +37,11 @@ if pid:
     print "parent waking up"
 
     forceCollection()
+
+    done = True
+    while counter:
+        time.sleep(0.0)
+    time.sleep(0.01)
 else:
     print "child"
     forceCollection()

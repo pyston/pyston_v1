@@ -1,3 +1,6 @@
+# skip-if: True
+# - I don't think this test is reliable on CPython, even if we use the threading module
+
 # Make sure that we can exit with threads running in the background.
 
 from thread import start_new_thread
