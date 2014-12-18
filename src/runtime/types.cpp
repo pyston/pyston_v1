@@ -285,6 +285,8 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 
     if (cls->base)
         v->visit(cls->base);
+    if (cls->tp_dict)
+        v->visit(cls->tp_dict);
 }
 
 extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {

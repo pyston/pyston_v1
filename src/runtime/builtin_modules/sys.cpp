@@ -84,18 +84,23 @@ void prependToSysPath(const std::string& path) {
 static BoxedClass* sys_flags_cls;
 class BoxedSysFlags : public Box {
 public:
-    Box* division_warning, *bytes_warning;
+    Box* division_warning, *bytes_warning, *no_user_site;
 
     BoxedSysFlags() : Box(sys_flags_cls) {
         auto zero = boxInt(0);
         division_warning = zero;
         bytes_warning = zero;
+        no_user_site = zero;
     }
 
-    static void gcHandler(GCVisitor* v, Box* b) {
-        assert(b->cls == sys_flags_cls);
+    static void gcHandler(GCVisitor* v, Box* _b) {
+        assert(_b->cls == sys_flags_cls);
+        boxGCHandler(v, _b);
 
-        boxGCHandler(v, b);
+        BoxedSysFlags* self = static_cast<BoxedSysFlags*>(_b);
+        v->visit(self->division_warning);
+        v->visit(self->bytes_warning);
+        v->visit(self->no_user_site);
     }
 
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {
@@ -164,6 +169,7 @@ void setupSys() {
                             new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSysFlags, name)))
     ADD(division_warning);
     ADD(bytes_warning);
+    ADD(no_user_site);
 #undef ADD
 
     sys_flags_cls->freeze();
