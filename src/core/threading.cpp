@@ -117,7 +117,7 @@ void popGenerator() {
 }
 
 static int signals_waiting(0);
-static std::vector<ThreadState> thread_states;
+static std::vector<ThreadGCState> thread_states;
 
 static void pushThreadState(pthread_t tid, ucontext_t* context) {
 #if STACK_GROWS_DOWN
@@ -128,10 +128,10 @@ static void pushThreadState(pthread_t tid, ucontext_t* context) {
     void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
 #endif
     assert(stack_start < stack_end);
-    thread_states.push_back(ThreadState(tid, context, stack_start, stack_end));
+    thread_states.push_back(ThreadGCState(tid, context, stack_start, stack_end));
 }
 
-std::vector<ThreadState> getAllThreadStates() {
+std::vector<ThreadGCState> getAllThreadStates() {
     // TODO need to prevent new threads from starting,
     // though I suppose that will have been taken care of
     // by the caller of this function.

@@ -607,31 +607,27 @@ extern "C" int PySlice_GetIndicesEx(PySliceObject* r, Py_ssize_t length, Py_ssiz
 }
 
 Box* typeRepr(BoxedClass* self) {
-    if (isUserDefined(self)) {
-        std::ostringstream os;
+    std::ostringstream os;
+    if ((self->tp_flags & Py_TPFLAGS_HEAPTYPE) && isUserDefined(self))
         os << "<class '";
+    else
+        os << "<type '";
 
-        Box* m = self->getattr("__module__");
-        RELEASE_ASSERT(m, "");
-        if (m->cls == str_cls) {
-            BoxedString* sm = static_cast<BoxedString*>(m);
-            os << sm->s << '.';
-        }
-
-        Box* n = self->getattr("__name__");
-        RELEASE_ASSERT(n, "");
-        RELEASE_ASSERT(n->cls == str_cls, "should have prevented you from setting __name__ to non-string");
-        BoxedString* sn = static_cast<BoxedString*>(n);
-        os << sn->s;
-
-        os << "'>";
-
-        return boxString(os.str());
-    } else {
-        char buf[80];
-        snprintf(buf, 80, "<type '%s'>", getNameOfClass(self)->c_str());
-        return boxStrConstant(buf);
+    Box* m = self->getattr("__module__");
+    if (m && m->cls == str_cls) {
+        BoxedString* sm = static_cast<BoxedString*>(m);
+        os << sm->s << '.';
     }
+
+    Box* n = self->getattr("__name__");
+    RELEASE_ASSERT(n, "");
+    RELEASE_ASSERT(n->cls == str_cls, "should have prevented you from setting __name__ to non-string");
+    BoxedString* sn = static_cast<BoxedString*>(n);
+    os << sn->s;
+
+    os << "'>";
+
+    return boxString(os.str());
 }
 
 Box* typeHash(BoxedClass* self) {

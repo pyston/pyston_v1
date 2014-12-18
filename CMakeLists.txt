@@ -141,7 +141,8 @@ add_subdirectory(test/unittests)
 add_subdirectory(tools)
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
-target_link_libraries(pyston stdlib pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
+# Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
 
 # copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lib_python/2.7 ${CMAKE_BINARY_DIR}/lib_python/2.7)

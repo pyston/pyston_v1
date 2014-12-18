@@ -877,6 +877,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     }
 
     cls->gc_visit = &conservativeGCHandler;
+    cls->is_user_defined = true;
 
     // TODO not sure how we can handle extension types that manually
     // specify a dict...

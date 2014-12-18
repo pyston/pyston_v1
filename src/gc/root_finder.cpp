@@ -47,9 +47,9 @@ void collectRoots(void* start, void* end, TraceStack* stack) {
 
 
 void collectOtherThreadsStacks(TraceStack* stack) {
-    std::vector<threading::ThreadState> threads = threading::getAllThreadStates();
+    std::vector<threading::ThreadGCState> threads = threading::getAllThreadStates();
 
-    for (threading::ThreadState& tstate : threads) {
+    for (threading::ThreadGCState& tstate : threads) {
         collectRoots(tstate.stack_start, tstate.stack_end, stack);
         collectRoots(tstate.ucontext, tstate.ucontext + 1, stack);
     }
