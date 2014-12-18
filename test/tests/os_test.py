@@ -17,3 +17,8 @@ print os.path.isfile("/dev/null")
 print os.path.isfile("/should_not_exist!")
 
 OSError(1, 2, 3)
+
+try:
+    os.execvp("aoeuaoeu", ['aoeuaoeu'])
+except OSError, e:
+    print e
