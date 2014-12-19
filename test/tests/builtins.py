@@ -55,3 +55,6 @@ class C(object):
     def __init__(self):
         self.a = 1
 print vars(C()).items()
+
+print globals().get("not a real variable")
+print globals().get("not a real variable", 1)

@@ -31,6 +31,8 @@ TEST_THREADS := 1
 ERROR_LIMIT := 10
 COLOR := 1
 
+SELF_HOST := 0
+
 VERBOSE := 0
 
 ENABLE_INTEL_JIT_EVENTS := 0
@@ -47,6 +49,14 @@ NINJA := ninja
 # Put any overrides in here:
 -include Makefile.local
 
+
+ifneq ($(SELF_HOST),1)
+	PYTHON := python
+	PYTHON_EXE_DEPS :=
+else
+	PYTHON := $(abspath ./pyston_dbg)
+	PYTHON_EXE_DEPS := pyston_dbg
+endif
 
 TOOLS_DIR := ./tools
 TEST_DIR := ./test
@@ -368,11 +378,11 @@ analyze:
 		$(MAKE) pyston_dbg USE_DISTCC=0 USE_CCACHE=0
 
 .PHONY: lint cpplint
-lint:
+lint: $(PYTHON_EXE_DEPS)
 	$(ECHO) linting...
-	$(VERB) cd src && python ../tools/lint.py
+	$(VERB) cd src && $(PYTHON) ../tools/lint.py
 cpplint:
-	$(VERB) cd src && python $(TOOLS_DIR)/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
+	$(VERB) $(PYTHON) $(TOOLS_DIR)/cpplint.py --filter=-whitespace,-build/header_guard,-build/include_order,-readability/todo $(SRCS)
 
 .PHONY: check quick_check
 check:
@@ -786,10 +796,10 @@ RUN_DEPS := ext_pyston
 define make_target
 $(eval \
 .PHONY: test$1 check$1
-check$1 test$1: pyston$1 ext_pyston
-	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	python $(TOOLS_DIR)/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
-	python $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
+check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
@@ -867,10 +877,10 @@ $(call make_search,profile_%)
 
 # pprof-based profiling:
 .PHONY: pprof_% pprof_release_%
-pprof_%: %.py pyston_pprof
+pprof_%: %.py $(PYTHON_EXE_DEPS) pyston_pprof
 	CPUPROFILE_FREQUENCY=1000 CPUPROFILE=$@.out ./pyston_pprof -p $(ARGS) $<
 	pprof --raw pyston_pprof $@.out > $@_raw.out
-	python codegen/profiling/process_pprof.py $@_raw.out pprof.jit > $@_processed.out
+	$(PYTHON) codegen/profiling/process_pprof.py $@_raw.out pprof.jit > $@_processed.out
 	pprof --text $@_processed.out
 	# rm -f pprof.out pprof.raw pprof.jit
 $(call make_search,pprof_%)
@@ -945,10 +955,21 @@ TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 
 .PHONY: ext_pyston
 ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
+ifneq ($(SELF_HOST),1)
 $(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o
 	gcc -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
 $(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h)
 	gcc -pthread -fno-strict-aliasing -DNDEBUG -g -fwrapv -O2 -Wall -Wstrict-prototypes -fPIC -Wimplicit -I./include -c $< -o $@
+else
+# Hax: we want to generate multiple targets from a single rule, and run the rule only if the
+# dependencies have been updated, and only run it once for all the targets.
+# So just tell make to generate the first extension module, and that the non-first ones just
+# depend on the first one.
+$(TEST_DIR)/test_extension/$(firstword $(TEST_EXT_MODULE_NAMES)).pyston.so: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.c) | pyston_dbg
+	$(MAKE) ext_pyston_selfhost
+NONFIRST_EXT := $(wordlist 2,9999,$(TEST_EXT_MODULE_NAMES))
+$(NONFIRST_EXT:%=$(TEST_DIR)/test_extension/%.pyston.so): $(TEST_DIR)/test_extension/$(firstword $(TEST_EXT_MODULE_NAMES)).pyston.so
+endif
 
 .PHONY: ext_pyston_selfhost dbg_ext_pyston_selfhost ext_pyston_selfhost_release
 ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)

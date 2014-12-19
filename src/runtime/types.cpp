@@ -686,6 +686,18 @@ public:
         return None;
     }
 
+    static Box* get(Box* _self, Box* _key, Box* def) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        Box* r = self->b->getattr(key->s);
+        if (!r)
+            return def;
+        return r;
+    }
+
     static Box* getitem(Box* _self, Box* _key) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -951,6 +963,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__name__", boxStrConstant("attrwrapper"));
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr(
+        "get", new BoxedFunction(boxRTFunction((void*)AttrWrapper::get, UNKNOWN, 3, 1, false, false), { None }));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));

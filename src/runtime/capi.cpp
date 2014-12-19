@@ -630,30 +630,30 @@ extern "C" int PyCallable_Check(PyObject* x) {
 }
 
 void checkAndThrowCAPIException() {
-    Box* value = threading::cur_thread_state.curexc_value;
+    Box* value = threading::cur_thread_state.exc_value;
     if (value) {
-        RELEASE_ASSERT(threading::cur_thread_state.curexc_traceback == NULL, "unsupported");
+        RELEASE_ASSERT(threading::cur_thread_state.exc_traceback == NULL, "unsupported");
 
         // This doesn't seem like the right behavior...
-        if (value->cls != threading::cur_thread_state.curexc_type) {
+        if (value->cls != threading::cur_thread_state.exc_type) {
             if (value->cls == tuple_cls)
-                value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(0, 0, true, false), value,
-                                    NULL, NULL, NULL, NULL);
+                value = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(0, 0, true, false), value, NULL,
+                                    NULL, NULL, NULL);
             else
-                value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(1), value, NULL, NULL, NULL,
-                                    NULL);
+                value
+                    = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
         }
 
-        RELEASE_ASSERT(value->cls == threading::cur_thread_state.curexc_type, "unsupported");
+        RELEASE_ASSERT(value->cls == threading::cur_thread_state.exc_type, "unsupported");
         PyErr_Clear();
         throw value;
     }
 }
 
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
-    threading::cur_thread_state.curexc_type = type;
-    threading::cur_thread_state.curexc_value = value;
-    threading::cur_thread_state.curexc_traceback = traceback;
+    threading::cur_thread_state.exc_type = type;
+    threading::cur_thread_state.exc_value = value;
+    threading::cur_thread_state.exc_traceback = traceback;
 }
 
 extern "C" void PyErr_Clear() {
@@ -685,16 +685,11 @@ extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
 }
 
 extern "C" PyObject* PyErr_Occurred() {
-    return threading::cur_thread_state.curexc_type;
+    return threading::cur_thread_state.exc_type;
 }
 
 extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {
     Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyErr_SetFromErrno(PyObject* type) {
-    Py_FatalError("unimplemented");
-    return NULL;
 }
 
 extern "C" PyObject* PyImport_Import(PyObject* module_name) {
@@ -947,84 +942,6 @@ extern "C" const char* PyUnicode_AS_DATA(PyObject*) {
 
 extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) {
     Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyErr_SetFromErrnoWithFilename(PyObject* exc, const char* filename) {
-    PyObject* name = filename ? PyString_FromString(filename) : NULL;
-    PyObject* result = PyErr_SetFromErrnoWithFilenameObject(exc, name);
-    Py_XDECREF(name);
-    return result;
-}
-
-extern "C" PyObject* PyErr_SetFromErrnoWithFilenameObject(PyObject* exc, PyObject* filenameObject) {
-    PyObject* v;
-    const char* s;
-    int i = errno;
-#ifdef PLAN9
-    char errbuf[ERRMAX];
-#endif
-#ifdef MS_WINDOWS
-    char* s_buf = NULL;
-    char s_small_buf[28]; /* Room for "Windows Error 0xFFFFFFFF" */
-#endif
-#ifdef EINTR
-    if (i == EINTR && PyErr_CheckSignals())
-        return NULL;
-#endif
-#ifdef PLAN9
-    rerrstr(errbuf, sizeof errbuf);
-    s = errbuf;
-#else
-    if (i == 0)
-        s = "Error"; /* Sometimes errno didn't get set */
-    else
-#ifndef MS_WINDOWS
-        s = strerror(i);
-#else
-    {
-        /* Note that the Win32 errors do not lineup with the
-           errno error.  So if the error is in the MSVC error
-           table, we use it, otherwise we assume it really _is_
-           a Win32 error code
-        */
-        if (i > 0 && i < _sys_nerr) {
-            s = _sys_errlist[i];
-        } else {
-            int len = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
-                                    | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                    NULL, /* no message source */
-                                    i, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                    /* Default language */
-                                    (LPTSTR)&s_buf, 0, /* size not used */
-                                    NULL);             /* no args */
-            if (len == 0) {
-                /* Only ever seen this in out-of-mem
-                   situations */
-                sprintf(s_small_buf, "Windows Error 0x%X", i);
-                s = s_small_buf;
-                s_buf = NULL;
-            } else {
-                s = s_buf;
-                /* remove trailing cr/lf and dots */
-                while (len > 0 && (s[len - 1] <= ' ' || s[len - 1] == '.'))
-                    s[--len] = '\0';
-            }
-        }
-    }
-#endif /* Unix/Windows */
-#endif /* PLAN 9*/
-    if (filenameObject != NULL)
-        v = Py_BuildValue("(isO)", i, s, filenameObject);
-    else
-        v = Py_BuildValue("(is)", i, s);
-    if (v != NULL) {
-        PyErr_SetObject(exc, v);
-        Py_DECREF(v);
-    }
-#ifdef MS_WINDOWS
-    LocalFree(s_buf);
-#endif
-    return NULL;
 }
 
 extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) {

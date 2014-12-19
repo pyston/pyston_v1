@@ -88,3 +88,11 @@ class Reverse(object):
         return self.n <= rhs.n
 
 print Reverse(4) > Reverse(3), Reverse(4) > Reverse(4)
+
+class EqOnly(object):
+    def __eq__(self, rhs):
+        print "eq"
+        return False
+
+print EqOnly() == 1
+print EqOnly() != 1

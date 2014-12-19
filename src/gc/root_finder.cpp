@@ -55,12 +55,12 @@ void collectOtherThreadsStacks(TraceStack* stack) {
         collectRoots(tstate.stack_start, tstate.stack_end, stack);
         collectRoots(tstate.ucontext, tstate.ucontext + 1, stack);
 
-        if (tstate.thread_state->curexc_type)
-            v.visit(tstate.thread_state->curexc_type);
-        if (tstate.thread_state->curexc_value)
-            v.visit(tstate.thread_state->curexc_value);
-        if (tstate.thread_state->curexc_traceback)
-            v.visit(tstate.thread_state->curexc_traceback);
+        if (tstate.thread_state->exc_type)
+            v.visit(tstate.thread_state->exc_type);
+        if (tstate.thread_state->exc_value)
+            v.visit(tstate.thread_state->exc_value);
+        if (tstate.thread_state->exc_traceback)
+            v.visit(tstate.thread_state->exc_traceback);
     }
 }
 
@@ -86,12 +86,12 @@ static void collectLocalStack(TraceStack* stack) {
 #endif
 
     GCVisitor v(stack);
-    if (threading::cur_thread_state.curexc_type)
-        v.visit(threading::cur_thread_state.curexc_type);
-    if (threading::cur_thread_state.curexc_value)
-        v.visit(threading::cur_thread_state.curexc_value);
-    if (threading::cur_thread_state.curexc_traceback)
-        v.visit(threading::cur_thread_state.curexc_traceback);
+    if (threading::cur_thread_state.exc_type)
+        v.visit(threading::cur_thread_state.exc_type);
+    if (threading::cur_thread_state.exc_value)
+        v.visit(threading::cur_thread_state.exc_value);
+    if (threading::cur_thread_state.exc_traceback)
+        v.visit(threading::cur_thread_state.exc_traceback);
 }
 
 void collectStackRoots(TraceStack* stack) {
