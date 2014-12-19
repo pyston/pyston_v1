@@ -288,7 +288,7 @@ private:
             arg_types.push_back(getType(node->args[i]));
         }
 
-        std::vector<std::pair<const std::string&, CompilerType*> > kw_types;
+        std::vector<std::pair<const std::string&, CompilerType*>> kw_types;
         for (AST_keyword* kw : node->keywords) {
             kw_types.push_back(std::make_pair<const std::string&, CompilerType*>(kw->arg, getType(kw->value)));
         }

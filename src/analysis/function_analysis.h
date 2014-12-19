@@ -36,10 +36,10 @@ private:
     CFG* cfg;
 
     friend class LivenessBBVisitor;
-    typedef std::unordered_map<CFGBlock*, std::unique_ptr<LivenessBBVisitor> > LivenessCacheMap;
+    typedef std::unordered_map<CFGBlock*, std::unique_ptr<LivenessBBVisitor>> LivenessCacheMap;
     LivenessCacheMap liveness_cache;
 
-    std::unordered_map<int, std::unordered_map<CFGBlock*, bool> > result_cache;
+    std::unordered_map<int, std::unordered_map<CFGBlock*, bool>> result_cache;
 
     // Map strings to unique indices.  For a given CFG, the set of strings should be fairly small
     // (a constant fraction max of the CFG itself), so just store all of them.  The theory is that
@@ -70,7 +70,7 @@ public:
     typedef std::unordered_set<std::string> RequiredSet;
 
 private:
-    std::unordered_map<CFGBlock*, std::unordered_map<std::string, DefinitionLevel> > results;
+    std::unordered_map<CFGBlock*, std::unordered_map<std::string, DefinitionLevel>> results;
     std::unordered_map<CFGBlock*, const RequiredSet> defined_at_end;
     ScopeInfo* scope_info;
 

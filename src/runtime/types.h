@@ -166,9 +166,9 @@ public:
     bool operator!=(const StlCompatAllocator<T>& rhs) const { return false; }
 };
 
-template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<K> >
+template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<K>>
 class conservative_unordered_map
-    : public std::unordered_map<K, V, Hash, KeyEqual, StlCompatAllocator<std::pair<const K, V> > > {};
+    : public std::unordered_map<K, V, Hash, KeyEqual, StlCompatAllocator<std::pair<const K, V>>> {};
 
 class BoxedClass : public BoxVar {
 public:
@@ -368,7 +368,7 @@ public:
 
 class BoxedTuple : public Box {
 public:
-    typedef std::vector<Box*, StlCompatAllocator<Box*> > GCVector;
+    typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
     GCVector elts;
 
     BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : Box(tuple_cls), elts(elts) {}
@@ -401,7 +401,7 @@ struct PyLt {
 
 class BoxedDict : public Box {
 public:
-    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*> > > DictMap;
+    typedef std::unordered_map<Box*, Box*, PyHasher, PyEq, StlCompatAllocator<std::pair<Box*, Box*>>> DictMap;
 
     DictMap d;
 

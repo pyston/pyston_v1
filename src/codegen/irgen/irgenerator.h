@@ -113,7 +113,7 @@ public:
 
 private:
     std::unordered_map<AST_expr*, ExprTypeGuard*> expr_type_guards;
-    std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> > block_begin_guards;
+    std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*>> block_begin_guards;
     // typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::iterator expr_type_guard_iterator;
     // typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::const_iterator expr_type_guard_const_iterator;
     typedef decltype(expr_type_guards)::iterator expr_type_guard_iterator;
@@ -167,7 +167,7 @@ public:
     }
 
     const std::vector<BlockEntryGuard*>& getGuardsForBlock(CFGBlock* block) const {
-        std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*> >::const_iterator it
+        std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*>>::const_iterator it
             = block_begin_guards.find(block);
         if (it != block_begin_guards.end())
             return it->second;

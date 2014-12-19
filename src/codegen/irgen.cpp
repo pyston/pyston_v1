@@ -213,10 +213,10 @@ static bool compareBlockPairs(const std::pair<CFGBlock*, CFGBlock*>& p1, const s
     return p1.first->idx < p2.first->idx;
 }
 
-static std::vector<std::pair<CFGBlock*, CFGBlock*> >
+static std::vector<std::pair<CFGBlock*, CFGBlock*>>
 computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_blocks, CFGBlock* start) {
 
-    std::vector<std::pair<CFGBlock*, CFGBlock*> > rtn;
+    std::vector<std::pair<CFGBlock*, CFGBlock*>> rtn;
     std::unordered_set<CFGBlock*> in_queue;
 
     if (start) {
@@ -552,7 +552,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
     std::unordered_map<CFGBlock*, SymbolTable*> ending_symbol_tables;
     std::unordered_map<CFGBlock*, ConcreteSymbolTable*> phi_ending_symbol_tables;
-    typedef std::unordered_map<std::string, std::pair<ConcreteCompilerType*, llvm::PHINode*> > PHITable;
+    typedef std::unordered_map<std::string, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
     std::unordered_map<CFGBlock*, PHITable*> created_phis;
 
     CFGBlock* initial_block = NULL;
@@ -569,7 +569,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
     // with a lower index value, so if the entry block is 0 then we can iterate in index
     // order.
     // The entry block doesn't have to be zero, so we have to calculate an allowable order here:
-    std::vector<std::pair<CFGBlock*, CFGBlock*> > traversal_order
+    std::vector<std::pair<CFGBlock*, CFGBlock*>> traversal_order
         = computeBlockTraversalOrder(full_blocks, partial_blocks, initial_block);
 
     std::unordered_set<CFGBlock*> into_hax;
@@ -861,7 +861,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         // basic blocks as part of type coercion.
         // Intsead, just make a record of the phi node, value, and the location of the from-BB,
         // which we won't read until after all new BBs have been added.
-        std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&> > phi_args;
+        std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&>> phi_args;
 
         for (PHITable::iterator it = phis->begin(); it != phis->end(); it++) {
             llvm::PHINode* llvm_phi = it->second.second;

@@ -2302,7 +2302,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         params_filled[i] = true;
     }
 
-    std::vector<Box*, StlCompatAllocator<Box*> > unused_positional;
+    std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
         rewrite_args = NULL;
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));

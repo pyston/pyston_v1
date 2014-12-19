@@ -80,7 +80,7 @@
 
 // Allow using std::pair as keys in hashtables:
 namespace std {
-template <typename T1, typename T2> struct hash<pair<T1, T2> > {
+template <typename T1, typename T2> struct hash<pair<T1, T2>> {
     size_t operator()(const pair<T1, T2> p) const { return hash<T1>()(p.first) ^ (hash<T2>()(p.second) << 1); }
 };
 }

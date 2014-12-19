@@ -53,7 +53,7 @@ int Stats::getStatId(const std::string& name) {
 void Stats::dump() {
     printf("Stats:\n");
 
-    std::vector<std::pair<std::string, int> > pairs;
+    std::vector<std::pair<std::string, int>> pairs;
     for (const auto& p : *names) {
         pairs.push_back(make_pair(p.second, p.first));
     }

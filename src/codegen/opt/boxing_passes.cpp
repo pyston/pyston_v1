@@ -98,7 +98,7 @@ public:
     virtual void getAnalysisUsage(AnalysisUsage& info) const { info.setPreservesCFG(); }
 
     virtual bool runOnBasicBlock(BasicBlock& BB) {
-        std::unordered_map<std::pair<void*, Value*>, llvm::SmallVector<CallInst*, 4> > boxing_calls;
+        std::unordered_map<std::pair<void*, Value*>, llvm::SmallVector<CallInst*, 4>> boxing_calls;
 
         // Find all boxInt, boxFloat and boxBool calls inside this BB and add them into a map,
         // the maps key is pair of the called function and the passed argument

@@ -55,7 +55,7 @@ private:
 
     uint8_t* buf;
 
-    std::vector<std::pair<ICInvalidator*, int64_t> > dependencies;
+    std::vector<std::pair<ICInvalidator*, int64_t>> dependencies;
 
     ICSlotRewrite(ICInfo* ic, const char* debug_name);
 
