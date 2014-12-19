@@ -32,7 +32,7 @@ namespace threading {
 bool threadWasStarted();
 
 struct ThreadState {
-    Box* curexc_type, *curexc_value, *curexc_traceback;
+    Box* exc_type, *exc_value, *exc_traceback;
 };
 extern __thread ThreadState cur_thread_state;
 

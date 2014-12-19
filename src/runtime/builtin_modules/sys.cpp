@@ -31,6 +31,13 @@ namespace pyston {
 BoxedModule* sys_module;
 BoxedDict* sys_modules_dict;
 
+Box* sysExcInfo() {
+    return new BoxedTuple(
+        { threading::cur_thread_state.exc_type ? threading::cur_thread_state.exc_type : None,
+          threading::cur_thread_state.exc_value ? threading::cur_thread_state.exc_value : None,
+          threading::cur_thread_state.exc_traceback ? threading::cur_thread_state.exc_traceback : None });
+}
+
 BoxedDict* getSysModulesDict() {
     // PyPy's behavior: fetch from sys.modules each time:
     // Box *_sys_modules = sys_module->getattr("modules");
@@ -133,6 +140,8 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w"));
     sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
+
+    sys_module->giveAttr("exc_info", new BoxedFunction(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0)));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);

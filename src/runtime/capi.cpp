@@ -630,30 +630,30 @@ extern "C" int PyCallable_Check(PyObject* x) {
 }
 
 void checkAndThrowCAPIException() {
-    Box* value = threading::cur_thread_state.curexc_value;
+    Box* value = threading::cur_thread_state.exc_value;
     if (value) {
-        RELEASE_ASSERT(threading::cur_thread_state.curexc_traceback == NULL, "unsupported");
+        RELEASE_ASSERT(threading::cur_thread_state.exc_traceback == NULL, "unsupported");
 
         // This doesn't seem like the right behavior...
-        if (value->cls != threading::cur_thread_state.curexc_type) {
+        if (value->cls != threading::cur_thread_state.exc_type) {
             if (value->cls == tuple_cls)
-                value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(0, 0, true, false), value,
-                                    NULL, NULL, NULL, NULL);
+                value = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(0, 0, true, false), value, NULL,
+                                    NULL, NULL, NULL);
             else
-                value = runtimeCall(threading::cur_thread_state.curexc_type, ArgPassSpec(1), value, NULL, NULL, NULL,
-                                    NULL);
+                value
+                    = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
         }
 
-        RELEASE_ASSERT(value->cls == threading::cur_thread_state.curexc_type, "unsupported");
+        RELEASE_ASSERT(value->cls == threading::cur_thread_state.exc_type, "unsupported");
         PyErr_Clear();
         throw value;
     }
 }
 
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
-    threading::cur_thread_state.curexc_type = type;
-    threading::cur_thread_state.curexc_value = value;
-    threading::cur_thread_state.curexc_traceback = traceback;
+    threading::cur_thread_state.exc_type = type;
+    threading::cur_thread_state.exc_value = value;
+    threading::cur_thread_state.exc_traceback = traceback;
 }
 
 extern "C" void PyErr_Clear() {
@@ -685,7 +685,7 @@ extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
 }
 
 extern "C" PyObject* PyErr_Occurred() {
-    return threading::cur_thread_state.curexc_type;
+    return threading::cur_thread_state.exc_type;
 }
 
 extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {
