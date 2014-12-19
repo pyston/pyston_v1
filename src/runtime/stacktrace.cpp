@@ -134,6 +134,9 @@ static void _printTraceback(const std::vector<const LineInfo*>& tb) {
     for (auto line : tb) {
         fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
 
+        if (line->line < 0)
+            continue;
+
         FILE* f = fopen(line->file.c_str(), "r");
         if (f) {
             assert(line->line < 10000000 && "Refusing to try to seek that many lines forward");

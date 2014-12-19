@@ -76,3 +76,14 @@ print l
 x = [0, 1, 2]
 print 2 * x
 print x * 2
+
+print range(5) == range(5)
+print range(5) == range(4)
+
+class C(object):
+    def __eq__(self, rhs):
+        print "C.eq"
+        return False
+
+# Should not call C().__eq__
+print [C()] == [1, 2]

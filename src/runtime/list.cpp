@@ -508,6 +508,13 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
     bool is_order
         = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
 
+    if (lsz != rsz) {
+        if (op_type == AST_TYPE::Eq)
+            return False;
+        if (op_type == AST_TYPE::NotEq)
+            return True;
+    }
+
     int n = std::min(lsz, rsz);
     for (int i = 0; i < n; i++) {
         Box* is_eq = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], AST_TYPE::Eq, NULL);
@@ -552,6 +559,16 @@ Box* listEq(BoxedList* self, Box* rhs) {
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Eq);
 }
 
+Box* listNe(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+
+    LOCK_REGION(self->lock.asRead());
+
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::NotEq);
+}
+
 void setupList() {
     list_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false);
 
@@ -569,6 +586,7 @@ void setupList() {
                        new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1)));
 
     list_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)listEq, UNKNOWN, 2)));
+    list_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)listNe, UNKNOWN, 2)));
 
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1)));
     list_cls->giveAttr("__str__", list_cls->getattr("__repr__"));
