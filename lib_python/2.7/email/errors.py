@@ -22,8 +22,11 @@ class BoundaryError(MessageParseError):
     """Couldn't find terminating boundary."""
 
 
-class MultipartConversionError(MessageError, TypeError):
-    """Conversion to a multipart is prohibited."""
+# Pyston change: we don't support multiple inheritance yet, so this error class is tricky.
+# We could make it so that it only inherits one of the base classes, but I'd rather that
+# anyone who tries to use this error gets a loud error message rather than different behavior.
+# class MultipartConversionError(MessageError, TypeError):
+    # """Conversion to a multipart is prohibited."""
 
 
 class CharsetError(MessageError):

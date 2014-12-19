@@ -990,6 +990,10 @@ $(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@) -O0
 
+$(FROM_CPYTHON_SRCS:.c=.o.ll): %.o.ll: %.c $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling C file to $@
+	$(VERB) $(CLANG_EXE) $(EXT_CFLAGS) -S -emit-llvm -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@) -O3 -g0
+
 $(FROM_CPYTHON_SRCS:.c=.release.o): %.release.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
