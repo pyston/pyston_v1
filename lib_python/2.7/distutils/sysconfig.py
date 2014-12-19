@@ -1,3 +1,7 @@
+# This file is originally from CPython 2.7, with modifications for Pyston
+# We should probably create a pyston-specific version instead of modifying the
+# CPython one.
+
 """Provide access to Python's configuration information.  The specific
 configuration variables available depend heavily on the platform and
 configuration.  The values may be retrieved using
@@ -64,6 +68,9 @@ def get_python_version():
 
 
 def get_python_inc(plat_specific=0, prefix=None):
+    # Pyston change: this is the way we layout things internally:
+    return os.path.join(os.path.dirname(sys.executable), "include")
+
     """Return the directory containing installed Python header files.
 
     If 'plat_specific' is false (the default), this is the path to the

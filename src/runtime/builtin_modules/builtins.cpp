@@ -852,6 +852,20 @@ public:
 
         return rtnval;
     }
+
+    static void gcHandler(GCVisitor* v, Box* _b) {
+        assert(isSubclass(_b->cls, EnvironmentError));
+
+        boxGCHandler(v, _b);
+
+        BoxedEnvironmentError* ee = static_cast<BoxedEnvironmentError*>(_b);
+        if (ee->myerrno)
+            v->visit(ee->myerrno);
+        if (ee->strerror)
+            v->visit(ee->strerror);
+        if (ee->filename)
+            v->visit(ee->filename);
+    }
 };
 
 void setupBuiltins() {
@@ -909,6 +923,7 @@ void setupBuiltins() {
     NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
     PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
 
+    EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
     EnvironmentError->giveAttr(
         "__init__",
         new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 1, false, false), { NULL }));
