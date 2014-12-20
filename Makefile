@@ -499,7 +499,7 @@ endif
 $(LLVM_CONFIGURATION): $(LLVM_SRC)/configure $(LLVM_CONFIG_INCL) | $(LLVM_SRC)/_patched
 	mkdir -p $(LLVM_BUILD)
 	cd $(LLVM_BUILD) ; \
-	$(LLVM_CONFIGURE_LINE)
+	$(LLVM_CONFIGURE_LINE) --disable-bindings
 	# CXX=ccache\ g++ ./configure --enable-targets=host
 	# CXX='env CCACHE_PREFIX=distcc ccache g++' ./configure --enable-targets=host
 
