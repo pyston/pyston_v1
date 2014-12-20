@@ -37,6 +37,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 
@@ -150,11 +151,15 @@ int main(int argc, char** argv) {
         try {
             main_module = createAndRunModule("__main__", fn);
         } catch (Box* b) {
-            std::string msg = formatException(b);
-            printLastTraceback();
-            fprintf(stderr, "%s\n", msg.c_str());
-
-            return 1;
+            if (isInstance(b, SystemExit)) {
+                printf("Warning: ignoring SystemExit code\n");
+                return 1;
+            } else {
+                std::string msg = formatException(b);
+                printLastTraceback();
+                fprintf(stderr, "%s\n", msg.c_str());
+                return 1;
+            }
         }
     }
 
@@ -218,9 +223,14 @@ int main(int argc, char** argv) {
                 try {
                     compileAndRunModule(m, main_module);
                 } catch (Box* b) {
-                    std::string msg = formatException(b);
-                    printLastTraceback();
-                    fprintf(stderr, "%s\n", msg.c_str());
+                    if (isInstance(b, SystemExit)) {
+                        printf("Warning: ignoring SystemExit code\n");
+                        return 1;
+                    } else {
+                        std::string msg = formatException(b);
+                        printLastTraceback();
+                        fprintf(stderr, "%s\n", msg.c_str());
+                    }
                 }
             }
         }

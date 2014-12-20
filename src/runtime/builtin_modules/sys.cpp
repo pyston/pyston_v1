@@ -38,6 +38,13 @@ Box* sysExcInfo() {
           threading::cur_thread_state.exc_traceback ? threading::cur_thread_state.exc_traceback : None });
 }
 
+static Box* sysExit(Box* arg) {
+    if (arg)
+        raiseExc(exceptionNew1(SystemExit));
+    else
+        raiseExc(exceptionNew2(SystemExit, arg));
+}
+
 BoxedDict* getSysModulesDict() {
     // PyPy's behavior: fetch from sys.modules each time:
     // Box *_sys_modules = sys_module->getattr("modules");
@@ -142,6 +149,7 @@ void setupSys() {
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
 
     sys_module->giveAttr("exc_info", new BoxedFunction(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0)));
+    sys_module->giveAttr("exit", new BoxedFunction(boxRTFunction((void*)sysExit, NONE, 1, 1, false, false), { None }));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
