@@ -142,8 +142,8 @@ find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
-add_subdirectory(lib_python)
 add_subdirectory(lib_pyston)
+add_subdirectory(lib_python)
 add_subdirectory(src)
 add_subdirectory(test/test_extension)
 add_subdirectory(test/unittests)
@@ -154,7 +154,6 @@ add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYST
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
 
 # copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
-add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lib_python/2.7 ${CMAKE_BINARY_DIR}/lib_python/2.7)
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
 
 add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
@@ -180,7 +179,7 @@ add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_
 add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston clang-format ext_cpython ext_pyston unittests) 
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests) 
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
 file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)

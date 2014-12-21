@@ -1,6 +1,6 @@
 # Copy any changed stdlib files to the destination:
 file(GLOB_RECURSE STDLIB_SRCS 2.7/ "*.py")
-SET(STDLIB_TARGETS "")
+set(STDLIB_TARGETS "")
 foreach(STDLIB_FILE ${STDLIB_SRCS})
     file(RELATIVE_PATH FN_REL ${CMAKE_SOURCE_DIR} ${STDLIB_FILE})
     set(TARGET ${CMAKE_BINARY_DIR}/${FN_REL})
