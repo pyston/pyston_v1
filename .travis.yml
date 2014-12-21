@@ -17,10 +17,11 @@ install:
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - cmake -GNinja $TRAVIS_BUILD_DIR
-  - cd ~/pyston-build && ninja llvm_up && ninja lint check-format
+  - ninja llvm_up
+  - ninja libunwind ext_cpython
 
 script:
-  - cd ~/pyston-build && ninja -j4 check-pyston
+  - ninja -j4 check-pyston
 
 os:
   - linux
