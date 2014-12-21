@@ -397,7 +397,7 @@ Box* listContains(BoxedList* self, Box* elt) {
         Box* e = self->elts->elts[i];
 
         bool identity_eq = e == elt;
-        if(identity_eq)
+        if (identity_eq)
             return True;
 
         Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
@@ -523,7 +523,7 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
     int n = std::min(lsz, rsz);
     for (int i = 0; i < n; i++) {
         bool identity_eq = lhs->elts->elts[i] == rhs->elts->elts[i];
-        if(identity_eq)
+        if (identity_eq)
             continue;
 
         Box* is_eq = compareInternal(lhs->elts->elts[i], rhs->elts->elts[i], AST_TYPE::Eq, NULL);
