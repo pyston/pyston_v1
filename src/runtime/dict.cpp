@@ -512,6 +512,13 @@ void setupDict() {
     dict_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1)));
 
     dict_iterator_cls->freeze();
+
+    dict_keys_cls->giveAttr("__name__", boxStrConstant("dictkeys"));
+    dict_keys_cls->freeze();
+    dict_values_cls->giveAttr("__name__", boxStrConstant("dictvalues"));
+    dict_values_cls->freeze();
+    dict_items_cls->giveAttr("__name__", boxStrConstant("dictitems"));
+    dict_items_cls->freeze();
 }
 
 void teardownDict() {

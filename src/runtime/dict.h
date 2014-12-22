@@ -48,16 +48,19 @@ Box* dictIterNext(Box* self);
 
 class BoxedDictKeys : public Box {
 public:
+    BoxedDict* d;
     BoxedDictKeys(BoxedDict* d);
 };
 
 class BoxedDictValues : public Box {
 public:
+    BoxedDict* d;
     BoxedDictValues(BoxedDict* d);
 };
 
 class BoxedDictItems : public Box {
 public:
+    BoxedDict* d;
     BoxedDictItems(BoxedDict* d);
 };
 

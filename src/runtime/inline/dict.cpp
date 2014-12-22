@@ -72,13 +72,13 @@ Box* dictIterNext(Box* s) {
     return rtn;
 }
 
-BoxedDictKeys::BoxedDictKeys(BoxedDict* d) : Box(dict_keys_cls) {
+BoxedDictKeys::BoxedDictKeys(BoxedDict* d) : Box(dict_keys_cls), d(d) {
 }
 
-BoxedDictValues::BoxedDictValues(BoxedDict* d) : Box(dict_values_cls) {
+BoxedDictValues::BoxedDictValues(BoxedDict* d) : Box(dict_values_cls), d(d) {
 }
 
-BoxedDictItems::BoxedDictItems(BoxedDict* d) : Box(dict_items_cls) {
+BoxedDictItems::BoxedDictItems(BoxedDict* d) : Box(dict_items_cls), d(d) {
 }
 
 }
