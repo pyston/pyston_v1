@@ -71,4 +71,14 @@ Box* dictIterNext(Box* s) {
     ++self->it;
     return rtn;
 }
+
+BoxedDictKeys::BoxedDictKeys(BoxedDict* d) : Box(dict_keys_cls) {
+}
+
+BoxedDictValues::BoxedDictValues(BoxedDict* d) : Box(dict_values_cls) {
+}
+
+BoxedDictItems::BoxedDictItems(BoxedDict* d) : Box(dict_items_cls) {
+}
+
 }

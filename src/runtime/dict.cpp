@@ -90,6 +90,21 @@ Box* dictKeys(BoxedDict* self) {
     return rtn;
 }
 
+Box* dictViewKeys(BoxedDict* self) {
+    BoxedDictKeys* rtn = new BoxedDictKeys(self);
+    return rtn;
+}
+
+Box* dictViewValues(BoxedDict* self) {
+    BoxedDictValues* rtn = new BoxedDictValues(self);
+    return rtn;
+}
+
+Box* dictViewItems(BoxedDict* self) {
+    BoxedDictItems* rtn = new BoxedDictItems(self);
+    return rtn;
+}
+
 Box* dictLen(BoxedDict* self) {
     assert(self->cls == dict_cls);
     return boxInt(self->d.size());
@@ -422,8 +437,19 @@ extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
     v->visit(it->d);
 }
 
+BoxedClass* dict_keys_cls = NULL;
+BoxedClass* dict_values_cls = NULL;
+BoxedClass* dict_items_cls = NULL;
+extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
+
+}
+
 void setupDict() {
     dict_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
+
+    dict_keys_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictKeys), false);
+    dict_values_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictValues), false);
+    dict_items_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictItems), false);
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
@@ -457,6 +483,10 @@ void setupDict() {
     dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
     dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));
 
+
+    dict_cls->giveAttr("viewkeys", new BoxedFunction(boxRTFunction((void*)dictViewKeys, UNKNOWN, 1)));
+    dict_cls->giveAttr("viewvalues", new BoxedFunction(boxRTFunction((void*)dictViewValues, UNKNOWN, 1)));
+    dict_cls->giveAttr("viewitems", new BoxedFunction(boxRTFunction((void*)dictViewItems, UNKNOWN, 1)));
 
     dict_cls->giveAttr("get", new BoxedFunction(boxRTFunction((void*)dictGet, UNKNOWN, 3, 1, false, false), { None }));
 
