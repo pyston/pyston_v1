@@ -443,9 +443,8 @@ BoxedClass* dict_items_cls = NULL;
 extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
-
-    BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
-    v->visit(it->d);
+    BoxedDictView* view = static_cast<BoxedDictView*>(b);
+    v->visit(view->d);
 }
 
 void setupDict() {
