@@ -194,3 +194,16 @@ d = {}
 d.update({'c':3}, a=1, b=2)
 print sorted(d.items())
 
+# viewkeys / viewvalues / viewitems
+
+d = {}
+
+print list(d.viewkeys())
+print list(d.viewvalues())
+print list(d.viewitems())
+
+d['a'] = 1
+
+print list(d.viewkeys())
+print list(d.viewvalues())
+print list(d.viewitems())

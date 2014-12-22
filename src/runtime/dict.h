@@ -46,23 +46,15 @@ Box* dictIterHasnext(Box* self);
 i1 dictIterHasnextUnboxed(Box* self);
 Box* dictIterNext(Box* self);
 
-class BoxedDictKeys : public Box {
+class BoxedDictView : public Box {
 public:
     BoxedDict* d;
-    BoxedDictKeys(BoxedDict* d);
+    BoxedDictView(BoxedDict* d, BoxedClass* view_cls);
 };
 
-class BoxedDictValues : public Box {
-public:
-    BoxedDict* d;
-    BoxedDictValues(BoxedDict* d);
-};
-
-class BoxedDictItems : public Box {
-public:
-    BoxedDict* d;
-    BoxedDictItems(BoxedDict* d);
-};
+Box* dictViewKeysIter(Box* self);
+Box* dictViewValuesIter(Box* self);
+Box* dictViewItemsIter(Box* self);
 
 }
 

@@ -72,13 +72,26 @@ Box* dictIterNext(Box* s) {
     return rtn;
 }
 
-BoxedDictKeys::BoxedDictKeys(BoxedDict* d) : Box(dict_keys_cls), d(d) {
+BoxedDictView::BoxedDictView(BoxedDict* d, BoxedClass* view_cls)
+    : Box(view_cls), d(d) {
 }
 
-BoxedDictValues::BoxedDictValues(BoxedDict* d) : Box(dict_values_cls), d(d) {
+Box* dictViewKeysIter(Box* s) {
+    assert(s->cls == dict_keys_cls);
+    BoxedDictView* self = static_cast<BoxedDictView*>(s);
+    return dictIterKeys(self->d);
 }
 
-BoxedDictItems::BoxedDictItems(BoxedDict* d) : Box(dict_items_cls), d(d) {
+Box* dictViewValuesIter(Box* s) {
+    assert(s->cls == dict_values_cls);
+    BoxedDictView* self = static_cast<BoxedDictView*>(s);
+    return dictIterValues(self->d);
+}
+
+Box* dictViewItemsIter(Box* s) {
+    assert(s->cls == dict_items_cls);
+    BoxedDictView* self = static_cast<BoxedDictView*>(s);
+    return dictIterItems(self->d);
 }
 
 }

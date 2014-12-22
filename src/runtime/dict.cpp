@@ -91,17 +91,17 @@ Box* dictKeys(BoxedDict* self) {
 }
 
 Box* dictViewKeys(BoxedDict* self) {
-    BoxedDictKeys* rtn = new BoxedDictKeys(self);
+    BoxedDictView* rtn = new BoxedDictView(self, dict_keys_cls);
     return rtn;
 }
 
 Box* dictViewValues(BoxedDict* self) {
-    BoxedDictValues* rtn = new BoxedDictValues(self);
+    BoxedDictView* rtn = new BoxedDictView(self, dict_values_cls);
     return rtn;
 }
 
 Box* dictViewItems(BoxedDict* self) {
-    BoxedDictItems* rtn = new BoxedDictItems(self);
+    BoxedDictView* rtn = new BoxedDictView(self, dict_items_cls);
     return rtn;
 }
 
@@ -441,15 +441,19 @@ BoxedClass* dict_keys_cls = NULL;
 BoxedClass* dict_values_cls = NULL;
 BoxedClass* dict_items_cls = NULL;
 extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
 
+
+    BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
+    v->visit(it->d);
 }
 
 void setupDict() {
     dict_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
 
-    dict_keys_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictKeys), false);
-    dict_values_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictValues), false);
-    dict_items_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictItems), false);
+    dict_keys_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
+    dict_values_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
+    dict_items_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
@@ -514,10 +518,16 @@ void setupDict() {
     dict_iterator_cls->freeze();
 
     dict_keys_cls->giveAttr("__name__", boxStrConstant("dictkeys"));
+    dict_keys_cls->giveAttr("__iter__",
+                       new BoxedFunction(boxRTFunction((void*)dictViewKeysIter, typeFromClass(dict_iterator_cls), 1)));
     dict_keys_cls->freeze();
     dict_values_cls->giveAttr("__name__", boxStrConstant("dictvalues"));
+    dict_values_cls->giveAttr("__iter__",
+                       new BoxedFunction(boxRTFunction((void*)dictViewValuesIter, typeFromClass(dict_iterator_cls), 1)));
     dict_values_cls->freeze();
     dict_items_cls->giveAttr("__name__", boxStrConstant("dictitems"));
+    dict_items_cls->giveAttr("__iter__",
+                       new BoxedFunction(boxRTFunction((void*)dictViewItemsIter, typeFromClass(dict_iterator_cls), 1)));
     dict_items_cls->freeze();
 }
 
