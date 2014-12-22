@@ -55,7 +55,6 @@ public:
 Box* dictViewKeysIter(Box* self);
 Box* dictViewValuesIter(Box* self);
 Box* dictViewItemsIter(Box* self);
-
 }
 
 #endif

@@ -72,8 +72,7 @@ Box* dictIterNext(Box* s) {
     return rtn;
 }
 
-BoxedDictView::BoxedDictView(BoxedDict* d, BoxedClass* view_cls)
-    : Box(view_cls), d(d) {
+BoxedDictView::BoxedDictView(BoxedDict* d, BoxedClass* view_cls) : Box(view_cls), d(d) {
 }
 
 Box* dictViewKeysIter(Box* s) {
@@ -93,5 +92,4 @@ Box* dictViewItemsIter(Box* s) {
     BoxedDictView* self = static_cast<BoxedDictView*>(s);
     return dictIterItems(self->d);
 }
-
 }

@@ -517,16 +517,16 @@ void setupDict() {
     dict_iterator_cls->freeze();
 
     dict_keys_cls->giveAttr("__name__", boxStrConstant("dictkeys"));
-    dict_keys_cls->giveAttr("__iter__",
-                       new BoxedFunction(boxRTFunction((void*)dictViewKeysIter, typeFromClass(dict_iterator_cls), 1)));
+    dict_keys_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)dictViewKeysIter, typeFromClass(dict_iterator_cls), 1)));
     dict_keys_cls->freeze();
     dict_values_cls->giveAttr("__name__", boxStrConstant("dictvalues"));
-    dict_values_cls->giveAttr("__iter__",
-                       new BoxedFunction(boxRTFunction((void*)dictViewValuesIter, typeFromClass(dict_iterator_cls), 1)));
+    dict_values_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)dictViewValuesIter, typeFromClass(dict_iterator_cls), 1)));
     dict_values_cls->freeze();
     dict_items_cls->giveAttr("__name__", boxStrConstant("dictitems"));
-    dict_items_cls->giveAttr("__iter__",
-                       new BoxedFunction(boxRTFunction((void*)dictViewItemsIter, typeFromClass(dict_iterator_cls), 1)));
+    dict_items_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)dictViewItemsIter, typeFromClass(dict_iterator_cls), 1)));
     dict_items_cls->freeze();
 }
 
