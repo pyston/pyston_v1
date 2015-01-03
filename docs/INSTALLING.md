@@ -122,6 +122,19 @@ make -j4
 make install
 ```
 
+### gtest
+
+For running the unittests:
+
+```
+cd ~/pyston_deps
+wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
+unzip gtest-1.7.0.zip
+cd gtest-1.7.0
+./configure CXXFLAGS="-fno-omit-frame-pointer -isystem $HOME/pyston_deps/gcc-4.8.2-install/include/c++/4.8.2"
+make -j4
+```
+
 ---
 
 At this point you should be able to run `make check` (in the `~/pyston` directory) and pass the tests.  See the main README for more information about available targets and options.
@@ -136,19 +149,6 @@ We have some extension module tests, in which we compile the extension module co
 
 ```
 sudo apt-get install python-dev
-```
-
-### gtest
-
-For running the unittests:
-
-```
-cd ~/pyston_deps
-wget https://googletest.googlecode.com/files/gtest-1.7.0.zip
-unzip gtest-1.7.0.zip
-cd gtest-1.7.0
-./configure CXXFLAGS=-fno-omit-frame-pointer
-make -j4
 ```
 
 ### gdb
