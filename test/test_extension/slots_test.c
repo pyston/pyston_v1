@@ -15,7 +15,7 @@ slots_tester_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
 
     int n;
-    if (!PyArg_ParseTuple(args, "n", &n))
+    if (!PyArg_ParseTuple(args, "i", &n))
         return NULL;
 
     /* create attrgetterobject structure */
