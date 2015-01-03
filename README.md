@@ -1,5 +1,7 @@
 # Pyston [![Build Status](https://travis-ci.org/dropbox/pyston.svg?branch=master)](https://travis-ci.org/dropbox/pyston/builds)
 
+[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/dropbox/pyston?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Pyston is a new, under-development Python implementation built using LLVM and modern JIT techniques with the goal of achieving good performance.
 
 We have a small website [pyston.org](http://pyston.org/), which for now just hosts the mailing lists and the [blog](http://blog.pyston.org/).  We have two mailing lists: [pyston-dev@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev) for development-related discussions, and [pyston-announce@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-announce) which is for wider announcements (new releases, major project changes).
