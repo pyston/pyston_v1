@@ -260,8 +260,6 @@ call_funcs(PyObject* _module, PyObject* args) {
         printf("tp_as_sequence doesnt exist\n");
     }
 
-    Py_DECREF(obj);
-
     Py_RETURN_NONE;
 }
 
