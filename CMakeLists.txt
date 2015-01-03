@@ -21,6 +21,7 @@ option(ENABLE_GOLD "enable the gold linker" ON)
 option(ENABLE_GRWL "threading use GRWL" OFF)
 option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
 option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
+option(ENABLE_SELF_HOST "use pyston to test pyston" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
 
 # automatically use ccache if found
@@ -41,6 +42,13 @@ if(ENABLE_GOLD)
     set(CMAKE_LINKER "${GOLD_LINKER}")
     set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -B${CMAKE_SOURCE_DIR}/tools/build_system")
   endif()
+endif()
+
+# pyston self host mode
+if(ENABLE_SELF_HOST)
+  set(PYTHON_EXE "pyston")
+else()
+  find_program(PYTHON_EXE python)
 endif()
 
 # initial clang flags (set here so they're used when building llvm)
@@ -134,8 +142,8 @@ find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
-add_subdirectory(lib_python)
 add_subdirectory(lib_pyston)
+add_subdirectory(lib_python)
 add_subdirectory(src)
 add_subdirectory(test/test_extension)
 add_subdirectory(test/unittests)
@@ -146,7 +154,6 @@ add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYST
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
 
 # copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
-add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lib_python/2.7 ${CMAKE_BINARY_DIR}/lib_python/2.7)
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
 
 add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
@@ -155,13 +162,15 @@ add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh
 
 # test
 enable_testing()
-add_test(NAME lint COMMAND python ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+set(TEST_THREADS 1)
+
+add_test(NAME lint COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
-add_test(NAME pyston_defaults COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -k ${CMAKE_SOURCE_DIR}/test/tests)
-add_test(NAME pyston_max_compilation_tier COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j4 -a -O -k ${CMAKE_SOURCE_DIR}/test/tests)
-add_test(NAME pyston_experimental_pypa_parser COMMAND python ${CMAKE_SOURCE_DIR}/tools/tester.py -a -x -R ./pyston -j4 -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_max_compilation_tier COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a -O -k ${CMAKE_SOURCE_DIR}/test/tests)
+add_test(NAME pyston_experimental_pypa_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a -x -R ./pyston -j${TEST_THREADS} -a -n -k ${CMAKE_SOURCE_DIR}/test/tests)
 
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -169,10 +178,10 @@ add_custom_target(format ${LLVM_TOOLS_BINARY_DIR}/clang-format -style=file -i ${
 add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # lint
-add_custom_target(lint python ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston clang-format ext_cpython ext_pyston unittests) 
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests) 
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
 file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)
