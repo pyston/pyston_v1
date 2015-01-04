@@ -119,11 +119,11 @@ int main(int argc, char** argv) {
 
     llvm::SmallString<128> stdlib_dir(self_path);
     llvm::sys::path::remove_filename(stdlib_dir); // executable name
-    llvm::sys::path::append(stdlib_dir, "lib_python");
-    llvm::sys::path::append(stdlib_dir, "2.7");
+    llvm::sys::path::append(stdlib_dir, "from_cpython");
+    llvm::sys::path::append(stdlib_dir, "Lib");
     appendToSysPath(stdlib_dir.c_str());
 
-    // go from ./lib_python/2.7 to ./lib_pyston
+    // go from ./from_cpython/Lib to ./lib_pyston
     llvm::sys::path::remove_filename(stdlib_dir);
     llvm::sys::path::remove_filename(stdlib_dir);
     llvm::sys::path::append(stdlib_dir, "lib_pyston");

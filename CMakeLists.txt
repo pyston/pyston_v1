@@ -136,14 +136,14 @@ add_definitions(-DDEFAULT_PYTHON_MAJOR_VERSION=2 -DDEFAULT_PYTHON_MINOR_VERSION=
 add_definitions(-DLLVMREV=${LLVMREV})
 
 include_directories(${LLVM_INCLUDE_DIRS})
-include_directories(include)
+include_directories(from_cpython/Include)
 
 find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
 add_subdirectory(lib_pyston)
-add_subdirectory(lib_python)
+add_subdirectory(from_cpython)
 add_subdirectory(src)
 add_subdirectory(test/test_extension)
 add_subdirectory(test/unittests)
@@ -153,7 +153,7 @@ add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYST
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
 target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
 
-# copy the python standard library (lib_python/2.7) and src/codegen/parse_ast.py to the build directory
+# copy src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
 
 add_custom_target(astcompare COMMAND ${CMAKE_SOURCE_DIR}/tools/astprint_test.sh

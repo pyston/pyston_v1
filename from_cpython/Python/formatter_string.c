@@ -6,8 +6,7 @@
    of int.__format__, etc., that take and return string objects */
 
 #include "Python.h"
-// Pyston change: had to change this path
-#include "../2.7_Objects/stringlib/stringdefs.h"
+#include "../Objects/stringlib/stringdefs.h"
 
 #define FORMAT_STRING  _PyBytes_FormatAdvanced
 #define FORMAT_LONG    _PyLong_FormatAdvanced
@@ -18,5 +17,5 @@
 #endif
 
 // Pyston change: had to change this path
-#include "../2.7_Objects/stringlib/formatter.h"
+#include "../Objects/stringlib/formatter.h"
 
