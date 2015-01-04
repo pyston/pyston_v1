@@ -633,20 +633,28 @@ void checkAndThrowCAPIException() {
     Box* value = threading::cur_thread_state.exc_value;
     if (value) {
         RELEASE_ASSERT(threading::cur_thread_state.exc_traceback == NULL, "unsupported");
+        Box* _type = threading::cur_thread_state.exc_type;
+        BoxedClass* type = static_cast<BoxedClass*>(_type);
+        assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
+               && "Only support throwing subclass of BaseException for now");
 
-        // This doesn't seem like the right behavior...
-        if (value->cls != threading::cur_thread_state.exc_type) {
-            if (value->cls == tuple_cls)
+        // This is similar to PyErr_NormalizeException:
+        if (!isInstance(value, type)) {
+            if (value->cls == tuple_cls) {
                 value = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(0, 0, true, false), value, NULL,
                                     NULL, NULL, NULL);
-            else
+            } else if (value == None) {
+                value = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            } else {
                 value
                     = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
+            }
         }
 
-        RELEASE_ASSERT(value->cls == threading::cur_thread_state.exc_type, "unsupported");
+        RELEASE_ASSERT(value->cls == type, "unsupported");
+
         PyErr_Clear();
-        throw value;
+        raiseExc(value);
     }
 }
 

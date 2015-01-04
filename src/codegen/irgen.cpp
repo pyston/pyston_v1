@@ -290,6 +290,8 @@ static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, const std:
         return GENERATOR;
     else if (name == PASSED_CLOSURE_NAME)
         return CLOSURE;
+    else if (name == CREATED_CLOSURE_NAME)
+        return CLOSURE;
     else
         return types->getTypeAtBlockStart(name, block);
 }

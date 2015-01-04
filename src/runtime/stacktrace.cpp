@@ -272,11 +272,7 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 std::string formatException(Box* b) {
     const std::string* name = getTypeName(b);
 
-    Box* attr = b->getattr("message");
-    if (attr == nullptr)
-        return *name;
-
-    BoxedString* r = strOrNull(attr);
+    BoxedString* r = strOrNull(b);
     if (!r)
         return *name;
 

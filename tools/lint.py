@@ -2,7 +2,7 @@ import os
 import sys
 
 def file_is_from_cpython(fn):
-    return '2.7' in fn
+    return 'from_cpython' in fn
 
 def verify_include_guard(_, dir, files):
     for bn in files:
@@ -40,7 +40,7 @@ def verify_license(_, dir, files):
 
 PYSTON_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
 PYSTON_SRC_SUBDIRS = [bn for bn in os.listdir(PYSTON_SRC_DIR) if os.path.isdir(os.path.join(PYSTON_SRC_DIR, bn))]
-CAPI_HEADER_DIR = os.path.join(PYSTON_SRC_DIR, "../include")
+CAPI_HEADER_DIR = os.path.join(PYSTON_SRC_DIR, "../from_cpython/Include")
 CAPI_HEADERS = [bn for bn in os.listdir(CAPI_HEADER_DIR) if bn.endswith(".h")]
 
 def verify_include_order(_, dir, files):

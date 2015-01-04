@@ -37,6 +37,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 
@@ -119,11 +120,11 @@ int main(int argc, char** argv) {
 
     llvm::SmallString<128> stdlib_dir(self_path);
     llvm::sys::path::remove_filename(stdlib_dir); // executable name
-    llvm::sys::path::append(stdlib_dir, "lib_python");
-    llvm::sys::path::append(stdlib_dir, "2.7");
+    llvm::sys::path::append(stdlib_dir, "from_cpython");
+    llvm::sys::path::append(stdlib_dir, "Lib");
     appendToSysPath(stdlib_dir.c_str());
 
-    // go from ./lib_python/2.7 to ./lib_pyston
+    // go from ./from_cpython/Lib to ./lib_pyston
     llvm::sys::path::remove_filename(stdlib_dir);
     llvm::sys::path::remove_filename(stdlib_dir);
     llvm::sys::path::append(stdlib_dir, "lib_pyston");
@@ -150,11 +151,15 @@ int main(int argc, char** argv) {
         try {
             main_module = createAndRunModule("__main__", fn);
         } catch (Box* b) {
-            std::string msg = formatException(b);
-            printLastTraceback();
-            fprintf(stderr, "%s\n", msg.c_str());
-
-            return 1;
+            if (isInstance(b, SystemExit)) {
+                printf("Warning: ignoring SystemExit code\n");
+                return 1;
+            } else {
+                std::string msg = formatException(b);
+                printLastTraceback();
+                fprintf(stderr, "%s\n", msg.c_str());
+                return 1;
+            }
         }
     }
 
@@ -218,9 +223,14 @@ int main(int argc, char** argv) {
                 try {
                     compileAndRunModule(m, main_module);
                 } catch (Box* b) {
-                    std::string msg = formatException(b);
-                    printLastTraceback();
-                    fprintf(stderr, "%s\n", msg.c_str());
+                    if (isInstance(b, SystemExit)) {
+                        printf("Warning: ignoring SystemExit code\n");
+                        return 1;
+                    } else {
+                        std::string msg = formatException(b);
+                        printLastTraceback();
+                        fprintf(stderr, "%s\n", msg.c_str());
+                    }
                 }
             }
         }

@@ -142,7 +142,7 @@ LLVM_PROFILE_LIB_DEPS := $(wildcard $(LLVM_BUILD)/Release+Profile/lib/*)
 CLANG_EXE := $(LLVM_BIN)/clang
 CLANGPP_EXE := $(LLVM_BIN)/clang++
 
-COMMON_CFLAGS := -g -Werror -Wreturn-type -Wall -Wno-sign-compare -Wno-unused -Isrc -I./include -fno-omit-frame-pointer
+COMMON_CFLAGS := -g -Werror -Wreturn-type -Wall -Wno-sign-compare -Wno-unused -Isrc -Ifrom_cpython/Include -fno-omit-frame-pointer
 COMMON_CFLAGS += -Wextra -Wno-sign-compare
 COMMON_CFLAGS += -Wno-unused-parameter # should use the "unused" attribute
 COMMON_CXXFLAGS := $(COMMON_CFLAGS)
@@ -221,7 +221,7 @@ endif
 CLANGFLAGS := $(CXXFLAGS_DBG) $(CLANG_EXTRA_FLAGS)
 CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
-EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -I../include
+EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -Ifrom_cpython/Include
 EXT_CFLAGS += -Wno-missing-field-initializers
 EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits
 ifneq ($(USE_CLANG),0)
@@ -293,7 +293,7 @@ STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c $(EXTRA_STDMODULE_SRCS)
 STDOBJECT_SRCS := structseq.c capsule.c stringobject.c $(EXTRA_STDOBJECT_SRCS)
 STDPYTHON_SRCS := pyctype.c getargs.c formatter_string.c pystrtod.c dtoa.c $(EXTRA_STDPYTHON_SRCS)
-FROM_CPYTHON_SRCS := $(addprefix lib_python/2.7_Modules/,$(STDMODULE_SRCS)) $(addprefix lib_python/2.7_Objects/,$(STDOBJECT_SRCS)) $(addprefix lib_python/2.7_Python/,$(STDPYTHON_SRCS))
+FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
@@ -321,7 +321,7 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
 all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
 
-ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard ./include/*.h)
+ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard cpython2.7/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
@@ -769,11 +769,11 @@ pyston_release:
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 
--include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ./lib_python/2.7_Modules/*.d)
+-include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ./from_cpython/Modules/*.d)
 
 .PHONY: clean
 clean:
-	@ find src $(TOOLS_DIR) $(TEST_DIR) ./lib_python/2.7_Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
+	@ find src $(TOOLS_DIR) $(TEST_DIR) ./from_cpython/Modules \( -name '*.o' -o -name '*.d' -o -name '*.py_cache' -o -name '*.bc' -o -name '*.o.ll' -o -name '*.pub.ll' -o -name '*.cache' -o -name 'stdlib*.ll' -o -name '*.pyc' -o -name '*.so' -o -name '*.a' -o -name '*.expected_cache' -o -name '*.pch' \) -print -delete
 	@ find \( -name 'pyston*' -executable -type f \) -print -delete
 	@ find $(TOOLS_DIR) -maxdepth 0 -executable -type f -print -delete
 	@ rm -rf oprofile_data
@@ -957,9 +957,9 @@ TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
 ifneq ($(SELF_HOST),1)
 $(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o
-	gcc -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
-$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h)
-	gcc -pthread -fno-strict-aliasing -DNDEBUG -g -fwrapv -O2 -Wall -Wstrict-prototypes -fPIC -Wimplicit -I./include -c $< -o $@
+	$(CC) -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
+$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard from_cpython/Include/*.h)
+	$(CC) -pthread $(EXT_CFLAGS) -c $< -o $@
 else
 # Hax: we want to generate multiple targets from a single rule, and run the rule only if the
 # dependencies have been updated, and only run it once for all the targets.
@@ -999,5 +999,5 @@ $(FROM_CPYTHON_SRCS:.c=.release.o): %.release.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
 # These are necessary until we support unicode:
-../lib_python/2.7_Modules/_sre.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
-../lib_python/2.7_Modules/_sre.release.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
+../from_cpython/Modules/_sre.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
+../from_cpython/Modules/_sre.release.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
