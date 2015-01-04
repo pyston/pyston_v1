@@ -957,9 +957,9 @@ TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
 ifneq ($(SELF_HOST),1)
 $(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o
-	gcc -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
-$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard ./include/*.h)
-	gcc -pthread -fno-strict-aliasing -DNDEBUG -g -fwrapv -O2 -Wall -Wstrict-prototypes -fPIC -Wimplicit -Ifrom_cpython/Include -c $< -o $@
+	$(CC) -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
+$(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard from_cpython/Include/*.h)
+	$(CC) -pthread $(EXT_CFLAGS) -c $< -o $@
 else
 # Hax: we want to generate multiple targets from a single rule, and run the rule only if the
 # dependencies have been updated, and only run it once for all the targets.
