@@ -199,6 +199,10 @@ extern "C" int _PyFile_SanitizeMode(char* mode) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyObject_AsFileDescriptor(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
 void setupFile() {
     file_cls->giveAttr("__name__", boxStrConstant("file"));
 

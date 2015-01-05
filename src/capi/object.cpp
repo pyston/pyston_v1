@@ -63,4 +63,8 @@ extern "C" PyObject* PyObject_Str(PyObject* v) {
     assert(PyString_Check(res));
     return res;
 }
+
+extern "C" PyObject* PyObject_SelfIter(PyObject* obj) {
+    Py_FatalError("unimplemented");
+}
 }
