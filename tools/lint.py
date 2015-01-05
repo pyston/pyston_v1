@@ -35,7 +35,7 @@ def verify_license(_, dir, files):
             elif fn.endswith("/astprint.cpp"):
                 continue
             else:
-                assert "Copyright (c) 2014 Dropbox, Inc." in s, fn
+                assert "Copyright (c) 2014-2015 Dropbox, Inc." in s, fn
                 assert "Apache License, Version 2.0" in s, fn
 
 PYSTON_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
