@@ -21,6 +21,7 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/IR/IRBuilder.h"
@@ -35,7 +36,6 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include "codegen/codegen.h"
-#include "codegen/dis.h"
 #include "codegen/memmgr.h"
 #include "codegen/profiling/profiling.h"
 #include "codegen/stackmaps.h"
@@ -199,7 +199,11 @@ void initCodegen() {
 #endif
 
     eb.setEngineKind(llvm::EngineKind::JIT); // specify we only want the JIT, and not the interpreter fallback
+#if LLVMREV < 223183
+    eb.setMCJITMemoryManager(createMemoryManager().release());
+#else
     eb.setMCJITMemoryManager(createMemoryManager());
+#endif
     // eb.setOptLevel(llvm::CodeGenOpt::None); // -O0
     // eb.setOptLevel(llvm::CodeGenOpt::Less); // -O1
     // eb.setOptLevel(llvm::CodeGenOpt::Default); // -O2, -Os

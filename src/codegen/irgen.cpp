@@ -63,17 +63,6 @@ void MyInserter::InsertHelper(llvm::Instruction* I, const llvm::Twine& Name, llv
     llvm::IRBuilderDefaultInserter<true>::InsertHelper(I, Name, BB, InsertPt);
 }
 
-static void addIRDebugSymbols(llvm::Function* f) {
-    llvm::legacy::PassManager mpm;
-
-    llvm_error_code code = llvm::sys::fs::create_directory(".debug_ir", true);
-    assert(!code);
-
-    mpm.add(llvm::createDebugIRPass(false, false, ".debug_ir", f->getName()));
-
-    mpm.run(*g.cur_module);
-}
-
 static void optimizeIR(llvm::Function* f, EffortLevel::EffortLevel effort) {
     // TODO maybe should do some simple passes (ex: gvn?) if effort level isn't maximal?
     // In general, this function needs a lot of tuning.
@@ -1258,12 +1247,6 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
 
     if (ENABLE_LLVMOPTS)
         optimizeIR(f, effort);
-
-    bool ENABLE_IR_DEBUG = false;
-    if (ENABLE_IR_DEBUG) {
-        addIRDebugSymbols(f);
-        // dumpPrettyIR(f);
-    }
 
     g.cur_module = NULL;
 

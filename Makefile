@@ -741,12 +741,12 @@ endef
 $(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl_dbg,stdlib.grwl_dbg.bc.o $(SRCS:.cpp=.grwl_dbg.o),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_nosync,stdlib.nosync.bc.o $(SRCS:.cpp=.nosync.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
-pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
+pyston_oprof: $(OPT_OBJS) src/codegen/profiling/oprofile.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/oprofile.o $(LDFLAGS_RELEASE) -lopagent -o $@
-pyston_pprof: $(OPT_OBJS) codegen/profiling/pprof.release.o $(LLVM_DEPS)
+	$(VERB) $(CXX) $(OPT_OBJS) src/codegen/profiling/oprofile.o $(LDFLAGS_RELEASE) -lopagent -o $@
+pyston_pprof: $(OPT_OBJS) src/codegen/profiling/pprof.release.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
+	$(VERB) $(CXX) $(OPT_OBJS) src/codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
 pyston_prof: $(PROFILE_OBJS) $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS) -pg -o $@

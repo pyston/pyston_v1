@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 namespace llvm {
 class RTDyldMemoryManager;
@@ -24,7 +25,7 @@ class RTDyldMemoryManager;
 
 namespace pyston {
 
-llvm::RTDyldMemoryManager* createMemoryManager();
+std::unique_ptr<llvm::RTDyldMemoryManager> createMemoryManager();
 void registerEHFrames(uint8_t* addr, uint64_t load_addr, size_t size);
 void deregisterEHFrames(uint8_t* addr, uint64_t load_addr, size_t size);
 }

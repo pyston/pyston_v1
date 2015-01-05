@@ -227,8 +227,8 @@ PystonMemoryManager::~PystonMemoryManager() {
         sys::Memory::releaseMappedMemory(RODataMem.AllocatedMem[i]);
 }
 
-llvm::RTDyldMemoryManager* createMemoryManager() {
-    return new PystonMemoryManager();
+std::unique_ptr<llvm::RTDyldMemoryManager> createMemoryManager() {
+    return std::unique_ptr<llvm::RTDyldMemoryManager>(new PystonMemoryManager());
 }
 
 // These functions exist as instance methods of the RTDyldMemoryManager class,

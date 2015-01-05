@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/Object/ObjectFile.h"
 
 #include "opagent.h"
 
@@ -35,26 +35,26 @@ public:
 
     virtual ~OprofileJITEventListener() { op_close_agent(agent); }
 
-    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj, const llvm::RuntimeDyld::LoadedObjectInfo& L);
 };
 
-void OprofileJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+void OprofileJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                                   const llvm::RuntimeDyld::LoadedObjectInfo& L) {
     if (VERBOSITY() >= 1)
         printf("An object has been emitted:\n");
 
     llvm_error_code code;
-    for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
+    for (const auto& sym : Obj.symbols()) {
         llvm::object::SymbolRef::Type type;
-        code = I->getType(type);
+        code = sym.getType(type);
         assert(!code);
         if (type == llvm::object::SymbolRef::ST_Function) {
             llvm::StringRef name;
             uint64_t addr, size;
-            code = I->getName(name);
+            code = sym.getName(name);
             assert(!code);
-            code = I->getAddress(addr);
-            assert(!code);
-            code = I->getSize(size);
+            addr = L.getSymbolLoadAddress(name);
+            code = sym.getSize(size);
             assert(!code);
 
             if (VERBOSITY() >= 1)
@@ -63,11 +63,10 @@ void OprofileJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
             assert(r == 0);
             //} else {
             // llvm::StringRef name;
-            // code = I->getName(name);
+            // code = sym.getName(name);
             // assert(!code);
             // printf("Skipping %s\n", name.data());
         }
-        ++I;
     }
 }
 

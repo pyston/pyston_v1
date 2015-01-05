@@ -15,7 +15,7 @@
 #include <sstream>
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/Object/ObjectFile.h"
 
 #include "codegen/profiling/profiling.h"
 #include "core/common.h"
@@ -26,11 +26,12 @@ namespace pyston {
 class DumpJITEventListener : public llvm::JITEventListener {
 private:
 public:
-    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj, const llvm::RuntimeDyld::LoadedObjectInfo& L);
 };
 
 static int num = 0;
-void DumpJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+void DumpJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                               const llvm::RuntimeDyld::LoadedObjectInfo& L) {
     llvm_error_code code;
 
     std::ostringstream os("");

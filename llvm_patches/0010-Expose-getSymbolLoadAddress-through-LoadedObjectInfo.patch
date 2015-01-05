@@ -1,0 +1,41 @@
+From 0fdc4cdde6c1642c2860a41af31f10f85153f1f6 Mon Sep 17 00:00:00 2001
+From: Kevin Modzelewski <kevmod@gmail.com>
+Date: Mon, 5 Jan 2015 04:10:04 +0000
+Subject: [PATCH] Expose getSymbolLoadAddress through LoadedObjectInfo
+
+---
+ include/llvm/ExecutionEngine/RuntimeDyld.h      | 1 +
+ lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/include/llvm/ExecutionEngine/RuntimeDyld.h b/include/llvm/ExecutionEngine/RuntimeDyld.h
+index 799fc34..ae8d699 100644
+--- a/include/llvm/ExecutionEngine/RuntimeDyld.h
++++ b/include/llvm/ExecutionEngine/RuntimeDyld.h
+@@ -60,6 +60,7 @@ public:
+     virtual object::OwningBinary<object::ObjectFile>
+     getObjectForDebug(const object::ObjectFile &Obj) const = 0;
+ 
++    uint64_t getSymbolLoadAddress(StringRef Name) const;
+     uint64_t getSectionLoadAddress(StringRef Name) const;
+ 
+   protected:
+diff --git a/lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp b/lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp
+index 00ac869..f7c5934 100644
+--- a/lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp
++++ b/lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp
+@@ -742,6 +742,11 @@ uint64_t RuntimeDyld::LoadedObjectInfo::getSectionLoadAddress(
+   return 0;
+ }
+ 
++uint64_t RuntimeDyld::LoadedObjectInfo::getSymbolLoadAddress(
++                                                  StringRef SymbolName) const {
++  return RTDyld.getSymbolLoadAddress(SymbolName);
++}
++
+ RuntimeDyld::RuntimeDyld(RTDyldMemoryManager *mm) {
+   // FIXME: There's a potential issue lurking here if a single instance of
+   // RuntimeDyld is used to load multiple objects.  The current implementation
+-- 
+1.9.1
+
