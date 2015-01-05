@@ -769,7 +769,7 @@ pyston_release:
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
 
--include $(wildcard *.d) $(wildcard */*.d) $(wildcard */*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard ./from_cpython/Modules/*.d)
+-include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 
 .PHONY: clean
 clean:
