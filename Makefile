@@ -933,19 +933,19 @@ wdbg_%:
 
 .PHONY: test_asm test_cpp_asm
 test_asm:
-	$(CLANGPP_EXE) $(TEST_DIR)/test.s -c -o test
-	objdump -d test | less
-	@ rm test
+	$(CLANGPP_EXE) $(TEST_DIR)/test.s -c -o test_asm
+	objdump -d test_asm | less
+	@ rm test_asm
 test_cpp_asm:
-	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test -c -O3 -std=c++11
-	# $(GPP) tests/test.cpp -o test -c -O3
-	objdump -d test | less
-	rm test
+	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test_asm -c -O3 -std=c++11
+	# $(GPP) tests/test.cpp -o test_asm -c -O3
+	objdump -d test_asm | less
+	rm test_asm
 test_cpp_dwarf:
-	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test -c -O3 -std=c++11 -g
-	# $(GPP) tests/test.cpp -o test -c -O3
-	objdump -W test | less
-	rm test
+	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test_asm -c -O3 -std=c++11 -g
+	# $(GPP) tests/test.cpp -o test_asm -c -O3
+	objdump -W test_asm | less
+	rm test_asm
 test_cpp_ll:
 	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11 -g
 	less test.ll
