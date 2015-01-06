@@ -61,12 +61,17 @@ Box* generatorSend(Box* s, Box* v) {
     assert(s->cls == generator_cls);
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
 
+    if (self->running)
+        raiseExcHelper(ValueError, "generator already executing");
+
     // check if the generator already exited
     if (self->entryExited)
         raiseExcHelper(StopIteration, "");
 
     self->returnValue = v;
+    self->running = true;
     swapcontext(&self->returnContext, &self->context);
+    self->running = false;
 
     // propagate exception to the caller
     if (self->exception)
@@ -130,7 +135,7 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, B
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
     : Box(generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false),
-      returnValue(nullptr), exception(nullptr) {
+      running(false), returnValue(nullptr), exception(nullptr) {
 
     giveAttr("__name__", boxString(function->f->source->getName()));
 

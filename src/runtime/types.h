@@ -524,6 +524,7 @@ public:
     GCdArray* args;
 
     bool entryExited;
+    bool running;
     Box* returnValue;
     Box* exception;
 
