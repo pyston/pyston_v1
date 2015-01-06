@@ -388,11 +388,11 @@ cpplint:
 check:
 	@# These are ordered roughly in decreasing order of (chance will expose issue) / (time to run test)
 	$(MAKE) lint
+	$(MAKE) check_format
 	$(MAKE) ext_python ext_pyston pyston_dbg
 
 	$(MAKE) check_dbg
 
-	$(MAKE) check_format
 	$(MAKE) run_unittests
 
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
