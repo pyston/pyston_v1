@@ -21,6 +21,9 @@
 namespace pyston {
 
 extern BoxedClass* dict_iterator_cls;
+extern BoxedClass* dict_keys_cls;
+extern BoxedClass* dict_values_cls;
+extern BoxedClass* dict_items_cls;
 class BoxedDictIterator : public Box {
 public:
     enum IteratorType { KeyIterator, ValueIterator, ItemIterator };
@@ -42,6 +45,16 @@ Box* dictIterIter(Box* self);
 Box* dictIterHasnext(Box* self);
 i1 dictIterHasnextUnboxed(Box* self);
 Box* dictIterNext(Box* self);
+
+class BoxedDictView : public Box {
+public:
+    BoxedDict* d;
+    BoxedDictView(BoxedDict* d, BoxedClass* view_cls);
+};
+
+Box* dictViewKeysIter(Box* self);
+Box* dictViewValuesIter(Box* self);
+Box* dictViewItemsIter(Box* self);
 }
 
 #endif
