@@ -197,13 +197,19 @@ print sorted(d.items())
 # viewkeys / viewvalues / viewitems
 
 d = {}
+keys = d.keys()
+viewkeys = d.viewkeys()
 
 print list(d.viewkeys())
 print list(d.viewvalues())
 print list(d.viewitems())
+print 'keys of d: ', keys
+print 'viewkeys of d: ', list(viewkeys)
 
 d['a'] = 1
 
 print list(d.viewkeys())
 print list(d.viewvalues())
 print list(d.viewitems())
+print 'keys of d: ', keys
+print 'viewkeys of d: ', list(viewkeys)

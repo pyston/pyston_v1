@@ -91,16 +91,28 @@ Box* dictKeys(BoxedDict* self) {
 }
 
 Box* dictViewKeys(BoxedDict* self) {
+    if (!isSubclass(self->cls, dict_cls)) {
+        raiseExcHelper(TypeError, "descriptor 'viewkeys' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+    }
     BoxedDictView* rtn = new BoxedDictView(self, dict_keys_cls);
     return rtn;
 }
 
 Box* dictViewValues(BoxedDict* self) {
+    if (!isSubclass(self->cls, dict_cls)) {
+        raiseExcHelper(TypeError, "descriptor 'viewvalues' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+    }
     BoxedDictView* rtn = new BoxedDictView(self, dict_values_cls);
     return rtn;
 }
 
 Box* dictViewItems(BoxedDict* self) {
+    if (!isSubclass(self->cls, dict_cls)) {
+        raiseExcHelper(TypeError, "descriptor 'viewitems' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+    }
     BoxedDictView* rtn = new BoxedDictView(self, dict_items_cls);
     return rtn;
 }
