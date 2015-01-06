@@ -198,3 +198,10 @@ foreach(RUNTARGET ${RUNTARGETS})
     add_custom_target(cachegrind_${BASEFILENAME} valgrind --tool=cachegrind ./pyston ${RUNTARGET} DEPENDS pyston)
   endif()
 endforeach()
+
+# doxygen
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+  configure_file(${CMAKE_SOURCE_DIR}/docs/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
+  add_custom_target(docs ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()
