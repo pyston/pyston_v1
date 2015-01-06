@@ -460,7 +460,10 @@ void allowGLReadPreemption() {
         if (!threads_waiting_on_gil.load(std::memory_order_seq_cst))
             return;
 
+        threads_waiting_on_gil++;
         pthread_cond_wait(&gil_acquired, &gil);
+        threads_waiting_on_gil--;
+        pthread_cond_signal(&gil_acquired);
     }
 }
 #elif THREADING_USE_GRWL
