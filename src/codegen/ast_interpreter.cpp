@@ -281,6 +281,8 @@ public:
 }
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, AST_stmt* start_at) {
+    threading::allowGLReadPreemption();
+
     assert(start_at == NULL);
 
     void* frame_addr = __builtin_frame_address(0);
@@ -409,7 +411,11 @@ Value ASTInterpreter::visit_branch(AST_Branch* node) {
 }
 
 Value ASTInterpreter::visit_jump(AST_Jump* node) {
-    if (ENABLE_OSR && node->target->idx < current_block->idx && compiled_func) {
+    bool backedge = node->target->idx < current_block->idx && compiled_func;
+    if (backedge)
+        threading::allowGLReadPreemption();
+
+    if (ENABLE_OSR && backedge) {
         ++edgecount;
         if (edgecount > OSR_THRESHOLD) {
             eraseDeadSymbols();
