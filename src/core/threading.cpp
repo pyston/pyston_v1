@@ -421,10 +421,14 @@ extern "C" void endAllowThreads() {
 static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
 static std::atomic<int> threads_waiting_on_gil(0);
+static pthread_cond_t gil_acquired = PTHREAD_COND_INITIALIZER;
+
 void acquireGLWrite() {
     threads_waiting_on_gil++;
     pthread_mutex_lock(&gil);
     threads_waiting_on_gil--;
+
+    pthread_cond_signal(&gil_acquired);
 }
 
 void releaseGLWrite() {
@@ -435,17 +439,28 @@ void releaseGLWrite() {
 // Note: this doesn't need to be an atomic, since it should
 // only be accessed by the thread that holds the gil:
 int gil_check_count = 0;
+
+// TODO: this function is fair in that it forces a thread to give up the GIL
+// after a bounded amount of time, but currently we have no guarantees about
+// who it will release the GIL to.  So we could have two threads that are
+// switching back and forth, and a third that never gets run.
+// We could enforce fairness by having a FIFO of events (implementd with mutexes?)
+// and make sure to always wake up the longest-waiting one.
 void allowGLReadPreemption() {
-    // Can read this variable with relaxed consistency; not a huge problem if
-    // we accidentally read a stale value for a little while.
+    // Double-checked locking: first read with no ordering constraint:
     if (!threads_waiting_on_gil.load(std::memory_order_relaxed))
         return;
 
     gil_check_count++;
     if (gil_check_count >= GIL_CHECK_INTERVAL) {
         gil_check_count = 0;
-        releaseGLRead();
-        acquireGLRead();
+
+        // Double check this, since if we are wrong about there being a thread waiting on the gil,
+        // we're going to get stuck in the following pthread_cond_wait:
+        if (!threads_waiting_on_gil.load(std::memory_order_seq_cst))
+            return;
+
+        pthread_cond_wait(&gil_acquired, &gil);
     }
 }
 #elif THREADING_USE_GRWL
