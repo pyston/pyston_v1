@@ -67,4 +67,12 @@ extern "C" PyObject* PyObject_Str(PyObject* v) {
 extern "C" PyObject* PyObject_SelfIter(PyObject* obj) {
     Py_FatalError("unimplemented");
 }
+
+extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* buffer_len) {
+    Py_FatalError("unimplemented");
+}
 }

@@ -69,7 +69,7 @@ def get_python_version():
 
 def get_python_inc(plat_specific=0, prefix=None):
     # Pyston change: this is the way we layout things internally:
-    return os.path.join(os.path.dirname(sys.executable), "include")
+    return os.path.join(os.path.dirname(sys.executable), "from_cpython/Include")
 
     """Return the directory containing installed Python header files.
 

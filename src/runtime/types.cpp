@@ -46,6 +46,7 @@ extern "C" void initoperator();
 extern "C" void initbinascii();
 extern "C" void initpwd();
 extern "C" void initposix();
+extern "C" void init_struct();
 
 namespace pyston {
 
@@ -995,6 +996,7 @@ void setupRuntime() {
     initbinascii();
     initpwd();
     initposix();
+    init_struct();
 
     setupSysEnd();
 

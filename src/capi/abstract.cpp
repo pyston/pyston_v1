@@ -26,7 +26,61 @@
 
 namespace pyston {
 
+static PyObject* type_error(const char* msg, PyObject* obj) noexcept {
+    PyErr_Format(PyExc_TypeError, msg, Py_TYPE(obj)->tp_name);
+    return NULL;
+}
+
+static PyObject* null_error(void) noexcept {
+    if (!PyErr_Occurred())
+        PyErr_SetString(PyExc_SystemError, "null argument to internal routine");
+    return NULL;
+}
+
+static PyObject* objargs_mktuple(va_list va) noexcept {
+    int i, n = 0;
+    va_list countva;
+    PyObject* result, *tmp;
+
+#ifdef VA_LIST_IS_ARRAY
+    memcpy(countva, va, sizeof(va_list));
+#else
+#ifdef __va_copy
+    __va_copy(countva, va);
+#else
+    countva = va;
+#endif
+#endif
+
+    while (((PyObject*)va_arg(countva, PyObject*)) != NULL)
+        ++n;
+    result = PyTuple_New(n);
+    if (result != NULL && n > 0) {
+        for (i = 0; i < n; ++i) {
+            tmp = (PyObject*)va_arg(va, PyObject*);
+            PyTuple_SET_ITEM(result, i, tmp);
+            Py_INCREF(tmp);
+        }
+    }
+    return result;
+}
+
 extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) {
-    Py_FatalError("unimplemented");
+    PyObject* args, *tmp;
+    va_list vargs;
+
+    if (callable == NULL)
+        return null_error();
+
+    /* count the args */
+    va_start(vargs, callable);
+    args = objargs_mktuple(vargs);
+    va_end(vargs);
+    if (args == NULL)
+        return NULL;
+    tmp = PyObject_Call(callable, args, NULL);
+    Py_DECREF(args);
+
+    return tmp;
 }
 }
