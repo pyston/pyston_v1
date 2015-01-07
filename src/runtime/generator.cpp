@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <sys/mman.h>
 #include <ucontext.h>
 
 #include "core/ast.h"
@@ -30,11 +31,21 @@
 
 namespace pyston {
 
+static uint64_t next_stack_addr = 0x3270000000L;
+static std::vector<uint64_t> available_addrs;
+
+// There should be a better way of getting this:
+#define PAGE_SIZE 4096
+
+#define INITIAL_STACK_SIZE (8 * PAGE_SIZE)
+#define STACK_REDZONE_SIZE PAGE_SIZE
+#define MAX_STACK_SIZE (4 * 1024 * 1024)
 
 static void generatorEntry(BoxedGenerator* g) {
     assert(g->cls == generator_cls);
     assert(g->function->cls == function_cls);
-    threading::pushGenerator(&g->returnContext);
+
+    threading::pushGenerator(g, g->stack_begin, (void*)g->returnContext.uc_mcontext.gregs[REG_RSP]);
 
     try {
         // call body of the generator
@@ -114,7 +125,7 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
 
     threading::popGenerator();
     swapcontext(&self->context, &self->returnContext);
-    threading::pushGenerator(&self->returnContext);
+    threading::pushGenerator(obj, obj->stack_begin, (void*)obj->returnContext.uc_mcontext.gregs[REG_RSP]);
 
     // if the generator receives a exception from the caller we have to throw it
     if (self->exception) {
@@ -148,8 +159,40 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Bo
 
     getcontext(&context);
     context.uc_link = 0;
-    context.uc_stack.ss_sp = stack;
-    context.uc_stack.ss_size = STACK_SIZE;
+
+    uint64_t stack_low = next_stack_addr;
+    uint64_t stack_high = stack_low + MAX_STACK_SIZE;
+    next_stack_addr = stack_high;
+
+#if STACK_GROWS_DOWN
+    this->stack_begin = (void*)stack_high;
+
+    void* initial_stack_limit = (void*)(stack_high - INITIAL_STACK_SIZE);
+    void* p = mmap(initial_stack_limit, INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
+    assert(p == initial_stack_limit);
+
+    context.uc_stack.ss_sp = initial_stack_limit;
+    context.uc_stack.ss_size = INITIAL_STACK_SIZE;
+
+    // Create an inaccessible redzone so that the generator stack won't grow indefinitely.
+    // Looks like it throws a SIGBUS if we reach the redzone; it's unclear if that's better
+    // or worse than being able to consume all available memory.
+    void* p2 = mmap((void*)stack_low, STACK_REDZONE_SIZE, PROT_NONE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    assert(p2 == (void*)stack_low);
+    // Interestingly, it seems like MAP_GROWSDOWN will leave a page-size gap between the redzone and the growable
+    // region.
+
+    if (VERBOSITY() >= 1) {
+        printf("Created new generator stack, starts at %p, currently extends to %p\n", (void*)stack_high,
+               initial_stack_limit);
+        printf("Created a redzone from %p-%p\n", (void*)stack_low, (void*)(stack_low + STACK_REDZONE_SIZE));
+    }
+
+#else
+#error "implement me"
+#endif
+
     makecontext(&context, (void (*)(void))generatorEntry, 1, this);
 }
 
@@ -174,10 +217,16 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     if (g->exception)
         v->visit(g->exception);
 
-    v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
-    v->visitPotentialRange((void**)&g->returnContext,
-                           ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
-    v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
+    if (g->running) {
+        v->visitPotentialRange((void**)&g->returnContext,
+                               ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
+    } else {
+        v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
+
+#if STACK_GROWS_DOWN
+        v->visitPotentialRange((void**)g->context.uc_mcontext.gregs[REG_RSP], (void**)g->stack_begin);
+#endif
+    }
 }
 
 

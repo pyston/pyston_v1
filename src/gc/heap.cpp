@@ -74,7 +74,7 @@ public:
         assert(size % PAGE_SIZE == 0);
         // printf("mmap %ld\n", size);
 
-        void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
         ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
         cur = (uint8_t*)cur + size;

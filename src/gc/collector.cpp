@@ -18,13 +18,13 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "core/common.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
 #include "gc/heap.h"
-#include "gc/root_finder.h"
 #include "runtime/types.h"
 
 #ifndef NVALGRIND
@@ -138,6 +138,12 @@ void GCVisitor::visit(void* p) {
 }
 
 void GCVisitor::visitRange(void* const* start, void* const* end) {
+    ASSERT((char*)end - (char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((char*)end - (char*)start) * 1.0 / (1 << 30));
+
+    assert((uintptr_t)start % sizeof(void*) == 0);
+    assert((uintptr_t)end % sizeof(void*) == 0);
+
     while (start < end) {
         visit(*start);
         start++;
@@ -152,6 +158,12 @@ void GCVisitor::visitPotential(void* p) {
 }
 
 void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
+    ASSERT((char*)end - (char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((char*)end - (char*)start) * 1.0 / (1 << 30));
+
+    assert((uintptr_t)start % sizeof(void*) == 0);
+    assert((uintptr_t)end % sizeof(void*) == 0);
+
     while (start < end) {
         visitPotential(*start);
         start++;
@@ -166,9 +178,10 @@ static void markPhase() {
 #endif
 
     TraceStack stack(roots);
-    collectStackRoots(&stack);
-
     GCVisitor visitor(&stack);
+
+    threading::visitAllStacks(&visitor);
+    gatherInterpreterRoots(&visitor);
 
     for (void* p : nonheap_roots) {
         Box* b = reinterpret_cast<Box*>(p);

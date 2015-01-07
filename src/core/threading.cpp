@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <err.h>
+#include <setjmp.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -28,6 +29,7 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
+#include "gc/collector.h"
 
 namespace pyston {
 namespace threading {
@@ -50,21 +52,37 @@ private:
     bool saved;
     ucontext_t ucontext;
 
-    ucontext_t* context_from_generator;
-    int generator_depth;
-
 public:
-    void* stack_bottom;
+    void* stack_start;
+
+    struct StackInfo {
+        BoxedGenerator* next_generator;
+        void* stack_start;
+        void* stack_limit;
+
+        StackInfo(BoxedGenerator* next_generator, void* stack_start, void* stack_limit)
+            : next_generator(next_generator), stack_start(stack_start), stack_limit(stack_limit) {
+#if STACK_GROWS_DOWN
+            assert(stack_start > stack_limit);
+            assert((char*)stack_start - (char*)stack_limit < (1L << 30));
+#else
+            assert(stack_start < stack_limit);
+            assert((char*)stack_limit - (char*)stack_start < (1L << 30));
+#endif
+        }
+    };
+
+    std::vector<StackInfo> previous_stacks;
     pthread_t pthread_id;
 
-    ThreadStateInternal(void* stack_bottom, pthread_t pthread_id)
-        : saved(false), generator_depth(0), stack_bottom(stack_bottom), pthread_id(pthread_id) {}
+    ThreadState* public_thread_state;
+
+    ThreadStateInternal(void* stack_start, pthread_t pthread_id, ThreadState* public_thread_state)
+        : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {}
 
     void saveCurrent() {
         assert(!saved);
-        if (generator_depth == 0) {
-            getcontext(&ucontext);
-        }
+        getcontext(&ucontext);
         saved = true;
     }
 
@@ -73,73 +91,119 @@ public:
         saved = false;
     }
 
-    bool isValid() { return saved || generator_depth; }
+    bool isValid() { return saved; }
 
-    ucontext_t* getContext() {
-        if (generator_depth)
-            return context_from_generator;
-        return &ucontext;
-    }
+    ucontext_t* getContext() { return &ucontext; }
 
-    void pushGenerator(ucontext_t* prev_context) {
-        if (generator_depth == 0)
-            context_from_generator = prev_context;
-        generator_depth++;
+    void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+        previous_stacks.emplace_back(g, this->stack_start, old_stack_limit);
+        this->stack_start = new_stack_start;
     }
 
     void popGenerator() {
-        generator_depth--;
-        assert(generator_depth >= 0);
+        assert(previous_stacks.size());
+        StackInfo& stack = previous_stacks.back();
+        stack_start = stack.stack_start;
+        previous_stacks.pop_back();
     }
 
-    void assertNoGenerators() { assert(generator_depth == 0); }
+    void assertNoGenerators() { assert(previous_stacks.size() == 0); }
 
-    friend void* getStackTop();
+    void accept(gc::GCVisitor* v) {
+        auto pub_state = public_thread_state;
+        if (pub_state->exc_type)
+            v->visit(pub_state->exc_type);
+        if (pub_state->exc_value)
+            v->visit(pub_state->exc_value);
+        if (pub_state->exc_traceback)
+            v->visit(pub_state->exc_traceback);
+
+        for (auto& stack_info : previous_stacks) {
+            v->visit(stack_info.next_generator);
+#if STACK_GROWS_DOWN
+            v->visitPotentialRange((void**)stack_info.stack_limit, (void**)stack_info.stack_start);
+#else
+            v->visitPotentialRange((void**)stack_info.stack_start, (void**)stack_info.stack_limit);
+#endif
+        }
+    }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 
 // TODO could optimize these by keeping a __thread local reference to current_threads[pthread_self()]
-void* getStackBottom() {
-    return current_threads[pthread_self()]->stack_bottom;
+void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+    assert(new_stack_start);
+    assert(old_stack_limit);
+    current_threads[pthread_self()]->pushGenerator(g, new_stack_start, old_stack_limit);
 }
 
-void* getStackTop() {
-    ThreadStateInternal* state = current_threads[pthread_self()];
-    int depth = state->generator_depth;
-    if (depth == 0) {
-        return __builtin_frame_address(0);
-    }
-    return (void*)state->context_from_generator->uc_mcontext.gregs[REG_RSP];
-}
-
-void pushGenerator(ucontext_t* prev_context) {
-    current_threads[pthread_self()]->pushGenerator(prev_context);
-}
 void popGenerator() {
     current_threads[pthread_self()]->popGenerator();
 }
 
+// These are guarded by threading_lock
 static int signals_waiting(0);
-static std::vector<ThreadGCState> thread_states;
+static gc::GCVisitor* cur_visitor = NULL;
 
-static void pushThreadState(pthread_t tid, ucontext_t* context) {
+// This function should only be called with the threading_lock held:
+static void pushThreadState(ThreadStateInternal* thread_state, ucontext_t* context) {
+    assert(cur_visitor);
+    cur_visitor->visitPotentialRange((void**)context, (void**)(context + 1));
+
 #if STACK_GROWS_DOWN
-    void* stack_start = (void*)context->uc_mcontext.gregs[REG_RSP];
-    void* stack_end = current_threads[tid]->stack_bottom;
+    void* stack_low = (void*)context->uc_mcontext.gregs[REG_RSP];
+    void* stack_high = thread_state->stack_start;
 #else
-    void* stack_start = current_threads[tid]->stack_bottom;
-    void* stack_end = (void*)(context->uc_mcontext.gregs[REG_RSP] + sizeof(void*));
+    void* stack_low = thread_state->stack_start;
+    void* stack_high = (void*)context->uc_mcontext.gregs[REG_RSP];
 #endif
-    assert(stack_start < stack_end);
-    thread_states.push_back(ThreadGCState(tid, context, stack_start, stack_end, &cur_thread_state));
+
+    assert(stack_low < stack_high);
+    cur_visitor->visitPotentialRange((void**)stack_low, (void**)stack_high);
+
+    thread_state->accept(cur_visitor);
 }
 
-std::vector<ThreadGCState> getAllThreadStates() {
+// This better not get inlined:
+void* getCurrentStackLimit() __attribute__((noinline));
+void* getCurrentStackLimit() {
+    return __builtin_frame_address(0);
+}
+
+static void visitLocalStack(gc::GCVisitor* v) {
+    // force callee-save registers onto the stack:
+    jmp_buf registers __attribute__((aligned(sizeof(void*))));
+    setjmp(registers);
+    assert(sizeof(registers) % 8 == 0);
+    v->visitPotentialRange((void**)&registers, (void**)((&registers) + 1));
+
+    ThreadStateInternal* thread_state = current_threads[pthread_self()];
+
+#if STACK_GROWS_DOWN
+    void* stack_low = getCurrentStackLimit();
+    void* stack_high = thread_state->stack_start;
+#else
+    void* stack_low = thread_state->stack_start;
+    void* stack_high = getCurrentStackLimit();
+#endif
+
+    assert(stack_low < stack_high);
+    v->visitPotentialRange((void**)stack_low, (void**)stack_high);
+
+    thread_state->accept(v);
+}
+
+void visitAllStacks(gc::GCVisitor* v) {
+    visitLocalStack(v);
+
     // TODO need to prevent new threads from starting,
     // though I suppose that will have been taken care of
     // by the caller of this function.
 
     LOCK_REGION(&threading_lock);
+
+    assert(cur_visitor == NULL);
+    cur_visitor = v;
 
     while (true) {
         // TODO shouldn't busy-wait:
@@ -153,7 +217,6 @@ std::vector<ThreadGCState> getAllThreadStates() {
     }
 
     signals_waiting = (current_threads.size() - 1);
-    thread_states.clear();
 
     // Current strategy:
     // Let the other threads decide whether they want to cooperate and save their state before we get here.
@@ -163,18 +226,13 @@ std::vector<ThreadGCState> getAllThreadStates() {
     pthread_t mytid = pthread_self();
     for (auto& pair : current_threads) {
         pthread_t tid = pair.first;
-        ThreadStateInternal* state = pair.second;
 
         if (tid == mytid)
             continue;
 
-        // TODO I'm pretty skeptical about this... are we really guaranteed that this is still valid?
-        // (in the non-generator case where the thread saved its own state)
-        // ex what if an object pointer got pushed onto the stack, below where we thought the stack
-        // ended.  We might be able to handle that case by examining the entire stack region, but are
-        // there other issues as well?
+        ThreadStateInternal* state = pair.second;
         if (state->isValid()) {
-            pushThreadState(tid, state->getContext());
+            pushThreadState(state, state->getContext());
             signals_waiting--;
             continue;
         }
@@ -192,7 +250,7 @@ std::vector<ThreadGCState> getAllThreadStates() {
 
     assert(num_starting_threads == 0);
 
-    return std::move(thread_states);
+    cur_visitor = NULL;
 }
 
 static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
@@ -207,7 +265,7 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
         printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
 
-    pushThreadState(tid, context);
+    pushThreadState(current_threads[tid], context);
     signals_waiting--;
 }
 
@@ -246,7 +304,7 @@ static void* _thread_start(void* _arg) {
 #else
         void* stack_bottom = stack_start;
 #endif
-        current_threads[current_thread] = new ThreadStateInternal(stack_bottom, current_thread);
+        current_threads[current_thread] = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
 
         num_starting_threads--;
 
@@ -343,7 +401,7 @@ static void* find_stack() {
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
 
-    current_threads[pthread_self()] = new ThreadStateInternal(find_stack(), pthread_self());
+    current_threads[pthread_self()] = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));

@@ -439,6 +439,15 @@ static const LineInfo* lineInfoForFrame(PythonFrameIterator& frame_it) {
 std::vector<const LineInfo*> getTracebackEntries() {
     std::vector<const LineInfo*> entries;
 
+    if (!ENABLE_FRAME_INTROSPECTION) {
+        static bool printed_warning = false;
+        if (!printed_warning) {
+            printed_warning = true;
+            fprintf(stderr, "Warning: can't get traceback since ENABLE_FRAME_INTROSPECTION=0\n");
+        }
+        return entries;
+    }
+
     for (auto& frame_info : unwindPythonFrames()) {
         const LineInfo* line_info = lineInfoForFrame(frame_info);
         if (line_info)

@@ -516,8 +516,6 @@ public:
 
 class BoxedGenerator : public Box {
 public:
-    enum { STACK_SIZE = SIGSTKSZ * 5 };
-
     HCAttrs attrs;
     BoxedFunction* function;
     Box* arg1, *arg2, *arg3;
@@ -529,7 +527,7 @@ public:
     Box* exception;
 
     ucontext_t context, returnContext;
-    char stack[STACK_SIZE];
+    void* stack_begin;
 
     BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 };
