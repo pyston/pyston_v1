@@ -21,7 +21,6 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/Object/ObjectFile.h"
 
 #include "codegen/codegen.h"
@@ -43,7 +42,7 @@ StackMap* parseStackMap() {
 class StackmapJITEventListener : public llvm::JITEventListener {
 private:
 public:
-    virtual void NotifyObjectEmitted(const llvm::ObjectImage&);
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile&, const llvm::RuntimeDyld::LoadedObjectInfo& L);
 };
 
 // LLVM will silently not register the eh frames with libgcc if these functions don't exist;
@@ -57,23 +56,21 @@ extern void _force_link() {
     __deregister_frame(nullptr);
 }
 
-void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                                   const llvm::RuntimeDyld::LoadedObjectInfo& L) {
     // llvm::outs() << "An object has been emitted:\n";
 
     llvm_error_code code;
 
-    for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
+    for (const auto& sec : Obj.sections()) {
         llvm::StringRef name;
-        code = I->getName(name);
+        code = sec.getName(name);
         assert(!code);
 
-        if (name == "__LLVM_StackMaps") {
-            uint64_t stackmap_address = 0;
-            code = I->getAddress(stackmap_address);
-            assert(!code);
-            // code = I->getSize(stackmap_size);
-            // assert(stackmap_size > 0);
-            // assert(!code);
+        if (name == ".llvm_stackmaps") {
+            uint64_t stackmap_address = L.getSectionLoadAddress(name);
+            assert(stackmap_address > 0);
+
             if (VERBOSITY() >= 2)
                 printf("Found the stackmaps at stackmap_address 0x%lx\n", stackmap_address);
 
@@ -175,28 +172,9 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj)
                     ptr.u32++; // pad to 8-byte boundary
             }
 
-#ifndef NDEBUG
-            uint64_t stackmap_size;
-            llvm::object::section_iterator section(Obj.end_sections());
-            code = I->getSection(section);
-            assert(!code);
-#if LLVMREV < 219314
-            code = section->getSize(stackmap_size);
-            assert(!code);
-#else
-            stackmap_size = section->getSize();
-#endif
-            assert(stackmap_size > 0);
-
+            uint64_t stackmap_size = sec.getSize();
             ASSERT(ptr.i8 - start_ptr == stackmap_size, "%ld %ld", ptr.i8 - start_ptr, stackmap_size);
-#endif
         }
-
-#if LLVMREV < 200442
-        I = I.increment(code);
-#else
-        ++I;
-#endif
     }
 }
 

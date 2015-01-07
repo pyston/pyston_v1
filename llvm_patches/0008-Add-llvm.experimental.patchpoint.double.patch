@@ -35,7 +35,7 @@ diff --git a/include/llvm/IR/Intrinsics.td b/include/llvm/IR/Intrinsics.td
 index 1b9339a..45eecca 100644
 --- a/include/llvm/IR/Intrinsics.td
 +++ b/include/llvm/IR/Intrinsics.td
-@@ -490,6 +490,11 @@ def int_experimental_patchpoint_i64 : Intrinsic<[llvm_i64_ty],
+@@ -490,4 +490,9 @@ def int_experimental_patchpoint_i64 : Intrinsic<[llvm_i64_ty],
                                                   llvm_ptr_ty, llvm_i32_ty,
                                                   llvm_vararg_ty],
                                                   [Throws]>;
@@ -45,8 +45,6 @@ index 1b9339a..45eecca 100644
 +                                                 llvm_vararg_ty],
 +                                                 [Throws]>;
  
- //===-------------------------- Other Intrinsics --------------------------===//
- //
 diff --git a/lib/CodeGen/SelectionDAG/FastISel.cpp b/lib/CodeGen/SelectionDAG/FastISel.cpp
 index 72390a9..b624a63 100644
 --- a/lib/CodeGen/SelectionDAG/FastISel.cpp

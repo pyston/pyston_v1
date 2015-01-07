@@ -320,9 +320,10 @@ private:
     void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, CompilerVariable* node_value) {
         assert(check_val->getType() == g.i1);
 
-        llvm::Value* md_vals[]
-            = { llvm::MDString::get(g.context, "branch_weights"), getConstantInt(1000), getConstantInt(1) };
-        llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Value*>(md_vals));
+        llvm::Metadata* md_vals[]
+            = { llvm::MDString::get(g.context, "branch_weights"), llvm::ConstantAsMetadata::get(getConstantInt(1000)),
+                llvm::ConstantAsMetadata::get(getConstantInt(1)) };
+        llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Metadata*>(md_vals));
 
         // For some reason there doesn't seem to be the ability to place the new BB
         // right after the current bb (can only place it *before* something else),
@@ -717,7 +718,7 @@ private:
     void _addAnnotation(const char* message) {
         llvm::Instruction* inst = emitter.getBuilder()->CreateCall(
             llvm::Intrinsic::getDeclaration(g.cur_module, llvm::Intrinsic::donothing));
-        llvm::Value* md_vals[] = { getConstantInt(0) };
+        llvm::Metadata* md_vals[] = { llvm::ConstantAsMetadata::get(getConstantInt(0)) };
         llvm::MDNode* mdnode = llvm::MDNode::get(g.context, md_vals);
         inst->setMetadata(message, mdnode);
     }
@@ -1855,9 +1856,10 @@ private:
             OSR_THRESHOLD = 100;
         llvm::Value* osr_test = emitter.getBuilder()->CreateICmpSGT(newcount, getConstantInt(OSR_THRESHOLD));
 
-        llvm::Value* md_vals[]
-            = { llvm::MDString::get(g.context, "branch_weights"), getConstantInt(1), getConstantInt(1000) };
-        llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Value*>(md_vals));
+        llvm::Metadata* md_vals[]
+            = { llvm::MDString::get(g.context, "branch_weights"), llvm::ConstantAsMetadata::get(getConstantInt(1)),
+                llvm::ConstantAsMetadata::get(getConstantInt(1000)) };
+        llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Metadata*>(md_vals));
         emitter.getBuilder()->CreateCondBr(osr_test, onramp, normal_target, branch_weights);
 
         // Emitting the actual OSR:

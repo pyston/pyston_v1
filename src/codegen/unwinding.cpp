@@ -20,8 +20,8 @@
 
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/IR/DebugInfo.h"
+#include "llvm/Object/ObjectFile.h"
 
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
@@ -97,32 +97,33 @@ CompiledFunction* getCFForAddress(uint64_t addr) {
 
 class TracebacksEventListener : public llvm::JITEventListener {
 public:
-    void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
-        std::unique_ptr<llvm::DIContext> Context(llvm::DIContext::getDWARFContext(*Obj.getObjectFile()));
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                     const llvm::RuntimeDyld::LoadedObjectInfo& L) {
+        std::unique_ptr<llvm::DIContext> Context(llvm::DIContext::getDWARFContext(Obj));
 
         assert(g.cur_cf);
 
         llvm_error_code ec;
-        for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E && !ec; ++I) {
+        for (const auto& sym : Obj.symbols()) {
             llvm::object::SymbolRef::Type SymType;
-            if (I->getType(SymType))
+            if (sym.getType(SymType))
                 continue;
             if (SymType == llvm::object::SymbolRef::ST_Function) {
                 llvm::StringRef Name;
                 uint64_t Addr;
                 uint64_t Size;
-                if (I->getName(Name))
+                if (sym.getName(Name))
                     continue;
-                if (I->getAddress(Addr))
-                    continue;
-                if (I->getSize(Size))
+                Addr = L.getSymbolLoadAddress(Name);
+                assert(Addr);
+                if (sym.getSize(Size))
                     continue;
 
 // TODO this should be the Python name, not the C name:
 #if LLVMREV < 208921
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
                     Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo
-                                | llvm::DILineInfoSpecifier::AbsoluteFilePath);
+                                    | llvm::DILineInfoSpecifier::AbsoluteFilePath);
 #else
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
                     Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
@@ -148,38 +149,24 @@ public:
         uint64_t text_addr = -1, text_size = -1;
         uint64_t eh_frame_addr = -1, eh_frame_size = -1;
 
-        for (llvm::object::section_iterator I = Obj.begin_sections(), E = Obj.end_sections(); I != E; ++I) {
+        for (const auto& sec : Obj.sections()) {
             llvm::StringRef name;
-            code = I->getName(name);
+            code = sec.getName(name);
             assert(!code);
 
             uint64_t addr, size;
             if (name == ".eh_frame") {
                 assert(!found_eh_frame);
-#if LLVMREV < 219314
-                if (I->getAddress(eh_frame_addr))
-                    continue;
-                if (I->getSize(eh_frame_size))
-                    continue;
-#else
-                eh_frame_addr = I->getAddress();
-                eh_frame_size = I->getSize();
-#endif
+                eh_frame_addr = L.getSectionLoadAddress(name);
+                eh_frame_size = sec.getSize();
 
                 if (VERBOSITY())
                     printf("eh_frame: %lx %lx\n", eh_frame_addr, eh_frame_size);
                 found_eh_frame = true;
             } else if (name == ".text") {
                 assert(!found_text);
-#if LLVMREV < 219314
-                if (I->getAddress(text_addr))
-                    continue;
-                if (I->getSize(text_size))
-                    continue;
-#else
-                text_addr = I->getAddress();
-                text_size = I->getSize();
-#endif
+                text_addr = L.getSectionLoadAddress(name);
+                text_size = sec.getSize();
 
                 if (VERBOSITY())
                     printf("text: %lx %lx\n", text_addr, text_size);

@@ -20,9 +20,10 @@
 #include <unistd.h>
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/FileSystem.h"
 
 #include "analysis/scoping_analysis.h"
 #include "core/ast.h"
@@ -154,20 +155,15 @@ std::string FunctionAddressRegistry::getFuncNameAtAddress(void* addr, bool deman
 
 class RegistryEventListener : public llvm::JITEventListener {
 public:
-    void NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                     const llvm::RuntimeDyld::LoadedObjectInfo& L) {
         static StatCounter code_bytes("code_bytes");
         code_bytes.log(Obj.getData().size());
 
         llvm_error_code code;
-        for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;
-#if LLVMREV < 200442
-             I = I.increment(code)
-#else
-             ++I
-#endif
-                 ) {
-            llvm::object::section_iterator section(Obj.end_sections());
-            code = I->getSection(section);
+        for (const auto& sym : Obj.symbols()) {
+            llvm::object::section_iterator section(Obj.section_end());
+            code = sym.getSection(section);
             assert(!code);
             bool is_text;
 #if LLVMREV < 219314
@@ -180,18 +176,20 @@ public:
                 continue;
 
             llvm::StringRef name;
-            uint64_t addr, size;
-            code = I->getName(name);
+            code = sym.getName(name);
             assert(!code);
-            code = I->getAddress(addr);
-            assert(!code);
-            code = I->getSize(size);
+            uint64_t size;
+            code = sym.getSize(size);
             assert(!code);
 
             if (name == ".text")
                 continue;
 
-            g.func_addr_registry.registerFunction(name.data(), (void*)addr, size, NULL);
+
+            uint64_t sym_addr = L.getSymbolLoadAddress(name);
+            assert(sym_addr);
+
+            g.func_addr_registry.registerFunction(name.data(), (void*)sym_addr, size, NULL);
         }
     }
 };

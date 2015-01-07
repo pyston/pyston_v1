@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/ExecutionEngine/ObjectImage.h"
+#include "llvm/Object/ObjectFile.h"
 
 #include "codegen/profiling/profiling.h"
 #include "core/common.h"
@@ -29,23 +29,23 @@ public:
     PprofJITEventListener() { of = fopen("pprof.jit", "w"); }
     virtual ~PprofJITEventListener() { fclose(of); }
 
-    virtual void NotifyObjectEmitted(const llvm::ObjectImage& Obj);
+    virtual void NotifyObjectEmitted(const llvm::object::ObjectFile& Obj, const llvm::RuntimeDyld::LoadedObjectInfo& L);
 };
 
-void PprofJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
-    llvm::error_code code;
-    for (llvm::object::symbol_iterator I = Obj.begin_symbols(), E = Obj.end_symbols(); I != E;) {
+void PprofJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFile& Obj,
+                                                const llvm::RuntimeDyld::LoadedObjectInfo& L) {
+    llvm_error_code code;
+    for (const auto& sym : Obj.symbols()) {
         llvm::object::SymbolRef::Type type;
-        code = I->getType(type);
+        code = sym.getType(type);
         assert(!code);
         if (type == llvm::object::SymbolRef::ST_Function) {
             llvm::StringRef name;
             uint64_t addr, size;
-            code = I->getName(name);
+            code = sym.getName(name);
             assert(!code);
-            code = I->getAddress(addr);
-            assert(!code);
-            code = I->getSize(size);
+            addr = L.getSymbolLoadAddress(name);
+            code = sym.getSize(size);
             assert(!code);
 
             // fprintf(of, "%lx-%lx: %s\n", addr, addr + size, name.data());
@@ -55,7 +55,6 @@ void PprofJITEventListener::NotifyObjectEmitted(const llvm::ObjectImage& Obj) {
             if (VERBOSITY() >= 1)
                 printf("%lx %lx %s\n", addr, addr + size, name.data());
         }
-        ++I;
     }
 }
 

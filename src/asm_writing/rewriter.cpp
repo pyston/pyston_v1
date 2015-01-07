@@ -901,10 +901,9 @@ void Rewriter::finishAssembly(int continue_offset) {
 
 void Rewriter::commitReturning(RewriterVar* var) {
     addAction([=]() {
-                  var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
-                  var->bumpUse();
-              },
-              { var }, ActionType::NORMAL);
+        var->getInReg(getReturnDestination(), true /* allow_constant_in_reg */);
+        var->bumpUse();
+    }, { var }, ActionType::NORMAL);
 
     commit();
 }
@@ -1214,7 +1213,7 @@ void Rewriter::addLocationToVar(RewriterVar* var, Location l) {
     assert(vars_by_location.count(l) == 0);
 
     ASSERT(l.type == Location::Register || l.type == Location::XMMRegister || l.type == Location::Scratch
-           || l.type == Location::Stack,
+               || l.type == Location::Stack,
            "%d", l.type);
 
     var->locations.insert(l);

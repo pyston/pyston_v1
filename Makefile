@@ -366,9 +366,14 @@ endef
 .PHONY: format check_format
 format:
 	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
+ifneq ($(USE_CMAKE),1)
 check_format:
 	$(ECHO) checking formatting...
 	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
+else
+check_format:
+	$(NINJA) -C $(HOME)/pyston-build-release check-format
+endif
 
 .PHONY: analyze
 analyze:
@@ -741,12 +746,12 @@ endef
 $(call link,_grwl,stdlib.grwl.bc.o $(SRCS:.cpp=.grwl.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 $(call link,_grwl_dbg,stdlib.grwl_dbg.bc.o $(SRCS:.cpp=.grwl_dbg.o),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_nosync,stdlib.nosync.bc.o $(SRCS:.cpp=.nosync.o),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
-pyston_oprof: $(OPT_OBJS) codegen/profiling/oprofile.o $(LLVM_DEPS)
+pyston_oprof: $(OPT_OBJS) src/codegen/profiling/oprofile.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/oprofile.o $(LDFLAGS_RELEASE) -lopagent -o $@
-pyston_pprof: $(OPT_OBJS) codegen/profiling/pprof.release.o $(LLVM_DEPS)
+	$(VERB) $(CXX) $(OPT_OBJS) src/codegen/profiling/oprofile.o $(LDFLAGS_RELEASE) -lopagent -o $@
+pyston_pprof: $(OPT_OBJS) src/codegen/profiling/pprof.release.o $(LLVM_DEPS)
 	$(ECHO) Linking $@
-	$(VERB) $(CXX) $(OPT_OBJS) codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
+	$(VERB) $(CXX) $(OPT_OBJS) src/codegen/profiling/pprof.release.o $(LDFLAGS_RELEASE) -lprofiler -o $@
 pyston_prof: $(PROFILE_OBJS) $(LLVM_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS) -pg -o $@

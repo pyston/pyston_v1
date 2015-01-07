@@ -65,7 +65,7 @@ extern "C" PyObject* PyErr_SetFromErrnoWithFilenameObject(PyObject* exc, PyObjec
             s = _sys_errlist[i];
         } else {
             int len = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
-                                    | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                        | FORMAT_MESSAGE_IGNORE_INSERTS,
                                     NULL, /* no message source */
                                     i, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                                     /* Default language */
