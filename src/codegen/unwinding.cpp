@@ -123,7 +123,7 @@ public:
 #if LLVMREV < 208921
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
                     Addr, Size, llvm::DILineInfoSpecifier::FunctionName | llvm::DILineInfoSpecifier::FileLineInfo
-                                | llvm::DILineInfoSpecifier::AbsoluteFilePath);
+                                    | llvm::DILineInfoSpecifier::AbsoluteFilePath);
 #else
                 llvm::DILineInfoTable lines = Context->getLineInfoForAddressRange(
                     Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
