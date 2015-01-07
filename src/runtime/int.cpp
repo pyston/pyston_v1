@@ -105,6 +105,30 @@ bool __builtin_smull_overflow(i64 lhs, i64 rhs, i64* result) {
 
 #endif
 
+long arbitraryToDecimal(std::string number, int base) {
+    if (base != 0 && (base < 2 || base > 36)) {
+        raiseExcHelper(ValueError, "int() base must be >= 2 and <= 36");
+        return 0;
+    }
+
+    if (number.empty())
+        return 0;
+
+    // Make sure the arbitrary numeral system number is in upper case
+    std::transform(number.begin(), number.end(), number.begin(), ::toupper);
+
+    if ((number.compare(0, 2, "0B") == 0 && base == 2) || (number.compare(0, 2, "0O") == 0 && base == 8)
+        || (number.compare(0, 2, "0X") == 0 && base == 16)) {
+        number.erase(0, 2);
+    } else if (((number.compare(0, 3, "-0B") == 0 || number.compare(0, 3, "+0B") == 0) && base == 2)
+               || ((number.compare(0, 3, "-0O") == 0 || number.compare(0, 3, "+0O") == 0) && base == 8)
+               || ((number.compare(0, 3, "-0X") == 0 || number.compare(0, 3, "+0X") == 0) && base == 16)) {
+        number.erase(1, 2);
+    }
+
+    return std::stol(number, 0, base);
+}
+
 // Could add this to the others, but the inliner should be smart enough
 // that this isn't needed:
 extern "C" Box* add_i64_i64(i64 lhs, i64 rhs) {
@@ -733,7 +757,7 @@ extern "C" Box* intHash(BoxedInt* self) {
     return boxInt(self->n);
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val) {
+extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
 
@@ -751,11 +775,22 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
         rtn->n = static_cast<BoxedInt*>(val)->n;
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
+        std::string str(s->s);
+        str.erase(remove_if(str.begin(), str.end(), ::isspace), str.end());
 
-        std::istringstream ss(s->s);
-        int64_t n;
-        ss >> n;
-        rtn->n = n;
+        if (base->cls == float_cls) {
+            raiseExcHelper(TypeError, "integer argument expected, got float");
+        } else if (base->cls == int_cls) {
+            rtn->n = arbitraryToDecimal(str, static_cast<BoxedInt*>(base)->n);
+        } else if (base->cls != none_cls) {
+            raiseExcHelper(TypeError, "an integer is required");
+        } else {
+
+            std::istringstream ss(str);
+            int64_t n;
+            ss >> n;
+            rtn->n = n;
+        }
     } else if (val->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(val)->d;
 
@@ -765,6 +800,7 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
                 getTypeName(val)->c_str());
         raiseExcHelper(TypeError, "");
     }
+
     return rtn;
 }
 
@@ -844,8 +880,8 @@ void setupInt() {
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2)));
 
-    int_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) }));
+    int_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 3, 2, false, false), { boxInt(0), None }));
 
     int_cls->giveAttr("__init__",
                       new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
