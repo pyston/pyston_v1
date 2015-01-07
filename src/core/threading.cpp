@@ -132,6 +132,8 @@ static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
 
 // TODO could optimize these by keeping a __thread local reference to current_threads[pthread_self()]
 void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
+    assert(new_stack_start);
+    assert(old_stack_limit);
     current_threads[pthread_self()]->pushGenerator(g, new_stack_start, old_stack_limit);
 }
 
