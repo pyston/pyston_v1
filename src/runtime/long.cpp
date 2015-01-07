@@ -32,6 +32,32 @@ namespace pyston {
 
 BoxedClass* long_cls;
 
+#define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
+#define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
+
+extern "C" int _PyLong_Sign(PyObject* l) {
+    return mpz_sgn(static_cast<BoxedLong*>(l)->n);
+}
+
+extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLong(PyObject* vv) {
+    unsigned PY_LONG_LONG bytes;
+    int one = 1;
+    int res;
+
+    if (vv == NULL || !PyLong_Check(vv)) {
+        PyErr_BadInternalCall();
+        return (unsigned PY_LONG_LONG) - 1;
+    }
+
+    res = _PyLong_AsByteArray((PyLongObject*)vv, (unsigned char*)&bytes, SIZEOF_LONG_LONG, IS_LITTLE_ENDIAN, 0);
+
+    /* Plan 9 can't handle PY_LONG_LONG in ? : expressions */
+    if (res < 0)
+        return (unsigned PY_LONG_LONG)res;
+    else
+        return bytes;
+}
+
 extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) {
     Py_FatalError("unimplemented");
 }
@@ -133,9 +159,6 @@ extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
     return rtn;
 }
 
-#define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
-#define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
-
 extern "C" PyObject* PyLong_FromSsize_t(Py_ssize_t ival) {
     Py_ssize_t bytes = ival;
     int one = 1;
@@ -151,6 +174,73 @@ extern "C" PyObject* PyLong_FromSize_t(size_t ival) {
 #undef IS_LITTLE_ENDIAN
 
 extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) {
+    Py_FatalError("unimplemented");
+}
+
+/* Create a new long (or int) object from a C pointer */
+
+extern "C" PyObject* PyLong_FromVoidPtr(void* p) {
+#if SIZEOF_VOID_P <= SIZEOF_LONG
+    if ((long)p < 0)
+        return PyLong_FromUnsignedLong((unsigned long)p);
+    return PyInt_FromLong((long)p);
+#else
+
+#ifndef HAVE_LONG_LONG
+#error "PyLong_FromVoidPtr: sizeof(void*) > sizeof(long), but no long long"
+#endif
+#if SIZEOF_LONG_LONG < SIZEOF_VOID_P
+#error "PyLong_FromVoidPtr: sizeof(PY_LONG_LONG) < sizeof(void*)"
+#endif
+    /* optimize null pointers */
+    if (p == NULL)
+        return PyInt_FromLong(0);
+    return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG)p);
+
+#endif /* SIZEOF_VOID_P <= SIZEOF_LONG */
+}
+
+/* Get a C pointer from a long object (or an int object in some cases) */
+
+extern "C" void* PyLong_AsVoidPtr(PyObject* vv) {
+/* This function will allow int or long objects. If vv is neither,
+   then the PyLong_AsLong*() functions will raise the exception:
+   PyExc_SystemError, "bad argument to internal function"
+*/
+#if SIZEOF_VOID_P <= SIZEOF_LONG
+    long x;
+
+    if (PyInt_Check(vv))
+        x = PyInt_AS_LONG(vv);
+    else if (PyLong_Check(vv) && _PyLong_Sign(vv) < 0)
+        x = PyLong_AsLong(vv);
+    else
+        x = PyLong_AsUnsignedLong(vv);
+#else
+
+#ifndef HAVE_LONG_LONG
+#error "PyLong_AsVoidPtr: sizeof(void*) > sizeof(long), but no long long"
+#endif
+#if SIZEOF_LONG_LONG < SIZEOF_VOID_P
+#error "PyLong_AsVoidPtr: sizeof(PY_LONG_LONG) < sizeof(void*)"
+#endif
+    PY_LONG_LONG x;
+
+    if (PyInt_Check(vv))
+        x = PyInt_AS_LONG(vv);
+    else if (PyLong_Check(vv) && _PyLong_Sign(vv) < 0)
+        x = PyLong_AsLongLong(vv);
+    else
+        x = PyLong_AsUnsignedLongLong(vv);
+
+#endif /* SIZEOF_VOID_P <= SIZEOF_LONG */
+
+    if (x == -1 && PyErr_Occurred())
+        return NULL;
+    return (void*)x;
+}
+
+extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian, int is_signed) {
     Py_FatalError("unimplemented");
 }
 

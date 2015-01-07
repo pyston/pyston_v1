@@ -27,7 +27,7 @@ extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
 }
 
-static int check_num_args(PyObject* ob, int n) {
+static int check_num_args(PyObject* ob, int n) noexcept {
     if (!PyTuple_CheckExact(ob)) {
         PyErr_SetString(PyExc_SystemError, "PyArg_UnpackTuple() argument list is not a tuple");
         return 0;
@@ -38,7 +38,7 @@ static int check_num_args(PyObject* ob, int n) {
     return 0;
 }
 
-static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     hashfunc func = (hashfunc)wrapped;
     long res;
 
@@ -50,13 +50,13 @@ static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) {
     return PyInt_FromLong(res);
 }
 
-static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) {
+static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) noexcept {
     ternaryfunc func = (ternaryfunc)wrapped;
 
     return (*func)(self, args, kwds);
 }
 
-static PyObject* wrap_richcmpfunc(PyObject* self, PyObject* args, void* wrapped, int op) {
+static PyObject* wrap_richcmpfunc(PyObject* self, PyObject* args, void* wrapped, int op) noexcept {
     richcmpfunc func = (richcmpfunc)wrapped;
     PyObject* other;
 
@@ -79,7 +79,7 @@ RICHCMP_WRAPPER(ne, Py_NE)
 RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
-static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     unaryfunc func = (unaryfunc)wrapped;
 
     if (!check_num_args(args, 0))
@@ -87,7 +87,7 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) {
     return (*func)(self);
 }
 
-static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -115,7 +115,7 @@ static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
     return i;
 }
 
-static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     lenfunc func = (lenfunc)wrapped;
     Py_ssize_t res;
 
@@ -127,7 +127,7 @@ static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) {
     return PyInt_FromLong((long)res);
 }
 
-static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizeargfunc func = (ssizeargfunc)wrapped;
     PyObject* o;
     Py_ssize_t i;
@@ -157,7 +157,7 @@ static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noe
     return NULL;
 }
 
-static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizessizeargfunc func = (ssizessizeargfunc)wrapped;
     Py_ssize_t i, j;
 
@@ -166,7 +166,7 @@ static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wr
     return (*func)(self, i, j);
 }
 
-static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
@@ -184,7 +184,7 @@ static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) 
     return Py_None;
 }
 
-static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
@@ -203,7 +203,7 @@ static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) 
     return Py_None;
 }
 
-static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
     Py_ssize_t i, j;
     int res;
@@ -218,7 +218,7 @@ static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void*
     return Py_None;
 }
 
-static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
     Py_ssize_t i, j;
     int res;
@@ -233,7 +233,7 @@ static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) {
 }
 
 /* XXX objobjproc is a misnomer; should be objargpred */
-static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     objobjproc func = (objobjproc)wrapped;
     int res;
     PyObject* value;
@@ -248,7 +248,7 @@ static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) 
         return PyBool_FromLong(res);
 }
 
-static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     objobjargproc func = (objobjargproc)wrapped;
     int res;
     PyObject* key, *value;
@@ -262,7 +262,7 @@ static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrappe
     return Py_None;
 }
 
-static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
     objobjargproc func = (objobjargproc)wrapped;
     int res;
     PyObject* key;
@@ -272,6 +272,15 @@ static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) {
     key = PyTuple_GET_ITEM(args, 0);
     res = (*func)(self, key, NULL);
     if (res == -1 && PyErr_Occurred())
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject* wrap_init(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) noexcept {
+    initproc func = (initproc)wrapped;
+
+    if (func(self, args, kwds) < 0)
         return NULL;
     Py_INCREF(Py_None);
     return Py_None;
@@ -395,7 +404,7 @@ static const char* name_op[] = {
     "__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__",
 };
 
-static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) {
+static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) noexcept {
     PyObject* func, *args, *res;
     static PyObject* op_str[6];
 
@@ -416,7 +425,7 @@ static PyObject* half_richcompare(PyObject* self, PyObject* other, int op) {
     return res;
 }
 
-static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) {
+static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) noexcept {
     PyObject* res;
 
     if (Py_TYPE(self)->tp_richcompare == slot_tp_richcompare) {
@@ -449,6 +458,26 @@ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexce
     }
 }
 
+static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    static PyObject* init_str;
+    PyObject* meth = lookup_method(self, "__init__", &init_str);
+    PyObject* res;
+
+    if (meth == NULL)
+        return -1;
+    res = PyObject_Call(meth, args, kwds);
+    Py_DECREF(meth);
+    if (res == NULL)
+        return -1;
+    if (res != Py_None) {
+        PyErr_Format(PyExc_TypeError, "__init__() should return None, not '%.200s'", Py_TYPE(res)->tp_name);
+        Py_DECREF(res);
+        return -1;
+    }
+    Py_DECREF(res);
+    return 0;
+}
+
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     try {
         return getitem(self, boxInt(i));
@@ -457,7 +486,7 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     }
 }
 
-static Py_ssize_t slot_sq_length(PyObject* self) {
+static Py_ssize_t slot_sq_length(PyObject* self) noexcept {
     static PyObject* len_str;
     PyObject* res = call_method(self, "__len__", &len_str, "()");
     Py_ssize_t len;
@@ -474,7 +503,7 @@ static Py_ssize_t slot_sq_length(PyObject* self) {
     return len;
 }
 
-static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) {
+static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexcept {
     static PyObject* getslice_str;
 
     if (PyErr_WarnPy3k("in 3.x, __getslice__ has been removed; "
@@ -664,6 +693,10 @@ static slotdef slotdefs[] = {
     TPSLOT("__ne__", tp_richcompare, slot_tp_richcompare, richcmp_ne, "x.__ne__(y) <==> x!=y"),
     TPSLOT("__gt__", tp_richcompare, slot_tp_richcompare, richcmp_gt, "x.__gt__(y) <==> x>y"),
     TPSLOT("__ge__", tp_richcompare, slot_tp_richcompare, richcmp_ge, "x.__ge__(y) <==> x>=y"),
+
+    FLSLOT("__init__", tp_init, slot_tp_init, (wrapperfunc)wrap_init, "x.__init__(...) initializes x; "
+                                                                      "see help(type(x)) for signature",
+           PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
@@ -809,7 +842,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_as_number == NULL, "");
     RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
-    RELEASE_ASSERT(cls->tp_setattro == NULL, "");
+    RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
 
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
@@ -820,8 +853,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
-    RELEASE_ASSERT(cls->tp_init == NULL, "");
-    RELEASE_ASSERT(cls->tp_alloc == NULL, "");
+    RELEASE_ASSERT(cls->tp_alloc == NULL || cls->tp_alloc == PyType_GenericAlloc, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
     RELEASE_ASSERT(cls->tp_base == NULL, "");

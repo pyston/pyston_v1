@@ -127,6 +127,11 @@ extern "C" Py_ssize_t PyDict_Size(PyObject* op) {
     return static_cast<BoxedDict*>(op)->d.size();
 }
 
+extern "C" void PyDict_Clear(PyObject* op) {
+    RELEASE_ASSERT(PyDict_Check(op), "");
+    static_cast<BoxedDict*>(op)->d.clear();
+}
+
 Box* dictGetitem(BoxedDict* self, Box* k) {
     assert(self->cls == dict_cls);
 

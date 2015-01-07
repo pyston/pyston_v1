@@ -18,14 +18,24 @@ slots_tester_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!PyArg_ParseTuple(args, "i", &n))
         return NULL;
 
+    printf("slots_tester_seq.__new__, %d\n", n);
+
     /* create attrgetterobject structure */
     obj = PyObject_New(slots_tester_object, type);
     if (obj == NULL)
         return NULL;
 
-    obj->n = n;
+    obj->n = n - 1;
 
     return (PyObject *)obj;
+}
+
+static int
+slots_tester_init(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    printf("slots_tester_seq.__init__, %d\n", ((slots_tester_object*)self)->n);
+
+    return 0;
 }
 
 static long slots_tester_seq_hash(slots_tester_object* obj) {
@@ -121,7 +131,7 @@ static PyTypeObject slots_tester_seq = {
     0,                                  /* tp_descr_get */
     0,                                  /* tp_descr_set */
     0,                                  /* tp_dictoffset */
-    0,                                  /* tp_init */
+    slots_tester_init,                  /* tp_init */
     0,                                  /* tp_alloc */
     slots_tester_new,                   /* tp_new */
     0,                                  /* tp_free */
@@ -214,6 +224,18 @@ call_funcs(PyObject* _module, PyObject* args) {
         PyObject* rtn = cls->tp_new(cls, PyTuple_New(0), PyDict_New());
         printf("tp_new exists and returned an object of type: '%s'\n", Py_TYPE(rtn)->tp_name);
         Py_DECREF(rtn);
+    }
+
+    if (cls->tp_new) {
+        printf("tp_new exists\n");
+    } else {
+        printf("tp_new doesnt exist\n");
+    }
+
+    if (cls->tp_init) {
+        printf("tp_init exists\n");
+    } else {
+        printf("tp_init doesnt exist\n");
     }
 
     if (cls->tp_call) {
