@@ -366,9 +366,14 @@ endef
 .PHONY: format check_format
 format:
 	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
+ifneq ($(USE_CMAKE),1)
 check_format:
 	$(ECHO) checking formatting...
 	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
+else
+check_format:
+	$(NINJA) -C $(HOME)/pyston-build-release check-format
+endif
 
 .PHONY: analyze
 analyze:

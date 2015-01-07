@@ -140,16 +140,16 @@ bool updateTBAA(Function* f) {
 
         assert(tbaa->getNumOperands() == 3);
 
-        if (!isConstant(llvm::cast<MDNode>(tbaa->getOperand(0)), llvm::cast<ConstantInt>(tbaa->getOperand(2))->getSExtValue())) {
+        if (!isConstant(llvm::cast<MDNode>(tbaa->getOperand(0)), llvm::cast<ConstantInt>(llvm::cast<ConstantAsMetadata>(tbaa->getOperand(2))->getValue())->getSExtValue())) {
             continue;
         }
 
-        std::vector<Value*> operands;
+        std::vector<Metadata*> operands;
 
         for (int i = 0; i < tbaa->getNumOperands(); i++) {
             operands.push_back(tbaa->getOperand(i));
         }
-        operands.push_back(ConstantInt::get(Type::getInt64Ty(c), 1));
+        operands.push_back(ConstantAsMetadata::get(ConstantInt::get(Type::getInt64Ty(c), 1)));
 
         MDNode *new_tbaa = MDNode::get(c, operands);
         it->setMetadata(LLVMContext::MD_tbaa, new_tbaa);

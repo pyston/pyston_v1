@@ -627,9 +627,10 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 llvm::Value* reopt_test = emitter->getBuilder()->CreateICmpSGT(
                     new_call_count, getConstantInt(REOPT_THRESHOLDS[effort], g.i64));
 
-                llvm::Value* md_vals[]
-                    = { llvm::MDString::get(g.context, "branch_weights"), getConstantInt(1), getConstantInt(1000) };
-                llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Value*>(md_vals));
+                llvm::Metadata* md_vals[] = { llvm::MDString::get(g.context, "branch_weights"),
+                                              llvm::ConstantAsMetadata::get(getConstantInt(1)),
+                                              llvm::ConstantAsMetadata::get(getConstantInt(1000)) };
+                llvm::MDNode* branch_weights = llvm::MDNode::get(g.context, llvm::ArrayRef<llvm::Metadata*>(md_vals));
 
                 llvm::BranchInst* guard = emitter->getBuilder()->CreateCondBr(
                     reopt_test, reopt_bb, llvm_entry_blocks[source->cfg->getStartingBlock()], branch_weights);
@@ -1055,29 +1056,15 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 
     llvm::DIFile file = builder.createFile(fn, dir);
-#if LLVMREV < 214132
-    llvm::DIArray param_types = builder.getOrCreateArray(llvm::None);
-#else
     llvm::DITypeArray param_types = builder.getOrCreateTypeArray(llvm::None);
-#endif
     llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
     llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
                                                           false, true, lineno + 1, 0, true, f);
 
-    // The 'variables' field gets initialized with a tag-prefixed array, but
-    // a later verifier asserts that there is no tag.  Replace it with an empty array:
-    func_info.getVariables()->replaceAllUsesWith(builder.getOrCreateArray(llvm::ArrayRef<llvm::Value*>()));
-
     llvm::DICompileUnit compile_unit
         = builder.createCompileUnit(llvm::dwarf::DW_LANG_Python, fn, dir, producer, true, "", 0);
 
-    llvm::DIArray subprograms = builder.getOrCreateArray(&*func_info);
-    compile_unit.getSubprograms()->replaceAllUsesWith(subprograms);
-
-    compile_unit.getEnumTypes()->replaceAllUsesWith(builder.getOrCreateArray(llvm::ArrayRef<llvm::Value*>()));
-    compile_unit.getRetainedTypes()->replaceAllUsesWith(builder.getOrCreateArray(llvm::ArrayRef<llvm::Value*>()));
-    compile_unit.getGlobalVariables()->replaceAllUsesWith(builder.getOrCreateArray(llvm::ArrayRef<llvm::Value*>()));
-    compile_unit.getImportedEntities()->replaceAllUsesWith(builder.getOrCreateArray(llvm::ArrayRef<llvm::Value*>()));
+    builder.finalize();
     return func_info;
 }
 
