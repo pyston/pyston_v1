@@ -34,7 +34,8 @@ namespace pyston {
 static void generatorEntry(BoxedGenerator* g) {
     assert(g->cls == generator_cls);
     assert(g->function->cls == function_cls);
-    threading::pushGenerator(&g->returnContext);
+    threading::pushGenerator(g, g->stack + BoxedGenerator::STACK_SIZE,
+                             (void*)g->returnContext.uc_mcontext.gregs[REG_RSP]);
 
     try {
         // call body of the generator
@@ -114,7 +115,8 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
 
     threading::popGenerator();
     swapcontext(&self->context, &self->returnContext);
-    threading::pushGenerator(&self->returnContext);
+    threading::pushGenerator(obj, obj->stack + BoxedGenerator::STACK_SIZE,
+                             (void*)obj->returnContext.uc_mcontext.gregs[REG_RSP]);
 
     // if the generator receives a exception from the caller we have to throw it
     if (self->exception) {
@@ -174,10 +176,16 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     if (g->exception)
         v->visit(g->exception);
 
-    v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
-    v->visitPotentialRange((void**)&g->returnContext,
-                           ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
-    v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
+    if (g->running) {
+        v->visitPotentialRange((void**)&g->returnContext,
+                               ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
+    } else {
+        v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
+
+#if STACK_GROWS_DOWN
+        v->visitPotentialRange((void**)g->context.uc_mcontext.gregs[REG_RSP], (void**)g->stack + BoxedGenerator::STACK_SIZE);
+#endif
+    }
 }
 
 

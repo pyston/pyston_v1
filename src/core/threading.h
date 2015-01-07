@@ -25,6 +25,11 @@
 
 namespace pyston {
 class Box;
+class BoxedGenerator;
+
+namespace gc {
+class GCVisitor;
+}
 
 namespace threading {
 
@@ -39,40 +44,19 @@ extern __thread ThreadState cur_thread_state;
 // returns a thread id (currently, the pthread_t id)
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
 
+// Hooks to tell the threading machinery about the main thread:
 void registerMainThread();
 void finishMainThread();
 
-struct ThreadGCState {
-    pthread_t tid; // useful mostly for debugging
-    ucontext_t* ucontext;
+// Hook for the GC; will visit all the threads (including the current one), visiting their
+// stacks and thread-local ThreadState objects
+void visitAllStacks(gc::GCVisitor* v);
 
-    // start and end (start < end) of the threads main stack.
-    // The thread may not be actually executing on that stack, since it may be
-    // in a generator, but those generators will be tracked separately.
-    void* stack_start, *stack_end;
-
-    ThreadState* thread_state;
-
-    ThreadGCState(pthread_t tid, ucontext_t* ucontext, void* stack_start, void* stack_end, ThreadState* thread_state)
-        : tid(tid), ucontext(ucontext), stack_start(stack_start), stack_end(stack_end), thread_state(thread_state) {}
-};
-// Gets a ThreadGCState per thread, not including the thread calling this function.
-// For this call to make sense, the threads all should be blocked;
-// as a corollary, this thread is very much not thread safe.
-std::vector<ThreadGCState> getAllThreadStates();
-
-// Get the stack "bottom" (ie first pushed data.  For stacks that grow down, this
-// will be the highest address).
-void* getStackBottom();
-void* getStackTop();
-
-// We need to track the state of the thread's main stack.  This can get complicated when
-// generators are involved, so we add some hooks for the generator code to notify the threading
-// code that it has switched onto of off of a generator.
-// A generator should call pushGenerator() when it gets switched to, with a pointer to the context
-// that it will return to (ie the context of the thing that called the generator).
-// The generator should call popGenerator() when it is about to switch back to the caller.
-void pushGenerator(ucontext_t* prev_context);
+// Some hooks to keep track of the list of stacks that this thread has been using.
+// Every time we switch to a new generator, we need to pass a reference to the generator
+// itself (so we can access the registers it is saving), the location of the new stack, and
+// where we stopped executing on the old stack.
+void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit);
 void popGenerator();
 
 
