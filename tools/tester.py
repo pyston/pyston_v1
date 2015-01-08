@@ -80,7 +80,7 @@ def get_expected_output(fn):
         if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_extmodule_mtime():
             try:
                 return cPickle.load(open(cache_fn))
-            except EOFError:
+            except (EOFError, ValueError):
                 pass
 
     # TODO don't suppress warnings globally:

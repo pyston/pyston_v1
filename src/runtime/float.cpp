@@ -544,41 +544,25 @@ std::string floatFmt(double x, int precision, char code) {
     return std::string(buf, n);
 }
 
-Box* floatNew(BoxedClass* _cls, Box* a) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
-
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, float_cls))
-        raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
-
-    // Note: "a->cls == cls" is not a strong enough condition to let us
-    // reuse the argument:
-    if (cls == float_cls && a->cls == float_cls)
-        return a;
-
-    assert(cls->tp_basicsize >= sizeof(BoxedFloat));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedFloat* rtn = ::new (mem) BoxedFloat(cls, 0);
-    initUserAttrs(rtn, cls);
-
+BoxedFloat* _floatNew(Box* a) {
     if (a->cls == float_cls) {
-        rtn->d = static_cast<BoxedFloat*>(a)->d;
+        return static_cast<BoxedFloat*>(a);
+    } else if (isSubclass(a->cls, float_cls)) {
+        return new BoxedFloat(float_cls, static_cast<BoxedFloat*>(a)->d);
     } else if (isSubclass(a->cls, int_cls)) {
-        rtn->d = static_cast<BoxedInt*>(a)->n;
+        return new BoxedFloat(float_cls, static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(a)->s;
         if (s == "nan")
-            return boxFloat(NAN);
+            return new BoxedFloat(float_cls, NAN);
         if (s == "-nan")
-            return boxFloat(-NAN);
+            return new BoxedFloat(float_cls, -NAN);
         if (s == "inf")
-            return boxFloat(INFINITY);
+            return new BoxedFloat(float_cls, INFINITY);
         if (s == "-inf")
-            return boxFloat(-INFINITY);
+            return new BoxedFloat(float_cls, -INFINITY);
 
-        rtn->d = strtod(s.c_str(), NULL);
+        return new BoxedFloat(float_cls, strtod(s.c_str(), NULL));
     } else {
         static const std::string float_str("__float__");
         Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -593,9 +577,31 @@ Box* floatNew(BoxedClass* _cls, Box* a) {
         if (!isSubclass(r->cls, float_cls)) {
             raiseExcHelper(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
         }
-        rtn->d = static_cast<BoxedFloat*>(r)->d;
+        return static_cast<BoxedFloat*>(r);
     }
+}
 
+Box* floatNew(BoxedClass* _cls, Box* a) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, float_cls))
+        raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+
+    if (cls == float_cls)
+        return _floatNew(a);
+
+    BoxedFloat* f = _floatNew(a);
+
+    assert(cls->tp_basicsize >= sizeof(BoxedFloat));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    BoxedFloat* rtn = ::new (mem) BoxedFloat(cls, 0);
+    initUserAttrs(rtn, cls);
+
+    rtn->d = f->d;
     return rtn;
 }
 

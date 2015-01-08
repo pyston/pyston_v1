@@ -45,3 +45,5 @@ print type(x)
 
 x = I(D(C()))
 print type(x)
+
+print type(int(C()))
