@@ -20,6 +20,10 @@ file(GLOB GC_SRCS gc/*.cpp)
 file(GLOB RUNTIME_BUILTIN_MODULES_SRCS runtime/builtin_modules/*.cpp)
 file(GLOB RUNTIME_SRCS runtime/*.cpp)
 
+if(ENABLE_GPERFTOOLS)
+  set(OPTIONAL_SRCS ${OPTIONAL_SRCS} codegen/profiling/pprof.cpp)
+endif()
+
 if(ENABLE_OPROFILE)
   set(OPTIONAL_SRCS codegen/profiling/oprofile.cpp)
 endif()
