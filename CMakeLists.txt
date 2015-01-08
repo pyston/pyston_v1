@@ -21,6 +21,7 @@ option(ENABLE_GOLD "enable the gold linker" ON)
 option(ENABLE_GRWL "threading use GRWL" OFF)
 option(ENABLE_INTEL_JIT_EVENTS "LLVM support for Intel JIT Events API" OFF)
 option(ENABLE_LLVM_DEBUG "LLVM debug symbols" OFF)
+option(ENABLE_OPROFILE "enable oprofile support" OFF)
 option(ENABLE_SELF_HOST "use pyston to test pyston" OFF)
 option(ENABLE_VALGRIND "pyston valgrind support" OFF)
 
@@ -119,6 +120,10 @@ else()
   add_definitions(-DTHREADING_USE_GIL=1 -DTHREADING_USE_GRWL=0)
 endif()
 
+if(ENABLE_OPROFILE)
+  set(OPTIONAL_LIBRARIES ${OPTIONAL_LIBRARIES} opagent)
+endif()
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -Wreturn-type -Wno-sign-compare -Wno-unused -Wno-sign-compare -Wno-unused-parameter -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++11 -fPIC -fno-rtti -fexceptions -fvisibility-inlines-hidden -ffunction-sections -fdata-sections -Woverloaded-virtual -Wno-invalid-offsetof -Wcast-qual -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wmissing-include-dirs -Wstrict-overflow=5 -Wpointer-arith -Wtype-limits -Wwrite-strings -Wempty-body -Waggregate-return -Wmissing-field-initializers -Wredundant-decls -Winline -Wint-to-pointer-cast -Wlong-long -Wvla -Wno-attributes")
 
@@ -151,7 +156,7 @@ add_subdirectory(tools)
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline gmp unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
 
 # copy src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)
