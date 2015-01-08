@@ -37,4 +37,10 @@ slots_test.call_funcs(C())
 def repr2(self):
     return "repr2()"
 C.__repr__ = repr2
+
+def nonzero(self):
+    print "nonzero"
+    return True
+C.__nonzero__ = nonzero
+
 slots_test.call_funcs(C())

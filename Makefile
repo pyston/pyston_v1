@@ -865,6 +865,10 @@ $(call make_target,_grwl)
 $(call make_target,_grwl_dbg)
 $(call make_target,_nosync)
 
+runpy_%: %.py ext_python
+	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
+$(call make_search,runpy_%)
+
 # "kill valgrind":
 kv:
 	ps aux | awk '/[v]algrind/ {print $$2}' | xargs kill -9; true

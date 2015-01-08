@@ -87,6 +87,18 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) n
     return (*func)(self);
 }
 
+static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    inquiry func = (inquiry)wrapped;
+    int res;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    return PyBool_FromLong((long)res);
+}
+
 static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
@@ -400,6 +412,41 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
     }
 }
 
+static int slot_nb_nonzero(PyObject* self) noexcept {
+    PyObject* func, *args;
+    static PyObject* nonzero_str, *len_str;
+    int result = -1;
+    int using_len = 0;
+
+    func = lookup_maybe(self, "__nonzero__", &nonzero_str);
+    if (func == NULL) {
+        if (PyErr_Occurred())
+            return -1;
+        func = lookup_maybe(self, "__len__", &len_str);
+        if (func == NULL)
+            return PyErr_Occurred() ? -1 : 1;
+        using_len = 1;
+    }
+    args = PyTuple_New(0);
+    if (args != NULL) {
+        PyObject* temp = PyObject_Call(func, args, NULL);
+        Py_DECREF(args);
+        if (temp != NULL) {
+            if (PyInt_CheckExact(temp) || PyBool_Check(temp))
+                result = PyObject_IsTrue(temp);
+            else {
+                PyErr_Format(PyExc_TypeError, "%s should return "
+                                              "bool or int, returned %s",
+                             (using_len ? "__len__" : "__nonzero__"), temp->cls->tp_name);
+                result = -1;
+            }
+            Py_DECREF(temp);
+        }
+    }
+    Py_DECREF(func);
+    return result;
+}
+
 static const char* name_op[] = {
     "__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__",
 };
@@ -699,6 +746,8 @@ static slotdef slotdefs[] = {
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
+    UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"),
+
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
     MPSLOT("__setitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_objobjargproc,
@@ -739,6 +788,17 @@ static void init_slotdefs() {
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
         if (i > 0) {
+#ifndef NDEBUG
+            if (slotdefs[i - 1].offset > slotdefs[i].offset) {
+                printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name);
+                for (int j = i; j < sizeof(slotdefs) / sizeof(slotdefs[0]); j++) {
+                    if (slotdefs[i - 1].offset <= slotdefs[j].offset) {
+                        printf("Should go before %s\n", slotdefs[j].name);
+                        break;
+                    }
+                }
+            }
+#endif
             ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name);
             // CPython interns the name here
         }
@@ -839,7 +899,21 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_getattr == NULL, "");
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_number == NULL, "");
+
+    // Hacky way to assert that only tp_as_number slots we support are getting set:
+    // zero out the ones we know about, then assert that the entire struct
+    // is zero, then restore the ones we know about.
+    if (cls->tp_as_number) {
+        auto nb_nonzero = cls->tp_as_number->nb_nonzero;
+        cls->tp_as_number->nb_nonzero = NULL;
+
+        for (void** p = (void**)cls->tp_as_number; p < (void**)cls->tp_as_number + 1; p++) {
+            RELEASE_ASSERT(*p == NULL, "");
+        }
+
+        cls->tp_as_number->nb_nonzero = nb_nonzero;
+    }
+
     RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");

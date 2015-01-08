@@ -373,7 +373,12 @@ call_funcs(PyObject* _module, PyObject* args) {
 
     if (cls->tp_as_number) {
         printf("tp_as_number exists\n");
-        PyNumberMethods* seq = cls->tp_as_number;
+        PyNumberMethods* num = cls->tp_as_number;
+
+        if (num->nb_nonzero) {
+            int n = num->nb_nonzero(obj);
+            printf("nb_nonzero exists and returned %d\n", n);
+        }
     } else {
         printf("tp_as_number doesnt exist\n");
     }
