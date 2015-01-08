@@ -248,36 +248,19 @@ download from http://code.google.com/p/gperftools/downloads/list
 standard ./configure, make, make install
 ```
 
-### ninja-based LLVM build
+### Debug build of CPython
 
-Ninja is supposed to be faster than make; I've only tried it very briefly, and it does seem to be faster when modifying LLVM files.  May or may not be worth using; thought I'd jot down my notes though:
+Having a debug-enabled CPython can be useful for debugging issues with our extension modules.  To get it set up:
 
-You may or may not need a more-recent version of ninja than your package manager provides:
 ```
+sudo apt-get install python2.7-dbg
 cd ~/pyston_deps
-git clone https://github.com/martine/ninja.git
-cd ninja
-git checkout v1.4.0
-./bootstrap.py
+mkdir python-src
+cd python-src
+apt-get source python2.7-dbg
 ```
 
-```
-cd ~/pyston_deps
-wget http://www.cmake.org/files/v3.0/cmake-3.0.0.tar.gz
-tar zxvf cmake-3.0.0.tar.gz
-cd cmake-3.0.0
-./configure
-make -j4
-```
-
-```
-cd ~/pyston_deps
-mkdir llvm-trunk-cmake
-cd llvm-trunk-cmake
-CXX=g++ CC=gcc PATH=~/pyston_deps/gcc-4.8.2-install/bin:$PATH:~/pyston_deps/ninja CMAKE_MAKE_PROGRAM=~/pyston_deps/ninja/ninja ~/pyston_deps/cmake-3.0.0/bin/cmake ../llvm-trunk -G Ninja -DLLVM_TARGETS_TO_BUILD=host -DCMAKE_BUILD_TYPE=RELEASE -DLLVM_ENABLE_ASSERTIONS=ON
-~/pyston_deps/ninja/ninja # runs in parallel
-```
-
+Then, run `make dbgpy_TESTNAME` and it will launch the test under gdb.  There's also a [wiki page](https://wiki.python.org/moin/DebuggingWithGdb) with some extra Python-specific GDB commands.
 
 # (Experimental) CMake build system
 
