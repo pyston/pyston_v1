@@ -544,31 +544,72 @@ std::string floatFmt(double x, int precision, char code) {
     return std::string(buf, n);
 }
 
-Box* floatNew(BoxedClass* cls, Box* a) {
-    RELEASE_ASSERT(cls == float_cls, "");
-
+BoxedFloat* _floatNew(Box* a) {
     if (a->cls == float_cls) {
-        return a;
+        return static_cast<BoxedFloat*>(a);
+    } else if (isSubclass(a->cls, float_cls)) {
+        return new BoxedFloat(float_cls, static_cast<BoxedFloat*>(a)->d);
     } else if (isSubclass(a->cls, int_cls)) {
-        return boxFloat(static_cast<BoxedInt*>(a)->n);
+        return new BoxedFloat(float_cls, static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(a)->s;
         if (s == "nan")
-            return boxFloat(NAN);
+            return new BoxedFloat(float_cls, NAN);
         if (s == "-nan")
-            return boxFloat(-NAN);
+            return new BoxedFloat(float_cls, -NAN);
         if (s == "inf")
-            return boxFloat(INFINITY);
+            return new BoxedFloat(float_cls, INFINITY);
         if (s == "-inf")
-            return boxFloat(-INFINITY);
+            return new BoxedFloat(float_cls, -INFINITY);
 
-        return boxFloat(strtod(s.c_str(), NULL));
+        return new BoxedFloat(float_cls, strtod(s.c_str(), NULL));
+    } else {
+        static const std::string float_str("__float__");
+        Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                          ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+
+        if (!r) {
+            fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n",
+                    getTypeName(a)->c_str());
+            raiseExcHelper(TypeError, "");
+        }
+
+        if (!isSubclass(r->cls, float_cls)) {
+            raiseExcHelper(TypeError, "__float__ returned non-float (type %s)", r->cls->tp_name);
+        }
+        return static_cast<BoxedFloat*>(r);
     }
-    RELEASE_ASSERT(0, "%s", getTypeName(a)->c_str());
+}
+
+Box* floatNew(BoxedClass* _cls, Box* a) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, float_cls))
+        raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+
+    if (cls == float_cls)
+        return _floatNew(a);
+
+    BoxedFloat* f = _floatNew(a);
+
+    assert(cls->tp_basicsize >= sizeof(BoxedFloat));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    BoxedFloat* rtn = ::new (mem) BoxedFloat(cls, 0);
+    initUserAttrs(rtn, cls);
+
+    rtn->d = f->d;
+    return rtn;
 }
 
 Box* floatStr(BoxedFloat* self) {
-    assert(self->cls == float_cls);
+    if (!isSubclass(self->cls, float_cls))
+        raiseExcHelper(TypeError, "descriptor '__str__' requires a 'float' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     return boxString(floatFmt(self->d, 12, 'g'));
 }
 

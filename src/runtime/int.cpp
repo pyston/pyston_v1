@@ -733,33 +733,42 @@ extern "C" Box* intHash(BoxedInt* self) {
     return boxInt(self->n);
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+extern "C" Box* intHex(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'int' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, int_cls))
-        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+    char buf[80];
+    int len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
+    return new BoxedString(std::string(buf, len));
+}
 
-    assert(cls->tp_basicsize >= sizeof(BoxedInt));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
-    initUserAttrs(rtn, cls);
+extern "C" Box* intOct(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'int' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
+    char buf[80];
+    int len = snprintf(buf, sizeof(buf), "%#lo", self->n);
+    return new BoxedString(std::string(buf, len));
+}
+
+BoxedInt* _intNew(Box* val) {
     if (isSubclass(val->cls, int_cls)) {
-        rtn->n = static_cast<BoxedInt*>(val)->n;
+        BoxedInt* n = static_cast<BoxedInt*>(val);
+        if (val->cls == int_cls)
+            return n;
+        return new BoxedInt(int_cls, n->n);
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
 
         std::istringstream ss(s->s);
         int64_t n;
         ss >> n;
-        rtn->n = n;
+        return new BoxedInt(int_cls, n);
     } else if (val->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(val)->d;
-
-        rtn->n = d;
+        return new BoxedInt(int_cls, d);
     } else {
         static const std::string int_str("__int__");
         Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -774,8 +783,30 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
         if (!isSubclass(r->cls, int_cls)) {
             raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
         }
-        rtn->n = static_cast<BoxedInt*>(r)->n;
+        return static_cast<BoxedInt*>(r);
     }
+}
+
+extern "C" Box* intNew(Box* _cls, Box* val) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, int_cls))
+        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+    if (cls == int_cls)
+        return _intNew(val);
+
+    BoxedInt* n = _intNew(val);
+
+    assert(cls->tp_basicsize >= sizeof(BoxedInt));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
+    initUserAttrs(rtn, cls);
+
+    rtn->n = n->n;
     return rtn;
 }
 
@@ -854,6 +885,9 @@ void setupInt() {
     int_cls->giveAttr("__str__", int_cls->getattr("__repr__"));
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2)));
+
+    int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
+    int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
     int_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) }));

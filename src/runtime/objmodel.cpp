@@ -3458,7 +3458,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
         allowable_news.push_back(object_new);
 
-        for (BoxedClass* allowed_cls : { int_cls, xrange_cls, float_cls, long_cls }) {
+        for (BoxedClass* allowed_cls : { xrange_cls }) {
             auto new_obj = typeLookup(allowed_cls, _new_str, NULL);
             gc::registerPermanentRoot(new_obj);
             allowable_news.push_back(new_obj);
@@ -3472,6 +3472,13 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
                 ok = true;
                 break;
             }
+        }
+
+        if (!ok && (cls == int_cls || cls == float_cls || cls == long_cls)) {
+            if (npassed_args == 1)
+                ok = true;
+            else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls))
+                ok = true;
         }
 
         if (!ok) {

@@ -48,3 +48,35 @@ print long("100", 26)
 
 print type(hash(1L))
 print hash(1L) == hash(2L)
+
+# Testing long.__new__:
+class C(long):
+    def __init__(self, *args):
+        print "C.__init__, %d args" % len(args)
+
+class D(object):
+    def __init__(self, n):
+        self.n = n
+
+    def __long__(self):
+        return self.n
+
+for a in (False, True, 2, 3L, D(4), D(C(5)), D(False)):
+    i = long.__new__(C, a)
+    print type(i), i, type(long(a))
+
+try:
+    long.__new__(C, D(1.0))
+except TypeError, e:
+    print e
+
+class I(long):
+    pass
+
+x = long(D(C()))
+print type(x)
+
+x = I(D(C()))
+print type(x)
+
+print type(long(C()))

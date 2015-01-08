@@ -115,8 +115,36 @@ extern "C" Box* abs_(Box* x) {
     } else if (x->cls == long_cls) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {
-        RELEASE_ASSERT(0, "%s", getTypeName(x)->c_str());
+        static const std::string abs_str("__abs__");
+        return callattr(x, &abs_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
+                        NULL, NULL, NULL, NULL, NULL);
     }
+}
+
+extern "C" Box* hexFunc(Box* x) {
+    static const std::string hex_str("__hex__");
+    Box* r = callattr(x, &hex_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                      NULL, NULL, NULL, NULL, NULL);
+    if (!r)
+        raiseExcHelper(TypeError, "hex() argument can't be converted to hex");
+
+    if (!isSubclass(r->cls, str_cls))
+        raiseExcHelper(TypeError, "__hex__() returned non-string (type %.200s)", r->cls->tp_name);
+
+    return r;
+}
+
+extern "C" Box* octFunc(Box* x) {
+    static const std::string oct_str("__oct__");
+    Box* r = callattr(x, &oct_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                      NULL, NULL, NULL, NULL, NULL);
+    if (!r)
+        raiseExcHelper(TypeError, "oct() argument can't be converted to oct");
+
+    if (!isSubclass(r->cls, str_cls))
+        raiseExcHelper(TypeError, "__oct__() returned non-string (type %.200s)", r->cls->tp_name);
+
+    return r;
 }
 
 extern "C" Box* all(Box* container) {
@@ -944,6 +972,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("hash", hash_obj);
     abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, UNKNOWN, 1));
     builtins_module->giveAttr("abs", abs_obj);
+    builtins_module->giveAttr("hex", new BoxedFunction(boxRTFunction((void*)hexFunc, UNKNOWN, 1)));
+    builtins_module->giveAttr("oct", new BoxedFunction(boxRTFunction((void*)octFunc, UNKNOWN, 1)));
 
     min_obj = new BoxedFunction(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("min", min_obj);
