@@ -1140,26 +1140,26 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
 
-    // Hacky way to assert that only tp_as_number slots we support are getting set:
-    // zero out the ones we know about, then assert that the entire struct
-    // is zero, then restore the ones we know about.
     if (cls->tp_as_number) {
-#define SAVE(N)                                                                                                        \
-    auto N = cls->tp_as_number->N;                                                                                     \
-    cls->tp_as_number->N = NULL;
-#define RESTORE(N) cls->tp_as_number->N = N;
-
-        SAVE(nb_nonzero);
-        SAVE(nb_add);
-
-        for (void** p = (void**)cls->tp_as_number; p < (void**)(cls->tp_as_number + 1); p++) {
-            // RELEASE_ASSERT(*p == NULL, "");
-        }
-
-        RESTORE(nb_nonzero);
-        RESTORE(nb_add)
-#undef SAVE
-#undef RESTORE
+        auto num = cls->tp_as_number;
+        // Members not added yet:
+        assert(num->nb_coerce == NULL);
+        assert(num->nb_inplace_add == NULL);
+        assert(num->nb_inplace_subtract == NULL);
+        assert(num->nb_inplace_multiply == NULL);
+        assert(num->nb_inplace_divide == NULL);
+        assert(num->nb_inplace_remainder == NULL);
+        assert(num->nb_inplace_power == NULL);
+        assert(num->nb_inplace_lshift == NULL);
+        assert(num->nb_inplace_rshift == NULL);
+        assert(num->nb_inplace_and == NULL);
+        assert(num->nb_inplace_xor == NULL);
+        assert(num->nb_inplace_or == NULL);
+        assert(num->nb_floor_divide == NULL);
+        assert(num->nb_true_divide == NULL);
+        assert(num->nb_inplace_floor_divide == NULL);
+        assert(num->nb_inplace_true_divide == NULL);
+        assert(num->nb_index == NULL);
     }
 
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
