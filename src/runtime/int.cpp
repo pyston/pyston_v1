@@ -753,33 +753,19 @@ extern "C" Box* intOct(BoxedInt* self) {
     return new BoxedString(std::string(buf, len));
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
-
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, int_cls))
-        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
-
-    assert(cls->tp_basicsize >= sizeof(BoxedInt));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
-    initUserAttrs(rtn, cls);
-
+BoxedInt* _intNew(Box* val) {
     if (isSubclass(val->cls, int_cls)) {
-        rtn->n = static_cast<BoxedInt*>(val)->n;
+        return new BoxedInt(int_cls, static_cast<BoxedInt*>(val)->n);
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
 
         std::istringstream ss(s->s);
         int64_t n;
         ss >> n;
-        rtn->n = n;
+        return new BoxedInt(int_cls, n);
     } else if (val->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(val)->d;
-
-        rtn->n = d;
+        return new BoxedInt(int_cls, d);
     } else {
         static const std::string int_str("__int__");
         Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -794,8 +780,30 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
         if (!isSubclass(r->cls, int_cls)) {
             raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
         }
-        rtn->n = static_cast<BoxedInt*>(r)->n;
+        return static_cast<BoxedInt*>(r);
     }
+}
+
+extern "C" Box* intNew(Box* _cls, Box* val) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, int_cls))
+        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+    if (cls == int_cls)
+        return _intNew(val);
+
+    BoxedInt* n = _intNew(val);
+
+    assert(cls->tp_basicsize >= sizeof(BoxedInt));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
+    initUserAttrs(rtn, cls);
+
+    rtn->n = n->n;
     return rtn;
 }
 

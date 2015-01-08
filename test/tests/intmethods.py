@@ -29,7 +29,7 @@ class D(object):
 
 for a in (False, True, 2, 3.0, D(4), D(C(5)), D(False)):
     i = int.__new__(C, a)
-    print type(i), i
+    print type(i), i, type(int(a))
 
 try:
     int.__new__(C, D(1.0))
