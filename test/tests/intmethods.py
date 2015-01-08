@@ -18,7 +18,8 @@ print -1 ** 0
 
 # Testing int.__new__:
 class C(int):
-    pass
+    def __init__(self, *args):
+        print "C.__init__, %d args" % len(args)
 
 class D(object):
     def __init__(self, n):
@@ -35,3 +36,12 @@ try:
     int.__new__(C, D(1.0))
 except TypeError, e:
     print e
+
+class I(int):
+    pass
+
+x = int(D(C()))
+print type(x)
+
+x = I(D(C()))
+print type(x)
