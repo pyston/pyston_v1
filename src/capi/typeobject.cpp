@@ -79,6 +79,30 @@ RICHCMP_WRAPPER(ne, Py_NE)
 RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
+static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    ternaryfunc func = (ternaryfunc)wrapped;
+    PyObject* other;
+    PyObject* third = Py_None;
+
+    /* Note: This wrapper only works for __pow__() */
+
+    if (!PyArg_UnpackTuple(args, "", 1, 2, &other, &third))
+        return NULL;
+    return (*func)(self, other, third);
+}
+
+static PyObject* wrap_ternaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    ternaryfunc func = (ternaryfunc)wrapped;
+    PyObject* other;
+    PyObject* third = Py_None;
+
+    /* Note: This wrapper only works for __pow__() */
+
+    if (!PyArg_UnpackTuple(args, "", 1, 2, &other, &third))
+        return NULL;
+    return (*func)(other, self, third);
+}
+
 static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     unaryfunc func = (unaryfunc)wrapped;
 
@@ -803,6 +827,31 @@ SLOT1BIN(slot_nb_divmod, nb_divmod, "__divmod__", "__rdivmod__")
 
 static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*);
 
+SLOT1BINFULL(slot_nb_power_binary, slot_nb_power, nb_power, "__pow__", "__rpow__")
+
+static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulus) {
+    static PyObject* pow_str;
+
+    if (modulus == Py_None)
+        return slot_nb_power_binary(self, other);
+    /* Three-arg power doesn't use __rpow__.  But ternary_op
+       can call this when the second argument's type uses
+       slot_nb_power, so check before calling self.__pow__. */
+    if (Py_TYPE(self)->tp_as_number != NULL && Py_TYPE(self)->tp_as_number->nb_power == slot_nb_power) {
+        return call_method(self, "__pow__", &pow_str, "(OO)", other, modulus);
+    }
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+// SLOT0(slot_nb_invert, "__invert__")
+SLOT1BIN(slot_nb_lshift, nb_lshift, "__lshift__", "__rlshift__")
+SLOT1BIN(slot_nb_rshift, nb_rshift, "__rshift__", "__rrshift__")
+SLOT1BIN(slot_nb_and, nb_and, "__and__", "__rand__")
+SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
+SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
+
+
 typedef wrapper_def slotdef;
 
 static void** slotptr(BoxedClass* type, int offset) {
@@ -893,9 +942,31 @@ static slotdef slotdefs[] = {
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
-    BINSLOT("__add__", nb_add, slot_nb_add, "+"), //
-    RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),
-    UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"),
+    BINSLOT("__add__", nb_add, slot_nb_add, "+"),               // [force clang-format to line break]
+    RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),             //
+    BINSLOT("__sub__", nb_subtract, slot_nb_subtract, "-"),     //
+    RBINSLOT("__rsub__", nb_subtract, slot_nb_subtract, "-"),   //
+    BINSLOT("__mul__", nb_multiply, slot_nb_multiply, "*"),     //
+    RBINSLOT("__rmul__", nb_multiply, slot_nb_multiply, "*"),   //
+    BINSLOT("__div__", nb_divide, slot_nb_divide, "/"),         //
+    RBINSLOT("__rdiv__", nb_divide, slot_nb_divide, "/"),       //
+    BINSLOT("__mod__", nb_remainder, slot_nb_remainder, "%"),   //
+    RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder, "%"), //
+    BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod, "divmod(x, y)"),
+    RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),
+    NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),
+    NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),
+    UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"), //
+    BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                         //
+    RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                       //
+    BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                         //
+    RBINSLOT("__rrshift__", nb_rshift, slot_nb_rshift, ">>"),                       //
+    BINSLOT("__and__", nb_and, slot_nb_and, "&"),                                   //
+    RBINSLOT("__rand__", nb_and, slot_nb_and, "&"),                                 //
+    BINSLOT("__xor__", nb_xor, slot_nb_xor, "^"),                                   //
+    RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                 //
+    BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                      //
+    RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                    //
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),

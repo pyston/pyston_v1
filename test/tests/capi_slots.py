@@ -16,7 +16,19 @@ for i in xrange(3):
 
 for i in xrange(3):
     t = slots_test.SlotsTesterNum(i)
-    print bool(t), t + 5
+    print bool(t)
+    print t + 5
+    print t - 5
+    print t * 5
+    print t / 5
+    print t % 5
+    print divmod(t, 5)
+    print t ** 5
+    print t << 5
+    print t >> 5
+    print t & 5
+    print t ^ 5
+    print t | 5
 
 class C(object):
     def __repr__(self):

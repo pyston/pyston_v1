@@ -215,30 +215,54 @@ static int s_nonzero(slots_tester_object* self) {
     return self->n != 0;
 }
 
-static PyObject* s_add(slots_tester_object* lhs, PyObject* rhs) {
-    printf("s_add, %d %s\n", lhs->n, Py_TYPE(rhs)->tp_name);
+#define _PYSTON_STRINGIFY(N) #N
+#define PYSTON_STRINGIFY(N) _PYSTON_STRINGIFY(N)
+#define CREATE_FUNC(N) \
+static PyObject* N(slots_tester_object* lhs, PyObject* rhs) { \
+    printf(PYSTON_STRINGIFY(N) ", %d %s\n", lhs->n, Py_TYPE(rhs)->tp_name); \
+    Py_INCREF(lhs); \
+    return (PyObject*)lhs; \
+}
+
+CREATE_FUNC(s_add);
+CREATE_FUNC(s_subtract);
+CREATE_FUNC(s_multiply);
+CREATE_FUNC(s_divide);
+CREATE_FUNC(s_remainder);
+CREATE_FUNC(s_divmod);
+
+static PyObject* s_power(slots_tester_object* lhs, PyObject* rhs, PyObject* mod) {
+    printf("s_power, %d %s %s\n", lhs->n, Py_TYPE(rhs)->tp_name, Py_TYPE(mod)->tp_name);
     Py_INCREF(lhs);
     return (PyObject*)lhs;
 }
 
+CREATE_FUNC(s_lshift);
+CREATE_FUNC(s_rshift);
+CREATE_FUNC(s_and);
+CREATE_FUNC(s_xor);
+CREATE_FUNC(s_or);
+
+#undef CREATE_FUNC
+
 static PyNumberMethods slots_tester_as_number = {
     (binaryfunc)s_add,                                  /* nb_add */
-    0,                             /* nb_subtract */
-    0,                             /* nb_multiply */
-    0,                               /* nb_divide */
-    0,                                          /* nb_remainder */
-    0,                                          /* nb_divmod */
-    0,                                          /* nb_power */
+    (binaryfunc)s_subtract,                             /* nb_subtract */
+    (binaryfunc)s_multiply,                             /* nb_multiply */
+    (binaryfunc)s_divide,                               /* nb_divide */
+    (binaryfunc)s_remainder,                                          /* nb_remainder */
+    (binaryfunc)s_divmod,                                          /* nb_divmod */
+    (ternaryfunc)s_power,                                          /* nb_power */
     0,                  /* nb_negative */
     0,                  /* nb_positive */
     0,                       /* nb_absolute */
     (inquiry)s_nonzero,                     /* nb_nonzero */
     0,                                          /*nb_invert*/
-    0,                                          /*nb_lshift*/
-    0,                                          /*nb_rshift*/
-    0,                                          /*nb_and*/
-    0,                                          /*nb_xor*/
-    0,                                          /*nb_or*/
+    (binaryfunc)s_lshift,                                          /*nb_lshift*/
+    (binaryfunc)s_rshift,                                          /*nb_rshift*/
+    (binaryfunc)s_and,                                          /*nb_and*/
+    (binaryfunc)s_xor,                                          /*nb_xor*/
+    (binaryfunc)s_or,                                          /*nb_or*/
     0,                                          /*nb_coerce*/
     0,                                          /*nb_int*/
     0,                                          /*nb_long*/
@@ -398,11 +422,33 @@ call_funcs(PyObject* _module, PyObject* args) {
             printf("nb_nonzero exists and returned %d\n", n);
         }
 
-        if (num->nb_add) {
-            PyObject* res = num->nb_add(obj, obj);
-            printf("nb_add exists and returned a %s\n", Py_TYPE(res)->tp_name);
+#define CHECK(N) \
+        if (num->N) { \
+            PyObject* res = num->N(obj, obj); \
+            printf(PYSTON_STRINGIFY(N) " exists and returned a %s\n", Py_TYPE(res)->tp_name); \
+            Py_DECREF(res);  \
+        }
+
+        CHECK(nb_add);
+        CHECK(nb_subtract);
+        CHECK(nb_multiply);
+        CHECK(nb_divide);
+        CHECK(nb_remainder);
+        CHECK(nb_divmod);
+
+        if (num->nb_power) {
+            PyObject* res = num->nb_power(obj, obj, Py_None);
+            printf("nb_power exists and returned a %s\n", Py_TYPE(res)->tp_name);
             Py_DECREF(res);
         }
+
+        CHECK(nb_lshift);
+        CHECK(nb_rshift);
+        CHECK(nb_and);
+        CHECK(nb_xor);
+        CHECK(nb_or);
+#undef CHECK
+
     } else {
         printf("tp_as_number doesnt exist\n");
     }
