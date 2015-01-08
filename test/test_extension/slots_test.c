@@ -62,6 +62,14 @@ slots_tester_seq_repr(slots_tester_object *obj)
 }
 
 static PyObject *
+slots_tester_seq_str(slots_tester_object *obj)
+{
+    char buf[80];
+    snprintf(buf, sizeof(buf), "<my custom str: %d>", obj->n);
+    return PyString_FromString(buf);
+}
+
+static PyObject *
 slots_tester_seq_call(slots_tester_object *obj, PyObject *args, PyObject *kw)
 {
     if (!PyArg_ParseTuple(args, ""))
@@ -111,7 +119,7 @@ static PyTypeObject slots_tester_seq = {
     0,                                  /* tp_as_mapping */
     (hashfunc)slots_tester_seq_hash, /* tp_hash */
     (ternaryfunc)slots_tester_seq_call,     /* tp_call */
-    0,                                  /* tp_str */
+    (reprfunc)slots_tester_seq_str,     /* tp_str */
     0,                                  /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
@@ -170,7 +178,7 @@ static PyTypeObject slots_tester_map= {
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
     0,                                  /* tp_compare */
-    0,        /* tp_repr */
+    (reprfunc)slots_tester_seq_repr,    /* tp_repr */
     0,                                  /* tp_as_number */
     0,          /* tp_as_sequence */
     &slots_tester_map_asmapping,                                  /* tp_as_mapping */
@@ -181,6 +189,143 @@ static PyTypeObject slots_tester_map= {
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,                 /* tp_flags */
+    0,                   /* tp_doc */
+    0,                                  /* tp_traverse */
+    0,                                  /* tp_clear */
+    0,                                  /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    0,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    0,                                  /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    0,                                  /* tp_init */
+    0,                                  /* tp_alloc */
+    slots_tester_new,                   /* tp_new */
+    0,                                  /* tp_free */
+};
+
+#define _PYSTON_STRINGIFY(N) #N
+#define PYSTON_STRINGIFY(N) _PYSTON_STRINGIFY(N)
+#define CREATE_UN(N, R) \
+static PyObject* N(slots_tester_object* lhs) { \
+    printf(PYSTON_STRINGIFY(N) ", %d\n", lhs->n); \
+    Py_INCREF(R); \
+    return (PyObject*)R; \
+}
+
+#define CREATE_BIN(N) \
+static PyObject* N(slots_tester_object* lhs, PyObject* rhs) { \
+    printf(PYSTON_STRINGIFY(N) ", %d %s\n", lhs->n, Py_TYPE(rhs)->tp_name); \
+    Py_INCREF(lhs); \
+    return (PyObject*)lhs; \
+}
+
+CREATE_BIN(s_add);
+CREATE_BIN(s_subtract);
+CREATE_BIN(s_multiply);
+CREATE_BIN(s_divide);
+CREATE_BIN(s_remainder);
+CREATE_BIN(s_divmod);
+CREATE_UN(s_negative, lhs);
+CREATE_UN(s_positive, lhs);
+CREATE_UN(s_absolute, lhs);
+
+static int s_nonzero(slots_tester_object* self) {
+    printf("s_nonzero, %d\n", self->n);
+    return self->n != 0;
+}
+
+CREATE_UN(s_invert, lhs);
+
+static PyObject* s_power(slots_tester_object* lhs, PyObject* rhs, PyObject* mod) {
+    printf("s_power, %d %s %s\n", lhs->n, Py_TYPE(rhs)->tp_name, Py_TYPE(mod)->tp_name);
+    Py_INCREF(lhs);
+    return (PyObject*)lhs;
+}
+
+CREATE_BIN(s_lshift);
+CREATE_BIN(s_rshift);
+CREATE_BIN(s_and);
+CREATE_BIN(s_xor);
+CREATE_BIN(s_or);
+
+CREATE_UN(s_int, Py_True);
+CREATE_UN(s_long, Py_True);
+CREATE_UN(s_float, PyFloat_FromDouble(1.0));
+CREATE_UN(s_oct, PyString_FromString("oct"));
+CREATE_UN(s_hex, PyString_FromString("hex"));
+
+#undef CREATE_BIN
+
+static PyNumberMethods slots_tester_as_number = {
+    (binaryfunc)s_add,                                  /* nb_add */
+    (binaryfunc)s_subtract,                             /* nb_subtract */
+    (binaryfunc)s_multiply,                             /* nb_multiply */
+    (binaryfunc)s_divide,                               /* nb_divide */
+    (binaryfunc)s_remainder,                                          /* nb_remainder */
+    (binaryfunc)s_divmod,                                          /* nb_divmod */
+    (ternaryfunc)s_power,                                          /* nb_power */
+    (unaryfunc)s_negative,                  /* nb_negative */
+    (unaryfunc)s_positive,                  /* nb_positive */
+    (unaryfunc)s_absolute,                       /* nb_absolute */
+    (inquiry)s_nonzero,                     /* nb_nonzero */
+    (unaryfunc)s_invert,                                          /*nb_invert*/
+    (binaryfunc)s_lshift,                                          /*nb_lshift*/
+    (binaryfunc)s_rshift,                                          /*nb_rshift*/
+    (binaryfunc)s_and,                                          /*nb_and*/
+    (binaryfunc)s_xor,                                          /*nb_xor*/
+    (binaryfunc)s_or,                                          /*nb_or*/
+    0,                                          /*nb_coerce*/
+    (unaryfunc)s_int,                                          /*nb_int*/
+    (unaryfunc)s_long,                                          /*nb_long*/
+    (unaryfunc)s_float,                                          /*nb_float*/
+    (unaryfunc)s_oct,                                          /*nb_oct*/
+    (unaryfunc)s_hex,                                          /*nb_hex*/
+    0,                                          /*nb_inplace_add*/
+    0,                                          /*nb_inplace_subtract*/
+    0,                                          /*nb_inplace_multiply*/
+    0,                                          /*nb_inplace_divide*/
+    0,                                          /*nb_inplace_remainder*/
+    0,                                          /*nb_inplace_power*/
+    0,                                          /*nb_inplace_lshift*/
+    0,                                          /*nb_inplace_rshift*/
+    0,                                          /*nb_inplace_and*/
+    0,                                          /*nb_inplace_xor*/
+    0,                                          /*nb_inplace_or*/
+    0,                               /* nb_floor_divide */
+    0,                                          /* nb_true_divide */
+    0,                                          /* nb_inplace_floor_divide */
+    0,                                          /* nb_inplace_true_divide */
+};
+
+static PyTypeObject slots_tester_num = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "slots_test.slots_tester_num",            /* tp_name */
+    sizeof(slots_tester_object),          /* tp_basicsize */
+    0,                                  /* tp_itemsize */
+    /* methods */
+    0,                                  /* tp_dealloc */
+    0,                                  /* tp_print */
+    0,                                  /* tp_getattr */
+    0,                                  /* tp_setattr */
+    0,                                  /* tp_compare */
+    0,        /* tp_repr */
+    &slots_tester_as_number,                                  /* tp_as_number */
+    0,          /* tp_as_sequence */
+    0,                                  /* tp_as_mapping */
+    0,                                  /* tp_hash */
+    0,     /* tp_call */
+    (reprfunc)slots_tester_seq_str,     /* tp_str */
+    0,                                  /* tp_getattro */
+    0,                                  /* tp_setattro */
+    0,                                  /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES,                 /* tp_flags */
     0,                   /* tp_doc */
     0,                                  /* tp_traverse */
     0,                                  /* tp_clear */
@@ -282,6 +427,69 @@ call_funcs(PyObject* _module, PyObject* args) {
         printf("tp_as_sequence doesnt exist\n");
     }
 
+    if (cls->tp_as_number) {
+        printf("tp_as_number exists\n");
+        PyNumberMethods* num = cls->tp_as_number;
+
+        if (!(cls->tp_flags & Py_TPFLAGS_CHECKTYPES)) {
+            printf("CHECKTYPES is not set!\n");
+        }
+
+#define CHECK_UN(N) \
+        if (num->N) { \
+            PyObject* res = num->N(obj); \
+            printf(PYSTON_STRINGIFY(N) " exists and returned a %s\n", Py_TYPE(res)->tp_name); \
+            Py_DECREF(res);  \
+        }
+
+#define CHECK_BIN(N) \
+        if (num->N) { \
+            PyObject* res = num->N(obj, obj); \
+            printf(PYSTON_STRINGIFY(N) " exists and returned a %s\n", Py_TYPE(res)->tp_name); \
+            Py_DECREF(res);  \
+        }
+
+        CHECK_BIN(nb_add);
+        CHECK_BIN(nb_subtract);
+        CHECK_BIN(nb_multiply);
+        CHECK_BIN(nb_divide);
+        CHECK_BIN(nb_remainder);
+        CHECK_BIN(nb_divmod);
+
+        CHECK_UN(nb_negative);
+        CHECK_UN(nb_positive);
+        CHECK_UN(nb_absolute);
+
+        if (num->nb_nonzero) {
+            int n = num->nb_nonzero(obj);
+            printf("nb_nonzero exists and returned %d\n", n);
+        }
+
+        CHECK_UN(nb_invert);
+
+        if (num->nb_power) {
+            PyObject* res = num->nb_power(obj, obj, Py_None);
+            printf("nb_power exists and returned a %s\n", Py_TYPE(res)->tp_name);
+            Py_DECREF(res);
+        }
+
+        CHECK_BIN(nb_lshift);
+        CHECK_BIN(nb_rshift);
+        CHECK_BIN(nb_and);
+        CHECK_BIN(nb_xor);
+        CHECK_BIN(nb_or);
+
+        CHECK_UN(nb_int);
+        CHECK_UN(nb_long);
+        CHECK_UN(nb_float);
+        CHECK_UN(nb_oct);
+        CHECK_UN(nb_hex);
+#undef CHECK_BIN
+
+    } else {
+        printf("tp_as_number doesnt exist\n");
+    }
+
     Py_RETURN_NONE;
 }
 
@@ -307,9 +515,14 @@ initslots_test(void)
     if (res < 0)
         return;
 
+    res = PyType_Ready(&slots_tester_num);
+    if (res < 0)
+        return;
+
     // Not sure if the result of PyInt_FromLong needs to be decref'd
     PyDict_SetItemString(slots_tester_seq.tp_dict, "set_through_tpdict", PyInt_FromLong(123));
 
     PyModule_AddObject(m, "SlotsTesterSeq", (PyObject *)&slots_tester_seq);
     PyModule_AddObject(m, "SlotsTesterMap", (PyObject *)&slots_tester_map);
+    PyModule_AddObject(m, "SlotsTesterNum", (PyObject *)&slots_tester_num);
 }

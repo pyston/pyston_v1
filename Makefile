@@ -321,7 +321,7 @@ NONSTDLIB_SRCS := $(MAIN_SRCS) $(OPTIONAL_SRCS) $(TOOL_SRCS) $(UNITTEST_SRCS)
 # all: pyston_dbg pyston_release pyston_oprof pyston_prof $(OPTIONAL_SRCS:.cpp=.o) ext_python ext_pyston
 all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
 
-ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard cpython2.7/Include/*.h)
+ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
 	$(VERB) ctags $^
@@ -864,6 +864,10 @@ $(call make_target,_release)
 $(call make_target,_grwl)
 $(call make_target,_grwl_dbg)
 $(call make_target,_nosync)
+
+runpy_%: %.py ext_python
+	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
+$(call make_search,runpy_%)
 
 # "kill valgrind":
 kv:

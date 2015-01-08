@@ -353,6 +353,7 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
     tp_basicsize = instance_size;
 
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
+    tp_flags |= Py_TPFLAGS_CHECKTYPES;
 
     if (metaclass == NULL) {
         assert(type_cls == NULL);
@@ -1456,26 +1457,6 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         descr = typeLookup(obj->cls, attr, NULL);
     }
 
-    if (isSubclass(obj->cls, type_cls)) {
-        BoxedClass* self = static_cast<BoxedClass*>(obj);
-
-        if (attr == _getattr_str || attr == _getattribute_str) {
-            // Will have to embed the clear in the IC, so just disable the patching for now:
-            rewrite_args = NULL;
-
-            // TODO should put this clearing behavior somewhere else, since there are probably more
-            // cases in which we want to do it.
-            self->dependent_icgetattrs.invalidateAll();
-        }
-
-        if (attr == "__base__" && self->getattr("__base__"))
-            raiseExcHelper(TypeError, "readonly attribute");
-
-        bool touched_slot = update_slot(self, attr);
-        if (touched_slot)
-            rewrite_args = NULL;
-    }
-
     Box* _set_ = NULL;
     RewriterVar* r_set = NULL;
     if (descr) {
@@ -1510,6 +1491,26 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         }
     } else {
         obj->setattr(attr, val, rewrite_args);
+    }
+
+    if (isSubclass(obj->cls, type_cls)) {
+        BoxedClass* self = static_cast<BoxedClass*>(obj);
+
+        if (attr == _getattr_str || attr == _getattribute_str) {
+            // Will have to embed the clear in the IC, so just disable the patching for now:
+            rewrite_args = NULL;
+
+            // TODO should put this clearing behavior somewhere else, since there are probably more
+            // cases in which we want to do it.
+            self->dependent_icgetattrs.invalidateAll();
+        }
+
+        if (attr == "__base__" && self->getattr("__base__"))
+            raiseExcHelper(TypeError, "readonly attribute");
+
+        bool touched_slot = update_slot(self, attr);
+        if (touched_slot)
+            rewrite_args = NULL;
     }
 }
 

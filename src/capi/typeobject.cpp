@@ -79,12 +79,48 @@ RICHCMP_WRAPPER(ne, Py_NE)
 RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
+static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    ternaryfunc func = (ternaryfunc)wrapped;
+    PyObject* other;
+    PyObject* third = Py_None;
+
+    /* Note: This wrapper only works for __pow__() */
+
+    if (!PyArg_UnpackTuple(args, "", 1, 2, &other, &third))
+        return NULL;
+    return (*func)(self, other, third);
+}
+
+static PyObject* wrap_ternaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    ternaryfunc func = (ternaryfunc)wrapped;
+    PyObject* other;
+    PyObject* third = Py_None;
+
+    /* Note: This wrapper only works for __pow__() */
+
+    if (!PyArg_UnpackTuple(args, "", 1, 2, &other, &third))
+        return NULL;
+    return (*func)(other, self, third);
+}
+
 static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     unaryfunc func = (unaryfunc)wrapped;
 
     if (!check_num_args(args, 0))
         return NULL;
     return (*func)(self);
+}
+
+static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    inquiry func = (inquiry)wrapped;
+    int res;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == -1 && PyErr_Occurred())
+        return NULL;
+    return PyBool_FromLong((long)res);
 }
 
 static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
@@ -95,6 +131,34 @@ static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) 
         return NULL;
     other = PyTuple_GET_ITEM(args, 0);
     return (*func)(self, other);
+}
+
+static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped) {
+    binaryfunc func = (binaryfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    if (!(self->cls->tp_flags & Py_TPFLAGS_CHECKTYPES) && !PyType_IsSubtype(other->cls, self->cls)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    return (*func)(self, other);
+}
+
+static PyObject* wrap_binaryfunc_r(PyObject* self, PyObject* args, void* wrapped) {
+    binaryfunc func = (binaryfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    if (!(self->cls->tp_flags & Py_TPFLAGS_CHECKTYPES) && !PyType_IsSubtype(other->cls, self->cls)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    return (*func)(other, self);
 }
 
 static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
@@ -343,10 +407,53 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
     return retval;
 }
 
+/* Clone of call_method() that returns NotImplemented when the lookup fails. */
+
+static PyObject* call_maybe(PyObject* o, const char* name, PyObject** nameobj, const char* format, ...) noexcept {
+    va_list va;
+    PyObject* args, * func = 0, *retval;
+    va_start(va, format);
+
+    func = lookup_maybe(o, name, nameobj);
+    if (func == NULL) {
+        va_end(va);
+        if (!PyErr_Occurred()) {
+            Py_INCREF(Py_NotImplemented);
+            return Py_NotImplemented;
+        }
+        return NULL;
+    }
+
+    if (format && *format)
+        args = Py_VaBuildValue(format, va);
+    else
+        args = PyTuple_New(0);
+
+    va_end(va);
+
+    if (args == NULL)
+        return NULL;
+
+    assert(PyTuple_Check(args));
+    retval = PyObject_Call(func, args, NULL);
+
+    Py_DECREF(args);
+    Py_DECREF(func);
+
+    return retval;
+}
 
 PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
         return repr(self);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
+PyObject* slot_tp_str(PyObject* self) noexcept {
+    try {
+        return str(self);
     } catch (Box* e) {
         abort();
     }
@@ -591,6 +698,73 @@ static int slot_sq_contains(PyObject* self, PyObject* value) {
         return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
     }
 
+/* Boolean helper for SLOT1BINFULL().
+   right.__class__ is a nontrivial subclass of left.__class__. */
+static int method_is_overloaded(PyObject* left, PyObject* right, const char* name) {
+    PyObject* a, *b;
+    int ok;
+
+    b = PyObject_GetAttrString((PyObject*)(Py_TYPE(right)), name);
+    if (b == NULL) {
+        PyErr_Clear();
+        /* If right doesn't have it, it's not overloaded */
+        return 0;
+    }
+
+    a = PyObject_GetAttrString((PyObject*)(Py_TYPE(left)), name);
+    if (a == NULL) {
+        PyErr_Clear();
+        Py_DECREF(b);
+        /* If right has it but left doesn't, it's overloaded */
+        return 1;
+    }
+
+    ok = PyObject_RichCompareBool(a, b, Py_NE);
+    Py_DECREF(a);
+    Py_DECREF(b);
+    if (ok < 0) {
+        PyErr_Clear();
+        return 0;
+    }
+
+    return ok;
+}
+
+#define SLOT1BINFULL(FUNCNAME, TESTFUNC, SLOTNAME, OPSTR, ROPSTR)                                                      \
+    static PyObject* FUNCNAME(PyObject* self, PyObject* other) {                                                       \
+        static PyObject* cache_str, *rcache_str;                                                                       \
+        int do_other = Py_TYPE(self) != Py_TYPE(other) && Py_TYPE(other)->tp_as_number != NULL                         \
+                       && Py_TYPE(other)->tp_as_number->SLOTNAME == TESTFUNC;                                          \
+        if (Py_TYPE(self)->tp_as_number != NULL && Py_TYPE(self)->tp_as_number->SLOTNAME == TESTFUNC) {                \
+            PyObject* r;                                                                                               \
+            if (do_other && PyType_IsSubtype(Py_TYPE(other), Py_TYPE(self))                                            \
+                && method_is_overloaded(self, other, ROPSTR)) {                                                        \
+                r = call_maybe(other, ROPSTR, &rcache_str, "(O)", self);                                               \
+                if (r != Py_NotImplemented)                                                                            \
+                    return r;                                                                                          \
+                Py_DECREF(r);                                                                                          \
+                do_other = 0;                                                                                          \
+            }                                                                                                          \
+            r = call_maybe(self, OPSTR, &cache_str, "(O)", other);                                                     \
+            if (r != Py_NotImplemented || Py_TYPE(other) == Py_TYPE(self))                                             \
+                return r;                                                                                              \
+            Py_DECREF(r);                                                                                              \
+        }                                                                                                              \
+        if (do_other) {                                                                                                \
+            return call_maybe(other, ROPSTR, &rcache_str, "(O)", self);                                                \
+        }                                                                                                              \
+        Py_INCREF(Py_NotImplemented);                                                                                  \
+        return Py_NotImplemented;                                                                                      \
+    }
+
+#define SLOT1BIN(FUNCNAME, SLOTNAME, OPSTR, ROPSTR) SLOT1BINFULL(FUNCNAME, FUNCNAME, SLOTNAME, OPSTR, ROPSTR)
+
+#define SLOT2(FUNCNAME, OPSTR, ARG1TYPE, ARG2TYPE, ARGCODES)                                                           \
+    static PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1, ARG2TYPE arg2) {                                          \
+        static PyObject* cache_str;                                                                                    \
+        return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1, arg2);                                     \
+    }
+
 #define slot_mp_length slot_sq_length
 
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
@@ -609,6 +783,85 @@ static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value)
     return 0;
 }
 
+SLOT1BIN(slot_nb_add, nb_add, "__add__", "__radd__")
+SLOT1BIN(slot_nb_subtract, nb_subtract, "__sub__", "__rsub__")
+SLOT1BIN(slot_nb_multiply, nb_multiply, "__mul__", "__rmul__")
+SLOT1BIN(slot_nb_divide, nb_divide, "__div__", "__rdiv__")
+SLOT1BIN(slot_nb_remainder, nb_remainder, "__mod__", "__rmod__")
+SLOT1BIN(slot_nb_divmod, nb_divmod, "__divmod__", "__rdivmod__")
+
+static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*);
+
+SLOT1BINFULL(slot_nb_power_binary, slot_nb_power, nb_power, "__pow__", "__rpow__")
+
+static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulus) {
+    static PyObject* pow_str;
+
+    if (modulus == Py_None)
+        return slot_nb_power_binary(self, other);
+    /* Three-arg power doesn't use __rpow__.  But ternary_op
+       can call this when the second argument's type uses
+       slot_nb_power, so check before calling self.__pow__. */
+    if (Py_TYPE(self)->tp_as_number != NULL && Py_TYPE(self)->tp_as_number->nb_power == slot_nb_power) {
+        return call_method(self, "__pow__", &pow_str, "(OO)", other, modulus);
+    }
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+SLOT0(slot_nb_negative, "__neg__")
+SLOT0(slot_nb_positive, "__pos__")
+SLOT0(slot_nb_absolute, "__abs__")
+
+static int slot_nb_nonzero(PyObject* self) noexcept {
+    PyObject* func, *args;
+    static PyObject* nonzero_str, *len_str;
+    int result = -1;
+    int using_len = 0;
+
+    func = lookup_maybe(self, "__nonzero__", &nonzero_str);
+    if (func == NULL) {
+        if (PyErr_Occurred())
+            return -1;
+        func = lookup_maybe(self, "__len__", &len_str);
+        if (func == NULL)
+            return PyErr_Occurred() ? -1 : 1;
+        using_len = 1;
+    }
+    args = PyTuple_New(0);
+    if (args != NULL) {
+        PyObject* temp = PyObject_Call(func, args, NULL);
+        Py_DECREF(args);
+        if (temp != NULL) {
+            if (PyInt_CheckExact(temp) || PyBool_Check(temp))
+                result = PyObject_IsTrue(temp);
+            else {
+                PyErr_Format(PyExc_TypeError, "%s should return "
+                                              "bool or int, returned %s",
+                             (using_len ? "__len__" : "__nonzero__"), temp->cls->tp_name);
+                result = -1;
+            }
+            Py_DECREF(temp);
+        }
+    }
+    Py_DECREF(func);
+    return result;
+}
+
+SLOT0(slot_nb_invert, "__invert__")
+SLOT1BIN(slot_nb_lshift, nb_lshift, "__lshift__", "__rlshift__")
+SLOT1BIN(slot_nb_rshift, nb_rshift, "__rshift__", "__rrshift__")
+SLOT1BIN(slot_nb_and, nb_and, "__and__", "__rand__")
+SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
+SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
+
+static int slot_nb_coerce(PyObject** a, PyObject** b);
+
+SLOT0(slot_nb_int, "__int__")
+SLOT0(slot_nb_long, "__long__")
+SLOT0(slot_nb_float, "__float__")
+SLOT0(slot_nb_oct, "__oct__")
+SLOT0(slot_nb_hex, "__hex__")
 
 typedef wrapper_def slotdef;
 
@@ -687,6 +940,7 @@ static slotdef slotdefs[] = {
     TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
     FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
            PyWrapperFlag_KEYWORDS),
+    TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
     TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
     TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
     TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
@@ -698,6 +952,41 @@ static slotdef slotdefs[] = {
                                                                       "see help(type(x)) for signature",
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+
+    BINSLOT("__add__", nb_add, slot_nb_add, "+"),               // [force clang-format to line break]
+    RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),             //
+    BINSLOT("__sub__", nb_subtract, slot_nb_subtract, "-"),     //
+    RBINSLOT("__rsub__", nb_subtract, slot_nb_subtract, "-"),   //
+    BINSLOT("__mul__", nb_multiply, slot_nb_multiply, "*"),     //
+    RBINSLOT("__rmul__", nb_multiply, slot_nb_multiply, "*"),   //
+    BINSLOT("__div__", nb_divide, slot_nb_divide, "/"),         //
+    RBINSLOT("__rdiv__", nb_divide, slot_nb_divide, "/"),       //
+    BINSLOT("__mod__", nb_remainder, slot_nb_remainder, "%"),   //
+    RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder, "%"), //
+    BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod, "divmod(x, y)"),
+    RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),
+    NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),
+    NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),
+    UNSLOT("__neg__", nb_negative, slot_nb_negative, wrap_unaryfunc, "-x"),         //
+    UNSLOT("__pos__", nb_positive, slot_nb_positive, wrap_unaryfunc, "+x"),         //
+    UNSLOT("__abs__", nb_absolute, slot_nb_absolute, wrap_unaryfunc, "abs(x)"),     //
+    UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"), //
+    UNSLOT("__invert__", nb_invert, slot_nb_invert, wrap_unaryfunc, "~x"),          //
+    BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                         //
+    RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                       //
+    BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                         //
+    RBINSLOT("__rrshift__", nb_rshift, slot_nb_rshift, ">>"),                       //
+    BINSLOT("__and__", nb_and, slot_nb_and, "&"),                                   //
+    RBINSLOT("__rand__", nb_and, slot_nb_and, "&"),                                 //
+    BINSLOT("__xor__", nb_xor, slot_nb_xor, "^"),                                   //
+    RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                 //
+    BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                      //
+    RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                    //
+    UNSLOT("__int__", nb_int, slot_nb_int, wrap_unaryfunc, "int(x)"),               //
+    UNSLOT("__long__", nb_long, slot_nb_long, wrap_unaryfunc, "long(x)"),           //
+    UNSLOT("__float__", nb_float, slot_nb_float, wrap_unaryfunc, "float(x)"),       //
+    UNSLOT("__oct__", nb_oct, slot_nb_oct, wrap_unaryfunc, "oct(x)"),               //
+    UNSLOT("__hex__", nb_hex, slot_nb_hex, wrap_unaryfunc, "hex(x)"),               //
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
@@ -739,6 +1028,17 @@ static void init_slotdefs() {
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
         if (i > 0) {
+#ifndef NDEBUG
+            if (slotdefs[i - 1].offset > slotdefs[i].offset) {
+                printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name);
+                for (int j = i; j < sizeof(slotdefs) / sizeof(slotdefs[0]); j++) {
+                    if (slotdefs[i - 1].offset <= slotdefs[j].offset) {
+                        printf("Should go before %s\n", slotdefs[j].name);
+                        break;
+                    }
+                }
+            }
+#endif
             ASSERT(slotdefs[i].offset >= slotdefs[i - 1].offset, "%d %s", i, slotdefs[i - 1].name);
             // CPython interns the name here
         }
@@ -839,14 +1139,38 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     RELEASE_ASSERT(cls->tp_getattr == NULL, "");
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
-    RELEASE_ASSERT(cls->tp_as_number == NULL, "");
-    RELEASE_ASSERT(cls->tp_str == NULL, "");
+
+    if (cls->tp_as_number) {
+        auto num = cls->tp_as_number;
+        // Members not added yet:
+        assert(num->nb_coerce == NULL);
+        assert(num->nb_inplace_add == NULL);
+        assert(num->nb_inplace_subtract == NULL);
+        assert(num->nb_inplace_multiply == NULL);
+        assert(num->nb_inplace_divide == NULL);
+        assert(num->nb_inplace_remainder == NULL);
+        assert(num->nb_inplace_power == NULL);
+        assert(num->nb_inplace_lshift == NULL);
+        assert(num->nb_inplace_rshift == NULL);
+        assert(num->nb_inplace_and == NULL);
+        assert(num->nb_inplace_xor == NULL);
+        assert(num->nb_inplace_or == NULL);
+        assert(num->nb_floor_divide == NULL);
+        assert(num->nb_true_divide == NULL);
+        assert(num->nb_inplace_floor_divide == NULL);
+        assert(num->nb_inplace_true_divide == NULL);
+        assert(num->nb_index == NULL);
+    }
+
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
 
-    int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
+    int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
+    if (cls->tp_as_number) {
+        RELEASE_ASSERT(cls->tp_flags & Py_TPFLAGS_CHECKTYPES, "Pyston doesn't yet support non-checktypes behavior");
+    }
 
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");

@@ -2,17 +2,42 @@ import slots_test
 
 for i in xrange(3):
     t = slots_test.SlotsTesterSeq(i + 5)
-    print t, repr(t), t(), t[2]
-    print hash(t), t < 1, t > 2, t != 3
+    print t, repr(t), str(t), t(), t[2]
+    print hash(t), t < 1, t > 2, t != 3, bool(t)
 
 # print slots_test.SlotsTesterSeq.__doc__
 print slots_test.SlotsTesterSeq.set_through_tpdict, slots_test.SlotsTesterSeq(5).set_through_tpdict
 
 for i in xrange(3):
     t = slots_test.SlotsTesterMap(i + 5)
-    print len(t), t[2]
+    print len(t), t[2], repr(t), str(t)
     t[1] = 5
     del t[2]
+
+for i in xrange(3):
+    t = slots_test.SlotsTesterNum(i)
+    print bool(t)
+    print t + 5
+    print t - 5
+    print t * 5
+    print t / 5
+    print t % 5
+    print divmod(t, 5)
+    print t ** 5
+    print t << 5
+    print t >> 5
+    print t & 5
+    print t ^ 5
+    print t | 5
+    print +t
+    print -t
+    print abs(t)
+    print ~t
+    print int(t)
+    print long(t)
+    print float(t)
+    print hex(t)
+    print oct(t)
 
 class C(object):
     def __repr__(self):
@@ -33,4 +58,14 @@ slots_test.call_funcs(C())
 def repr2(self):
     return "repr2()"
 C.__repr__ = repr2
+
+def nonzero(self):
+    print "nonzero"
+    return True
+C.__nonzero__ = nonzero
+
+def add(self, rhs):
+    print "add", self, rhs
+C.__add__ = add
+
 slots_test.call_funcs(C())
