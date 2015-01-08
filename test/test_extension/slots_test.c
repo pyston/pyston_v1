@@ -202,6 +202,95 @@ static PyTypeObject slots_tester_map= {
     0,                                  /* tp_free */
 };
 
+static int s_nonzero(slots_tester_object* self) {
+    printf("s_nonzero, %d\n", self->n);
+    return self->n != 0;
+}
+
+static PyNumberMethods slots_tester_as_number = {
+    0,                                  /* nb_add */
+    0,                             /* nb_subtract */
+    0,                             /* nb_multiply */
+    0,                               /* nb_divide */
+    0,                                          /* nb_remainder */
+    0,                                          /* nb_divmod */
+    0,                                          /* nb_power */
+    0,                  /* nb_negative */
+    0,                  /* nb_positive */
+    0,                       /* nb_absolute */
+    (inquiry)s_nonzero,                     /* nb_nonzero */
+    0,                                          /*nb_invert*/
+    0,                                          /*nb_lshift*/
+    0,                                          /*nb_rshift*/
+    0,                                          /*nb_and*/
+    0,                                          /*nb_xor*/
+    0,                                          /*nb_or*/
+    0,                                          /*nb_coerce*/
+    0,                                          /*nb_int*/
+    0,                                          /*nb_long*/
+    0,                                          /*nb_float*/
+    0,                                          /*nb_oct*/
+    0,                                          /*nb_hex*/
+    0,                                          /*nb_inplace_add*/
+    0,                                          /*nb_inplace_subtract*/
+    0,                                          /*nb_inplace_multiply*/
+    0,                                          /*nb_inplace_divide*/
+    0,                                          /*nb_inplace_remainder*/
+    0,                                          /*nb_inplace_power*/
+    0,                                          /*nb_inplace_lshift*/
+    0,                                          /*nb_inplace_rshift*/
+    0,                                          /*nb_inplace_and*/
+    0,                                          /*nb_inplace_xor*/
+    0,                                          /*nb_inplace_or*/
+    0,                               /* nb_floor_divide */
+    0,                                          /* nb_true_divide */
+    0,                                          /* nb_inplace_floor_divide */
+    0,                                          /* nb_inplace_true_divide */
+};
+
+static PyTypeObject slots_tester_num = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "slots_test.slots_tester_num",            /* tp_name */
+    sizeof(slots_tester_object),          /* tp_basicsize */
+    0,                                  /* tp_itemsize */
+    /* methods */
+    0,                                  /* tp_dealloc */
+    0,                                  /* tp_print */
+    0,                                  /* tp_getattr */
+    0,                                  /* tp_setattr */
+    0,                                  /* tp_compare */
+    0,        /* tp_repr */
+    &slots_tester_as_number,                                  /* tp_as_number */
+    0,          /* tp_as_sequence */
+    0,                                  /* tp_as_mapping */
+    0,                                  /* tp_hash */
+    0,     /* tp_call */
+    0,                                  /* tp_str */
+    0,                                  /* tp_getattro */
+    0,                                  /* tp_setattro */
+    0,                                  /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,                 /* tp_flags */
+    0,                   /* tp_doc */
+    0,                                  /* tp_traverse */
+    0,                                  /* tp_clear */
+    0,                                  /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    0,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    0,                                  /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    0,                                  /* tp_init */
+    0,                                  /* tp_alloc */
+    slots_tester_new,                   /* tp_new */
+    0,                                  /* tp_free */
+};
+
 // Tests the correctness of the CAPI slots when the attributes get set in Python code:
 static PyObject *
 call_funcs(PyObject* _module, PyObject* args) {
@@ -282,6 +371,13 @@ call_funcs(PyObject* _module, PyObject* args) {
         printf("tp_as_sequence doesnt exist\n");
     }
 
+    if (cls->tp_as_number) {
+        printf("tp_as_number exists\n");
+        PyNumberMethods* seq = cls->tp_as_number;
+    } else {
+        printf("tp_as_number doesnt exist\n");
+    }
+
     Py_RETURN_NONE;
 }
 
@@ -307,9 +403,14 @@ initslots_test(void)
     if (res < 0)
         return;
 
+    res = PyType_Ready(&slots_tester_num);
+    if (res < 0)
+        return;
+
     // Not sure if the result of PyInt_FromLong needs to be decref'd
     PyDict_SetItemString(slots_tester_seq.tp_dict, "set_through_tpdict", PyInt_FromLong(123));
 
     PyModule_AddObject(m, "SlotsTesterSeq", (PyObject *)&slots_tester_seq);
     PyModule_AddObject(m, "SlotsTesterMap", (PyObject *)&slots_tester_map);
+    PyModule_AddObject(m, "SlotsTesterNum", (PyObject *)&slots_tester_num);
 }
