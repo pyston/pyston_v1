@@ -58,3 +58,13 @@ print vars(C()).items()
 
 print globals().get("not a real variable")
 print globals().get("not a real variable", 1)
+
+print hex(12345)
+print oct(234)
+print hex(0)
+print oct(0)
+
+try:
+    print hex([])
+except TypeError, e:
+    print e

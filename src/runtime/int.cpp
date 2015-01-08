@@ -733,6 +733,26 @@ extern "C" Box* intHash(BoxedInt* self) {
     return boxInt(self->n);
 }
 
+extern "C" Box* intHex(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'int' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
+    char buf[80];
+    int len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
+    return new BoxedString(std::string(buf, len));
+}
+
+extern "C" Box* intOct(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'int' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
+    char buf[80];
+    int len = snprintf(buf, sizeof(buf), "%#lo", self->n);
+    return new BoxedString(std::string(buf, len));
+}
+
 extern "C" Box* intNew(Box* _cls, Box* val) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
@@ -854,6 +874,9 @@ void setupInt() {
     int_cls->giveAttr("__str__", int_cls->getattr("__repr__"));
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
     int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2)));
+
+    int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
+    int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
     int_cls->giveAttr("__new__",
                       new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) }));
