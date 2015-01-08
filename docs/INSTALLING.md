@@ -278,6 +278,18 @@ CXX=g++ CC=gcc PATH=~/pyston_deps/gcc-4.8.2-install/bin:$PATH:~/pyston_deps/ninj
 ~/pyston_deps/ninja/ninja # runs in parallel
 ```
 
+### doxygen
+```
+sudo apt-get install doxygen
+
+# then run cmake (see below) and invoke the docs target
+ninja docs
+
+# now within the Pyston build directory open docs/html/index.html with a browser
+```
+
+Generate doxygen documentation for Pyston. Requires using the cmake build system.
+
 
 # (Experimental) CMake build system
 
