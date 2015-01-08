@@ -72,3 +72,19 @@ def add(self, rhs):
 C.__add__ = add
 
 slots_test.call_funcs(C())
+
+class C2(C):
+    pass
+
+slots_test.call_funcs(C2())
+
+class C3(slots_test.SlotsTesterSeq):
+    pass
+
+slots_test.call_funcs(C3(5))
+
+try:
+    class C4(slots_test.SlotsTesterNonsubclassable):
+        pass
+except TypeError, e:
+    print e

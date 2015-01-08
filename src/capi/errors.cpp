@@ -120,4 +120,8 @@ extern "C" PyObject* PyErr_SetFromErrnoWithUnicodeFilename(PyObject* exc, const 
 extern "C" PyObject* PyErr_SetFromErrno(PyObject* exc) {
     return PyErr_SetFromErrnoWithFilenameObject(exc, NULL);
 }
+
+extern "C" void PyErr_Print() {
+    Py_FatalError("unimplemented");
+}
 }

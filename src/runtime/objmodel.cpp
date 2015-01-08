@@ -354,6 +354,7 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
 
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
+    tp_flags |= Py_TPFLAGS_BASETYPE;
 
     tp_base = base;
 
@@ -3306,6 +3307,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     RELEASE_ASSERT(_base->cls == type_cls, "");
     base = static_cast<BoxedClass*>(_base);
 
+    if ((base->tp_flags & Py_TPFLAGS_BASETYPE) == 0)
+        raiseExcHelper(TypeError, "type '%.100s' is not an acceptable base type", base->tp_name);
 
 
     BoxedClass* made;

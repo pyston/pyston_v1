@@ -447,7 +447,8 @@ PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
         return repr(self);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -455,7 +456,8 @@ PyObject* slot_tp_str(PyObject* self) noexcept {
     try {
         return str(self);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -503,7 +505,8 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
         // TODO: runtime ICs?
         return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -561,7 +564,8 @@ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexce
 
         return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -589,7 +593,8 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     try {
         return getitem(self, boxInt(i));
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
