@@ -280,7 +280,7 @@ CXX=g++ CC=gcc PATH=~/pyston_deps/gcc-4.8.2-install/bin:$PATH:~/pyston_deps/ninj
 
 ### doxygen
 ```
-sudo apt-get install doxygen
+sudo apt-get install doxygen graphviz
 
 # then run cmake (see below) and invoke the docs target
 ninja docs
