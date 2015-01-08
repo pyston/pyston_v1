@@ -333,9 +333,23 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
             int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
             RELEASE_ASSERT(r == 0, "");
         } else {
-            fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
-                    getTypeName(val)->c_str());
-            raiseExcHelper(TypeError, "");
+            static const std::string long_str("__long__");
+            Box* r = callattr(val, &long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                              ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+
+            if (!r) {
+                fprintf(stderr, "TypeError: long() argument must be a string or a number, not '%s'\n",
+                        getTypeName(val)->c_str());
+                raiseExcHelper(TypeError, "");
+            }
+
+            if (isSubclass(r->cls, int_cls)) {
+                mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(r)->n);
+            } else if (!isSubclass(r->cls, long_cls)) {
+                raiseExcHelper(TypeError, "__long__ returned non-long (type %s)", r->cls->tp_name);
+            } else {
+                mpz_init_set(rtn->n, static_cast<BoxedLong*>(r)->n);
+            }
         }
     }
     return rtn;

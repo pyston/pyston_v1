@@ -297,7 +297,7 @@ class BoxedFloat : public Box {
 public:
     double d;
 
-    BoxedFloat(double d) __attribute__((visibility("default"))) : Box(float_cls), d(d) {}
+    BoxedFloat(BoxedClass* cls, double d) __attribute__((visibility("default"))) : Box(cls), d(d) {}
 };
 
 class BoxedComplex : public Box {
