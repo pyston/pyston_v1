@@ -205,6 +205,10 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     long us = _t.end();
     static StatCounter us_compiling("us_compiling");
     us_compiling.log(us);
+    if (VERBOSITY() >= 1 && us > 100000) {
+        printf("Took %ldms to compile %s::%s!\n", us / 1000, source->parent_module->fn.c_str(), name.c_str());
+    }
+
     static StatCounter num_compiles("num_compiles");
     num_compiles.log();
 
