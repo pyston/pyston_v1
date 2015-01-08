@@ -29,6 +29,15 @@ for i in xrange(3):
     print t & 5
     print t ^ 5
     print t | 5
+    print +t
+    print -t
+    print abs(t)
+    print ~t
+    print int(t)
+    print long(t)
+    print float(t)
+    print hex(t)
+    print oct(t)
 
 class C(object):
     def __repr__(self):

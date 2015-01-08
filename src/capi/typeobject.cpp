@@ -507,41 +507,6 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
     }
 }
 
-static int slot_nb_nonzero(PyObject* self) noexcept {
-    PyObject* func, *args;
-    static PyObject* nonzero_str, *len_str;
-    int result = -1;
-    int using_len = 0;
-
-    func = lookup_maybe(self, "__nonzero__", &nonzero_str);
-    if (func == NULL) {
-        if (PyErr_Occurred())
-            return -1;
-        func = lookup_maybe(self, "__len__", &len_str);
-        if (func == NULL)
-            return PyErr_Occurred() ? -1 : 1;
-        using_len = 1;
-    }
-    args = PyTuple_New(0);
-    if (args != NULL) {
-        PyObject* temp = PyObject_Call(func, args, NULL);
-        Py_DECREF(args);
-        if (temp != NULL) {
-            if (PyInt_CheckExact(temp) || PyBool_Check(temp))
-                result = PyObject_IsTrue(temp);
-            else {
-                PyErr_Format(PyExc_TypeError, "%s should return "
-                                              "bool or int, returned %s",
-                             (using_len ? "__len__" : "__nonzero__"), temp->cls->tp_name);
-                result = -1;
-            }
-            Py_DECREF(temp);
-        }
-    }
-    Py_DECREF(func);
-    return result;
-}
-
 static const char* name_op[] = {
     "__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__",
 };
@@ -844,13 +809,59 @@ static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulu
     return Py_NotImplemented;
 }
 
-// SLOT0(slot_nb_invert, "__invert__")
+SLOT0(slot_nb_negative, "__neg__")
+SLOT0(slot_nb_positive, "__pos__")
+SLOT0(slot_nb_absolute, "__abs__")
+
+static int slot_nb_nonzero(PyObject* self) noexcept {
+    PyObject* func, *args;
+    static PyObject* nonzero_str, *len_str;
+    int result = -1;
+    int using_len = 0;
+
+    func = lookup_maybe(self, "__nonzero__", &nonzero_str);
+    if (func == NULL) {
+        if (PyErr_Occurred())
+            return -1;
+        func = lookup_maybe(self, "__len__", &len_str);
+        if (func == NULL)
+            return PyErr_Occurred() ? -1 : 1;
+        using_len = 1;
+    }
+    args = PyTuple_New(0);
+    if (args != NULL) {
+        PyObject* temp = PyObject_Call(func, args, NULL);
+        Py_DECREF(args);
+        if (temp != NULL) {
+            if (PyInt_CheckExact(temp) || PyBool_Check(temp))
+                result = PyObject_IsTrue(temp);
+            else {
+                PyErr_Format(PyExc_TypeError, "%s should return "
+                                              "bool or int, returned %s",
+                             (using_len ? "__len__" : "__nonzero__"), temp->cls->tp_name);
+                result = -1;
+            }
+            Py_DECREF(temp);
+        }
+    }
+    Py_DECREF(func);
+    return result;
+}
+
+SLOT0(slot_nb_invert, "__invert__")
 SLOT1BIN(slot_nb_lshift, nb_lshift, "__lshift__", "__rlshift__")
 SLOT1BIN(slot_nb_rshift, nb_rshift, "__rshift__", "__rrshift__")
 SLOT1BIN(slot_nb_and, nb_and, "__and__", "__rand__")
 SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
 SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
 
+static int slot_nb_coerce(PyObject** a, PyObject** b);
+
+SLOT0(slot_nb_int, "__int__")
+SLOT0(slot_nb_long, "__long__")
+SLOT0(slot_nb_float, "__float__")
+SLOT0(slot_nb_oct, "__oct__")
+SLOT0(slot_nb_hex, "__hex__")
 
 typedef wrapper_def slotdef;
 
@@ -956,7 +967,11 @@ static slotdef slotdefs[] = {
     RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),
     NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),
     NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),
+    UNSLOT("__neg__", nb_negative, slot_nb_negative, wrap_unaryfunc, "-x"),         //
+    UNSLOT("__pos__", nb_positive, slot_nb_positive, wrap_unaryfunc, "+x"),         //
+    UNSLOT("__abs__", nb_absolute, slot_nb_absolute, wrap_unaryfunc, "abs(x)"),     //
     UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"), //
+    UNSLOT("__invert__", nb_invert, slot_nb_invert, wrap_unaryfunc, "~x"),          //
     BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                         //
     RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                       //
     BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                         //
@@ -967,6 +982,11 @@ static slotdef slotdefs[] = {
     RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                 //
     BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                      //
     RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                    //
+    UNSLOT("__int__", nb_int, slot_nb_int, wrap_unaryfunc, "int(x)"),               //
+    UNSLOT("__long__", nb_long, slot_nb_long, wrap_unaryfunc, "long(x)"),           //
+    UNSLOT("__float__", nb_float, slot_nb_float, wrap_unaryfunc, "float(x)"),       //
+    UNSLOT("__oct__", nb_oct, slot_nb_oct, wrap_unaryfunc, "oct(x)"),               //
+    UNSLOT("__hex__", nb_hex, slot_nb_hex, wrap_unaryfunc, "hex(x)"),               //
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
     MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
@@ -1132,8 +1152,8 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
         SAVE(nb_nonzero);
         SAVE(nb_add);
 
-        for (void** p = (void**)cls->tp_as_number; p < (void**)cls->tp_as_number + 1; p++) {
-            RELEASE_ASSERT(*p == NULL, "");
+        for (void** p = (void**)cls->tp_as_number; p < (void**)(cls->tp_as_number + 1); p++) {
+            // RELEASE_ASSERT(*p == NULL, "");
         }
 
         RESTORE(nb_nonzero);

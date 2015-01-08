@@ -210,26 +210,38 @@ static PyTypeObject slots_tester_map= {
     0,                                  /* tp_free */
 };
 
-static int s_nonzero(slots_tester_object* self) {
-    printf("s_nonzero, %d\n", self->n);
-    return self->n != 0;
-}
-
 #define _PYSTON_STRINGIFY(N) #N
 #define PYSTON_STRINGIFY(N) _PYSTON_STRINGIFY(N)
-#define CREATE_FUNC(N) \
+#define CREATE_UN(N, R) \
+static PyObject* N(slots_tester_object* lhs) { \
+    printf(PYSTON_STRINGIFY(N) ", %d\n", lhs->n); \
+    Py_INCREF(R); \
+    return (PyObject*)R; \
+}
+
+#define CREATE_BIN(N) \
 static PyObject* N(slots_tester_object* lhs, PyObject* rhs) { \
     printf(PYSTON_STRINGIFY(N) ", %d %s\n", lhs->n, Py_TYPE(rhs)->tp_name); \
     Py_INCREF(lhs); \
     return (PyObject*)lhs; \
 }
 
-CREATE_FUNC(s_add);
-CREATE_FUNC(s_subtract);
-CREATE_FUNC(s_multiply);
-CREATE_FUNC(s_divide);
-CREATE_FUNC(s_remainder);
-CREATE_FUNC(s_divmod);
+CREATE_BIN(s_add);
+CREATE_BIN(s_subtract);
+CREATE_BIN(s_multiply);
+CREATE_BIN(s_divide);
+CREATE_BIN(s_remainder);
+CREATE_BIN(s_divmod);
+CREATE_UN(s_negative, lhs);
+CREATE_UN(s_positive, lhs);
+CREATE_UN(s_absolute, lhs);
+
+static int s_nonzero(slots_tester_object* self) {
+    printf("s_nonzero, %d\n", self->n);
+    return self->n != 0;
+}
+
+CREATE_UN(s_invert, lhs);
 
 static PyObject* s_power(slots_tester_object* lhs, PyObject* rhs, PyObject* mod) {
     printf("s_power, %d %s %s\n", lhs->n, Py_TYPE(rhs)->tp_name, Py_TYPE(mod)->tp_name);
@@ -237,13 +249,19 @@ static PyObject* s_power(slots_tester_object* lhs, PyObject* rhs, PyObject* mod)
     return (PyObject*)lhs;
 }
 
-CREATE_FUNC(s_lshift);
-CREATE_FUNC(s_rshift);
-CREATE_FUNC(s_and);
-CREATE_FUNC(s_xor);
-CREATE_FUNC(s_or);
+CREATE_BIN(s_lshift);
+CREATE_BIN(s_rshift);
+CREATE_BIN(s_and);
+CREATE_BIN(s_xor);
+CREATE_BIN(s_or);
 
-#undef CREATE_FUNC
+CREATE_UN(s_int, Py_True);
+CREATE_UN(s_long, Py_True);
+CREATE_UN(s_float, PyFloat_FromDouble(1.0));
+CREATE_UN(s_oct, PyString_FromString("oct"));
+CREATE_UN(s_hex, PyString_FromString("hex"));
+
+#undef CREATE_BIN
 
 static PyNumberMethods slots_tester_as_number = {
     (binaryfunc)s_add,                                  /* nb_add */
@@ -253,22 +271,22 @@ static PyNumberMethods slots_tester_as_number = {
     (binaryfunc)s_remainder,                                          /* nb_remainder */
     (binaryfunc)s_divmod,                                          /* nb_divmod */
     (ternaryfunc)s_power,                                          /* nb_power */
-    0,                  /* nb_negative */
-    0,                  /* nb_positive */
-    0,                       /* nb_absolute */
+    (unaryfunc)s_negative,                  /* nb_negative */
+    (unaryfunc)s_positive,                  /* nb_positive */
+    (unaryfunc)s_absolute,                       /* nb_absolute */
     (inquiry)s_nonzero,                     /* nb_nonzero */
-    0,                                          /*nb_invert*/
+    (unaryfunc)s_invert,                                          /*nb_invert*/
     (binaryfunc)s_lshift,                                          /*nb_lshift*/
     (binaryfunc)s_rshift,                                          /*nb_rshift*/
     (binaryfunc)s_and,                                          /*nb_and*/
     (binaryfunc)s_xor,                                          /*nb_xor*/
     (binaryfunc)s_or,                                          /*nb_or*/
     0,                                          /*nb_coerce*/
-    0,                                          /*nb_int*/
-    0,                                          /*nb_long*/
-    0,                                          /*nb_float*/
-    0,                                          /*nb_oct*/
-    0,                                          /*nb_hex*/
+    (unaryfunc)s_int,                                          /*nb_int*/
+    (unaryfunc)s_long,                                          /*nb_long*/
+    (unaryfunc)s_float,                                          /*nb_float*/
+    (unaryfunc)s_oct,                                          /*nb_oct*/
+    (unaryfunc)s_hex,                                          /*nb_hex*/
     0,                                          /*nb_inplace_add*/
     0,                                          /*nb_inplace_subtract*/
     0,                                          /*nb_inplace_multiply*/
@@ -417,24 +435,37 @@ call_funcs(PyObject* _module, PyObject* args) {
             printf("CHECKTYPES is not set!\n");
         }
 
-        if (num->nb_nonzero) {
-            int n = num->nb_nonzero(obj);
-            printf("nb_nonzero exists and returned %d\n", n);
+#define CHECK_UN(N) \
+        if (num->N) { \
+            PyObject* res = num->N(obj); \
+            printf(PYSTON_STRINGIFY(N) " exists and returned a %s\n", Py_TYPE(res)->tp_name); \
+            Py_DECREF(res);  \
         }
 
-#define CHECK(N) \
+#define CHECK_BIN(N) \
         if (num->N) { \
             PyObject* res = num->N(obj, obj); \
             printf(PYSTON_STRINGIFY(N) " exists and returned a %s\n", Py_TYPE(res)->tp_name); \
             Py_DECREF(res);  \
         }
 
-        CHECK(nb_add);
-        CHECK(nb_subtract);
-        CHECK(nb_multiply);
-        CHECK(nb_divide);
-        CHECK(nb_remainder);
-        CHECK(nb_divmod);
+        CHECK_BIN(nb_add);
+        CHECK_BIN(nb_subtract);
+        CHECK_BIN(nb_multiply);
+        CHECK_BIN(nb_divide);
+        CHECK_BIN(nb_remainder);
+        CHECK_BIN(nb_divmod);
+
+        CHECK_UN(nb_negative);
+        CHECK_UN(nb_positive);
+        CHECK_UN(nb_absolute);
+
+        if (num->nb_nonzero) {
+            int n = num->nb_nonzero(obj);
+            printf("nb_nonzero exists and returned %d\n", n);
+        }
+
+        CHECK_UN(nb_invert);
 
         if (num->nb_power) {
             PyObject* res = num->nb_power(obj, obj, Py_None);
@@ -442,12 +473,18 @@ call_funcs(PyObject* _module, PyObject* args) {
             Py_DECREF(res);
         }
 
-        CHECK(nb_lshift);
-        CHECK(nb_rshift);
-        CHECK(nb_and);
-        CHECK(nb_xor);
-        CHECK(nb_or);
-#undef CHECK
+        CHECK_BIN(nb_lshift);
+        CHECK_BIN(nb_rshift);
+        CHECK_BIN(nb_and);
+        CHECK_BIN(nb_xor);
+        CHECK_BIN(nb_or);
+
+        CHECK_UN(nb_int);
+        CHECK_UN(nb_long);
+        CHECK_UN(nb_float);
+        CHECK_UN(nb_oct);
+        CHECK_UN(nb_hex);
+#undef CHECK_BIN
 
     } else {
         printf("tp_as_number doesnt exist\n");
