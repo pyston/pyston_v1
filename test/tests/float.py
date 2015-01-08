@@ -34,3 +34,5 @@ class F2(float):
     pass
 
 print type(F2(D(F())))
+
+print type(float(F()))

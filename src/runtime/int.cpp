@@ -755,7 +755,10 @@ extern "C" Box* intOct(BoxedInt* self) {
 
 BoxedInt* _intNew(Box* val) {
     if (isSubclass(val->cls, int_cls)) {
-        return new BoxedInt(int_cls, static_cast<BoxedInt*>(val)->n);
+        BoxedInt* n = static_cast<BoxedInt*>(val);
+        if (val->cls == int_cls)
+            return n;
+        return new BoxedInt(int_cls, n->n);
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
 

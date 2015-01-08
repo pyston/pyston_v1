@@ -290,20 +290,8 @@ extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) {
     return rtn;
 }
 
-extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
-    if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
-
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, long_cls))
-        raiseExcHelper(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
-
-    assert(cls->tp_basicsize >= sizeof(BoxedInt));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedLong* rtn = ::new (mem) BoxedLong(cls);
-    initUserAttrs(rtn, cls);
-
+BoxedLong* _longNew(Box* val, Box* _base) {
+    BoxedLong* rtn = new BoxedLong(long_cls);
     if (_base) {
         if (!isSubclass(_base->cls, int_cls))
             raiseExcHelper(TypeError, "an integer is required");
@@ -326,7 +314,14 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
         int r = mpz_init_set_str(rtn->n, s->s.c_str(), base);
         RELEASE_ASSERT(r == 0, "");
     } else {
-        if (isSubclass(val->cls, int_cls)) {
+        if (isSubclass(val->cls, long_cls)) {
+            BoxedLong* l = static_cast<BoxedLong*>(val);
+            if (val->cls == long_cls)
+                return l;
+            BoxedLong* rtn = new BoxedLong(long_cls);
+            mpz_init_set(rtn->n, l->n);
+            return rtn;
+        } else if (isSubclass(val->cls, int_cls)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
             const std::string& s = static_cast<BoxedString*>(val)->s;
@@ -348,10 +343,32 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
             } else if (!isSubclass(r->cls, long_cls)) {
                 raiseExcHelper(TypeError, "__long__ returned non-long (type %s)", r->cls->tp_name);
             } else {
-                mpz_init_set(rtn->n, static_cast<BoxedLong*>(r)->n);
+                return static_cast<BoxedLong*>(r);
             }
         }
     }
+    return rtn;
+}
+
+extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
+    if (!isSubclass(_cls->cls, type_cls))
+        raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(cls, long_cls))
+        raiseExcHelper(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls)->c_str(),
+                       getNameOfClass(cls)->c_str());
+
+    BoxedLong* l = _longNew(val, _base);
+    if (cls == long_cls)
+        return l;
+
+    assert(cls->tp_basicsize >= sizeof(BoxedInt));
+    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
+    BoxedLong* rtn = ::new (mem) BoxedLong(cls);
+    initUserAttrs(rtn, cls);
+
+    mpz_init_set(rtn->n, l->n);
     return rtn;
 }
 
