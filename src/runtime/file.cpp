@@ -191,6 +191,14 @@ extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*clo
     Py_FatalError("unimplemented");
 }
 
+extern "C" FILE* PyFile_AsFile(PyObject* f) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyFile_WriteString(const char* s, PyObject* f) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) {
     Py_FatalError("unimplemented");
 }
@@ -200,6 +208,10 @@ extern "C" int _PyFile_SanitizeMode(char* mode) {
 }
 
 extern "C" int PyObject_AsFileDescriptor(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) {
     Py_FatalError("unimplemented");
 }
 

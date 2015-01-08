@@ -630,6 +630,19 @@ extern "C" int PyCallable_Check(PyObject* x) {
     return typeLookup(x->cls, call_attr, NULL) != NULL;
 }
 
+extern "C" int Py_FlushLine(void) {
+    PyObject* f = PySys_GetObject("stdout");
+    if (f == NULL)
+        return 0;
+    if (!PyFile_SoftSpace(f, 0))
+        return 0;
+    return PyFile_WriteString("\n", f);
+}
+
+extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb) {
+    Py_FatalError("unimplemented");
+}
+
 void checkAndThrowCAPIException() {
     Box* value = threading::cur_thread_state.exc_value;
     if (value) {

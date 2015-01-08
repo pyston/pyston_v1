@@ -117,11 +117,94 @@ extern "C" PyObject* PyErr_SetFromErrnoWithUnicodeFilename(PyObject* exc, const 
 }
 #endif /* MS_WINDOWS */
 
+extern "C" void PyErr_Fetch(PyObject** p_type, PyObject** p_value, PyObject** p_traceback) {
+    auto* tstate = &threading::cur_thread_state;
+
+    *p_type = tstate->exc_type;
+    *p_value = tstate->exc_value;
+    *p_traceback = tstate->exc_traceback;
+
+    tstate->exc_type = NULL;
+    tstate->exc_value = NULL;
+    tstate->exc_traceback = NULL;
+}
+
 extern "C" PyObject* PyErr_SetFromErrno(PyObject* exc) {
     return PyErr_SetFromErrnoWithFilenameObject(exc, NULL);
 }
 
-extern "C" void PyErr_Print() {
+extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) {
     Py_FatalError("unimplemented");
+}
+
+static void handle_system_exit(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" void PyErr_PrintEx(int set_sys_last_vars) {
+    PyObject* exception, *v, *tb, *hook;
+
+    if (PyErr_ExceptionMatches(PyExc_SystemExit)) {
+        handle_system_exit();
+    }
+    PyErr_Fetch(&exception, &v, &tb);
+    if (exception == NULL)
+        return;
+    PyErr_NormalizeException(&exception, &v, &tb);
+    if (exception == NULL)
+        return;
+    /* Now we know v != NULL too */
+    if (set_sys_last_vars) {
+        PySys_SetObject("last_type", exception);
+        PySys_SetObject("last_value", v);
+        PySys_SetObject("last_traceback", tb);
+    }
+    hook = PySys_GetObject("excepthook");
+    if (hook && hook != Py_None) {
+        PyObject* args = PyTuple_Pack(3, exception, v, tb ? tb : Py_None);
+        PyObject* result = PyEval_CallObject(hook, args);
+        if (result == NULL) {
+            PyObject* exception2, *v2, *tb2;
+            if (PyErr_ExceptionMatches(PyExc_SystemExit)) {
+                handle_system_exit();
+            }
+            PyErr_Fetch(&exception2, &v2, &tb2);
+            PyErr_NormalizeException(&exception2, &v2, &tb2);
+            /* It should not be possible for exception2 or v2
+               to be NULL. However PyErr_Display() can't
+               tolerate NULLs, so just be safe. */
+            if (exception2 == NULL) {
+                exception2 = Py_None;
+                Py_INCREF(exception2);
+            }
+            if (v2 == NULL) {
+                v2 = Py_None;
+                Py_INCREF(v2);
+            }
+            if (Py_FlushLine())
+                PyErr_Clear();
+            fflush(stdout);
+            PySys_WriteStderr("Error in sys.excepthook:\n");
+            PyErr_Display(exception2, v2, tb2);
+            PySys_WriteStderr("\nOriginal exception was:\n");
+            PyErr_Display(exception, v, tb);
+            Py_DECREF(exception2);
+            Py_DECREF(v2);
+            Py_XDECREF(tb2);
+        }
+        Py_XDECREF(result);
+        Py_XDECREF(args);
+    } else {
+        PySys_WriteStderr("sys.excepthook is missing\n");
+        PyErr_Display(exception, v, tb);
+    }
+    Py_XDECREF(exception);
+    Py_XDECREF(v);
+    Py_XDECREF(tb);
+}
+
+
+extern "C" void PyErr_Print() {
+    PyErr_PrintEx(1);
 }
 }
