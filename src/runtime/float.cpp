@@ -545,7 +545,7 @@ std::string floatFmt(double x, int precision, char code) {
 }
 
 Box* floatNew(BoxedClass* cls, Box* a) {
-    assert(cls == float_cls);
+    RELEASE_ASSERT(cls == float_cls, "");
 
     if (a->cls == float_cls) {
         return a;

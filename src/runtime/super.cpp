@@ -73,7 +73,9 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    RELEASE_ASSERT(0, "should call the equivalent of objectGetattr here");
+    Box* r = typeLookup(s->cls, attr->s, NULL);
+    RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
+    return processDescriptor(r, s, s->cls);
 }
 
 Box* superRepr(Box* _s) {
@@ -107,9 +109,9 @@ BoxedClass* supercheck(BoxedClass* type, Box* obj) {
     raiseExcHelper(TypeError, "super(type, obj): obj must be an instance or subtype of type");
 }
 
-// TODO This functionality is supposed to be in the __init__ function:
-Box* superNew(Box* _cls, Box* _type, Box* obj) {
-    RELEASE_ASSERT(_cls == super_cls, "");
+Box* superInit(Box* _self, Box* _type, Box* obj) {
+    RELEASE_ASSERT(_self->cls == super_cls, "");
+    BoxedSuper* self = static_cast<BoxedSuper*>(_self);
 
     if (!isSubclass(_type->cls, type_cls))
         raiseExcHelper(TypeError, "must be type, not %s", getTypeName(_type)->c_str());
@@ -121,7 +123,11 @@ Box* superNew(Box* _cls, Box* _type, Box* obj) {
     if (obj != NULL)
         obj_type = supercheck(type, obj);
 
-    return new BoxedSuper(type, obj, obj_type);
+    self->type = type;
+    self->obj = obj;
+    self->obj_type = obj_type;
+
+    return None;
 }
 
 void setupSuper() {
@@ -132,8 +138,15 @@ void setupSuper() {
     super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
     super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
 
-    super_cls->giveAttr("__new__",
-                        new BoxedFunction(boxRTFunction((void*)superNew, UNKNOWN, 3, 1, false, false), { NULL }));
+    super_cls->giveAttr("__init__",
+                        new BoxedFunction(boxRTFunction((void*)superInit, UNKNOWN, 3, 1, false, false), { NULL }));
+
+    super_cls->giveAttr("__thisclass__",
+                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, type)));
+    super_cls->giveAttr("__self__",
+                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, obj)));
+    super_cls->giveAttr("__self_class__",
+                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedSuper, obj_type)));
 
     super_cls->freeze();
 }

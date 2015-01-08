@@ -949,6 +949,10 @@ void setupRuntime() {
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
     instancemethod_cls->giveAttr(
         "__get__", new BoxedFunction(boxRTFunction((void*)instancemethodGet, UNKNOWN, 3, 0, false, false)));
+    instancemethod_cls->giveAttr(
+        "im_func", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, func)));
+    instancemethod_cls->giveAttr(
+        "im_self", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, obj)));
     instancemethod_cls->freeze();
 
     slice_cls->giveAttr("__name__", boxStrConstant("slice"));

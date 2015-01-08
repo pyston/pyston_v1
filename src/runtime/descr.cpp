@@ -21,15 +21,28 @@ namespace pyston {
 static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == member_cls, "");
 
+    if (inst == None)
+        return self;
+
+    if (self->type == BoxedMemberDescriptor::OBJECT) {
+        return *(Box**)(((char*)inst) + self->offset);
+    }
+
     Py_FatalError("unimplemented");
 }
 
-static Box* propertyNew(Box* cls, Box* fget, Box* fset, Box** args) {
-    RELEASE_ASSERT(cls == property_cls, "");
+static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
+    RELEASE_ASSERT(_self->cls == property_cls, "");
     Box* fdel = args[0];
     Box* doc = args[1];
 
-    return new BoxedProperty(fget, fset, fdel, doc);
+    BoxedProperty* self = static_cast<BoxedProperty*>(_self);
+    self->prop_get = fget;
+    self->prop_set = fset;
+    self->prop_del = fdel;
+    self->prop_doc = doc;
+
+    return None;
 }
 
 static Box* propertyGet(Box* self, Box* obj, Box* type) {
@@ -70,9 +83,12 @@ static Box* propertySet(Box* self, Box* obj, Box* val) {
     return None;
 }
 
-static Box* staticmethodNew(Box* cls, Box* f) {
-    RELEASE_ASSERT(cls == staticmethod_cls, "");
-    return new BoxedStaticmethod(f);
+static Box* staticmethodInit(Box* _self, Box* f) {
+    RELEASE_ASSERT(_self->cls == staticmethod_cls, "");
+    BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
+    self->sm_callable = f;
+
+    return None;
 }
 
 static Box* staticmethodGet(Box* self, Box* obj, Box* type) {
@@ -87,9 +103,12 @@ static Box* staticmethodGet(Box* self, Box* obj, Box* type) {
     return sm->sm_callable;
 }
 
-static Box* classmethodNew(Box* cls, Box* f) {
-    RELEASE_ASSERT(cls == classmethod_cls, "");
-    return new BoxedClassmethod(f);
+static Box* classmethodInit(Box* _self, Box* f) {
+    RELEASE_ASSERT(_self->cls == classmethod_cls, "");
+    BoxedClassmethod* self = static_cast<BoxedClassmethod*>(_self);
+    self->cm_callable = f;
+
+    return None;
 }
 
 static Box* classmethodGet(Box* self, Box* obj, Box* type) {
@@ -114,29 +133,38 @@ void setupDescr() {
     member_cls->freeze();
 
     property_cls->giveAttr("__name__", boxStrConstant("property"));
-    property_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)propertyNew, UNKNOWN, 5, 4, false, false),
-                                                        { None, None, None, None }));
+    property_cls->giveAttr(
+        "__init__",
+        new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false), { None, None, None, None }));
     property_cls->giveAttr("__get__",
                            new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3, 0, false, false)));
     property_cls->giveAttr("__set__",
                            new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3, 0, false, false)));
+    property_cls->giveAttr("fget",
+                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_get)));
+    property_cls->giveAttr("fset",
+                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_set)));
+    property_cls->giveAttr("fdel",
+                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_del)));
+    property_cls->giveAttr("fdoc",
+                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_doc)));
     property_cls->freeze();
 
     staticmethod_cls->giveAttr("__name__", boxStrConstant("staticmethod"));
-    staticmethod_cls->giveAttr("__new__",
-                               new BoxedFunction(boxRTFunction((void*)staticmethodNew, UNKNOWN, 5, 4, false, false),
+    staticmethod_cls->giveAttr("__init__",
+                               new BoxedFunction(boxRTFunction((void*)staticmethodInit, UNKNOWN, 5, 4, false, false),
                                                  { None, None, None, None }));
-    staticmethod_cls->giveAttr("__get__",
-                               new BoxedFunction(boxRTFunction((void*)staticmethodGet, UNKNOWN, 3, 0, false, false)));
+    staticmethod_cls->giveAttr(
+        "__get__", new BoxedFunction(boxRTFunction((void*)staticmethodGet, UNKNOWN, 3, 1, false, false), { None }));
     staticmethod_cls->freeze();
 
 
     classmethod_cls->giveAttr("__name__", boxStrConstant("classmethod"));
-    classmethod_cls->giveAttr("__new__",
-                              new BoxedFunction(boxRTFunction((void*)classmethodNew, UNKNOWN, 5, 4, false, false),
+    classmethod_cls->giveAttr("__init__",
+                              new BoxedFunction(boxRTFunction((void*)classmethodInit, UNKNOWN, 5, 4, false, false),
                                                 { None, None, None, None }));
-    classmethod_cls->giveAttr("__get__",
-                              new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, 0, false, false)));
+    classmethod_cls->giveAttr(
+        "__get__", new BoxedFunction(boxRTFunction((void*)classmethodGet, UNKNOWN, 3, 1, false, false), { None }));
     classmethod_cls->freeze();
 }
 
