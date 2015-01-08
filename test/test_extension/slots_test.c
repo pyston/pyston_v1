@@ -62,6 +62,14 @@ slots_tester_seq_repr(slots_tester_object *obj)
 }
 
 static PyObject *
+slots_tester_seq_str(slots_tester_object *obj)
+{
+    char buf[80];
+    snprintf(buf, sizeof(buf), "<my custom str: %d>", obj->n);
+    return PyString_FromString(buf);
+}
+
+static PyObject *
 slots_tester_seq_call(slots_tester_object *obj, PyObject *args, PyObject *kw)
 {
     if (!PyArg_ParseTuple(args, ""))
@@ -111,7 +119,7 @@ static PyTypeObject slots_tester_seq = {
     0,                                  /* tp_as_mapping */
     (hashfunc)slots_tester_seq_hash, /* tp_hash */
     (ternaryfunc)slots_tester_seq_call,     /* tp_call */
-    0,                                  /* tp_str */
+    (reprfunc)slots_tester_seq_str,     /* tp_str */
     0,                                  /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
@@ -170,7 +178,7 @@ static PyTypeObject slots_tester_map= {
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
     0,                                  /* tp_compare */
-    0,        /* tp_repr */
+    (reprfunc)slots_tester_seq_repr,    /* tp_repr */
     0,                                  /* tp_as_number */
     0,          /* tp_as_sequence */
     &slots_tester_map_asmapping,                                  /* tp_as_mapping */

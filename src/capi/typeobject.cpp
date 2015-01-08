@@ -364,6 +364,14 @@ PyObject* slot_tp_repr(PyObject* self) noexcept {
     }
 }
 
+PyObject* slot_tp_str(PyObject* self) noexcept {
+    try {
+        return str(self);
+    } catch (Box* e) {
+        abort();
+    }
+}
+
 static long slot_tp_hash(PyObject* self) noexcept {
     PyObject* func;
     static PyObject* hash_str, *eq_str, *cmp_str;
@@ -734,6 +742,7 @@ static slotdef slotdefs[] = {
     TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
     FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
            PyWrapperFlag_KEYWORDS),
+    TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
     TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
     TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
     TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
@@ -914,7 +923,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
         cls->tp_as_number->nb_nonzero = nb_nonzero;
     }
 
-    RELEASE_ASSERT(cls->tp_str == NULL, "");
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");

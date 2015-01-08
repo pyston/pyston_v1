@@ -2,7 +2,7 @@ import slots_test
 
 for i in xrange(3):
     t = slots_test.SlotsTesterSeq(i + 5)
-    print t, repr(t), t(), t[2]
+    print t, repr(t), str(t), t(), t[2]
     print hash(t), t < 1, t > 2, t != 3, bool(t)
 
 # print slots_test.SlotsTesterSeq.__doc__
@@ -10,7 +10,7 @@ print slots_test.SlotsTesterSeq.set_through_tpdict, slots_test.SlotsTesterSeq(5)
 
 for i in xrange(3):
     t = slots_test.SlotsTesterMap(i + 5)
-    print len(t), t[2]
+    print len(t), t[2], repr(t), str(t)
     t[1] = 5
     del t[2]
 
