@@ -1131,6 +1131,304 @@ extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) {
     return isSubclass(a, b);
 }
 
+#define BUFFER_FLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
+
+// This is copied from CPython with some modifications:
+static void inherit_special(PyTypeObject* type, PyTypeObject* base) {
+    Py_ssize_t oldsize, newsize;
+
+    /* Special flag magic */
+    if (!type->tp_as_buffer && base->tp_as_buffer) {
+        type->tp_flags &= ~BUFFER_FLAGS;
+        type->tp_flags |= base->tp_flags & BUFFER_FLAGS;
+    }
+    if (!type->tp_as_sequence && base->tp_as_sequence) {
+        type->tp_flags &= ~Py_TPFLAGS_HAVE_SEQUENCE_IN;
+        type->tp_flags |= base->tp_flags & Py_TPFLAGS_HAVE_SEQUENCE_IN;
+    }
+    if ((type->tp_flags & Py_TPFLAGS_HAVE_INPLACEOPS) != (base->tp_flags & Py_TPFLAGS_HAVE_INPLACEOPS)) {
+        if ((!type->tp_as_number && base->tp_as_number) || (!type->tp_as_sequence && base->tp_as_sequence)) {
+            type->tp_flags &= ~Py_TPFLAGS_HAVE_INPLACEOPS;
+            if (!type->tp_as_number && !type->tp_as_sequence) {
+                type->tp_flags |= base->tp_flags & Py_TPFLAGS_HAVE_INPLACEOPS;
+            }
+        }
+        /* Wow */
+    }
+    if (!type->tp_as_number && base->tp_as_number) {
+        type->tp_flags &= ~Py_TPFLAGS_CHECKTYPES;
+        type->tp_flags |= base->tp_flags & Py_TPFLAGS_CHECKTYPES;
+    }
+
+    /* Copying basicsize is connected to the GC flags */
+    oldsize = base->tp_basicsize;
+    newsize = type->tp_basicsize ? type->tp_basicsize : oldsize;
+    if (!(type->tp_flags & Py_TPFLAGS_HAVE_GC) && (base->tp_flags & Py_TPFLAGS_HAVE_GC)
+        && (type->tp_flags & Py_TPFLAGS_HAVE_RICHCOMPARE /*GC slots exist*/)
+        && (!type->tp_traverse && !type->tp_clear)) {
+        type->tp_flags |= Py_TPFLAGS_HAVE_GC;
+        if (type->tp_traverse == NULL)
+            type->tp_traverse = base->tp_traverse;
+        if (type->tp_clear == NULL)
+            type->tp_clear = base->tp_clear;
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+        /* The condition below could use some explanation.
+           It appears that tp_new is not inherited for static types
+           whose base class is 'object'; this seems to be a precaution
+           so that old extension types don't suddenly become
+           callable (object.__new__ wouldn't insure the invariants
+           that the extension type's own factory function ensures).
+           Heap types, of course, are under our control, so they do
+           inherit tp_new; static extension types that specify some
+           other built-in type as the default are considered
+           new-style-aware so they also inherit object.__new__. */
+        if (base != object_cls || (type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+            if (type->tp_new == NULL)
+                type->tp_new = base->tp_new;
+        }
+    }
+    type->tp_basicsize = newsize;
+
+/* Copy other non-function slots */
+
+#undef COPYVAL
+#define COPYVAL(SLOT)                                                                                                  \
+    if (type->SLOT == 0)                                                                                               \
+    type->SLOT = base->SLOT
+
+    COPYVAL(tp_itemsize);
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_WEAKREFS) {
+        COPYVAL(tp_weaklistoffset);
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+        COPYVAL(tp_dictoffset);
+    }
+
+// Pyston change: are not using these for now:
+#if 0
+    /* Setup fast subclass flags */
+    if (PyType_IsSubtype(base, (PyTypeObject*)PyExc_BaseException))
+        type->tp_flags |= Py_TPFLAGS_BASE_EXC_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyType_Type))
+        type->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyInt_Type))
+        type->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyLong_Type))
+        type->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyString_Type))
+        type->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
+#ifdef Py_USING_UNICODE
+    else if (PyType_IsSubtype(base, &PyUnicode_Type))
+        type->tp_flags |= Py_TPFLAGS_UNICODE_SUBCLASS;
+#endif
+    else if (PyType_IsSubtype(base, &PyTuple_Type))
+        type->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyList_Type))
+        type->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyDict_Type))
+        type->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
+#endif
+}
+
+static int overrides_name(PyTypeObject* type, const char* name) {
+    PyObject* dict = type->tp_dict;
+
+    assert(dict != NULL);
+    if (PyDict_GetItemString(dict, name) != NULL) {
+        return 1;
+    }
+    return 0;
+}
+
+#define OVERRIDES_HASH(x) overrides_name(x, "__hash__")
+#define OVERRIDES_EQ(x) overrides_name(x, "__eq__")
+
+static void inherit_slots(PyTypeObject* type, PyTypeObject* base) {
+    // Pyston addition:
+    if (base->tp_base == NULL)
+        assert(base == object_cls);
+
+    PyTypeObject* basebase;
+
+#undef SLOTDEFINED
+#undef COPYSLOT
+#undef COPYNUM
+#undef COPYSEQ
+#undef COPYMAP
+#undef COPYBUF
+
+#define SLOTDEFINED(SLOT) (base->SLOT != 0 && (basebase == NULL || base->SLOT != basebase->SLOT))
+
+#define COPYSLOT(SLOT)                                                                                                 \
+    if (!type->SLOT && SLOTDEFINED(SLOT))                                                                              \
+    type->SLOT = base->SLOT
+
+#define COPYNUM(SLOT) COPYSLOT(tp_as_number->SLOT)
+#define COPYSEQ(SLOT) COPYSLOT(tp_as_sequence->SLOT)
+#define COPYMAP(SLOT) COPYSLOT(tp_as_mapping->SLOT)
+#define COPYBUF(SLOT) COPYSLOT(tp_as_buffer->SLOT)
+
+    /* This won't inherit indirect slots (from tp_as_number etc.)
+       if type doesn't provide the space. */
+
+    if (type->tp_as_number != NULL && base->tp_as_number != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_number == NULL)
+            basebase = NULL;
+        COPYNUM(nb_add);
+        COPYNUM(nb_subtract);
+        COPYNUM(nb_multiply);
+        COPYNUM(nb_divide);
+        COPYNUM(nb_remainder);
+        COPYNUM(nb_divmod);
+        COPYNUM(nb_power);
+        COPYNUM(nb_negative);
+        COPYNUM(nb_positive);
+        COPYNUM(nb_absolute);
+        COPYNUM(nb_nonzero);
+        COPYNUM(nb_invert);
+        COPYNUM(nb_lshift);
+        COPYNUM(nb_rshift);
+        COPYNUM(nb_and);
+        COPYNUM(nb_xor);
+        COPYNUM(nb_or);
+        COPYNUM(nb_coerce);
+        COPYNUM(nb_int);
+        COPYNUM(nb_long);
+        COPYNUM(nb_float);
+        COPYNUM(nb_oct);
+        COPYNUM(nb_hex);
+        COPYNUM(nb_inplace_add);
+        COPYNUM(nb_inplace_subtract);
+        COPYNUM(nb_inplace_multiply);
+        COPYNUM(nb_inplace_divide);
+        COPYNUM(nb_inplace_remainder);
+        COPYNUM(nb_inplace_power);
+        COPYNUM(nb_inplace_lshift);
+        COPYNUM(nb_inplace_rshift);
+        COPYNUM(nb_inplace_and);
+        COPYNUM(nb_inplace_xor);
+        COPYNUM(nb_inplace_or);
+        if (base->tp_flags & Py_TPFLAGS_CHECKTYPES) {
+            COPYNUM(nb_true_divide);
+            COPYNUM(nb_floor_divide);
+            COPYNUM(nb_inplace_true_divide);
+            COPYNUM(nb_inplace_floor_divide);
+        }
+        if (base->tp_flags & Py_TPFLAGS_HAVE_INDEX) {
+            COPYNUM(nb_index);
+        }
+    }
+
+    if (type->tp_as_sequence != NULL && base->tp_as_sequence != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_sequence == NULL)
+            basebase = NULL;
+        COPYSEQ(sq_length);
+        COPYSEQ(sq_concat);
+        COPYSEQ(sq_repeat);
+        COPYSEQ(sq_item);
+        COPYSEQ(sq_slice);
+        COPYSEQ(sq_ass_item);
+        COPYSEQ(sq_ass_slice);
+        COPYSEQ(sq_contains);
+        COPYSEQ(sq_inplace_concat);
+        COPYSEQ(sq_inplace_repeat);
+    }
+
+    if (type->tp_as_mapping != NULL && base->tp_as_mapping != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_mapping == NULL)
+            basebase = NULL;
+        COPYMAP(mp_length);
+        COPYMAP(mp_subscript);
+        COPYMAP(mp_ass_subscript);
+    }
+
+    if (type->tp_as_buffer != NULL && base->tp_as_buffer != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_buffer == NULL)
+            basebase = NULL;
+        COPYBUF(bf_getreadbuffer);
+        COPYBUF(bf_getwritebuffer);
+        COPYBUF(bf_getsegcount);
+        COPYBUF(bf_getcharbuffer);
+        COPYBUF(bf_getbuffer);
+        COPYBUF(bf_releasebuffer);
+    }
+
+    basebase = base->tp_base;
+
+    COPYSLOT(tp_dealloc);
+    COPYSLOT(tp_print);
+    if (type->tp_getattr == NULL && type->tp_getattro == NULL) {
+        type->tp_getattr = base->tp_getattr;
+        type->tp_getattro = base->tp_getattro;
+    }
+    if (type->tp_setattr == NULL && type->tp_setattro == NULL) {
+        type->tp_setattr = base->tp_setattr;
+        type->tp_setattro = base->tp_setattro;
+    }
+    /* tp_compare see tp_richcompare */
+    COPYSLOT(tp_repr);
+    /* tp_hash see tp_richcompare */
+    COPYSLOT(tp_call);
+    COPYSLOT(tp_str);
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_RICHCOMPARE) {
+        if (type->tp_compare == NULL && type->tp_richcompare == NULL && type->tp_hash == NULL) {
+            type->tp_compare = base->tp_compare;
+            type->tp_richcompare = base->tp_richcompare;
+            type->tp_hash = base->tp_hash;
+            /* Check for changes to inherited methods in Py3k*/
+            if (Py_Py3kWarningFlag) {
+                if (base->tp_hash && (base->tp_hash != PyObject_HashNotImplemented) && !OVERRIDES_HASH(type)) {
+                    if (OVERRIDES_EQ(type)) {
+                        if (PyErr_WarnPy3k("Overriding "
+                                           "__eq__ blocks inheritance "
+                                           "of __hash__ in 3.x",
+                                           1) < 0)
+                            /* XXX This isn't right.  If the warning is turned
+                               into an exception, we should be communicating
+                               the error back to the caller, but figuring out
+                               how to clean up in that case is tricky.  See
+                               issue 8627 for more. */
+                            PyErr_Clear();
+                    }
+                }
+            }
+        }
+    } else {
+        COPYSLOT(tp_compare);
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_ITER) {
+        COPYSLOT(tp_iter);
+        COPYSLOT(tp_iternext);
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+        COPYSLOT(tp_descr_get);
+        COPYSLOT(tp_descr_set);
+        COPYSLOT(tp_dictoffset);
+        COPYSLOT(tp_init);
+        COPYSLOT(tp_alloc);
+        COPYSLOT(tp_is_gc);
+        if ((type->tp_flags & Py_TPFLAGS_HAVE_GC) == (base->tp_flags & Py_TPFLAGS_HAVE_GC)) {
+            /* They agree about gc. */
+            COPYSLOT(tp_free);
+        } else if ((type->tp_flags & Py_TPFLAGS_HAVE_GC) && type->tp_free == NULL && base->tp_free == _PyObject_Del) {
+            /* A bit of magic to plug in the correct default
+             * tp_free function when a derived class adds gc,
+             * didn't define tp_free, and the base uses the
+             * default non-gc tp_free.
+             */
+            type->tp_free = PyObject_GC_Del;
+        }
+        /* else they didn't agree about gc, and there isn't something
+         * obvious to be done -- the type is on its own.
+         */
+    }
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) {
     gc::registerNonheapRootObject(cls);
 
@@ -1174,13 +1472,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
 
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
-    RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_alloc == NULL || cls->tp_alloc == PyType_GenericAlloc, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
-    RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
     RELEASE_ASSERT(cls->tp_cache == NULL, "");
     RELEASE_ASSERT(cls->tp_subclasses == NULL, "");
@@ -1198,9 +1494,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
 
-    BoxedClass* base = cls->base = object_cls;
+    BoxedClass* base = cls->tp_base;
+    if (base == NULL)
+        base = cls->tp_base = object_cls;
     if (!cls->cls)
-        cls->cls = cls->base->cls;
+        cls->cls = cls->tp_base->cls;
 
     assert(cls->tp_dict == NULL);
     cls->tp_dict = makeAttrWrapper(cls);
@@ -1235,6 +1533,18 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     if (cls->tp_getset) {
         if (VERBOSITY())
             printf("warning: ignoring tp_getset for now\n");
+    }
+
+    inherit_special(cls, cls->tp_base);
+
+    // This is supposed to be over the MRO but we don't support multiple inheritance yet:
+    BoxedClass* b = base;
+    while (b) {
+        // Not sure when this could fail; maybe not in Pyston right now but apparently it can in CPython:
+        if (PyType_Check(b))
+            inherit_slots(cls, b);
+
+        b = b->tp_base;
     }
 
     cls->gc_visit = &conservativeGCHandler;

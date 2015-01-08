@@ -284,8 +284,8 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 
     BoxedClass* cls = (BoxedClass*)b;
 
-    if (cls->base)
-        v->visit(cls->base);
+    if (cls->tp_base)
+        v->visit(cls->tp_base);
     if (cls->tp_dict)
         v->visit(cls->tp_dict);
 }
@@ -804,7 +804,7 @@ void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
 
-    object_cls = new BoxedHeapClass(NULL, NULL, &boxGCHandler, 0, sizeof(Box), false);
+    object_cls = new BoxedClass(NULL, NULL, &boxGCHandler, 0, sizeof(Box), false);
     type_cls
         = new BoxedHeapClass(NULL, object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
     type_cls->cls = type_cls;

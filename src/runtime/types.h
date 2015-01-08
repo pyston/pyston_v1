@@ -174,10 +174,6 @@ class BoxedClass : public BoxVar {
 public:
     typedef void (*gcvisit_func)(GCVisitor*, Box*);
 
-protected:
-    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-               bool is_user_defined);
-
 public:
     PyTypeObject_BODY;
 
@@ -196,10 +192,6 @@ public:
     Box* callNextIC(Box* obj);
     Box* callReprIC(Box* obj);
     bool callNonzeroIC(Box* obj);
-
-    // Only a single base supported for now.
-    // Is NULL iff this is object_cls
-    BoxedClass* base;
 
     gcvisit_func gc_visit;
 
@@ -223,6 +215,9 @@ public:
     bool hasGenericGetattr() { return true; }
 
     void freeze();
+
+    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+               bool is_user_defined);
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -244,11 +239,9 @@ static_assert(offsetof(pyston::BoxedClass, cls) == offsetof(struct _typeobject, 
 static_assert(offsetof(pyston::BoxedClass, tp_name) == offsetof(struct _typeobject, tp_name), "");
 static_assert(offsetof(pyston::BoxedClass, attrs) == offsetof(struct _typeobject, _hcls), "");
 static_assert(offsetof(pyston::BoxedClass, dependent_icgetattrs) == offsetof(struct _typeobject, _dep_getattrs), "");
-static_assert(offsetof(pyston::BoxedClass, base) == offsetof(struct _typeobject, _base), "");
 static_assert(offsetof(pyston::BoxedClass, gc_visit) == offsetof(struct _typeobject, _gcvisit_func), "");
 static_assert(sizeof(pyston::BoxedClass) == sizeof(struct _typeobject), "");
 
-static_assert(offsetof(pyston::BoxedHeapClass, base) == offsetof(PyHeapTypeObject, ht_type._base), "");
 static_assert(offsetof(pyston::BoxedHeapClass, as_number) == offsetof(PyHeapTypeObject, as_number), "");
 static_assert(offsetof(pyston::BoxedHeapClass, as_mapping) == offsetof(PyHeapTypeObject, as_mapping), "");
 static_assert(offsetof(pyston::BoxedHeapClass, as_sequence) == offsetof(PyHeapTypeObject, as_sequence), "");

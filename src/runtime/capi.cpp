@@ -40,6 +40,7 @@ MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)
 MAKE_CHECK(Dict, dict_cls)
 MAKE_CHECK(Slice, slice_cls)
+MAKE_CHECK(Type, type_cls)
 
 #ifdef Py_USING_UNICODE
 MAKE_CHECK(Unicode, unicode_cls)

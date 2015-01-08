@@ -66,7 +66,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
 
     if (!skip) {
         // We don't support multiple inheritance yet, so the lookup order is simple:
-        Box* r = typeLookup(s->type->base, attr->s, NULL);
+        Box* r = typeLookup(s->type->tp_base, attr->s, NULL);
 
         if (r) {
             return processDescriptor(r, (s->obj == s->obj_type ? None : s->obj), s->obj_type);

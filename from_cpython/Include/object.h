@@ -412,7 +412,7 @@ typedef PyObject *(*allocfunc)(PyTypeObject *, Py_ssize_t);
     struct PyMethodDef *tp_methods;\
     struct PyMemberDef *tp_members;\
     struct PyGetSetDef *tp_getset;\
-    struct _typeobject *tp_base;\
+    PyTypeObject *tp_base;\
     PyObject *tp_dict;\
     descrgetfunc tp_descr_get;\
     descrsetfunc tp_descr_set;\
@@ -456,7 +456,6 @@ struct _typeobject {
     void* _hcattrs;
     char _dep_getattrs[56]; // FIXME: this is hardcoding the size of this particular implementation of std::unordered_map
     char _ics[32];
-    void* _base;
     void* _gcvisit_func;
     int _attrs_offset;
     bool _flags[2];

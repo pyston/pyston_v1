@@ -39,6 +39,9 @@ for i in xrange(3):
     print hex(t)
     print oct(t)
 
+su = slots_test.SlotsTesterSub(5)
+print su
+
 class C(object):
     def __repr__(self):
         print "__repr__()"
