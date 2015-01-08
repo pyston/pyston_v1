@@ -116,7 +116,8 @@ extern "C" Box* abs_(Box* x) {
         return longAbs(static_cast<BoxedLong*>(x));
     } else {
         static const std::string abs_str("__abs__");
-        return callattr(x, &abs_str, CallattrFlags({.cls_only = true }), ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        return callattr(x, &abs_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }), ArgPassSpec(0),
+                        NULL, NULL, NULL, NULL, NULL);
     }
 }
 

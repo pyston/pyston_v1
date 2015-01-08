@@ -3474,6 +3474,13 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             }
         }
 
+        if (!ok && (cls == int_cls || cls == float_cls || cls == long_cls)) {
+            if (npassed_args == 1)
+                ok = true;
+            else if (npassed_args == 2 && (arg2->cls == int_cls || arg2->cls == str_cls || arg2->cls == float_cls))
+                ok = true;
+        }
+
         if (!ok) {
             // Uncomment this to try to find __new__ functions that we could either white- or blacklist:
             // ASSERT(cls->is_user_defined || cls == type_cls, "Does '%s' have a well-behaved __new__?  if so, add to
