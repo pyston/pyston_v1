@@ -761,9 +761,20 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
 
         rtn->n = d;
     } else {
-        fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
-                getTypeName(val)->c_str());
-        raiseExcHelper(TypeError, "");
+        static const std::string int_str("__int__");
+        Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                          ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+
+        if (!r) {
+            fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
+                    getTypeName(val)->c_str());
+            raiseExcHelper(TypeError, "");
+        }
+
+        if (!isSubclass(r->cls, int_cls)) {
+            raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
+        }
+        rtn->n = static_cast<BoxedInt*>(r)->n;
     }
     return rtn;
 }

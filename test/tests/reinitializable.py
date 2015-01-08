@@ -20,6 +20,7 @@ print sl.start
 slice.__init__(sl, 17, 18, 19)
 print sl.start
 
+# Not supported yet:
 # l = list((20,))
 # print l
 # list.__init__(l, (21,))

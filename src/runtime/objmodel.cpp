@@ -3382,6 +3382,13 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
     Box* _cls = arg1;
 
+    if (!isSubclass(_cls->cls, type_cls)) {
+        raiseExcHelper(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
+                       getTypeName(_cls)->c_str());
+    }
+
+    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
+
     RewriterVar* r_ccls = NULL;
     RewriterVar* r_new = NULL;
     RewriterVar* r_init = NULL;
@@ -3393,15 +3400,8 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
         r_ccls = rewrite_args->arg1;
         // This is probably a duplicate, but it's hard to really convince myself of that.
         // Need to create a clear contract of who guards on what
-        r_ccls->addGuard((intptr_t)arg1);
+        r_ccls->addGuard((intptr_t)arg1 /* = _cls */);
     }
-
-    if (!isSubclass(_cls->cls, type_cls)) {
-        raiseExcHelper(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
-                       getTypeName(_cls)->c_str());
-    }
-
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
@@ -3430,6 +3430,58 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     }
     assert(new_attr && "This should always resolve");
 
+    // typeCall is tricky to rewrite since it has complicated behavior: we are supposed to
+    // call the __init__ method of the *result of the __new__ call*, not of the original
+    // class.  (And only if the result is an instance of the original class, but that's not
+    // even the tricky part here.)
+    //
+    // By the time we know the type of the result of __new__(), it's too late to add traditional
+    // guards.  So, instead of doing that, we're going to add a guard that makes sure that __new__
+    // has the property that __new__(kls) always returns an instance of kls.
+    //
+    // Whitelist a set of __new__ methods that we know work like this.  Most importantly: object.__new__.
+    //
+    // Most builtin classes behave this way, but not all!
+    // Notably, "type" itself does not.  For instance, assuming M is a subclass of
+    // type, type.__new__(M, 1) will return the int class, which is not an instance of M.
+
+    static Box* object_new = NULL;
+    static Box* object_init = NULL;
+    static std::vector<Box*> allowable_news;
+    if (!object_new) {
+        object_new = typeLookup(object_cls, _new_str, NULL);
+        // I think this is unnecessary, but good form:
+        gc::registerPermanentRoot(object_new);
+
+        object_init = typeLookup(object_cls, _init_str, NULL);
+        gc::registerPermanentRoot(object_init);
+
+        allowable_news.push_back(object_new);
+
+        for (BoxedClass* allowed_cls : { int_cls, xrange_cls, float_cls, long_cls }) {
+            auto new_obj = typeLookup(allowed_cls, _new_str, NULL);
+            gc::registerPermanentRoot(new_obj);
+            allowable_news.push_back(new_obj);
+        }
+    }
+
+    if (rewrite_args) {
+        bool ok = false;
+        for (auto b : allowable_news) {
+            if (b == new_attr) {
+                ok = true;
+                break;
+            }
+        }
+
+        if (!ok) {
+            // Uncomment this to try to find __new__ functions that we could either white- or blacklist:
+            // ASSERT(cls->is_user_defined || cls == type_cls, "Does '%s' have a well-behaved __new__?  if so, add to
+            // allowable_news, otherwise add to the blacklist in this assert", cls->tp_name);
+            rewrite_args = NULL;
+        }
+    }
+
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         init_attr = typeLookup(cls, _init_str, &grewrite_args);
@@ -3451,8 +3503,8 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     RewriterVar* r_made = NULL;
 
     ArgPassSpec new_argspec = argspec;
-    if (npassed_args > 1 && new_attr == typeLookup(object_cls, _new_str, NULL)) {
-        if (init_attr == typeLookup(object_cls, _init_str, NULL)) {
+    if (npassed_args > 1 && new_attr == object_new) {
+        if (init_attr == object_init) {
             raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
         } else {
             new_argspec = ArgPassSpec(1);
@@ -3475,6 +3527,8 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
         srewrite_args.func_guarded = true;
 
         made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
+        ASSERT(made->cls == cls, "We should only have allowed the rewrite to continue if we were guaranteed that made "
+                                 "would have class cls!");
 
         if (!srewrite_args.out_success) {
             rewrite_args = NULL;
@@ -3491,11 +3545,21 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     if (cls == type_cls && argspec == ArgPassSpec(2))
         return made;
 
-    // If this is true, not supposed to call __init__:
-    RELEASE_ASSERT(made->cls == cls, "allowed but unsupported (%s vs %s)", getNameOfClass(made->cls)->c_str(),
-                   getNameOfClass(cls)->c_str());
+    // If __new__ returns a subclass, supposed to call that subclass's __init__.
+    // If __new__ returns a non-subclass, not supposed to call __init__.
+    if (made->cls != cls) {
+        ASSERT(rewrite_args == NULL, "We should only have allowed the rewrite to continue if we were guaranteed that "
+                                     "made would have class cls!");
 
-    if (init_attr && init_attr != typeLookup(object_cls, _init_str, NULL)) {
+        if (!isSubclass(made->cls, cls)) {
+            init_attr = NULL;
+        } else {
+            // We could have skipped the initial __init__ lookup
+            init_attr = typeLookup(made->cls, _init_str, NULL);
+        }
+    }
+
+    if (init_attr && init_attr != object_init) {
         // TODO apply the same descriptor special-casing as in callattr?
 
         Box* initrtn;
