@@ -75,4 +75,29 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
 extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* buffer_len) {
     Py_FatalError("unimplemented");
 }
+
+/* Return -1 if error; 1 if v op w; 0 if not (v op w). */
+extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) {
+    PyObject* res;
+    int ok;
+
+    /* Quick result when objects are the same.
+       Guarantees that identity implies equality. */
+    if (v == w) {
+        if (op == Py_EQ)
+            return 1;
+        else if (op == Py_NE)
+            return 0;
+    }
+
+    res = PyObject_RichCompare(v, w, op);
+    if (res == NULL)
+        return -1;
+    if (PyBool_Check(res))
+        ok = (res == Py_True);
+    else
+        ok = PyObject_IsTrue(res);
+    Py_DECREF(res);
+    return ok;
+}
 }

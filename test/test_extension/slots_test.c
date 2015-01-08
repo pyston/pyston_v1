@@ -215,8 +215,14 @@ static int s_nonzero(slots_tester_object* self) {
     return self->n != 0;
 }
 
+static PyObject* s_add(slots_tester_object* lhs, PyObject* rhs) {
+    printf("s_add, %d %s\n", lhs->n, Py_TYPE(rhs)->tp_name);
+    Py_INCREF(lhs);
+    return (PyObject*)lhs;
+}
+
 static PyNumberMethods slots_tester_as_number = {
-    0,                                  /* nb_add */
+    (binaryfunc)s_add,                                  /* nb_add */
     0,                             /* nb_subtract */
     0,                             /* nb_multiply */
     0,                               /* nb_divide */
@@ -273,11 +279,11 @@ static PyTypeObject slots_tester_num = {
     0,                                  /* tp_as_mapping */
     0,                                  /* tp_hash */
     0,     /* tp_call */
-    0,                                  /* tp_str */
+    (reprfunc)slots_tester_seq_str,     /* tp_str */
     0,                                  /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,                 /* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES,                 /* tp_flags */
     0,                   /* tp_doc */
     0,                                  /* tp_traverse */
     0,                                  /* tp_clear */
@@ -383,9 +389,19 @@ call_funcs(PyObject* _module, PyObject* args) {
         printf("tp_as_number exists\n");
         PyNumberMethods* num = cls->tp_as_number;
 
+        if (!(cls->tp_flags & Py_TPFLAGS_CHECKTYPES)) {
+            printf("CHECKTYPES is not set!\n");
+        }
+
         if (num->nb_nonzero) {
             int n = num->nb_nonzero(obj);
             printf("nb_nonzero exists and returned %d\n", n);
+        }
+
+        if (num->nb_add) {
+            PyObject* res = num->nb_add(obj, obj);
+            printf("nb_add exists and returned a %s\n", Py_TYPE(res)->tp_name);
+            Py_DECREF(res);
         }
     } else {
         printf("tp_as_number doesnt exist\n");

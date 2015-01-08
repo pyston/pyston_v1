@@ -16,7 +16,7 @@ for i in xrange(3):
 
 for i in xrange(3):
     t = slots_test.SlotsTesterNum(i)
-    print bool(t)
+    print bool(t), t + 5
 
 class C(object):
     def __repr__(self):
@@ -42,5 +42,9 @@ def nonzero(self):
     print "nonzero"
     return True
 C.__nonzero__ = nonzero
+
+def add(self, rhs):
+    print "add", self, rhs
+C.__add__ = add
 
 slots_test.call_funcs(C())

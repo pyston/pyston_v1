@@ -109,6 +109,34 @@ static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) 
     return (*func)(self, other);
 }
 
+static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped) {
+    binaryfunc func = (binaryfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    if (!(self->cls->tp_flags & Py_TPFLAGS_CHECKTYPES) && !PyType_IsSubtype(other->cls, self->cls)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    return (*func)(self, other);
+}
+
+static PyObject* wrap_binaryfunc_r(PyObject* self, PyObject* args, void* wrapped) {
+    binaryfunc func = (binaryfunc)wrapped;
+    PyObject* other;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    if (!(self->cls->tp_flags & Py_TPFLAGS_CHECKTYPES) && !PyType_IsSubtype(other->cls, self->cls)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    return (*func)(other, self);
+}
+
 static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
     Py_ssize_t i;
 
@@ -355,6 +383,41 @@ static PyObject* call_method(PyObject* o, const char* name, PyObject** nameobj, 
     return retval;
 }
 
+/* Clone of call_method() that returns NotImplemented when the lookup fails. */
+
+static PyObject* call_maybe(PyObject* o, const char* name, PyObject** nameobj, const char* format, ...) noexcept {
+    va_list va;
+    PyObject* args, * func = 0, *retval;
+    va_start(va, format);
+
+    func = lookup_maybe(o, name, nameobj);
+    if (func == NULL) {
+        va_end(va);
+        if (!PyErr_Occurred()) {
+            Py_INCREF(Py_NotImplemented);
+            return Py_NotImplemented;
+        }
+        return NULL;
+    }
+
+    if (format && *format)
+        args = Py_VaBuildValue(format, va);
+    else
+        args = PyTuple_New(0);
+
+    va_end(va);
+
+    if (args == NULL)
+        return NULL;
+
+    assert(PyTuple_Check(args));
+    retval = PyObject_Call(func, args, NULL);
+
+    Py_DECREF(args);
+    Py_DECREF(func);
+
+    return retval;
+}
 
 PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
@@ -646,6 +709,73 @@ static int slot_sq_contains(PyObject* self, PyObject* value) {
         return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1);                                           \
     }
 
+/* Boolean helper for SLOT1BINFULL().
+   right.__class__ is a nontrivial subclass of left.__class__. */
+static int method_is_overloaded(PyObject* left, PyObject* right, const char* name) {
+    PyObject* a, *b;
+    int ok;
+
+    b = PyObject_GetAttrString((PyObject*)(Py_TYPE(right)), name);
+    if (b == NULL) {
+        PyErr_Clear();
+        /* If right doesn't have it, it's not overloaded */
+        return 0;
+    }
+
+    a = PyObject_GetAttrString((PyObject*)(Py_TYPE(left)), name);
+    if (a == NULL) {
+        PyErr_Clear();
+        Py_DECREF(b);
+        /* If right has it but left doesn't, it's overloaded */
+        return 1;
+    }
+
+    ok = PyObject_RichCompareBool(a, b, Py_NE);
+    Py_DECREF(a);
+    Py_DECREF(b);
+    if (ok < 0) {
+        PyErr_Clear();
+        return 0;
+    }
+
+    return ok;
+}
+
+#define SLOT1BINFULL(FUNCNAME, TESTFUNC, SLOTNAME, OPSTR, ROPSTR)                                                      \
+    static PyObject* FUNCNAME(PyObject* self, PyObject* other) {                                                       \
+        static PyObject* cache_str, *rcache_str;                                                                       \
+        int do_other = Py_TYPE(self) != Py_TYPE(other) && Py_TYPE(other)->tp_as_number != NULL                         \
+                       && Py_TYPE(other)->tp_as_number->SLOTNAME == TESTFUNC;                                          \
+        if (Py_TYPE(self)->tp_as_number != NULL && Py_TYPE(self)->tp_as_number->SLOTNAME == TESTFUNC) {                \
+            PyObject* r;                                                                                               \
+            if (do_other && PyType_IsSubtype(Py_TYPE(other), Py_TYPE(self))                                            \
+                && method_is_overloaded(self, other, ROPSTR)) {                                                        \
+                r = call_maybe(other, ROPSTR, &rcache_str, "(O)", self);                                               \
+                if (r != Py_NotImplemented)                                                                            \
+                    return r;                                                                                          \
+                Py_DECREF(r);                                                                                          \
+                do_other = 0;                                                                                          \
+            }                                                                                                          \
+            r = call_maybe(self, OPSTR, &cache_str, "(O)", other);                                                     \
+            if (r != Py_NotImplemented || Py_TYPE(other) == Py_TYPE(self))                                             \
+                return r;                                                                                              \
+            Py_DECREF(r);                                                                                              \
+        }                                                                                                              \
+        if (do_other) {                                                                                                \
+            return call_maybe(other, ROPSTR, &rcache_str, "(O)", self);                                                \
+        }                                                                                                              \
+        Py_INCREF(Py_NotImplemented);                                                                                  \
+        return Py_NotImplemented;                                                                                      \
+    }
+
+#define SLOT1BIN(FUNCNAME, SLOTNAME, OPSTR, ROPSTR) SLOT1BINFULL(FUNCNAME, FUNCNAME, SLOTNAME, OPSTR, ROPSTR)
+
+#define SLOT2(FUNCNAME, OPSTR, ARG1TYPE, ARG2TYPE, ARGCODES)                                                           \
+    static PyObject* FUNCNAME(PyObject* self, ARG1TYPE arg1, ARG2TYPE arg2) {                                          \
+        static PyObject* cache_str;                                                                                    \
+        return call_method(self, OPSTR, &cache_str, "(" ARGCODES ")", arg1, arg2);                                     \
+    }
+
 #define slot_mp_length slot_sq_length
 
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
@@ -664,6 +794,14 @@ static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value)
     return 0;
 }
 
+SLOT1BIN(slot_nb_add, nb_add, "__add__", "__radd__")
+SLOT1BIN(slot_nb_subtract, nb_subtract, "__sub__", "__rsub__")
+SLOT1BIN(slot_nb_multiply, nb_multiply, "__mul__", "__rmul__")
+SLOT1BIN(slot_nb_divide, nb_divide, "__div__", "__rdiv__")
+SLOT1BIN(slot_nb_remainder, nb_remainder, "__mod__", "__rmod__")
+SLOT1BIN(slot_nb_divmod, nb_divmod, "__divmod__", "__rdivmod__")
+
+static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*);
 
 typedef wrapper_def slotdef;
 
@@ -755,6 +893,8 @@ static slotdef slotdefs[] = {
            PyWrapperFlag_KEYWORDS),
     TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
+    BINSLOT("__add__", nb_add, slot_nb_add, "+"), //
+    RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),
     UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"),
 
     MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
@@ -913,22 +1053,33 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     // zero out the ones we know about, then assert that the entire struct
     // is zero, then restore the ones we know about.
     if (cls->tp_as_number) {
-        auto nb_nonzero = cls->tp_as_number->nb_nonzero;
-        cls->tp_as_number->nb_nonzero = NULL;
+#define SAVE(N)                                                                                                        \
+    auto N = cls->tp_as_number->N;                                                                                     \
+    cls->tp_as_number->N = NULL;
+#define RESTORE(N) cls->tp_as_number->N = N;
+
+        SAVE(nb_nonzero);
+        SAVE(nb_add);
 
         for (void** p = (void**)cls->tp_as_number; p < (void**)cls->tp_as_number + 1; p++) {
             RELEASE_ASSERT(*p == NULL, "");
         }
 
-        cls->tp_as_number->nb_nonzero = nb_nonzero;
+        RESTORE(nb_nonzero);
+        RESTORE(nb_add)
+#undef SAVE
+#undef RESTORE
     }
 
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
 
-    int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC;
+    int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
+    if (cls->tp_as_number) {
+        RELEASE_ASSERT(cls->tp_flags & Py_TPFLAGS_CHECKTYPES, "Pyston doesn't yet support non-checktypes behavior");
+    }
 
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
