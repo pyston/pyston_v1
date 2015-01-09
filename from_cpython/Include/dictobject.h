@@ -1,4 +1,4 @@
-// This file is originally from CPython 2.7, with modifications for Pyston
+// PYSTON_NOEXCEPT This file is originally from CPython 2.7, with modifications for Pyston
 
 #ifndef Py_DICTOBJECT_H
 #define Py_DICTOBJECT_H
@@ -121,7 +121,7 @@ PyAPI_DATA(PyTypeObject*) dictvalues_cls;
 #define PyDictValues_Type (*dictvalues_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyDict_Check(PyObject*);
+PyAPI_FUNC(bool) PyDict_Check(PyObject*) PYSTON_NOEXCEPT;
 #if 0
 #define PyDict_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_DICT_SUBCLASS)
@@ -134,27 +134,27 @@ PyAPI_FUNC(bool) PyDict_Check(PyObject*);
 # define PyDictViewSet_Check(op) \
     (PyDictKeys_Check(op) || PyDictItems_Check(op))
 
-PyAPI_FUNC(PyObject *) PyDict_New(void);
-PyAPI_FUNC(PyObject *) PyDict_GetItem(PyObject *mp, PyObject *key);
-PyAPI_FUNC(int) PyDict_SetItem(PyObject *mp, PyObject *key, PyObject *item);
-PyAPI_FUNC(int) PyDict_DelItem(PyObject *mp, PyObject *key);
-PyAPI_FUNC(void) PyDict_Clear(PyObject *mp);
+PyAPI_FUNC(PyObject *) PyDict_New(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyDict_GetItem(PyObject *mp, PyObject *key) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyDict_SetItem(PyObject *mp, PyObject *key, PyObject *item) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyDict_DelItem(PyObject *mp, PyObject *key) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyDict_Clear(PyObject *mp) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyDict_Next(
-    PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value);
+    PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) _PyDict_Next(
-    PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value, long *hash);
-PyAPI_FUNC(PyObject *) PyDict_Keys(PyObject *mp);
-PyAPI_FUNC(PyObject *) PyDict_Values(PyObject *mp);
-PyAPI_FUNC(PyObject *) PyDict_Items(PyObject *mp);
-PyAPI_FUNC(Py_ssize_t) PyDict_Size(PyObject *mp);
-PyAPI_FUNC(PyObject *) PyDict_Copy(PyObject *mp);
-PyAPI_FUNC(int) PyDict_Contains(PyObject *mp, PyObject *key);
-PyAPI_FUNC(int) _PyDict_Contains(PyObject *mp, PyObject *key, long hash);
-PyAPI_FUNC(PyObject *) _PyDict_NewPresized(Py_ssize_t minused);
-PyAPI_FUNC(void) _PyDict_MaybeUntrack(PyObject *mp);
+    PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value, long *hash) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyDict_Keys(PyObject *mp) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyDict_Values(PyObject *mp) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyDict_Items(PyObject *mp) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_ssize_t) PyDict_Size(PyObject *mp) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyDict_Copy(PyObject *mp) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyDict_Contains(PyObject *mp, PyObject *key) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyDict_Contains(PyObject *mp, PyObject *key, long hash) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyDict_NewPresized(Py_ssize_t minused) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyDict_MaybeUntrack(PyObject *mp) PYSTON_NOEXCEPT;
 
 /* PyDict_Update(mp, other) is equivalent to PyDict_Merge(mp, other, 1). */
-PyAPI_FUNC(int) PyDict_Update(PyObject *mp, PyObject *other);
+PyAPI_FUNC(int) PyDict_Update(PyObject *mp, PyObject *other) PYSTON_NOEXCEPT;
 
 /* PyDict_Merge updates/merges from a mapping object (an object that
    supports PyMapping_Keys() and PyObject_GetItem()).  If override is true,
@@ -163,7 +163,7 @@ PyAPI_FUNC(int) PyDict_Update(PyObject *mp, PyObject *other);
 */
 PyAPI_FUNC(int) PyDict_Merge(PyObject *mp,
                                    PyObject *other,
-                                   int override);
+                                   int override) PYSTON_NOEXCEPT;
 
 /* PyDict_MergeFromSeq2 updates/merges from an iterable object producing
    iterable objects of length 2.  If override is true, the last occurrence
@@ -172,11 +172,11 @@ PyAPI_FUNC(int) PyDict_Merge(PyObject *mp,
 */
 PyAPI_FUNC(int) PyDict_MergeFromSeq2(PyObject *d,
                                            PyObject *seq2,
-                                           int override);
+                                           int override) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyObject *) PyDict_GetItemString(PyObject *dp, const char *key);
-PyAPI_FUNC(int) PyDict_SetItemString(PyObject *dp, const char *key, PyObject *item);
-PyAPI_FUNC(int) PyDict_DelItemString(PyObject *dp, const char *key);
+PyAPI_FUNC(PyObject *) PyDict_GetItemString(PyObject *dp, const char *key) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyDict_SetItemString(PyObject *dp, const char *key, PyObject *item) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyDict_DelItemString(PyObject *dp, const char *key) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

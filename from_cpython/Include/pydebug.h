@@ -35,7 +35,7 @@ PyAPI_DATA(int) Py_HashRandomizationFlag;
 #define Py_GETENV(s) (Py_IgnoreEnvironmentFlag ? NULL : getenv(s))
 
 // Pyston change: make Py_FatalError a macro so that it can access linenumber info, similar to assert:
-//PyAPI_FUNC(void) Py_FatalError(const char *message) __attribute__((__noreturn__));
+//PyAPI_FUNC(void) Py_FatalError(const char *message) __attribute__((__noreturn__)) PYSTON_NOEXCEPT;
 #define _PYSTON_STRINGIFY(N) #N
 #define PYSTON_STRINGIFY(N) _PYSTON_STRINGIFY(N)
 #define Py_FatalError(message)                                                                                          \

@@ -603,7 +603,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     return cls;
 }
 
-extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* dict) {
+extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* dict) noexcept {
     RELEASE_ASSERT(_base == NULL, "unimplemented");
     RELEASE_ASSERT(dict == NULL, "unimplemented");
 

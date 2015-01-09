@@ -35,11 +35,11 @@ BoxedClass* long_cls;
 #define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
-extern "C" int _PyLong_Sign(PyObject* l) {
+extern "C" int _PyLong_Sign(PyObject* l) noexcept {
     return mpz_sgn(static_cast<BoxedLong*>(l)->n);
 }
 
-extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLong(PyObject* vv) {
+extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLong(PyObject* vv) noexcept {
     unsigned PY_LONG_LONG bytes;
     int one = 1;
     int res;
@@ -58,15 +58,15 @@ extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLong(PyObject* vv) {
         return bytes;
 }
 
-extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) {
+extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) {
+extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) {
+extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -88,7 +88,7 @@ static uint64_t asUnsignedLong(BoxedLong* self) {
     return mpz_get_ui(self->n);
 }
 
-extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) {
+extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
 
@@ -99,14 +99,14 @@ extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) {
     }
 }
 
-extern "C" long PyLong_AsLong(PyObject* vv) {
+extern "C" long PyLong_AsLong(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
     RELEASE_ASSERT(mpz_fits_slong_p(l->n), "");
     return mpz_get_si(l->n);
 }
 
-extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) {
+extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
     // Ported from CPython; original comment:
     /* This version by Tim Peters */
 
@@ -133,39 +133,39 @@ extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) {
     Py_FatalError("unsupported case");
 }
 
-extern "C" double PyLong_AsDouble(PyObject* vv) {
+extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
     return mpz_get_d(l->n);
 }
 
-extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL, int newstyle) {
+extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL, int newstyle) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyLong_FromDouble(double v) {
+extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyLong_FromLong(long ival) {
+extern "C" PyObject* PyLong_FromLong(long ival) noexcept {
     BoxedLong* rtn = new BoxedLong(long_cls);
     mpz_init_set_si(rtn->n, ival);
     return rtn;
 }
 
-extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) {
+extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) noexcept {
     BoxedLong* rtn = new BoxedLong(long_cls);
     mpz_init_set_ui(rtn->n, ival);
     return rtn;
 }
 
-extern "C" PyObject* PyLong_FromSsize_t(Py_ssize_t ival) {
+extern "C" PyObject* PyLong_FromSsize_t(Py_ssize_t ival) noexcept {
     Py_ssize_t bytes = ival;
     int one = 1;
     return _PyLong_FromByteArray((unsigned char*)&bytes, SIZEOF_SIZE_T, IS_LITTLE_ENDIAN, 1);
 }
 
-extern "C" PyObject* PyLong_FromSize_t(size_t ival) {
+extern "C" PyObject* PyLong_FromSize_t(size_t ival) noexcept {
     size_t bytes = ival;
     int one = 1;
     return _PyLong_FromByteArray((unsigned char*)&bytes, SIZEOF_SIZE_T, IS_LITTLE_ENDIAN, 0);
@@ -173,13 +173,13 @@ extern "C" PyObject* PyLong_FromSize_t(size_t ival) {
 
 #undef IS_LITTLE_ENDIAN
 
-extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) {
+extern "C" double _PyLong_Frexp(PyLongObject* a, Py_ssize_t* e) noexcept {
     Py_FatalError("unimplemented");
 }
 
 /* Create a new long (or int) object from a C pointer */
 
-extern "C" PyObject* PyLong_FromVoidPtr(void* p) {
+extern "C" PyObject* PyLong_FromVoidPtr(void* p) noexcept {
 #if SIZEOF_VOID_P <= SIZEOF_LONG
     if ((long)p < 0)
         return PyLong_FromUnsignedLong((unsigned long)p);
@@ -202,7 +202,7 @@ extern "C" PyObject* PyLong_FromVoidPtr(void* p) {
 
 /* Get a C pointer from a long object (or an int object in some cases) */
 
-extern "C" void* PyLong_AsVoidPtr(PyObject* vv) {
+extern "C" void* PyLong_AsVoidPtr(PyObject* vv) noexcept {
 /* This function will allow int or long objects. If vv is neither,
    then the PyLong_AsLong*() functions will raise the exception:
    PyExc_SystemError, "bad argument to internal function"
@@ -240,11 +240,13 @@ extern "C" void* PyLong_AsVoidPtr(PyObject* vv) {
     return (void*)x;
 }
 
-extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian, int is_signed) {
+extern "C" int _PyLong_AsByteArray(PyLongObject* v, unsigned char* bytes, size_t n, int little_endian,
+                                   int is_signed) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n, int little_endian, int is_signed) {
+extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n, int little_endian,
+                                           int is_signed) noexcept {
     if (n == 0)
         return PyLong_FromLong(0);
 
@@ -278,13 +280,13 @@ extern "C" BoxedLong* boxLong(int64_t n) {
     return rtn;
 }
 
-extern "C" PyObject* PyLong_FromLongLong(long long ival) {
+extern "C" PyObject* PyLong_FromLongLong(long long ival) noexcept {
     BoxedLong* rtn = new BoxedLong(long_cls);
     mpz_init_set_si(rtn->n, ival);
     return rtn;
 }
 
-extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) {
+extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) noexcept {
     BoxedLong* rtn = new BoxedLong(long_cls);
     mpz_init_set_ui(rtn->n, ival);
     return rtn;

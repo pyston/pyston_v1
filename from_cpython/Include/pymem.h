@@ -51,13 +51,13 @@ extern "C" {
    performed on failure (no exception is set, no warning is printed, etc).
 */
 
-PyAPI_FUNC(void *) gc_compat_malloc(size_t);
-PyAPI_FUNC(void *) gc_compat_realloc(void *, size_t);
-PyAPI_FUNC(void) gc_compat_free(void *);
+PyAPI_FUNC(void *) gc_compat_malloc(size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) gc_compat_realloc(void *, size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) gc_compat_free(void *) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(void *) PyMem_Malloc(size_t);
-PyAPI_FUNC(void *) PyMem_Realloc(void *, size_t);
-PyAPI_FUNC(void) PyMem_Free(void *);
+PyAPI_FUNC(void *) PyMem_Malloc(size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) PyMem_Realloc(void *, size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyMem_Free(void *) PYSTON_NOEXCEPT;
 
 /* Starting from Python 1.6, the wrappers Py_{Malloc,Realloc,Free} are
    no longer supported. They used to call PyErr_NoMemory() on failure. */

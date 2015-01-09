@@ -79,13 +79,13 @@ typedef struct {
 
 /* Error handling definitions */
 
-PyAPI_FUNC(void) PyErr_SetNone(PyObject *);
-PyAPI_FUNC(void) PyErr_SetObject(PyObject *, PyObject *);
-PyAPI_FUNC(void) PyErr_SetString(PyObject *, const char *);
-PyAPI_FUNC(PyObject *) PyErr_Occurred(void);
-PyAPI_FUNC(void) PyErr_Clear(void);
-PyAPI_FUNC(void) PyErr_Fetch(PyObject **, PyObject **, PyObject **);
-PyAPI_FUNC(void) PyErr_Restore(PyObject *, PyObject *, PyObject *);
+PyAPI_FUNC(void) PyErr_SetNone(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_SetObject(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_SetString(PyObject *, const char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyErr_Occurred(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_Clear(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_Fetch(PyObject **, PyObject **, PyObject **) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_Restore(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 #ifdef Py_DEBUG
 #define _PyErr_OCCURRED() PyErr_Occurred()
@@ -94,9 +94,9 @@ PyAPI_FUNC(void) PyErr_Restore(PyObject *, PyObject *, PyObject *);
 #endif
 
 /* Error testing and normalization */
-PyAPI_FUNC(int) PyErr_GivenExceptionMatches(PyObject *, PyObject *);
-PyAPI_FUNC(int) PyErr_ExceptionMatches(PyObject *);
-PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**);
+PyAPI_FUNC(int) PyErr_GivenExceptionMatches(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyErr_ExceptionMatches(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**) PYSTON_NOEXCEPT;
 
 /* */
 
@@ -121,10 +121,10 @@ PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**);
       : (PyObject*)((x)->ob_type)))
 #endif
 // (We might have to make these wrapper macros that do appropriate casting to PyObject)
-PyAPI_FUNC(int) PyExceptionClass_Check(PyObject*);
-PyAPI_FUNC(int) PyExceptionInstance_Check(PyObject*);
-PyAPI_FUNC(const char*) PyExceptionClass_Name(PyObject*);
-PyAPI_FUNC(PyObject*) PyExceptionInstance_Class(PyObject*);
+PyAPI_FUNC(int) PyExceptionClass_Check(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyExceptionInstance_Check(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(const char*) PyExceptionClass_Name(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject*) PyExceptionInstance_Class(PyObject*) PYSTON_NOEXCEPT;
 
 /* Predefined exceptions */
 
@@ -248,63 +248,63 @@ PyAPI_DATA(PyTypeObject *) BytesWarning;
 
 /* Convenience functions */
 
-PyAPI_FUNC(int) PyErr_BadArgument(void);
-PyAPI_FUNC(PyObject *) PyErr_NoMemory(void);
-PyAPI_FUNC(PyObject *) PyErr_SetFromErrno(PyObject *);
+PyAPI_FUNC(int) PyErr_BadArgument(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyErr_NoMemory(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyErr_SetFromErrno(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilenameObject(
-    PyObject *, PyObject *);
+    PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilename(
-    PyObject *, const char *);
+    PyObject *, const char *) PYSTON_NOEXCEPT;
 #ifdef MS_WINDOWS
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithUnicodeFilename(
-    PyObject *, const Py_UNICODE *);
+    PyObject *, const Py_UNICODE *) PYSTON_NOEXCEPT;
 #endif /* MS_WINDOWS */
 
 PyAPI_FUNC(PyObject *) PyErr_Format(PyObject *, const char *, ...)
-                        Py_GCC_ATTRIBUTE((format(printf, 2, 3)));
+                        PYSTON_NOEXCEPT Py_GCC_ATTRIBUTE((format(printf, 2, 3)));
 
 #ifdef MS_WINDOWS
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilenameObject(
-    int, const char *);
+    int, const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilename(
-    int, const char *);
+    int, const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithUnicodeFilename(
-    int, const Py_UNICODE *);
-PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErr(int);
+    int, const Py_UNICODE *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErr(int) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilenameObject(
-    PyObject *,int, PyObject *);
+    PyObject *,int, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilename(
-    PyObject *,int, const char *);
+    PyObject *,int, const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithUnicodeFilename(
-    PyObject *,int, const Py_UNICODE *);
-PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErr(PyObject *, int);
+    PyObject *,int, const Py_UNICODE *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErr(PyObject *, int) PYSTON_NOEXCEPT;
 #endif /* MS_WINDOWS */
 
 /* Export the old function so that the existing API remains available: */
-PyAPI_FUNC(void) PyErr_BadInternalCall(void);
+PyAPI_FUNC(void) PyErr_BadInternalCall(void) PYSTON_NOEXCEPT;
 // Pyston change: changed this from char* to const char*
-PyAPI_FUNC(void) _PyErr_BadInternalCall(const char *filename, int lineno);
+PyAPI_FUNC(void) _PyErr_BadInternalCall(const char *filename, int lineno) PYSTON_NOEXCEPT;
 /* Mask the old API with a call to the new API for code compiled under
    Python 2.0: */
 #define PyErr_BadInternalCall() _PyErr_BadInternalCall(__FILE__, __LINE__)
 
 /* Function to create a new exception */
 PyAPI_FUNC(PyObject *) PyErr_NewException(
-    char *name, PyObject *base, PyObject *dict);
+    char *name, PyObject *base, PyObject *dict) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyErr_NewExceptionWithDoc(
-    char *name, char *doc, PyObject *base, PyObject *dict);
-PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *);
+    char *name, char *doc, PyObject *base, PyObject *dict) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *) PYSTON_NOEXCEPT;
 
 /* In sigcheck.c or signalmodule.c */
-PyAPI_FUNC(int) PyErr_CheckSignals(void);
-PyAPI_FUNC(void) PyErr_SetInterrupt(void);
+PyAPI_FUNC(int) PyErr_CheckSignals(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyErr_SetInterrupt(void) PYSTON_NOEXCEPT;
 
 /* In signalmodule.c */
 int PySignal_SetWakeupFd(int fd);
 
 /* Support for adding program text to SyntaxErrors */
-PyAPI_FUNC(void) PyErr_SyntaxLocation(const char *, int);
-PyAPI_FUNC(PyObject *) PyErr_ProgramText(const char *, int);
+PyAPI_FUNC(void) PyErr_SyntaxLocation(const char *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyErr_ProgramText(const char *, int) PYSTON_NOEXCEPT;
 
 #ifdef Py_USING_UNICODE
 /* The following functions are used to create and modify unicode
@@ -312,62 +312,62 @@ PyAPI_FUNC(PyObject *) PyErr_ProgramText(const char *, int);
 
 /* create a UnicodeDecodeError object */
 PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_Create(
-    const char *, const char *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
+    const char *, const char *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *) PYSTON_NOEXCEPT;
 
 /* create a UnicodeEncodeError object */
 PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_Create(
-    const char *, const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
+    const char *, const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *) PYSTON_NOEXCEPT;
 
 /* create a UnicodeTranslateError object */
 PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_Create(
-    const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
+    const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *) PYSTON_NOEXCEPT;
 
 /* get the encoding attribute */
-PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetEncoding(PyObject *);
-PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_GetEncoding(PyObject *);
+PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetEncoding(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_GetEncoding(PyObject *) PYSTON_NOEXCEPT;
 
 /* get the object attribute */
-PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetObject(PyObject *);
-PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_GetObject(PyObject *);
-PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_GetObject(PyObject *);
+PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetObject(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_GetObject(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_GetObject(PyObject *) PYSTON_NOEXCEPT;
 
 /* get the value of the start attribute (the int * may not be NULL)
    return 0 on success, -1 on failure */
-PyAPI_FUNC(int) PyUnicodeEncodeError_GetStart(PyObject *, Py_ssize_t *);
-PyAPI_FUNC(int) PyUnicodeDecodeError_GetStart(PyObject *, Py_ssize_t *);
-PyAPI_FUNC(int) PyUnicodeTranslateError_GetStart(PyObject *, Py_ssize_t *);
+PyAPI_FUNC(int) PyUnicodeEncodeError_GetStart(PyObject *, Py_ssize_t *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeDecodeError_GetStart(PyObject *, Py_ssize_t *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeTranslateError_GetStart(PyObject *, Py_ssize_t *) PYSTON_NOEXCEPT;
 
 /* assign a new value to the start attribute
    return 0 on success, -1 on failure */
-PyAPI_FUNC(int) PyUnicodeEncodeError_SetStart(PyObject *, Py_ssize_t);
-PyAPI_FUNC(int) PyUnicodeDecodeError_SetStart(PyObject *, Py_ssize_t);
-PyAPI_FUNC(int) PyUnicodeTranslateError_SetStart(PyObject *, Py_ssize_t);
+PyAPI_FUNC(int) PyUnicodeEncodeError_SetStart(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeDecodeError_SetStart(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeTranslateError_SetStart(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 
 /* get the value of the end attribute (the int *may not be NULL)
  return 0 on success, -1 on failure */
-PyAPI_FUNC(int) PyUnicodeEncodeError_GetEnd(PyObject *, Py_ssize_t *);
-PyAPI_FUNC(int) PyUnicodeDecodeError_GetEnd(PyObject *, Py_ssize_t *);
-PyAPI_FUNC(int) PyUnicodeTranslateError_GetEnd(PyObject *, Py_ssize_t *);
+PyAPI_FUNC(int) PyUnicodeEncodeError_GetEnd(PyObject *, Py_ssize_t *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeDecodeError_GetEnd(PyObject *, Py_ssize_t *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeTranslateError_GetEnd(PyObject *, Py_ssize_t *) PYSTON_NOEXCEPT;
 
 /* assign a new value to the end attribute
    return 0 on success, -1 on failure */
-PyAPI_FUNC(int) PyUnicodeEncodeError_SetEnd(PyObject *, Py_ssize_t);
-PyAPI_FUNC(int) PyUnicodeDecodeError_SetEnd(PyObject *, Py_ssize_t);
-PyAPI_FUNC(int) PyUnicodeTranslateError_SetEnd(PyObject *, Py_ssize_t);
+PyAPI_FUNC(int) PyUnicodeEncodeError_SetEnd(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeDecodeError_SetEnd(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyUnicodeTranslateError_SetEnd(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 
 /* get the value of the reason attribute */
-PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetReason(PyObject *);
-PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_GetReason(PyObject *);
-PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_GetReason(PyObject *);
+PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetReason(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_GetReason(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_GetReason(PyObject *) PYSTON_NOEXCEPT;
 
 /* assign a new value to the reason attribute
    return 0 on success, -1 on failure */
 PyAPI_FUNC(int) PyUnicodeEncodeError_SetReason(
-    PyObject *, const char *);
+    PyObject *, const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyUnicodeDecodeError_SetReason(
-    PyObject *, const char *);
+    PyObject *, const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyUnicodeTranslateError_SetReason(
-    PyObject *, const char *);
+    PyObject *, const char *) PYSTON_NOEXCEPT;
 #endif
 
 
@@ -387,9 +387,9 @@ PyAPI_FUNC(int) PyUnicodeTranslateError_SetReason(
 
 #include <stdarg.h>
 PyAPI_FUNC(int) PyOS_snprintf(char *str, size_t size, const char  *format, ...)
-                        Py_GCC_ATTRIBUTE((format(printf, 3, 4)));
+                        PYSTON_NOEXCEPT Py_GCC_ATTRIBUTE((format(printf, 3, 4)));
 PyAPI_FUNC(int) PyOS_vsnprintf(char *str, size_t size, const char  *format, va_list va)
-                        Py_GCC_ATTRIBUTE((format(printf, 3, 0)));
+                        PYSTON_NOEXCEPT Py_GCC_ATTRIBUTE((format(printf, 3, 0)));
 
 #ifdef __cplusplus
 }

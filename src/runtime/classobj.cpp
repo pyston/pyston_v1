@@ -57,7 +57,7 @@ static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
     return NULL;
 }
 
-extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) {
+extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) noexcept {
     Py_FatalError("unimplemented");
 }
 

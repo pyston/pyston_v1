@@ -230,7 +230,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 #define  PyObject_DelAttr(O,A) PyObject_SetAttr((O),(A),NULL)
 
-     PyAPI_FUNC(int) PyObject_Cmp(PyObject *o1, PyObject *o2, int *result);
+     PyAPI_FUNC(int) PyObject_Cmp(PyObject *o1, PyObject *o2, int *result) PYSTON_NOEXCEPT;
 
        /*
      Compare the values of o1 and o2 using a routine provided by
@@ -292,7 +292,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        /* Declared elsewhere
 
-     PyAPI_FUNC(int) PyCallable_Check(PyObject *o);
+     PyAPI_FUNC(int) PyCallable_Check(PyObject *o) PYSTON_NOEXCEPT;
 
      Determine if the object, o, is callable.  Return 1 if the
      object is callable and 0 otherwise.
@@ -304,7 +304,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 
      PyAPI_FUNC(PyObject *) PyObject_Call(PyObject *callable_object,
-                                         PyObject *args, PyObject *kw);
+                                         PyObject *args, PyObject *kw) PYSTON_NOEXCEPT;
 
        /*
      Call a callable Python object, callable_object, with
@@ -314,7 +314,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyObject_CallObject(PyObject *callable_object,
-                                               PyObject *args);
+                                               PyObject *args) PYSTON_NOEXCEPT;
 
        /*
      Call a callable Python object, callable_object, with
@@ -326,7 +326,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyObject_CallFunction(PyObject *callable_object,
-                                                 char *format, ...);
+                                                 char *format, ...) PYSTON_NOEXCEPT;
 
        /*
      Call a callable Python object, callable_object, with a
@@ -340,7 +340,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 
      PyAPI_FUNC(PyObject *) PyObject_CallMethod(PyObject *o, char *m,
-                                               char *format, ...);
+                                               char *format, ...) PYSTON_NOEXCEPT;
 
        /*
      Call the method named m of object o with a variable number of
@@ -352,13 +352,13 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) _PyObject_CallFunction_SizeT(PyObject *callable,
-                                                         char *format, ...);
+                                                         char *format, ...) PYSTON_NOEXCEPT;
      PyAPI_FUNC(PyObject *) _PyObject_CallMethod_SizeT(PyObject *o,
                                                        char *name,
-                                                       char *format, ...);
+                                                       char *format, ...) PYSTON_NOEXCEPT;
 
      PyAPI_FUNC(PyObject *) PyObject_CallFunctionObjArgs(PyObject *callable,
-                                                        ...);
+                                                        ...) PYSTON_NOEXCEPT;
 
        /*
      Call a callable Python object, callable_object, with a
@@ -370,7 +370,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 
      PyAPI_FUNC(PyObject *) PyObject_CallMethodObjArgs(PyObject *o,
-                                                      PyObject *m, ...);
+                                                      PyObject *m, ...) PYSTON_NOEXCEPT;
 
        /*
      Call the method named m of object o with a variable number of
@@ -412,7 +412,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyObject_Type(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyObject_Type(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      On success, returns a type object corresponding to the object
@@ -420,7 +420,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      equivalent to the Python expression: type(o).
        */
 
-     PyAPI_FUNC(Py_ssize_t) PyObject_Size(PyObject *o);
+     PyAPI_FUNC(Py_ssize_t) PyObject_Size(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Return the size of object o.  If the object, o, provides
@@ -432,10 +432,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        /* For DLL compatibility */
 #undef PyObject_Length
-     PyAPI_FUNC(Py_ssize_t) PyObject_Length(PyObject *o);
+     PyAPI_FUNC(Py_ssize_t) PyObject_Length(PyObject *o) PYSTON_NOEXCEPT;
 #define PyObject_Length PyObject_Size
 
-     PyAPI_FUNC(Py_ssize_t) _PyObject_LengthHint(PyObject *o, Py_ssize_t);
+     PyAPI_FUNC(Py_ssize_t) _PyObject_LengthHint(PyObject *o, Py_ssize_t) PYSTON_NOEXCEPT;
 
        /*
      Guess the size of object o using len(o) or o.__length_hint__().
@@ -443,7 +443,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      default value.  If one of the calls fails, this function returns -1.
        */
 
-     PyAPI_FUNC(PyObject *) PyObject_GetItem(PyObject *o, PyObject *key);
+     PyAPI_FUNC(PyObject *) PyObject_GetItem(PyObject *o, PyObject *key) PYSTON_NOEXCEPT;
 
        /*
      Return element of o corresponding to the object, key, or NULL
@@ -452,7 +452,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(int) PyObject_SetItem(PyObject *o, PyObject *key, PyObject *v);
+     PyAPI_FUNC(int) PyObject_SetItem(PyObject *o, PyObject *key, PyObject *v) PYSTON_NOEXCEPT;
 
        /*
      Map the object, key, to the value, v.  Returns
@@ -460,7 +460,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      statement: o[key]=v.
        */
 
-     PyAPI_FUNC(int) PyObject_DelItemString(PyObject *o, char *key);
+     PyAPI_FUNC(int) PyObject_DelItemString(PyObject *o, char *key) PYSTON_NOEXCEPT;
 
        /*
      Remove the mapping for object, key, from the object *o.
@@ -468,7 +468,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      the Python statement: del o[key].
        */
 
-     PyAPI_FUNC(int) PyObject_DelItem(PyObject *o, PyObject *key);
+     PyAPI_FUNC(int) PyObject_DelItem(PyObject *o, PyObject *key) PYSTON_NOEXCEPT;
 
        /*
      Delete the mapping for key from *o.  Returns -1 on failure.
@@ -477,7 +477,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(int) PyObject_AsCharBuffer(PyObject *obj,
                                           const char **buffer,
-                                          Py_ssize_t *buffer_len);
+                                          Py_ssize_t *buffer_len) PYSTON_NOEXCEPT;
 
        /*
       Takes an arbitrary object which must support the (character,
@@ -491,7 +491,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(int) PyObject_CheckReadBuffer(PyObject *obj);
+     PyAPI_FUNC(int) PyObject_CheckReadBuffer(PyObject *obj) PYSTON_NOEXCEPT;
 
       /*
       Checks whether an arbitrary object supports the (character,
@@ -502,7 +502,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(int) PyObject_AsReadBuffer(PyObject *obj,
                                           const void **buffer,
-                                          Py_ssize_t *buffer_len);
+                                          Py_ssize_t *buffer_len) PYSTON_NOEXCEPT;
 
        /*
       Same as PyObject_AsCharBuffer() except that this API expects
@@ -518,7 +518,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(int) PyObject_AsWriteBuffer(PyObject *obj,
                                            void **buffer,
-                                           Py_ssize_t *buffer_len);
+                                           Py_ssize_t *buffer_len) PYSTON_NOEXCEPT;
 
        /*
       Takes an arbitrary object which must support the (writeable,
@@ -542,7 +542,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        return 0 */
 
      PyAPI_FUNC(int) PyObject_GetBuffer(PyObject *obj, Py_buffer *view,
-                                        int flags);
+                                        int flags) PYSTON_NOEXCEPT;
 
     /* This is a C-API version of the getbuffer function call.  It checks
        to make sure object has the required function pointer and issues the
@@ -551,13 +551,13 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     */
 
 
-     PyAPI_FUNC(void *) PyBuffer_GetPointer(Py_buffer *view, Py_ssize_t *indices);
+     PyAPI_FUNC(void *) PyBuffer_GetPointer(Py_buffer *view, Py_ssize_t *indices) PYSTON_NOEXCEPT;
 
     /* Get the memory area pointed to by the indices for the buffer given.
        Note that view->ndim is the assumed size of indices
     */
 
-     PyAPI_FUNC(int) PyBuffer_SizeFromFormat(const char *);
+     PyAPI_FUNC(int) PyBuffer_SizeFromFormat(const char *) PYSTON_NOEXCEPT;
 
     /* Return the implied itemsize of the data-format area from a
        struct-style description */
@@ -565,10 +565,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 
      PyAPI_FUNC(int) PyBuffer_ToContiguous(void *buf, Py_buffer *view,
-                                           Py_ssize_t len, char fort);
+                                           Py_ssize_t len, char fort) PYSTON_NOEXCEPT;
 
      PyAPI_FUNC(int) PyBuffer_FromContiguous(Py_buffer *view, void *buf,
-                                             Py_ssize_t len, char fort);
+                                             Py_ssize_t len, char fort) PYSTON_NOEXCEPT;
 
 
     /* Copy len bytes of data from the contiguous chunk of memory
@@ -587,19 +587,19 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
     */
 
-     PyAPI_FUNC(int) PyObject_CopyData(PyObject *dest, PyObject *src);
+     PyAPI_FUNC(int) PyObject_CopyData(PyObject *dest, PyObject *src) PYSTON_NOEXCEPT;
 
     /* Copy the data from the src buffer to the buffer of destination
      */
 
-     PyAPI_FUNC(int) PyBuffer_IsContiguous(Py_buffer *view, char fort);
+     PyAPI_FUNC(int) PyBuffer_IsContiguous(Py_buffer *view, char fort) PYSTON_NOEXCEPT;
 
 
      PyAPI_FUNC(void) PyBuffer_FillContiguousStrides(int ndims,
                                                     Py_ssize_t *shape,
                                                     Py_ssize_t *strides,
                                                     int itemsize,
-                                                    char fort);
+                                                    char fort) PYSTON_NOEXCEPT;
 
     /*  Fill the strides array with byte-strides of a contiguous
         (Fortran-style if fort is 'F' or C-style otherwise)
@@ -609,7 +609,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(int) PyBuffer_FillInfo(Py_buffer *view, PyObject *o, void *buf,
                                        Py_ssize_t len, int readonly,
-                                       int flags);
+                                       int flags) PYSTON_NOEXCEPT;
 
     /* Fills in a buffer-info structure correctly for an exporter
        that can only share a contiguous chunk of memory of
@@ -617,13 +617,13 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        and -1 (with raising an error) on error.
      */
 
-     PyAPI_FUNC(void) PyBuffer_Release(Py_buffer *view);
+     PyAPI_FUNC(void) PyBuffer_Release(Py_buffer *view) PYSTON_NOEXCEPT;
 
        /* Releases a Py_buffer obtained from getbuffer ParseTuple's s*.
     */
 
      PyAPI_FUNC(PyObject *) PyObject_Format(PyObject* obj,
-                                            PyObject *format_spec);
+                                            PyObject *format_spec) PYSTON_NOEXCEPT;
        /*
      Takes an arbitrary object and returns the result of
      calling obj.__format__(format_spec).
@@ -631,7 +631,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /* Iterators */
 
-     PyAPI_FUNC(PyObject *) PyObject_GetIter(PyObject *);
+     PyAPI_FUNC(PyObject *) PyObject_GetIter(PyObject *) PYSTON_NOEXCEPT;
      /* Takes an object and returns an iterator for it.
     This is typically a new iterator but if the argument
     is an iterator, this returns itself. */
@@ -641,7 +641,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      (obj)->ob_type->tp_iternext != NULL && \
      (obj)->ob_type->tp_iternext != &_PyObject_NextNotImplemented)
 
-     PyAPI_FUNC(PyObject *) PyIter_Next(PyObject *);
+     PyAPI_FUNC(PyObject *) PyIter_Next(PyObject *) PYSTON_NOEXCEPT;
      /* Takes an iterator object and calls its tp_iternext slot,
     returning the next value.  If the iterator is exhausted,
     this returns NULL without setting an exception.
@@ -649,7 +649,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /*  Number Protocol:*/
 
-     PyAPI_FUNC(int) PyNumber_Check(PyObject *o);
+     PyAPI_FUNC(int) PyNumber_Check(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns 1 if the object, o, provides numeric protocols, and
@@ -659,7 +659,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Add(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Add(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of adding o1 and o2, or null on failure.
@@ -668,7 +668,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Subtract(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Subtract(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of subtracting o2 from o1, or null on
@@ -677,7 +677,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Multiply(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Multiply(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of multiplying o1 and o2, or null on
@@ -687,7 +687,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Divide(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Divide(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of dividing o1 by o2, or null on failure.
@@ -696,7 +696,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_FloorDivide(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_FloorDivide(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of dividing o1 by o2 giving an integral result,
@@ -706,7 +706,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_TrueDivide(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_TrueDivide(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of dividing o1 by o2 giving a float result,
@@ -716,7 +716,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Remainder(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Remainder(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the remainder of dividing o1 by o2, or null on
@@ -726,7 +726,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Divmod(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Divmod(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      See the built-in function divmod.  Returns NULL on failure.
@@ -737,7 +737,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyNumber_Power(PyObject *o1, PyObject *o2,
-                                          PyObject *o3);
+                                          PyObject *o3) PYSTON_NOEXCEPT;
 
        /*
      See the built-in function pow.  Returns NULL on failure.
@@ -746,7 +746,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Negative(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Negative(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the negation of o on success, or null on failure.
@@ -754,7 +754,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Positive(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Positive(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the (what?) of o on success, or NULL on failure.
@@ -762,7 +762,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Absolute(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Absolute(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the absolute value of o, or null on failure.  This is
@@ -770,7 +770,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Invert(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Invert(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the bitwise negation of o on success, or NULL on
@@ -780,7 +780,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Lshift(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Lshift(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of left shifting o1 by o2 on success, or
@@ -790,7 +790,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Rshift(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Rshift(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of right shifting o1 by o2 on success, or
@@ -799,7 +799,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_And(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_And(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of bitwise and of o1 and o2 on success, or
@@ -809,7 +809,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Xor(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Xor(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the bitwise exclusive or of o1 by o2 on success, or
@@ -819,7 +819,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Or(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_Or(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of bitwise or on o1 and o2 on success, or
@@ -848,7 +848,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      // Pyston change: made this a function:
-    bool _PyIndex_Check(PyObject* o);
+    PyAPI_FUNC(bool) _PyIndex_Check(PyObject* o) PYSTON_NOEXCEPT;
 #define PyIndex_Check(obj) _PyIndex_Check((PyObject*)(obj))
 #if 0
 #define PyIndex_Check(obj) \
@@ -857,14 +857,14 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     (obj)->ob_type->tp_as_number->nb_index != NULL)
 #endif
 
-     PyAPI_FUNC(PyObject *) PyNumber_Index(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Index(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the object converted to a Python long or int
      or NULL with an error raised on failure.
        */
 
-     PyAPI_FUNC(Py_ssize_t) PyNumber_AsSsize_t(PyObject *o, PyObject *exc);
+     PyAPI_FUNC(Py_ssize_t) PyNumber_AsSsize_t(PyObject *o, PyObject *exc) PYSTON_NOEXCEPT;
 
        /*
      Returns the Integral instance converted to an int. The
@@ -877,7 +877,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(PyObject *) _PyNumber_ConvertIntegralToInt(
          PyObject *integral,
-         const char* error_format);
+         const char* error_format) PYSTON_NOEXCEPT;
 
        /*
     Returns the object converted to Py_ssize_t by going through
@@ -887,7 +887,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     is cleared and the value is clipped.
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Int(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Int(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the o converted to an integer object on success, or
@@ -896,7 +896,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Long(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Long(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the o converted to a long integer object on success,
@@ -905,7 +905,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_Float(PyObject *o);
+     PyAPI_FUNC(PyObject *) PyNumber_Float(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the o converted to a float object on success, or NULL
@@ -915,7 +915,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /*  In-place variants of (some of) the above number protocol functions */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceAdd(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceAdd(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of adding o2 to o1, possibly in-place, or null
@@ -924,7 +924,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceSubtract(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceSubtract(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of subtracting o2 from o1, possibly in-place or
@@ -933,7 +933,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceMultiply(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceMultiply(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of multiplying o1 by o2, possibly in-place, or
@@ -942,7 +942,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceDivide(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceDivide(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of dividing o1 by o2, possibly in-place, or null
@@ -952,7 +952,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyNumber_InPlaceFloorDivide(PyObject *o1,
-                                                       PyObject *o2);
+                                                       PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of dividing o1 by o2 giving an integral result,
@@ -963,7 +963,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyNumber_InPlaceTrueDivide(PyObject *o1,
-                                                      PyObject *o2);
+                                                      PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of dividing o1 by o2 giving a float result,
@@ -973,7 +973,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceRemainder(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceRemainder(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the remainder of dividing o1 by o2, possibly in-place, or
@@ -983,7 +983,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyNumber_InPlacePower(PyObject *o1, PyObject *o2,
-                                                 PyObject *o3);
+                                                 PyObject *o3) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of raising o1 to the power of o2, possibly
@@ -992,7 +992,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceLshift(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceLshift(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of left shifting o1 by o2, possibly in-place, or
@@ -1001,7 +1001,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceRshift(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceRshift(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of right shifting o1 by o2, possibly in-place or
@@ -1010,7 +1010,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceAnd(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceAnd(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of bitwise and of o1 and o2, possibly in-place,
@@ -1019,7 +1019,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceXor(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceXor(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the bitwise exclusive or of o1 by o2, possibly in-place, or
@@ -1028,7 +1028,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PyNumber_InPlaceOr(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PyNumber_InPlaceOr(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Returns the result of bitwise or of o1 and o2, possibly in-place,
@@ -1038,7 +1038,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
 
-     PyAPI_FUNC(PyObject *) PyNumber_ToBase(PyObject *n, int base);
+     PyAPI_FUNC(PyObject *) PyNumber_ToBase(PyObject *n, int base) PYSTON_NOEXCEPT;
 
        /*
      Returns the integer n converted to a string with a base, with a base
@@ -1049,7 +1049,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /*  Sequence protocol:*/
 
-     PyAPI_FUNC(int) PySequence_Check(PyObject *o);
+     PyAPI_FUNC(int) PySequence_Check(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Return 1 if the object provides sequence protocol, and zero
@@ -1059,7 +1059,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(Py_ssize_t) PySequence_Size(PyObject *o);
+     PyAPI_FUNC(Py_ssize_t) PySequence_Size(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Return the size of sequence object o, or -1 on failure.
@@ -1068,11 +1068,11 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        /* For DLL compatibility */
 #undef PySequence_Length
-     PyAPI_FUNC(Py_ssize_t) PySequence_Length(PyObject *o);
+     PyAPI_FUNC(Py_ssize_t) PySequence_Length(PyObject *o) PYSTON_NOEXCEPT;
 #define PySequence_Length PySequence_Size
 
 
-     PyAPI_FUNC(PyObject *) PySequence_Concat(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PySequence_Concat(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Return the concatenation of o1 and o2 on success, and NULL on
@@ -1081,7 +1081,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PySequence_Repeat(PyObject *o, Py_ssize_t count);
+     PyAPI_FUNC(PyObject *) PySequence_Repeat(PyObject *o, Py_ssize_t count) PYSTON_NOEXCEPT;
 
        /*
      Return the result of repeating sequence object o count times,
@@ -1090,14 +1090,14 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PySequence_GetItem(PyObject *o, Py_ssize_t i);
+     PyAPI_FUNC(PyObject *) PySequence_GetItem(PyObject *o, Py_ssize_t i) PYSTON_NOEXCEPT;
 
        /*
      Return the ith element of o, or NULL on failure. This is the
      equivalent of the Python expression: o[i].
        */
 
-     PyAPI_FUNC(PyObject *) PySequence_GetSlice(PyObject *o, Py_ssize_t i1, Py_ssize_t i2);
+     PyAPI_FUNC(PyObject *) PySequence_GetSlice(PyObject *o, Py_ssize_t i1, Py_ssize_t i2) PYSTON_NOEXCEPT;
 
        /*
      Return the slice of sequence object o between i1 and i2, or
@@ -1106,7 +1106,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(int) PySequence_SetItem(PyObject *o, Py_ssize_t i, PyObject *v);
+     PyAPI_FUNC(int) PySequence_SetItem(PyObject *o, Py_ssize_t i, PyObject *v) PYSTON_NOEXCEPT;
 
        /*
      Assign object v to the ith element of o.  Returns
@@ -1115,7 +1115,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(int) PySequence_DelItem(PyObject *o, Py_ssize_t i);
+     PyAPI_FUNC(int) PySequence_DelItem(PyObject *o, Py_ssize_t i) PYSTON_NOEXCEPT;
 
        /*
      Delete the ith element of object v.  Returns
@@ -1124,7 +1124,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(int) PySequence_SetSlice(PyObject *o, Py_ssize_t i1, Py_ssize_t i2,
-                                        PyObject *v);
+                                        PyObject *v) PYSTON_NOEXCEPT;
 
        /*
      Assign the sequence object, v, to the slice in sequence
@@ -1132,7 +1132,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      equivalent of the Python statement: o[i1:i2]=v.
        */
 
-     PyAPI_FUNC(int) PySequence_DelSlice(PyObject *o, Py_ssize_t i1, Py_ssize_t i2);
+     PyAPI_FUNC(int) PySequence_DelSlice(PyObject *o, Py_ssize_t i1, Py_ssize_t i2) PYSTON_NOEXCEPT;
 
        /*
      Delete the slice in sequence object, o, from i1 to i2.
@@ -1140,7 +1140,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      statement: del o[i1:i2].
        */
 
-     PyAPI_FUNC(PyObject *) PySequence_Tuple(PyObject *o);
+     PyAPI_FUNC(PyObject *) PySequence_Tuple(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the sequence, o, as a tuple on success, and NULL on failure.
@@ -1148,13 +1148,13 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
 
-     PyAPI_FUNC(PyObject *) PySequence_List(PyObject *o);
+     PyAPI_FUNC(PyObject *) PySequence_List(PyObject *o) PYSTON_NOEXCEPT;
        /*
      Returns the sequence, o, as a list on success, and NULL on failure.
      This is equivalent to the Python expression: list(o)
        */
 
-     PyAPI_FUNC(PyObject *) PySequence_Fast(PyObject *o, const char* m);
+     PyAPI_FUNC(PyObject *) PySequence_Fast(PyObject *o, const char* m) PYSTON_NOEXCEPT;
        /*
      Return the sequence, o, as a list, unless it's already a
      tuple or list.  Use PySequence_Fast_GET_ITEM to access the
@@ -1190,7 +1190,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     /* Return a pointer to the underlying item array for
        an object retured by PySequence_Fast */
 
-     PyAPI_FUNC(Py_ssize_t) PySequence_Count(PyObject *o, PyObject *value);
+     PyAPI_FUNC(Py_ssize_t) PySequence_Count(PyObject *o, PyObject *value) PYSTON_NOEXCEPT;
 
        /*
      Return the number of occurrences on value on o, that is,
@@ -1199,7 +1199,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      expression: o.count(value).
        */
 
-     PyAPI_FUNC(int) PySequence_Contains(PyObject *seq, PyObject *ob);
+     PyAPI_FUNC(int) PySequence_Contains(PyObject *seq, PyObject *ob) PYSTON_NOEXCEPT;
        /*
      Return -1 if error; 1 if ob in seq; 0 if ob not in seq.
      Use __contains__ if possible, else _PySequence_IterSearch().
@@ -1209,7 +1209,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 #define PY_ITERSEARCH_INDEX    2
 #define PY_ITERSEARCH_CONTAINS 3
      PyAPI_FUNC(Py_ssize_t) _PySequence_IterSearch(PyObject *seq,
-                                        PyObject *obj, int operation);
+                                        PyObject *obj, int operation) PYSTON_NOEXCEPT;
     /*
       Iterate over seq.  Result depends on the operation:
       PY_ITERSEARCH_COUNT:  return # of times obj appears in seq; -1 if
@@ -1223,7 +1223,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /* For DLL-level backwards compatibility */
 #undef PySequence_In
-     PyAPI_FUNC(int) PySequence_In(PyObject *o, PyObject *value);
+     PyAPI_FUNC(int) PySequence_In(PyObject *o, PyObject *value) PYSTON_NOEXCEPT;
 
 /* For source-level backwards compatibility */
 #define PySequence_In PySequence_Contains
@@ -1234,7 +1234,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      is equivalent to the Python expression: value in o.
        */
 
-     PyAPI_FUNC(Py_ssize_t) PySequence_Index(PyObject *o, PyObject *value);
+     PyAPI_FUNC(Py_ssize_t) PySequence_Index(PyObject *o, PyObject *value) PYSTON_NOEXCEPT;
 
        /*
      Return the first index for which o[i]=value.  On error,
@@ -1244,7 +1244,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /* In-place versions of some of the above Sequence functions. */
 
-     PyAPI_FUNC(PyObject *) PySequence_InPlaceConcat(PyObject *o1, PyObject *o2);
+     PyAPI_FUNC(PyObject *) PySequence_InPlaceConcat(PyObject *o1, PyObject *o2) PYSTON_NOEXCEPT;
 
        /*
      Append o2 to o1, in-place when possible. Return the resulting
@@ -1253,7 +1253,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        */
 
-     PyAPI_FUNC(PyObject *) PySequence_InPlaceRepeat(PyObject *o, Py_ssize_t count);
+     PyAPI_FUNC(PyObject *) PySequence_InPlaceRepeat(PyObject *o, Py_ssize_t count) PYSTON_NOEXCEPT;
 
        /*
      Repeat o1 by count, in-place when possible. Return the resulting
@@ -1264,7 +1264,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 /*  Mapping protocol:*/
 
-     PyAPI_FUNC(int) PyMapping_Check(PyObject *o);
+     PyAPI_FUNC(int) PyMapping_Check(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Return 1 if the object provides mapping protocol, and zero
@@ -1273,7 +1273,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      This function always succeeds.
        */
 
-     PyAPI_FUNC(Py_ssize_t) PyMapping_Size(PyObject *o);
+     PyAPI_FUNC(Py_ssize_t) PyMapping_Size(PyObject *o) PYSTON_NOEXCEPT;
 
        /*
      Returns the number of keys in object o on success, and -1 on
@@ -1283,7 +1283,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        /* For DLL compatibility */
 #undef PyMapping_Length
-     PyAPI_FUNC(Py_ssize_t) PyMapping_Length(PyObject *o);
+     PyAPI_FUNC(Py_ssize_t) PyMapping_Length(PyObject *o) PYSTON_NOEXCEPT;
 #define PyMapping_Length PyMapping_Size
 
 
@@ -1307,7 +1307,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 #define PyMapping_DelItem(O,K) PyObject_DelItem((O),(K))
 
-     PyAPI_FUNC(int) PyMapping_HasKeyString(PyObject *o, char *key);
+     PyAPI_FUNC(int) PyMapping_HasKeyString(PyObject *o, char *key) PYSTON_NOEXCEPT;
 
        /*
      On success, return 1 if the mapping object has the key, key,
@@ -1317,7 +1317,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      This function always succeeds.
        */
 
-     PyAPI_FUNC(int) PyMapping_HasKey(PyObject *o, PyObject *key);
+     PyAPI_FUNC(int) PyMapping_HasKey(PyObject *o, PyObject *key) PYSTON_NOEXCEPT;
 
        /*
      Return 1 if the mapping object has the key, key,
@@ -1360,7 +1360,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 #define PyMapping_Items(O) PyObject_CallMethod(O,"items",NULL)
 
-     PyAPI_FUNC(PyObject *) PyMapping_GetItemString(PyObject *o, char *key);
+     PyAPI_FUNC(PyObject *) PyMapping_GetItemString(PyObject *o, char *key) PYSTON_NOEXCEPT;
 
        /*
      Return element of o corresponding to the object, key, or NULL
@@ -1369,7 +1369,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(int) PyMapping_SetItemString(PyObject *o, char *key,
-                                            PyObject *value);
+                                            PyObject *value) PYSTON_NOEXCEPT;
 
        /*
      Map the object, key, to the value, v.  Returns
@@ -1378,23 +1378,23 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
       */
 
 
-PyAPI_FUNC(int) PyObject_IsInstance(PyObject *object, PyObject *typeorclass);
+PyAPI_FUNC(int) PyObject_IsInstance(PyObject *object, PyObject *typeorclass) PYSTON_NOEXCEPT;
       /* isinstance(object, typeorclass) */
 
-PyAPI_FUNC(int) PyObject_IsSubclass(PyObject *object, PyObject *typeorclass);
+PyAPI_FUNC(int) PyObject_IsSubclass(PyObject *object, PyObject *typeorclass) PYSTON_NOEXCEPT;
       /* issubclass(object, typeorclass) */
 
 
-PyAPI_FUNC(int) _PyObject_RealIsInstance(PyObject *inst, PyObject *cls);
+PyAPI_FUNC(int) _PyObject_RealIsInstance(PyObject *inst, PyObject *cls) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(int) _PyObject_RealIsSubclass(PyObject *derived, PyObject *cls);
+PyAPI_FUNC(int) _PyObject_RealIsSubclass(PyObject *derived, PyObject *cls) PYSTON_NOEXCEPT;
 
 
 /* For internal use by buffer API functions */
 PyAPI_FUNC(void) _Py_add_one_to_index_F(int nd, Py_ssize_t *index,
-                                        const Py_ssize_t *shape);
+                                        const Py_ssize_t *shape) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _Py_add_one_to_index_C(int nd, Py_ssize_t *index,
-                                        const Py_ssize_t *shape);
+                                        const Py_ssize_t *shape) PYSTON_NOEXCEPT;
 
 
 #ifdef __cplusplus

@@ -96,27 +96,27 @@ PyObject_{New, NewVar, Del}.
    the object gets initialized via PyObject_{Init, InitVar} after obtaining
    the raw memory.
 */
-PyAPI_FUNC(void *) PyObject_Malloc(size_t);
-PyAPI_FUNC(void *) PyObject_Realloc(void *, size_t);
-PyAPI_FUNC(void) PyObject_Free(void *);
+PyAPI_FUNC(void *) PyObject_Malloc(size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) PyObject_Realloc(void *, size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyObject_Free(void *) PYSTON_NOEXCEPT;
 
 
 /* Macros */
 #ifdef WITH_PYMALLOC
 #ifdef PYMALLOC_DEBUG   /* WITH_PYMALLOC && PYMALLOC_DEBUG */
-PyAPI_FUNC(void *) _PyObject_DebugMalloc(size_t nbytes);
-PyAPI_FUNC(void *) _PyObject_DebugRealloc(void *p, size_t nbytes);
-PyAPI_FUNC(void) _PyObject_DebugFree(void *p);
-PyAPI_FUNC(void) _PyObject_DebugDumpAddress(const void *p);
-PyAPI_FUNC(void) _PyObject_DebugCheckAddress(const void *p);
-PyAPI_FUNC(void) _PyObject_DebugMallocStats(void);
-PyAPI_FUNC(void *) _PyObject_DebugMallocApi(char api, size_t nbytes);
-PyAPI_FUNC(void *) _PyObject_DebugReallocApi(char api, void *p, size_t nbytes);
-PyAPI_FUNC(void) _PyObject_DebugFreeApi(char api, void *p);
-PyAPI_FUNC(void) _PyObject_DebugCheckAddressApi(char api, const void *p);
-PyAPI_FUNC(void *) _PyMem_DebugMalloc(size_t nbytes);
-PyAPI_FUNC(void *) _PyMem_DebugRealloc(void *p, size_t nbytes);
-PyAPI_FUNC(void) _PyMem_DebugFree(void *p);
+PyAPI_FUNC(void *) _PyObject_DebugMalloc(size_t nbytes) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) _PyObject_DebugRealloc(void *p, size_t nbytes) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_DebugFree(void *p) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_DebugDumpAddress(const void *p) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_DebugCheckAddress(const void *p) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_DebugMallocStats(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) _PyObject_DebugMallocApi(char api, size_t nbytes) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) _PyObject_DebugReallocApi(char api, void *p, size_t nbytes) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_DebugFreeApi(char api, void *p) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_DebugCheckAddressApi(char api, const void *p) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) _PyMem_DebugMalloc(size_t nbytes) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) _PyMem_DebugRealloc(void *p, size_t nbytes) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyMem_DebugFree(void *p) PYSTON_NOEXCEPT;
 #define PyObject_MALLOC         _PyObject_DebugMalloc
 #define PyObject_Malloc         _PyObject_DebugMalloc
 #define PyObject_REALLOC        _PyObject_DebugRealloc
@@ -149,11 +149,11 @@ PyAPI_FUNC(void) _PyMem_DebugFree(void *p);
  */
 
 /* Functions */
-PyAPI_FUNC(PyObject *) PyObject_Init(PyObject *, PyTypeObject *);
+PyAPI_FUNC(PyObject *) PyObject_Init(PyObject *, PyTypeObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyVarObject *) PyObject_InitVar(PyVarObject *,
-                                                 PyTypeObject *, Py_ssize_t);
-PyAPI_FUNC(PyObject *) _PyObject_New(PyTypeObject *);
-PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
+                                                 PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyObject_New(PyTypeObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 
 #define PyObject_New(type, typeobj) \
                 ( (type *) _PyObject_New(typeobj) )
@@ -234,7 +234,7 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
  */
 
 /* C equivalent of gc.collect(). */
-PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void);
+PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void) PYSTON_NOEXCEPT;
 
 /* Test if a type has a GC head */
 #define PyType_IS_GC(t) PyType_HasFeature((t), Py_TPFLAGS_HAVE_GC)
@@ -243,7 +243,7 @@ PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void);
 #define PyObject_IS_GC(o) (PyType_IS_GC(Py_TYPE(o)) && \
     (Py_TYPE(o)->tp_is_gc == NULL || Py_TYPE(o)->tp_is_gc(o)))
 
-PyAPI_FUNC(PyVarObject *) _PyObject_GC_Resize(PyVarObject *, Py_ssize_t);
+PyAPI_FUNC(PyVarObject *) _PyObject_GC_Resize(PyVarObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 #define PyObject_GC_Resize(type, op, n) \
                 ( (type *) _PyObject_GC_Resize((PyVarObject *)(op), (n)) )
 
@@ -305,12 +305,12 @@ extern PyGC_Head *_PyGC_generation0;
         (!PyTuple_CheckExact(obj) || _PyObject_GC_IS_TRACKED(obj)))
 
 
-PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t);
-PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *);
-PyAPI_FUNC(PyVarObject *) _PyObject_GC_NewVar(PyTypeObject *, Py_ssize_t);
-PyAPI_FUNC(void) PyObject_GC_Track(void *);
-PyAPI_FUNC(void) PyObject_GC_UnTrack(void *);
-PyAPI_FUNC(void) PyObject_GC_Del(void *);
+PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyVarObject *) _PyObject_GC_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyObject_GC_Track(void *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyObject_GC_UnTrack(void *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyObject_GC_Del(void *) PYSTON_NOEXCEPT;
 
 #define PyObject_GC_New(type, typeobj) \
                 ( (type *) _PyObject_GC_New(typeobj) )

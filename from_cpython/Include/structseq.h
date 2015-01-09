@@ -23,9 +23,9 @@ typedef struct PyStructSequence_Desc {
 extern char* PyStructSequence_UnnamedField;
 
 PyAPI_FUNC(void) PyStructSequence_InitType(PyTypeObject *type,
-					   PyStructSequence_Desc *desc);
+					   PyStructSequence_Desc *desc) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyObject *) PyStructSequence_New(PyTypeObject* type);
+PyAPI_FUNC(PyObject *) PyStructSequence_New(PyTypeObject* type) PYSTON_NOEXCEPT;
 
 typedef struct {
 	PyObject_VAR_HEAD

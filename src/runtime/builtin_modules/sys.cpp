@@ -75,7 +75,7 @@ Box* getSysStdout() {
     return sys_stdout;
 }
 
-extern "C" int PySys_SetObject(const char* name, PyObject* v) {
+extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     try {
         if (!v) {
             if (sys_module->getattr(name))
@@ -88,7 +88,7 @@ extern "C" int PySys_SetObject(const char* name, PyObject* v) {
     return 0;
 }
 
-extern "C" PyObject* PySys_GetObject(const char* name) {
+extern "C" PyObject* PySys_GetObject(const char* name) noexcept {
     return sys_module->getattr(name);
 }
 
@@ -118,7 +118,7 @@ static void mywrite(const char* name, FILE* fp, const char* format, va_list va) 
     PyErr_Restore(error_type, error_value, error_traceback);
 }
 
-extern "C" void PySys_WriteStdout(const char* format, ...) {
+extern "C" void PySys_WriteStdout(const char* format, ...) noexcept {
     va_list va;
 
     va_start(va, format);
@@ -126,7 +126,7 @@ extern "C" void PySys_WriteStdout(const char* format, ...) {
     va_end(va);
 }
 
-extern "C" void PySys_WriteStderr(const char* format, ...) {
+extern "C" void PySys_WriteStderr(const char* format, ...) noexcept {
     va_list va;
 
     va_start(va, format);

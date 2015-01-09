@@ -34,8 +34,8 @@ extern "C" {
      XXX block_new(DEFAULT_BLOCK_SIZE) returns NULL, that's passed on but
      XXX an exception is not set in that case).
   */
-  PyAPI_FUNC(PyArena *) PyArena_New(void);
-  PyAPI_FUNC(void) PyArena_Free(PyArena *);
+  PyAPI_FUNC(PyArena *) PyArena_New(void) PYSTON_NOEXCEPT;
+  PyAPI_FUNC(void) PyArena_Free(PyArena *) PYSTON_NOEXCEPT;
 
   /* Mostly like malloc(), return the address of a block of memory spanning
    * `size` bytes, or return NULL (without setting an exception) if enough
@@ -49,13 +49,13 @@ extern "C" {
    * until PyArena_Free(ar) is called, at which point all pointers obtained
    * from the arena `ar` become invalid simultaneously.
    */
-  PyAPI_FUNC(void *) PyArena_Malloc(PyArena *, size_t size);
+  PyAPI_FUNC(void *) PyArena_Malloc(PyArena *, size_t size) PYSTON_NOEXCEPT;
 
   /* This routine isn't a proper arena allocation routine.  It takes
    * a PyObject* and records it so that it can be DECREFed when the
    * arena is freed.
    */
-  PyAPI_FUNC(int) PyArena_AddPyObject(PyArena *, PyObject *);
+  PyAPI_FUNC(int) PyArena_AddPyObject(PyArena *, PyObject *) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

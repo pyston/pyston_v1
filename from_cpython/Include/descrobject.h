@@ -82,18 +82,18 @@ PyAPI_DATA(PyTypeObject) PyMemberDescr_Type;
 #endif
 // (Pyston TODO: add #defines to our names)
 
-PyAPI_FUNC(PyObject *) PyDescr_NewMethod(PyTypeObject *, PyMethodDef *);
-PyAPI_FUNC(PyObject *) PyDescr_NewClassMethod(PyTypeObject *, PyMethodDef *);
+PyAPI_FUNC(PyObject *) PyDescr_NewMethod(PyTypeObject *, PyMethodDef *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyDescr_NewClassMethod(PyTypeObject *, PyMethodDef *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyDescr_NewMember(PyTypeObject *,
-                                               struct PyMemberDef *);
+                                               struct PyMemberDef *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyDescr_NewGetSet(PyTypeObject *,
-                                               struct PyGetSetDef *);
+                                               struct PyGetSetDef *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyDescr_NewWrapper(PyTypeObject *,
-                                                struct wrapperbase *, void *);
+                                                struct wrapperbase *, void *) PYSTON_NOEXCEPT;
 #define PyDescr_IsData(d) (Py_TYPE(d)->tp_descr_set != NULL)
 
-PyAPI_FUNC(PyObject *) PyDictProxy_New(PyObject *);
-PyAPI_FUNC(PyObject *) PyWrapper_New(PyObject *, PyObject *);
+PyAPI_FUNC(PyObject *) PyDictProxy_New(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyWrapper_New(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 
 // Pyston change: this is no longer a static object

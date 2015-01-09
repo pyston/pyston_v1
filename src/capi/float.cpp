@@ -28,7 +28,7 @@ typedef enum { unknown_format, ieee_big_endian_format, ieee_little_endian_format
 static float_format_type double_format, float_format;
 static float_format_type detected_double_format, detected_float_format;
 
-static PyObject* float_getformat(PyTypeObject* v, PyObject* arg) {
+static PyObject* float_getformat(PyTypeObject* v, PyObject* arg) noexcept {
     char* s;
     float_format_type r;
 
@@ -69,7 +69,7 @@ PyDoc_STRVAR(float_getformat_doc, "float.__getformat__(typestr) -> string\n"
                                   "'unknown', 'IEEE, big-endian' or 'IEEE, little-endian' best describes the\n"
                                   "format of floating point numbers used by the C type named by typestr.");
 
-static PyObject* float_setformat(PyTypeObject* v, PyObject* args) {
+static PyObject* float_setformat(PyTypeObject* v, PyObject* args) noexcept {
     char* typestr;
     char* format;
     float_format_type f;
@@ -118,7 +118,7 @@ static PyObject* float_setformat(PyTypeObject* v, PyObject* args) {
 /*----------------------------------------------------------------------------
  * _PyFloat_{Pack,Unpack}{4,8}.  See floatobject.h.
  */
-extern "C" int _PyFloat_Pack4(double x, unsigned char* p, int le) {
+extern "C" int _PyFloat_Pack4(double x, unsigned char* p, int le) noexcept {
     if (float_format == unknown_format) {
         unsigned char sign;
         int e;
@@ -214,7 +214,7 @@ Overflow:
     return -1;
 }
 
-extern "C" int _PyFloat_Pack8(double x, unsigned char* p, int le) {
+extern "C" int _PyFloat_Pack8(double x, unsigned char* p, int le) noexcept {
     if (double_format == unknown_format) {
         unsigned char sign;
         int e;
@@ -334,7 +334,7 @@ extern "C" int _PyFloat_Pack8(double x, unsigned char* p, int le) {
     }
 }
 
-double _PyFloat_Unpack4(const unsigned char* p, int le) {
+double _PyFloat_Unpack4(const unsigned char* p, int le) noexcept {
     if (float_format == unknown_format) {
         unsigned char sign;
         int e;
@@ -405,7 +405,7 @@ double _PyFloat_Unpack4(const unsigned char* p, int le) {
     }
 }
 
-double _PyFloat_Unpack8(const unsigned char* p, int le) {
+double _PyFloat_Unpack8(const unsigned char* p, int le) noexcept {
     if (double_format == unknown_format) {
         unsigned char sign;
         int e;

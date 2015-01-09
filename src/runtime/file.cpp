@@ -187,18 +187,18 @@ Box* fileIterHasNext(Box* s) {
     return boxBool(!fileEof(self));
 }
 
-extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) {
+extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" FILE* PyFile_AsFile(PyObject* f) {
+extern "C" FILE* PyFile_AsFile(PyObject* f) noexcept {
     if (!f || !PyFile_Check(f))
         return NULL;
 
     return static_cast<BoxedFile*>(f)->f;
 }
 
-extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) {
+extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) noexcept {
     if (f->cls != file_cls || v->cls != str_cls || flags != Py_PRINT_RAW)
         Py_FatalError("unimplemented");
     try {
@@ -227,7 +227,7 @@ static PyObject* err_closed(void) noexcept {
     return NULL;
 }
 
-extern "C" int PyFile_WriteString(const char* s, PyObject* f) {
+extern "C" int PyFile_WriteString(const char* s, PyObject* f) noexcept {
     if (f == NULL) {
         /* Should be caused by a pre-existing error */
         if (!PyErr_Occurred())
@@ -256,19 +256,19 @@ extern "C" int PyFile_WriteString(const char* s, PyObject* f) {
         return -1;
 }
 
-extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) {
+extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int _PyFile_SanitizeMode(char* mode) {
+extern "C" int _PyFile_SanitizeMode(char* mode) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_AsFileDescriptor(PyObject* o) {
+extern "C" int PyObject_AsFileDescriptor(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) {
+extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
     try {
         return softspace(f, newflag);
     } catch (Box* b) {

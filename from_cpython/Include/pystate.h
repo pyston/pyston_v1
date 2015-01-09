@@ -119,23 +119,23 @@ typedef struct _ts {
 } PyThreadState;
 
 
-PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_New(void);
-PyAPI_FUNC(void) PyInterpreterState_Clear(PyInterpreterState *);
-PyAPI_FUNC(void) PyInterpreterState_Delete(PyInterpreterState *);
+PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_New(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyInterpreterState_Clear(PyInterpreterState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyInterpreterState_Delete(PyInterpreterState *) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyThreadState *) PyThreadState_New(PyInterpreterState *);
-PyAPI_FUNC(PyThreadState *) _PyThreadState_Prealloc(PyInterpreterState *);
-PyAPI_FUNC(void) _PyThreadState_Init(PyThreadState *);
-PyAPI_FUNC(void) PyThreadState_Clear(PyThreadState *);
-PyAPI_FUNC(void) PyThreadState_Delete(PyThreadState *);
+PyAPI_FUNC(PyThreadState *) PyThreadState_New(PyInterpreterState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyThreadState *) _PyThreadState_Prealloc(PyInterpreterState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyThreadState_Init(PyThreadState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyThreadState_Clear(PyThreadState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyThreadState_Delete(PyThreadState *) PYSTON_NOEXCEPT;
 #ifdef WITH_THREAD
-PyAPI_FUNC(void) PyThreadState_DeleteCurrent(void);
+PyAPI_FUNC(void) PyThreadState_DeleteCurrent(void) PYSTON_NOEXCEPT;
 #endif
 
-PyAPI_FUNC(PyThreadState *) PyThreadState_Get(void);
-PyAPI_FUNC(PyThreadState *) PyThreadState_Swap(PyThreadState *);
-PyAPI_FUNC(PyObject *) PyThreadState_GetDict(void);
-PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *);
+PyAPI_FUNC(PyThreadState *) PyThreadState_Get(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyThreadState *) PyThreadState_Swap(PyThreadState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyThreadState_GetDict(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *) PYSTON_NOEXCEPT;
 
 
 /* Variable and macro for in-line access to current thread state */
@@ -176,7 +176,7 @@ typedef
 
    Failure is a fatal error.
 */
-PyAPI_FUNC(PyGILState_STATE) PyGILState_Ensure(void);
+PyAPI_FUNC(PyGILState_STATE) PyGILState_Ensure(void) PYSTON_NOEXCEPT;
 
 /* Release any resources previously acquired.  After this call, Python's
    state will be the same as it was prior to the corresponding
@@ -186,7 +186,7 @@ PyAPI_FUNC(PyGILState_STATE) PyGILState_Ensure(void);
    Every call to PyGILState_Ensure must be matched by a call to
    PyGILState_Release on the same thread.
 */
-PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
+PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE) PYSTON_NOEXCEPT;
 
 /* Helper/diagnostic function - get the current thread state for
    this thread.  May return NULL if no GILState API has been used
@@ -194,19 +194,19 @@ PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
    thread-state, even if no auto-thread-state call has been made
    on the main thread.
 */
-PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void);
+PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void) PYSTON_NOEXCEPT;
 
 /* The implementation of sys._current_frames()  Returns a dict mapping
    thread id to that thread's current frame.
 */
-PyAPI_FUNC(PyObject *) _PyThread_CurrentFrames(void);
+PyAPI_FUNC(PyObject *) _PyThread_CurrentFrames(void) PYSTON_NOEXCEPT;
 
 /* Routines for advanced debuggers, requested by David Beazley.
    Don't use unless you know what you are doing! */
-PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_Head(void);
-PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_Next(PyInterpreterState *);
-PyAPI_FUNC(PyThreadState *) PyInterpreterState_ThreadHead(PyInterpreterState *);
-PyAPI_FUNC(PyThreadState *) PyThreadState_Next(PyThreadState *);
+PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_Head(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_Next(PyInterpreterState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyThreadState *) PyInterpreterState_ThreadHead(PyInterpreterState *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyThreadState *) PyThreadState_Next(PyThreadState *) PYSTON_NOEXCEPT;
 
 typedef struct _frame *(*PyThreadFrameGetter)(PyThreadState *self_);
 

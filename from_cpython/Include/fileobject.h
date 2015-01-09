@@ -44,21 +44,21 @@ PyAPI_DATA(PyTypeObject*) file_cls;
 #define PyFile_Check(op) PyObject_TypeCheck(op, &PyFile_Type)
 #define PyFile_CheckExact(op) (Py_TYPE(op) == &PyFile_Type)
 
-PyAPI_FUNC(PyObject *) PyFile_FromString(char *, char *);
-PyAPI_FUNC(void) PyFile_SetBufSize(PyObject *, int);
-PyAPI_FUNC(int) PyFile_SetEncoding(PyObject *, const char *);
-PyAPI_FUNC(int) PyFile_SetEncodingAndErrors(PyObject *, const char *, char *errors);
+PyAPI_FUNC(PyObject *) PyFile_FromString(char *, char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyFile_SetBufSize(PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyFile_SetEncoding(PyObject *, const char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyFile_SetEncodingAndErrors(PyObject *, const char *, char *errors) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyFile_FromFile(FILE *, char *, char *,
-                                             int (*)(FILE *));
-PyAPI_FUNC(FILE *) PyFile_AsFile(PyObject *);
-PyAPI_FUNC(void) PyFile_IncUseCount(PyFileObject *);
-PyAPI_FUNC(void) PyFile_DecUseCount(PyFileObject *);
-PyAPI_FUNC(PyObject *) PyFile_Name(PyObject *);
-PyAPI_FUNC(PyObject *) PyFile_GetLine(PyObject *, int);
-PyAPI_FUNC(int) PyFile_WriteObject(PyObject *, PyObject *, int);
-PyAPI_FUNC(int) PyFile_SoftSpace(PyObject *, int);
-PyAPI_FUNC(int) PyFile_WriteString(const char *, PyObject *);
-PyAPI_FUNC(int) PyObject_AsFileDescriptor(PyObject *);
+                                             int (*)(FILE *)) PYSTON_NOEXCEPT;
+PyAPI_FUNC(FILE *) PyFile_AsFile(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyFile_IncUseCount(PyFileObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyFile_DecUseCount(PyFileObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyFile_Name(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyFile_GetLine(PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyFile_WriteObject(PyObject *, PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyFile_SoftSpace(PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyFile_WriteString(const char *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_AsFileDescriptor(PyObject *) PYSTON_NOEXCEPT;
 
 /* The default encoding used by the platform file system APIs
    If non-NULL, this is different than the default encoding for strings
@@ -69,13 +69,13 @@ PyAPI_DATA(const char *) Py_FileSystemDefaultEncoding;
    or \r\n as line terminators.
 */
 #define PY_STDIOTEXTMODE "b"
-char *Py_UniversalNewlineFgets(char *, int, FILE*, PyObject *);
-size_t Py_UniversalNewlineFread(char *, size_t, FILE *, PyObject *);
+char *Py_UniversalNewlineFgets(char *, int, FILE*, PyObject *) PYSTON_NOEXCEPT;
+size_t Py_UniversalNewlineFread(char *, size_t, FILE *, PyObject *) PYSTON_NOEXCEPT;
 
 /* A routine to do sanity checking on the file mode string.  returns
    non-zero on if an exception occurred
 */
-int _PyFile_SanitizeMode(char *mode);
+int _PyFile_SanitizeMode(char *mode) PYSTON_NOEXCEPT;
 
 #if defined _MSC_VER && _MSC_VER >= 1400
 /* A routine to check if a file descriptor is valid on Windows.  Returns 0

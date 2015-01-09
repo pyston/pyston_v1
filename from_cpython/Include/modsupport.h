@@ -21,26 +21,26 @@ extern "C" {
 #define Py_BuildValue			_Py_BuildValue_SizeT
 #define Py_VaBuildValue			_Py_VaBuildValue_SizeT
 #else
-PyAPI_FUNC(PyObject *) _Py_VaBuildValue_SizeT(const char *, va_list);
+PyAPI_FUNC(PyObject *) _Py_VaBuildValue_SizeT(const char *, va_list) PYSTON_NOEXCEPT;
 #endif
 
-PyAPI_FUNC(int) PyArg_Parse(PyObject *, const char *, ...);
-PyAPI_FUNC(int) PyArg_ParseTuple(PyObject *, const char *, ...) Py_FORMAT_PARSETUPLE(PyArg_ParseTuple, 2, 3);
+PyAPI_FUNC(int) PyArg_Parse(PyObject *, const char *, ...) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyArg_ParseTuple(PyObject *, const char *, ...) Py_FORMAT_PARSETUPLE(PyArg_ParseTuple, 2, 3) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyArg_ParseTupleAndKeywords(PyObject *, PyObject *,
-                                                  const char *, char **, ...);
-PyAPI_FUNC(int) PyArg_UnpackTuple(PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...);
-PyAPI_FUNC(PyObject *) Py_BuildValue(const char *, ...);
-PyAPI_FUNC(PyObject *) _Py_BuildValue_SizeT(const char *, ...);
-PyAPI_FUNC(int) _PyArg_NoKeywords(const char *funcname, PyObject *kw);
+                                                  const char *, char **, ...) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyArg_UnpackTuple(PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) Py_BuildValue(const char *, ...) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _Py_BuildValue_SizeT(const char *, ...) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyArg_NoKeywords(const char *funcname, PyObject *kw) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(int) PyArg_VaParse(PyObject *, const char *, va_list);
+PyAPI_FUNC(int) PyArg_VaParse(PyObject *, const char *, va_list) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyArg_VaParseTupleAndKeywords(PyObject *, PyObject *,
-                                                  const char *, char **, va_list);
-PyAPI_FUNC(PyObject *) Py_VaBuildValue(const char *, va_list);
+                                                  const char *, char **, va_list) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) Py_VaBuildValue(const char *, va_list) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(int) PyModule_AddObject(PyObject *, const char *, PyObject *);
-PyAPI_FUNC(int) PyModule_AddIntConstant(PyObject *, const char *, long);
-PyAPI_FUNC(int) PyModule_AddStringConstant(PyObject *, const char *, const char *);
+PyAPI_FUNC(int) PyModule_AddObject(PyObject *, const char *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyModule_AddIntConstant(PyObject *, const char *, long) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyModule_AddStringConstant(PyObject *, const char *, const char *) PYSTON_NOEXCEPT;
 #define PyModule_AddIntMacro(m, c) PyModule_AddIntConstant(m, #c, c)
 #define PyModule_AddStringMacro(m, c) PyModule_AddStringConstant(m, #c, c)
 
@@ -117,7 +117,7 @@ PyAPI_FUNC(int) PyModule_AddStringConstant(PyObject *, const char *, const char 
 
 PyAPI_FUNC(PyObject *) Py_InitModule4(const char *name, PyMethodDef *methods,
                                       const char *doc, PyObject *self,
-                                      int apiver);
+                                      int apiver) PYSTON_NOEXCEPT;
 
 #define Py_InitModule(name, methods) \
 	Py_InitModule4(name, methods, (char *)NULL, (PyObject *)NULL, \

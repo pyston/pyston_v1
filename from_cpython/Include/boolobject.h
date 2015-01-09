@@ -36,7 +36,7 @@ PyAPI_DATA(PyObject) *True, *False;
 #define Py_RETURN_FALSE return Py_INCREF(Py_False), Py_False
 
 /* Function to return a bool from a C long */
-PyAPI_FUNC(PyObject *) PyBool_FromLong(long);
+PyAPI_FUNC(PyObject *) PyBool_FromLong(long) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

@@ -21,25 +21,25 @@ PyAPI_DATA(PyTypeObject*) long_cls;
 #define PyLong_Type (*long_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyLong_Check(PyObject*);
+PyAPI_FUNC(bool) PyLong_Check(PyObject*) PYSTON_NOEXCEPT;
 #if 0
 #define PyLong_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LONG_SUBCLASS)
 #endif
 #define PyLong_CheckExact(op) (Py_TYPE(op) == &PyLong_Type)
 
-PyAPI_FUNC(PyObject *) PyLong_FromLong(long);
-PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLong(unsigned long);
-PyAPI_FUNC(PyObject *) PyLong_FromDouble(double);
-PyAPI_FUNC(PyObject *) PyLong_FromSize_t(size_t);
-PyAPI_FUNC(PyObject *) PyLong_FromSsize_t(Py_ssize_t);
-PyAPI_FUNC(long) PyLong_AsLong(PyObject *);
-PyAPI_FUNC(long) PyLong_AsLongAndOverflow(PyObject *, int *);
-PyAPI_FUNC(unsigned long) PyLong_AsUnsignedLong(PyObject *);
-PyAPI_FUNC(unsigned long) PyLong_AsUnsignedLongMask(PyObject *);
-PyAPI_FUNC(Py_ssize_t) PyLong_AsSsize_t(PyObject *);
-PyAPI_FUNC(int) _PyLong_AsInt(PyObject *);
-PyAPI_FUNC(PyObject *) PyLong_GetInfo(void);
+PyAPI_FUNC(PyObject *) PyLong_FromLong(long) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLong(unsigned long) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromDouble(double) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromSize_t(size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromSsize_t(Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) PyLong_AsLong(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) PyLong_AsLongAndOverflow(PyObject *, int *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(unsigned long) PyLong_AsUnsignedLong(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(unsigned long) PyLong_AsUnsignedLongMask(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_ssize_t) PyLong_AsSsize_t(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyLong_AsInt(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_GetInfo(void) PYSTON_NOEXCEPT;
 
 /* For use by intobject.c only */
 #define _PyLong_AsSsize_t PyLong_AsSsize_t
@@ -53,31 +53,31 @@ PyAPI_DATA(int) _PyLong_DigitValue[256];
    zeroes); otherwise, 0.5 <= abs(x) < 1.0.  On overflow, which is
    possible if the number of bits doesn't fit into a Py_ssize_t, sets
    OverflowError and returns -1.0 for x, 0 for e. */
-PyAPI_FUNC(double) _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e);
+PyAPI_FUNC(double) _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(double) PyLong_AsDouble(PyObject *);
-PyAPI_FUNC(PyObject *) PyLong_FromVoidPtr(void *);
-PyAPI_FUNC(void *) PyLong_AsVoidPtr(PyObject *);
+PyAPI_FUNC(double) PyLong_AsDouble(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromVoidPtr(void *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void *) PyLong_AsVoidPtr(PyObject *) PYSTON_NOEXCEPT;
 
 #ifdef HAVE_LONG_LONG
-PyAPI_FUNC(PyObject *) PyLong_FromLongLong(PY_LONG_LONG);
-PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG);
-PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLong(PyObject *);
-PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLong(PyObject *);
-PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLongMask(PyObject *);
-PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLongAndOverflow(PyObject *, int *);
+PyAPI_FUNC(PyObject *) PyLong_FromLongLong(PY_LONG_LONG) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLong(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLong(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLongMask(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLongAndOverflow(PyObject *, int *) PYSTON_NOEXCEPT;
 #endif /* HAVE_LONG_LONG */
 
-PyAPI_FUNC(PyObject *) PyLong_FromString(char *, char **, int);
+PyAPI_FUNC(PyObject *) PyLong_FromString(char *, char **, int) PYSTON_NOEXCEPT;
 #ifdef Py_USING_UNICODE
-PyAPI_FUNC(PyObject *) PyLong_FromUnicode(Py_UNICODE*, Py_ssize_t, int);
+PyAPI_FUNC(PyObject *) PyLong_FromUnicode(Py_UNICODE*, Py_ssize_t, int) PYSTON_NOEXCEPT;
 #endif
 
 /* _PyLong_Sign.  Return 0 if v is 0, -1 if v < 0, +1 if v > 0.
    v must not be NULL, and must be a normalized long.
    There are no error cases.
 */
-PyAPI_FUNC(int) _PyLong_Sign(PyObject *v);
+PyAPI_FUNC(int) _PyLong_Sign(PyObject *v) PYSTON_NOEXCEPT;
 
 
 /* _PyLong_NumBits.  Return the number of bits needed to represent the
@@ -87,7 +87,7 @@ PyAPI_FUNC(int) _PyLong_Sign(PyObject *v);
    (size_t)-1 is returned and OverflowError set if the true result doesn't
    fit in a size_t.
 */
-PyAPI_FUNC(size_t) _PyLong_NumBits(PyObject *v);
+PyAPI_FUNC(size_t) _PyLong_NumBits(PyObject *v) PYSTON_NOEXCEPT;
 
 /* _PyLong_FromByteArray:  View the n unsigned bytes as a binary integer in
    base 256, and return a Python long with the same numeric value.
@@ -104,7 +104,7 @@ PyAPI_FUNC(size_t) _PyLong_NumBits(PyObject *v);
 */
 PyAPI_FUNC(PyObject *) _PyLong_FromByteArray(
 	const unsigned char* bytes, size_t n,
-	int little_endian, int is_signed);
+	int little_endian, int is_signed) PYSTON_NOEXCEPT;
 
 /* _PyLong_AsByteArray: Convert the least-significant 8*n bits of long
    v to a base-256 integer, stored in array bytes.  Normally return 0,
@@ -127,20 +127,20 @@ PyAPI_FUNC(PyObject *) _PyLong_FromByteArray(
 */
 PyAPI_FUNC(int) _PyLong_AsByteArray(PyLongObject* v,
 	unsigned char* bytes, size_t n,
-	int little_endian, int is_signed);
+	int little_endian, int is_signed) PYSTON_NOEXCEPT;
 
 /* _PyLong_Format: Convert the long to a string object with given base,
    appending a base prefix of 0[box] if base is 2, 8 or 16.
    Add a trailing "L" if addL is non-zero.
    If newstyle is zero, then use the pre-2.6 behavior of octal having
    a leading "0", instead of the prefix "0o" */
-PyAPI_FUNC(PyObject *) _PyLong_Format(PyObject *aa, int base, int addL, int newstyle);
+PyAPI_FUNC(PyObject *) _PyLong_Format(PyObject *aa, int base, int addL, int newstyle) PYSTON_NOEXCEPT;
 
 /* Format the object based on the format_spec, as defined in PEP 3101
    (Advanced String Formatting). */
 PyAPI_FUNC(PyObject *) _PyLong_FormatAdvanced(PyObject *obj,
 					      char *format_spec,
-					      Py_ssize_t format_spec_len);
+					      Py_ssize_t format_spec_len) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

@@ -6,6 +6,12 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+#define PYSTON_NOEXCEPT noexcept
+#else
+#define PYSTON_NOEXCEPT
+#endif
+
 // Pyston change: these are just hard-coded for now:
 typedef ssize_t         Py_ssize_t;
 #define Py_FORMAT_PARSETUPLE(func,p1,p2)

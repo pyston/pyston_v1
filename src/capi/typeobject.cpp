@@ -23,7 +23,7 @@ namespace pyston {
 // FIXME duplicated with objmodel.cpp
 static const std::string _new_str("__new__");
 
-extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) {
+extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
 }
 
@@ -133,7 +133,7 @@ static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) 
     return (*func)(self, other);
 }
 
-static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped) noexcept {
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -147,7 +147,7 @@ static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped
     return (*func)(self, other);
 }
 
-static PyObject* wrap_binaryfunc_r(PyObject* self, PyObject* args, void* wrapped) {
+static PyObject* wrap_binaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -362,7 +362,7 @@ static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** at
     return obj;
 }
 
-extern "C" PyObject* _PyObject_LookupSpecial(PyObject* self, const char* attrstr, PyObject** attrobj) {
+extern "C" PyObject* _PyObject_LookupSpecial(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
     assert(!PyInstance_Check(self));
     return lookup_maybe(self, attrstr, attrobj);
 }
@@ -625,7 +625,7 @@ static PyObject* slot_sq_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j) noexc
     return call_method(self, "__getslice__", &getslice_str, "nn", i, j);
 }
 
-static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) {
+static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) noexcept {
     PyObject* res;
     static PyObject* delitem_str, *setitem_str;
 
@@ -639,7 +639,7 @@ static int slot_sq_ass_item(PyObject* self, Py_ssize_t index, PyObject* value) {
     return 0;
 }
 
-static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObject* value) {
+static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObject* value) noexcept {
     PyObject* res;
     static PyObject* delslice_str, *setslice_str;
 
@@ -662,7 +662,7 @@ static int slot_sq_ass_slice(PyObject* self, Py_ssize_t i, Py_ssize_t j, PyObjec
     return 0;
 }
 
-static int slot_sq_contains(PyObject* self, PyObject* value) {
+static int slot_sq_contains(PyObject* self, PyObject* value) noexcept {
     PyObject* func, *res, *args;
     int result = -1;
 
@@ -705,7 +705,7 @@ static int slot_sq_contains(PyObject* self, PyObject* value) {
 
 /* Boolean helper for SLOT1BINFULL().
    right.__class__ is a nontrivial subclass of left.__class__. */
-static int method_is_overloaded(PyObject* left, PyObject* right, const char* name) {
+static int method_is_overloaded(PyObject* left, PyObject* right, const char* name) noexcept {
     PyObject* a, *b;
     int ok;
 
@@ -736,7 +736,7 @@ static int method_is_overloaded(PyObject* left, PyObject* right, const char* nam
 }
 
 #define SLOT1BINFULL(FUNCNAME, TESTFUNC, SLOTNAME, OPSTR, ROPSTR)                                                      \
-    static PyObject* FUNCNAME(PyObject* self, PyObject* other) {                                                       \
+    static PyObject* FUNCNAME(PyObject* self, PyObject* other) noexcept {                                              \
         static PyObject* cache_str, *rcache_str;                                                                       \
         int do_other = Py_TYPE(self) != Py_TYPE(other) && Py_TYPE(other)->tp_as_number != NULL                         \
                        && Py_TYPE(other)->tp_as_number->SLOTNAME == TESTFUNC;                                          \
@@ -774,7 +774,7 @@ static int method_is_overloaded(PyObject* left, PyObject* right, const char* nam
 
 SLOT1(slot_mp_subscript, "__getitem__", PyObject*, "O")
 
-static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) {
+static int slot_mp_ass_subscript(PyObject* self, PyObject* key, PyObject* value) noexcept {
     PyObject* res;
     static PyObject* delitem_str, *setitem_str;
 
@@ -795,11 +795,11 @@ SLOT1BIN(slot_nb_divide, nb_divide, "__div__", "__rdiv__")
 SLOT1BIN(slot_nb_remainder, nb_remainder, "__mod__", "__rmod__")
 SLOT1BIN(slot_nb_divmod, nb_divmod, "__divmod__", "__rdivmod__")
 
-static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*);
+static PyObject* slot_nb_power(PyObject*, PyObject*, PyObject*) noexcept;
 
 SLOT1BINFULL(slot_nb_power_binary, slot_nb_power, nb_power, "__pow__", "__rpow__")
 
-static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulus) {
+static PyObject* slot_nb_power(PyObject* self, PyObject* other, PyObject* modulus) noexcept {
     static PyObject* pow_str;
 
     if (modulus == Py_None)
@@ -860,7 +860,7 @@ SLOT1BIN(slot_nb_and, nb_and, "__and__", "__rand__")
 SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
 SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
 
-static int slot_nb_coerce(PyObject** a, PyObject** b);
+static int slot_nb_coerce(PyObject** a, PyObject** b) noexcept;
 
 SLOT0(slot_nb_int, "__int__")
 SLOT0(slot_nb_long, "__long__")
@@ -870,7 +870,7 @@ SLOT0(slot_nb_hex, "__hex__")
 
 typedef wrapper_def slotdef;
 
-static void** slotptr(BoxedClass* type, int offset) {
+static void** slotptr(BoxedClass* type, int offset) noexcept {
     // We use the index into PyHeapTypeObject as the canonical way to represent offsets, even though we are not
     // (currently) using that object representation
 
@@ -1005,7 +1005,7 @@ static slotdef slotdefs[]
         SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
         { NULL, 0, NULL, NULL, NULL, 0 } };
 
-static void init_slotdefs() {
+static void init_slotdefs() noexcept {
     static bool initialized = false;
     if (initialized)
         return;
@@ -1042,7 +1042,7 @@ static void init_slotdefs() {
 
 /* Return a slot pointer for a given name, but ONLY if the attribute has
    exactly one slot function.  The name must be an interned string. */
-static void** resolve_slotdups(PyTypeObject* type, const std::string& name) {
+static void** resolve_slotdups(PyTypeObject* type, const std::string& name) noexcept {
     /* XXX Maybe this could be optimized more -- but is it worth it? */
 
     /* pname and ptrs act as a little cache */
@@ -1076,7 +1076,7 @@ static void** resolve_slotdups(PyTypeObject* type, const std::string& name) {
     return res;
 }
 
-static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) {
+static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexcept {
     assert(p->name);
 
     PyObject* descr;
@@ -1152,7 +1152,7 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) {
     return p;
 }
 
-bool update_slot(BoxedClass* self, const std::string& attr) {
+bool update_slot(BoxedClass* self, const std::string& attr) noexcept {
     bool updated = false;
     for (const slotdef& p : slotdefs) {
         if (!p.name)
@@ -1166,7 +1166,7 @@ bool update_slot(BoxedClass* self, const std::string& attr) {
     return updated;
 }
 
-void fixup_slot_dispatchers(BoxedClass* self) {
+void fixup_slot_dispatchers(BoxedClass* self) noexcept {
     init_slotdefs();
 
     const slotdef* p = slotdefs;
@@ -1183,7 +1183,7 @@ void fixup_slot_dispatchers(BoxedClass* self) {
     }
 }
 
-static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) {
+static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
     RELEASE_ASSERT(isSubclass(self->cls, type_cls), "");
 
     // ASSERT(self->tp_new != Py_CallPythonNew, "going to get in an infinite loop");
@@ -1201,7 +1201,7 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
     return self->tp_new(subtype, new_args, kwds);
 }
 
-static void add_tp_new_wrapper(BoxedClass* type) {
+static void add_tp_new_wrapper(BoxedClass* type) noexcept {
     if (type->getattr("__new__"))
         return;
 
@@ -1209,7 +1209,7 @@ static void add_tp_new_wrapper(BoxedClass* type) {
                    new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
 }
 
-static void add_operators(BoxedClass* cls) {
+static void add_operators(BoxedClass* cls) noexcept {
     init_slotdefs();
 
     for (const slotdef& p : slotdefs) {
@@ -1234,14 +1234,14 @@ static void add_operators(BoxedClass* cls) {
         add_tp_new_wrapper(cls);
 }
 
-extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) {
+extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
     return isSubclass(a, b);
 }
 
 #define BUFFER_FLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
 
 // This is copied from CPython with some modifications:
-static void inherit_special(PyTypeObject* type, PyTypeObject* base) {
+static void inherit_special(PyTypeObject* type, PyTypeObject* base) noexcept {
     Py_ssize_t oldsize, newsize;
 
     /* Special flag magic */
@@ -1338,7 +1338,7 @@ static void inherit_special(PyTypeObject* type, PyTypeObject* base) {
 #endif
 }
 
-static int overrides_name(PyTypeObject* type, const char* name) {
+static int overrides_name(PyTypeObject* type, const char* name) noexcept {
     PyObject* dict = type->tp_dict;
 
     assert(dict != NULL);
@@ -1351,7 +1351,7 @@ static int overrides_name(PyTypeObject* type, const char* name) {
 #define OVERRIDES_HASH(x) overrides_name(x, "__hash__")
 #define OVERRIDES_EQ(x) overrides_name(x, "__eq__")
 
-static void inherit_slots(PyTypeObject* type, PyTypeObject* base) {
+static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
     // Pyston addition:
     if (base->tp_base == NULL)
         assert(base == object_cls);
@@ -1553,7 +1553,7 @@ void PystonType_Ready(BoxedClass* cls) {
     }
 }
 
-extern "C" int PyType_Ready(PyTypeObject* cls) {
+extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     gc::registerNonheapRootObject(cls);
 
     // unhandled fields:

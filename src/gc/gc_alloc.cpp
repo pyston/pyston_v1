@@ -31,17 +31,17 @@
 namespace pyston {
 namespace gc {
 
-extern "C" void* gc_compat_malloc(size_t sz) {
+extern "C" void* gc_compat_malloc(size_t sz) noexcept {
     return gc_alloc(sz, GCKind::CONSERVATIVE);
 }
 
-extern "C" void* gc_compat_realloc(void* ptr, size_t sz) {
+extern "C" void* gc_compat_realloc(void* ptr, size_t sz) noexcept {
     if (ptr == NULL)
         return gc_alloc(sz, GCKind::CONSERVATIVE);
     return gc_realloc(ptr, sz);
 }
 
-extern "C" void gc_compat_free(void* ptr) {
+extern "C" void gc_compat_free(void* ptr) noexcept {
     gc_free(ptr);
 }
 

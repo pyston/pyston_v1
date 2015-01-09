@@ -29,7 +29,7 @@
 
 namespace pyston {
 
-extern "C" int PyList_Append(PyObject* op, PyObject* newitem) {
+extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     try {
         listAppend(op, newitem);
     } catch (Box* b) {
@@ -95,7 +95,7 @@ extern "C" Box* listPop(BoxedList* self, Box* idx) {
     return rtn;
 }
 
-extern "C" Py_ssize_t PyList_Size(PyObject* self) {
+extern "C" Py_ssize_t PyList_Size(PyObject* self) noexcept {
     RELEASE_ASSERT(self->cls == list_cls, "");
     return static_cast<BoxedList*>(self)->size;
 }
@@ -144,7 +144,7 @@ extern "C" Box* listGetitemInt(BoxedList* self, BoxedInt* slice) {
     return listGetitemUnboxed(self, slice->n);
 }
 
-extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) {
+extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(PyList_Check(op), "");
     RELEASE_ASSERT(i >= 0, ""); // unlike list.__getitem__, PyList_GetItem doesn't do index wrapping
     try {
@@ -494,7 +494,7 @@ extern "C" Box* listNew(Box* cls, Box* container) {
     return rtn;
 }
 
-extern "C" PyObject* PyList_New(Py_ssize_t size) {
+extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
     // This function is supposed to return a list of `size` NULL elements.
     // That will probably trip an assert somewhere if we try to create that (ex
     // I think the GC will expect them to be real objects so they can be relocated).

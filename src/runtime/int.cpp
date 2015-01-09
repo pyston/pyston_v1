@@ -31,38 +31,38 @@
 
 namespace pyston {
 
-extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) {
+extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" long PyInt_AsLong(PyObject* op) {
+extern "C" long PyInt_AsLong(PyObject* op) noexcept {
     RELEASE_ASSERT(isSubclass(op->cls, int_cls), "");
     return static_cast<BoxedInt*>(op)->n;
 }
 
-extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) {
+extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) noexcept {
     RELEASE_ASSERT(isSubclass(op->cls, int_cls), "");
     return static_cast<BoxedInt*>(op)->n;
 }
 
-extern "C" PyObject* PyInt_FromSize_t(size_t ival) {
+extern "C" PyObject* PyInt_FromSize_t(size_t ival) noexcept {
     RELEASE_ASSERT(ival <= LONG_MAX, "");
     return boxInt(ival);
 }
 
-extern "C" PyObject* PyInt_FromSsize_t(Py_ssize_t ival) {
+extern "C" PyObject* PyInt_FromSsize_t(Py_ssize_t ival) noexcept {
     return boxInt(ival);
 }
 
-extern "C" PyObject* PyInt_FromLong(long n) {
+extern "C" PyObject* PyInt_FromLong(long n) noexcept {
     return boxInt(n);
 }
 
-extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) {
+extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int _PyInt_AsInt(PyObject*) {
+extern "C" int _PyInt_AsInt(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 

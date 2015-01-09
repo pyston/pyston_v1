@@ -26,11 +26,11 @@
 
 namespace pyston {
 
-extern "C" PyObject* PyObject_Unicode(PyObject* v) {
+extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* _PyObject_Str(PyObject* v) {
+extern "C" PyObject* _PyObject_Str(PyObject* v) noexcept {
     if (v == NULL)
         return boxStrConstant("<NULL>");
 
@@ -45,7 +45,7 @@ extern "C" PyObject* _PyObject_Str(PyObject* v) {
     }
 }
 
-extern "C" PyObject* PyObject_Str(PyObject* v) {
+extern "C" PyObject* PyObject_Str(PyObject* v) noexcept {
     PyObject* res = _PyObject_Str(v);
     if (res == NULL)
         return NULL;
@@ -64,15 +64,15 @@ extern "C" PyObject* PyObject_Str(PyObject* v) {
     return res;
 }
 
-extern "C" PyObject* PyObject_SelfIter(PyObject* obj) {
+extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) {
+extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
+extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
     // won't end up doing a GIL check?
     // threading::GLDemoteRegion _gil_demote;
@@ -85,7 +85,7 @@ extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
     }
 }
 
-extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) {
+extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) noexcept {
     PyObject* res = PyObject_GetAttrString(v, name);
     if (res != NULL) {
         Py_DECREF(res);
@@ -95,12 +95,12 @@ extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) {
     return 0;
 }
 
-extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* buffer_len) {
+extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* buffer_len) noexcept {
     Py_FatalError("unimplemented");
 }
 
 /* Return -1 if error; 1 if v op w; 0 if not (v op w). */
-extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) {
+extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexcept {
     PyObject* res;
     int ok;
 

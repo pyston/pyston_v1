@@ -22,9 +22,9 @@ typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *, PyObject *,
 					     PyObject *);
 typedef PyObject *(*PyNoArgsFunction)(PyObject *);
 
-PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *);
-PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *);
-PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *);
+PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *) PYSTON_NOEXCEPT;
 
 /* Macros for direct access to these values. Type checks are *not*
    done, so use with care. */
@@ -34,7 +34,7 @@ PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *);
 	(((PyCFunctionObject *)func) -> m_self)
 #define PyCFunction_GET_FLAGS(func) \
 	(((PyCFunctionObject *)func) -> m_ml -> ml_flags)
-PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *);
+PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 struct PyMethodDef {
     const char	*ml_name;	/* The name of the built-in function/method */
@@ -45,11 +45,11 @@ struct PyMethodDef {
 };
 typedef struct PyMethodDef PyMethodDef;
 
-PyAPI_FUNC(PyObject *) Py_FindMethod(PyMethodDef[], PyObject *, const char *);
+PyAPI_FUNC(PyObject *) Py_FindMethod(PyMethodDef[], PyObject *, const char *) PYSTON_NOEXCEPT;
 
 #define PyCFunction_New(ML, SELF) PyCFunction_NewEx((ML), (SELF), NULL)
 PyAPI_FUNC(PyObject *) PyCFunction_NewEx(PyMethodDef *, PyObject *, 
-					 PyObject *);
+					 PyObject *) PYSTON_NOEXCEPT;
 
 /* Flag passed to newmethodobject */
 #define METH_OLDARGS  0x0000
@@ -78,7 +78,7 @@ typedef struct PyMethodChain {
 } PyMethodChain;
 
 PyAPI_FUNC(PyObject *) Py_FindMethodInChain(PyMethodChain *, PyObject *,
-                                            const char *);
+                                            const char *) PYSTON_NOEXCEPT;
 
 typedef struct {
     PyObject_HEAD
@@ -87,7 +87,7 @@ typedef struct {
     PyObject    *m_module; /* The __module__ attribute, can be anything */
 } PyCFunctionObject;
 
-PyAPI_FUNC(int) PyCFunction_ClearFreeList(void);
+PyAPI_FUNC(int) PyCFunction_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

@@ -30,11 +30,11 @@ extern "C" Box* createPureImaginary(double i) {
     return new BoxedComplex(0.0, i);
 }
 
-extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) {
+extern "C" Py_complex PyComplex_AsCComplex(PyObject* op) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" double PyComplex_RealAsDouble(PyObject* op) {
+extern "C" double PyComplex_RealAsDouble(PyObject* op) noexcept {
     if (PyComplex_Check(op)) {
         return static_cast<BoxedComplex*>(op)->real;
     } else {
@@ -42,7 +42,7 @@ extern "C" double PyComplex_RealAsDouble(PyObject* op) {
     }
 }
 
-extern "C" double PyComplex_ImagAsDouble(PyObject* op) {
+extern "C" double PyComplex_ImagAsDouble(PyObject* op) noexcept {
     if (PyComplex_Check(op)) {
         return static_cast<BoxedComplex*>(op)->imag;
     } else {

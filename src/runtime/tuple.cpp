@@ -68,7 +68,7 @@ Box* tupleGetitemInt(BoxedTuple* self, BoxedInt* slice) {
     return tupleGetitemUnboxed(self, slice->n);
 }
 
-extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) {
+extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
     RELEASE_ASSERT(i >= 0, ""); // unlike tuple.__getitem__, PyTuple_GetItem doesn't do index wrapping
     try {
@@ -87,7 +87,7 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
     return _tupleSlice(self, start, stop, step, length);
 }
 
-extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) {
+extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) noexcept {
     RELEASE_ASSERT(p->cls == tuple_cls, ""); // could it be a subclass or something else?
     BoxedTuple* t = static_cast<BoxedTuple*>(p);
 
@@ -157,7 +157,7 @@ Box* tupleLen(BoxedTuple* t) {
     return boxInt(t->elts.size());
 }
 
-extern "C" Py_ssize_t PyTuple_Size(PyObject* op) {
+extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
     return static_cast<BoxedTuple*>(op)->elts.size();
 }
@@ -338,7 +338,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     return new BoxedTuple(std::move(velts));
 }
 
-extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) {
+extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
 
     BoxedTuple* t = static_cast<BoxedTuple*>(op);
@@ -347,7 +347,7 @@ extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) {
     return 0;
 }
 
-extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) {
+extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
     va_list vargs;
 
     va_start(vargs, n);
@@ -366,7 +366,7 @@ extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) {
     return result;
 }
 
-extern "C" PyObject* PyTuple_New(Py_ssize_t size) {
+extern "C" PyObject* PyTuple_New(Py_ssize_t size) noexcept {
     RELEASE_ASSERT(size >= 0, "");
 
     return new BoxedTuple(BoxedTuple::GCVector(size, NULL));

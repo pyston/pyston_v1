@@ -49,25 +49,25 @@ PyAPI_DATA(PyTypeObject*) list_cls;
 #define PyList_Type (*list_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyList_Check(PyObject*);
+PyAPI_FUNC(bool) PyList_Check(PyObject*) PYSTON_NOEXCEPT;
 #if 0
 #define PyList_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LIST_SUBCLASS)
 #endif
 #define PyList_CheckExact(op) (Py_TYPE(op) == &PyList_Type)
 
-PyAPI_FUNC(PyObject *) PyList_New(Py_ssize_t size);
-PyAPI_FUNC(Py_ssize_t) PyList_Size(PyObject *);
-PyAPI_FUNC(PyObject *) PyList_GetItem(PyObject *, Py_ssize_t);
-PyAPI_FUNC(int) PyList_SetItem(PyObject *, Py_ssize_t, PyObject *);
-PyAPI_FUNC(int) PyList_Insert(PyObject *, Py_ssize_t, PyObject *);
-PyAPI_FUNC(int) PyList_Append(PyObject *, PyObject *);
-PyAPI_FUNC(PyObject *) PyList_GetSlice(PyObject *, Py_ssize_t, Py_ssize_t);
-PyAPI_FUNC(int) PyList_SetSlice(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *);
-PyAPI_FUNC(int) PyList_Sort(PyObject *);
-PyAPI_FUNC(int) PyList_Reverse(PyObject *);
-PyAPI_FUNC(PyObject *) PyList_AsTuple(PyObject *);
-PyAPI_FUNC(PyObject *) _PyList_Extend(PyListObject *, PyObject *);
+PyAPI_FUNC(PyObject *) PyList_New(Py_ssize_t size) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_ssize_t) PyList_Size(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyList_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyList_SetItem(PyObject *, Py_ssize_t, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyList_Insert(PyObject *, Py_ssize_t, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyList_Append(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyList_GetSlice(PyObject *, Py_ssize_t, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyList_SetSlice(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyList_Sort(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyList_Reverse(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyList_AsTuple(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyList_Extend(PyListObject *, PyObject *) PYSTON_NOEXCEPT;
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]

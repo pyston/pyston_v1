@@ -32,7 +32,7 @@ namespace pyston {
 
 #define FLAG_SIZE_T 1
 
-static int countformat(const char* format, int endchar) {
+static int countformat(const char* format, int endchar) noexcept {
     int count = 0;
     int level = 0;
     while (level > 0 || *format != endchar) {
@@ -196,7 +196,7 @@ static PyObject* do_mktuple(const char** p_format, va_list* p_va, int endchar, i
     return v;
 }
 
-static PyObject* va_build_value(const char* fmt, va_list va, int flags) {
+static PyObject* va_build_value(const char* fmt, va_list va, int flags) noexcept {
     int n = countformat(fmt, '\0');
 
     if (n < 0)
@@ -214,11 +214,11 @@ static PyObject* va_build_value(const char* fmt, va_list va, int flags) {
     return do_mktuple(&fmt, &lva, '\0', n, flags);
 }
 
-extern "C" PyObject* Py_VaBuildValue(const char* format, va_list va) {
+extern "C" PyObject* Py_VaBuildValue(const char* format, va_list va) noexcept {
     return va_build_value(format, va, 0);
 }
 
-extern "C" PyObject* _Py_BuildValue_SizeT(const char* fmt, ...) {
+extern "C" PyObject* _Py_BuildValue_SizeT(const char* fmt, ...) noexcept {
     va_list ap;
     va_start(ap, fmt);
 
@@ -228,7 +228,7 @@ extern "C" PyObject* _Py_BuildValue_SizeT(const char* fmt, ...) {
     return r;
 }
 
-extern "C" PyObject* Py_BuildValue(const char* fmt, ...) {
+extern "C" PyObject* Py_BuildValue(const char* fmt, ...) noexcept {
     va_list ap;
     va_start(ap, fmt);
 
@@ -239,7 +239,7 @@ extern "C" PyObject* Py_BuildValue(const char* fmt, ...) {
 }
 
 extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
-                                    int apiver) {
+                                    int apiver) noexcept {
     BoxedModule* module = createModule(name, "__builtin__");
 
     Box* passthrough = static_cast<Box*>(self);
@@ -264,14 +264,14 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
     return module;
 }
 
-extern "C" PyObject* PyModule_GetDict(PyObject* _m) {
+extern "C" PyObject* PyModule_GetDict(PyObject* _m) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
     return makeAttrWrapper(m);
 }
 
-extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) {
+extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
@@ -279,7 +279,7 @@ extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* valu
     return 0;
 }
 
-extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) {
+extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) noexcept {
     return PyModule_AddObject(_m, name, boxInt(value));
 }
 

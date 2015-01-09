@@ -47,21 +47,21 @@ PyAPI_DATA(PyTypeObject*) float_cls;
 		return PyFloat_FromDouble(-Py_HUGE_VAL);	\
 	} while(0)
 
-PyAPI_FUNC(double) PyFloat_GetMax(void);
-PyAPI_FUNC(double) PyFloat_GetMin(void);
-PyAPI_FUNC(PyObject *) PyFloat_GetInfo(void);
+PyAPI_FUNC(double) PyFloat_GetMax(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(double) PyFloat_GetMin(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyFloat_GetInfo(void) PYSTON_NOEXCEPT;
 
 /* Return Python float from string PyObject.  Second argument ignored on
    input, and, if non-NULL, NULL is stored into *junk (this tried to serve a
    purpose once but can't be made to work as intended). */
-PyAPI_FUNC(PyObject *) PyFloat_FromString(PyObject*, char** junk);
+PyAPI_FUNC(PyObject *) PyFloat_FromString(PyObject*, char** junk) PYSTON_NOEXCEPT;
 
 /* Return Python float from C double. */
-PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double);
+PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double) PYSTON_NOEXCEPT;
 
 /* Extract C double from Python float.  The macro version trades safety for
    speed. */
-PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
+PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *) PYSTON_NOEXCEPT;
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 #define PyFloat_AS_DOUBLE(op) PyFloat_AsDouble((PyObject*)op)
 //#define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
@@ -70,14 +70,14 @@ PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
    buffer must be "big enough"; >= 100 is very safe.
    PyFloat_AsReprString(buf, x) strives to print enough digits so that
    PyFloat_FromString(buf) then reproduces x exactly. */
-PyAPI_FUNC(void) PyFloat_AsReprString(char*, PyFloatObject *v);
+PyAPI_FUNC(void) PyFloat_AsReprString(char*, PyFloatObject *v) PYSTON_NOEXCEPT;
 
 /* Write str(v) into the char buffer argument, followed by null byte.  The
    buffer must be "big enough"; >= 100 is very safe.  Note that it's
    unusual to be able to get back the float you started with from
    PyFloat_AsString's result -- use PyFloat_AsReprString() if you want to
    preserve precision across conversions. */
-PyAPI_FUNC(void) PyFloat_AsString(char*, PyFloatObject *v);
+PyAPI_FUNC(void) PyFloat_AsString(char*, PyFloatObject *v) PYSTON_NOEXCEPT;
 
 /* _PyFloat_{Pack,Unpack}{4,8}
  *
@@ -111,12 +111,12 @@ PyAPI_FUNC(void) PyFloat_AsString(char*, PyFloatObject *v);
  * 1):  What this does is undefined if x is a NaN or infinity.
  * 2):  -0.0 and +0.0 produce the same string.
  */
-PyAPI_FUNC(int) _PyFloat_Pack4(double x, unsigned char *p, int le);
-PyAPI_FUNC(int) _PyFloat_Pack8(double x, unsigned char *p, int le);
+PyAPI_FUNC(int) _PyFloat_Pack4(double x, unsigned char *p, int le) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyFloat_Pack8(double x, unsigned char *p, int le) PYSTON_NOEXCEPT;
 
 /* Used to get the important decimal digits of a double */
-PyAPI_FUNC(int) _PyFloat_Digits(char *buf, double v, int *signum);
-PyAPI_FUNC(void) _PyFloat_DigitsInit(void);
+PyAPI_FUNC(int) _PyFloat_Digits(char *buf, double v, int *signum) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyFloat_DigitsInit(void) PYSTON_NOEXCEPT;
 
 /* The unpack routines read 4 or 8 bytes, starting at p.  le is a bool
  * argument, true if the string is in little-endian format (exponent
@@ -126,22 +126,22 @@ PyAPI_FUNC(void) _PyFloat_DigitsInit(void);
  * OverflowError).  Note that on a non-IEEE platform this will refuse
  * to unpack a string that represents a NaN or infinity.
  */
-PyAPI_FUNC(double) _PyFloat_Unpack4(const unsigned char *p, int le);
-PyAPI_FUNC(double) _PyFloat_Unpack8(const unsigned char *p, int le);
+PyAPI_FUNC(double) _PyFloat_Unpack4(const unsigned char *p, int le) PYSTON_NOEXCEPT;
+PyAPI_FUNC(double) _PyFloat_Unpack8(const unsigned char *p, int le) PYSTON_NOEXCEPT;
 
 /* free list api */
-PyAPI_FUNC(int) PyFloat_ClearFreeList(void);
+PyAPI_FUNC(int) PyFloat_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 /* Format the object based on the format_spec, as defined in PEP 3101
    (Advanced String Formatting). */
 PyAPI_FUNC(PyObject *) _PyFloat_FormatAdvanced(PyObject *obj,
 					       char *format_spec,
-					       Py_ssize_t format_spec_len);
+					       Py_ssize_t format_spec_len) PYSTON_NOEXCEPT;
 
 /* Round a C double x to the closest multiple of 10**-ndigits.  Returns a
    Python float on success, or NULL (with an appropriate exception set) on
    failure.  Used in builtin_round in bltinmodule.c. */
-PyAPI_FUNC(PyObject *) _Py_double_round(double x, int ndigits);
+PyAPI_FUNC(PyObject *) _Py_double_round(double x, int ndigits) PYSTON_NOEXCEPT;
 
 
 

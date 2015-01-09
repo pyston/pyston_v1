@@ -8,41 +8,41 @@
 extern "C" {
 #endif
 
-PyAPI_FUNC(long) PyImport_GetMagicNumber(void);
-PyAPI_FUNC(PyObject *) PyImport_ExecCodeModule(char *name, PyObject *co);
+PyAPI_FUNC(long) PyImport_GetMagicNumber(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_ExecCodeModule(char *name, PyObject *co) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleEx(
-	char *name, PyObject *co, char *pathname);
-PyAPI_FUNC(PyObject *) PyImport_GetModuleDict(void);
-PyAPI_FUNC(PyObject *) PyImport_AddModule(const char *name);
-PyAPI_FUNC(PyObject *) PyImport_ImportModule(const char *name);
-PyAPI_FUNC(PyObject *) PyImport_ImportModuleNoBlock(const char *);
+	char *name, PyObject *co, char *pathname) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_GetModuleDict(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_AddModule(const char *name) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_ImportModule(const char *name) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_ImportModuleNoBlock(const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_ImportModuleLevel(char *name,
-	PyObject *globals, PyObject *locals, PyObject *fromlist, int level);
+	PyObject *globals, PyObject *locals, PyObject *fromlist, int level) PYSTON_NOEXCEPT;
 
 #define PyImport_ImportModuleEx(n, g, l, f) \
 	PyImport_ImportModuleLevel(n, g, l, f, -1)
 
-PyAPI_FUNC(PyObject *) PyImport_GetImporter(PyObject *path);
-PyAPI_FUNC(PyObject *) PyImport_Import(PyObject *name);
-PyAPI_FUNC(PyObject *) PyImport_ReloadModule(PyObject *m);
-PyAPI_FUNC(void) PyImport_Cleanup(void);
-PyAPI_FUNC(int) PyImport_ImportFrozenModule(char *);
+PyAPI_FUNC(PyObject *) PyImport_GetImporter(PyObject *path) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_Import(PyObject *name) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_ReloadModule(PyObject *m) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyImport_Cleanup(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyImport_ImportFrozenModule(char *) PYSTON_NOEXCEPT;
 
 #ifdef WITH_THREAD
-PyAPI_FUNC(void) _PyImport_AcquireLock(void);
-PyAPI_FUNC(int) _PyImport_ReleaseLock(void);
+PyAPI_FUNC(void) _PyImport_AcquireLock(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyImport_ReleaseLock(void) PYSTON_NOEXCEPT;
 #else
 #define _PyImport_AcquireLock()
 #define _PyImport_ReleaseLock() 1
 #endif
 
 PyAPI_FUNC(struct filedescr *) _PyImport_FindModule(
-	const char *, PyObject *, char *, size_t, FILE **, PyObject **);
-PyAPI_FUNC(int) _PyImport_IsScript(struct filedescr *);
-PyAPI_FUNC(void) _PyImport_ReInitLock(void);
+	const char *, PyObject *, char *, size_t, FILE **, PyObject **) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyImport_IsScript(struct filedescr *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyImport_ReInitLock(void) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyObject *) _PyImport_FindExtension(char *, char *);
-PyAPI_FUNC(PyObject *) _PyImport_FixupExtension(char *, char *);
+PyAPI_FUNC(PyObject *) _PyImport_FindExtension(char *, char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyImport_FixupExtension(char *, char *) PYSTON_NOEXCEPT;
 
 struct _inittab {
     char *name;
@@ -53,8 +53,8 @@ struct _inittab {
 //PyAPI_DATA(PyTypeObject) PyNullImporter_Type;
 PyAPI_DATA(struct _inittab *) PyImport_Inittab;
 
-PyAPI_FUNC(int) PyImport_AppendInittab(const char *name, void (*initfunc)(void));
-PyAPI_FUNC(int) PyImport_ExtendInittab(struct _inittab *newtab);
+PyAPI_FUNC(int) PyImport_AppendInittab(const char *name, void (*initfunc)(void)) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyImport_ExtendInittab(struct _inittab *newtab) PYSTON_NOEXCEPT;
 
 struct _frozen {
     char *name;

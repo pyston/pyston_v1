@@ -192,20 +192,20 @@ static Box* import(const std::string* name, bool return_first) {
     return return_first ? first_module : last_module;
 }
 
-extern "C" void _PyImport_AcquireLock() {
+extern "C" void _PyImport_AcquireLock() noexcept {
     // TODO: currently no import lock!
 }
 
-extern "C" int _PyImport_ReleaseLock() {
+extern "C" int _PyImport_ReleaseLock() noexcept {
     // TODO: currently no import lock!
     return 1;
 }
 
-extern "C" void _PyImport_ReInitLock() {
+extern "C" void _PyImport_ReInitLock() noexcept {
     // TODO: currently no import lock!
 }
 
-extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) {
+extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) noexcept {
     Py_FatalError("unimplemented");
 }
 

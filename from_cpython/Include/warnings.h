@@ -6,11 +6,11 @@
 extern "C" {
 #endif
 
-PyAPI_FUNC(void) _PyWarnings_Init(void);
+PyAPI_FUNC(void) _PyWarnings_Init(void) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(int) PyErr_WarnEx(PyObject *, const char *, Py_ssize_t);
+PyAPI_FUNC(int) PyErr_WarnEx(PyObject *, const char *, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyErr_WarnExplicit(PyObject *, const char *, const char *, int,
-                                    const char *, PyObject *);
+                                    const char *, PyObject *) PYSTON_NOEXCEPT;
 
 #define PyErr_WarnPy3k(msg, stacklevel) \
   (Py_Py3kWarningFlag ? PyErr_WarnEx(PyExc_DeprecationWarning, msg, stacklevel) : 0)

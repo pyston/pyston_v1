@@ -37,7 +37,7 @@ PyAPI_DATA(PyTypeObject*) int_cls;
 #define PyInt_Type (*int_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyInt_Check(PyObject*);
+PyAPI_FUNC(bool) _PyInt_Check(PyObject*) PYSTON_NOEXCEPT;
 #define PyInt_Check(op) _PyInt_Check((PyObject*)op)
 #if 0
 #define PyInt_Check(op) \
@@ -45,22 +45,22 @@ PyAPI_FUNC(bool) _PyInt_Check(PyObject*);
 #endif
 #define PyInt_CheckExact(op) (Py_TYPE(op) == &PyInt_Type)
 
-PyAPI_FUNC(PyObject *) PyInt_FromString(char*, char**, int);
+PyAPI_FUNC(PyObject *) PyInt_FromString(char*, char**, int) PYSTON_NOEXCEPT;
 #ifdef Py_USING_UNICODE
-PyAPI_FUNC(PyObject *) PyInt_FromUnicode(Py_UNICODE*, Py_ssize_t, int);
+PyAPI_FUNC(PyObject *) PyInt_FromUnicode(Py_UNICODE*, Py_ssize_t, int) PYSTON_NOEXCEPT;
 #endif
-PyAPI_FUNC(PyObject *) PyInt_FromLong(long);
-PyAPI_FUNC(PyObject *) PyInt_FromSize_t(size_t);
-PyAPI_FUNC(PyObject *) PyInt_FromSsize_t(Py_ssize_t);
-PyAPI_FUNC(long) PyInt_AsLong(PyObject *);
-PyAPI_FUNC(Py_ssize_t) PyInt_AsSsize_t(PyObject *);
-PyAPI_FUNC(int) _PyInt_AsInt(PyObject *);
-PyAPI_FUNC(unsigned long) PyInt_AsUnsignedLongMask(PyObject *);
+PyAPI_FUNC(PyObject *) PyInt_FromLong(long) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyInt_FromSize_t(size_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyInt_FromSsize_t(Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) PyInt_AsLong(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_ssize_t) PyInt_AsSsize_t(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyInt_AsInt(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(unsigned long) PyInt_AsUnsignedLongMask(PyObject *) PYSTON_NOEXCEPT;
 #ifdef HAVE_LONG_LONG
-PyAPI_FUNC(unsigned PY_LONG_LONG) PyInt_AsUnsignedLongLongMask(PyObject *);
+PyAPI_FUNC(unsigned PY_LONG_LONG) PyInt_AsUnsignedLongLongMask(PyObject *) PYSTON_NOEXCEPT;
 #endif
 
-PyAPI_FUNC(long) PyInt_GetMax(void);
+PyAPI_FUNC(long) PyInt_GetMax(void) PYSTON_NOEXCEPT;
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
@@ -73,23 +73,23 @@ PyAPI_FUNC(long) PyInt_GetMax(void);
  * into the main Python shared library/DLL.  Guido thinks I'm weird for
  * building it this way.  :-)  [cjh]
  */
-PyAPI_FUNC(unsigned long) PyOS_strtoul(char *, char **, int);
-PyAPI_FUNC(long) PyOS_strtol(char *, char **, int);
+PyAPI_FUNC(unsigned long) PyOS_strtoul(char *, char **, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) PyOS_strtol(char *, char **, int) PYSTON_NOEXCEPT;
 
 /* free list api */
-PyAPI_FUNC(int) PyInt_ClearFreeList(void);
+PyAPI_FUNC(int) PyInt_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 /* Convert an integer to the given base.  Returns a string.
    If base is 2, 8 or 16, add the proper prefix '0b', '0o' or '0x'.
    If newstyle is zero, then use the pre-2.6 behavior of octal having
    a leading "0" */
-PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle);
+PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) PYSTON_NOEXCEPT;
 
 /* Format the object based on the format_spec, as defined in PEP 3101
    (Advanced String Formatting). */
 PyAPI_FUNC(PyObject *) _PyInt_FormatAdvanced(PyObject *obj,
 					     char *format_spec,
-					     Py_ssize_t format_spec_len);
+					     Py_ssize_t format_spec_len) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

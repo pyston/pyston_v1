@@ -32,9 +32,9 @@ namespace pyston {
 BoxedClass* method_cls;
 
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
-    extern "C" bool Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
+    extern "C" bool Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
 #define MAKE_CHECK2(NAME, cls_name)                                                                                    \
-    extern "C" bool _Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
+    extern "C" bool _Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
 
 MAKE_CHECK2(Int, int_cls)
 MAKE_CHECK2(String, str_cls)
@@ -52,7 +52,7 @@ MAKE_CHECK(Unicode, unicode_cls)
 #undef MAKE_CHECK
 #undef MAKE_CHECK2
 
-extern "C" bool _PyIndex_Check(PyObject* op) {
+extern "C" bool _PyIndex_Check(PyObject* op) noexcept {
     // TODO this is wrong (the CPython version checks for things that can be coerced to a number):
     return PyInt_Check(op);
 }
@@ -63,7 +63,7 @@ int Py_Py3kWarningFlag;
 
 BoxedClass* capifunc_cls;
 
-extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) {
+extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) noexcept {
     RELEASE_ASSERT(nitems == 0, "unimplemented");
     RELEASE_ASSERT(cls->tp_itemsize == 0, "unimplemented");
 
@@ -90,7 +90,8 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
 }
 
 // copied from CPython's getargs.c:
-extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_ssize_t len, int readonly, int flags) {
+extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_ssize_t len, int readonly,
+                                 int flags) noexcept {
     if (view == NULL)
         return 0;
     if (((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE) && (readonly == 1)) {
@@ -122,7 +123,7 @@ extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_s
     return 0;
 }
 
-extern "C" void PyBuffer_Release(Py_buffer* view) {
+extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
     if (!view->buf) {
         assert(!view->obj);
         return;
@@ -137,11 +138,11 @@ extern "C" void PyBuffer_Release(Py_buffer* view) {
     view->obj = NULL;
 }
 
-extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) {
+extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
+extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     RELEASE_ASSERT(op, "");
     RELEASE_ASSERT(tp, "");
 
@@ -161,7 +162,7 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) {
     return op;
 }
 
-extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) {
+extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
     assert(gc::isValidGCObject(op));
     assert(gc::isValidGCObject(tp));
 
@@ -172,7 +173,7 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
     return op;
 }
 
-extern "C" PyObject* _PyObject_New(PyTypeObject* cls) {
+extern "C" PyObject* _PyObject_New(PyTypeObject* cls) noexcept {
     assert(cls->tp_itemsize == 0);
 
     auto rtn = (PyObject*)gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
@@ -182,36 +183,36 @@ extern "C" PyObject* _PyObject_New(PyTypeObject* cls) {
     return rtn;
 }
 
-extern "C" void PyObject_Free(void* p) {
+extern "C" void PyObject_Free(void* p) noexcept {
     gc::gc_free(p);
     ASSERT(0, "I think this is good enough but I'm not sure; should test");
 }
 
-extern "C" PyObject* _PyObject_GC_Malloc(size_t) {
+extern "C" PyObject* _PyObject_GC_Malloc(size_t) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* _PyObject_GC_New(PyTypeObject* cls) {
+extern "C" PyObject* _PyObject_GC_New(PyTypeObject* cls) noexcept {
     return _PyObject_New(cls);
 }
 
-extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject*, Py_ssize_t) {
+extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject*, Py_ssize_t) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" void PyObject_GC_Track(void*) {
+extern "C" void PyObject_GC_Track(void*) noexcept {
     // TODO do we have to do anything to support the C API GC protocol?
 }
 
-extern "C" void PyObject_GC_UnTrack(void*) {
+extern "C" void PyObject_GC_UnTrack(void*) noexcept {
     // TODO do we have to do anything to support the C API GC protocol?
 }
 
-extern "C" void PyObject_GC_Del(void*) {
+extern "C" void PyObject_GC_Del(void*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) {
+extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {
     RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
     RELEASE_ASSERT(args->cls == tuple_cls, "");
 
@@ -227,15 +228,15 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) {
     }
 }
 
-extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) {
+extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) {
+extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
+extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
     try {
         return len(o)->n;
     } catch (Box* b) {
@@ -243,11 +244,11 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
     }
 }
 
-extern "C" PyObject* PyObject_GetIter(PyObject*) {
+extern "C" PyObject* PyObject_GetIter(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_Repr(PyObject* obj) {
+extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
     try {
         return repr(obj);
     } catch (Box* b) {
@@ -255,7 +256,7 @@ extern "C" PyObject* PyObject_Repr(PyObject* obj) {
     }
 }
 
-extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) {
+extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
     PyObject* empty = NULL;
     PyObject* result = NULL;
 #ifdef Py_USING_UNICODE
@@ -401,7 +402,7 @@ done:
 }
 
 
-extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) {
+extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept {
     if (!isSubclass(attr_name->cls, str_cls)) {
         PyErr_Format(PyExc_TypeError, "attribute name must be string, not '%.200s'", Py_TYPE(attr_name)->tp_name);
         return NULL;
@@ -414,11 +415,11 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) {
     }
 }
 
-extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) {
+extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
+extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
     try {
         return getitem(o, key);
     } catch (Box* b) {
@@ -427,15 +428,15 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) {
     }
 }
 
-extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) {
+extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) {
+extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) {
+extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -443,7 +444,7 @@ extern "C" {
 int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
 }
 
-extern "C" long PyObject_Hash(PyObject* o) {
+extern "C" long PyObject_Hash(PyObject* o) noexcept {
     try {
         return hash(o)->n;
     } catch (Box* b) {
@@ -451,17 +452,17 @@ extern "C" long PyObject_Hash(PyObject* o) {
     }
 }
 
-extern "C" long PyObject_HashNotImplemented(PyObject* self) {
+extern "C" long PyObject_HashNotImplemented(PyObject* self) noexcept {
     PyErr_Format(PyExc_TypeError, "unhashable type: '%.200s'", Py_TYPE(self)->tp_name);
     return -1;
 }
 
-extern "C" PyObject* _PyObject_NextNotImplemented(PyObject* self) {
+extern "C" PyObject* _PyObject_NextNotImplemented(PyObject* self) noexcept {
     PyErr_Format(PyExc_TypeError, "'%.200s' object is not iterable", Py_TYPE(self)->tp_name);
     return NULL;
 }
 
-extern "C" long _Py_HashPointer(void* p) {
+extern "C" long _Py_HashPointer(void* p) noexcept {
     long x;
     size_t y = (size_t)p;
     /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
@@ -473,7 +474,7 @@ extern "C" long _Py_HashPointer(void* p) {
     return x;
 }
 
-extern "C" int PyObject_IsTrue(PyObject* o) {
+extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
     try {
         return nonzero(o);
     } catch (Box* b) {
@@ -482,11 +483,11 @@ extern "C" int PyObject_IsTrue(PyObject* o) {
 }
 
 
-extern "C" int PyObject_Not(PyObject* o) {
+extern "C" int PyObject_Not(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) {
+extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
     PyObject* result;
 
     if (arg == NULL) {
@@ -510,7 +511,7 @@ extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg
     return result;
 }
 
-extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) {
+extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
     try {
         if (kw)
             return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
@@ -521,43 +522,43 @@ extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, Py
     }
 }
 
-extern "C" void PyObject_ClearWeakRefs(PyObject* object) {
+extern "C" void PyObject_ClearWeakRefs(PyObject* object) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) {
+extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) {
+extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
     Py_FatalError("unimplemented");
 };
 
-extern "C" int PySequence_Check(PyObject*) {
+extern "C" int PySequence_Check(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PySequence_Size(PyObject* o) {
+extern "C" Py_ssize_t PySequence_Size(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_Concat(PyObject* o1, PyObject* o2) {
+extern "C" PyObject* PySequence_Concat(PyObject* o1, PyObject* o2) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) {
+extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_InPlaceConcat(PyObject* o1, PyObject* o2) {
+extern "C" PyObject* PySequence_InPlaceConcat(PyObject* o1, PyObject* o2) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) {
+extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) {
+extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
     try {
         // Not sure if this is really the same:
         return getitem(o, boxInt(i));
@@ -566,7 +567,7 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) {
     }
 }
 
-extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) {
+extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
     try {
         // Not sure if this is really the same:
         return getitem(o, new BoxedSlice(boxInt(i1), boxInt(i2), None));
@@ -575,51 +576,51 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t 
     }
 }
 
-extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) {
+extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) {
+extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) {
+extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) {
+extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) {
+extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySequence_Contains(PyObject* o, PyObject* value) {
+extern "C" int PySequence_Contains(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) {
+extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_List(PyObject* o) {
+extern "C" PyObject* PySequence_List(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_Tuple(PyObject* o) {
+extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_Fast(PyObject* o, const char* m) {
+extern "C" PyObject* PySequence_Fast(PyObject* o, const char* m) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyIter_Next(PyObject*) {
+extern "C" PyObject* PyIter_Next(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyCallable_Check(PyObject* x) {
+extern "C" int PyCallable_Check(PyObject* x) noexcept {
     if (x == NULL)
         return 0;
 
@@ -627,7 +628,7 @@ extern "C" int PyCallable_Check(PyObject* x) {
     return typeLookup(x->cls, call_attr, NULL) != NULL;
 }
 
-extern "C" int Py_FlushLine(void) {
+extern "C" int Py_FlushLine(void) noexcept {
     PyObject* f = PySys_GetObject("stdout");
     if (f == NULL)
         return 0;
@@ -636,7 +637,7 @@ extern "C" int Py_FlushLine(void) {
     return PyFile_WriteString("\n", f);
 }
 
-extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb) {
+extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb) noexcept {
     PyObject* type = *exc;
     PyObject* value = *val;
     PyObject* inclass = NULL;
@@ -762,54 +763,54 @@ void checkAndThrowCAPIException() {
     }
 }
 
-extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
+extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) noexcept {
     cur_thread_state.curexc_type = type;
     cur_thread_state.curexc_value = value;
     cur_thread_state.curexc_traceback = traceback;
 }
 
-extern "C" void PyErr_Clear() {
+extern "C" void PyErr_Clear() noexcept {
     PyErr_Restore(NULL, NULL, NULL);
 }
 
-extern "C" void PyErr_SetString(PyObject* exception, const char* string) {
+extern "C" void PyErr_SetString(PyObject* exception, const char* string) noexcept {
     PyErr_SetObject(exception, boxStrConstant(string));
 }
 
-extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) {
+extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) noexcept {
     PyErr_Restore(exception, value, NULL);
 }
 
-extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) {
+extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyErr_NoMemory() {
+extern "C" PyObject* PyErr_NoMemory() noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyErr_CheckSignals() {
+extern "C" int PyErr_CheckSignals() noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyExceptionClass_Check(PyObject* o) {
+extern "C" int PyExceptionClass_Check(PyObject* o) noexcept {
     return PyClass_Check(o) || (PyType_Check(o) && isSubclass(static_cast<BoxedClass*>(o), BaseException));
 }
 
-extern "C" int PyExceptionInstance_Check(PyObject* o) {
+extern "C" int PyExceptionInstance_Check(PyObject* o) noexcept {
     return PyInstance_Check(o) || isSubclass(o->cls, BaseException);
 }
 
-extern "C" const char* PyExceptionClass_Name(PyObject* o) {
+extern "C" const char* PyExceptionClass_Name(PyObject* o) noexcept {
     return PyClass_Check(o) ? PyString_AS_STRING(static_cast<BoxedClassobj*>(o)->name)
                             : static_cast<BoxedClass*>(o)->tp_name;
 }
 
-extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) {
+extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) noexcept {
     return PyInstance_Check(o) ? (Box*)static_cast<BoxedInstance*>(o)->inst_cls : o->cls;
 }
 
-extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) {
+extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -824,7 +825,7 @@ int _Py_CheckRecursionLimit = Py_DEFAULT_RECURSION_LIMIT;
    If USE_STACKCHECK, the macro decrements _Py_CheckRecursionLimit
    to guarantee that _Py_CheckRecursiveCall() is regularly called.
    Without USE_STACKCHECK, there is no need for this. */
-extern "C" int _Py_CheckRecursiveCall(const char* where) {
+extern "C" int _Py_CheckRecursiveCall(const char* where) noexcept {
     PyThreadState* tstate = PyThreadState_GET();
 
 #ifdef USE_STACKCHECK
@@ -843,16 +844,16 @@ extern "C" int _Py_CheckRecursiveCall(const char* where) {
     return 0;
 }
 
-extern "C" int Py_GetRecursionLimit(void) {
+extern "C" int Py_GetRecursionLimit(void) noexcept {
     return recursion_limit;
 }
 
-extern "C" void Py_SetRecursionLimit(int new_limit) {
+extern "C" void Py_SetRecursionLimit(int new_limit) noexcept {
     recursion_limit = new_limit;
     _Py_CheckRecursionLimit = recursion_limit;
 }
 
-extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) {
+extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) noexcept {
     if (err == NULL || exc == NULL) {
         /* maybe caused by "import exceptions" that failed early on */
         return 0;
@@ -897,19 +898,19 @@ extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) {
     return err == exc;
 }
 
-extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
+extern "C" int PyErr_ExceptionMatches(PyObject* exc) noexcept {
     return PyErr_GivenExceptionMatches(PyErr_Occurred(), exc);
 }
 
-extern "C" PyObject* PyErr_Occurred() {
+extern "C" PyObject* PyErr_Occurred() noexcept {
     return cur_thread_state.curexc_type;
 }
 
-extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {
+extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyImport_Import(PyObject* module_name) {
+extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
     RELEASE_ASSERT(module_name, "");
     RELEASE_ASSERT(module_name->cls == str_cls, "");
 
@@ -921,23 +922,23 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) {
 }
 
 
-extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) {
+extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" void* PyMem_Malloc(size_t sz) {
+extern "C" void* PyMem_Malloc(size_t sz) noexcept {
     return gc_compat_malloc(sz);
 }
 
-extern "C" void* PyMem_Realloc(void* ptr, size_t sz) {
+extern "C" void* PyMem_Realloc(void* ptr, size_t sz) noexcept {
     return gc_compat_realloc(ptr, sz);
 }
 
-extern "C" void PyMem_Free(void* ptr) {
+extern "C" void PyMem_Free(void* ptr) noexcept {
     gc_compat_free(ptr);
 }
 
-extern "C" int PyNumber_Check(PyObject* obj) {
+extern "C" int PyNumber_Check(PyObject* obj) noexcept {
     assert(obj && obj->cls);
 
     // Our check, since we don't currently fill in tp_as_number:
@@ -948,7 +949,7 @@ extern "C" int PyNumber_Check(PyObject* obj) {
     return obj->cls->tp_as_number && (obj->cls->tp_as_number->nb_int || obj->cls->tp_as_number->nb_float);
 }
 
-extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Add);
     } catch (Box* b) {
@@ -956,7 +957,7 @@ extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Sub);
     } catch (Box* b) {
@@ -964,7 +965,7 @@ extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mult);
     } catch (Box* b) {
@@ -972,7 +973,7 @@ extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Div);
     } catch (Box* b) {
@@ -980,15 +981,15 @@ extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mod);
     } catch (Box* b) {
@@ -996,23 +997,23 @@ extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_Divmod(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_Divmod(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) {
+extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Negative(PyObject* o) {
+extern "C" PyObject* PyNumber_Negative(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Positive(PyObject* o) {
+extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Absolute(PyObject* o) {
+extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
     try {
         return abs_(o);
     } catch (Box* b) {
@@ -1020,15 +1021,15 @@ extern "C" PyObject* PyNumber_Absolute(PyObject* o) {
     }
 }
 
-extern "C" PyObject* PyNumber_Invert(PyObject* o) {
+extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::RShift);
     } catch (Box* b) {
@@ -1036,7 +1037,7 @@ extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) {
+extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::BitAnd);
     } catch (Box* b) {
@@ -1044,95 +1045,95 @@ extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) {
     }
 }
 
-extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Or(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_Or(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceDivide(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceDivide(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlacePower(PyObject*, PyObject*, PyObject* o3) {
+extern "C" PyObject* PyNumber_InPlacePower(PyObject*, PyObject*, PyObject* o3) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceLshift(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceLshift(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceRshift(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceRshift(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceAnd(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceAnd(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceXor(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceXor(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) {
+extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyNumber_Coerce(PyObject**, PyObject**) {
+extern "C" int PyNumber_Coerce(PyObject**, PyObject**) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) {
+extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Int(PyObject* o) {
+extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Long(PyObject* o) {
+extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Float(PyObject* o) {
+extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_Index(PyObject* o) {
+extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) {
+extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
+extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
     RELEASE_ASSERT(o->cls != long_cls, "unhandled");
 
     RELEASE_ASSERT(isSubclass(o->cls, int_cls), "??");
@@ -1141,27 +1142,27 @@ extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) {
     return n;
 }
 
-extern "C" Py_ssize_t PyUnicode_GET_SIZE(PyObject*) {
+extern "C" Py_ssize_t PyUnicode_GET_SIZE(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PyUnicode_GET_DATA_SIZE(PyObject*) {
+extern "C" Py_ssize_t PyUnicode_GET_DATA_SIZE(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_UNICODE* PyUnicode_AS_UNICODE(PyObject*) {
+extern "C" Py_UNICODE* PyUnicode_AS_UNICODE(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" const char* PyUnicode_AS_DATA(PyObject*) {
+extern "C" const char* PyUnicode_AS_DATA(PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) {
+extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) {
+extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) noexcept {
     int rc;
     va_list va;
 
@@ -1171,7 +1172,7 @@ extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) {
     return rc;
 }
 
-extern "C" int PyOS_vsnprintf(char* str, size_t size, const char* format, va_list va) {
+extern "C" int PyOS_vsnprintf(char* str, size_t size, const char* format, va_list va) noexcept {
     int len; /* # bytes written, excluding \0 */
 #ifdef HAVE_SNPRINTF
 #define _PyOS_vsnprintf_EXTRA_SPACE 1
@@ -1222,7 +1223,7 @@ Done:
 #undef _PyOS_vsnprintf_EXTRA_SPACE
 }
 
-extern "C" void PyOS_AfterFork(void) {
+extern "C" void PyOS_AfterFork(void) noexcept {
     // TODO CPython does a number of things after a fork:
     // - clears pending signals
     // - updates the cached "main_pid"
@@ -1287,7 +1288,7 @@ static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
 }
 }
 
-extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) {
+extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) noexcept {
     if (size < 0) {
         PyErr_Format(PyExc_ValueError, "negative argument not allowed");
         return -1;

@@ -485,7 +485,7 @@ typedef struct _heaptypeobject {
 
 
 /* Generic type check */
-PyAPI_FUNC(int) PyType_IsSubtype(PyTypeObject *, PyTypeObject *);
+PyAPI_FUNC(int) PyType_IsSubtype(PyTypeObject *, PyTypeObject *) PYSTON_NOEXCEPT;
 #define PyObject_TypeCheck(ob, tp) \
     (Py_TYPE(ob) == (tp) || PyType_IsSubtype(Py_TYPE(ob), (tp)))
 
@@ -499,57 +499,57 @@ PyAPI_DATA(PyTypeObject*) type_cls;
 //PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyType_Check(PyObject*);
+PyAPI_FUNC(bool) PyType_Check(PyObject*) PYSTON_NOEXCEPT;
 #if 0
 #define PyType_Check(op) \
     PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS)
 #endif
 #define PyType_CheckExact(op) (Py_TYPE(op) == &PyType_Type)
 
-PyAPI_FUNC(int) PyType_Ready(PyTypeObject *);
-PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t);
+PyAPI_FUNC(int) PyType_Ready(PyTypeObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
-                                               PyObject *, PyObject *);
-PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *);
+                                               PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *) PYSTON_NOEXCEPT;
 // Pyston change: modified this to take a const char*
-PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, const char *, PyObject **);
-PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
-PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
+PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, const char *, PyObject **) PYSTON_NOEXCEPT;
+PyAPI_FUNC(unsigned int) PyType_ClearCache(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyType_Modified(PyTypeObject *) PYSTON_NOEXCEPT;
 
 /* Generic operations on objects */
-PyAPI_FUNC(int) PyObject_Print(PyObject *, FILE *, int);
-PyAPI_FUNC(void) _PyObject_Dump(PyObject *);
-PyAPI_FUNC(PyObject *) PyObject_Repr(PyObject *);
-PyAPI_FUNC(PyObject *) _PyObject_Str(PyObject *);
-PyAPI_FUNC(PyObject *) PyObject_Str(PyObject *);
+PyAPI_FUNC(int) PyObject_Print(PyObject *, FILE *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyObject_Dump(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_Repr(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyObject_Str(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_Str(PyObject *) PYSTON_NOEXCEPT;
 #define PyObject_Bytes PyObject_Str
 #ifdef Py_USING_UNICODE
-PyAPI_FUNC(PyObject *) PyObject_Unicode(PyObject *);
+PyAPI_FUNC(PyObject *) PyObject_Unicode(PyObject *) PYSTON_NOEXCEPT;
 #endif
-PyAPI_FUNC(int) PyObject_Compare(PyObject *, PyObject *);
-PyAPI_FUNC(PyObject *) PyObject_RichCompare(PyObject *, PyObject *, int);
-PyAPI_FUNC(int) PyObject_RichCompareBool(PyObject *, PyObject *, int);
-PyAPI_FUNC(PyObject *) PyObject_GetAttrString(PyObject *, const char *);
-PyAPI_FUNC(int) PyObject_SetAttrString(PyObject *, const char *, PyObject *);
-PyAPI_FUNC(int) PyObject_HasAttrString(PyObject *, const char *);
-PyAPI_FUNC(PyObject *) PyObject_GetAttr(PyObject *, PyObject *);
-PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *);
-PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *);
-PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *);
-PyAPI_FUNC(PyObject *) PyObject_SelfIter(PyObject *);
-PyAPI_FUNC(PyObject *) _PyObject_NextNotImplemented(PyObject *);
-PyAPI_FUNC(PyObject *) PyObject_GenericGetAttr(PyObject *, PyObject *);
+PyAPI_FUNC(int) PyObject_Compare(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_RichCompare(PyObject *, PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_RichCompareBool(PyObject *, PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_GetAttrString(PyObject *, const char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_SetAttrString(PyObject *, const char *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_HasAttrString(PyObject *, const char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_GetAttr(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_SelfIter(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyObject_NextNotImplemented(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyObject_GenericGetAttr(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PyObject_GenericSetAttr(PyObject *,
-                                              PyObject *, PyObject *);
-PyAPI_FUNC(long) PyObject_Hash(PyObject *);
-PyAPI_FUNC(long) PyObject_HashNotImplemented(PyObject *);
-PyAPI_FUNC(int) PyObject_IsTrue(PyObject *);
-PyAPI_FUNC(int) PyObject_Not(PyObject *);
-PyAPI_FUNC(int) PyCallable_Check(PyObject *);
-PyAPI_FUNC(int) PyNumber_Coerce(PyObject **, PyObject **);
-PyAPI_FUNC(int) PyNumber_CoerceEx(PyObject **, PyObject **);
+                                              PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) PyObject_Hash(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) PyObject_HashNotImplemented(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_IsTrue(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyObject_Not(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyCallable_Check(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyNumber_Coerce(PyObject **, PyObject **) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyNumber_CoerceEx(PyObject **, PyObject **) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(void) PyObject_ClearWeakRefs(PyObject *);
+PyAPI_FUNC(void) PyObject_ClearWeakRefs(PyObject *) PYSTON_NOEXCEPT;
 
 /* A slot function whose address we need to compare */
 extern int _PyObject_SlotCompare(PyObject *, PyObject *);
@@ -567,16 +567,16 @@ _PyObject_GenericSetAttrWithDict(PyObject *, PyObject *,
    returning the names of the current locals.  In this case, if there are
    no current locals, NULL is returned, and PyErr_Occurred() is false.
 */
-PyAPI_FUNC(PyObject *) PyObject_Dir(PyObject *);
+PyAPI_FUNC(PyObject *) PyObject_Dir(PyObject *) PYSTON_NOEXCEPT;
 
 
 /* Helpers for printing recursive container types */
-PyAPI_FUNC(int) Py_ReprEnter(PyObject *);
-PyAPI_FUNC(void) Py_ReprLeave(PyObject *);
+PyAPI_FUNC(int) Py_ReprEnter(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) Py_ReprLeave(PyObject *) PYSTON_NOEXCEPT;
 
 /* Helpers for hash functions */
-PyAPI_FUNC(long) _Py_HashDouble(double);
-PyAPI_FUNC(long) _Py_HashPointer(void*);
+PyAPI_FUNC(long) _Py_HashDouble(double) PYSTON_NOEXCEPT;
+PyAPI_FUNC(long) _Py_HashPointer(void*) PYSTON_NOEXCEPT;
 
 typedef struct {
     long prefix;
@@ -768,10 +768,10 @@ environment the global variable trick is not safe.)
 #ifdef Py_REF_DEBUG
 PyAPI_DATA(Py_ssize_t) _Py_RefTotal;
 PyAPI_FUNC(void) _Py_NegativeRefcount(const char *fname,
-                                            int lineno, PyObject *op);
-PyAPI_FUNC(PyObject *) _PyDict_Dummy(void);
-PyAPI_FUNC(PyObject *) _PySet_Dummy(void);
-PyAPI_FUNC(Py_ssize_t) _Py_GetRefTotal(void);
+                                            int lineno, PyObject *op) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PyDict_Dummy(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PySet_Dummy(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_ssize_t) _Py_GetRefTotal(void) PYSTON_NOEXCEPT;
 #define _Py_INC_REFTOTAL        _Py_RefTotal++
 #define _Py_DEC_REFTOTAL        _Py_RefTotal--
 #define _Py_REF_DEBUG_COMMA     ,
@@ -788,8 +788,8 @@ PyAPI_FUNC(Py_ssize_t) _Py_GetRefTotal(void);
 #endif /* Py_REF_DEBUG */
 
 #ifdef COUNT_ALLOCS
-PyAPI_FUNC(void) inc_count(PyTypeObject *);
-PyAPI_FUNC(void) dec_count(PyTypeObject *);
+PyAPI_FUNC(void) inc_count(PyTypeObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) dec_count(PyTypeObject *) PYSTON_NOEXCEPT;
 #define _Py_INC_TPALLOCS(OP)    inc_count(Py_TYPE(OP))
 #define _Py_INC_TPFREES(OP)     dec_count(Py_TYPE(OP))
 #define _Py_DEC_TPFREES(OP)     Py_TYPE(OP)->tp_frees--
@@ -803,12 +803,12 @@ PyAPI_FUNC(void) dec_count(PyTypeObject *);
 
 #ifdef Py_TRACE_REFS
 /* Py_TRACE_REFS is such major surgery that we call external routines. */
-PyAPI_FUNC(void) _Py_NewReference(PyObject *);
-PyAPI_FUNC(void) _Py_ForgetReference(PyObject *);
-PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
-PyAPI_FUNC(void) _Py_PrintReferences(FILE *);
-PyAPI_FUNC(void) _Py_PrintReferenceAddresses(FILE *);
-PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force);
+PyAPI_FUNC(void) _Py_NewReference(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_ForgetReference(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_Dealloc(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_PrintReferences(FILE *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_PrintReferenceAddresses(FILE *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
 
 #else
 /* Without Py_TRACE_REFS, there's little enough to do that we expand code
@@ -882,8 +882,8 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force);
 These are provided as conveniences to Python runtime embedders, so that
 they can have object code that is not dependent on Python compilation flags.
 */
-PyAPI_FUNC(void) Py_IncRef(PyObject *);
-PyAPI_FUNC(void) Py_DecRef(PyObject *);
+PyAPI_FUNC(void) Py_IncRef(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) Py_DecRef(PyObject *) PYSTON_NOEXCEPT;
 
 /*
 _Py_NoneStruct is an object of undefined type which can be used in contexts
@@ -1035,14 +1035,14 @@ with the call stack never exceeding a depth of PyTrash_UNWIND_LEVEL.
 
 /* This is the old private API, invoked by the macros before 2.7.4.
    Kept for binary compatibility of extensions. */
-PyAPI_FUNC(void) _PyTrash_deposit_object(PyObject*);
-PyAPI_FUNC(void) _PyTrash_destroy_chain(void);
+PyAPI_FUNC(void) _PyTrash_deposit_object(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyTrash_destroy_chain(void) PYSTON_NOEXCEPT;
 PyAPI_DATA(int) _PyTrash_delete_nesting;
 PyAPI_DATA(PyObject *) _PyTrash_delete_later;
 
 /* The new thread-safe private API, invoked by the macros below. */
-PyAPI_FUNC(void) _PyTrash_thread_deposit_object(PyObject*);
-PyAPI_FUNC(void) _PyTrash_thread_destroy_chain(void);
+PyAPI_FUNC(void) _PyTrash_thread_deposit_object(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyTrash_thread_destroy_chain(void) PYSTON_NOEXCEPT;
 
 #define PyTrash_UNWIND_LEVEL 50
 

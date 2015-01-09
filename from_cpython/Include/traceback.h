@@ -22,9 +22,9 @@ typedef struct _traceback {
 #endif
 typedef struct _PyTracebackObject PyTracebackObject;
 
-PyAPI_FUNC(int) PyTraceBack_Here(struct _frame *);
-PyAPI_FUNC(int) PyTraceBack_Print(PyObject *, PyObject *);
-PyAPI_FUNC(int) _Py_DisplaySourceLine(PyObject *, const char *, int, int);
+PyAPI_FUNC(int) PyTraceBack_Here(struct _frame *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyTraceBack_Print(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _Py_DisplaySourceLine(PyObject *, const char *, int, int) PYSTON_NOEXCEPT;
 
 /* Reveal traceback type so we can typecheck traceback objects */
 // Pyston change: not a static type any more

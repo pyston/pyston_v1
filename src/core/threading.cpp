@@ -424,7 +424,7 @@ void finishMainThread() {
     // TODO maybe this is the place to wait for non-daemon threads?
 }
 
-extern "C" void PyEval_ReInitThreads() {
+extern "C" void PyEval_ReInitThreads() noexcept {
     pthread_t current_thread = pthread_self();
     assert(current_threads.count(pthread_self()));
 
@@ -447,7 +447,7 @@ extern "C" void PyEval_ReInitThreads() {
 // It adds some perf overhead I suppose, though I haven't measured it.
 // It also means that you're not allowed to do that much inside an AllowThreads region...
 // TODO maybe we should let the client decide which way to handle it
-extern "C" void beginAllowThreads() {
+extern "C" void beginAllowThreads() noexcept {
     // I don't think it matters whether the GL release happens before or after the state
     // saving; do it before, then, to reduce the amount we hold the GL:
     releaseGLRead();
@@ -461,7 +461,7 @@ extern "C" void beginAllowThreads() {
     }
 }
 
-extern "C" void endAllowThreads() {
+extern "C" void endAllowThreads() noexcept {
     {
         LOCK_REGION(&threading_lock);
         ThreadStateInternal* state = current_threads[pthread_self()];

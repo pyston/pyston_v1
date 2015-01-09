@@ -12,14 +12,14 @@ extern "C" {
 
 #define PySeqIter_Check(op) (Py_TYPE(op) == &PySeqIter_Type)
 
-PyAPI_FUNC(PyObject *) PySeqIter_New(PyObject *);
+PyAPI_FUNC(PyObject *) PySeqIter_New(PyObject *) PYSTON_NOEXCEPT;
 
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PyCallIter_Type;
 
 #define PyCallIter_Check(op) (Py_TYPE(op) == &PyCallIter_Type)
 
-PyAPI_FUNC(PyObject *) PyCallIter_New(PyObject *, PyObject *);
+PyAPI_FUNC(PyObject *) PyCallIter_New(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif

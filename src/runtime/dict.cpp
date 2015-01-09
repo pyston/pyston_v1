@@ -122,12 +122,12 @@ Box* dictLen(BoxedDict* self) {
     return boxInt(self->d.size());
 }
 
-extern "C" Py_ssize_t PyDict_Size(PyObject* op) {
+extern "C" Py_ssize_t PyDict_Size(PyObject* op) noexcept {
     RELEASE_ASSERT(PyDict_Check(op), "");
     return static_cast<BoxedDict*>(op)->d.size();
 }
 
-extern "C" void PyDict_Clear(PyObject* op) {
+extern "C" void PyDict_Clear(PyObject* op) noexcept {
     RELEASE_ASSERT(PyDict_Check(op), "");
     static_cast<BoxedDict*>(op)->d.clear();
 }
@@ -150,7 +150,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
     return pos;
 }
 
-extern "C" PyObject* PyDict_New() {
+extern "C" PyObject* PyDict_New() noexcept {
     return new BoxedDict();
 }
 
@@ -158,7 +158,7 @@ extern "C" PyObject* PyDict_New() {
 // that we provide dict-like objects instead of proper dicts.
 // The performance should hopefully be comparable to the CPython fast case, since we can use
 // runtimeICs.
-extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
+extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noexcept {
     ASSERT(mp->cls == dict_cls || mp->cls == attrwrapper_cls, "%s", getTypeName(mp)->c_str());
 
     assert(mp);
@@ -175,7 +175,7 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) {
     return 0;
 }
 
-extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) {
+extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* item) noexcept {
     Box* key_s;
     try {
         key_s = boxStrConstant(key);
@@ -186,7 +186,7 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
     return PyDict_SetItem(mp, key_s, item);
 }
 
-extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) {
+extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
     ASSERT(dict->cls == dict_cls || dict->cls == attrwrapper_cls, "%s", getTypeName(dict)->c_str());
     try {
         return getitem(dict, key);
@@ -197,11 +197,11 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) {
     }
 }
 
-extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) {
+extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) {
+extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {
     Box* key_s;
     try {
         key_s = boxStrConstant(key);
@@ -422,27 +422,27 @@ extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
-extern "C" int PyMapping_Check(PyObject* o) {
+extern "C" int PyMapping_Check(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" Py_ssize_t PyMapping_Size(PyObject* o) {
+extern "C" Py_ssize_t PyMapping_Size(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyMapping_HasKeyString(PyObject* o, char* key) {
+extern "C" int PyMapping_HasKeyString(PyObject* o, char* key) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) {
+extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) {
+extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* v) {
+extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }
 

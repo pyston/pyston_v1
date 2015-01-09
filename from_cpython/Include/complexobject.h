@@ -23,13 +23,13 @@ typedef struct {
 #define c_pow _Py_c_pow
 #define c_abs _Py_c_abs
 
-PyAPI_FUNC(Py_complex) c_sum(Py_complex, Py_complex);
-PyAPI_FUNC(Py_complex) c_diff(Py_complex, Py_complex);
-PyAPI_FUNC(Py_complex) c_neg(Py_complex);
-PyAPI_FUNC(Py_complex) c_prod(Py_complex, Py_complex);
-PyAPI_FUNC(Py_complex) c_quot(Py_complex, Py_complex);
-PyAPI_FUNC(Py_complex) c_pow(Py_complex, Py_complex);
-PyAPI_FUNC(double) c_abs(Py_complex);
+PyAPI_FUNC(Py_complex) c_sum(Py_complex, Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_complex) c_diff(Py_complex, Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_complex) c_neg(Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_complex) c_prod(Py_complex, Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_complex) c_quot(Py_complex, Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_complex) c_pow(Py_complex, Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(double) c_abs(Py_complex) PYSTON_NOEXCEPT;
 
 
 /* Complex object interface */
@@ -56,18 +56,18 @@ PyAPI_DATA(PyTypeObject*) complex_cls;
 #define PyComplex_Check(op) PyObject_TypeCheck(op, &PyComplex_Type)
 #define PyComplex_CheckExact(op) (Py_TYPE(op) == &PyComplex_Type)
 
-PyAPI_FUNC(PyObject *) PyComplex_FromCComplex(Py_complex);
-PyAPI_FUNC(PyObject *) PyComplex_FromDoubles(double real, double imag);
+PyAPI_FUNC(PyObject *) PyComplex_FromCComplex(Py_complex) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyComplex_FromDoubles(double real, double imag) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(double) PyComplex_RealAsDouble(PyObject *op);
-PyAPI_FUNC(double) PyComplex_ImagAsDouble(PyObject *op);
-PyAPI_FUNC(Py_complex) PyComplex_AsCComplex(PyObject *op);
+PyAPI_FUNC(double) PyComplex_RealAsDouble(PyObject *op) PYSTON_NOEXCEPT;
+PyAPI_FUNC(double) PyComplex_ImagAsDouble(PyObject *op) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_complex) PyComplex_AsCComplex(PyObject *op) PYSTON_NOEXCEPT;
 
 /* Format the object based on the format_spec, as defined in PEP 3101
    (Advanced String Formatting). */
 PyAPI_FUNC(PyObject *) _PyComplex_FormatAdvanced(PyObject *obj,
                                                  char *format_spec,
-                                                 Py_ssize_t format_spec_len);
+                                                 Py_ssize_t format_spec_len) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

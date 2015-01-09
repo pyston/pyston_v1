@@ -623,12 +623,12 @@ Box* sliceRepr(BoxedSlice* self) {
 }
 
 extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
-                                  Py_ssize_t* step) {
+                                  Py_ssize_t* step) noexcept {
     Py_FatalError("unimplemented");
 }
 
 extern "C" int PySlice_GetIndicesEx(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
-                                    Py_ssize_t* step, Py_ssize_t* slicelength) {
+                                    Py_ssize_t* step, Py_ssize_t* slicelength) noexcept {
     Py_FatalError("unimplemented");
 }
 

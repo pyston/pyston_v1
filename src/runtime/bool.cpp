@@ -22,7 +22,7 @@ namespace pyston {
 
 Box* True, *False;
 
-extern "C" PyObject* PyBool_FromLong(long n) {
+extern "C" PyObject* PyBool_FromLong(long n) noexcept {
     return boxBool(n != 0);
 }
 

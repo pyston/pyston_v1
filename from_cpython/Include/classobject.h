@@ -57,15 +57,15 @@ PyAPI_DATA(PyTypeObject*) instancemethod_cls;
 #define PyInstance_Check(op) (Py_TYPE(op) == &PyInstance_Type)
 #define PyMethod_Check(op) (Py_TYPE(op) == &PyMethod_Type)
 
-PyAPI_FUNC(PyObject *) PyClass_New(PyObject *, PyObject *, PyObject *);
+PyAPI_FUNC(PyObject *) PyClass_New(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyInstance_New(PyObject *, PyObject *,
-                                            PyObject *);
-PyAPI_FUNC(PyObject *) PyInstance_NewRaw(PyObject *, PyObject *);
-PyAPI_FUNC(PyObject *) PyMethod_New(PyObject *, PyObject *, PyObject *);
+                                            PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyInstance_NewRaw(PyObject *, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyMethod_New(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyObject *) PyMethod_Function(PyObject *);
-PyAPI_FUNC(PyObject *) PyMethod_Self(PyObject *);
-PyAPI_FUNC(PyObject *) PyMethod_Class(PyObject *);
+PyAPI_FUNC(PyObject *) PyMethod_Function(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyMethod_Self(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyMethod_Class(PyObject *) PYSTON_NOEXCEPT;
 
 /* Look up attribute with name (a string) on instance object pinst, using
  * only the instance and base class dicts.  If a descriptor is found in
@@ -77,7 +77,7 @@ PyAPI_FUNC(PyObject *) PyMethod_Class(PyObject *);
  * can't fail, never sets an exception, and NULL is not an error (it just
  * means "not found").
  */
-PyAPI_FUNC(PyObject *) _PyInstance_Lookup(PyObject *pinst, PyObject *name);
+PyAPI_FUNC(PyObject *) _PyInstance_Lookup(PyObject *pinst, PyObject *name) PYSTON_NOEXCEPT;
 
 /* Macros for direct access to these values. Type checks are *not*
    done, so use with care. */
@@ -88,9 +88,9 @@ PyAPI_FUNC(PyObject *) _PyInstance_Lookup(PyObject *pinst, PyObject *name);
 #define PyMethod_GET_CLASS(meth) \
 	(((PyMethodObject *)meth) -> im_class)
 
-PyAPI_FUNC(int) PyClass_IsSubclass(PyObject *, PyObject *);
+PyAPI_FUNC(int) PyClass_IsSubclass(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(int) PyMethod_ClearFreeList(void);
+PyAPI_FUNC(int) PyMethod_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

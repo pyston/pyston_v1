@@ -42,21 +42,21 @@ PyAPI_DATA(PyTypeObject*) tuple_cls;
 #define PyTuple_Type (*tuple_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyTuple_Check(PyObject*);
+PyAPI_FUNC(bool) PyTuple_Check(PyObject*) PYSTON_NOEXCEPT;
 #if 0
 #define PyTuple_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TUPLE_SUBCLASS)
 #endif
 #define PyTuple_CheckExact(op) (Py_TYPE(op) == &PyTuple_Type)
 
-PyAPI_FUNC(PyObject *) PyTuple_New(Py_ssize_t size);
-PyAPI_FUNC(Py_ssize_t) PyTuple_Size(PyObject *);
-PyAPI_FUNC(PyObject *) PyTuple_GetItem(PyObject *, Py_ssize_t);
-PyAPI_FUNC(int) PyTuple_SetItem(PyObject *, Py_ssize_t, PyObject *);
-PyAPI_FUNC(PyObject *) PyTuple_GetSlice(PyObject *, Py_ssize_t, Py_ssize_t);
-PyAPI_FUNC(int) _PyTuple_Resize(PyObject **, Py_ssize_t);
-PyAPI_FUNC(PyObject *) PyTuple_Pack(Py_ssize_t, ...);
-PyAPI_FUNC(void) _PyTuple_MaybeUntrack(PyObject *);
+PyAPI_FUNC(PyObject *) PyTuple_New(Py_ssize_t size) PYSTON_NOEXCEPT;
+PyAPI_FUNC(Py_ssize_t) PyTuple_Size(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyTuple_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) PyTuple_SetItem(PyObject *, Py_ssize_t, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyTuple_GetSlice(PyObject *, Py_ssize_t, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyTuple_Resize(PyObject **, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyTuple_Pack(Py_ssize_t, ...) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _PyTuple_MaybeUntrack(PyObject *) PYSTON_NOEXCEPT;
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
@@ -68,7 +68,7 @@ PyAPI_FUNC(void) _PyTuple_MaybeUntrack(PyObject *);
 #define PyTuple_SET_ITEM(op, i, v) PyTuple_SetItem((PyObject*)op, i, v)
 //#define PyTuple_SET_ITEM(op, i, v) (((PyTupleObject *)(op))->ob_item[i] = v)
 
-PyAPI_FUNC(int) PyTuple_ClearFreeList(void);
+PyAPI_FUNC(int) PyTuple_ClearFreeList(void) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

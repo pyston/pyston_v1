@@ -65,7 +65,7 @@ PyAPI_DATA(PyTypeObject*) str_cls;
 #define PyString_Type (*str_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyString_Check(PyObject*);
+PyAPI_FUNC(bool) _PyString_Check(PyObject*) PYSTON_NOEXCEPT;
 #define PyString_Check(op) _PyString_Check((PyObject*)op)
 #if 0
 #define PyString_Check(op) \
@@ -73,31 +73,31 @@ PyAPI_FUNC(bool) _PyString_Check(PyObject*);
 #endif
 #define PyString_CheckExact(op) (Py_TYPE(op) == &PyString_Type)
 
-PyAPI_FUNC(PyObject *) PyString_FromStringAndSize(const char *, Py_ssize_t);
-PyAPI_FUNC(PyObject *) PyString_FromString(const char *);
+PyAPI_FUNC(PyObject *) PyString_FromStringAndSize(const char *, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyString_FromString(const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyString_FromFormatV(const char*, va_list)
-				Py_GCC_ATTRIBUTE((format(printf, 1, 0)));
+				PYSTON_NOEXCEPT Py_GCC_ATTRIBUTE((format(printf, 1, 0)));
 PyAPI_FUNC(PyObject *) PyString_FromFormat(const char*, ...)
-				Py_GCC_ATTRIBUTE((format(printf, 1, 2)));
-PyAPI_FUNC(Py_ssize_t) PyString_Size(PyObject *);
-PyAPI_FUNC(char *) PyString_AsString(PyObject *);
-PyAPI_FUNC(PyObject *) PyString_Repr(PyObject *, int);
-PyAPI_FUNC(void) PyString_Concat(PyObject **, PyObject *);
-PyAPI_FUNC(void) PyString_ConcatAndDel(PyObject **, PyObject *);
-PyAPI_FUNC(int) _PyString_Resize(PyObject **, Py_ssize_t);
-PyAPI_FUNC(int) _PyString_Eq(PyObject *, PyObject*);
-PyAPI_FUNC(PyObject *) PyString_Format(PyObject *, PyObject *);
+				PYSTON_NOEXCEPT Py_GCC_ATTRIBUTE((format(printf, 1, 2)));
+PyAPI_FUNC(Py_ssize_t) PyString_Size(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(char *) PyString_AsString(PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyString_Repr(PyObject *, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyString_Concat(PyObject **, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyString_ConcatAndDel(PyObject **, PyObject *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyString_Resize(PyObject **, Py_ssize_t) PYSTON_NOEXCEPT;
+PyAPI_FUNC(int) _PyString_Eq(PyObject *, PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyString_Format(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 // Pyston change: added const
 PyAPI_FUNC(PyObject *) _PyString_FormatLong(PyObject*, int, int,
-						  int, const char**, int*);
+						  int, const char**, int*) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyString_DecodeEscape(const char *, Py_ssize_t, 
 						   const char *, Py_ssize_t,
-						   const char *);
+						   const char *) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(void) PyString_InternInPlace(PyObject **);
-PyAPI_FUNC(void) PyString_InternImmortal(PyObject **);
-PyAPI_FUNC(PyObject *) PyString_InternFromString(const char *);
-PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void);
+PyAPI_FUNC(void) PyString_InternInPlace(PyObject **) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) PyString_InternImmortal(PyObject **) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyString_InternFromString(const char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void) PYSTON_NOEXCEPT;
 
 /* Use only if you know it's a string */
 #define PyString_CHECK_INTERNED(op) (((PyStringObject *)(op))->ob_sstate)
@@ -111,7 +111,7 @@ PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void);
 
 /* _PyString_Join(sep, x) is like sep.join(x).  sep must be PyStringObject*,
    x must be an iterable object. */
-PyAPI_FUNC(PyObject *) _PyString_Join(PyObject *sep, PyObject *x);
+PyAPI_FUNC(PyObject *) _PyString_Join(PyObject *sep, PyObject *x) PYSTON_NOEXCEPT;
 
 /* --- Generic Codecs ----------------------------------------------------- */
 
@@ -123,7 +123,7 @@ PyAPI_FUNC(PyObject*) PyString_Decode(
     Py_ssize_t size,            /* size of buffer */
     const char *encoding,       /* encoding */
     const char *errors          /* error handling */
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* Encodes a char buffer of the given size and returns a 
    Python object. */
@@ -133,7 +133,7 @@ PyAPI_FUNC(PyObject*) PyString_Encode(
     Py_ssize_t size,            /* number of chars to encode */
     const char *encoding,       /* encoding */
     const char *errors          /* error handling */
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* Encodes a string object and returns the result as Python 
    object. */
@@ -142,7 +142,7 @@ PyAPI_FUNC(PyObject*) PyString_AsEncodedObject(
     PyObject *str,	 	/* string object */
     const char *encoding,	/* encoding */
     const char *errors		/* error handling */
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* Encodes a string object and returns the result as Python string
    object.   
@@ -156,7 +156,7 @@ PyAPI_FUNC(PyObject*) PyString_AsEncodedString(
     PyObject *str,	 	/* string object */
     const char *encoding,	/* encoding */
     const char *errors		/* error handling */
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* Decodes a string object and returns the result as Python 
    object. */
@@ -165,7 +165,7 @@ PyAPI_FUNC(PyObject*) PyString_AsDecodedObject(
     PyObject *str,	 	/* string object */
     const char *encoding,	/* encoding */
     const char *errors		/* error handling */
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* Decodes a string object and returns the result as Python string
    object.  
@@ -179,7 +179,7 @@ PyAPI_FUNC(PyObject*) PyString_AsDecodedString(
     PyObject *str,	 	/* string object */
     const char *encoding,	/* encoding */
     const char *errors		/* error handling */
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* Provides access to the internal data buffer and size of a string
    object or the default encoded version of an Unicode object. Passing
@@ -203,7 +203,7 @@ PyAPI_FUNC(Py_ssize_t) _PyString_InsertThousandsGroupingLocale(char *buffer,
                                   Py_ssize_t n_buffer,
                                   char *digits,
                                   Py_ssize_t n_digits,
-                                  Py_ssize_t min_width);
+                                  Py_ssize_t min_width) PYSTON_NOEXCEPT;
 
 /* Using explicit passed-in values, insert the thousands grouping
    into the string pointed to by buffer.  For the argument descriptions,
@@ -214,13 +214,13 @@ PyAPI_FUNC(Py_ssize_t) _PyString_InsertThousandsGrouping(char *buffer,
                                   Py_ssize_t n_digits,
                                   Py_ssize_t min_width,
                                   const char *grouping,
-                                  const char *thousands_sep);
+                                  const char *thousands_sep) PYSTON_NOEXCEPT;
 
 /* Format the object based on the format_spec, as defined in PEP 3101
    (Advanced String Formatting). */
 PyAPI_FUNC(PyObject *) _PyBytes_FormatAdvanced(PyObject *obj,
 					       char *format_spec,
-					       Py_ssize_t format_spec_len);
+					       Py_ssize_t format_spec_len) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }

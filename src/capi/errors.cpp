@@ -29,7 +29,7 @@
 
 namespace pyston {
 
-extern "C" PyObject* PyErr_SetFromErrnoWithFilenameObject(PyObject* exc, PyObject* filenameObject) {
+extern "C" PyObject* PyErr_SetFromErrnoWithFilenameObject(PyObject* exc, PyObject* filenameObject) noexcept {
     PyObject* v;
     // Pyston change: made const
     const char* s;
@@ -101,7 +101,7 @@ extern "C" PyObject* PyErr_SetFromErrnoWithFilenameObject(PyObject* exc, PyObjec
     return NULL;
 }
 
-extern "C" PyObject* PyErr_SetFromErrnoWithFilename(PyObject* exc, const char* filename) {
+extern "C" PyObject* PyErr_SetFromErrnoWithFilename(PyObject* exc, const char* filename) noexcept {
     PyObject* name = filename ? PyString_FromString(filename) : NULL;
     PyObject* result = PyErr_SetFromErrnoWithFilenameObject(exc, name);
     Py_XDECREF(name);
@@ -109,7 +109,7 @@ extern "C" PyObject* PyErr_SetFromErrnoWithFilename(PyObject* exc, const char* f
 }
 
 #ifdef MS_WINDOWS
-extern "C" PyObject* PyErr_SetFromErrnoWithUnicodeFilename(PyObject* exc, const Py_UNICODE* filename) {
+extern "C" PyObject* PyErr_SetFromErrnoWithUnicodeFilename(PyObject* exc, const Py_UNICODE* filename) noexcept {
     PyObject* name = filename ? PyUnicode_FromUnicode(filename, wcslen(filename)) : NULL;
     PyObject* result = PyErr_SetFromErrnoWithFilenameObject(exc, name);
     Py_XDECREF(name);
@@ -117,7 +117,7 @@ extern "C" PyObject* PyErr_SetFromErrnoWithUnicodeFilename(PyObject* exc, const 
 }
 #endif /* MS_WINDOWS */
 
-extern "C" void PyErr_Fetch(PyObject** p_type, PyObject** p_value, PyObject** p_traceback) {
+extern "C" void PyErr_Fetch(PyObject** p_type, PyObject** p_value, PyObject** p_traceback) noexcept {
     PyThreadState* tstate = PyThreadState_GET();
 
     *p_type = tstate->curexc_type;
@@ -129,13 +129,13 @@ extern "C" void PyErr_Fetch(PyObject** p_type, PyObject** p_value, PyObject** p_
     tstate->curexc_traceback = NULL;
 }
 
-extern "C" PyObject* PyErr_SetFromErrno(PyObject* exc) {
+extern "C" PyObject* PyErr_SetFromErrno(PyObject* exc) noexcept {
     return PyErr_SetFromErrnoWithFilenameObject(exc, NULL);
 }
 
 /* Call when an exception has occurred but there is no way for Python
    to handle it.  Examples: exception in __del__ or during GC. */
-extern "C" void PyErr_WriteUnraisable(PyObject* obj) {
+extern "C" void PyErr_WriteUnraisable(PyObject* obj) noexcept {
     PyObject* f, *t, *v, *tb;
     PyErr_Fetch(&t, &v, &tb);
     f = PySys_GetObject("stderr");
@@ -191,7 +191,7 @@ static void print_error_text(PyObject* f, int offset, const char* text) noexcept
     Py_FatalError("unimplemented");
 }
 
-extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) {
+extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) noexcept {
     int err = 0;
     PyObject* f = PySys_GetObject("stderr");
     Py_INCREF(value);
@@ -287,7 +287,7 @@ static void handle_system_exit(void) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" void PyErr_PrintEx(int set_sys_last_vars) {
+extern "C" void PyErr_PrintEx(int set_sys_last_vars) noexcept {
     PyObject* exception, *v, *tb, *hook;
 
     if (PyErr_ExceptionMatches(PyExc_SystemExit)) {
@@ -350,7 +350,7 @@ extern "C" void PyErr_PrintEx(int set_sys_last_vars) {
 }
 
 
-extern "C" void PyErr_Print() {
+extern "C" void PyErr_Print() noexcept {
     PyErr_PrintEx(1);
 }
 }

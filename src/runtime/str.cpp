@@ -32,7 +32,7 @@
 
 namespace pyston {
 
-extern "C" PyObject* PyString_FromFormatV(const char* format, va_list vargs) {
+extern "C" PyObject* PyString_FromFormatV(const char* format, va_list vargs) noexcept {
     va_list count;
     Py_ssize_t n = 0;
     const char* f;
@@ -256,7 +256,7 @@ end:
     return string;
 }
 
-extern "C" PyObject* PyString_FromFormat(const char* format, ...) {
+extern "C" PyObject* PyString_FromFormat(const char* format, ...) noexcept {
     PyObject* ret;
     va_list vargs;
 
@@ -307,7 +307,7 @@ Py_LOCAL_INLINE(PyObject*) getnextarg(PyObject* args, Py_ssize_t arglen, Py_ssiz
     return NULL;
 }
 
-extern "C" PyObject* _PyString_FormatLong(PyObject*, int, int, int, const char**, int*) {
+extern "C" PyObject* _PyString_FormatLong(PyObject*, int, int, int, const char**, int*) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -413,7 +413,7 @@ Py_LOCAL_INLINE(int) formatchar(char* buf, size_t buflen, PyObject* v) {
 }
 
 #define FORMATBUFLEN (size_t)120
-extern "C" PyObject* PyString_Format(PyObject* format, PyObject* args) {
+extern "C" PyObject* PyString_Format(PyObject* format, PyObject* args) noexcept {
     char* fmt, *res;
     Py_ssize_t arglen, argidx;
     Py_ssize_t reslen, rescnt, fmtcnt;
@@ -1663,7 +1663,7 @@ Box* strCount2(BoxedString* self, Box* elt) {
     return boxInt(strCount2Unboxed(self, elt));
 }
 
-extern "C" PyObject* PyString_FromString(const char* s) {
+extern "C" PyObject* PyString_FromString(const char* s) noexcept {
     return boxStrConstant(s);
 }
 
@@ -1686,25 +1686,25 @@ char* getWriteableStringContents(BoxedString* s) {
     return &s->s[0];
 }
 
-extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) {
+extern "C" PyObject* PyString_FromStringAndSize(const char* s, ssize_t n) noexcept {
     if (s == NULL)
         return createUninitializedString(n);
     return boxStrConstantSize(s, n);
 }
 
-extern "C" char* PyString_AsString(PyObject* o) {
+extern "C" char* PyString_AsString(PyObject* o) noexcept {
     RELEASE_ASSERT(o->cls == str_cls, "");
 
     BoxedString* s = static_cast<BoxedString*>(o);
     return getWriteableStringContents(s);
 }
 
-extern "C" Py_ssize_t PyString_Size(PyObject* s) {
+extern "C" Py_ssize_t PyString_Size(PyObject* s) noexcept {
     RELEASE_ASSERT(s->cls == str_cls, "");
     return static_cast<BoxedString*>(s)->s.size();
 }
 
-extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) {
+extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     // This is only allowed to be called when there is only one user of the string (ie a refcount of 1 in CPython)
 
     assert(pv);

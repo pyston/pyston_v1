@@ -215,7 +215,7 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
     return retval;
 }
 
-extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) {
+extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
     static PyObject* name = NULL;
 
     /* Quick test for an exact match */
@@ -265,7 +265,7 @@ extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) {
     return recursive_isinstance(inst, cls);
 }
 
-extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) {
+extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) noexcept {
     PyObject* args, *tmp;
     va_list vargs;
 
@@ -308,7 +308,7 @@ static int recursive_issubclass(PyObject* derived, PyObject* cls) noexcept {
     return retval;
 }
 
-extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) {
+extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
     static PyObject* name = NULL;
 
     if (PyTuple_Check(cls)) {

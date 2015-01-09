@@ -39,16 +39,16 @@ PyAPI_DATA(PyTypeObject*) ellipsis_cls;
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 //#define PySlice_Check(op) (Py_TYPE(op) == &PySlice_Type)
-PyAPI_FUNC(bool) PySlice_Check(PyObject*);
+PyAPI_FUNC(bool) PySlice_Check(PyObject*) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(PyObject *) PySlice_New(PyObject* start, PyObject* stop,
-                                  PyObject* step);
-PyAPI_FUNC(PyObject *) _PySlice_FromIndices(Py_ssize_t start, Py_ssize_t stop);
+                                  PyObject* step) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) _PySlice_FromIndices(Py_ssize_t start, Py_ssize_t stop) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PySlice_GetIndices(PySliceObject *r, Py_ssize_t length,
-                                  Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step);
+                                  Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int) PySlice_GetIndicesEx(PySliceObject *r, Py_ssize_t length,
 				    Py_ssize_t *start, Py_ssize_t *stop, 
-				    Py_ssize_t *step, Py_ssize_t *slicelength);
+				    Py_ssize_t *step, Py_ssize_t *slicelength) PYSTON_NOEXCEPT;
 
 #ifdef __cplusplus
 }
