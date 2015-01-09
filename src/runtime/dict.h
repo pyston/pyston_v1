@@ -34,6 +34,8 @@ public:
     const IteratorType type;
 
     BoxedDictIterator(BoxedDict* d, IteratorType type);
+
+    DEFAULT_CLASS(dict_iterator_cls);
 };
 
 Box* dictGetitem(BoxedDict* self, Box* k);
@@ -49,7 +51,7 @@ Box* dictIterNext(Box* self);
 class BoxedDictView : public Box {
 public:
     BoxedDict* d;
-    BoxedDictView(BoxedDict* d, BoxedClass* view_cls);
+    BoxedDictView(BoxedDict* d);
 };
 
 Box* dictViewKeysIter(Box* self);

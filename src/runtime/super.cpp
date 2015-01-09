@@ -32,8 +32,9 @@ public:
     Box* obj;             // "the instance invoking super(); make be None"
     BoxedClass* obj_type; // "the type of the instance invoking super(); may be None"
 
-    BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type)
-        : Box(super_cls), type(type), obj(obj), obj_type(obj_type) {}
+    BoxedSuper(BoxedClass* type, Box* obj, BoxedClass* obj_type) : type(type), obj(obj), obj_type(obj_type) {}
+
+    DEFAULT_CLASS(super_cls);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == super_cls);
@@ -131,7 +132,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
 }
 
 void setupSuper() {
-    super_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false);
+    super_cls = new BoxedHeapClass(object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false);
 
     super_cls->giveAttr("__name__", boxStrConstant("super"));
 

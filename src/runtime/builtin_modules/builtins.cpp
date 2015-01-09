@@ -26,6 +26,7 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/classobj.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
@@ -262,8 +263,11 @@ Box* open(Box* arg1, Box* arg2) {
     const std::string& mode = static_cast<BoxedString*>(arg2)->s;
 
     FILE* f = fopen(fn.c_str(), mode.c_str());
-    if (!f)
-        raiseExcHelper(IOError, "[Errno %d] %s: '%s'", errno, strerror(errno), fn.c_str());
+    if (!f) {
+        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
+        checkAndThrowCAPIException();
+        abort(); // unreachable;
+    }
 
     return new BoxedFile(f, fn, mode);
 }
@@ -533,7 +537,7 @@ Box* exceptionNew1(BoxedClass* cls) {
 class BoxedException : public Box {
 public:
     HCAttrs attrs;
-    BoxedException(BoxedClass* cls) : Box(cls) {}
+    BoxedException() {}
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
@@ -548,11 +552,7 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
         raiseExcHelper(TypeError, "BaseException.__new__(%s): %s is not a subtype of BaseException",
                        getNameOfClass(cls)->c_str(), getNameOfClass(cls)->c_str());
 
-    assert(cls->tp_basicsize >= sizeof(BoxedException));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    memset((char*)mem + sizeof(BoxedException), 0, cls->tp_basicsize - sizeof(BoxedException));
-    BoxedException* rtn = ::new (mem) BoxedException(cls);
-    initUserAttrs(rtn, cls);
+    BoxedException* rtn = new (cls) BoxedException();
 
     // TODO: this should be a MemberDescriptor and set during init
     if (args->elts.size() == 1)
@@ -587,7 +587,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls = new BoxedHeapClass(type_cls, base, NULL, offsetof(BoxedException, attrs), size, false);
+    BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), size, false);
     cls->giveAttr("__name__", boxStrConstant(name));
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
@@ -609,8 +609,7 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
 
     try {
         BoxedClass* base = Exception;
-        BoxedClass* cls
-            = new BoxedHeapClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
+        BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
 
         char* dot_pos = strchr(name, '.');
         RELEASE_ASSERT(dot_pos, "");
@@ -634,7 +633,9 @@ private:
 
 public:
     BoxedEnumerate(BoxIterator iterator_begin, BoxIterator iterator_end, int64_t idx)
-        : Box(enumerate_cls), iterator(iterator_begin), iterator_end(iterator_end), idx(idx) {}
+        : iterator(iterator_begin), iterator_end(iterator_end), idx(idx) {}
+
+    DEFAULT_CLASS(enumerate_cls);
 
     static Box* new_(Box* cls, Box* obj, Box* start) {
         RELEASE_ASSERT(cls == enumerate_cls, "");
@@ -906,11 +907,11 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
-    notimplemented_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
+    notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
     notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
-    NotImplemented = new Box(notimplemented_cls);
+    NotImplemented = new (notimplemented_cls) Box();
     gc::registerPermanentRoot(NotImplemented);
 
     builtins_module->giveAttr("NotImplemented", NotImplemented);
@@ -1015,8 +1016,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("__import__", new BoxedFunction(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
 
-    enumerate_cls
-        = new BoxedHeapClass(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
+    enumerate_cls = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
     enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
     enumerate_cls->giveAttr(
         "__new__",
@@ -1091,9 +1091,9 @@ void setupBuiltins() {
     builtins_module->giveAttr("classmethod", classmethod_cls);
 
 
-    PyExc_RecursionErrorInst = new BoxedException(RuntimeError);
+    PyExc_RecursionErrorInst = new (RuntimeError) BoxedException();
     gc::registerPermanentRoot(PyExc_RecursionErrorInst);
-    PyExc_MemoryErrorInst = new BoxedException(MemoryError);
+    PyExc_MemoryErrorInst = new (MemoryError) BoxedException();
     gc::registerPermanentRoot(PyExc_MemoryErrorInst);
 }
 }

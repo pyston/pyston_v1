@@ -20,7 +20,7 @@
 
 namespace pyston {
 
-BoxedListIterator::BoxedListIterator(BoxedList* l) : Box(list_iterator_cls), l(l), pos(0) {
+BoxedListIterator::BoxedListIterator(BoxedList* l) : l(l), pos(0) {
 }
 
 

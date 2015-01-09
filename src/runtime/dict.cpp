@@ -95,7 +95,7 @@ Box* dictViewKeys(BoxedDict* self) {
         raiseExcHelper(TypeError, "descriptor 'viewkeys' requires a 'dict' object but received a '%s'",
                        getTypeName(self)->c_str());
     }
-    BoxedDictView* rtn = new BoxedDictView(self, dict_keys_cls);
+    BoxedDictView* rtn = new (dict_keys_cls) BoxedDictView(self);
     return rtn;
 }
 
@@ -104,7 +104,7 @@ Box* dictViewValues(BoxedDict* self) {
         raiseExcHelper(TypeError, "descriptor 'viewvalues' requires a 'dict' object but received a '%s'",
                        getTypeName(self)->c_str());
     }
-    BoxedDictView* rtn = new BoxedDictView(self, dict_values_cls);
+    BoxedDictView* rtn = new (dict_values_cls) BoxedDictView(self);
     return rtn;
 }
 
@@ -113,7 +113,7 @@ Box* dictViewItems(BoxedDict* self) {
         raiseExcHelper(TypeError, "descriptor 'viewitems' requires a 'dict' object but received a '%s'",
                        getTypeName(self)->c_str());
     }
-    BoxedDictView* rtn = new BoxedDictView(self, dict_items_cls);
+    BoxedDictView* rtn = new (dict_items_cls) BoxedDictView(self);
     return rtn;
 }
 
@@ -465,11 +465,11 @@ extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
 }
 
 void setupDict() {
-    dict_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
+    dict_iterator_cls = new BoxedHeapClass(object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false);
 
-    dict_keys_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
-    dict_values_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
-    dict_items_cls = new BoxedHeapClass(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
+    dict_keys_cls = new BoxedHeapClass(object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
+    dict_values_cls = new BoxedHeapClass(object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
+    dict_items_cls = new BoxedHeapClass(object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false);
 
     dict_cls->giveAttr("__name__", boxStrConstant("dict"));
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));

@@ -38,8 +38,7 @@ public:
     BoxedTuple* bases;
     BoxedString* name;
 
-    BoxedClassobj(BoxedClass* metaclass, BoxedString* name, BoxedTuple* bases)
-        : Box(metaclass), bases(bases), name(name) {}
+    BoxedClassobj(BoxedString* name, BoxedTuple* bases) : bases(bases), name(name) {}
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == classobj_cls);
@@ -55,7 +54,9 @@ public:
 
     BoxedClassobj* inst_cls;
 
-    BoxedInstance(BoxedClassobj* inst_cls) : Box(instance_cls), inst_cls(inst_cls) {}
+    BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) {}
+
+    DEFAULT_CLASS(instance_cls);
 
     static void gcHandler(GCVisitor* v, Box* _o) {
         assert(_o->cls == instance_cls);

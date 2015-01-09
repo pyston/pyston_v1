@@ -83,7 +83,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
         raiseExcHelper(TypeError, "PyClass_New: bases must be a tuple");
     BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
 
-    BoxedClassobj* made = new BoxedClassobj(cls, name, bases);
+    BoxedClassobj* made = new (cls) BoxedClassobj(name, bases);
 
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));
     made->giveAttr("__doc__", None);
@@ -270,9 +270,9 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
 }
 
 void setupClassobj() {
-    classobj_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
+    classobj_cls = new BoxedHeapClass(object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
                                       sizeof(BoxedClassobj), false);
-    instance_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
+    instance_cls = new BoxedHeapClass(object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
                                       sizeof(BoxedInstance), false);
 
     classobj_cls->giveAttr("__name__", boxStrConstant("classobj"));

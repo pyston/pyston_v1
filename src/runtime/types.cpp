@@ -57,6 +57,38 @@ bool IN_SHUTDOWN = false;
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
 
+extern "C" PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
+    assert(cls);
+    RELEASE_ASSERT(nitems == 0, "");
+    RELEASE_ASSERT(cls->tp_itemsize == 0, "");
+
+    const size_t size = cls->tp_basicsize;
+
+    // Maybe we should only zero the extension memory?
+    // I'm not sure we have the information at the moment, but when we were in Box::operator new()
+    // we knew which memory was beyond C++ class.
+    void* mem = gc_alloc(size, gc::GCKind::PYTHON);
+    RELEASE_ASSERT(mem, "");
+
+    Box* rtn = static_cast<Box*>(mem);
+
+    PyObject_Init(rtn, cls);
+    assert(rtn->cls);
+
+    return rtn;
+}
+
+// Analogue of PyType_GenericNew
+void* Box::operator new(size_t size, BoxedClass* cls) {
+    assert(cls);
+    ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
+    assert(cls->tp_alloc);
+
+    void* mem = cls->tp_alloc(cls, 0);
+    RELEASE_ASSERT(mem, "");
+    return mem;
+}
+
 Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
     assert(obj->cls == this);
 
@@ -170,7 +202,7 @@ void BoxIterator::gcHandler(GCVisitor* v) {
 std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
-    : Box(function_cls), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
+    : f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
     if (f->source) {
         assert(f->source->ast);
         // this->giveAttr("__name__", boxString(&f->source->ast->name));
@@ -188,7 +220,7 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
 
 extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
                                         bool isGenerator)
-    : Box(function_cls), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL) {
+    : f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -232,7 +264,7 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
     }
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : Box(module_cls), fn(fn) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : fn(fn) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
 }
@@ -690,7 +722,9 @@ private:
     Box* b;
 
 public:
-    AttrWrapper(Box* b) : Box(attrwrapper_cls), b(b) {}
+    AttrWrapper(Box* b) : b(b) {}
+
+    DEFAULT_CLASS(attrwrapper_cls);
 
     static void gcHandler(GCVisitor* v, Box* b) {
         boxGCHandler(v, b);
@@ -795,12 +829,7 @@ Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
             raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
     }
 
-    assert(cls->tp_basicsize >= sizeof(Box));
-    void* mem = gc::gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-
-    Box* rtn = ::new (mem) Box(cls);
-    initUserAttrs(rtn, cls);
-    return rtn;
+    return new (cls) Box();
 }
 
 Box* objectInit(Box* b, BoxedTuple* args) {
@@ -821,27 +850,62 @@ Box* objectStr(Box* obj) {
     return obj->reprIC();
 }
 
+// cls should be obj->cls.
+// Added as parameter because it should typically be available
+inline void initUserAttrs(Box* obj, BoxedClass* cls) {
+    assert(obj->cls == cls);
+    if (cls->attrs_offset) {
+        HCAttrs* attrs = obj->getAttrsPtr();
+        attrs = new ((void*)attrs) HCAttrs();
+    }
+}
+
+extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
+    assert(op);
+    assert(tp);
+
+    assert(gc::isValidGCObject(op));
+    assert(gc::isValidGCObject(tp));
+
+    Py_TYPE(op) = tp;
+
+    // I think CPython defers the dict creation (equivalent of our initUserAttrs) to the
+    // first time that an attribute gets set.
+    // Our HCAttrs object already includes this optimization of no-allocation-if-empty,
+    // but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
+    // TODO It does mean that anything not defering to this function will have to call
+    // initUserAttrs themselves, though.
+    initUserAttrs(op, tp);
+
+    return op;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
 
-    object_cls = new BoxedClass(NULL, NULL, &boxGCHandler, 0, sizeof(Box), false);
-    type_cls
-        = new BoxedHeapClass(NULL, object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedClass), false);
-    type_cls->cls = type_cls;
-    object_cls->cls = type_cls;
+    // We have to do a little dance to get object_cls and type_cls set up, since the normal
+    // object-creation routines look at the class to see the allocation size.
+    void* mem = gc_alloc(sizeof(BoxedClass), gc::GCKind::PYTHON);
+    object_cls = ::new (mem) BoxedClass(NULL, &boxGCHandler, 0, sizeof(Box), false);
+    mem = gc_alloc(sizeof(BoxedHeapClass), gc::GCKind::PYTHON);
+    type_cls = ::new (mem)
+        BoxedHeapClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedHeapClass), false);
+    PyObject_Init(object_cls, type_cls);
+    PyObject_Init(type_cls, type_cls);
 
-    none_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
-    None = new Box(none_cls);
+    none_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
+    None = new (none_cls) Box();
+    assert(None->cls);
     gc::registerPermanentRoot(None);
 
     // You can't actually have an instance of basestring
-    basestring_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(Box), false);
+    basestring_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
 
     // TODO we leak all the string data!
-    str_cls = new BoxedHeapClass(type_cls, basestring_cls, NULL, 0, sizeof(BoxedString), false);
-    unicode_cls = new BoxedHeapClass(type_cls, basestring_cls, NULL, 0, sizeof(BoxedUnicode), false);
+    str_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedString), false);
+    unicode_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedUnicode), false);
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
     type_cls->giveAttr("__base__", object_cls);
@@ -851,42 +915,39 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
-    tuple_cls = new BoxedHeapClass(type_cls, object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false);
+    tuple_cls = new BoxedHeapClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false);
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
 
 
-    module_cls
-        = new BoxedHeapClass(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
+    module_cls = new BoxedHeapClass(object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false);
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    int_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedInt), false);
-    bool_cls = new BoxedHeapClass(type_cls, int_cls, NULL, 0, sizeof(BoxedBool), false);
-    complex_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedComplex), false);
+    int_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedInt), false);
+    bool_cls = new BoxedHeapClass(int_cls, NULL, 0, sizeof(BoxedBool), false);
+    complex_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedComplex), false);
     // TODO we're leaking long memory!
-    long_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedLong), false);
-    float_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedFloat), false);
-    function_cls = new BoxedHeapClass(type_cls, object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
+    long_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedLong), false);
+    float_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFloat), false);
+    function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
                                       sizeof(BoxedFunction), false);
     instancemethod_cls
-        = new BoxedHeapClass(type_cls, object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false);
-    list_cls = new BoxedHeapClass(type_cls, object_cls, &listGCHandler, 0, sizeof(BoxedList), false);
-    slice_cls = new BoxedHeapClass(type_cls, object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false);
-    dict_cls = new BoxedHeapClass(type_cls, object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false);
-    file_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedFile), false);
-    set_cls = new BoxedHeapClass(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
-    frozenset_cls = new BoxedHeapClass(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
-    member_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
-    closure_cls = new BoxedHeapClass(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
-                                     sizeof(BoxedClosure), false);
-    property_cls = new BoxedHeapClass(type_cls, object_cls, &propertyGCHandler, 0, sizeof(BoxedProperty), false);
-    staticmethod_cls
-        = new BoxedHeapClass(type_cls, object_cls, &staticmethodGCHandler, 0, sizeof(BoxedStaticmethod), false);
-    classmethod_cls
-        = new BoxedHeapClass(type_cls, object_cls, &classmethodGCHandler, 0, sizeof(BoxedClassmethod), false);
-    attrwrapper_cls = new BoxedHeapClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
+        = new BoxedHeapClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false);
+    list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false);
+    slice_cls = new BoxedHeapClass(object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false);
+    dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false);
+    file_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFile), false);
+    set_cls = new BoxedHeapClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
+    frozenset_cls = new BoxedHeapClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
+    member_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
+    closure_cls
+        = new BoxedHeapClass(object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure), false);
+    property_cls = new BoxedHeapClass(object_cls, &propertyGCHandler, 0, sizeof(BoxedProperty), false);
+    staticmethod_cls = new BoxedHeapClass(object_cls, &staticmethodGCHandler, 0, sizeof(BoxedStaticmethod), false);
+    classmethod_cls = new BoxedHeapClass(object_cls, &classmethodGCHandler, 0, sizeof(BoxedClassmethod), false);
+    attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);

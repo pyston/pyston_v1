@@ -216,8 +216,9 @@ public:
 
     void freeze();
 
-    BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-               bool is_user_defined);
+    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
+
+    DEFAULT_CLASS(type_cls);
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -228,8 +229,7 @@ public:
     PyBufferProcs as_buffer;
     PyObject* ht_name, *ht_slots;
 
-    BoxedHeapClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                   bool is_user_defined);
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
@@ -278,19 +278,22 @@ public:
     HiddenClass* delAttrToMakeHC(const std::string& attr);
 };
 
-
 class BoxedInt : public Box {
 public:
     int64_t n;
 
-    BoxedInt(BoxedClass* cls, int64_t n) __attribute__((visibility("default"))) : Box(cls), n(n) {}
+    BoxedInt(int64_t n) __attribute__((visibility("default"))) : n(n) {}
+
+    DEFAULT_CLASS(int_cls);
 };
 
 class BoxedFloat : public Box {
 public:
     double d;
 
-    BoxedFloat(BoxedClass* cls, double d) __attribute__((visibility("default"))) : Box(cls), d(d) {}
+    BoxedFloat(double d) __attribute__((visibility("default"))) : d(d) {}
+
+    DEFAULT_CLASS(float_cls);
 };
 
 class BoxedComplex : public Box {
@@ -298,12 +301,16 @@ public:
     double real;
     double imag;
 
-    BoxedComplex(double r, double i) __attribute__((visibility("default"))) : Box(complex_cls), real(r), imag(i) {}
+    BoxedComplex(double r, double i) __attribute__((visibility("default"))) : real(r), imag(i) {}
+
+    DEFAULT_CLASS(complex_cls);
 };
 
 class BoxedBool : public BoxedInt {
 public:
-    BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(bool_cls, b ? 1 : 0) {}
+    BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(b ? 1 : 0) {}
+
+    DEFAULT_CLASS(bool_cls);
 };
 
 class BoxedString : public Box {
@@ -311,9 +318,11 @@ public:
     // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
     std::string s;
 
-    BoxedString(const char* s, size_t n) __attribute__((visibility("default"))) : Box(str_cls), s(s, n) {}
-    BoxedString(const std::string&& s) __attribute__((visibility("default"))) : Box(str_cls), s(std::move(s)) {}
-    BoxedString(const std::string& s) __attribute__((visibility("default"))) : Box(str_cls), s(s) {}
+    BoxedString(const char* s, size_t n) __attribute__((visibility("default"))) : s(s, n) {}
+    BoxedString(const std::string&& s) __attribute__((visibility("default"))) : s(std::move(s)) {}
+    BoxedString(const std::string& s) __attribute__((visibility("default"))) : s(s) {}
+
+    DEFAULT_CLASS(str_cls);
 };
 
 class BoxedUnicode : public Box {
@@ -325,8 +334,9 @@ public:
     // obj is NULL for unbound instancemethod
     Box* obj, *func;
 
-    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
-    : Box(instancemethod_cls), obj(obj), func(func) {}
+    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default"))) : obj(obj), func(func) {}
+
+    DEFAULT_CLASS(instancemethod_cls);
 };
 
 class GCdArray {
@@ -352,11 +362,13 @@ public:
 
     DS_DEFINE_MUTEX(lock);
 
-    BoxedList() __attribute__((visibility("default"))) : Box(list_cls), size(0), capacity(0) {}
+    BoxedList() __attribute__((visibility("default"))) : size(0), capacity(0) {}
 
     void ensure(int space);
     void shrink();
     static const int INITIAL_CAPACITY;
+
+    DEFAULT_CLASS(list_cls);
 };
 
 class BoxedTuple : public Box {
@@ -364,8 +376,10 @@ public:
     typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
     GCVector elts;
 
-    BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : Box(tuple_cls), elts(elts) {}
-    BoxedTuple(GCVector&& elts) __attribute__((visibility("default"))) : Box(tuple_cls), elts(std::move(elts)) {}
+    BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : elts(elts) {}
+    BoxedTuple(GCVector&& elts) __attribute__((visibility("default"))) : elts(std::move(elts)) {}
+
+    DEFAULT_CLASS(tuple_cls);
 };
 extern "C" BoxedTuple* EmptyTuple;
 
@@ -377,7 +391,9 @@ public:
     bool closed;
     bool softspace;
     BoxedFile(FILE* f, std::string fname, std::string fmode) __attribute__((visibility("default")))
-    : Box(file_cls), f(f), fname(fname), fmode(fmode), closed(false), softspace(false) {}
+    : f(f), fname(fname), fmode(fmode), closed(false), softspace(false) {}
+
+    DEFAULT_CLASS(file_cls);
 };
 
 struct PyHasher {
@@ -398,7 +414,9 @@ public:
 
     DictMap d;
 
-    BoxedDict() __attribute__((visibility("default"))) : Box(dict_cls) {}
+    BoxedDict() __attribute__((visibility("default"))) {}
+
+    DEFAULT_CLASS(dict_cls);
 
     Box* getOrNull(Box* k) {
         const auto& p = d.find(k);
@@ -424,6 +442,8 @@ public:
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   bool isGenerator = false);
+
+    DEFAULT_CLASS(function_cls);
 };
 
 class BoxedModule : public Box {
@@ -434,12 +454,16 @@ public:
 
     BoxedModule(const std::string& name, const std::string& fn);
     std::string name();
+
+    DEFAULT_CLASS(module_cls);
 };
 
 class BoxedSlice : public Box {
 public:
     Box* start, *stop, *step;
-    BoxedSlice(Box* lower, Box* upper, Box* step) : Box(slice_cls), start(lower), stop(upper), step(step) {}
+    BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
+
+    DEFAULT_CLASS(slice_cls);
 };
 
 class BoxedMemberDescriptor : public Box {
@@ -468,9 +492,10 @@ public:
 
     int offset;
 
-    BoxedMemberDescriptor(MemberType type, int offset) : Box(member_cls), type(type), offset(offset) {}
-    BoxedMemberDescriptor(PyMemberDef* member)
-        : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
+    BoxedMemberDescriptor(MemberType type, int offset) : type(type), offset(offset) {}
+    BoxedMemberDescriptor(PyMemberDef* member) : type((MemberType)member->type), offset(member->offset) {}
+
+    DEFAULT_CLASS(member_cls);
 };
 
 class BoxedProperty : public Box {
@@ -481,21 +506,27 @@ public:
     Box* prop_doc;
 
     BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
-        : Box(property_cls), prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
+        : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
+
+    DEFAULT_CLASS(property_cls);
 };
 
 class BoxedStaticmethod : public Box {
 public:
     Box* sm_callable;
 
-    BoxedStaticmethod(Box* callable) : Box(staticmethod_cls), sm_callable(callable){};
+    BoxedStaticmethod(Box* callable) : sm_callable(callable){};
+
+    DEFAULT_CLASS(staticmethod_cls);
 };
 
 class BoxedClassmethod : public Box {
 public:
     Box* cm_callable;
 
-    BoxedClassmethod(Box* callable) : Box(classmethod_cls), cm_callable(callable){};
+    BoxedClassmethod(Box* callable) : cm_callable(callable){};
+
+    DEFAULT_CLASS(classmethod_cls);
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?
@@ -504,7 +535,9 @@ public:
     HCAttrs attrs;
     BoxedClosure* parent;
 
-    BoxedClosure(BoxedClosure* parent) : Box(closure_cls), parent(parent) {}
+    BoxedClosure(BoxedClosure* parent) : parent(parent) {}
+
+    DEFAULT_CLASS(closure_cls);
 };
 
 class BoxedGenerator : public Box {
@@ -523,6 +556,8 @@ public:
     void* stack_begin;
 
     BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
+
+    DEFAULT_CLASS(generator_cls);
 };
 
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
@@ -534,16 +569,6 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args);
 extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
     *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
     *StopIteration, *GeneratorExit, *SyntaxError;
-
-// cls should be obj->cls.
-// Added as parameter because it should typically be available
-inline void initUserAttrs(Box* obj, BoxedClass* cls) {
-    assert(obj->cls == cls);
-    if (cls->attrs_offset) {
-        HCAttrs* attrs = obj->getAttrsPtr();
-        attrs = new ((void*)attrs) HCAttrs();
-    }
-}
 
 Box* makeAttrWrapper(Box* b);
 }

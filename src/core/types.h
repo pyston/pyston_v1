@@ -354,26 +354,10 @@ enum class GCKind : uint8_t {
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
 }
 
-class PythonGCObject {
-public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) {
-        return gc_alloc(size, gc::GCKind::PYTHON);
-    }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
-};
-
 class ConservativeGCObject {
 public:
     void* operator new(size_t size) __attribute__((visibility("default"))) {
         return gc_alloc(size, gc::GCKind::CONSERVATIVE);
-    }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
-};
-
-class UntrackedGCObject {
-public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) {
-        return gc_alloc(size, gc::GCKind::UNTRACKED);
     }
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 };
@@ -399,25 +383,18 @@ public:
 
 class BoxedString;
 
-class Box : public PythonGCObject {
+class Box {
 public:
+    // Add a no-op constructor to make sure that we don't zero-initialize cls
+    Box() {}
+
+    void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+
+    // Note: cls gets initialized in the new() function.
     BoxedClass* cls;
 
     llvm::iterator_range<BoxIterator> pyElements();
-
-    Box(BoxedClass* cls) : cls(cls) {
-        // if (TRACK_ALLOCATIONS) {
-        // int id = Stats::getStatId("allocated_" + *getNameOfClass(c));
-        // Stats::log(id);
-        //}
-
-        // the only way cls should be NULL is if we're creating the type_cls
-        // object itself:
-        if (cls == NULL) {
-            ASSERT(type_cls == NULL, "should pass a non-null cls here");
-        } else {
-        }
-    }
 
     HCAttrs* getAttrsPtr();
 
@@ -439,12 +416,20 @@ public:
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
+#define DEFAULT_CLASS(default_cls)                                                                                     \
+    void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        return Box::operator new(size, cls);                                                                           \
+    }                                                                                                                  \
+    void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
+        return Box::operator new(size, default_cls);                                                                   \
+    }
+
 // CPython C API compatibility class:
 class BoxVar : public Box {
 public:
     Py_ssize_t ob_size;
 
-    BoxVar(BoxedClass* cls, Py_ssize_t ob_size) : Box(cls), ob_size(ob_size) {}
+    BoxVar(Py_ssize_t ob_size) : ob_size(ob_size) {}
 };
 static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
 

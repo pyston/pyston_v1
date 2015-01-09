@@ -26,9 +26,11 @@ private:
     const int64_t start, stop, step;
 
 public:
-    BoxedXrange(i64 start, i64 stop, i64 step) : Box(xrange_cls), start(start), stop(stop), step(step) {}
+    BoxedXrange(i64 start, i64 stop, i64 step) : start(start), stop(stop), step(step) {}
 
     friend class BoxedXrangeIterator;
+
+    DEFAULT_CLASS(xrange_cls);
 };
 
 class BoxedXrangeIterator : public Box {
@@ -37,7 +39,9 @@ private:
     int64_t cur;
 
 public:
-    BoxedXrangeIterator(BoxedXrange* xrange) : Box(xrange_iterator_cls), xrange(xrange), cur(xrange->start) {}
+    BoxedXrangeIterator(BoxedXrange* xrange) : xrange(xrange), cur(xrange->start) {}
+
+    DEFAULT_CLASS(xrange_iterator_cls);
 
     static bool xrangeIteratorHasnextUnboxed(Box* s) __attribute__((visibility("default"))) {
         assert(s->cls == xrange_iterator_cls);
@@ -113,9 +117,9 @@ Box* xrangeIter(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedXrange), false);
+    xrange_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedXrange), false);
     xrange_cls->giveAttr("__name__", boxStrConstant("xrange"));
-    xrange_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
+    xrange_iterator_cls = new BoxedHeapClass(object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
                                              sizeof(BoxedXrangeIterator), false);
     xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
 

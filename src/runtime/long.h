@@ -30,7 +30,9 @@ class BoxedLong : public Box {
 public:
     mpz_t n;
 
-    BoxedLong(BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls) {}
+    BoxedLong() __attribute__((visibility("default"))) {}
+
+    DEFAULT_CLASS(long_cls);
 };
 
 extern "C" Box* createLong(const std::string* s);

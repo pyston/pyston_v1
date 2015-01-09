@@ -382,8 +382,7 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
 
 
 void setupTuple() {
-    tuple_iterator_cls
-        = new BoxedHeapClass(type_cls, object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false);
+    tuple_iterator_cls = new BoxedHeapClass(object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false);
 
     tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
 

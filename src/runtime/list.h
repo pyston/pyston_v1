@@ -26,6 +26,8 @@ public:
     BoxedList* l;
     int pos;
     BoxedListIterator(BoxedList* l);
+
+    DEFAULT_CLASS(list_iterator_cls);
 };
 
 Box* listIter(Box* self);
