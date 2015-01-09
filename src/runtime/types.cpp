@@ -57,9 +57,7 @@ bool IN_SHUTDOWN = false;
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
 
-PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
-    abort(); // untested
-
+extern "C" PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
     RELEASE_ASSERT(nitems == 0, "");
     RELEASE_ASSERT(cls->tp_itemsize == 0, "");
@@ -75,6 +73,7 @@ PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     Box* rtn = static_cast<Box*>(mem);
 
     PyObject_Init(rtn, cls);
+    assert(rtn->cls);
 
     return rtn;
 }
@@ -898,6 +897,7 @@ void setupRuntime() {
 
     none_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
     None = new (none_cls) Box();
+    assert(None->cls);
     gc::registerPermanentRoot(None);
 
     // You can't actually have an instance of basestring

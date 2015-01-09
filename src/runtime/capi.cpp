@@ -63,17 +63,6 @@ int Py_Py3kWarningFlag;
 
 BoxedClass* capifunc_cls;
 
-extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* cls, Py_ssize_t nitems) noexcept {
-    RELEASE_ASSERT(nitems == 0, "unimplemented");
-    RELEASE_ASSERT(cls->tp_itemsize == 0, "unimplemented");
-
-    auto rtn = (PyObject*)gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    memset(rtn, 0, cls->tp_basicsize);
-
-    PyObject_Init(rtn, cls);
-    return rtn;
-}
-
 BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
 
 Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {

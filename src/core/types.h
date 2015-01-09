@@ -385,6 +385,9 @@ class BoxedString;
 
 class Box {
 public:
+    // Add a no-op constructor to make sure that we don't zero-initialize cls
+    Box() {}
+
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
