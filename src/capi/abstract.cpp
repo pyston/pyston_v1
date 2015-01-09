@@ -353,4 +353,8 @@ extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
     }
     return recursive_issubclass(derived, cls);
 }
+
+extern "C" PyObject* _PyObject_CallFunction_SizeT(PyObject* callable, char* format, ...) noexcept {
+    Py_FatalError("unimplemented");
+}
 }

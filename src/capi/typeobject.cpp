@@ -79,6 +79,32 @@ RICHCMP_WRAPPER(ne, Py_NE)
 RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
+static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    coercion func = (coercion)wrapped;
+    PyObject* other, *res;
+    int ok;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    other = PyTuple_GET_ITEM(args, 0);
+    ok = func(&self, &other);
+    if (ok < 0)
+        return NULL;
+    if (ok > 0) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+    res = PyTuple_New(2);
+    if (res == NULL) {
+        Py_DECREF(self);
+        Py_DECREF(other);
+        return NULL;
+    }
+    PyTuple_SET_ITEM(res, 0, self);
+    PyTuple_SET_ITEM(res, 1, other);
+    return res;
+}
+
 static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     ternaryfunc func = (ternaryfunc)wrapped;
     PyObject* other;
@@ -853,6 +879,12 @@ static int slot_nb_nonzero(PyObject* self) noexcept {
     return result;
 }
 
+static PyObject* slot_nb_index(PyObject* self) noexcept {
+    static PyObject* index_str;
+    return call_method(self, "__index__", &index_str, "()");
+}
+
+
 SLOT0(slot_nb_invert, "__invert__")
 SLOT1BIN(slot_nb_lshift, nb_lshift, "__lshift__", "__rlshift__")
 SLOT1BIN(slot_nb_rshift, nb_rshift, "__rshift__", "__rrshift__")
@@ -860,13 +892,82 @@ SLOT1BIN(slot_nb_and, nb_and, "__and__", "__rand__")
 SLOT1BIN(slot_nb_xor, nb_xor, "__xor__", "__rxor__")
 SLOT1BIN(slot_nb_or, nb_or, "__or__", "__ror__")
 
-static int slot_nb_coerce(PyObject** a, PyObject** b) noexcept;
+static int slot_nb_coerce(PyObject** a, PyObject** b) noexcept {
+    static PyObject* coerce_str;
+    PyObject* self = *a, * other = *b;
+
+    if (self->cls->tp_as_number != NULL && self->cls->tp_as_number->nb_coerce == slot_nb_coerce) {
+        PyObject* r;
+        r = call_maybe(self, "__coerce__", &coerce_str, "(O)", other);
+        if (r == NULL)
+            return -1;
+        if (r == Py_NotImplemented) {
+            Py_DECREF(r);
+        } else {
+            if (!PyTuple_Check(r) || PyTuple_GET_SIZE(r) != 2) {
+                PyErr_SetString(PyExc_TypeError, "__coerce__ didn't return a 2-tuple");
+                Py_DECREF(r);
+                return -1;
+            }
+            *a = PyTuple_GET_ITEM(r, 0);
+            Py_INCREF(*a);
+            *b = PyTuple_GET_ITEM(r, 1);
+            Py_INCREF(*b);
+            Py_DECREF(r);
+            return 0;
+        }
+    }
+    if (other->cls->tp_as_number != NULL && other->cls->tp_as_number->nb_coerce == slot_nb_coerce) {
+        PyObject* r;
+        r = call_maybe(other, "__coerce__", &coerce_str, "(O)", self);
+        if (r == NULL)
+            return -1;
+        if (r == Py_NotImplemented) {
+            Py_DECREF(r);
+            return 1;
+        }
+        if (!PyTuple_Check(r) || PyTuple_GET_SIZE(r) != 2) {
+            PyErr_SetString(PyExc_TypeError, "__coerce__ didn't return a 2-tuple");
+            Py_DECREF(r);
+            return -1;
+        }
+        *a = PyTuple_GET_ITEM(r, 1);
+        Py_INCREF(*a);
+        *b = PyTuple_GET_ITEM(r, 0);
+        Py_INCREF(*b);
+        Py_DECREF(r);
+        return 0;
+    }
+    return 1;
+}
 
 SLOT0(slot_nb_int, "__int__")
 SLOT0(slot_nb_long, "__long__")
 SLOT0(slot_nb_float, "__float__")
 SLOT0(slot_nb_oct, "__oct__")
 SLOT0(slot_nb_hex, "__hex__")
+SLOT1(slot_nb_inplace_add, "__iadd__", PyObject*, "O")
+SLOT1(slot_nb_inplace_subtract, "__isub__", PyObject*, "O")
+SLOT1(slot_nb_inplace_multiply, "__imul__", PyObject*, "O")
+SLOT1(slot_nb_inplace_divide, "__idiv__", PyObject*, "O")
+SLOT1(slot_nb_inplace_remainder, "__imod__", PyObject*, "O")
+/* Can't use SLOT1 here, because nb_inplace_power is ternary */
+static PyObject* slot_nb_inplace_power(PyObject* self, PyObject* arg1, PyObject* arg2) {
+    static PyObject* cache_str;
+    return call_method(self, "__ipow__", &cache_str, "("
+                                                     "O"
+                                                     ")",
+                       arg1);
+}
+SLOT1(slot_nb_inplace_lshift, "__ilshift__", PyObject*, "O")
+SLOT1(slot_nb_inplace_rshift, "__irshift__", PyObject*, "O")
+SLOT1(slot_nb_inplace_and, "__iand__", PyObject*, "O")
+SLOT1(slot_nb_inplace_xor, "__ixor__", PyObject*, "O")
+SLOT1(slot_nb_inplace_or, "__ior__", PyObject*, "O")
+SLOT1BIN(slot_nb_floor_divide, nb_floor_divide, "__floordiv__", "__rfloordiv__")
+SLOT1BIN(slot_nb_true_divide, nb_true_divide, "__truediv__", "__rtruediv__")
+SLOT1(slot_nb_inplace_floor_divide, "__ifloordiv__", PyObject*, "O")
+SLOT1(slot_nb_inplace_true_divide, "__itruediv__", PyObject*, "O")
 
 typedef wrapper_def slotdef;
 
@@ -937,40 +1038,59 @@ static slotdef slotdefs[]
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
-        BINSLOT("__add__", nb_add, slot_nb_add, "+"),               // [force clang-format to line break]
-        RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),             //
-        BINSLOT("__sub__", nb_subtract, slot_nb_subtract, "-"),     //
-        RBINSLOT("__rsub__", nb_subtract, slot_nb_subtract, "-"),   //
-        BINSLOT("__mul__", nb_multiply, slot_nb_multiply, "*"),     //
-        RBINSLOT("__rmul__", nb_multiply, slot_nb_multiply, "*"),   //
-        BINSLOT("__div__", nb_divide, slot_nb_divide, "/"),         //
-        RBINSLOT("__rdiv__", nb_divide, slot_nb_divide, "/"),       //
-        BINSLOT("__mod__", nb_remainder, slot_nb_remainder, "%"),   //
-        RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder, "%"), //
-        BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod, "divmod(x, y)"),
-        RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),
-        NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),
-        NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),
-        UNSLOT("__neg__", nb_negative, slot_nb_negative, wrap_unaryfunc, "-x"),         //
-        UNSLOT("__pos__", nb_positive, slot_nb_positive, wrap_unaryfunc, "+x"),         //
-        UNSLOT("__abs__", nb_absolute, slot_nb_absolute, wrap_unaryfunc, "abs(x)"),     //
-        UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"), //
-        UNSLOT("__invert__", nb_invert, slot_nb_invert, wrap_unaryfunc, "~x"),          //
-        BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                         //
-        RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                       //
-        BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                         //
-        RBINSLOT("__rrshift__", nb_rshift, slot_nb_rshift, ">>"),                       //
-        BINSLOT("__and__", nb_and, slot_nb_and, "&"),                                   //
-        RBINSLOT("__rand__", nb_and, slot_nb_and, "&"),                                 //
-        BINSLOT("__xor__", nb_xor, slot_nb_xor, "^"),                                   //
-        RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                 //
-        BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                      //
-        RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                    //
-        UNSLOT("__int__", nb_int, slot_nb_int, wrap_unaryfunc, "int(x)"),               //
-        UNSLOT("__long__", nb_long, slot_nb_long, wrap_unaryfunc, "long(x)"),           //
-        UNSLOT("__float__", nb_float, slot_nb_float, wrap_unaryfunc, "float(x)"),       //
-        UNSLOT("__oct__", nb_oct, slot_nb_oct, wrap_unaryfunc, "oct(x)"),               //
-        UNSLOT("__hex__", nb_hex, slot_nb_hex, wrap_unaryfunc, "hex(x)"),               //
+        BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
+        RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),                           //
+        BINSLOT("__sub__", nb_subtract, slot_nb_subtract, "-"),                   //
+        RBINSLOT("__rsub__", nb_subtract, slot_nb_subtract, "-"),                 //
+        BINSLOT("__mul__", nb_multiply, slot_nb_multiply, "*"),                   //
+        RBINSLOT("__rmul__", nb_multiply, slot_nb_multiply, "*"),                 //
+        BINSLOT("__div__", nb_divide, slot_nb_divide, "/"),                       //
+        RBINSLOT("__rdiv__", nb_divide, slot_nb_divide, "/"),                     //
+        BINSLOT("__mod__", nb_remainder, slot_nb_remainder, "%"),                 //
+        RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder, "%"),               //
+        BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod, "divmod(x, y)"), //
+        RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),                                 //
+        NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),      //
+        NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),  //
+        UNSLOT("__neg__", nb_negative, slot_nb_negative, wrap_unaryfunc, "-x"),                                     //
+        UNSLOT("__pos__", nb_positive, slot_nb_positive, wrap_unaryfunc, "+x"),                                     //
+        UNSLOT("__abs__", nb_absolute, slot_nb_absolute, wrap_unaryfunc, "abs(x)"),                                 //
+        UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"),                             //
+        UNSLOT("__invert__", nb_invert, slot_nb_invert, wrap_unaryfunc, "~x"),                                      //
+        BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                                                     //
+        RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                                                   //
+        BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                                                     //
+        RBINSLOT("__rrshift__", nb_rshift, slot_nb_rshift, ">>"),                                                   //
+        BINSLOT("__and__", nb_and, slot_nb_and, "&"),                                                               //
+        RBINSLOT("__rand__", nb_and, slot_nb_and, "&"),                                                             //
+        BINSLOT("__xor__", nb_xor, slot_nb_xor, "^"),                                                               //
+        RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                                             //
+        BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                                                  //
+        RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                                                //
+        NBSLOT("__coerce__", nb_coerce, slot_nb_coerce, wrap_coercefunc, "x.__coerce__(y) <==> coerce(x, y)"),      //
+        UNSLOT("__int__", nb_int, slot_nb_int, wrap_unaryfunc, "int(x)"),                                           //
+        UNSLOT("__long__", nb_long, slot_nb_long, wrap_unaryfunc, "long(x)"),                                       //
+        UNSLOT("__float__", nb_float, slot_nb_float, wrap_unaryfunc, "float(x)"),                                   //
+        UNSLOT("__oct__", nb_oct, slot_nb_oct, wrap_unaryfunc, "oct(x)"),                                           //
+        UNSLOT("__hex__", nb_hex, slot_nb_hex, wrap_unaryfunc, "hex(x)"),                                           //
+        IBSLOT("__iadd__", nb_inplace_add, slot_nb_inplace_add, wrap_binaryfunc, "+="),                             //
+        IBSLOT("__isub__", nb_inplace_subtract, slot_nb_inplace_subtract, wrap_binaryfunc, "-="),                   //
+        IBSLOT("__imul__", nb_inplace_multiply, slot_nb_inplace_multiply, wrap_binaryfunc, "*="),                   //
+        IBSLOT("__idiv__", nb_inplace_divide, slot_nb_inplace_divide, wrap_binaryfunc, "/="),                       //
+        IBSLOT("__imod__", nb_inplace_remainder, slot_nb_inplace_remainder, wrap_binaryfunc, "%="),                 //
+        IBSLOT("__ipow__", nb_inplace_power, slot_nb_inplace_power, wrap_binaryfunc, "**="),                        //
+        IBSLOT("__ilshift__", nb_inplace_lshift, slot_nb_inplace_lshift, wrap_binaryfunc, "<<="),                   //
+        IBSLOT("__irshift__", nb_inplace_rshift, slot_nb_inplace_rshift, wrap_binaryfunc, ">>="),                   //
+        IBSLOT("__iand__", nb_inplace_and, slot_nb_inplace_and, wrap_binaryfunc, "&="),                             //
+        IBSLOT("__ixor__", nb_inplace_xor, slot_nb_inplace_xor, wrap_binaryfunc, "^="),                             //
+        IBSLOT("__ior__", nb_inplace_or, slot_nb_inplace_or, wrap_binaryfunc, "|="),                                //
+        BINSLOT("__floordiv__", nb_floor_divide, slot_nb_floor_divide, "//"),                                       //
+        RBINSLOT("__rfloordiv__", nb_floor_divide, slot_nb_floor_divide, "//"),                                     //
+        BINSLOT("__truediv__", nb_true_divide, slot_nb_true_divide, "/"),                                           //
+        RBINSLOT("__rtruediv__", nb_true_divide, slot_nb_true_divide, "/"),                                         //
+        IBSLOT("__ifloordiv__", nb_inplace_floor_divide, slot_nb_inplace_floor_divide, wrap_binaryfunc, "//"),      //
+        IBSLOT("__itruediv__", nb_inplace_true_divide, slot_nb_inplace_true_divide, wrap_binaryfunc, "/"),          //
+        NBSLOT("__index__", nb_index, slot_nb_index, wrap_unaryfunc, "x[y:z] <==> x[y.__index__():z.__index__()]"), //
 
         MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
         MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
@@ -1563,28 +1683,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
 
-    if (cls->tp_as_number) {
-        auto num = cls->tp_as_number;
-        // Members not added yet:
-        assert(num->nb_coerce == NULL);
-        assert(num->nb_inplace_add == NULL);
-        assert(num->nb_inplace_subtract == NULL);
-        assert(num->nb_inplace_multiply == NULL);
-        assert(num->nb_inplace_divide == NULL);
-        assert(num->nb_inplace_remainder == NULL);
-        assert(num->nb_inplace_power == NULL);
-        assert(num->nb_inplace_lshift == NULL);
-        assert(num->nb_inplace_rshift == NULL);
-        assert(num->nb_inplace_and == NULL);
-        assert(num->nb_inplace_xor == NULL);
-        assert(num->nb_inplace_or == NULL);
-        assert(num->nb_floor_divide == NULL);
-        assert(num->nb_true_divide == NULL);
-        assert(num->nb_inplace_floor_divide == NULL);
-        assert(num->nb_inplace_true_divide == NULL);
-        assert(num->nb_index == NULL);
-    }
-
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
     RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
@@ -1623,6 +1721,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         base = cls->tp_base = object_cls;
     if (!cls->cls)
         cls->cls = cls->tp_base->cls;
+    cls->giveAttr("__base__", base);
 
     assert(cls->tp_dict == NULL);
     cls->tp_dict = makeAttrWrapper(cls);
@@ -1670,6 +1769,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     assert(cls->attrs_offset == 0);
 
     return 0;
+}
+
+extern "C" PyObject* PyType_GenericNew(PyTypeObject* type, PyObject* args, PyObject* kwds) noexcept {
+    return type->tp_alloc(type, 0);
 }
 
 } // namespace pyston

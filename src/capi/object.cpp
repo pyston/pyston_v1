@@ -123,4 +123,9 @@ extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexce
     Py_DECREF(res);
     return ok;
 }
+
+// I'm not sure how we can support this one:
+extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
+    Py_FatalError("unimplemented");
+}
 }

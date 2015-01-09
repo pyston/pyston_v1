@@ -1716,7 +1716,12 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     return 0;
 }
 
-static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) {
+extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject* w) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+
+static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) noexcept {
     RELEASE_ASSERT(index == 0, "");
     // I think maybe this can just be a non-release assert?  shouldn't be able to call this with
     // the wrong type
@@ -1727,7 +1732,7 @@ static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, con
     return s->s.size();
 }
 
-static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) {
+static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) noexcept {
     RELEASE_ASSERT(lenp == NULL, "");
     RELEASE_ASSERT(o->cls == str_cls, "");
 

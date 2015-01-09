@@ -144,7 +144,9 @@ extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL
 }
 
 extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedLong* rtn = new BoxedLong();
+    mpz_init_set_d(rtn->n, v);
+    return rtn;
 }
 
 extern "C" PyObject* PyLong_FromLong(long ival) noexcept {
