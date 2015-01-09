@@ -456,6 +456,11 @@ extern "C" long PyObject_HashNotImplemented(PyObject* self) {
     return -1;
 }
 
+extern "C" PyObject* _PyObject_NextNotImplemented(PyObject* self) {
+    PyErr_Format(PyExc_TypeError, "'%.200s' object is not iterable", Py_TYPE(self)->tp_name);
+    return NULL;
+}
+
 extern "C" long _Py_HashPointer(void* p) {
     long x;
     size_t y = (size_t)p;
