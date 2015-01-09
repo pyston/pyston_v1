@@ -76,11 +76,20 @@ Box* getSysStdout() {
 }
 
 extern "C" int PySys_SetObject(const char* name, PyObject* v) {
-    Py_FatalError("unimplemented");
+    try {
+        if (!v) {
+            if (sys_module->getattr(name))
+                sys_module->delattr(name, NULL);
+        } else
+            sys_module->setattr(name, v, NULL);
+    } catch (Box* b) {
+        abort();
+    }
+    return 0;
 }
 
 extern "C" PyObject* PySys_GetObject(const char* name) {
-    Py_FatalError("unimplemented");
+    return sys_module->getattr(name);
 }
 
 static void mywrite(const char* name, FILE* fp, const char* format, va_list va) noexcept {

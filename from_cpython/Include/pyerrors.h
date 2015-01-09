@@ -219,10 +219,9 @@ PyAPI_DATA(PyTypeObject *) VMSError;
 #define PyExc_BufferError ((PyObject*)BufferError)
 PyAPI_DATA(PyTypeObject *) BufferError;
 
-#define PyExc_MemoryErrorInst ((PyObject*)MemoryErrorInst)
-PyAPI_DATA(PyTypeObject *) MemoryErrorInst;
-#define PyExc_RecursionErrorInst ((PyObject*)RecursionErrorInst)
-PyAPI_DATA(PyTypeObject *) RecursionErrorInst;
+PyAPI_DATA(PyObject *) PyExc_MemoryErrorInst;
+PyAPI_DATA(PyObject *) PyExc_RecursionErrorInst;
+
 
 /* Predefined warning categories */
 #define PyExc_Warning ((PyObject*)Warning)

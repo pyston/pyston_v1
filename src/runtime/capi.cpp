@@ -22,6 +22,7 @@
 #include "capi/types.h"
 #include "core/threading.h"
 #include "core/types.h"
+#include "runtime/classobj.h"
 #include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -643,7 +644,101 @@ extern "C" int Py_FlushLine(void) {
 }
 
 extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObject** tb) {
-    Py_FatalError("unimplemented");
+    PyObject* type = *exc;
+    PyObject* value = *val;
+    PyObject* inclass = NULL;
+    PyObject* initial_tb = NULL;
+    PyThreadState* tstate = NULL;
+
+    if (type == NULL) {
+        /* There was no exception, so nothing to do. */
+        return;
+    }
+
+    /* If PyErr_SetNone() was used, the value will have been actually
+       set to NULL.
+    */
+    if (!value) {
+        value = Py_None;
+        Py_INCREF(value);
+    }
+
+    if (PyExceptionInstance_Check(value))
+        inclass = PyExceptionInstance_Class(value);
+
+    /* Normalize the exception so that if the type is a class, the
+       value will be an instance.
+    */
+    if (PyExceptionClass_Check(type)) {
+        /* if the value was not an instance, or is not an instance
+           whose class is (or is derived from) type, then use the
+           value as an argument to instantiation of the type
+           class.
+        */
+        if (!inclass || !PyObject_IsSubclass(inclass, type)) {
+            PyObject* args, *res;
+
+            if (value == Py_None)
+                args = PyTuple_New(0);
+            else if (PyTuple_Check(value)) {
+                Py_INCREF(value);
+                args = value;
+            } else
+                args = PyTuple_Pack(1, value);
+
+            if (args == NULL)
+                goto finally;
+            res = PyEval_CallObject(type, args);
+            Py_DECREF(args);
+            if (res == NULL)
+                goto finally;
+            Py_DECREF(value);
+            value = res;
+        }
+        /* if the class of the instance doesn't exactly match the
+           class of the type, believe the instance
+        */
+        else if (inclass != type) {
+            Py_DECREF(type);
+            type = inclass;
+            Py_INCREF(type);
+        }
+    }
+    *exc = type;
+    *val = value;
+    return;
+finally:
+    Py_DECREF(type);
+    Py_DECREF(value);
+    /* If the new exception doesn't set a traceback and the old
+       exception had a traceback, use the old traceback for the
+       new exception.  It's better than nothing.
+    */
+    initial_tb = *tb;
+    PyErr_Fetch(exc, val, tb);
+    if (initial_tb != NULL) {
+        if (*tb == NULL)
+            *tb = initial_tb;
+        else
+            Py_DECREF(initial_tb);
+    }
+    /* normalize recursively */
+    tstate = PyThreadState_GET();
+    if (++tstate->recursion_depth > Py_GetRecursionLimit()) {
+        --tstate->recursion_depth;
+        /* throw away the old exception... */
+        Py_DECREF(*exc);
+        Py_DECREF(*val);
+        /* ... and use the recursion error instead */
+        *exc = PyExc_RuntimeError;
+        *val = PyExc_RecursionErrorInst;
+        Py_INCREF(*exc);
+        Py_INCREF(*val);
+        /* just keeping the old traceback */
+        return;
+    }
+    PyErr_NormalizeException(exc, val, tb);
+    --tstate->recursion_depth;
 }
 
 void checkAndThrowCAPIException() {
@@ -705,11 +800,11 @@ extern "C" int PyErr_CheckSignals() {
 }
 
 extern "C" int PyExceptionClass_Check(PyObject* o) {
-    Py_FatalError("unimplemented");
+    return PyClass_Check(o) || (PyType_Check(o) && isSubclass(static_cast<BoxedClass*>(o), BaseException));
 }
 
 extern "C" int PyExceptionInstance_Check(PyObject* o) {
-    Py_FatalError("unimplemented");
+    return PyInstance_Check(o) || isSubclass(o->cls, BaseException);
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) {
@@ -717,6 +812,10 @@ extern "C" const char* PyExceptionClass_Name(PyObject* o) {
 }
 
 extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) {
+    return PyInstance_Check(o) ? (Box*)static_cast<BoxedInstance*>(o)->inst_cls : o->cls;
+}
+
+extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) {
     Py_FatalError("unimplemented");
 }
 

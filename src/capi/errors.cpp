@@ -181,6 +181,7 @@ extern "C" void PyErr_WriteUnraisable(PyObject* obj) {
     Py_XDECREF(v);
     Py_XDECREF(tb);
 }
+
 extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) {
     Py_FatalError("unimplemented");
 }

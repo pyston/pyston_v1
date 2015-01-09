@@ -192,7 +192,10 @@ extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*clo
 }
 
 extern "C" FILE* PyFile_AsFile(PyObject* f) {
-    Py_FatalError("unimplemented");
+    if (!f || !PyFile_Check(f))
+        return NULL;
+
+    return static_cast<BoxedFile*>(f)->f;
 }
 
 extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) {
