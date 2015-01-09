@@ -182,8 +182,105 @@ extern "C" void PyErr_WriteUnraisable(PyObject* obj) {
     Py_XDECREF(tb);
 }
 
-extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) {
+static int parse_syntax_error(PyObject* err, PyObject** message, const char** filename, int* lineno, int* offset,
+                              const char** text) noexcept {
     Py_FatalError("unimplemented");
+}
+
+static void print_error_text(PyObject* f, int offset, const char* text) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) {
+    int err = 0;
+    PyObject* f = PySys_GetObject("stderr");
+    Py_INCREF(value);
+    if (f == NULL || f == Py_None)
+        fprintf(stderr, "lost sys.stderr\n");
+    else {
+        if (Py_FlushLine())
+            PyErr_Clear();
+        fflush(stdout);
+        if (tb && tb != Py_None)
+            err = PyTraceBack_Print(tb, f);
+        if (err == 0 && PyObject_HasAttrString(value, "print_file_and_line")) {
+            PyObject* message;
+            const char* filename, *text;
+            int lineno, offset;
+            if (!parse_syntax_error(value, &message, &filename, &lineno, &offset, &text))
+                PyErr_Clear();
+            else {
+                char buf[10];
+                PyFile_WriteString("  File \"", f);
+                if (filename == NULL)
+                    PyFile_WriteString("<string>", f);
+                else
+                    PyFile_WriteString(filename, f);
+                PyFile_WriteString("\", line ", f);
+                PyOS_snprintf(buf, sizeof(buf), "%d", lineno);
+                PyFile_WriteString(buf, f);
+                PyFile_WriteString("\n", f);
+                if (text != NULL)
+                    print_error_text(f, offset, text);
+                Py_DECREF(value);
+                value = message;
+                /* Can't be bothered to check all those
+                   PyFile_WriteString() calls */
+                if (PyErr_Occurred())
+                    err = -1;
+            }
+        }
+        if (err) {
+            /* Don't do anything else */
+        } else if (PyExceptionClass_Check(exception)) {
+            PyObject* moduleName;
+            const char* className = PyExceptionClass_Name(exception);
+            if (className != NULL) {
+                const char* dot = strrchr(className, '.');
+                if (dot != NULL)
+                    className = dot + 1;
+            }
+
+            moduleName = PyObject_GetAttrString(exception, "__module__");
+            if (moduleName == NULL)
+                err = PyFile_WriteString("<unknown>", f);
+            else {
+                char* modstr = PyString_AsString(moduleName);
+                if (modstr && strcmp(modstr, "exceptions")) {
+                    err = PyFile_WriteString(modstr, f);
+                    err += PyFile_WriteString(".", f);
+                }
+                Py_DECREF(moduleName);
+            }
+            if (err == 0) {
+                if (className == NULL)
+                    err = PyFile_WriteString("<unknown>", f);
+                else
+                    err = PyFile_WriteString(className, f);
+            }
+        } else
+            err = PyFile_WriteObject(exception, f, Py_PRINT_RAW);
+        if (err == 0 && (value != Py_None)) {
+            PyObject* s = PyObject_Str(value);
+            /* only print colon if the str() of the
+               object is not the empty string
+            */
+            if (s == NULL)
+                err = -1;
+            else if (!PyString_Check(s) || PyString_GET_SIZE(s) != 0)
+                err = PyFile_WriteString(": ", f);
+            if (err == 0)
+                err = PyFile_WriteObject(s, f, Py_PRINT_RAW);
+            Py_XDECREF(s);
+        }
+        /* try to write a newline in any case */
+        err += PyFile_WriteString("\n", f);
+    }
+    Py_DECREF(value);
+    /* If an error happened here, don't show it.
+       XXX This is wrong, but too many callers rely on this behavior. */
+    if (err != 0)
+        PyErr_Clear();
 }
 
 static void handle_system_exit(void) noexcept {

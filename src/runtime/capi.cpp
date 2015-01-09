@@ -235,18 +235,6 @@ extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* f
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
-    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
-    // won't end up doing a GIL check?
-    // threading::GLDemoteRegion _gil_demote;
-
-    try {
-        return getattr(o, attr);
-    } catch (Box* b) {
-        Py_FatalError("unimplemented");
-    }
-}
-
 extern "C" Py_ssize_t PyObject_Size(PyObject* o) {
     try {
         return len(o)->n;
@@ -808,7 +796,7 @@ extern "C" int PyExceptionInstance_Check(PyObject* o) {
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) {
-    Py_FatalError("unimplemented");
+    return PyClass_Check(o) ? PyString_AS_STRING(static_cast<BoxedClassobj*>(o)->name) : o->cls->tp_name;
 }
 
 extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) {
