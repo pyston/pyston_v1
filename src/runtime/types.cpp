@@ -57,12 +57,29 @@ bool IN_SHUTDOWN = false;
 #define SLICE_STOP_OFFSET ((char*)&(((BoxedSlice*)0x01)->stop) - (char*)0x1)
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
 
-extern "C" PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
+// Analogue of PyType_GenericAlloc (default tp_alloc), but should only be used for Pyston classes!
+PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
     RELEASE_ASSERT(nitems == 0, "");
     RELEASE_ASSERT(cls->tp_itemsize == 0, "");
 
     const size_t size = cls->tp_basicsize;
+
+#ifndef NDEBUG
+#if 0
+    assert(cls->tp_bases);
+    // TODO this should iterate over all subclasses
+    for (auto e : cls->tp_bases->pyElements()) {
+        assert(e->cls == type_cls); // what about old style classes?
+        assert(static_cast<BoxedClass*>(e)->is_pyston_class);
+    }
+#endif
+    BoxedClass* b = cls;
+    while (b) {
+        ASSERT(b->is_pyston_class, "%s (%s)", cls->tp_name, b->tp_name);
+        b = b->tp_base;
+    }
+#endif
 
     // Maybe we should only zero the extension memory?
     // I'm not sure we have the information at the moment, but when we were in Box::operator new()
@@ -76,6 +93,42 @@ extern "C" PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noe
     assert(rtn->cls);
 
     return rtn;
+}
+
+extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
+    PyObject* obj;
+    const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
+    /* note that we need to add one, for the sentinel */
+
+    if (PyType_IS_GC(type))
+        obj = _PyObject_GC_Malloc(size);
+    else
+        obj = (PyObject*)PyObject_MALLOC(size);
+
+    if (obj == NULL)
+        return PyErr_NoMemory();
+
+    memset(obj, '\0', size);
+
+    if (type->tp_flags & Py_TPFLAGS_HEAPTYPE)
+        Py_INCREF(type);
+
+    if (type->tp_itemsize == 0)
+        PyObject_INIT(obj, type);
+    else
+        (void)PyObject_INIT_VAR((PyVarObject*)obj, type, nitems);
+
+    if (PyType_IS_GC(type))
+        _PyObject_GC_TRACK(obj);
+    return obj;
+}
+
+extern "C" PyObject* _PyObject_New(PyTypeObject* tp) noexcept {
+    PyObject* op;
+    op = (PyObject*)PyObject_MALLOC(_PyObject_SIZE(tp));
+    if (op == NULL)
+        return PyErr_NoMemory();
+    return PyObject_INIT(op, tp);
 }
 
 // Analogue of PyType_GenericNew

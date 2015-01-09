@@ -1528,7 +1528,8 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
              * didn't define tp_free, and the base uses the
              * default non-gc tp_free.
              */
-            type->tp_free = PyObject_GC_Del;
+            // Pyston change: don't do this:
+            // type->tp_free = PyObject_GC_Del;
         }
         /* else they didn't agree about gc, and there isn't something
          * obvious to be done -- the type is on its own.

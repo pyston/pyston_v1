@@ -142,43 +142,9 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
     return op;
 }
 
-extern "C" PyObject* _PyObject_New(PyTypeObject* cls) noexcept {
-    assert(cls->tp_itemsize == 0);
-
-    auto rtn = (PyObject*)gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    // no memset for this function
-
-    PyObject_Init(rtn, cls);
-    return rtn;
-}
-
 extern "C" void PyObject_Free(void* p) noexcept {
     gc::gc_free(p);
     ASSERT(0, "I think this is good enough but I'm not sure; should test");
-}
-
-extern "C" PyObject* _PyObject_GC_Malloc(size_t) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* _PyObject_GC_New(PyTypeObject* cls) noexcept {
-    return _PyObject_New(cls);
-}
-
-extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject*, Py_ssize_t) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" void PyObject_GC_Track(void*) noexcept {
-    // TODO do we have to do anything to support the C API GC protocol?
-}
-
-extern "C" void PyObject_GC_UnTrack(void*) noexcept {
-    // TODO do we have to do anything to support the C API GC protocol?
-}
-
-extern "C" void PyObject_GC_Del(void*) noexcept {
-    Py_FatalError("unimplemented");
 }
 
 extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {

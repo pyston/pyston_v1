@@ -345,7 +345,8 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
                        bool is_user_defined)
-    : BoxVar(0), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined) {
+    : BoxVar(0), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined),
+      is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -357,7 +358,13 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
 
     tp_base = base;
 
-    tp_alloc = PyType_GenericAlloc;
+    if (tp_base) {
+        assert(tp_base->tp_alloc);
+        tp_alloc = tp_base->tp_alloc;
+    } else {
+        assert(object_cls == NULL);
+        tp_alloc = PystonType_GenericAlloc;
+    }
 
     if (cls == NULL) {
         assert(type_cls == NULL);
@@ -1803,9 +1810,19 @@ extern "C" i64 unboxedLen(Box* obj) {
 extern "C" void dump(void* p) {
     printf("\n");
     printf("Raw address: %p\n", p);
-    bool is_gc = (gc::global_heap.getAllocationFromInteriorPointer(p) != NULL);
+
+    bool is_gc = gc::isValidGCObject(p);
     if (!is_gc) {
         printf("non-gc memory\n");
+        return;
+    }
+
+    if (gc::isNonheapRoot(p)) {
+        printf("Non-heap GC object\n");
+
+        printf("Assuming it's a class object...\n");
+        PyTypeObject* type = (PyTypeObject*)(p);
+        printf("tp_name: %s\n", type->tp_name);
         return;
     }
 
@@ -3331,12 +3348,13 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
     made->setattr("__name__", name, NULL);
 
-    // TODO should this function (typeNew) call PyType_Ready?
     made->tp_new = base->tp_new;
-    made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
 
     PystonType_Ready(made);
     fixup_slot_dispatchers(made);
+
+    made->tp_alloc = base->tp_alloc;
+    assert(made->tp_alloc);
 
     return made;
 }

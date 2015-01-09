@@ -102,7 +102,7 @@ void registerNonheapRootObject(void* obj) {
     max_nonheap_root = std::max(obj, max_nonheap_root);
 }
 
-static bool isNonheapRoot(void* p) {
+bool isNonheapRoot(void* p) {
     return p <= max_nonheap_root && nonheap_roots.count(p) != 0;
 }
 

@@ -170,7 +170,7 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NO
     ( Py_SIZE(op) = (size), PyObject_INIT((op), (typeobj)) )
 #endif
 #define PyObject_INIT(op, typeobj) PyObject_Init((PyObject*)(op), (PyTypeObject*)(typeobj))
-#define PyObject_INIT_VAR(op, typeobj, size) PyObject_InitVar((PyObject*)(op), (PyTypeObject*)(typeobj), size)
+#define PyObject_INIT_VAR(op, typeobj, size) PyObject_InitVar((PyVarObject*)(op), (PyTypeObject*)(typeobj), size)
 
 #define _PyObject_SIZE(typeobj) ( (typeobj)->tp_basicsize )
 
@@ -241,6 +241,9 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NO
 /* C equivalent of gc.collect(). */
 PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void) PYSTON_NOEXCEPT;
 
+// Pyston changes: everything is GC tracked now
+
+#if 0
 /* Test if a type has a GC head */
 #define PyType_IS_GC(t) PyType_HasFeature((t), Py_TPFLAGS_HAVE_GC)
 
@@ -309,13 +312,22 @@ extern PyGC_Head *_PyGC_generation0;
     (PyObject_IS_GC(obj) && \
         (!PyTuple_CheckExact(obj) || _PyObject_GC_IS_TRACKED(obj)))
 
-
 PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyVarObject *) _PyObject_GC_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_Track(void *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_UnTrack(void *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_Del(void *) PYSTON_NOEXCEPT;
+#endif
+#define PyType_IS_GC(t) ((t),1)
+#define _PyObject_GC_TRACK(o) ((void)(o))
+#define _PyObject_GC_UNTRACK(o) ((void)(o))
+#define _PyObject_GC_Malloc(size) ((PyObject*)PyObject_MALLOC(size))
+#define _PyObject_GC_New _PyObject_New
+#define PyObject_GC_Track(o) ((void)(o))
+#define PyObject_GC_UnTrack(o) ((void)(o))
+#define PyObject_GC_Del(o) ((void)(o))
+
 
 #define PyObject_GC_New(type, typeobj) \
                 ( (type *) _PyObject_GC_New(typeobj) )

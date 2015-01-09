@@ -211,6 +211,11 @@ public:
     // this is used mostly for debugging.
     bool is_user_defined;
 
+    // Whether this is a Pyston-defined class (as opposed to an extension-defined class).
+    // We can ensure certain behavior about our Pyston classes (in particular around GC support)
+    // that we can't rely on for extension classes.
+    bool is_pyston_class;
+
     // will need to update this once we support tp_getattr-style overriding:
     bool hasGenericGetattr() { return true; }
 
@@ -571,5 +576,8 @@ extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, 
     *StopIteration, *GeneratorExit, *SyntaxError;
 
 Box* makeAttrWrapper(Box* b);
+
+// Our default for tp_alloc:
+PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 }
 #endif

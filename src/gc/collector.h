@@ -46,7 +46,9 @@ public:
 
 void runCollection();
 
+// These are mostly for debugging:
 bool isValidGCObject(void* p);
+bool isNonheapRoot(void* p);
 }
 }
 
