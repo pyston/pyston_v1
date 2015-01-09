@@ -3334,6 +3334,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     // TODO should this function (typeNew) call PyType_Ready?
     made->tp_new = base->tp_new;
     made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
+
+    PystonType_Ready(made);
     fixup_slot_dispatchers(made);
 
     return made;

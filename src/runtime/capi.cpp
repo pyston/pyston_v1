@@ -801,7 +801,8 @@ extern "C" int PyExceptionInstance_Check(PyObject* o) {
 }
 
 extern "C" const char* PyExceptionClass_Name(PyObject* o) {
-    return PyClass_Check(o) ? PyString_AS_STRING(static_cast<BoxedClassobj*>(o)->name) : o->cls->tp_name;
+    return PyClass_Check(o) ? PyString_AS_STRING(static_cast<BoxedClassobj*>(o)->name)
+                            : static_cast<BoxedClass*>(o)->tp_name;
 }
 
 extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) {

@@ -1536,6 +1536,23 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) {
     }
 }
 
+// PystonType_Ready is for the common code between PyType_Ready (which is just for extension classes)
+// and our internal type-creation endpoints (BoxedClass::BoxedClass()).
+// TODO: Move more of the duplicated logic into here.
+void PystonType_Ready(BoxedClass* cls) {
+    inherit_special(cls, cls->tp_base);
+
+    // This is supposed to be over the MRO but we don't support multiple inheritance yet:
+    BoxedClass* b = cls->tp_base;
+    while (b) {
+        // Not sure when this could fail; maybe not in Pyston right now but apparently it can in CPython:
+        if (PyType_Check(b))
+            inherit_slots(cls, b);
+
+        b = b->tp_base;
+    }
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) {
     gc::registerNonheapRootObject(cls);
 
@@ -1642,17 +1659,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
             printf("warning: ignoring tp_getset for now\n");
     }
 
-    inherit_special(cls, cls->tp_base);
-
-    // This is supposed to be over the MRO but we don't support multiple inheritance yet:
-    BoxedClass* b = base;
-    while (b) {
-        // Not sure when this could fail; maybe not in Pyston right now but apparently it can in CPython:
-        if (PyType_Check(b))
-            inherit_slots(cls, b);
-
-        b = b->tp_base;
-    }
+    PystonType_Ready(cls);
 
     cls->gc_visit = &conservativeGCHandler;
     cls->is_user_defined = true;
