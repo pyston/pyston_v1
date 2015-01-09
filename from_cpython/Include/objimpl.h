@@ -160,12 +160,17 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NO
 #define PyObject_NewVar(type, typeobj, n) \
                 ( (type *) _PyObject_NewVar((typeobj), (n)) )
 
+// Pyston change: these are function calls now
+#if 0
 /* Macros trading binary compatibility for speed. See also pymem.h.
    Note that these macros expect non-NULL object pointers.*/
 #define PyObject_INIT(op, typeobj) \
     ( Py_TYPE(op) = (typeobj), (op) )
 #define PyObject_INIT_VAR(op, typeobj, size) \
     ( Py_SIZE(op) = (size), PyObject_INIT((op), (typeobj)) )
+#endif
+#define PyObject_INIT(op, typeobj) PyObject_Init((PyObject*)(op), (PyTypeObject*)(typeobj))
+#define PyObject_INIT_VAR(op, typeobj, size) PyObject_InitVar((PyObject*)(op), (PyTypeObject*)(typeobj), size)
 
 #define _PyObject_SIZE(typeobj) ( (typeobj)->tp_basicsize )
 

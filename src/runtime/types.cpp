@@ -82,7 +82,7 @@ PyObject* PyType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
 // Analogue of PyType_GenericNew
 void* Box::operator new(size_t size, BoxedClass* cls) {
     assert(cls);
-    assert(cls->tp_basicsize >= size);
+    ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_alloc);
 
     void* mem = cls->tp_alloc(cls, 0);
