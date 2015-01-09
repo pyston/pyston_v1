@@ -26,6 +26,7 @@
 #include "core/ast.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/classobj.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
@@ -262,8 +263,11 @@ Box* open(Box* arg1, Box* arg2) {
     const std::string& mode = static_cast<BoxedString*>(arg2)->s;
 
     FILE* f = fopen(fn.c_str(), mode.c_str());
-    if (!f)
-        raiseExcHelper(IOError, "[Errno %d] %s: '%s'", errno, strerror(errno), fn.c_str());
+    if (!f) {
+        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
+        checkAndThrowCAPIException();
+        abort(); // unreachable;
+    }
 
     return new BoxedFile(f, fn, mode);
 }
