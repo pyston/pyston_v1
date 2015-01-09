@@ -1599,7 +1599,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
-    RELEASE_ASSERT(cls->tp_alloc == NULL || cls->tp_alloc == PyType_GenericAlloc, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
@@ -1637,10 +1636,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     if (!cls->tp_new && base != object_cls)
         cls->tp_new = base->tp_new;
 
-    if (!cls->tp_alloc) {
-        cls->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
-    }
-
     try {
         add_operators(cls);
     } catch (Box* b) {
@@ -1661,6 +1656,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     }
 
     PystonType_Ready(cls);
+
+    if (cls->tp_alloc == &PystonType_GenericAlloc)
+        cls->tp_alloc = &PyType_GenericAlloc;
 
     cls->gc_visit = &conservativeGCHandler;
     cls->is_user_defined = true;

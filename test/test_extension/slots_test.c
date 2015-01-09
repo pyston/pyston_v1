@@ -37,6 +37,13 @@ slots_tester_init(PyObject *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
+static PyObject*
+slots_tester_alloc(PyTypeObject* type, Py_ssize_t nitems) {
+    printf("slots_tester_seq.tp_alloc, %s %ld\n", type->tp_name, nitems);
+
+    return PyType_GenericAlloc(type, nitems);
+}
+
 static long slots_tester_seq_hash(slots_tester_object* obj) {
     printf("slots_tester_seq.__hash__\n");
     return obj->n ^ 1;
@@ -139,7 +146,7 @@ static PyTypeObject slots_tester_seq = {
     0,                                  /* tp_descr_set */
     0,                                  /* tp_dictoffset */
     slots_tester_init,                  /* tp_init */
-    0,                                  /* tp_alloc */
+    (allocfunc)slots_tester_alloc,                 /* tp_alloc */
     slots_tester_new,                   /* tp_new */
     0,                                  /* tp_free */
 };

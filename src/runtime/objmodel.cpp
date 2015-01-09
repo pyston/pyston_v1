@@ -355,6 +355,8 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
     tp_flags |= Py_TPFLAGS_BASETYPE;
+    tp_flags |= Py_TPFLAGS_HAVE_CLASS;
+    tp_flags |= Py_TPFLAGS_HAVE_GC;
 
     tp_base = base;
 
@@ -3353,8 +3355,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     PystonType_Ready(made);
     fixup_slot_dispatchers(made);
 
-    made->tp_alloc = base->tp_alloc;
-    assert(made->tp_alloc);
+    if (base->tp_alloc == &PystonType_GenericAlloc)
+        made->tp_alloc = PystonType_GenericAlloc;
+    else
+        made->tp_alloc = PyType_GenericAlloc;
 
     return made;
 }
