@@ -25,6 +25,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/classobj.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
@@ -433,9 +434,30 @@ extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict)
     }
     assert(metaclass);
 
-    Box* r = runtimeCall(metaclass, ArgPassSpec(3), boxStringPtr(name), _bases, _attr_dict, NULL, NULL);
-    RELEASE_ASSERT(r, "");
-    return r;
+    try {
+        Box* r = runtimeCall(metaclass, ArgPassSpec(3), boxStringPtr(name), _bases, _attr_dict, NULL, NULL);
+        RELEASE_ASSERT(r, "");
+        return r;
+    } catch (Box* b) {
+        // TODO [CAPI] bad error handling...
+
+        RELEASE_ASSERT(isSubclass(b->cls, BaseException), "");
+
+        Box* msg = b->getattr("message");
+        RELEASE_ASSERT(msg, "");
+        RELEASE_ASSERT(msg->cls == str_cls, "");
+
+        PyObject* newmsg;
+        newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
+                                     "    %s",
+                                     PyString_AS_STRING(msg));
+
+        PyErr_Restore(b->cls, newmsg, NULL);
+        checkAndThrowCAPIException();
+
+        // Should not reach here
+        abort();
+    }
 }
 
 extern "C" Box* boxInstanceMethod(Box* obj, Box* func) {
