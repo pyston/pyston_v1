@@ -447,7 +447,8 @@ PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
         return repr(self);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -455,7 +456,8 @@ PyObject* slot_tp_str(PyObject* self) noexcept {
     try {
         return str(self);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -503,7 +505,8 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
         // TODO: runtime ICs?
         return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -561,7 +564,8 @@ PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexce
 
         return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -589,7 +593,8 @@ PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     try {
         return getitem(self, boxInt(i));
     } catch (Box* e) {
-        abort();
+        PyErr_SetObject(e->cls, e);
+        return NULL;
     }
 }
 
@@ -891,27 +896,6 @@ static void** slotptr(BoxedClass* type, int offset) {
     return (void**)ptr;
 }
 
-static void update_one_slot(BoxedClass* self, const slotdef& p) {
-    // TODO: CPython version is significantly more sophisticated
-    void** ptr = slotptr(self, p.offset);
-    Box* attr = typeLookup(self, p.name, NULL);
-
-    if (!ptr) {
-        assert(!attr && "I don't think this case should happen? CPython handles it though");
-        return;
-    }
-
-    if (attr) {
-        if (attr == None && ptr == (void**)&self->tp_hash) {
-            *ptr = (void*)&PyObject_HashNotImplemented;
-        } else {
-            *ptr = p.function;
-        }
-    } else {
-        *ptr = NULL;
-    }
-}
-
 // Copied from CPython:
 #define TPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                     \
     { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), 0 }
@@ -935,91 +919,91 @@ static void update_one_slot(BoxedClass* self, const slotdef& p) {
 #define RBINSLOTNOTINFIX(NAME, SLOT, FUNCTION, DOC)                                                                    \
     ETSLOT(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, "x." NAME "(y) <==> " DOC)
 
-static slotdef slotdefs[] = {
-    TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
-    TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
-    FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
-           PyWrapperFlag_KEYWORDS),
-    TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
-    TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
-    TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
-    TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
-    TPSLOT("__ne__", tp_richcompare, slot_tp_richcompare, richcmp_ne, "x.__ne__(y) <==> x!=y"),
-    TPSLOT("__gt__", tp_richcompare, slot_tp_richcompare, richcmp_gt, "x.__gt__(y) <==> x>y"),
-    TPSLOT("__ge__", tp_richcompare, slot_tp_richcompare, richcmp_ge, "x.__ge__(y) <==> x>=y"),
+static slotdef slotdefs[]
+    = { TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
+        TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
+        FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
+               PyWrapperFlag_KEYWORDS),
+        TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
+        TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
+        TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
+        TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
+        TPSLOT("__ne__", tp_richcompare, slot_tp_richcompare, richcmp_ne, "x.__ne__(y) <==> x!=y"),
+        TPSLOT("__gt__", tp_richcompare, slot_tp_richcompare, richcmp_gt, "x.__gt__(y) <==> x>y"),
+        TPSLOT("__ge__", tp_richcompare, slot_tp_richcompare, richcmp_ge, "x.__ge__(y) <==> x>=y"),
 
-    FLSLOT("__init__", tp_init, slot_tp_init, (wrapperfunc)wrap_init, "x.__init__(...) initializes x; "
-                                                                      "see help(type(x)) for signature",
-           PyWrapperFlag_KEYWORDS),
-    TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+        FLSLOT("__init__", tp_init, slot_tp_init, (wrapperfunc)wrap_init, "x.__init__(...) initializes x; "
+                                                                          "see help(type(x)) for signature",
+               PyWrapperFlag_KEYWORDS),
+        TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
 
-    BINSLOT("__add__", nb_add, slot_nb_add, "+"),               // [force clang-format to line break]
-    RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),             //
-    BINSLOT("__sub__", nb_subtract, slot_nb_subtract, "-"),     //
-    RBINSLOT("__rsub__", nb_subtract, slot_nb_subtract, "-"),   //
-    BINSLOT("__mul__", nb_multiply, slot_nb_multiply, "*"),     //
-    RBINSLOT("__rmul__", nb_multiply, slot_nb_multiply, "*"),   //
-    BINSLOT("__div__", nb_divide, slot_nb_divide, "/"),         //
-    RBINSLOT("__rdiv__", nb_divide, slot_nb_divide, "/"),       //
-    BINSLOT("__mod__", nb_remainder, slot_nb_remainder, "%"),   //
-    RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder, "%"), //
-    BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod, "divmod(x, y)"),
-    RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),
-    NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),
-    NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),
-    UNSLOT("__neg__", nb_negative, slot_nb_negative, wrap_unaryfunc, "-x"),         //
-    UNSLOT("__pos__", nb_positive, slot_nb_positive, wrap_unaryfunc, "+x"),         //
-    UNSLOT("__abs__", nb_absolute, slot_nb_absolute, wrap_unaryfunc, "abs(x)"),     //
-    UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"), //
-    UNSLOT("__invert__", nb_invert, slot_nb_invert, wrap_unaryfunc, "~x"),          //
-    BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                         //
-    RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                       //
-    BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                         //
-    RBINSLOT("__rrshift__", nb_rshift, slot_nb_rshift, ">>"),                       //
-    BINSLOT("__and__", nb_and, slot_nb_and, "&"),                                   //
-    RBINSLOT("__rand__", nb_and, slot_nb_and, "&"),                                 //
-    BINSLOT("__xor__", nb_xor, slot_nb_xor, "^"),                                   //
-    RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                 //
-    BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                      //
-    RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                    //
-    UNSLOT("__int__", nb_int, slot_nb_int, wrap_unaryfunc, "int(x)"),               //
-    UNSLOT("__long__", nb_long, slot_nb_long, wrap_unaryfunc, "long(x)"),           //
-    UNSLOT("__float__", nb_float, slot_nb_float, wrap_unaryfunc, "float(x)"),       //
-    UNSLOT("__oct__", nb_oct, slot_nb_oct, wrap_unaryfunc, "oct(x)"),               //
-    UNSLOT("__hex__", nb_hex, slot_nb_hex, wrap_unaryfunc, "hex(x)"),               //
+        BINSLOT("__add__", nb_add, slot_nb_add, "+"),               // [force clang-format to line break]
+        RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),             //
+        BINSLOT("__sub__", nb_subtract, slot_nb_subtract, "-"),     //
+        RBINSLOT("__rsub__", nb_subtract, slot_nb_subtract, "-"),   //
+        BINSLOT("__mul__", nb_multiply, slot_nb_multiply, "*"),     //
+        RBINSLOT("__rmul__", nb_multiply, slot_nb_multiply, "*"),   //
+        BINSLOT("__div__", nb_divide, slot_nb_divide, "/"),         //
+        RBINSLOT("__rdiv__", nb_divide, slot_nb_divide, "/"),       //
+        BINSLOT("__mod__", nb_remainder, slot_nb_remainder, "%"),   //
+        RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder, "%"), //
+        BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod, "divmod(x, y)"),
+        RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod, "divmod(y, x)"),
+        NBSLOT("__pow__", nb_power, slot_nb_power, wrap_ternaryfunc, "x.__pow__(y[, z]) <==> pow(x, y[, z])"),
+        NBSLOT("__rpow__", nb_power, slot_nb_power, wrap_ternaryfunc_r, "y.__rpow__(x[, z]) <==> pow(x, y[, z])"),
+        UNSLOT("__neg__", nb_negative, slot_nb_negative, wrap_unaryfunc, "-x"),         //
+        UNSLOT("__pos__", nb_positive, slot_nb_positive, wrap_unaryfunc, "+x"),         //
+        UNSLOT("__abs__", nb_absolute, slot_nb_absolute, wrap_unaryfunc, "abs(x)"),     //
+        UNSLOT("__nonzero__", nb_nonzero, slot_nb_nonzero, wrap_inquirypred, "x != 0"), //
+        UNSLOT("__invert__", nb_invert, slot_nb_invert, wrap_unaryfunc, "~x"),          //
+        BINSLOT("__lshift__", nb_lshift, slot_nb_lshift, "<<"),                         //
+        RBINSLOT("__rlshift__", nb_lshift, slot_nb_lshift, "<<"),                       //
+        BINSLOT("__rshift__", nb_rshift, slot_nb_rshift, ">>"),                         //
+        RBINSLOT("__rrshift__", nb_rshift, slot_nb_rshift, ">>"),                       //
+        BINSLOT("__and__", nb_and, slot_nb_and, "&"),                                   //
+        RBINSLOT("__rand__", nb_and, slot_nb_and, "&"),                                 //
+        BINSLOT("__xor__", nb_xor, slot_nb_xor, "^"),                                   //
+        RBINSLOT("__rxor__", nb_xor, slot_nb_xor, "^"),                                 //
+        BINSLOT("__or__", nb_or, slot_nb_or, "|"),                                      //
+        RBINSLOT("__ror__", nb_or, slot_nb_or, "|"),                                    //
+        UNSLOT("__int__", nb_int, slot_nb_int, wrap_unaryfunc, "int(x)"),               //
+        UNSLOT("__long__", nb_long, slot_nb_long, wrap_unaryfunc, "long(x)"),           //
+        UNSLOT("__float__", nb_float, slot_nb_float, wrap_unaryfunc, "float(x)"),       //
+        UNSLOT("__oct__", nb_oct, slot_nb_oct, wrap_unaryfunc, "oct(x)"),               //
+        UNSLOT("__hex__", nb_hex, slot_nb_hex, wrap_unaryfunc, "hex(x)"),               //
 
-    MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
-    MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
-    MPSLOT("__setitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_objobjargproc,
-           "x.__setitem__(i, y) <==> x[i]=y"),
-    MPSLOT("__delitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_delitem, "x.__delitem__(y) <==> del x[y]"),
+        MPSLOT("__len__", mp_length, slot_mp_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
+        MPSLOT("__getitem__", mp_subscript, slot_mp_subscript, wrap_binaryfunc, "x.__getitem__(y) <==> x[y]"),
+        MPSLOT("__setitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_objobjargproc,
+               "x.__setitem__(i, y) <==> x[i]=y"),
+        MPSLOT("__delitem__", mp_ass_subscript, slot_mp_ass_subscript, wrap_delitem, "x.__delitem__(y) <==> del x[y]"),
 
-    SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
-    /* Heap types defining __add__/__mul__ have sq_concat/sq_repeat == NULL.
-       The logic in abstract.c always falls back to nb_add/nb_multiply in
-       this case.  Defining both the nb_* and the sq_* slots to call the
-       user-defined methods has unexpected side-effects, as shown by
-       test_descr.notimplemented() */
-    SQSLOT("__add__", sq_concat, NULL, wrap_binaryfunc, "x.__add__(y) <==> x+y"),
-    SQSLOT("__mul__", sq_repeat, NULL, wrap_indexargfunc, "x.__mul__(n) <==> x*n"),
-    SQSLOT("__rmul__", sq_repeat, NULL, wrap_indexargfunc, "x.__rmul__(n) <==> n*x"),
-    SQSLOT("__getitem__", sq_item, slot_sq_item, wrap_sq_item, "x.__getitem__(y) <==> x[y]"),
-    SQSLOT("__getslice__", sq_slice, slot_sq_slice, wrap_ssizessizeargfunc, "x.__getslice__(i, j) <==> x[i:j]\n\
+        SQSLOT("__len__", sq_length, slot_sq_length, wrap_lenfunc, "x.__len__() <==> len(x)"),
+        /* Heap types defining __add__/__mul__ have sq_concat/sq_repeat == NULL.
+           The logic in abstract.c always falls back to nb_add/nb_multiply in
+           this case.  Defining both the nb_* and the sq_* slots to call the
+           user-defined methods has unexpected side-effects, as shown by
+           test_descr.notimplemented() */
+        SQSLOT("__add__", sq_concat, NULL, wrap_binaryfunc, "x.__add__(y) <==> x+y"),
+        SQSLOT("__mul__", sq_repeat, NULL, wrap_indexargfunc, "x.__mul__(n) <==> x*n"),
+        SQSLOT("__rmul__", sq_repeat, NULL, wrap_indexargfunc, "x.__rmul__(n) <==> n*x"),
+        SQSLOT("__getitem__", sq_item, slot_sq_item, wrap_sq_item, "x.__getitem__(y) <==> x[y]"),
+        SQSLOT("__getslice__", sq_slice, slot_sq_slice, wrap_ssizessizeargfunc, "x.__getslice__(i, j) <==> x[i:j]\n\
            \n\
            Use of negative indices is not supported."),
-    SQSLOT("__setitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_setitem, "x.__setitem__(i, y) <==> x[i]=y"),
-    SQSLOT("__delitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_delitem, "x.__delitem__(y) <==> del x[y]"),
-    SQSLOT("__setslice__", sq_ass_slice, slot_sq_ass_slice, wrap_ssizessizeobjargproc,
-           "x.__setslice__(i, j, y) <==> x[i:j]=y\n\
+        SQSLOT("__setitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_setitem, "x.__setitem__(i, y) <==> x[i]=y"),
+        SQSLOT("__delitem__", sq_ass_item, slot_sq_ass_item, wrap_sq_delitem, "x.__delitem__(y) <==> del x[y]"),
+        SQSLOT("__setslice__", sq_ass_slice, slot_sq_ass_slice, wrap_ssizessizeobjargproc,
+               "x.__setslice__(i, j, y) <==> x[i:j]=y\n\
            \n\
            Use  of negative indices is not supported."),
-    SQSLOT("__delslice__", sq_ass_slice, slot_sq_ass_slice, wrap_delslice, "x.__delslice__(i, j) <==> del x[i:j]\n\
+        SQSLOT("__delslice__", sq_ass_slice, slot_sq_ass_slice, wrap_delslice, "x.__delslice__(i, j) <==> del x[i:j]\n\
            \n\
            Use of negative indices is not supported."),
-    SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
-    SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
-    SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
-};
+        SQSLOT("__contains__", sq_contains, slot_sq_contains, wrap_objobjproc, "x.__contains__(y) <==> y in x"),
+        SQSLOT("__iadd__", sq_inplace_concat, NULL, wrap_binaryfunc, "x.__iadd__(y) <==> x+=y"),
+        SQSLOT("__imul__", sq_inplace_repeat, NULL, wrap_indexargfunc, "x.__imul__(y) <==> x*=y"),
+        { NULL, 0, NULL, NULL, NULL, 0 } };
 
 static void init_slotdefs() {
     static bool initialized = false;
@@ -1028,6 +1012,9 @@ static void init_slotdefs() {
 
     for (int i = 0; i < sizeof(slotdefs) / sizeof(slotdefs[0]); i++) {
         if (i > 0) {
+            if (!slotdefs[i].name)
+                continue;
+
 #ifndef NDEBUG
             if (slotdefs[i - 1].offset > slotdefs[i].offset) {
                 printf("slotdef for %s in the wrong place\n", slotdefs[i - 1].name);
@@ -1047,12 +1034,132 @@ static void init_slotdefs() {
     initialized = true;
 }
 
+/* Length of array of slotdef pointers used to store slots with the
+   same __name__.  There should be at most MAX_EQUIV-1 slotdef entries with
+   the same __name__, for any __name__. Since that's a static property, it is
+   appropriate to declare fixed-size arrays for this. */
+#define MAX_EQUIV 10
+
+/* Return a slot pointer for a given name, but ONLY if the attribute has
+   exactly one slot function.  The name must be an interned string. */
+static void** resolve_slotdups(PyTypeObject* type, const std::string& name) {
+    /* XXX Maybe this could be optimized more -- but is it worth it? */
+
+    /* pname and ptrs act as a little cache */
+    static std::string pname;
+    static slotdef* ptrs[MAX_EQUIV];
+    slotdef* p, **pp;
+    void** res, **ptr;
+
+    if (pname != name) {
+        /* Collect all slotdefs that match name into ptrs. */
+        pname = name;
+        pp = ptrs;
+        for (p = slotdefs; p->name; p++) {
+            if (p->name == name)
+                *pp++ = p;
+        }
+        *pp = NULL;
+    }
+
+    /* Look in all matching slots of the type; if exactly one of these has
+       a filled-in slot, return its value.      Otherwise return NULL. */
+    res = NULL;
+    for (pp = ptrs; *pp; pp++) {
+        ptr = slotptr(type, (*pp)->offset);
+        if (ptr == NULL || *ptr == NULL)
+            continue;
+        if (res != NULL)
+            return NULL;
+        res = ptr;
+    }
+    return res;
+}
+
+static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) {
+    assert(p->name);
+
+    PyObject* descr;
+    BoxedWrapperDescriptor* d;
+    void* generic = NULL, * specific = NULL;
+    int use_generic = 0;
+    int offset = p->offset;
+    void** ptr = slotptr(type, offset);
+
+    if (ptr == NULL) {
+        do {
+            ++p;
+        } while (p->offset == offset);
+        return p;
+    }
+
+    do {
+        descr = typeLookup(type, p->name, NULL);
+        if (descr == NULL) {
+            if (ptr == (void**)&type->tp_iternext) {
+                specific = (void*)_PyObject_NextNotImplemented;
+            }
+            continue;
+        }
+        if (Py_TYPE(descr) == wrapperdescr_cls
+            && ((BoxedWrapperDescriptor*)descr)->wrapper->name == std::string(p->name)) {
+            void** tptr = resolve_slotdups(type, p->name);
+            if (tptr == NULL || tptr == ptr)
+                generic = p->function;
+            d = (BoxedWrapperDescriptor*)descr;
+            if (d->wrapper->wrapper == p->wrapper && PyType_IsSubtype(type, d->type)) {
+                if (specific == NULL || specific == d->wrapped)
+                    specific = d->wrapped;
+                else
+                    use_generic = 1;
+            }
+// TODO Pyston doesn't support PyCFunction_Type yet I think?
+#if 0
+        } else if (Py_TYPE(descr) == &PyCFunction_Type && PyCFunction_GET_FUNCTION(descr) == (PyCFunction)tp_new_wrapper
+                   && ptr == (void**)&type->tp_new) {
+            /* The __new__ wrapper is not a wrapper descriptor,
+               so must be special-cased differently.
+               If we don't do this, creating an instance will
+               always use slot_tp_new which will look up
+               __new__ in the MRO which will call tp_new_wrapper
+               which will look through the base classes looking
+               for a static base and call its tp_new (usually
+               PyType_GenericNew), after performing various
+               sanity checks and constructing a new argument
+               list.  Cut all that nonsense short -- this speeds
+               up instance creation tremendously. */
+            specific = (void*)type->tp_new;
+            /* XXX I'm not 100% sure that there isn't a hole
+               in this reasoning that requires additional
+               sanity checks.  I'll buy the first person to
+               point out a bug in this reasoning a beer. */
+#endif
+        } else if (descr == Py_None && ptr == (void**)&type->tp_hash) {
+            /* We specifically allow __hash__ to be set to None
+               to prevent inheritance of the default
+               implementation from object.__hash__ */
+            specific = (void*)PyObject_HashNotImplemented;
+        } else {
+            use_generic = 1;
+            generic = p->function;
+        }
+    } while ((++p)->offset == offset);
+
+    if (specific && !use_generic)
+        *ptr = specific;
+    else
+        *ptr = generic;
+    return p;
+}
+
 bool update_slot(BoxedClass* self, const std::string& attr) {
     bool updated = false;
     for (const slotdef& p : slotdefs) {
+        if (!p.name)
+            continue;
         if (p.name == attr) {
             // TODO update subclasses;
-            update_one_slot(self, p);
+            update_one_slot(self, &p);
             updated = true;
         }
     }
@@ -1062,9 +1169,9 @@ bool update_slot(BoxedClass* self, const std::string& attr) {
 void fixup_slot_dispatchers(BoxedClass* self) {
     init_slotdefs();
 
-    for (const slotdef& p : slotdefs) {
-        update_one_slot(self, p);
-    }
+    const slotdef* p = slotdefs;
+    while (p->name)
+        p = update_one_slot(self, p);
 
     // TODO: CPython handles this by having the __name__ attribute wrap (via a getset object)
     // the tp_name field, whereas we're (needlessly?) doing the opposite.
@@ -1131,6 +1238,321 @@ extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) {
     return isSubclass(a, b);
 }
 
+#define BUFFER_FLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
+
+// This is copied from CPython with some modifications:
+static void inherit_special(PyTypeObject* type, PyTypeObject* base) {
+    Py_ssize_t oldsize, newsize;
+
+    /* Special flag magic */
+    if (!type->tp_as_buffer && base->tp_as_buffer) {
+        type->tp_flags &= ~BUFFER_FLAGS;
+        type->tp_flags |= base->tp_flags & BUFFER_FLAGS;
+    }
+    if (!type->tp_as_sequence && base->tp_as_sequence) {
+        type->tp_flags &= ~Py_TPFLAGS_HAVE_SEQUENCE_IN;
+        type->tp_flags |= base->tp_flags & Py_TPFLAGS_HAVE_SEQUENCE_IN;
+    }
+    if ((type->tp_flags & Py_TPFLAGS_HAVE_INPLACEOPS) != (base->tp_flags & Py_TPFLAGS_HAVE_INPLACEOPS)) {
+        if ((!type->tp_as_number && base->tp_as_number) || (!type->tp_as_sequence && base->tp_as_sequence)) {
+            type->tp_flags &= ~Py_TPFLAGS_HAVE_INPLACEOPS;
+            if (!type->tp_as_number && !type->tp_as_sequence) {
+                type->tp_flags |= base->tp_flags & Py_TPFLAGS_HAVE_INPLACEOPS;
+            }
+        }
+        /* Wow */
+    }
+    if (!type->tp_as_number && base->tp_as_number) {
+        type->tp_flags &= ~Py_TPFLAGS_CHECKTYPES;
+        type->tp_flags |= base->tp_flags & Py_TPFLAGS_CHECKTYPES;
+    }
+
+    /* Copying basicsize is connected to the GC flags */
+    oldsize = base->tp_basicsize;
+    newsize = type->tp_basicsize ? type->tp_basicsize : oldsize;
+    if (!(type->tp_flags & Py_TPFLAGS_HAVE_GC) && (base->tp_flags & Py_TPFLAGS_HAVE_GC)
+        && (type->tp_flags & Py_TPFLAGS_HAVE_RICHCOMPARE /*GC slots exist*/)
+        && (!type->tp_traverse && !type->tp_clear)) {
+        type->tp_flags |= Py_TPFLAGS_HAVE_GC;
+        if (type->tp_traverse == NULL)
+            type->tp_traverse = base->tp_traverse;
+        if (type->tp_clear == NULL)
+            type->tp_clear = base->tp_clear;
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+        /* The condition below could use some explanation.
+           It appears that tp_new is not inherited for static types
+           whose base class is 'object'; this seems to be a precaution
+           so that old extension types don't suddenly become
+           callable (object.__new__ wouldn't insure the invariants
+           that the extension type's own factory function ensures).
+           Heap types, of course, are under our control, so they do
+           inherit tp_new; static extension types that specify some
+           other built-in type as the default are considered
+           new-style-aware so they also inherit object.__new__. */
+        if (base != object_cls || (type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+            if (type->tp_new == NULL)
+                type->tp_new = base->tp_new;
+        }
+    }
+    type->tp_basicsize = newsize;
+
+/* Copy other non-function slots */
+
+#undef COPYVAL
+#define COPYVAL(SLOT)                                                                                                  \
+    if (type->SLOT == 0)                                                                                               \
+    type->SLOT = base->SLOT
+
+    COPYVAL(tp_itemsize);
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_WEAKREFS) {
+        COPYVAL(tp_weaklistoffset);
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+        COPYVAL(tp_dictoffset);
+    }
+
+// Pyston change: are not using these for now:
+#if 0
+    /* Setup fast subclass flags */
+    if (PyType_IsSubtype(base, (PyTypeObject*)PyExc_BaseException))
+        type->tp_flags |= Py_TPFLAGS_BASE_EXC_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyType_Type))
+        type->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyInt_Type))
+        type->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyLong_Type))
+        type->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyString_Type))
+        type->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
+#ifdef Py_USING_UNICODE
+    else if (PyType_IsSubtype(base, &PyUnicode_Type))
+        type->tp_flags |= Py_TPFLAGS_UNICODE_SUBCLASS;
+#endif
+    else if (PyType_IsSubtype(base, &PyTuple_Type))
+        type->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyList_Type))
+        type->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
+    else if (PyType_IsSubtype(base, &PyDict_Type))
+        type->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
+#endif
+}
+
+static int overrides_name(PyTypeObject* type, const char* name) {
+    PyObject* dict = type->tp_dict;
+
+    assert(dict != NULL);
+    if (PyDict_GetItemString(dict, name) != NULL) {
+        return 1;
+    }
+    return 0;
+}
+
+#define OVERRIDES_HASH(x) overrides_name(x, "__hash__")
+#define OVERRIDES_EQ(x) overrides_name(x, "__eq__")
+
+static void inherit_slots(PyTypeObject* type, PyTypeObject* base) {
+    // Pyston addition:
+    if (base->tp_base == NULL)
+        assert(base == object_cls);
+
+    PyTypeObject* basebase;
+
+#undef SLOTDEFINED
+#undef COPYSLOT
+#undef COPYNUM
+#undef COPYSEQ
+#undef COPYMAP
+#undef COPYBUF
+
+#define SLOTDEFINED(SLOT) (base->SLOT != 0 && (basebase == NULL || base->SLOT != basebase->SLOT))
+
+#define COPYSLOT(SLOT)                                                                                                 \
+    if (!type->SLOT && SLOTDEFINED(SLOT))                                                                              \
+    type->SLOT = base->SLOT
+
+#define COPYNUM(SLOT) COPYSLOT(tp_as_number->SLOT)
+#define COPYSEQ(SLOT) COPYSLOT(tp_as_sequence->SLOT)
+#define COPYMAP(SLOT) COPYSLOT(tp_as_mapping->SLOT)
+#define COPYBUF(SLOT) COPYSLOT(tp_as_buffer->SLOT)
+
+    /* This won't inherit indirect slots (from tp_as_number etc.)
+       if type doesn't provide the space. */
+
+    if (type->tp_as_number != NULL && base->tp_as_number != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_number == NULL)
+            basebase = NULL;
+        COPYNUM(nb_add);
+        COPYNUM(nb_subtract);
+        COPYNUM(nb_multiply);
+        COPYNUM(nb_divide);
+        COPYNUM(nb_remainder);
+        COPYNUM(nb_divmod);
+        COPYNUM(nb_power);
+        COPYNUM(nb_negative);
+        COPYNUM(nb_positive);
+        COPYNUM(nb_absolute);
+        COPYNUM(nb_nonzero);
+        COPYNUM(nb_invert);
+        COPYNUM(nb_lshift);
+        COPYNUM(nb_rshift);
+        COPYNUM(nb_and);
+        COPYNUM(nb_xor);
+        COPYNUM(nb_or);
+        COPYNUM(nb_coerce);
+        COPYNUM(nb_int);
+        COPYNUM(nb_long);
+        COPYNUM(nb_float);
+        COPYNUM(nb_oct);
+        COPYNUM(nb_hex);
+        COPYNUM(nb_inplace_add);
+        COPYNUM(nb_inplace_subtract);
+        COPYNUM(nb_inplace_multiply);
+        COPYNUM(nb_inplace_divide);
+        COPYNUM(nb_inplace_remainder);
+        COPYNUM(nb_inplace_power);
+        COPYNUM(nb_inplace_lshift);
+        COPYNUM(nb_inplace_rshift);
+        COPYNUM(nb_inplace_and);
+        COPYNUM(nb_inplace_xor);
+        COPYNUM(nb_inplace_or);
+        if (base->tp_flags & Py_TPFLAGS_CHECKTYPES) {
+            COPYNUM(nb_true_divide);
+            COPYNUM(nb_floor_divide);
+            COPYNUM(nb_inplace_true_divide);
+            COPYNUM(nb_inplace_floor_divide);
+        }
+        if (base->tp_flags & Py_TPFLAGS_HAVE_INDEX) {
+            COPYNUM(nb_index);
+        }
+    }
+
+    if (type->tp_as_sequence != NULL && base->tp_as_sequence != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_sequence == NULL)
+            basebase = NULL;
+        COPYSEQ(sq_length);
+        COPYSEQ(sq_concat);
+        COPYSEQ(sq_repeat);
+        COPYSEQ(sq_item);
+        COPYSEQ(sq_slice);
+        COPYSEQ(sq_ass_item);
+        COPYSEQ(sq_ass_slice);
+        COPYSEQ(sq_contains);
+        COPYSEQ(sq_inplace_concat);
+        COPYSEQ(sq_inplace_repeat);
+    }
+
+    if (type->tp_as_mapping != NULL && base->tp_as_mapping != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_mapping == NULL)
+            basebase = NULL;
+        COPYMAP(mp_length);
+        COPYMAP(mp_subscript);
+        COPYMAP(mp_ass_subscript);
+    }
+
+    if (type->tp_as_buffer != NULL && base->tp_as_buffer != NULL) {
+        basebase = base->tp_base;
+        if (basebase->tp_as_buffer == NULL)
+            basebase = NULL;
+        COPYBUF(bf_getreadbuffer);
+        COPYBUF(bf_getwritebuffer);
+        COPYBUF(bf_getsegcount);
+        COPYBUF(bf_getcharbuffer);
+        COPYBUF(bf_getbuffer);
+        COPYBUF(bf_releasebuffer);
+    }
+
+    basebase = base->tp_base;
+
+    COPYSLOT(tp_dealloc);
+    COPYSLOT(tp_print);
+    if (type->tp_getattr == NULL && type->tp_getattro == NULL) {
+        type->tp_getattr = base->tp_getattr;
+        type->tp_getattro = base->tp_getattro;
+    }
+    if (type->tp_setattr == NULL && type->tp_setattro == NULL) {
+        type->tp_setattr = base->tp_setattr;
+        type->tp_setattro = base->tp_setattro;
+    }
+    /* tp_compare see tp_richcompare */
+    COPYSLOT(tp_repr);
+    /* tp_hash see tp_richcompare */
+    COPYSLOT(tp_call);
+    COPYSLOT(tp_str);
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_RICHCOMPARE) {
+        if (type->tp_compare == NULL && type->tp_richcompare == NULL && type->tp_hash == NULL) {
+            type->tp_compare = base->tp_compare;
+            type->tp_richcompare = base->tp_richcompare;
+            type->tp_hash = base->tp_hash;
+            /* Check for changes to inherited methods in Py3k*/
+            if (Py_Py3kWarningFlag) {
+                if (base->tp_hash && (base->tp_hash != PyObject_HashNotImplemented) && !OVERRIDES_HASH(type)) {
+                    if (OVERRIDES_EQ(type)) {
+                        if (PyErr_WarnPy3k("Overriding "
+                                           "__eq__ blocks inheritance "
+                                           "of __hash__ in 3.x",
+                                           1) < 0)
+                            /* XXX This isn't right.  If the warning is turned
+                               into an exception, we should be communicating
+                               the error back to the caller, but figuring out
+                               how to clean up in that case is tricky.  See
+                               issue 8627 for more. */
+                            PyErr_Clear();
+                    }
+                }
+            }
+        }
+    } else {
+        COPYSLOT(tp_compare);
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_ITER) {
+        COPYSLOT(tp_iter);
+        COPYSLOT(tp_iternext);
+    }
+    if (type->tp_flags & base->tp_flags & Py_TPFLAGS_HAVE_CLASS) {
+        COPYSLOT(tp_descr_get);
+        COPYSLOT(tp_descr_set);
+        COPYSLOT(tp_dictoffset);
+        COPYSLOT(tp_init);
+        COPYSLOT(tp_alloc);
+        COPYSLOT(tp_is_gc);
+        if ((type->tp_flags & Py_TPFLAGS_HAVE_GC) == (base->tp_flags & Py_TPFLAGS_HAVE_GC)) {
+            /* They agree about gc. */
+            COPYSLOT(tp_free);
+        } else if ((type->tp_flags & Py_TPFLAGS_HAVE_GC) && type->tp_free == NULL && base->tp_free == _PyObject_Del) {
+            /* A bit of magic to plug in the correct default
+             * tp_free function when a derived class adds gc,
+             * didn't define tp_free, and the base uses the
+             * default non-gc tp_free.
+             */
+            type->tp_free = PyObject_GC_Del;
+        }
+        /* else they didn't agree about gc, and there isn't something
+         * obvious to be done -- the type is on its own.
+         */
+    }
+}
+
+// PystonType_Ready is for the common code between PyType_Ready (which is just for extension classes)
+// and our internal type-creation endpoints (BoxedClass::BoxedClass()).
+// TODO: Move more of the duplicated logic into here.
+void PystonType_Ready(BoxedClass* cls) {
+    inherit_special(cls, cls->tp_base);
+
+    // This is supposed to be over the MRO but we don't support multiple inheritance yet:
+    BoxedClass* b = cls->tp_base;
+    while (b) {
+        // Not sure when this could fail; maybe not in Pyston right now but apparently it can in CPython:
+        if (PyType_Check(b))
+            inherit_slots(cls, b);
+
+        b = b->tp_base;
+    }
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) {
     gc::registerNonheapRootObject(cls);
 
@@ -1174,13 +1596,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
 
     RELEASE_ASSERT(cls->tp_iter == NULL, "");
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
-    RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_alloc == NULL || cls->tp_alloc == PyType_GenericAlloc, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
-    RELEASE_ASSERT(cls->tp_base == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
     RELEASE_ASSERT(cls->tp_cache == NULL, "");
     RELEASE_ASSERT(cls->tp_subclasses == NULL, "");
@@ -1198,9 +1618,11 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
     INITIALIZE(cls->dependent_icgetattrs);
 #undef INITIALIZE
 
-    BoxedClass* base = cls->base = object_cls;
+    BoxedClass* base = cls->tp_base;
+    if (base == NULL)
+        base = cls->tp_base = object_cls;
     if (!cls->cls)
-        cls->cls = cls->base->cls;
+        cls->cls = cls->tp_base->cls;
 
     assert(cls->tp_dict == NULL);
     cls->tp_dict = makeAttrWrapper(cls);
@@ -1236,6 +1658,8 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
         if (VERBOSITY())
             printf("warning: ignoring tp_getset for now\n");
     }
+
+    PystonType_Ready(cls);
 
     cls->gc_visit = &conservativeGCHandler;
     cls->is_user_defined = true;

@@ -191,6 +191,71 @@ extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*clo
     Py_FatalError("unimplemented");
 }
 
+extern "C" FILE* PyFile_AsFile(PyObject* f) {
+    if (!f || !PyFile_Check(f))
+        return NULL;
+
+    return static_cast<BoxedFile*>(f)->f;
+}
+
+extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) {
+    if (f->cls != file_cls || v->cls != str_cls || flags != Py_PRINT_RAW)
+        Py_FatalError("unimplemented");
+    try {
+        Box* r = fileWrite(static_cast<BoxedFile*>(f), v);
+        assert(r == None);
+        return 0;
+    } catch (Box* b) {
+        PyErr_SetObject(b->cls, b);
+        return -1;
+    }
+}
+
+#define FILE_BEGIN_ALLOW_THREADS(fobj)                                                                                 \
+    {                                                                                                                  \
+    /*fobj->unlocked_count++;*/                                                                                        \
+    Py_BEGIN_ALLOW_THREADS
+
+#define FILE_END_ALLOW_THREADS(fobj)                                                                                   \
+    Py_END_ALLOW_THREADS                                                                                               \
+    /*fobj->unlocked_count--;*/                                                                                        \
+    /*assert(fobj->unlocked_count >= 0);*/                                                                             \
+    }
+
+static PyObject* err_closed(void) noexcept {
+    PyErr_SetString(PyExc_ValueError, "I/O operation on closed file");
+    return NULL;
+}
+
+extern "C" int PyFile_WriteString(const char* s, PyObject* f) {
+    if (f == NULL) {
+        /* Should be caused by a pre-existing error */
+        if (!PyErr_Occurred())
+            PyErr_SetString(PyExc_SystemError, "null file for PyFile_WriteString");
+        return -1;
+    } else if (PyFile_Check(f)) {
+        PyFileObject* fobj = (PyFileObject*)f;
+        FILE* fp = PyFile_AsFile(f);
+        if (fp == NULL) {
+            err_closed();
+            return -1;
+        }
+        FILE_BEGIN_ALLOW_THREADS(fobj)
+        fputs(s, fp);
+        FILE_END_ALLOW_THREADS(fobj)
+        return 0;
+    } else if (!PyErr_Occurred()) {
+        PyObject* v = PyString_FromString(s);
+        int err;
+        if (v == NULL)
+            return -1;
+        err = PyFile_WriteObject(v, f, Py_PRINT_RAW);
+        Py_DECREF(v);
+        return err;
+    } else
+        return -1;
+}
+
 extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) {
     Py_FatalError("unimplemented");
 }
@@ -201,6 +266,14 @@ extern "C" int _PyFile_SanitizeMode(char* mode) {
 
 extern "C" int PyObject_AsFileDescriptor(PyObject* o) {
     Py_FatalError("unimplemented");
+}
+
+extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) {
+    try {
+        return softspace(f, newflag);
+    } catch (Box* b) {
+        abort();
+    }
 }
 
 void setupFile() {

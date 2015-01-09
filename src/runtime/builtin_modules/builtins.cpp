@@ -521,6 +521,9 @@ BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *Attribu
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
     *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
     *SystemError, *NotImplementedError, *PendingDeprecationWarning;
+
+Box* PyExc_RecursionErrorInst;
+Box* PyExc_MemoryErrorInst;
 }
 
 Box* exceptionNew1(BoxedClass* cls) {
@@ -1086,5 +1089,11 @@ void setupBuiltins() {
     builtins_module->giveAttr("property", property_cls);
     builtins_module->giveAttr("staticmethod", staticmethod_cls);
     builtins_module->giveAttr("classmethod", classmethod_cls);
+
+
+    PyExc_RecursionErrorInst = new BoxedException(RuntimeError);
+    gc::registerPermanentRoot(PyExc_RecursionErrorInst);
+    PyExc_MemoryErrorInst = new BoxedException(MemoryError);
+    gc::registerPermanentRoot(PyExc_MemoryErrorInst);
 }
 }

@@ -37,7 +37,8 @@ PyAPI_DATA(PyTypeObject*) int_cls;
 #define PyInt_Type (*int_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyInt_Check(PyObject*);
+PyAPI_FUNC(bool) _PyInt_Check(PyObject*);
+#define PyInt_Check(op) _PyInt_Check((PyObject*)op)
 #if 0
 #define PyInt_Check(op) \
 		 PyType_FastSubclass((op)->ob_type, Py_TPFLAGS_INT_SUBCLASS)

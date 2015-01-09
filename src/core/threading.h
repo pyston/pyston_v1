@@ -36,11 +36,6 @@ namespace threading {
 // Whether or not a second thread was ever started:
 bool threadWasStarted();
 
-struct ThreadState {
-    Box* exc_type, *exc_value, *exc_traceback;
-};
-extern __thread ThreadState cur_thread_state;
-
 // returns a thread id (currently, the pthread_t id)
 intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg2, Box* arg3);
 
@@ -49,7 +44,7 @@ void registerMainThread();
 void finishMainThread();
 
 // Hook for the GC; will visit all the threads (including the current one), visiting their
-// stacks and thread-local ThreadState objects
+// stacks and thread-local PyThreadState objects
 void visitAllStacks(gc::GCVisitor* v);
 
 // Some hooks to keep track of the list of stacks that this thread has been using.

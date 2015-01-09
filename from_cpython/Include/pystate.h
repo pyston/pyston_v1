@@ -110,8 +110,13 @@ typedef struct _ts {
 
 } PyThreadState;
 #endif
-struct _PyThreadState;
-typedef struct _PyThreadState PyThreadState;
+typedef struct _ts {
+    int recursion_depth;
+
+    PyObject *curexc_type;
+    PyObject *curexc_value;
+    PyObject *curexc_traceback;
+} PyThreadState;
 
 
 PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_New(void);
@@ -135,7 +140,10 @@ PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *);
 
 /* Variable and macro for in-line access to current thread state */
 
-PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
+// Pyston change: use our internal name for this
+//PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
+PyAPI_DATA(__thread PyThreadState) cur_thread_state;
+#define _PyThreadState_Current (&cur_thread_state)
 
 #ifdef Py_DEBUG
 #define PyThreadState_GET() PyThreadState_Get()

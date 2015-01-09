@@ -32,10 +32,9 @@ BoxedModule* sys_module;
 BoxedDict* sys_modules_dict;
 
 Box* sysExcInfo() {
-    return new BoxedTuple(
-        { threading::cur_thread_state.exc_type ? threading::cur_thread_state.exc_type : None,
-          threading::cur_thread_state.exc_value ? threading::cur_thread_state.exc_value : None,
-          threading::cur_thread_state.exc_traceback ? threading::cur_thread_state.exc_traceback : None });
+    return new BoxedTuple({ cur_thread_state.curexc_type ? cur_thread_state.curexc_type : None,
+                            cur_thread_state.curexc_value ? cur_thread_state.curexc_value : None,
+                            cur_thread_state.curexc_traceback ? cur_thread_state.curexc_traceback : None });
 }
 
 static Box* sysExit(Box* arg) {
@@ -74,6 +73,65 @@ Box* getSysStdout() {
     Box* sys_stdout = sys_module->getattr("stdout");
     RELEASE_ASSERT(sys_stdout, "lost sys.stdout??");
     return sys_stdout;
+}
+
+extern "C" int PySys_SetObject(const char* name, PyObject* v) {
+    try {
+        if (!v) {
+            if (sys_module->getattr(name))
+                sys_module->delattr(name, NULL);
+        } else
+            sys_module->setattr(name, v, NULL);
+    } catch (Box* b) {
+        abort();
+    }
+    return 0;
+}
+
+extern "C" PyObject* PySys_GetObject(const char* name) {
+    return sys_module->getattr(name);
+}
+
+static void mywrite(const char* name, FILE* fp, const char* format, va_list va) noexcept {
+    PyObject* file;
+    PyObject* error_type, *error_value, *error_traceback;
+
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+    file = PySys_GetObject(name);
+    if (file == NULL || PyFile_AsFile(file) == fp)
+        vfprintf(fp, format, va);
+    else {
+        char buffer[1001];
+        const int written = PyOS_vsnprintf(buffer, sizeof(buffer), format, va);
+        if (PyFile_WriteString(buffer, file) != 0) {
+            PyErr_Clear();
+            fputs(buffer, fp);
+        }
+        if (written < 0 || (size_t)written >= sizeof(buffer)) {
+            const char* truncated = "... truncated";
+            if (PyFile_WriteString(truncated, file) != 0) {
+                PyErr_Clear();
+                fputs(truncated, fp);
+            }
+        }
+    }
+    PyErr_Restore(error_type, error_value, error_traceback);
+}
+
+extern "C" void PySys_WriteStdout(const char* format, ...) {
+    va_list va;
+
+    va_start(va, format);
+    mywrite("stdout", stdout, format, va);
+    va_end(va);
+}
+
+extern "C" void PySys_WriteStderr(const char* format, ...) {
+    va_list va;
+
+    va_start(va, format);
+    mywrite("stderr", stderr, format, va);
+    va_end(va);
 }
 
 void addToSysArgv(const char* str) {

@@ -869,6 +869,10 @@ runpy_%: %.py ext_python
 	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
 $(call make_search,runpy_%)
 
+dbgpy_%: %.py ext_pythondbg
+	export PYTHON_VERSION=$$(python2.7-dbg -V 2>&1 | awk '{print $$2}'); PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7-pydebug $(GDB) --ex "dir $(DEPS_DIR)/python-src/python2.7-$$PYTHON_VERSION/debian" $(GDB_CMDS) --args python2.7-dbg $<
+$(call make_search,dbgpy_%)
+
 # "kill valgrind":
 kv:
 	ps aux | awk '/[v]algrind/ {print $$2}' | xargs kill -9; true
@@ -991,9 +995,11 @@ ext_pyston_selfhost_release: pyston_release $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR
 	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_release setup.py build
 	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
 
-.PHONY: ext_python
+.PHONY: ext_python ext_pythondbg
 ext_python: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
 	cd $(TEST_DIR)/test_extension; python setup.py build
+ext_pythondbg: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
+	cd $(TEST_DIR)/test_extension; python2.7-dbg setup.py build
 
 $(FROM_CPYTHON_SRCS:.c=.o): %.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@

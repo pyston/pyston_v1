@@ -42,6 +42,9 @@
 #define HAVE_INT32_T 1
 #define HAVE_INT64_T 1
 
+#define PY_FORMAT_LONG_LONG "ll"
+#define PY_FORMAT_SIZE_T "z"
+
 #define DOUBLE_IS_LITTLE_ENDIAN_IEEE754 1
 
 #define WITH_THREAD

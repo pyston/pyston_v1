@@ -66,6 +66,7 @@
 #include "classobject.h"
 #include "fileobject.h"
 #include "pycapsule.h"
+#include "traceback.h"
 #include "sliceobject.h"
 #include "iterobject.h"
 #include "descrobject.h"
@@ -79,6 +80,7 @@
 #include "modsupport.h"
 #include "pythonrun.h"
 #include "ceval.h"
+#include "sysmodule.h"
 #include "intrcheck.h"
 #include "import.h"
 

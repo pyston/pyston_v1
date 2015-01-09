@@ -72,6 +72,29 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) {
+    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
+    // won't end up doing a GIL check?
+    // threading::GLDemoteRegion _gil_demote;
+
+    try {
+        return getattr(o, attr);
+    } catch (Box* b) {
+        PyErr_SetObject(b->cls, b);
+        return NULL;
+    }
+}
+
+extern "C" int PyObject_HasAttrString(PyObject* v, const char* name) {
+    PyObject* res = PyObject_GetAttrString(v, name);
+    if (res != NULL) {
+        Py_DECREF(res);
+        return 1;
+    }
+    PyErr_Clear();
+    return 0;
+}
+
 extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* buffer_len) {
     Py_FatalError("unimplemented");
 }

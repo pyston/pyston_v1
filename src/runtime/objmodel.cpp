@@ -253,7 +253,7 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
     while (child) {
         if (child == parent)
             return true;
-        child = child->base;
+        child = child->tp_base;
     }
     return false;
 }
@@ -345,7 +345,7 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                        int instance_size, bool is_user_defined)
-    : BoxVar(metaclass, 0), base(base), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false),
+    : BoxVar(metaclass, 0), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false),
       is_user_defined(is_user_defined) {
 
     // Zero out the CPython tp_* slots:
@@ -354,6 +354,9 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
 
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
+    tp_flags |= Py_TPFLAGS_BASETYPE;
+
+    tp_base = base;
 
     if (metaclass == NULL) {
         assert(type_cls == NULL);
@@ -639,16 +642,16 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
 
         val = cls->getattr(attr, rewrite_args);
         assert(rewrite_args->out_success);
-        if (!val and cls->base) {
+        if (!val and cls->tp_base) {
             rewrite_args->out_success = false;
-            rewrite_args->obj = obj_saved->getAttr(offsetof(BoxedClass, base));
-            val = typeLookup(cls->base, attr, rewrite_args);
+            rewrite_args->obj = obj_saved->getAttr(offsetof(BoxedClass, tp_base));
+            val = typeLookup(cls->tp_base, attr, rewrite_args);
         }
         return val;
     } else {
         val = cls->getattr(attr, NULL);
-        if (!val and cls->base)
-            return typeLookup(cls->base, attr, NULL);
+        if (!val and cls->tp_base)
+            return typeLookup(cls->tp_base, attr, NULL);
         return val;
     }
 }
@@ -3304,6 +3307,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     RELEASE_ASSERT(_base->cls == type_cls, "");
     base = static_cast<BoxedClass*>(_base);
 
+    if ((base->tp_flags & Py_TPFLAGS_BASETYPE) == 0)
+        raiseExcHelper(TypeError, "type '%.100s' is not an acceptable base type", base->tp_name);
 
 
     BoxedClass* made;
@@ -3329,6 +3334,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     // TODO should this function (typeNew) call PyType_Ready?
     made->tp_new = base->tp_new;
     made->tp_alloc = reinterpret_cast<decltype(cls->tp_alloc)>(PyType_GenericAlloc);
+
+    PystonType_Ready(made);
     fixup_slot_dispatchers(made);
 
     return made;
