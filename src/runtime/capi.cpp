@@ -32,9 +32,11 @@ BoxedClass* method_cls;
 
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
     extern "C" bool Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
+#define MAKE_CHECK2(NAME, cls_name)                                                                                    \
+    extern "C" bool _Py##NAME##_Check(PyObject* op) { return isSubclass(op->cls, cls_name); }
 
-MAKE_CHECK(Int, int_cls)
-MAKE_CHECK(String, str_cls)
+MAKE_CHECK2(Int, int_cls)
+MAKE_CHECK2(String, str_cls)
 MAKE_CHECK(Long, long_cls)
 MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)
@@ -47,6 +49,7 @@ MAKE_CHECK(Unicode, unicode_cls)
 #endif
 
 #undef MAKE_CHECK
+#undef MAKE_CHECK2
 
 extern "C" bool _PyIndex_Check(PyObject* op) {
     // TODO this is wrong (the CPython version checks for things that can be coerced to a number):
@@ -644,10 +647,10 @@ extern "C" void PyErr_NormalizeException(PyObject** exc, PyObject** val, PyObjec
 }
 
 void checkAndThrowCAPIException() {
-    Box* value = threading::cur_thread_state.exc_value;
+    Box* value = cur_thread_state.curexc_value;
     if (value) {
-        RELEASE_ASSERT(threading::cur_thread_state.exc_traceback == NULL, "unsupported");
-        Box* _type = threading::cur_thread_state.exc_type;
+        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL, "unsupported");
+        Box* _type = cur_thread_state.curexc_type;
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
@@ -655,13 +658,12 @@ void checkAndThrowCAPIException() {
         // This is similar to PyErr_NormalizeException:
         if (!isInstance(value, type)) {
             if (value->cls == tuple_cls) {
-                value = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(0, 0, true, false), value, NULL,
-                                    NULL, NULL, NULL);
+                value = runtimeCall(cur_thread_state.curexc_type, ArgPassSpec(0, 0, true, false), value, NULL, NULL,
+                                    NULL, NULL);
             } else if (value == None) {
-                value = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+                value = runtimeCall(cur_thread_state.curexc_type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
             } else {
-                value
-                    = runtimeCall(threading::cur_thread_state.exc_type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
+                value = runtimeCall(cur_thread_state.curexc_type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
             }
         }
 
@@ -673,9 +675,9 @@ void checkAndThrowCAPIException() {
 }
 
 extern "C" void PyErr_Restore(PyObject* type, PyObject* value, PyObject* traceback) {
-    threading::cur_thread_state.exc_type = type;
-    threading::cur_thread_state.exc_value = value;
-    threading::cur_thread_state.exc_traceback = traceback;
+    cur_thread_state.curexc_type = type;
+    cur_thread_state.curexc_value = value;
+    cur_thread_state.curexc_traceback = traceback;
 }
 
 extern "C" void PyErr_Clear() {
@@ -702,12 +704,112 @@ extern "C" int PyErr_CheckSignals() {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
+extern "C" int PyExceptionClass_Check(PyObject* o) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyExceptionInstance_Check(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" const char* PyExceptionClass_Name(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) {
+    Py_FatalError("unimplemented");
+}
+
+#define Py_DEFAULT_RECURSION_LIMIT 1000
+static int recursion_limit = Py_DEFAULT_RECURSION_LIMIT;
+extern "C" {
+int _Py_CheckRecursionLimit = Py_DEFAULT_RECURSION_LIMIT;
+}
+
+/* the macro Py_EnterRecursiveCall() only calls _Py_CheckRecursiveCall()
+   if the recursion_depth reaches _Py_CheckRecursionLimit.
+   If USE_STACKCHECK, the macro decrements _Py_CheckRecursionLimit
+   to guarantee that _Py_CheckRecursiveCall() is regularly called.
+   Without USE_STACKCHECK, there is no need for this. */
+extern "C" int _Py_CheckRecursiveCall(const char* where) {
+    PyThreadState* tstate = PyThreadState_GET();
+
+#ifdef USE_STACKCHECK
+    if (PyOS_CheckStack()) {
+        --tstate->recursion_depth;
+        PyErr_SetString(PyExc_MemoryError, "Stack overflow");
+        return -1;
+    }
+#endif
+    if (tstate->recursion_depth > recursion_limit) {
+        --tstate->recursion_depth;
+        PyErr_Format(PyExc_RuntimeError, "maximum recursion depth exceeded%s", where);
+        return -1;
+    }
+    _Py_CheckRecursionLimit = recursion_limit;
+    return 0;
+}
+
+extern "C" int Py_GetRecursionLimit(void) {
+    return recursion_limit;
+}
+
+extern "C" void Py_SetRecursionLimit(int new_limit) {
+    recursion_limit = new_limit;
+    _Py_CheckRecursionLimit = recursion_limit;
+}
+
+extern "C" int PyErr_GivenExceptionMatches(PyObject* err, PyObject* exc) {
+    if (err == NULL || exc == NULL) {
+        /* maybe caused by "import exceptions" that failed early on */
+        return 0;
+    }
+    if (PyTuple_Check(exc)) {
+        Py_ssize_t i, n;
+        n = PyTuple_Size(exc);
+        for (i = 0; i < n; i++) {
+            /* Test recursively */
+            if (PyErr_GivenExceptionMatches(err, PyTuple_GET_ITEM(exc, i))) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+    /* err might be an instance, so check its class. */
+    if (PyExceptionInstance_Check(err))
+        err = PyExceptionInstance_Class(err);
+
+    if (PyExceptionClass_Check(err) && PyExceptionClass_Check(exc)) {
+        int res = 0, reclimit;
+        PyObject* exception, *value, *tb;
+        PyErr_Fetch(&exception, &value, &tb);
+        /* Temporarily bump the recursion limit, so that in the most
+           common case PyObject_IsSubclass will not raise a recursion
+           error we have to ignore anyway.  Don't do it when the limit
+           is already insanely high, to avoid overflow */
+        reclimit = Py_GetRecursionLimit();
+        if (reclimit < (1 << 30))
+            Py_SetRecursionLimit(reclimit + 5);
+        res = PyObject_IsSubclass(err, exc);
+        Py_SetRecursionLimit(reclimit);
+        /* This function must not fail, so print the error here */
+        if (res == -1) {
+            PyErr_WriteUnraisable(err);
+            res = 0;
+        }
+        PyErr_Restore(exception, value, tb);
+        return res;
+    }
+
+    return err == exc;
+}
+
+extern "C" int PyErr_ExceptionMatches(PyObject* exc) {
+    return PyErr_GivenExceptionMatches(PyErr_Occurred(), exc);
+}
+
 extern "C" PyObject* PyErr_Occurred() {
-    return threading::cur_thread_state.exc_type;
+    return cur_thread_state.curexc_type;
 }
 
 extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) {

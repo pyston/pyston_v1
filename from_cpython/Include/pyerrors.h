@@ -100,6 +100,8 @@ PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**);
 
 /* */
 
+// Pyston change: made these function calls for now
+#if 0
 #define PyExceptionClass_Check(x)                                       \
     (PyClass_Check((x)) || (PyType_Check((x)) &&                        \
       PyType_FastSubclass((PyTypeObject*)(x), Py_TPFLAGS_BASE_EXC_SUBCLASS)))
@@ -117,7 +119,12 @@ PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**);
     ((PyInstance_Check((x))                                             \
       ? (PyObject*)((PyInstanceObject*)(x))->in_class                   \
       : (PyObject*)((x)->ob_type)))
-
+#endif
+// (We might have to make these wrapper macros that do appropriate casting to PyObject)
+PyAPI_FUNC(int) PyExceptionClass_Check(PyObject*);
+PyAPI_FUNC(int) PyExceptionInstance_Check(PyObject*);
+PyAPI_FUNC(const char*) PyExceptionClass_Name(PyObject*);
+PyAPI_FUNC(PyObject*) PyExceptionInstance_Class(PyObject*);
 
 /* Predefined exceptions */
 

@@ -32,10 +32,9 @@ BoxedModule* sys_module;
 BoxedDict* sys_modules_dict;
 
 Box* sysExcInfo() {
-    return new BoxedTuple(
-        { threading::cur_thread_state.exc_type ? threading::cur_thread_state.exc_type : None,
-          threading::cur_thread_state.exc_value ? threading::cur_thread_state.exc_value : None,
-          threading::cur_thread_state.exc_traceback ? threading::cur_thread_state.exc_traceback : None });
+    return new BoxedTuple({ cur_thread_state.curexc_type ? cur_thread_state.curexc_type : None,
+                            cur_thread_state.curexc_value ? cur_thread_state.curexc_value : None,
+                            cur_thread_state.curexc_traceback ? cur_thread_state.curexc_traceback : None });
 }
 
 static Box* sysExit(Box* arg) {

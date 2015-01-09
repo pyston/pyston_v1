@@ -118,21 +118,69 @@ extern "C" PyObject* PyErr_SetFromErrnoWithUnicodeFilename(PyObject* exc, const 
 #endif /* MS_WINDOWS */
 
 extern "C" void PyErr_Fetch(PyObject** p_type, PyObject** p_value, PyObject** p_traceback) {
-    auto* tstate = &threading::cur_thread_state;
+    PyThreadState* tstate = PyThreadState_GET();
 
-    *p_type = tstate->exc_type;
-    *p_value = tstate->exc_value;
-    *p_traceback = tstate->exc_traceback;
+    *p_type = tstate->curexc_type;
+    *p_value = tstate->curexc_value;
+    *p_traceback = tstate->curexc_traceback;
 
-    tstate->exc_type = NULL;
-    tstate->exc_value = NULL;
-    tstate->exc_traceback = NULL;
+    tstate->curexc_type = NULL;
+    tstate->curexc_value = NULL;
+    tstate->curexc_traceback = NULL;
 }
 
 extern "C" PyObject* PyErr_SetFromErrno(PyObject* exc) {
     return PyErr_SetFromErrnoWithFilenameObject(exc, NULL);
 }
 
+/* Call when an exception has occurred but there is no way for Python
+   to handle it.  Examples: exception in __del__ or during GC. */
+extern "C" void PyErr_WriteUnraisable(PyObject* obj) {
+    PyObject* f, *t, *v, *tb;
+    PyErr_Fetch(&t, &v, &tb);
+    f = PySys_GetObject("stderr");
+    if (f != NULL) {
+        PyFile_WriteString("Exception ", f);
+        if (t) {
+            PyObject* moduleName;
+            const char* className;
+            assert(PyExceptionClass_Check(t));
+            className = PyExceptionClass_Name(t);
+            if (className != NULL) {
+                const char* dot = strrchr(className, '.');
+                if (dot != NULL)
+                    className = dot + 1;
+            }
+
+            moduleName = PyObject_GetAttrString(t, "__module__");
+            if (moduleName == NULL)
+                PyFile_WriteString("<unknown>", f);
+            else {
+                char* modstr = PyString_AsString(moduleName);
+                if (modstr && strcmp(modstr, "exceptions") != 0) {
+                    PyFile_WriteString(modstr, f);
+                    PyFile_WriteString(".", f);
+                }
+            }
+            if (className == NULL)
+                PyFile_WriteString("<unknown>", f);
+            else
+                PyFile_WriteString(className, f);
+            if (v && v != Py_None) {
+                PyFile_WriteString(": ", f);
+                PyFile_WriteObject(v, f, 0);
+            }
+            Py_XDECREF(moduleName);
+        }
+        PyFile_WriteString(" in ", f);
+        PyFile_WriteObject(obj, f, 0);
+        PyFile_WriteString(" ignored\n", f);
+        PyErr_Clear(); /* Just in case */
+    }
+    Py_XDECREF(t);
+    Py_XDECREF(v);
+    Py_XDECREF(tb);
+}
 extern "C" void PyErr_Display(PyObject* exception, PyObject* value, PyObject* tb) {
     Py_FatalError("unimplemented");
 }

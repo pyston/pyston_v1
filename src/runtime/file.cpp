@@ -195,6 +195,10 @@ extern "C" FILE* PyFile_AsFile(PyObject* f) {
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" int PyFile_WriteString(const char* s, PyObject* f) {
     Py_FatalError("unimplemented");
 }

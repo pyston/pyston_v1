@@ -57,6 +57,10 @@ static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
     return NULL;
 }
 
+extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) {
+    Py_FatalError("unimplemented");
+}
+
 Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "classobj.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());

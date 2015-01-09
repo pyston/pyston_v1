@@ -34,8 +34,10 @@
 namespace pyston {
 namespace threading {
 
-__thread ThreadState cur_thread_state
-    = { NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
+extern "C" {
+__thread PyThreadState cur_thread_state
+    = { 0, NULL, NULL, NULL }; // not sure if we need to explicitly request zero-initialization
+}
 
 PthreadFastMutex threading_lock;
 
@@ -75,9 +77,9 @@ public:
     std::vector<StackInfo> previous_stacks;
     pthread_t pthread_id;
 
-    ThreadState* public_thread_state;
+    PyThreadState* public_thread_state;
 
-    ThreadStateInternal(void* stack_start, pthread_t pthread_id, ThreadState* public_thread_state)
+    ThreadStateInternal(void* stack_start, pthread_t pthread_id, PyThreadState* public_thread_state)
         : saved(false), stack_start(stack_start), pthread_id(pthread_id), public_thread_state(public_thread_state) {}
 
     void saveCurrent() {
@@ -111,12 +113,12 @@ public:
 
     void accept(gc::GCVisitor* v) {
         auto pub_state = public_thread_state;
-        if (pub_state->exc_type)
-            v->visit(pub_state->exc_type);
-        if (pub_state->exc_value)
-            v->visit(pub_state->exc_value);
-        if (pub_state->exc_traceback)
-            v->visit(pub_state->exc_traceback);
+        if (pub_state->curexc_type)
+            v->visit(pub_state->curexc_type);
+        if (pub_state->curexc_value)
+            v->visit(pub_state->curexc_value);
+        if (pub_state->curexc_traceback)
+            v->visit(pub_state->curexc_traceback);
 
         for (auto& stack_info : previous_stacks) {
             v->visit(stack_info.next_generator);
