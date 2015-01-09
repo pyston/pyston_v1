@@ -148,13 +148,13 @@ extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
 }
 
 extern "C" PyObject* PyLong_FromLong(long ival) noexcept {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     mpz_init_set_si(rtn->n, ival);
     return rtn;
 }
 
 extern "C" PyObject* PyLong_FromUnsignedLong(unsigned long ival) noexcept {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     mpz_init_set_ui(rtn->n, ival);
     return rtn;
 }
@@ -261,39 +261,39 @@ extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
         return 0;
     }
 
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     mpz_init(rtn->n);
     mpz_import(rtn->n, 1, 1, n, little_endian ? -1 : 1, 0, &bytes[0]);
     return rtn;
 }
 
 extern "C" Box* createLong(const std::string* s) {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     int r = mpz_init_set_str(rtn->n, s->c_str(), 10);
     RELEASE_ASSERT(r == 0, "%d: '%s'", r, s->c_str());
     return rtn;
 }
 
 extern "C" BoxedLong* boxLong(int64_t n) {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     mpz_init_set_si(rtn->n, n);
     return rtn;
 }
 
 extern "C" PyObject* PyLong_FromLongLong(long long ival) noexcept {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     mpz_init_set_si(rtn->n, ival);
     return rtn;
 }
 
 extern "C" PyObject* PyLong_FromUnsignedLongLong(unsigned long long ival) noexcept {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     mpz_init_set_ui(rtn->n, ival);
     return rtn;
 }
 
 BoxedLong* _longNew(Box* val, Box* _base) {
-    BoxedLong* rtn = new BoxedLong(long_cls);
+    BoxedLong* rtn = new BoxedLong();
     if (_base) {
         if (!isSubclass(_base->cls, int_cls))
             raiseExcHelper(TypeError, "an integer is required");
@@ -320,7 +320,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             BoxedLong* l = static_cast<BoxedLong*>(val);
             if (val->cls == long_cls)
                 return l;
-            BoxedLong* rtn = new BoxedLong(long_cls);
+            BoxedLong* rtn = new BoxedLong();
             mpz_init_set(rtn->n, l->n);
             return rtn;
         } else if (isSubclass(val->cls, int_cls)) {
@@ -365,10 +365,7 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
     if (cls == long_cls)
         return l;
 
-    assert(cls->tp_basicsize >= sizeof(BoxedInt));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedLong* rtn = ::new (mem) BoxedLong(cls);
-    initUserAttrs(rtn, cls);
+    BoxedLong* rtn = new (cls) BoxedLong();
 
     mpz_init_set(rtn->n, l->n);
     return rtn;
@@ -408,7 +405,7 @@ Box* longNeg(BoxedLong* v1) {
         raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'long' object but received a '%s'",
                        getTypeName(v1)->c_str());
 
-    BoxedLong* r = new BoxedLong(long_cls);
+    BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
     mpz_neg(r->n, v1->n);
     return r;
@@ -416,7 +413,7 @@ Box* longNeg(BoxedLong* v1) {
 
 Box* longAbs(BoxedLong* v1) {
     assert(isSubclass(v1->cls, long_cls));
-    BoxedLong* r = new BoxedLong(long_cls);
+    BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
     mpz_abs(r->n, v1->n);
     return r;
@@ -430,14 +427,14 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_add(r->n, v1->n, v2->n);
         return r;
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         if (v2->n >= 0)
             mpz_add_ui(r->n, v1->n, v2->n);
@@ -455,13 +452,13 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
                        getTypeName(v1)->c_str());
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_and(r->n, v1->n, v2->n);
         return r;
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_t v2_long;
         mpz_init(v2_long);
@@ -482,13 +479,13 @@ extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
                        getTypeName(v1)->c_str());
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_xor(r->n, v1->n, v2->n);
         return r;
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_t v2_long;
         mpz_init(v2_long);
@@ -624,7 +621,7 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
             raiseExcHelper(ValueError, "negative shift count");
 
         uint64_t n = asUnsignedLong(v2);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_mul_2exp(r->n, v1->n, n);
         return r;
@@ -633,7 +630,7 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
         if (v2->n < 0)
             raiseExcHelper(ValueError, "negative shift count");
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_mul_2exp(r->n, v1->n, v2->n);
         return r;
@@ -654,7 +651,7 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
             raiseExcHelper(ValueError, "negative shift count");
 
         uint64_t n = asUnsignedLong(v2);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_div_2exp(r->n, v1->n, n);
         return r;
@@ -663,7 +660,7 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
         if (v2->n < 0)
             raiseExcHelper(ValueError, "negative shift count");
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_div_2exp(r->n, v1->n, v2->n);
         return r;
@@ -680,14 +677,14 @@ Box* longSub(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_sub(r->n, v1->n, v2->n);
         return r;
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         if (v2->n >= 0)
             mpz_sub_ui(r->n, v1->n, v2->n);
@@ -715,14 +712,14 @@ Box* longMul(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_mul(r->n, v1->n, v2->n);
         return r;
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_mul_si(r->n, v1->n, v2->n);
         return r;
@@ -742,7 +739,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
         if (mpz_cmp_si(v2->n, 0) == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_fdiv_q(r->n, v1->n, v2->n);
         return r;
@@ -752,7 +749,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
         if (v2->n == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init_set_si(r->n, v2->n);
         mpz_fdiv_q(r->n, v1->n, r->n);
         return r;
@@ -772,8 +769,8 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
         if (mpz_cmp_si(rhs->n, 0) == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
-        BoxedLong* q = new BoxedLong(long_cls);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* q = new BoxedLong();
+        BoxedLong* r = new BoxedLong();
         mpz_init(q->n);
         mpz_init(r->n);
         mpz_fdiv_qr(q->n, r->n, lhs->n, rhs->n);
@@ -784,8 +781,8 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
         if (rhs->n == 0)
             raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
 
-        BoxedLong* q = new BoxedLong(long_cls);
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* q = new BoxedLong();
+        BoxedLong* r = new BoxedLong();
         mpz_init(q->n);
         mpz_init_set_si(r->n, rhs->n);
         mpz_fdiv_qr(q->n, r->n, lhs->n, r->n);
@@ -806,14 +803,14 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init(r->n);
         mpz_fdiv_q(r->n, v2->n, v1->n);
         return r;
     } else if (isSubclass(_v2->cls, int_cls)) {
         BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
 
-        BoxedLong* r = new BoxedLong(long_cls);
+        BoxedLong* r = new BoxedLong();
         mpz_init_set_si(r->n, v2->n);
         mpz_fdiv_q(r->n, r->n, v1->n);
         return r;
@@ -836,7 +833,7 @@ Box* longPow(BoxedLong* v1, Box* _v2) {
     RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
     uint64_t n2 = mpz_get_ui(v2->n);
 
-    BoxedLong* r = new BoxedLong(long_cls);
+    BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
     mpz_pow_ui(r->n, v1->n, n2);
     return r;

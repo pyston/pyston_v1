@@ -142,26 +142,6 @@ extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcep
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
-    RELEASE_ASSERT(op, "");
-    RELEASE_ASSERT(tp, "");
-
-    assert(gc::isValidGCObject(op));
-    assert(gc::isValidGCObject(tp));
-
-    Py_TYPE(op) = tp;
-
-    // I think CPython defers the dict creation (equivalent of our initUserAttrs) to the
-    // first time that an attribute gets set.
-    // Our HCAttrs object already includes this optimization of no-allocation-if-empty,
-    // but it's nice to initialize the hcls here so we don't have to check it on every getattr/setattr.
-    // TODO It does mean that anything not defering to this function will have to call
-    // initUserAttrs themselves, though.
-    initUserAttrs(op, tp);
-
-    return op;
-}
-
 extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_ssize_t size) noexcept {
     assert(gc::isValidGCObject(op));
     assert(gc::isValidGCObject(tp));
@@ -1342,7 +1322,7 @@ BoxedModule* importTestExtension(const std::string& name) {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
+    capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
 
     capifunc_cls->giveAttr("__repr__",
@@ -1354,7 +1334,7 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 
-    method_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
+    method_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
     method_cls->giveAttr("__name__", boxStrConstant("method"));
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
@@ -1362,13 +1342,13 @@ void setupCAPI() {
                                                                      0, true, true)));
     method_cls->freeze();
 
-    wrapperdescr_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
+    wrapperdescr_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
     wrapperdescr_cls->giveAttr("__name__", boxStrConstant("wrapper_descriptor"));
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->freeze();
 
-    wrapperobject_cls = new BoxedHeapClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
+    wrapperobject_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
     wrapperobject_cls->giveAttr("__name__", boxStrConstant("method-wrapper"));
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));

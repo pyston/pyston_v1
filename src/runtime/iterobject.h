@@ -29,7 +29,9 @@ public:
     int64_t idx;
     Box* next;
 
-    BoxedSeqIter(Box* b) : Box(seqiter_cls), b(b), idx(0), next(NULL) {}
+    BoxedSeqIter(Box* b) : b(b), idx(0), next(NULL) {}
+
+    DEFAULT_CLASS(seqiter_cls);
 };
 
 void setupIter();

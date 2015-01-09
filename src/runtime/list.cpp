@@ -579,7 +579,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
 }
 
 void setupList() {
-    list_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false);
+    list_iterator_cls = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false);
 
     list_cls->giveAttr("__name__", boxStrConstant("list"));
 

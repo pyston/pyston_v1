@@ -25,7 +25,7 @@ BoxedClass* set_cls, *set_iterator_cls;
 BoxedClass* frozenset_cls;
 
 extern "C" Box* createSet() {
-    return new BoxedSet(set_cls);
+    return new BoxedSet();
 }
 
 namespace set {
@@ -35,7 +35,9 @@ public:
     BoxedSet* s;
     decltype(BoxedSet::s)::iterator it;
 
-    BoxedSetIterator(BoxedSet* s) : Box(set_iterator_cls), s(s), it(s->s.begin()) {}
+    BoxedSetIterator(BoxedSet* s) : s(s), it(s->s.begin()) {}
+
+    DEFAULT_CLASS(set_iterator_cls);
 
     bool hasNext() { return it != s->s.end(); }
 
@@ -77,10 +79,11 @@ Box* setNew(Box* _cls, Box* container) {
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     assert(cls == set_cls || cls == frozenset_cls);
 
-    if (container == None)
-        return new BoxedSet(cls);
+    Box* rtn = new (cls) BoxedSet();
 
-    Box* rtn = new BoxedSet(cls);
+    if (container == None)
+        return rtn;
+
     for (Box* e : container->pyElements()) {
         setAdd2(rtn, e);
     }
@@ -118,7 +121,7 @@ Box* setOrSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
     assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet(lhs->cls);
+    BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
     for (Box* elt : lhs->s) {
         rtn->s.insert(elt);
@@ -133,7 +136,7 @@ Box* setAndSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
     assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet(lhs->cls);
+    BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
     for (Box* elt : lhs->s) {
         if (rhs->s.count(elt))
@@ -146,7 +149,7 @@ Box* setSubSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
     assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet(lhs->cls);
+    BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
     for (Box* elt : lhs->s) {
         // TODO if len(rhs) << len(lhs), it might be more efficient
@@ -161,7 +164,7 @@ Box* setXorSet(BoxedSet* lhs, BoxedSet* rhs) {
     assert(lhs->cls == set_cls || lhs->cls == frozenset_cls);
     assert(rhs->cls == set_cls || rhs->cls == frozenset_cls);
 
-    BoxedSet* rtn = new BoxedSet(lhs->cls);
+    BoxedSet* rtn = new (lhs->cls) BoxedSet();
 
     for (Box* elt : lhs->s) {
         if (rhs->s.count(elt) == 0)
@@ -216,7 +219,7 @@ void setupSet() {
     set_cls->giveAttr("__name__", boxStrConstant("set"));
     frozenset_cls->giveAttr("__name__", boxStrConstant("frozenset"));
 
-    set_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false);
+    set_iterator_cls = new BoxedHeapClass(object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false);
     set_iterator_cls->giveAttr("__name__", boxStrConstant("setiterator"));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));

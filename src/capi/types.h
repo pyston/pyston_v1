@@ -44,7 +44,9 @@ private:
 
 public:
     BoxedCApiFunction(int ml_flags, Box* passthrough, const char* name, PyCFunction func)
-        : Box(capifunc_cls), ml_flags(ml_flags), passthrough(passthrough), name(name), func(func) {}
+        : ml_flags(ml_flags), passthrough(passthrough), name(name), func(func) {}
+
+    DEFAULT_CLASS(capifunc_cls);
 
     static BoxedString* __repr__(BoxedCApiFunction* self) {
         assert(self->cls == capifunc_cls);
@@ -88,7 +90,9 @@ public:
     BoxedClass* type;
     void* wrapped;
     BoxedWrapperDescriptor(const wrapper_def* wrapper, BoxedClass* type, void* wrapped)
-        : Box(wrapperdescr_cls), wrapper(wrapper), type(type), wrapped(wrapped) {}
+        : wrapper(wrapper), type(type), wrapped(wrapped) {}
+
+    DEFAULT_CLASS(wrapperdescr_cls);
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
 };
@@ -98,7 +102,9 @@ public:
     BoxedWrapperDescriptor* descr;
     Box* obj;
 
-    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : Box(wrapperobject_cls), descr(descr), obj(obj) {}
+    BoxedWrapperObject(BoxedWrapperDescriptor* descr, Box* obj) : descr(descr), obj(obj) {}
+
+    DEFAULT_CLASS(wrapperobject_cls);
 
     static Box* __call__(BoxedWrapperObject* self, Box* args, Box* kwds) {
         assert(self->cls == wrapperobject_cls);
@@ -128,7 +134,9 @@ public:
     PyMethodDef* method;
     BoxedClass* type;
 
-    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : Box(method_cls), method(method), type(type) {}
+    BoxedMethodDescriptor(PyMethodDef* method, BoxedClass* type) : method(method), type(type) {}
+
+    DEFAULT_CLASS(method_cls);
 
     static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
         RELEASE_ASSERT(self->cls == method_cls, "");

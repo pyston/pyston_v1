@@ -19,7 +19,7 @@
 namespace pyston {
 
 BoxedDictIterator::BoxedDictIterator(BoxedDict* d, IteratorType type)
-    : Box(dict_iterator_cls), d(d), it(d->d.begin()), itEnd(d->d.end()), type(type) {
+    : d(d), it(d->d.begin()), itEnd(d->d.end()), type(type) {
 }
 
 Box* dictIterKeys(Box* s) {
@@ -72,7 +72,7 @@ Box* dictIterNext(Box* s) {
     return rtn;
 }
 
-BoxedDictView::BoxedDictView(BoxedDict* d, BoxedClass* view_cls) : Box(view_cls), d(d) {
+BoxedDictView::BoxedDictView(BoxedDict* d) : d(d) {
 }
 
 Box* dictViewKeysIter(Box* s) {

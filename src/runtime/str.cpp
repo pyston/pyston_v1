@@ -1604,7 +1604,9 @@ public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s) : Box(str_iterator_cls), s(s), it(s->s.begin()), end(s->s.end()) {}
+    BoxedStringIterator(BoxedString* s) : it(s->s.begin()), end(s->s.end()) {}
+
+    DEFAULT_CLASS(str_iterator_cls);
 
     static bool hasnextUnboxed(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
@@ -1742,7 +1744,7 @@ static PyBufferProcs string_as_buffer = {
 };
 
 void setupStr() {
-    str_iterator_cls = new BoxedHeapClass(type_cls, object_cls, &strIteratorGCHandler, 0, sizeof(BoxedString), false);
+    str_iterator_cls = new BoxedHeapClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedString), false);
     str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));

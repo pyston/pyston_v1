@@ -19,7 +19,7 @@
 
 namespace pyston {
 
-BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : Box(tuple_iterator_cls), t(t), pos(0) {
+BoxedTupleIterator::BoxedTupleIterator(BoxedTuple* t) : t(t), pos(0) {
 }
 
 Box* tupleIterIter(Box* s) {

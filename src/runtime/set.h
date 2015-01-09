@@ -34,11 +34,11 @@ public:
     typedef std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*>> Set;
     Set s;
 
-    BoxedSet(BoxedClass* cls) __attribute__((visibility("default"))) : Box(cls) {}
+    BoxedSet() __attribute__((visibility("default"))) {}
 
-    template <typename T>
-    __attribute__((visibility("default"))) BoxedSet(T&& s, BoxedClass* cls)
-        : Box(cls), s(std::forward<T>(s)) {}
+    template <typename T> __attribute__((visibility("default"))) BoxedSet(T&& s) : s(std::forward<T>(s)) {}
+
+    DEFAULT_CLASS(set_cls);
 };
 }
 

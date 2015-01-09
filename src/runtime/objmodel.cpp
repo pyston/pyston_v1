@@ -343,10 +343,9 @@ void BoxedClass::freeze() {
     is_constant = true;
 }
 
-BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                       int instance_size, bool is_user_defined)
-    : BoxVar(metaclass, 0), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false),
-      is_user_defined(is_user_defined) {
+BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+                       bool is_user_defined)
+    : BoxVar(0), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -358,10 +357,12 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
 
     tp_base = base;
 
-    if (metaclass == NULL) {
+    tp_alloc = PyType_GenericAlloc;
+
+    if (cls == NULL) {
         assert(type_cls == NULL);
     } else {
-        assert(isSubclass(metaclass, type_cls));
+        assert(isSubclass(cls, type_cls));
     }
 
     assert(tp_dealloc == NULL);
@@ -396,10 +397,9 @@ BoxedClass::BoxedClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_
         gc::registerPermanentRoot(this);
 }
 
-BoxedHeapClass::BoxedHeapClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                               int instance_size, bool is_user_defined)
-    : BoxedClass(metaclass, base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(NULL),
-      ht_slots(NULL) {
+BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+                               bool is_user_defined)
+    : BoxedClass(base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(NULL), ht_slots(NULL) {
 
     tp_as_number = &as_number;
     tp_as_mapping = &as_mapping;
@@ -3314,10 +3314,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     BoxedClass* made;
 
     if (base->instancesHaveAttrs()) {
-        made = new BoxedHeapClass(cls, base, NULL, base->attrs_offset, base->tp_basicsize, true);
+        made = new (cls) BoxedHeapClass(base, NULL, base->attrs_offset, base->tp_basicsize, true);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = new BoxedHeapClass(cls, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
+        made = new (cls) BoxedHeapClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
     }
 
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));

@@ -548,21 +548,21 @@ BoxedFloat* _floatNew(Box* a) {
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
     } else if (isSubclass(a->cls, float_cls)) {
-        return new BoxedFloat(float_cls, static_cast<BoxedFloat*>(a)->d);
+        return new BoxedFloat(static_cast<BoxedFloat*>(a)->d);
     } else if (isSubclass(a->cls, int_cls)) {
-        return new BoxedFloat(float_cls, static_cast<BoxedInt*>(a)->n);
+        return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(a)->s;
         if (s == "nan")
-            return new BoxedFloat(float_cls, NAN);
+            return new BoxedFloat(NAN);
         if (s == "-nan")
-            return new BoxedFloat(float_cls, -NAN);
+            return new BoxedFloat(-NAN);
         if (s == "inf")
-            return new BoxedFloat(float_cls, INFINITY);
+            return new BoxedFloat(INFINITY);
         if (s == "-inf")
-            return new BoxedFloat(float_cls, -INFINITY);
+            return new BoxedFloat(-INFINITY);
 
-        return new BoxedFloat(float_cls, strtod(s.c_str(), NULL));
+        return new BoxedFloat(strtod(s.c_str(), NULL));
     } else {
         static const std::string float_str("__float__");
         Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -596,13 +596,7 @@ Box* floatNew(BoxedClass* _cls, Box* a) {
 
     BoxedFloat* f = _floatNew(a);
 
-    assert(cls->tp_basicsize >= sizeof(BoxedFloat));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedFloat* rtn = ::new (mem) BoxedFloat(cls, 0);
-    initUserAttrs(rtn, cls);
-
-    rtn->d = f->d;
-    return rtn;
+    return new (cls) BoxedFloat(f->d);
 }
 
 Box* floatStr(BoxedFloat* self) {

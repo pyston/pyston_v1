@@ -26,6 +26,8 @@ public:
     BoxedTuple* t;
     int pos;
     BoxedTupleIterator(BoxedTuple* t);
+
+    DEFAULT_CLASS(tuple_iterator_cls);
 };
 
 Box* tupleIter(Box* self);

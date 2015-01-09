@@ -145,8 +145,8 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, B
 
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
-    : Box(generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false),
-      running(false), returnValue(nullptr), exception(nullptr) {
+    : function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false), running(false),
+      returnValue(nullptr), exception(nullptr) {
 
     giveAttr("__name__", boxString(function->f->source->getName()));
 
@@ -231,7 +231,7 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
 
 
 void setupGenerator() {
-    generator_cls = new BoxedHeapClass(type_cls, object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
+    generator_cls = new BoxedHeapClass(object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
                                        sizeof(BoxedGenerator), false);
     generator_cls->giveAttr("__name__", boxStrConstant("generator"));
     generator_cls->giveAttr("__iter__",

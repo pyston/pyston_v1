@@ -758,17 +758,17 @@ BoxedInt* _intNew(Box* val) {
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
             return n;
-        return new BoxedInt(int_cls, n->n);
+        return new BoxedInt(n->n);
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
 
         std::istringstream ss(s->s);
         int64_t n;
         ss >> n;
-        return new BoxedInt(int_cls, n);
+        return new BoxedInt(n);
     } else if (val->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(val)->d;
-        return new BoxedInt(int_cls, d);
+        return new BoxedInt(d);
     } else {
         static const std::string int_str("__int__");
         Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -801,13 +801,7 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
 
     BoxedInt* n = _intNew(val);
 
-    assert(cls->tp_basicsize >= sizeof(BoxedInt));
-    void* mem = gc_alloc(cls->tp_basicsize, gc::GCKind::PYTHON);
-    BoxedInt* rtn = ::new (mem) BoxedInt(cls, 0);
-    initUserAttrs(rtn, cls);
-
-    rtn->n = n->n;
-    return rtn;
+    return new (cls) BoxedInt(n->n);
 }
 
 extern "C" Box* intInit(BoxedInt* self, Box* val, Box* args) {
@@ -849,7 +843,7 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
 
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
-        interned_ints[i] = new BoxedInt(int_cls, i);
+        interned_ints[i] = new BoxedInt(i);
         gc::registerPermanentRoot(interned_ints[i]);
     }
 

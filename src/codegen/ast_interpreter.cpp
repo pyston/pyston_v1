@@ -986,7 +986,7 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
     for (AST_expr* e : node->elts)
         set.insert(visit_expr(e).o);
 
-    return new BoxedSet(std::move(set), set_cls);
+    return new BoxedSet(std::move(set));
 }
 
 Value ASTInterpreter::visit_str(AST_Str* node) {
