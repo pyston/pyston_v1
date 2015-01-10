@@ -148,7 +148,17 @@ public:
 
     virtual void accept(ASTVisitor* v) = 0;
 
+#ifndef NDEBUG
+private:
+    static int next_lineno;
+
+public:
+    // In debug mode, initialize lineno to something unique, so that if we see something ridiculous
+    // appear in the traceback, we can isolate the allocation which created it.
+    AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {}
+#else
     AST(AST_TYPE::AST_TYPE type) : type(type) {}
+#endif
 };
 
 class AST_expr : public AST {
@@ -966,6 +976,7 @@ public:
         IMPORT_NAME,
         IMPORT_STAR,
         NONE,
+        NONZERO,
     } opcode;
     std::vector<AST_expr*> args;
 

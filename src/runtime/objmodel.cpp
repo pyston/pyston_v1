@@ -1631,6 +1631,8 @@ bool isUserDefined(BoxedClass* cls) {
 }
 
 extern "C" bool nonzero(Box* obj) {
+    assert(gc::isValidGCObject(obj));
+
     static StatCounter slowpath_nonzero("slowpath_nonzero");
 
     std::unique_ptr<Rewriter> rewriter(

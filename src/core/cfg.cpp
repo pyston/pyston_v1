@@ -131,6 +131,17 @@ private:
         return NULL;
     }
 
+    AST_expr* callNonzero(AST_expr* e) {
+        AST_LangPrimitive* call = new AST_LangPrimitive(AST_LangPrimitive::NONZERO);
+        call->args.push_back(e);
+        call->lineno = e->lineno;
+        call->col_offset = e->col_offset;
+
+        auto name = nodeName(e);
+        pushAssign(name, call);
+        return makeName(name, AST_TYPE::Load);
+    }
+
     AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
         AST_expr* key = remapExpr(node->key);
         AST_expr* value = remapExpr(node->value);
@@ -179,7 +190,7 @@ private:
             push_back(j);
 
             curblock = test_block;
-            AST_expr* test_call = remapExpr(makeCall(hasnext_attr));
+            AST_expr* test_call = callNonzero(remapExpr(makeCall(hasnext_attr)));
 
             CFGBlock* body_block = cfg->addBlock();
             body_block->info = "comprehension_body";
@@ -204,7 +215,7 @@ private:
             pushAssign(c->target, makeName(next_name, AST_TYPE::Load));
 
             for (AST_expr* if_condition : c->ifs) {
-                AST_expr* remapped = remapExpr(if_condition);
+                AST_expr* remapped = callNonzero(remapExpr(if_condition));
                 AST_Branch* br = new AST_Branch();
                 br->test = remapped;
                 push_back(br);
@@ -284,7 +295,7 @@ private:
 
     AST_Branch* makeBranch(AST_expr* test) {
         AST_Branch* rtn = new AST_Branch();
-        rtn->test = test;
+        rtn->test = callNonzero(test);
         rtn->col_offset = test->col_offset;
         rtn->lineno = test->lineno;
         return rtn;
@@ -520,7 +531,7 @@ private:
             pushAssign(name, val);
 
             AST_Branch* br = new AST_Branch();
-            br->test = _dup(val);
+            br->test = callNonzero(_dup(val));
             push_back(br);
 
             CFGBlock* was_block = curblock;
@@ -637,7 +648,7 @@ private:
                 pushAssign(name, val);
 
                 AST_Branch* br = new AST_Branch();
-                br->test = makeName(name, AST_TYPE::Load);
+                br->test = callNonzero(makeName(name, AST_TYPE::Load));
                 push_back(br);
 
                 CFGBlock* was_block = curblock;
@@ -725,7 +736,7 @@ private:
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_If* if_block = new AST_If();
-                if_block->test = if_condition;
+                if_block->test = callNonzero(if_condition);
 
                 insert_point->push_back(if_block);
                 insert_point = &if_block->body;
@@ -751,12 +762,13 @@ private:
     AST_expr* remapIfExp(AST_IfExp* node) {
         std::string rtn_name = nodeName(node);
 
-        CFGBlock* starting_block = curblock;
         AST_Branch* br = new AST_Branch();
         br->col_offset = node->col_offset;
         br->lineno = node->lineno;
-        br->test = remapExpr(node->test);
+        br->test = callNonzero(remapExpr(node->test));
         push_back(br);
+
+        CFGBlock* starting_block = curblock;
 
         CFGBlock* iftrue = cfg->addBlock();
         iftrue->info = "iftrue";
@@ -1250,7 +1262,7 @@ public:
 
     bool visit_assert(AST_Assert* node) override {
         AST_Branch* br = new AST_Branch();
-        br->test = remapExpr(node->test);
+        br->test = callNonzero(remapExpr(node->test));
         push_back(br);
 
         CFGBlock* iffalse = cfg->addBlock();
@@ -1502,7 +1514,7 @@ public:
         AST_Branch* br = new AST_Branch();
         br->col_offset = node->col_offset;
         br->lineno = node->lineno;
-        br->test = remapExpr(node->test);
+        br->test = callNonzero(remapExpr(node->test));
         push_back(br);
 
         CFGBlock* starting_block = curblock;
@@ -1831,7 +1843,7 @@ public:
                     is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
 
                     AST_Branch* br = new AST_Branch();
-                    br->test = remapExpr(is_caught_here);
+                    br->test = callNonzero(remapExpr(is_caught_here));
 
                     CFGBlock* exc_handle = cfg->addBlock();
                     exc_next = cfg->addDeferredBlock();
@@ -2157,8 +2169,18 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     for (auto b : rtn->blocks)
         flatten(b->body, flattened, true);
 
-    std::unordered_set<AST*> deduped(flattened.begin(), flattened.end());
-    assert(deduped.size() == flattened.size());
+    std::unordered_map<AST*, int> deduped;
+    bool no_dups = true;
+    for (auto e : flattened) {
+        deduped[e]++;
+        if (deduped[e] == 2) {
+            printf("Duplicated: ");
+            print_ast(e);
+            printf("\n");
+            no_dups = false;
+        }
+    }
+    assert(no_dups);
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path
 #endif
