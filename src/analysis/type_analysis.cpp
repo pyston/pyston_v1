@@ -372,6 +372,8 @@ private:
                 return UNKNOWN;
             case AST_LangPrimitive::NONE:
                 return NONE;
+            case AST_LangPrimitive::NONZERO:
+                return BOOL;
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

@@ -543,6 +543,18 @@ private:
             case AST_LangPrimitive::NONE: {
                 return getNone();
             }
+            case AST_LangPrimitive::NONZERO: {
+                assert(node->args.size() == 1);
+                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
+
+                ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
+                obj->decvref(emitter);
+
+                llvm::Value* v = emitter.createCall(unw_info, g.funcs.nonzero, { converted_obj->getValue() });
+                assert(v->getType() == g.i1);
+
+                return boolFromI1(emitter, v);
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

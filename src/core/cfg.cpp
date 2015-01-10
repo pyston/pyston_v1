@@ -736,7 +736,10 @@ private:
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_If* if_block = new AST_If();
-                if_block->test = callNonzero(if_condition);
+                // Note: don't call callNonzero here, since we are generating
+                // AST inside a new functiondef which will go through the CFG
+                // process again.
+                if_block->test = if_condition;
 
                 insert_point->push_back(if_block);
                 insert_point = &if_block->body;

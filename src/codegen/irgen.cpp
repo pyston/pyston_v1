@@ -752,7 +752,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                             // TODO: inneficient
                             sym_table = new SymbolTable(*sym_table);
-                            assert(sym_table->count(name->id));
+                            ASSERT(sym_table->count(name->id), "%d %s\n", block->idx, name->id.c_str());
                             sym_table->erase(name->id);
                             created_new_sym_table = true;
                         }

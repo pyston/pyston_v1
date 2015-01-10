@@ -404,9 +404,9 @@ Value ASTInterpreter::visit_slice(AST_Slice* node) {
 
 Value ASTInterpreter::visit_branch(AST_Branch* node) {
     Value v = visit_expr(node->test);
-    ASSERT(v.n == 0 || v.n == 1, "Should have called NONZERO before this branch");
+    ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
 
-    if (v.b)
+    if (v.o == True)
         next_block = node->iftrue;
     else
         next_block = node->iffalse;
@@ -585,9 +585,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     } else if (node->opcode == AST_LangPrimitive::NONZERO) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
-        // TODO we could not add the int64_t, which would only set the lower byte of v,
-        // since that's all we're going to look at later.
-        v = (int64_t)nonzero(obj.o);
+        v = boxBool(nonzero(obj.o));
     } else
         RELEASE_ASSERT(0, "not implemented");
     return v;
