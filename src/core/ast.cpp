@@ -24,6 +24,10 @@
 
 namespace pyston {
 
+#ifndef NDEBUG
+int AST::next_lineno = 100000;
+#endif
+
 llvm::StringRef getOpSymbol(int op_type) {
     switch (op_type) {
         case AST_TYPE::Add:
@@ -1447,6 +1451,9 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
             break;
         case AST_LangPrimitive::NONE:
             printf("NONE");
+            break;
+        case AST_LangPrimitive::NONZERO:
+            printf("NONZERO");
             break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);

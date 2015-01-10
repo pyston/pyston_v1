@@ -1631,6 +1631,8 @@ bool isUserDefined(BoxedClass* cls) {
 }
 
 extern "C" bool nonzero(Box* obj) {
+    assert(gc::isValidGCObject(obj));
+
     static StatCounter slowpath_nonzero("slowpath_nonzero");
 
     std::unique_ptr<Rewriter> rewriter(
@@ -1689,6 +1691,8 @@ extern "C" bool nonzero(Box* obj) {
 
     // go through descriptor logic
     Box* func = getclsattr_internal(obj, "__nonzero__", NULL);
+    if (!func)
+        func = getclsattr_internal(obj, "__len__", NULL);
 
     if (func == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls, "%s.__nonzero__",
@@ -1697,6 +1701,7 @@ extern "C" bool nonzero(Box* obj) {
     }
 
     Box* r = runtimeCall0(func, ArgPassSpec(0));
+    // I believe this behavior is handled by the slot wrappers in CPython:
     if (r->cls == bool_cls) {
         BoxedBool* b = static_cast<BoxedBool*>(r);
         bool rtn = b->n;

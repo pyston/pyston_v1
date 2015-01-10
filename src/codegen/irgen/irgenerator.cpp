@@ -543,6 +543,17 @@ private:
             case AST_LangPrimitive::NONE: {
                 return getNone();
             }
+            case AST_LangPrimitive::NONZERO: {
+                assert(node->args.size() == 1);
+                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
+
+                ConcreteCompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
+                assert(rtn->getType() == BOOL);
+                llvm::Value* v = i1FromBool(emitter, rtn);
+                assert(v->getType() == g.i1);
+
+                return boolFromI1(emitter, v);
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
@@ -1812,22 +1823,18 @@ private:
         assert(state != PARTIAL);
         assert(val);
 
-        // ASSERT(val->getType() == BOOL, "%s", val->getType()->debugName().c_str());
+        // We could call nonzero here if there is no try-catch block?
+        ASSERT(val->getType() == BOOL, "should have called NONZERO before this; is %s",
+               val->getType()->debugName().c_str());
+        llvm::Value* v = i1FromBool(emitter, static_cast<ConcreteCompilerVariable*>(val));
+        assert(v->getType() == g.i1);
 
-        ConcreteCompilerVariable* nonzero = val->nonzero(emitter, getOpInfoForNode(node, unw_info));
-        ASSERT(nonzero->getType() == BOOL, "%s %s", val->getType()->debugName().c_str(),
-               nonzero->getType()->debugName().c_str());
-        val->decvref(emitter);
-
-        llvm::Value* llvm_nonzero = i1FromBool(emitter, nonzero);
         llvm::BasicBlock* iftrue = entry_blocks[node->iftrue];
         llvm::BasicBlock* iffalse = entry_blocks[node->iffalse];
 
-        nonzero->decvref(emitter);
-
         endBlock(FINISHED);
 
-        emitter.getBuilder()->CreateCondBr(llvm_nonzero, iftrue, iffalse);
+        emitter.getBuilder()->CreateCondBr(v, iftrue, iffalse);
     }
 
     void doExpr(AST_Expr* node, UnwindInfo unw_info) {

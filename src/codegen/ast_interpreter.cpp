@@ -403,7 +403,10 @@ Value ASTInterpreter::visit_slice(AST_Slice* node) {
 }
 
 Value ASTInterpreter::visit_branch(AST_Branch* node) {
-    if (nonzero(visit_expr(node->test).o))
+    Value v = visit_expr(node->test);
+    ASSERT(v.o == True || v.o == False, "Should have called NONZERO before this branch");
+
+    if (v.o == True)
         next_block = node->iftrue;
     else
         next_block = node->iffalse;
@@ -441,6 +444,8 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
                     bool is_defined = it != sym_table.end();
                     sorted_symbol_table[getIsDefinedName(name)] = (Box*)is_defined;
+                    if (is_defined)
+                        assert(it->getValue() != NULL);
                     sorted_symbol_table[name] = is_defined ? it->getValue() : NULL;
                 } else {
                     ASSERT(it != sym_table.end(), "%s", name.c_str());
@@ -567,6 +572,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = boxBool(isinstance(obj.o, cls.o, unboxInt(flags.o)));
 
     } else if (node->opcode == AST_LangPrimitive::LOCALS) {
+        assert(node->args.size() == 0);
         BoxedDict* dict = new BoxedDict;
         for (auto& p : sym_table) {
             llvm::StringRef s = p.first();
@@ -576,6 +582,10 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
             dict->d[new BoxedString(s.str())] = p.second;
         }
         v = dict;
+    } else if (node->opcode == AST_LangPrimitive::NONZERO) {
+        assert(node->args.size() == 1);
+        Value obj = visit_expr(node->args[0]);
+        v = boxBool(nonzero(obj.o));
     } else
         RELEASE_ASSERT(0, "not implemented");
     return v;
@@ -735,8 +745,13 @@ Value ASTInterpreter::visit_raise(AST_Raise* node) {
 }
 
 Value ASTInterpreter::visit_assert(AST_Assert* node) {
-    if (!nonzero(visit_expr(node->test).o))
-        assertFail(source_info->parent_module, node->msg ? visit_expr(node->msg).o : 0);
+#ifndef NDEBUG
+    // Currently we only generate "assert 0" statements
+    Value v = visit_expr(node->test);
+    assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
+#endif
+    assertFail(source_info->parent_module, node->msg ? visit_expr(node->msg).o : 0);
+
     return Value();
 }
 
@@ -1002,8 +1017,6 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         SymMap::iterator it = sym_table.find(node->id);
         if (it != sym_table.end()) {
             Box* value = it->second;
-            if (!value)
-                assertNameDefined(value, node->id.c_str(), UnboundLocalError, true);
             return value;
         }
 
