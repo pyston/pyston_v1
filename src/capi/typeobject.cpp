@@ -1762,9 +1762,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->gc_visit = &conservativeGCHandler;
     cls->is_user_defined = true;
 
-    // TODO not sure how we can handle extension types that manually
-    // specify a dict...
-    RELEASE_ASSERT(cls->tp_dictoffset == 0, "");
     // this should get automatically initialized to 0 on this path:
     assert(cls->attrs_offset == 0);
 

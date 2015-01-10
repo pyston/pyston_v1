@@ -1274,8 +1274,13 @@ public:
         return c == cls;
     }
 
+    bool canStaticallyResolveGetattrs() {
+        return (cls->is_constant && !cls->instancesHaveHCAttrs() && !cls->instancesHaveDictAttrs()
+                && cls->hasGenericGetattr());
+    }
+
     CompilerType* getattrType(const std::string* attr, bool cls_only) override {
-        if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {
+        if (canStaticallyResolveGetattrs()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL)
                 return UNDEF;
@@ -1300,7 +1305,7 @@ public:
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) override {
         // printf("%s.getattr %s\n", debugName().c_str(), attr->c_str());
-        if (cls->is_constant && !cls->instancesHaveAttrs() && cls->hasGenericGetattr()) {
+        if (canStaticallyResolveGetattrs()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
@@ -1346,7 +1351,7 @@ public:
                                                   const std::vector<CompilerVariable*>& args,
                                                   const std::vector<const std::string*>* keyword_names,
                                                   bool raise_on_missing = true) {
-        if (!cls->is_constant || cls->instancesHaveAttrs() || !cls->hasGenericGetattr())
+        if (!canStaticallyResolveGetattrs())
             return NULL;
 
         Box* rtattr = cls->getattr(*attr);

@@ -349,8 +349,8 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
     if (b->cls) {
         v->visit(b->cls);
 
-        if (b->cls->instancesHaveAttrs()) {
-            HCAttrs* attrs = b->getAttrsPtr();
+        if (b->cls->instancesHaveHCAttrs()) {
+            HCAttrs* attrs = b->getHCAttrsPtr();
 
             v->visit(attrs->hcls);
             int nattrs = attrs->hcls->attr_offsets.size();
@@ -360,6 +360,10 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
                 v->visit(attr_list);
                 v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
             }
+        }
+
+        if (b->cls->instancesHaveDictAttrs()) {
+            RELEASE_ASSERT(0, "Shouldn't all of these objects be conservatively scanned?");
         }
     } else {
         assert(type_cls == NULL || b == type_cls);
@@ -776,7 +780,7 @@ private:
     Box* b;
 
 public:
-    AttrWrapper(Box* b) : b(b) {}
+    AttrWrapper(Box* b) : b(b) { assert(b->cls->instancesHaveHCAttrs()); }
 
     DEFAULT_CLASS(attrwrapper_cls);
 
@@ -829,7 +833,7 @@ public:
         std::ostringstream os("");
         os << "attrwrapper({";
 
-        HCAttrs* attrs = self->b->getAttrsPtr();
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
         bool first = true;
         for (const auto& p : attrs->hcls->attr_offsets) {
             if (!first)
@@ -859,7 +863,7 @@ public:
 
         BoxedList* rtn = new BoxedList();
 
-        HCAttrs* attrs = self->b->getAttrsPtr();
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
             BoxedTuple* t = new BoxedTuple({ boxString(p.first), attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
@@ -869,7 +873,7 @@ public:
 };
 
 Box* makeAttrWrapper(Box* b) {
-    assert(b->cls->instancesHaveAttrs());
+    assert(b->cls->instancesHaveHCAttrs());
     return new AttrWrapper(b);
 }
 
@@ -908,8 +912,8 @@ Box* objectStr(Box* obj) {
 // Added as parameter because it should typically be available
 inline void initUserAttrs(Box* obj, BoxedClass* cls) {
     assert(obj->cls == cls);
-    if (cls->attrs_offset) {
-        HCAttrs* attrs = obj->getAttrsPtr();
+    if (cls->instancesHaveHCAttrs()) {
+        HCAttrs* attrs = obj->getHCAttrsPtr();
         attrs = new ((void*)attrs) HCAttrs();
     }
 }

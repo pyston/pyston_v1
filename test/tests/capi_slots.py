@@ -102,7 +102,7 @@ except AttributeError, e:
 c = C3(5)
 c.foo = 1
 print c.foo
-print c.__dict__
+print c.__dict__.items()
 
 s = slots_test.SlotsTesterMap(6)
 s.bar = 2

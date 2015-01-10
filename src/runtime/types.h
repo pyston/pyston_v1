@@ -199,7 +199,8 @@ public:
     // Analogous to tp_dictoffset
     const int attrs_offset;
 
-    bool instancesHaveAttrs() { return attrs_offset != 0; }
+    bool instancesHaveHCAttrs() { return attrs_offset != 0; }
+    bool instancesHaveDictAttrs() { return tp_dictoffset != 0; }
 
     // Whether this class object is constant or not, ie whether or not class-level
     // attributes can be changed or added.
