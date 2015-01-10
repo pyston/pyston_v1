@@ -748,7 +748,7 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
 #ifndef NDEBUG
     // Currently we only generate "assert 0" statements
     Value v = visit_expr(node->test);
-    assert(v.n == 0);
+    assert(v.o->cls == int_cls && static_cast<BoxedInt*>(v.o)->n == 0);
 #endif
     assertFail(source_info->parent_module, node->msg ? visit_expr(node->msg).o : 0);
 

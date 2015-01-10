@@ -547,10 +547,9 @@ private:
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
-                ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
-                obj->decvref(emitter);
-
-                llvm::Value* v = emitter.createCall(unw_info, g.funcs.nonzero, { converted_obj->getValue() });
+                ConcreteCompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
+                assert(rtn->getType() == BOOL);
+                llvm::Value* v = i1FromBool(emitter, rtn);
                 assert(v->getType() == g.i1);
 
                 return boolFromI1(emitter, v);
