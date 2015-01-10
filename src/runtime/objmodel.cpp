@@ -64,6 +64,13 @@ static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("
 static const std::string _getattr_str("__getattr__");
 static const std::string _getattribute_str("__getattribute__");
 
+#if 0
+void REWRITE_ABORTED(const char* reason) {
+}
+#else
+#define REWRITE_ABORTED(reason) ((void)(reason))
+#endif
+
 struct GetattrRewriteArgs {
     Rewriter* rewriter;
     RewriterVar* obj;
@@ -494,15 +501,34 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
     return cur;
 }
 
-HCAttrs* Box::getAttrsPtr() {
-    assert(cls->instancesHaveAttrs());
+HCAttrs* Box::getHCAttrsPtr() {
+    assert(cls->instancesHaveHCAttrs());
 
     char* p = reinterpret_cast<char*>(this);
     p += cls->attrs_offset;
     return reinterpret_cast<HCAttrs*>(p);
 }
 
+BoxedDict* Box::getDict() {
+    assert(cls->instancesHaveDictAttrs());
+
+    char* p = reinterpret_cast<char*>(this);
+    p += cls->tp_dictoffset;
+
+    BoxedDict** d_ptr = reinterpret_cast<BoxedDict**>(p);
+    BoxedDict* d = *d_ptr;
+    if (!d) {
+        d = *d_ptr = new BoxedDict();
+    }
+
+    assert(d->cls == dict_cls);
+    return d;
+}
+
 Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
+    if (rewrite_args)
+        rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+
     // Have to guard on the memory layout of this object.
     // Right now, guard on the specific Python-class, which in turn
     // specifies the C structure.
@@ -512,41 +538,55 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     // Only matters if we end up getting multiple classes with the same
     // structure (ex user class) and the same hidden classes, because
     // otherwise the guard will fail anyway.;
-    if (rewrite_args) {
-        rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+    if (cls->instancesHaveHCAttrs()) {
+        if (rewrite_args)
+            rewrite_args->out_success = true;
+
+        HCAttrs* attrs = getHCAttrsPtr();
+        HiddenClass* hcls = attrs->hcls;
+
+        if (rewrite_args) {
+            if (!rewrite_args->obj_hcls_guarded)
+                rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+        }
+
+        int offset = hcls->getOffset(attr);
+        if (offset == -1) {
+            return NULL;
+        }
+
+        if (rewrite_args) {
+            // TODO using the output register as the temporary makes register allocation easier
+            // since we don't need to clobber a register, but does it make the code slower?
+            RewriterVar* r_attrs
+                = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+            rewrite_args->out_rtn = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
+        }
+
+        Box* rtn = attrs->attr_list->attrs[offset];
+        return rtn;
+    }
+
+    if (cls->instancesHaveDictAttrs()) {
+        if (rewrite_args)
+            REWRITE_ABORTED("");
+
+        BoxedDict* d = getDict();
+
+        Box* key = boxString(attr);
+        auto it = d->d.find(key);
+        if (it == d->d.end())
+            return NULL;
+        return it->second;
+    }
+
+    if (rewrite_args)
         rewrite_args->out_success = true;
-    }
 
-    if (!cls->instancesHaveAttrs()) {
-        return NULL;
-    }
-
-    HCAttrs* attrs = getAttrsPtr();
-    HiddenClass* hcls = attrs->hcls;
-
-    if (rewrite_args) {
-        if (!rewrite_args->obj_hcls_guarded)
-            rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
-    }
-
-    int offset = hcls->getOffset(attr);
-    if (offset == -1) {
-        return NULL;
-    }
-
-    if (rewrite_args) {
-        // TODO using the output register as the temporary makes register allocation easier
-        // since we don't need to clobber a register, but does it make the code slower?
-        RewriterVar* r_attrs = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
-        rewrite_args->out_rtn = r_attrs->getAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, Location::any());
-    }
-
-    Box* rtn = attrs->attr_list->attrs[offset];
-    return rtn;
+    return NULL;
 }
 
 void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
-    assert(cls->instancesHaveAttrs());
     assert(gc::isValidGCObject(val));
 
     // Have to guard on the memory layout of this object.
@@ -561,84 +601,96 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     if (rewrite_args)
         rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
 
-
     static const std::string none_str("None");
 
     RELEASE_ASSERT(attr != none_str || this == builtins_module, "can't assign to None");
 
-    HCAttrs* attrs = getAttrsPtr();
-    HiddenClass* hcls = attrs->hcls;
-    int numattrs = hcls->attr_offsets.size();
+    if (cls->instancesHaveHCAttrs()) {
+        HCAttrs* attrs = getHCAttrsPtr();
+        HiddenClass* hcls = attrs->hcls;
+        int numattrs = hcls->attr_offsets.size();
 
-    int offset = hcls->getOffset(attr);
-
-    if (rewrite_args) {
-        rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
-        // rewrite_args->rewriter->addDecision(offset == -1 ? 1 : 0);
-    }
-
-    if (offset >= 0) {
-        assert(offset < numattrs);
-        Box* prev = attrs->attr_list->attrs[offset];
-        attrs->attr_list->attrs[offset] = val;
+        int offset = hcls->getOffset(attr);
 
         if (rewrite_args) {
+            rewrite_args->obj->addAttrGuard(cls->attrs_offset + HCATTRS_HCLS_OFFSET, (intptr_t)hcls);
+            // rewrite_args->rewriter->addDecision(offset == -1 ? 1 : 0);
+        }
 
-            RewriterVar* r_hattrs
-                = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+        if (offset >= 0) {
+            assert(offset < numattrs);
+            Box* prev = attrs->attr_list->attrs[offset];
+            attrs->attr_list->attrs[offset] = val;
 
-            r_hattrs->setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
+            if (rewrite_args) {
+
+                RewriterVar* r_hattrs
+                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::any());
+
+                r_hattrs->setAttr(offset * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
+
+                rewrite_args->out_success = true;
+            }
+
+            return;
+        }
+
+        assert(offset == -1);
+        HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
+
+        // TODO need to make sure we don't need to rearrange the attributes
+        assert(new_hcls->attr_offsets[attr] == numattrs);
+#ifndef NDEBUG
+        for (const auto& p : hcls->attr_offsets) {
+            assert(new_hcls->attr_offsets[p.first] == p.second);
+        }
+#endif
+
+        RewriterVar* r_new_array2 = NULL;
+        int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
+        if (numattrs == 0) {
+            attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
+            if (rewrite_args) {
+                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
+                RewriterVar* r_kind
+                    = rewrite_args->rewriter->loadConst((int)gc::GCKind::UNTRACKED, Location::forArg(1));
+                r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_alloc, r_newsize, r_kind);
+            }
+        } else {
+            attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
+            if (rewrite_args) {
+                RewriterVar* r_oldarray
+                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
+                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
+                r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_realloc, r_oldarray, r_newsize);
+            }
+        }
+        // Don't set the new hcls until after we do the allocation for the new attr_list;
+        // that allocation can cause a collection, and we want the collector to always
+        // see a consistent state between the hcls and the attr_list
+        attrs->hcls = new_hcls;
+
+        if (rewrite_args) {
+            r_new_array2->setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
+            rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array2);
+
+            RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
+            rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
 
             rewrite_args->out_success = true;
         }
-
+        attrs->attr_list->attrs[numattrs] = val;
         return;
     }
 
-    assert(offset == -1);
-    HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
-
-    // TODO need to make sure we don't need to rearrange the attributes
-    assert(new_hcls->attr_offsets[attr] == numattrs);
-#ifndef NDEBUG
-    for (const auto& p : hcls->attr_offsets) {
-        assert(new_hcls->attr_offsets[p.first] == p.second);
+    if (cls->instancesHaveDictAttrs()) {
+        BoxedDict* d = getDict();
+        d->d[boxString(attr)] = val;
+        return;
     }
-#endif
 
-    RewriterVar* r_new_array2 = NULL;
-    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
-    if (numattrs == 0) {
-        attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
-        if (rewrite_args) {
-            RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-            RewriterVar* r_kind = rewrite_args->rewriter->loadConst((int)gc::GCKind::UNTRACKED, Location::forArg(1));
-            r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_alloc, r_newsize, r_kind);
-        }
-    } else {
-        attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
-        if (rewrite_args) {
-            RewriterVar* r_oldarray
-                = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
-            RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-            r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_realloc, r_oldarray, r_newsize);
-        }
-    }
-    // Don't set the new hcls until after we do the allocation for the new attr_list;
-    // that allocation can cause a collection, and we want the collector to always
-    // see a consistent state between the hcls and the attr_list
-    attrs->hcls = new_hcls;
-
-    if (rewrite_args) {
-        r_new_array2->setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
-        rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array2);
-
-        RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
-        rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
-
-        rewrite_args->out_success = true;
-    }
-    attrs->attr_list->attrs[numattrs] = val;
+    // Unreachable
+    abort();
 }
 
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
@@ -951,6 +1003,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                 }
 
                 rewrite_args = NULL;
+                REWRITE_ABORTED("");
                 char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
                 return boxString(std::string(rtn));
             }
@@ -962,6 +1015,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
 
     else if (descr->cls == property_cls) {
         rewrite_args = NULL; // TODO
+        REWRITE_ABORTED("");
 
         BoxedProperty* prop = static_cast<BoxedProperty*>(descr);
         if (prop->prop_get == NULL || prop->prop_get == None) {
@@ -1184,8 +1238,10 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                 if (_set_) {
                     // Have to abort because we're about to call now, but there will be before more
                     // guards between this call and the next...
-                    if (for_call)
+                    if (for_call) {
                         rewrite_args = NULL;
+                        REWRITE_ABORTED("");
+                    }
 
                     Box* res;
                     if (rewrite_args) {
@@ -1285,8 +1341,10 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                 if (local_get) {
                     Box* res;
 
-                    if (for_call)
+                    if (for_call) {
                         rewrite_args = NULL;
+                        REWRITE_ABORTED("");
+                    }
 
                     if (rewrite_args) {
                         CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_get, rewrite_args->destination);
@@ -1330,8 +1388,10 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // the result.
         if (_get_) {
             // this could happen for the callattr path...
-            if (for_call)
+            if (for_call) {
                 rewrite_args = NULL;
+                REWRITE_ABORTED("");
+            }
 
             Box* res;
             if (rewrite_args) {
@@ -1366,6 +1426,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // Don't need to pass icentry args, since we special-case __getattribute__ and __getattr__ to use
         // invalidation rather than guards
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
         Box* getattr = typeLookup(obj->cls, "__getattr__", NULL);
         if (getattr) {
             Box* boxstr = boxString(attr);
@@ -1403,7 +1464,8 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     }
 
     if (strcmp(attr, "__dict__") == 0) {
-        if (obj->cls->instancesHaveAttrs())
+        // TODO this is wrong, should be added at the class level as a getset
+        if (obj->cls->instancesHaveHCAttrs())
             return makeAttrWrapper(obj);
     }
 
@@ -1509,6 +1571,8 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
         if (attr == _getattr_str || attr == _getattribute_str) {
+            if (rewrite_args)
+                REWRITE_ABORTED("");
             // Will have to embed the clear in the IC, so just disable the patching for now:
             rewrite_args = NULL;
 
@@ -1521,8 +1585,10 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
             raiseExcHelper(TypeError, "readonly attribute");
 
         bool touched_slot = update_slot(self, attr);
-        if (touched_slot)
+        if (touched_slot) {
             rewrite_args = NULL;
+            REWRITE_ABORTED("");
+        }
     }
 }
 
@@ -1532,7 +1598,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
 
-    if (!obj->cls->instancesHaveAttrs()) {
+    if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs()) {
         raiseAttributeError(obj, attr);
     }
 
@@ -2013,6 +2079,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         Box* rtn;
         if (val->cls != function_cls && val->cls != instancemethod_cls) {
             rewrite_args = NULL;
+            REWRITE_ABORTED("");
         }
 
         if (rewrite_args) {
@@ -2239,11 +2306,13 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs || func->isGenerator) {
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     // These could be handled:
     if (argspec.num_keywords) {
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     // TODO Should we guard on the CLFunction or the BoxedFunction?
@@ -2328,10 +2397,12 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
     std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
     }
     for (int i = varargs_to_positional; i < varargs.size(); i++) {
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
         unused_positional.push_back(varargs[i]);
     }
 
@@ -2785,6 +2856,7 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
     if (rewrite_args) {
         assert(rewrite_args->out_success == false);
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     std::string rop_name = getReverseOpName(op_type);
@@ -2978,6 +3050,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     if (rewrite_args) {
         assert(rewrite_args->out_success == false);
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     std::string rop_name = getReverseOpName(op_type);
@@ -3182,25 +3255,34 @@ extern "C" void delitem(Box* target, Box* slice) {
 }
 
 void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
-    // as soon as the hcls changes, the guard on hidden class won't pass.
-    HCAttrs* attrs = getAttrsPtr();
-    HiddenClass* hcls = attrs->hcls;
-    HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
+    if (cls->instancesHaveHCAttrs()) {
+        // as soon as the hcls changes, the guard on hidden class won't pass.
+        HCAttrs* attrs = getHCAttrsPtr();
+        HiddenClass* hcls = attrs->hcls;
+        HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
 
-    // The order of attributes is pertained as delAttrToMakeHC constructs
-    // the new HiddenClass by invoking getOrMakeChild in the prevous order
-    // of remaining attributes
-    int num_attrs = hcls->attr_offsets.size();
-    int offset = hcls->getOffset(attr);
-    assert(offset >= 0);
-    Box** start = attrs->attr_list->attrs;
-    memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
+        // The order of attributes is pertained as delAttrToMakeHC constructs
+        // the new HiddenClass by invoking getOrMakeChild in the prevous order
+        // of remaining attributes
+        int num_attrs = hcls->attr_offsets.size();
+        int offset = hcls->getOffset(attr);
+        assert(offset >= 0);
+        Box** start = attrs->attr_list->attrs;
+        memmove(start + offset, start + offset + 1, (num_attrs - offset - 1) * sizeof(Box*));
 
-    attrs->hcls = new_hcls;
+        attrs->hcls = new_hcls;
 
-    // guarantee the size of the attr_list equals the number of attrs
-    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
-    attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
+        // guarantee the size of the attr_list equals the number of attrs
+        int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (num_attrs - 1);
+        attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
+        return;
+    }
+
+    if (cls->instancesHaveDictAttrs()) {
+        Py_FatalError("unimplemented");
+    }
+
+    abort();
 }
 
 extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
@@ -3332,13 +3414,14 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     BoxedClass* made;
 
-    if (base->instancesHaveAttrs()) {
+    if (base->instancesHaveDictAttrs() || base->instancesHaveHCAttrs()) {
         made = new (cls) BoxedHeapClass(base, NULL, base->attrs_offset, base->tp_basicsize, true);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
         made = new (cls) BoxedHeapClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
     }
 
+    made->tp_dictoffset = base->tp_dictoffset;
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));
     made->giveAttr("__doc__", None);
 
@@ -3373,6 +3456,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     // TODO shouldn't have to redo this argument handling here...
     if (argspec.has_starargs) {
         rewrite_args = NULL;
+        REWRITE_ABORTED("");
 
         Box* starargs;
         if (argspec.num_args == 0)
@@ -3452,6 +3536,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             if (descr_r) {
                 new_attr = descr_r;
                 rewrite_args = NULL;
+                REWRITE_ABORTED("");
             }
         }
     } else {
@@ -3516,6 +3601,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             // ASSERT(cls->is_user_defined || cls == type_cls, "Does '%s' have a well-behaved __new__?  if so, add to
             // allowable_news, otherwise add to the blacklist in this assert", cls->tp_name);
             rewrite_args = NULL;
+            REWRITE_ABORTED("");
         }
     }
 
@@ -3800,7 +3886,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
         return None;
     }
 
-    HCAttrs* module_attrs = from_module->getAttrsPtr();
+    HCAttrs* module_attrs = from_module->getHCAttrsPtr();
     for (auto& p : module_attrs->hcls->attr_offsets) {
         if (p.first[0] == '_')
             continue;

@@ -869,6 +869,10 @@ runpy_%: %.py ext_python
 	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
 $(call make_search,runpy_%)
 
+check_%: %.py ext_python ext_pyston
+	$(MAKE) check_dbg ARGS="$(patsubst %.py,%,$(notdir $<)) -K"
+$(call make_search,check_%)
+
 dbgpy_%: %.py ext_pythondbg
 	export PYTHON_VERSION=$$(python2.7-dbg -V 2>&1 | awk '{print $$2}'); PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7-pydebug $(GDB) --ex "dir $(DEPS_DIR)/python-src/python2.7-$$PYTHON_VERSION/debian" $(GDB_CMDS) --args python2.7-dbg $<
 $(call make_search,dbgpy_%)

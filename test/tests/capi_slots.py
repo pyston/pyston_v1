@@ -88,3 +88,27 @@ try:
         pass
 except TypeError, e:
     print e
+
+try:
+    slots_test.SlotsTesterSeq(5).foo = 1
+except AttributeError, e:
+    print e
+
+try:
+    print slots_test.SlotsTesterSeq(5).__dict__
+except AttributeError, e:
+    print e
+
+c = C3(5)
+c.foo = 1
+print c.foo
+print c.__dict__.items()
+
+s = slots_test.SlotsTesterMap(6)
+s.bar = 2
+print s.bar
+print hasattr(s, "bar"), hasattr(s, "foo")
+try:
+    print s.__dict__
+except AttributeError, e:
+    print e

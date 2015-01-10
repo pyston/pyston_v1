@@ -1,7 +1,10 @@
 #include <Python.h>
+#include <stddef.h> /* For offsetof */
 
 typedef struct {
-    PyObject_HEAD
+    PyObject_HEAD;
+
+    PyObject* dict;
 
     int n;
 } slots_tester_object;
@@ -252,7 +255,7 @@ static PyTypeObject slots_tester_map= {
     0,                                  /* tp_dict */
     0,                                  /* tp_descr_get */
     0,                                  /* tp_descr_set */
-    0,                                  /* tp_dictoffset */
+    offsetof(slots_tester_object, dict), /* tp_dictoffset */
     0,                                  /* tp_init */
     0,                                  /* tp_alloc */
     slots_tester_new,                   /* tp_new */

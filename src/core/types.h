@@ -381,6 +381,7 @@ public:
     HCAttrs() : hcls(root_hcls), attr_list(nullptr) {}
 };
 
+class BoxedDict;
 class BoxedString;
 
 class Box {
@@ -396,7 +397,8 @@ public:
 
     llvm::iterator_range<BoxIterator> pyElements();
 
-    HCAttrs* getAttrsPtr();
+    HCAttrs* getHCAttrsPtr();
+    BoxedDict* getDict();
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
     void giveAttr(const std::string& attr, Box* val) {
