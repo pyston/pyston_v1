@@ -65,7 +65,7 @@ extern "C" PyObject* PyObject_Str(PyObject* v) noexcept {
 }
 
 extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
-    Py_FatalError("unimplemented");
+    return obj;
 }
 
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {

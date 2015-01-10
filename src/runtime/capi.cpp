@@ -175,19 +175,26 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
     try {
         return len(o)->n;
     } catch (Box* b) {
-        Py_FatalError("unimplemented");
+        PyErr_SetObject(b->cls, b);
+        return -1;
     }
 }
 
-extern "C" PyObject* PyObject_GetIter(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
+    try {
+        return getiter(o);
+    } catch (Box* b) {
+        PyErr_SetObject(b->cls, b);
+        return NULL;
+    }
 }
 
 extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
     try {
         return repr(obj);
     } catch (Box* b) {
-        Py_FatalError("unimplemented");
+        PyErr_SetObject(b->cls, b);
+        return NULL;
     }
 }
 
@@ -539,8 +546,15 @@ extern "C" PyObject* PySequence_Fast(PyObject* o, const char* m) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyIter_Next(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
+    static const std::string next_str("next");
+    try {
+        return callattr(iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } catch (Box* b) {
+        PyErr_SetObject(b->cls, b);
+        return NULL;
+    }
 }
 
 extern "C" int PyCallable_Check(PyObject* x) noexcept {
