@@ -357,4 +357,115 @@ extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
 extern "C" PyObject* _PyObject_CallFunction_SizeT(PyObject* callable, char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
+
+#define NEW_STYLE_NUMBER(o) PyType_HasFeature((o)->cls, Py_TPFLAGS_CHECKTYPES)
+
+#define NB_SLOT(x) offsetof(PyNumberMethods, x)
+#define NB_BINOP(nb_methods, slot) (*(binaryfunc*)(&((char*)nb_methods)[slot]))
+#define NB_TERNOP(nb_methods, slot) (*(ternaryfunc*)(&((char*)nb_methods)[slot]))
+
+extern "C" int PySequence_Check(PyObject* s) noexcept {
+    if (s == NULL)
+        return 0;
+    if (PyInstance_Check(s))
+        return PyObject_HasAttrString(s, "__getitem__");
+    if (PyDict_Check(s))
+        return 0;
+    return s->cls->tp_as_sequence && s->cls->tp_as_sequence->sq_item != NULL;
+}
+
+static PyObject* binary_op1(PyObject* v, PyObject* w, const int op_slot) {
+    PyObject* x;
+    binaryfunc slotv = NULL;
+    binaryfunc slotw = NULL;
+
+    if (v->cls->tp_as_number != NULL && NEW_STYLE_NUMBER(v))
+        slotv = NB_BINOP(v->cls->tp_as_number, op_slot);
+    if (w->cls != v->cls && w->cls->tp_as_number != NULL && NEW_STYLE_NUMBER(w)) {
+        slotw = NB_BINOP(w->cls->tp_as_number, op_slot);
+        if (slotw == slotv)
+            slotw = NULL;
+    }
+    if (slotv) {
+        if (slotw && PyType_IsSubtype(w->cls, v->cls)) {
+            x = slotw(v, w);
+            if (x != Py_NotImplemented)
+                return x;
+            Py_DECREF(x); /* can't do it */
+            slotw = NULL;
+        }
+        x = slotv(v, w);
+        if (x != Py_NotImplemented)
+            return x;
+        Py_DECREF(x); /* can't do it */
+    }
+    if (slotw) {
+        x = slotw(v, w);
+        if (x != Py_NotImplemented)
+            return x;
+        Py_DECREF(x); /* can't do it */
+    }
+    if (!NEW_STYLE_NUMBER(v) || !NEW_STYLE_NUMBER(w)) {
+        int err = PyNumber_CoerceEx(&v, &w);
+        if (err < 0) {
+            return NULL;
+        }
+        if (err == 0) {
+            PyNumberMethods* mv = v->cls->tp_as_number;
+            if (mv) {
+                binaryfunc slot;
+                slot = NB_BINOP(mv, op_slot);
+                if (slot) {
+                    x = slot(v, w);
+                    Py_DECREF(v);
+                    Py_DECREF(w);
+                    return x;
+                }
+            }
+            /* CoerceEx incremented the reference counts */
+            Py_DECREF(v);
+            Py_DECREF(w);
+        }
+    }
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+static PyObject* binop_type_error(PyObject* v, PyObject* w, const char* op_name) {
+    PyErr_Format(PyExc_TypeError, "unsupported operand type(s) for %.100s: "
+                                  "'%.100s' and '%.100s'",
+                 op_name, v->cls->tp_name, w->cls->tp_name);
+    return NULL;
+}
+
+static PyObject* binary_op(PyObject* v, PyObject* w, const int op_slot, const char* op_name) {
+    PyObject* result = binary_op1(v, w, op_slot);
+    if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        return binop_type_error(v, w, op_name);
+    }
+    return result;
+}
+
+extern "C" PyObject* PySequence_Concat(PyObject* s, PyObject* o) noexcept {
+    PySequenceMethods* m;
+
+    if (s == NULL || o == NULL)
+        return null_error();
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_concat)
+        return m->sq_concat(s, o);
+
+    /* Instances of user classes defining an __add__() method only
+       have an nb_add slot, not an sq_concat slot.  So we fall back
+       to nb_add if both arguments appear to be sequences. */
+    if (PySequence_Check(s) && PySequence_Check(o)) {
+        PyObject* result = binary_op1(s, o, NB_SLOT(nb_add));
+        if (result != Py_NotImplemented)
+            return result;
+        Py_DECREF(result);
+    }
+    return type_error("'%.200s' object can't be concatenated", s);
+}
 }

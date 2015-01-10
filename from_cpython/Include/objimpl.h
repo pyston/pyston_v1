@@ -326,7 +326,7 @@ PyAPI_FUNC(void) PyObject_GC_Del(void *) PYSTON_NOEXCEPT;
 #define _PyObject_GC_New _PyObject_New
 #define PyObject_GC_Track(o) ((void)(o))
 #define PyObject_GC_UnTrack(o) ((void)(o))
-#define PyObject_GC_Del(o) ((void)(o))
+#define PyObject_GC_Del PyObject_Del
 
 
 #define PyObject_GC_New(type, typeobj) \

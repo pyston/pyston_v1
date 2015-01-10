@@ -132,6 +132,16 @@ extern "C" void PyDict_Clear(PyObject* op) noexcept {
     static_cast<BoxedDict*>(op)->d.clear();
 }
 
+extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
+    RELEASE_ASSERT(PyDict_Check(o), "");
+    try {
+        return dictCopy(static_cast<BoxedDict*>(o));
+    } catch (Box* e) {
+        PyErr_SetObject(e->cls, e);
+        return NULL;
+    }
+}
+
 Box* dictGetitem(BoxedDict* self, Box* k) {
     assert(self->cls == dict_cls);
 
@@ -379,6 +389,24 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
             raiseExcHelper(TypeError, "cannot convert dictionary update sequence element #%d to a sequence", idx);
 
         idx++;
+    }
+}
+
+extern "C" int PyDict_Merge(PyObject* a, PyObject* b, int override_) noexcept {
+    if (a == NULL || !PyDict_Check(a) || b == NULL) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    if (override_ != 1)
+        Py_FatalError("unimplemented");
+
+    try {
+        dictMerge(static_cast<BoxedDict*>(a), b);
+        return 0;
+    } catch (Box* e) {
+        PyErr_SetObject(e->cls, e);
+        return -1;
     }
 }
 

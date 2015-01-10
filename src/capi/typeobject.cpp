@@ -1697,7 +1697,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
-    RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del, "");
+    RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del || cls->tp_free == PyObject_GC_Del, "");
     RELEASE_ASSERT(cls->tp_is_gc == NULL, "");
     RELEASE_ASSERT(cls->tp_mro == NULL, "");
     RELEASE_ASSERT(cls->tp_cache == NULL, "");

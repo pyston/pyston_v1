@@ -469,15 +469,7 @@ extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
     Py_FatalError("unimplemented");
 };
 
-extern "C" int PySequence_Check(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" Py_ssize_t PySequence_Size(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PySequence_Concat(PyObject* o1, PyObject* o2) noexcept {
     Py_FatalError("unimplemented");
 }
 
