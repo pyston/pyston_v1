@@ -137,6 +137,11 @@ private:
         call->lineno = e->lineno;
         call->col_offset = e->col_offset;
 
+        // Simple optimization: allow the generation of nested nodes if there isn't a
+        // current exc handler.
+        if (exc_handlers.size() == 0)
+            return call;
+
         auto name = nodeName(e);
         pushAssign(name, call);
         return makeName(name, AST_TYPE::Load);
