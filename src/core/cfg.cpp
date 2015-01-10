@@ -1055,6 +1055,10 @@ public:
 #endif
                     curblock->push_back(node);
                     return;
+                } else if (asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id[0] == '#') {
+                    // Assigning from one temporary name to another:
+                    curblock->push_back(node);
+                    return;
                 }
             }
         }
