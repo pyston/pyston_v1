@@ -465,7 +465,7 @@ private:
                 // TODO if this is a type that has an __iter__, we could do way better than this, both in terms of
                 // function call overhead and resulting type information, if we went with that instead of the generic
                 // version.
-                // (ie we can inline getiter here, whether mechanically with LLVM [would require adding more
+                // (ie we can inline getPystonIter here, whether mechanically with LLVM [would require adding more
                 // optimization passes to make it fast] or by-hand)
                 //
                 // TODO Move this behavior into to the type-specific section (compvars.cpp)?
@@ -476,7 +476,7 @@ private:
                 ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
                 obj->decvref(emitter);
 
-                llvm::Value* v = emitter.createCall(unw_info, g.funcs.getiter, { converted_obj->getValue() });
+                llvm::Value* v = emitter.createCall(unw_info, g.funcs.getPystonIter, { converted_obj->getValue() });
                 assert(v->getType() == g.llvm_value_type_ptr);
 
                 return new ConcreteCompilerVariable(UNKNOWN, v, true);

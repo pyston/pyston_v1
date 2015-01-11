@@ -68,3 +68,13 @@ try:
     print hex([])
 except TypeError, e:
     print e
+
+class Iterable(object):
+    def __iter__(self):
+        return self
+    def next(self):
+        return 1
+
+i = Iterable()
+it = iter(i)
+print it is i

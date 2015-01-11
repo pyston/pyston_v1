@@ -90,7 +90,7 @@ void force() {
     FORCE(str);
     FORCE(isinstance);
     FORCE(yield);
-    FORCE(getiter);
+    FORCE(getPystonIter);
 
     FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);

@@ -84,7 +84,9 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isInstance(Box* obj, BoxedClass* parent);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
-extern "C" Box* getiter(Box* o);
+
+Box* getiter(Box* o);
+extern "C" Box* getPystonIter(Box* o);
 
 extern "C" void dump(void* p);
 

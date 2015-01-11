@@ -3349,16 +3349,20 @@ extern "C" void delattr(Box* obj, const char* attr) {
     delattr_internal(obj, attr, true, NULL);
 }
 
-extern "C" Box* getiter(Box* o) {
+extern "C" Box* getPystonIter(Box* o) {
+    Box* r = getiter(o);
+    static const std::string hasnext_str("__hasnext__");
+    if (typeLookup(r->cls, hasnext_str, NULL) == NULL)
+        return new BoxedIterWrapper(r);
+    return r;
+}
+
+Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
     static const std::string iter_str("__iter__");
     Box* r = callattrInternal0(o, &iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
-    if (r) {
-        static const std::string hasnext_str("__hasnext__");
-        if (typeLookup(r->cls, hasnext_str, NULL) == NULL)
-            return new BoxedIterWrapper(r);
+    if (r)
         return r;
-    }
 
     static const std::string getitem_str("__getitem__");
     if (typeLookup(o->cls, getitem_str, NULL)) {
@@ -3369,6 +3373,7 @@ extern "C" Box* getiter(Box* o) {
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {
+    // TODO: this should probably call getPystonIter
     Box* iter = getiter(this);
     assert(iter);
     return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));

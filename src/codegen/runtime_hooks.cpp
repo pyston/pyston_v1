@@ -197,7 +197,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(str);
     GET(isinstance);
     GET(yield);
-    GET(getiter);
+    GET(getPystonIter);
 
     GET(unpackIntoArray);
     GET(raiseAttributeError);
