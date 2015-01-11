@@ -663,13 +663,19 @@ finally:
 }
 
 void checkAndThrowCAPIException() {
-    Box* value = cur_thread_state.curexc_value;
-    if (value) {
+    Box* _type = cur_thread_state.curexc_type;
+    if (!_type)
+        assert(!cur_thread_state.curexc_value);
+
+    if (_type) {
         RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL, "unsupported");
-        Box* _type = cur_thread_state.curexc_type;
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
+
+        Box* value = cur_thread_state.curexc_value;
+        if (!value)
+            value = None;
 
         // This is similar to PyErr_NormalizeException:
         if (!isInstance(value, type)) {

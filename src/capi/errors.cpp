@@ -133,6 +133,10 @@ extern "C" PyObject* PyErr_SetFromErrno(PyObject* exc) noexcept {
     return PyErr_SetFromErrnoWithFilenameObject(exc, NULL);
 }
 
+extern "C" void PyErr_SetNone(PyObject* exception) noexcept {
+    PyErr_SetObject(exception, (PyObject*)NULL);
+}
+
 /* Call when an exception has occurred but there is no way for Python
    to handle it.  Examples: exception in __del__ or during GC. */
 extern "C" void PyErr_WriteUnraisable(PyObject* obj) noexcept {

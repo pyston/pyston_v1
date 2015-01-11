@@ -96,6 +96,15 @@ Box* iterwrapperNext(Box* s) {
     return r;
 }
 
+extern "C" PyObject* PySeqIter_New(PyObject* seq) noexcept {
+    try {
+        return new BoxedSeqIter(seq);
+    } catch (Box* e) {
+        PyErr_SetObject(e->cls, e);
+        return NULL;
+    }
+}
+
 void setupIter() {
     seqiter_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedSeqIter), false);
     seqiter_cls->giveAttr("__name__", boxStrConstant("iterator"));

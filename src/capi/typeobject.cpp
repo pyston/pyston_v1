@@ -79,6 +79,18 @@ RICHCMP_WRAPPER(ne, Py_NE)
 RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
+static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
+    unaryfunc func = (unaryfunc)wrapped;
+    PyObject* res;
+
+    if (!check_num_args(args, 0))
+        return NULL;
+    res = (*func)(self);
+    if (res == NULL && !PyErr_Occurred())
+        PyErr_SetNone(PyExc_StopIteration);
+    return res;
+}
+
 static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     coercion func = (coercion)wrapped;
     PyObject* other, *res;
@@ -581,7 +593,37 @@ static PyObject* slot_tp_richcompare(PyObject* self, PyObject* other, int op) no
     return Py_NotImplemented;
 }
 
-PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
+static PyObject* slot_tp_iter(PyObject* self) noexcept {
+    PyObject* func, *res;
+    static PyObject* iter_str, *getitem_str;
+
+    func = lookup_method(self, "__iter__", &iter_str);
+    if (func != NULL) {
+        PyObject* args;
+        args = res = PyTuple_New(0);
+        if (args != NULL) {
+            res = PyObject_Call(func, args, NULL);
+            Py_DECREF(args);
+        }
+        Py_DECREF(func);
+        return res;
+    }
+    PyErr_Clear();
+    func = lookup_method(self, "__getitem__", &getitem_str);
+    if (func == NULL) {
+        PyErr_Format(PyExc_TypeError, "'%.200s' object is not iterable", Py_TYPE(self)->tp_name);
+        return NULL;
+    }
+    Py_DECREF(func);
+    return PySeqIter_New(self);
+}
+
+static PyObject* slot_tp_iternext(PyObject* self) noexcept {
+    static PyObject* next_str;
+    return call_method(self, "next", &next_str, "()");
+}
+
+static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     try {
         // TODO: runtime ICs?
         Box* new_attr = typeLookup(self, _new_str, NULL);
@@ -1032,6 +1074,9 @@ static slotdef slotdefs[]
         TPSLOT("__ne__", tp_richcompare, slot_tp_richcompare, richcmp_ne, "x.__ne__(y) <==> x!=y"),
         TPSLOT("__gt__", tp_richcompare, slot_tp_richcompare, richcmp_gt, "x.__gt__(y) <==> x>y"),
         TPSLOT("__ge__", tp_richcompare, slot_tp_richcompare, richcmp_ge, "x.__ge__(y) <==> x>=y"),
+
+        TPSLOT("__iter__", tp_iter, slot_tp_iter, wrap_unaryfunc, "x.__iter__() <==> iter(x)"),
+        TPSLOT("next", tp_iternext, slot_tp_iternext, wrap_next, "x.next() -> the next value, or raise StopIteration"),
 
         FLSLOT("__init__", tp_init, slot_tp_init, (wrapperfunc)wrap_init, "x.__init__(...) initializes x; "
                                                                           "see help(type(x)) for signature",
@@ -1693,8 +1738,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         RELEASE_ASSERT(cls->tp_flags & Py_TPFLAGS_CHECKTYPES, "Pyston doesn't yet support non-checktypes behavior");
     }
 
-    RELEASE_ASSERT(cls->tp_iter == NULL, "");
-    RELEASE_ASSERT(cls->tp_iternext == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_get == NULL, "");
     RELEASE_ASSERT(cls->tp_descr_set == NULL, "");
     RELEASE_ASSERT(cls->tp_free == NULL || cls->tp_free == PyObject_Del || cls->tp_free == PyObject_GC_Del, "");

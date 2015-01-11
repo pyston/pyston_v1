@@ -39,6 +39,9 @@ for i in xrange(3):
     print hex(t)
     print oct(t)
 
+for i in slots_test.SlotsTesterSeq(6):
+    print i
+
 su = slots_test.SlotsTesterSub(5)
 print su
 

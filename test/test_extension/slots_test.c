@@ -9,6 +9,14 @@ typedef struct {
     int n;
 } slots_tester_object;
 
+typedef struct {
+    PyObject_HEAD;
+
+    slots_tester_object* obj;
+
+    int m;
+} slots_tester_iterobj;
+
 static PyObject *
 slots_tester_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -110,6 +118,7 @@ static PySequenceMethods slots_tester_seq_as_sequence = {
     (objobjproc)0,             /* sq_contains */
 };
 
+static slots_tester_iterobj* slots_tester_iter(slots_tester_object *obj);
 
 static PyTypeObject slots_tester_seq = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -138,7 +147,7 @@ static PyTypeObject slots_tester_seq = {
     0,                                  /* tp_clear */
     (richcmpfunc)slots_tester_seq_richcmp, /* tp_richcompare */
     0,                                  /* tp_weaklistoffset */
-    0,                                  /* tp_iter */
+    (getiterfunc)slots_tester_iter,                                  /* tp_iter */
     0,                                  /* tp_iternext */
     0,                                  /* tp_methods */
     0,                                  /* tp_members */
@@ -153,6 +162,73 @@ static PyTypeObject slots_tester_seq = {
     slots_tester_new,                   /* tp_new */
     0,                                  /* tp_free */
 };
+
+PyObject* slots_testeriter_iternext(slots_tester_iterobj* iter) {
+    iter->m++;
+    if (iter->m < iter->obj->n) {
+        return PyInt_FromLong(iter->m);
+    }
+    return NULL;
+}
+
+static int
+slots_testeriter_init(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    printf("slots_testeriter_seq.__init__, %d\n", ((slots_tester_object*)self)->n);
+
+    return 0;
+}
+
+static PyTypeObject slots_tester_seqiter = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "slots_test.slots_tester_seqiter",            /* tp_name */
+    sizeof(slots_tester_iterobj),          /* tp_basicsize */
+    0,                                  /* tp_itemsize */
+    /* methods */
+    0,                                  /* tp_dealloc */
+    0,                                  /* tp_print */
+    0,                                  /* tp_getattr */
+    0,                                  /* tp_setattr */
+    0,                                  /* tp_compare */
+    (reprfunc)slots_tester_seq_repr,        /* tp_repr */
+    0,                                  /* tp_as_number */
+    0,          /* tp_as_sequence */
+    0,                                  /* tp_as_mapping */
+    0, /* tp_hash */
+    0,     /* tp_call */
+    0,     /* tp_str */
+    0,                                  /* tp_getattro */
+    0,                                  /* tp_setattro */
+    0,                                  /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,                 /* tp_flags */
+    0,                   /* tp_doc */
+    0,                                  /* tp_traverse */
+    0,                                  /* tp_clear */
+    0, /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    (iternextfunc)slots_testeriter_iternext,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    0,                                  /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    slots_testeriter_init,                  /* tp_init */
+    0,                 /* tp_alloc */
+    0,                   /* tp_new */
+    0,                                  /* tp_free */
+};
+
+static slots_tester_iterobj* slots_tester_iter(slots_tester_object *obj) {
+    slots_tester_iterobj* rtn = PyObject_New(slots_tester_iterobj, &slots_tester_seqiter);
+    Py_INCREF(obj);
+    rtn->obj = obj;
+    rtn->m = 0;
+    return rtn;
+}
 
 static PyTypeObject slots_tester_nonsubclassable = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -615,6 +691,10 @@ initslots_test(void)
         return;
 
     int res = PyType_Ready(&slots_tester_seq);
+    if (res < 0)
+        return;
+
+    res = PyType_Ready(&slots_tester_seqiter);
     if (res < 0)
         return;
 
