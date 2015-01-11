@@ -1,6 +1,3 @@
-# expected: fail
-# - real iteration protocol is unsupported (no exceptions yet)
-
 class C(object):
     def __iter__(self):
         print "orig iter"
@@ -35,4 +32,20 @@ c = C()
 c.next = newnext
 
 for i in c: # should hit the old next
+    print i
+
+class C(object):
+    def __init__(self):
+        self.n = 0
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self.n < 10:
+            self.n += 1
+            return self.n * self.n
+        raise StopIteration()
+
+for i in C():
     print i

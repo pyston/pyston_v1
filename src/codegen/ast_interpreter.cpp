@@ -530,7 +530,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     Value v;
     if (node->opcode == AST_LangPrimitive::GET_ITER) {
         assert(node->args.size() == 1);
-        v = getiter(visit_expr(node->args[0]).o);
+        v = getPystonIter(visit_expr(node->args[0]).o);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_FROM) {
         assert(node->args.size() == 2);
         assert(node->args[0]->type == AST_TYPE::Name);

@@ -23,6 +23,9 @@
 namespace pyston {
 
 extern BoxedClass* seqiter_cls;
+
+// Analogue of CPython's PySeqIter: wraps an object that has a __getitem__
+// and uses that to iterate.
 class BoxedSeqIter : public Box {
 public:
     Box* b;
@@ -32,6 +35,19 @@ public:
     BoxedSeqIter(Box* b) : b(b), idx(0), next(NULL) {}
 
     DEFAULT_CLASS(seqiter_cls);
+};
+
+extern BoxedClass* iterwrapper_cls;
+// Pyston wrapper that wraps CPython-style iterators (next() which throws StopException)
+// and converts it to Pyston-style (__hasnext__)
+class BoxedIterWrapper : public Box {
+public:
+    Box* iter;
+    Box* next;
+
+    BoxedIterWrapper(Box* iter) : iter(iter) {}
+
+    DEFAULT_CLASS(iterwrapper_cls);
 };
 
 void setupIter();
