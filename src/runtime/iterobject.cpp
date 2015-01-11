@@ -30,6 +30,7 @@
 namespace pyston {
 
 BoxedClass* seqiter_cls;
+BoxedClass* iterwrapper_cls;
 
 Box* seqiterHasnext(Box* s) {
     RELEASE_ASSERT(s->cls == seqiter_cls, "");
@@ -56,6 +57,45 @@ Box* seqiterNext(Box* s) {
     return r;
 }
 
+static void iterwrapperGCVisit(GCVisitor* v, Box* b) {
+    assert(b->cls == iterwrapper_cls);
+    boxGCHandler(v, b);
+
+    BoxedIterWrapper* iw = static_cast<BoxedIterWrapper*>(b);
+    if (iw->next)
+        v->visit(iw->next);
+}
+
+Box* iterwrapperHasnext(Box* s) {
+    RELEASE_ASSERT(s->cls == iterwrapper_cls, "");
+    BoxedIterWrapper* self = static_cast<BoxedIterWrapper*>(s);
+
+    static const std::string next_str("next");
+    Box* next;
+    try {
+        next = callattr(self->iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } catch (Box* b) {
+        if (isSubclass(b->cls, StopIteration)) {
+            self->next = NULL;
+            return False;
+        }
+        throw;
+    }
+    self->next = next;
+    return True;
+}
+
+Box* iterwrapperNext(Box* s) {
+    RELEASE_ASSERT(s->cls == iterwrapper_cls, "");
+    BoxedIterWrapper* self = static_cast<BoxedIterWrapper*>(s);
+
+    RELEASE_ASSERT(self->next, "");
+    Box* r = self->next;
+    self->next = NULL;
+    return r;
+}
+
 void setupIter() {
     seqiter_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedSeqIter), false);
     seqiter_cls->giveAttr("__name__", boxStrConstant("iterator"));
@@ -64,5 +104,14 @@ void setupIter() {
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));
 
     seqiter_cls->freeze();
+
+    iterwrapper_cls = new BoxedHeapClass(object_cls, iterwrapperGCVisit, 0, sizeof(BoxedIterWrapper), false);
+    iterwrapper_cls->giveAttr("__name__", boxStrConstant("iterwrapper"));
+
+    iterwrapper_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)iterwrapperNext, UNKNOWN, 1)));
+    iterwrapper_cls->giveAttr("__hasnext__",
+                              new BoxedFunction(boxRTFunction((void*)iterwrapperHasnext, BOXED_BOOL, 1)));
+
+    iterwrapper_cls->freeze();
 }
 }

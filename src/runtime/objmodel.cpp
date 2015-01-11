@@ -3353,8 +3353,12 @@ extern "C" Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
     static const std::string iter_str("__iter__");
     Box* r = callattrInternal0(o, &iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
-    if (r)
+    if (r) {
+        static const std::string hasnext_str("__hasnext__");
+        if (typeLookup(r->cls, hasnext_str, NULL) == NULL)
+            return new BoxedIterWrapper(r);
         return r;
+    }
 
     static const std::string getitem_str("__getitem__");
     if (typeLookup(o->cls, getitem_str, NULL)) {

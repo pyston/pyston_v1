@@ -465,6 +465,9 @@ private:
                 // TODO if this is a type that has an __iter__, we could do way better than this, both in terms of
                 // function call overhead and resulting type information, if we went with that instead of the generic
                 // version.
+                // (ie we can inline getiter here, whether mechanically with LLVM [would require adding more
+                // optimization passes to make it fast] or by-hand)
+                //
                 // TODO Move this behavior into to the type-specific section (compvars.cpp)?
                 emitter.getBuilder();
                 assert(node->args.size() == 1);
