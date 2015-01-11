@@ -138,8 +138,8 @@ void GCVisitor::visit(void* p) {
 }
 
 void GCVisitor::visitRange(void* const* start, void* const* end) {
-    ASSERT((char*)end - (char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
-           ((char*)end - (char*)start) * 1.0 / (1 << 30));
+    ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
 
     assert((uintptr_t)start % sizeof(void*) == 0);
     assert((uintptr_t)end % sizeof(void*) == 0);
@@ -158,8 +158,8 @@ void GCVisitor::visitPotential(void* p) {
 }
 
 void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
-    ASSERT((char*)end - (char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
-           ((char*)end - (char*)start) * 1.0 / (1 << 30));
+    ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
+           ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
 
     assert((uintptr_t)start % sizeof(void*) == 0);
     assert((uintptr_t)end % sizeof(void*) == 0);
