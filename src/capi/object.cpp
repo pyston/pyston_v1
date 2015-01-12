@@ -128,4 +128,65 @@ extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexce
 extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
     Py_FatalError("unimplemented");
 }
+
+/* These methods are used to control infinite recursion in repr, str, print,
+   etc.  Container objects that may recursively contain themselves,
+   e.g. builtin dictionaries and lists, should used Py_ReprEnter() and
+   Py_ReprLeave() to avoid infinite recursion.
+
+   Py_ReprEnter() returns 0 the first time it is called for a particular
+   object and 1 every time thereafter.  It returns -1 if an exception
+   occurred.  Py_ReprLeave() has no return value.
+
+   See dictobject.c and listobject.c for examples of use.
+*/
+
+#define KEY "Py_Repr"
+
+extern "C" int Py_ReprEnter(PyObject* obj) noexcept {
+    PyObject* dict;
+    PyObject* list;
+    Py_ssize_t i;
+
+    dict = PyThreadState_GetDict();
+    if (dict == NULL)
+        return 0;
+    list = PyDict_GetItemString(dict, KEY);
+    if (list == NULL) {
+        list = PyList_New(0);
+        if (list == NULL)
+            return -1;
+        if (PyDict_SetItemString(dict, KEY, list) < 0)
+            return -1;
+        Py_DECREF(list);
+    }
+    i = PyList_GET_SIZE(list);
+    while (--i >= 0) {
+        if (PyList_GET_ITEM(list, i) == obj)
+            return 1;
+    }
+    PyList_Append(list, obj);
+    return 0;
+}
+
+extern "C" void Py_ReprLeave(PyObject* obj) noexcept {
+    PyObject* dict;
+    PyObject* list;
+    Py_ssize_t i;
+
+    dict = PyThreadState_GetDict();
+    if (dict == NULL)
+        return;
+    list = PyDict_GetItemString(dict, KEY);
+    if (list == NULL || !PyList_Check(list))
+        return;
+    i = PyList_GET_SIZE(list);
+    /* Count backwards because we always expect obj to be list[-1] */
+    while (--i >= 0) {
+        if (PyList_GET_ITEM(list, i) == obj) {
+            PyList_SetSlice(list, i, i + 1, NULL);
+            break;
+        }
+    }
+}
 }

@@ -1723,7 +1723,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     gc::registerNonheapRootObject(cls);
 
     // unhandled fields:
-    RELEASE_ASSERT(cls->tp_print == NULL, "");
     RELEASE_ASSERT(cls->tp_getattr == NULL, "");
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
@@ -1748,6 +1747,8 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
+
+// Pyston doesn't handle tp_print, but it looks like it's just for optimization so it should be ok to skip for now?
 
 // I think it is safe to ignore these for for now:
 // RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");

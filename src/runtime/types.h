@@ -431,6 +431,7 @@ public:
         return NULL;
     }
 };
+static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
 class BoxedFunction : public Box {
 public:

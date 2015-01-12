@@ -468,4 +468,28 @@ extern "C" PyObject* PySequence_Concat(PyObject* s, PyObject* o) noexcept {
     }
     return type_error("'%.200s' object can't be concatenated", s);
 }
+
+extern "C" PyObject* PySequence_List(PyObject* v) noexcept {
+    PyObject* result; /* result list */
+    PyObject* rv;     /* return value from PyList_Extend */
+
+    if (v == NULL)
+        return null_error();
+
+    result = PyList_New(0);
+    if (result == NULL)
+        return NULL;
+
+    rv = _PyList_Extend((PyListObject*)result, v);
+    if (rv == NULL) {
+        Py_DECREF(result);
+        return NULL;
+    }
+    Py_DECREF(rv);
+    return result;
+}
+
+extern "C" PyObject* PyObject_CallFunction(PyObject* callable, char* format, ...) noexcept {
+    Py_FatalError("unimplemented");
+}
 }

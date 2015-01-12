@@ -116,6 +116,8 @@ typedef struct _ts {
     PyObject *curexc_type;
     PyObject *curexc_value;
     PyObject *curexc_traceback;
+
+    PyObject *dict;  /* Stores per-thread state */
 } PyThreadState;
 
 

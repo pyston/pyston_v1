@@ -531,10 +531,6 @@ extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_List(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
@@ -1219,6 +1215,14 @@ static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
     close(fd);
     return 0;
 }
+}
+
+extern "C" PyObject* PyThreadState_GetDict(void) noexcept {
+    Box* dict = cur_thread_state.dict;
+    if (!dict) {
+        dict = cur_thread_state.dict = new BoxedDict();
+    }
+    return dict;
 }
 
 extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) noexcept {

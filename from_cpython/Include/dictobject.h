@@ -92,8 +92,10 @@ struct _dictobject {
     PyDictEntry ma_smalltable[PyDict_MINSIZE];
 };
 #endif
-PyAPI_DATA(PyTypeObject*) list_cls;
-#define PyList_Type (*list_cls)
+typedef struct {
+    PyObject_HEAD;
+    char _filler[48];
+} PyDictObject;
 
 // Pyston change: these are no longer static objects:
 #if 0

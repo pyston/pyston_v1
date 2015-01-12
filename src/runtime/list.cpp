@@ -341,20 +341,26 @@ Box* listMul(BoxedList* self, Box* rhs) {
 }
 
 Box* listIAdd(BoxedList* self, Box* _rhs) {
-    if (_rhs->cls != list_cls) {
-        raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs)->c_str());
-    }
-
     LOCK_REGION(self->lock.asWrite());
 
-    BoxedList* rhs = static_cast<BoxedList*>(_rhs);
+    if (_rhs->cls == list_cls) {
+        // This branch is safe if self==rhs:
+        BoxedList* rhs = static_cast<BoxedList*>(_rhs);
 
-    int s1 = self->size;
-    int s2 = rhs->size;
-    self->ensure(s1 + s2);
+        int s1 = self->size;
+        int s2 = rhs->size;
+        self->ensure(s1 + s2);
 
-    memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
-    self->size = s1 + s2;
+        memcpy(self->elts->elts + s1, rhs->elts->elts, sizeof(rhs->elts->elts[0]) * s2);
+        self->size = s1 + s2;
+        return self;
+    }
+
+    RELEASE_ASSERT(_rhs != self, "unsupported");
+
+    for (auto* b : _rhs->pyElements())
+        listAppendInternal(self, b);
+
     return self;
 }
 
@@ -576,6 +582,39 @@ Box* listNe(BoxedList* self, Box* rhs) {
     LOCK_REGION(self->lock.asRead());
 
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::NotEq);
+}
+
+extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
+    BoxedList* l = (BoxedList*)self;
+    assert(l->cls == list_cls);
+
+    try {
+        return listIAdd(l, b);
+    } catch (Box* b) {
+        PyErr_SetObject(b->cls, b);
+        return NULL;
+    }
+}
+
+extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, PyObject* v) noexcept {
+    if (!PyList_Check(a)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    BoxedList* l = (BoxedList*)a;
+    ASSERT(l->cls == list_cls, "%s", l->cls->tp_name);
+
+    try {
+        if (v)
+            listSetitemSlice(l, new BoxedSlice(boxInt(ilow), boxInt(ihigh), None), v);
+        else
+            listDelitemSlice(l, new BoxedSlice(boxInt(ilow), boxInt(ihigh), None));
+        return 0;
+    } catch (Box* b) {
+        PyErr_SetObject(b->cls, b);
+        return -1;
+    }
 }
 
 void setupList() {
