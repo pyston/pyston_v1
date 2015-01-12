@@ -48,13 +48,18 @@ Box* dictRepr(BoxedDict* self) {
 }
 
 Box* dictClear(BoxedDict* self) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'clear' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     self->d.clear();
     return None;
 }
 
 Box* dictCopy(BoxedDict* self) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'copy' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     BoxedDict* r = new BoxedDict();
     r->d.insert(self->d.begin(), self->d.end());
@@ -119,7 +124,10 @@ Box* dictViewItems(BoxedDict* self) {
 }
 
 Box* dictLen(BoxedDict* self) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__len__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     return boxInt(self->d.size());
 }
 
@@ -144,7 +152,9 @@ extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
 }
 
 Box* dictGetitem(BoxedDict* self, Box* k) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
@@ -237,7 +247,9 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictDelitem(BoxedDict* self, Box* k) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__delitem__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
@@ -255,7 +267,9 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
 }
 
 Box* dictPop(BoxedDict* self, Box* k, Box* d) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'pop' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
@@ -276,7 +290,9 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
 }
 
 Box* dictPopitem(BoxedDict* self) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'popitem' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.begin();
     if (it == self->d.end()) {
@@ -292,7 +308,9 @@ Box* dictPopitem(BoxedDict* self) {
 }
 
 Box* dictGet(BoxedDict* self, Box* k, Box* d) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'get' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end())
@@ -302,7 +320,9 @@ Box* dictGet(BoxedDict* self, Box* k, Box* d) {
 }
 
 Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'setdefault' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it != self->d.end())
@@ -313,7 +333,10 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictContains(BoxedDict* self, Box* k) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__contains__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     return boxBool(self->d.count(k) != 0);
 }
 
@@ -322,7 +345,9 @@ Box* dictNonzero(BoxedDict* self) {
 }
 
 Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'fromkeys' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto rtn = new BoxedDict();
     for (Box* e : iterable->pyElements()) {
