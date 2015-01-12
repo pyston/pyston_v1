@@ -368,9 +368,7 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
         raiseExcHelper(TypeError, "dict.__new__(%s): %s is not a subtype of dict", getNameOfClass(cls)->c_str(),
                        getNameOfClass(cls)->c_str());
 
-    RELEASE_ASSERT(cls == dict_cls, "");
-
-    return new BoxedDict();
+    return new (cls) BoxedDict();
 }
 
 void dictMerge(BoxedDict* self, Box* other) {

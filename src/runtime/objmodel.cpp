@@ -1463,12 +1463,6 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
 #endif
     }
 
-    if (strcmp(attr, "__dict__") == 0) {
-        // TODO this is wrong, should be added at the class level as a getset
-        if (obj->cls->instancesHaveHCAttrs())
-            return makeAttrWrapper(obj);
-    }
-
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
 
@@ -1505,6 +1499,21 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     if (val) {
         return val;
     }
+
+    if (attr[0] == '_' && attr[1] == '_') {
+        if (strcmp(attr, "__dict__") == 0) {
+            // TODO this is wrong, should be added at the class level as a getset
+            if (obj->cls->instancesHaveHCAttrs())
+                return makeAttrWrapper(obj);
+        }
+
+        // I'm not sure if there's more to it than this:
+        if (strcmp(attr, "__class__") == 0) {
+            assert(obj->cls != instance_cls); // I think in this case __class__ is supposed to be the classobj?
+            return obj->cls;
+        }
+    }
+
     raiseAttributeError(obj, attr);
 }
 
