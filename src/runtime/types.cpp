@@ -1040,20 +1040,17 @@ void setupRuntime() {
     type_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
-    type_cls->giveAttr("__str__", type_cls->getattr("__repr__"));
     type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
     type_cls->freeze();
 
     none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
-    none_cls->giveAttr("__str__", none_cls->getattr("__repr__"));
     none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->freeze();
 
     module_cls->giveAttr("__name__", boxStrConstant("module"));
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
-    module_cls->giveAttr("__str__", module_cls->getattr("__repr__"));
     module_cls->freeze();
 
     closure_cls->giveAttr("__name__", boxStrConstant("closure"));
@@ -1079,7 +1076,6 @@ void setupRuntime() {
 
     function_cls->giveAttr("__name__", boxStrConstant("function"));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
-    function_cls->giveAttr("__str__", function_cls->getattr("__repr__"));
     function_cls->giveAttr("__module__",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, modname)));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
@@ -1103,7 +1099,6 @@ void setupRuntime() {
     slice_cls->giveAttr("__new__",
                         new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None }));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, STR, 1)));
-    slice_cls->giveAttr("__str__", slice_cls->getattr("__repr__"));
     slice_cls->giveAttr("start", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_START_OFFSET));
     slice_cls->giveAttr("stop", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STOP_OFFSET));
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STEP_OFFSET));

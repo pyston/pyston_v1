@@ -412,7 +412,6 @@ void setupTuple() {
     tuple_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)tupleHash, BOXED_INT, 1)));
     tuple_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)tupleLen, BOXED_INT, 1)));
     tuple_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)tupleRepr, STR, 1)));
-    tuple_cls->giveAttr("__str__", tuple_cls->getattr("__repr__"));
     tuple_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)tupleAdd, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));

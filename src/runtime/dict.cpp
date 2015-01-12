@@ -530,7 +530,6 @@ void setupDict() {
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));
     dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NONE, 1, 0, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
-    dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
 
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));

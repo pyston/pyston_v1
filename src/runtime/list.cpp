@@ -670,7 +670,6 @@ void setupList() {
     list_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)listNe, UNKNOWN, 2)));
 
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1)));
-    list_cls->giveAttr("__str__", list_cls->getattr("__repr__"));
     list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1)));
 
     list_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)listPop, UNKNOWN, 2, 1, false, false), { None }));

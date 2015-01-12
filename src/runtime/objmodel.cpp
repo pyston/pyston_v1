@@ -1723,6 +1723,8 @@ extern "C" BoxedString* str(Box* obj) {
 
     if (obj->cls != str_cls) {
         static const std::string str_str("__str__");
+        // TODO could do an IC optimization here (once we do rewrites here at all):
+        // if __str__ is objectStr, just guard on that and call repr directly.
         obj = callattrInternal(obj, &str_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
