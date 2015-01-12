@@ -194,20 +194,51 @@ extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
     return None;
 }
 
+Box* listIAdd(BoxedList* self, Box* _rhs);
+
+// Analogue of _PyEval_SliceIndex
+static void sliceIndex(Box* b, int64_t* out) {
+    if (b->cls == none_cls)
+        return;
+
+    RELEASE_ASSERT(b->cls == int_cls, "");
+    *out = static_cast<BoxedInt*>(b)->n;
+}
+
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     LOCK_REGION(self->lock.asWrite());
 
     assert(self->cls == list_cls);
     assert(slice->cls == slice_cls);
-    i64 start, stop, step;
-    parseSlice(slice, self->size, &start, &stop, &step);
+
+    i64 start = 0, stop = self->size, step = 1;
+
+    sliceIndex(slice->start, &start);
+    sliceIndex(slice->stop, &stop);
+    sliceIndex(slice->step, &step);
+
     RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
 
-    assert(0 <= start && start < self->size);
-    ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
-    assert(start <= stop);
+    // Logic from PySequence_GetSlice:
+    if (start < 0)
+        start += self->size;
+    if (stop < 0)
+        stop += self->size;
 
-    ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
+    // Logic from list_ass_slice:
+    if (start < 0)
+        start = 0;
+    else if (start > self->size)
+        start = self->size;
+
+    if (stop < start)
+        stop = start;
+    else if (stop > self->size)
+        stop = self->size;
+
+    assert(0 <= start && start <= stop && stop <= self->size);
+
+    RELEASE_ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
     BoxedList* lv = static_cast<BoxedList*>(v);
 
     RELEASE_ASSERT(self->elts != lv->elts, "Slice self-assignment currently unsupported");
@@ -260,6 +291,7 @@ extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
     parseSlice(slice, self->size, &start, &stop, &step);
     RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
 
+    // TODO this should reuse listSetitemSlice which does proper index handling
     assert(0 <= start && start < self->size);
     ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
     assert(start <= stop);

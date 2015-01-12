@@ -25,7 +25,7 @@ for i in xrange(-5, 4):
 for i in xrange(-5, 4):
     l3 = range(5)
     l3[:i] = [7, 8]
-    print l3
+    print i, l3
 
 print [1, 2, 3, 4, 5]
 
@@ -87,3 +87,29 @@ class C(object):
 
 # Should not call C().__eq__
 print [C()] == [1, 2]
+
+l2 = l = range(5)
+l3 = range(4)
+l[:] = l3
+print l, l2, l3
+print l is l2
+print l is l3
+
+l = []
+l[:] = range(5)
+print l
+
+for i in xrange(3):
+    for j in xrange(5):
+        l = range(i)
+        l[j:] = ["added"]
+        print i, j, l
+
+        l = range(i)
+        l[:j] = ["added"]
+        print i, j, l
+
+        for k in xrange(5):
+            l = range(i)
+            l[j:k] = ["added"]
+            print i, j, k, l
