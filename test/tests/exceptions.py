@@ -336,3 +336,39 @@ def f11():
     except TypeError, e:
         print e
 f11()
+
+# Exception targets can be arbitrary lvalues:
+def f12():
+    print
+    print "f12"
+
+    def f(x, msg):
+        print msg
+        return x
+
+    e = Exception()
+    l = [0]
+    try:
+        raise e
+    except f(Exception, "exc") as f(l, "l")[f(0, 0)]:
+        pass
+    print l[0] is e
+
+    l = []
+    try:
+        try:
+            raise e
+        except Exception as l[0]:
+            print "shouldnt get here"
+    except Exception as e2:
+        print e2
+
+    l = []
+    try:
+        try:
+            raise e
+        except Exception as l[1/0]:
+            print "shouldnt get here"
+    except Exception as e2:
+        print e2
+f12()

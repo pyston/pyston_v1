@@ -62,6 +62,9 @@ public:
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
 
+        if (!xrangeIteratorHasnextUnboxed(s))
+            raiseExcHelper(StopIteration, "");
+
         i64 rtn = self->cur;
         self->cur += self->xrange->step;
         return rtn;

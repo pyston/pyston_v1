@@ -64,6 +64,8 @@ def f2():
 f2()
 
 def f2_2():
+    print
+    print "f2_2"
     try:
         raise Exception
     except Exception:
@@ -83,33 +85,6 @@ def f2_2():
         print "done", n, sys.exc_info()[0].__name__
     print "after", n, sys.exc_info()[0].__name__
 f2_2()
-
-def f3():
-    print
-    print "f3"
-
-    def f():
-        print "getting the exc handler type"
-        raise AssertionError()
-    try:
-        print "in the first try"
-        # f() won't get evaluated until the exception is actually thrown:
-        try:
-            print "in the second try"
-            raise Exception()
-        except f():
-            print "In the inner exception block??"
-        finally:
-            # This will get called even though there was an exception in
-            # evaluating the exception-handler type:
-            print "inner finally"
-    except Exception:
-        # This will print "AssertionError", from the f() call, *not* the Exception
-        # that was thrown in the inner try block.
-        print "In the outer exception block:", sys.exc_info()[0].__name__
-    finally:
-        print "outer finally"
-f3()
 
 def f4():
     print
@@ -159,72 +134,6 @@ def f5():
         print sys.exc_info()[0].__name__
 f5()
 
-def f6():
-    print
-    print "f6"
-
-    # A finally block must somehow track how it was entered, because it's not based
-    # on the value of sys.exc_info at the end of the finally block:
-
-    def inner(nested_throw, reraise):
-        try:
-            pass
-        finally:
-            if nested_throw:
-                try:
-                    raise AttributeError()
-                except:
-                    pass
-
-            print sys.exc_info()
-            if reraise:
-                raise
-
-    inner(False, False) # no exception raised
-    inner(True, False) # no exception raised
-
-    try:
-        inner(True, True)
-        # Shouldn't get here
-        raise Exception()
-    except AttributeError:
-        print "the thrown AttributeError raised as expected"
-    # Have to call this, because the inner throw can reraise the out-of-except
-    # exception from this scope!
-    sys.exc_clear()
-
-    try:
-        inner(False, True)
-        # Shouldn't get here
-        raise Exception()
-    except TypeError:
-        print "Got TypeError as expected, since exc_info was None"
-f6()
-
-def f7():
-    print
-    print "f7"
-
-    # Similar test to f6, but this time with an exception propagating
-    # up through a finally block.
-    # An exception thrown inside that finally shouldn't change the exception
-    # that will end up getting propagated
-
-    def inner():
-        try:
-            raise AttributeError()
-        finally:
-            try:
-                raise NotImplementedError()
-            except:
-                pass
-            print sys.exc_info()[0].__name__
-    try:
-        inner()
-    except:
-        print sys.exc_info()[0].__name__
-f7()
-
 def f8():
     print
     print "f8"
@@ -244,28 +153,8 @@ def f8():
         print "reraised correctly"
 f8()
 
-def f9():
-    print
-    print "f9"
-
-    # Exceptions thrown inside a catch block should still go through the finally,
-    # but not other catch blocks.
-
-    try:
-        try:
-            raise Exception()
-        except Exception:
-            print "here"
-            raise AttributeError()
-        except AttributeError:
-            print "shouldn't get here"
-        finally:
-            print "in finally"
-    except AttributeError:
-        pass
-f9()
-
 def f10():
+    print
     print "f10"
 
     x = 1
@@ -280,3 +169,50 @@ def f10():
         print x, y
         print "here"
 f10()
+
+def f11():
+    print
+    print "f11"
+    print sys.exc_info()[0]
+
+    try:
+        1/0
+    except:
+        pass
+    print sys.exc_info()[0]
+f11()
+print sys.exc_info()[0]
+
+# exc_info gets passed into generators (at both begin and send()) and cleared like normal on the way out:
+def f12():
+    print
+    print "f12"
+
+    print "begin:", sys.exc_info()[0]
+
+    def g():
+        print "start of generator:", sys.exc_info()[0]
+        yield 1
+        print "after first yield:", sys.exc_info()[0]
+        try:
+            raise KeyError()
+        except:
+            pass
+        print "after KeyError:", sys.exc_info()[0]
+        yield 2
+
+    try:
+        raise AttributeError()
+    except:
+        pass
+
+    i = g()
+    i.next()
+    try:
+        1/0
+    except:
+        print "after exc:", sys.exc_info()[0]
+        i.next()
+        print "after next:", sys.exc_info()[0]
+    list(i)
+f12()
