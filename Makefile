@@ -642,8 +642,8 @@ $$(NONSTDLIB_SRCS:.cpp=$1.o): CXXFLAGS:=$2
 $$(SRCS:.cpp=$1.o.bc): CXXFLAGS:=$2
 
 ## Need to set CXXFLAGS so that this rule doesn't inherit the '-include' rule from the
-## thing that's calling it:
-%$1.h.pch: CXXFLAGS:=$(2)
+## thing that's calling it.  At the same time, also filter out "-DGITREV=foo".
+%$1.h.pch: CXXFLAGS:=$(filter-out -DGITREV%,$(2))
 %$1.h.pch: %.h $$(BUILD_SYSTEM_DEPS)
 	$$(ECHO) Compiling $$@
 	$$(VERB) rm -f $$@-*
