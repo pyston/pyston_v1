@@ -16,6 +16,7 @@
 #include <cstring>
 #include <sstream>
 
+#include "capi/types.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -205,8 +206,8 @@ extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) noexcept 
         Box* r = fileWrite(static_cast<BoxedFile*>(f), v);
         assert(r == None);
         return 0;
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return -1;
     }
 }
@@ -271,7 +272,7 @@ extern "C" int PyObject_AsFileDescriptor(PyObject* o) noexcept {
 extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
     try {
         return softspace(f, newflag);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
 }

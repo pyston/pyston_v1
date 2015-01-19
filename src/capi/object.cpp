@@ -39,8 +39,8 @@ extern "C" PyObject* _PyObject_Str(PyObject* v) noexcept {
 
     try {
         return str(v);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -79,8 +79,8 @@ extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexc
 
     try {
         return getattr(o, attr);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }

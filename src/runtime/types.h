@@ -557,7 +557,7 @@ public:
     bool entryExited;
     bool running;
     Box* returnValue;
-    Box* exception;
+    ExcInfo exception;
 
     ucontext_t context, returnContext;
     void* stack_begin;

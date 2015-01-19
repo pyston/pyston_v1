@@ -73,7 +73,7 @@ extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(i >= 0, ""); // unlike tuple.__getitem__, PyTuple_GetItem doesn't do index wrapping
     try {
         return tupleGetitemUnboxed(static_cast<BoxedTuple*>(op), i);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
 }

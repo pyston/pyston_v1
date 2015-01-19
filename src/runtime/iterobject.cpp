@@ -17,6 +17,7 @@
 #include <cmath>
 #include <sstream>
 
+#include "capi/types.h"
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -39,7 +40,7 @@ Box* seqiterHasnext(Box* s) {
     Box* next;
     try {
         next = getitem(self->b, boxInt(self->idx));
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         return False;
     }
     self->idx++;
@@ -75,12 +76,12 @@ Box* iterwrapperHasnext(Box* s) {
     try {
         next = callattr(self->iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    } catch (Box* b) {
-        if (isSubclass(b->cls, StopIteration)) {
+    } catch (ExcInfo e) {
+        if (e.matches(StopIteration)) {
             self->next = NULL;
             return False;
         }
-        throw;
+        throw e;
     }
     self->next = next;
     return True;
@@ -99,8 +100,8 @@ Box* iterwrapperNext(Box* s) {
 extern "C" PyObject* PySeqIter_New(PyObject* seq) noexcept {
     try {
         return new BoxedSeqIter(seq);
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }

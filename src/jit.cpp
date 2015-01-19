@@ -150,12 +150,12 @@ int main(int argc, char** argv) {
 
         try {
             main_module = createAndRunModule("__main__", fn);
-        } catch (Box* b) {
-            if (isInstance(b, SystemExit)) {
+        } catch (ExcInfo e) {
+            if (e.matches(SystemExit)) {
                 printf("Warning: ignoring SystemExit code\n");
                 return 1;
             } else {
-                std::string msg = formatException(b);
+                std::string msg = formatException(e.value);
                 printLastTraceback();
                 fprintf(stderr, "%s\n", msg.c_str());
                 return 1;
@@ -222,12 +222,12 @@ int main(int argc, char** argv) {
 
                 try {
                     compileAndRunModule(m, main_module);
-                } catch (Box* b) {
-                    if (isInstance(b, SystemExit)) {
+                } catch (ExcInfo e) {
+                    if (e.matches(SystemExit)) {
                         printf("Warning: ignoring SystemExit code\n");
                         return 1;
                     } else {
-                        std::string msg = formatException(b);
+                        std::string msg = formatException(e.value);
                         printLastTraceback();
                         fprintf(stderr, "%s\n", msg.c_str());
                     }

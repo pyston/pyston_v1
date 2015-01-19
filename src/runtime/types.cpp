@@ -240,12 +240,12 @@ BoxIterator& BoxIterator::operator++() {
     } else {
         try {
             value = iter->nextIC();
-        } catch (Box* e) {
-            if ((e == StopIteration) || isSubclass(e->cls, StopIteration)) {
+        } catch (ExcInfo e) {
+            if (e.matches(StopIteration)) {
                 iter = nullptr;
                 value = nullptr;
             } else
-                throw;
+                throw e;
         }
     }
     return *this;
@@ -531,12 +531,12 @@ extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict)
         Box* r = runtimeCall(metaclass, ArgPassSpec(3), boxStringPtr(name), _bases, _attr_dict, NULL, NULL);
         RELEASE_ASSERT(r, "");
         return r;
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         // TODO [CAPI] bad error handling...
 
-        RELEASE_ASSERT(isSubclass(b->cls, BaseException), "");
+        RELEASE_ASSERT(e.matches(BaseException), "");
 
-        Box* msg = b->getattr("message");
+        Box* msg = e.value->getattr("message");
         RELEASE_ASSERT(msg, "");
         RELEASE_ASSERT(msg->cls == str_cls, "");
 
@@ -545,7 +545,7 @@ extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict)
                                      "    %s",
                                      PyString_AS_STRING(msg));
 
-        PyErr_Restore(b->cls, newmsg, NULL);
+        PyErr_Restore(e.type, newmsg, NULL);
         checkAndThrowCAPIException();
 
         // Should not reach here

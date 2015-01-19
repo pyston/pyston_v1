@@ -484,8 +484,8 @@ static PyObject* call_maybe(PyObject* o, const char* name, PyObject** nameobj, c
 PyObject* slot_tp_repr(PyObject* self) noexcept {
     try {
         return repr(self);
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -493,8 +493,8 @@ PyObject* slot_tp_repr(PyObject* self) noexcept {
 PyObject* slot_tp_str(PyObject* self) noexcept {
     try {
         return str(self);
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -542,8 +542,8 @@ PyObject* slot_tp_call(PyObject* self, PyObject* args, PyObject* kwds) noexcept 
 
         // TODO: runtime ICs?
         return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwds, NULL, NULL, NULL);
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -631,8 +631,8 @@ static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds)
         new_attr = processDescriptor(new_attr, None, self);
 
         return runtimeCall(new_attr, ArgPassSpec(1, 0, true, true), self, args, kwds, NULL, NULL);
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -660,8 +660,8 @@ static int slot_tp_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept
 PyObject* slot_sq_item(PyObject* self, Py_ssize_t i) noexcept {
     try {
         return getitem(self, boxInt(i));
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -1781,7 +1781,7 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     try {
         add_operators(cls);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
 

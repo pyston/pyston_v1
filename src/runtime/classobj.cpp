@@ -224,17 +224,17 @@ Box* instanceNonzero(Box* _inst) {
     Box* nonzero_func = NULL;
     try {
         nonzero_func = _instanceGetattribute(inst, boxStrConstant("__nonzero__"), false);
-    } catch (Box* b) {
-        if (!isInstance(b, AttributeError))
-            throw;
+    } catch (ExcInfo e) {
+        if (!e.matches(AttributeError))
+            throw e;
     }
 
     if (nonzero_func == NULL) {
         try {
             nonzero_func = _instanceGetattribute(inst, boxStrConstant("__len__"), false);
-        } catch (Box* b) {
-            if (!isInstance(b, AttributeError))
-                throw;
+        } catch (ExcInfo e) {
+            if (!e.matches(AttributeError))
+                throw e;
         }
     }
 

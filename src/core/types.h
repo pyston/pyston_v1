@@ -469,6 +469,14 @@ public:
     LineInfo(int line, int column, const std::string& file, const std::string& func)
         : line(line), column(column), file(file), func(func) {}
 };
+
+struct ExcInfo {
+    Box* type, *value, *traceback;
+
+    ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
+    bool matches(BoxedClass* cls) const;
+};
+
 }
 
 #endif

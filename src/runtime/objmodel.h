@@ -34,6 +34,7 @@ class BoxedGenerator;
 extern "C" void raise0() __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
+void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
@@ -138,5 +139,7 @@ static const char* objectNewParameterTypeErrorMsg() {
         return "object.__new__() takes no parameters";
     }
 }
+
+bool exceptionMatches(const ExcInfo& e, BoxedClass* cls);
 }
 #endif

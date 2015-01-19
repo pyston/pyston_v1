@@ -94,7 +94,7 @@ extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) noexcept {
 
     try {
         return asUnsignedLong(l);
-    } catch (Box* e) {
+    } catch (ExcInfo e) {
         abort();
     }
 }
