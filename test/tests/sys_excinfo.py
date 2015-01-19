@@ -216,3 +216,33 @@ def f12():
         print "after next:", sys.exc_info()[0]
     list(i)
 f12()
+
+# If an exception is thrown+caught in course of exception-matching, we need to still operate on the original exception:
+def f13():
+    print
+    print "f13"
+    def inner():
+        try:
+            raise KeyError
+        except:
+            pass
+        print sys.exc_info()[0]
+        return ZeroDivisionError
+
+    # This applies to what goes into exc_info:
+    try:
+        1/0
+    except inner():
+        print sys.exc_info()[0]
+
+    # This also applies to the exception that will propagate:
+    try:
+        try:
+            raise AttributeError()
+        except inner():
+            print "shouldn't get here!"
+    except Exception, e:
+        print type(e)
+        print sys.exc_info()[0]
+f13()
+
