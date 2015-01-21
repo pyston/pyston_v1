@@ -158,6 +158,8 @@ public:
         return getConcreteType()->guaranteedClass();
     }
     virtual void serializeToFrame(VAR* v, std::vector<llvm::Value*>& stackmap_args) = 0;
+
+    virtual std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, VAR* var, int num_into);
 };
 
 template <class V> class ValuedCompilerType : public _ValuedCompilerType<V> { public: };
@@ -264,6 +266,8 @@ public:
                                      AST_TYPE::AST_TYPE op_type, BinExpType exp_type) = 0;
 
     virtual void serializeToFrame(std::vector<llvm::Value*>& stackmap_args) = 0;
+
+    virtual std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, int num_into) = 0;
 };
 
 template <class V> class ValuedCompilerVariable : public CompilerVariable {
@@ -357,6 +361,10 @@ public:
     void serializeToFrame(std::vector<llvm::Value*>& stackmap_args) override {
         type->serializeToFrame(this, stackmap_args);
     }
+
+    std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, int num_into) override {
+        return type->unpack(emitter, info, this, num_into);
+    }
 };
 
 // template <>
@@ -382,6 +390,17 @@ CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<Con
 
 ConcreteCompilerVariable* boolFromI1(IREmitter&, llvm::Value*);
 llvm::Value* i1FromBool(IREmitter&, ConcreteCompilerVariable*);
+
+template <typename V>
+std::vector<CompilerVariable*> _ValuedCompilerType<V>::unpack(IREmitter& emitter, const OpInfo& info, VAR* var,
+                                                              int num_into) {
+    assert((CompilerType*)this != UNKNOWN);
+
+    ConcreteCompilerVariable* converted = makeConverted(emitter, var, UNKNOWN);
+    auto r = UNKNOWN->unpack(emitter, info, converted, num_into);
+    converted->decvref(emitter);
+    return r;
+}
 
 } // namespace pyston
 

@@ -1406,9 +1406,7 @@ private:
         assert(state != PARTIAL);
         int ntargets = target->elts.size();
 
-// TODO can do faster unpacking of non-instantiated tuples; ie for something like
-// a, b = 1, 2
-// We shouldn't need to do any runtime error checking or allocations
+        std::vector<CompilerVariable*> unpacked = val->unpack(emitter, getOpInfoForNode(target, unw_info), ntargets);
 
 #ifndef NDEBUG
         for (auto e : target->elts) {
@@ -1417,19 +1415,8 @@ private:
         }
 #endif
 
-        ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
-
-        llvm::Value* unpacked = emitter.createCall2(unw_info, g.funcs.unpackIntoArray, converted_val->getValue(),
-                                                    getConstantInt(ntargets, g.i64));
-        assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());
-        converted_val->decvref(emitter);
-
         for (int i = 0; i < ntargets; i++) {
-            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(unpacked, i);
-            llvm::Value* val = emitter.getBuilder()->CreateLoad(ptr);
-            assert(val->getType() == g.llvm_value_type_ptr);
-
-            CompilerVariable* thisval = new ConcreteCompilerVariable(UNKNOWN, val, true);
+            CompilerVariable* thisval = unpacked[i];
             _doSet(target->elts[i], thisval, unw_info);
             thisval->decvref(emitter);
         }
