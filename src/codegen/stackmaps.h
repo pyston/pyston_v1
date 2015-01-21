@@ -48,6 +48,8 @@ struct StackMap {
             uint8_t flags;
             uint16_t regnum;
             int32_t offset;
+
+            bool operator==(const Location& rhs);
         };
 
         struct __attribute__((__packed__)) LiveOut {
@@ -73,6 +75,10 @@ struct StackMap {
 class LocationMap {
 public:
     std::vector<uint64_t> constants;
+
+    StackMap::Record::Location frame_info_location;
+    bool frameInfoFound() { return frame_info_location.type != 0; }
+
     struct LocationTable {
         struct LocationEntry {
             uint64_t _debug_pp_id;

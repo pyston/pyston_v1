@@ -450,6 +450,17 @@ const LineInfo* getMostRecentLineInfo() {
     return lineInfoForFrame(*frame);
 }
 
+FrameInfo* getTopFrameInfo() {
+    std::unique_ptr<PythonFrameIterator> frame = getTopPythonFrame();
+    if (frame.get_id().type == PythonFrameId::COMPILED) {
+        abort();
+    } else if (frame.get_id().type == PythonFrameId::INTERPRETED) {
+        abort();
+    } else {
+        abort();
+    }
+}
+
 CompiledFunction* getTopCompiledFunction() {
     return getTopPythonFrame()->getCF();
 }
@@ -458,13 +469,6 @@ BoxedModule* getCurrentModule() {
     CompiledFunction* compiledFunction = getTopCompiledFunction();
     assert(compiledFunction);
     return compiledFunction->clfunc->source->parent_module;
-}
-
-ExecutionPoint getExecutionPoint() {
-    auto frame = getTopPythonFrame();
-    auto cf = frame->getCF();
-    auto current_stmt = frame->getCurrentStatement();
-    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
 }
 
 BoxedDict* getLocals(bool only_user_visible) {

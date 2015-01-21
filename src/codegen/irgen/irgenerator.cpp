@@ -38,6 +38,7 @@
 namespace pyston {
 
 extern "C" void dumpLLVM(llvm::Value* v) {
+    v->getType()->dump();
     v->dump();
 }
 
@@ -69,6 +70,28 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     scratch_space = new_scratch_space;
 
     return scratch_space;
+}
+
+llvm::Value* IRGenState::getFrameInfoVar() {
+    if (!frame_info) {
+        llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
+
+        llvm::IRBuilder<true> builder(&entry_block);
+
+        if (entry_block.begin() != entry_block.end())
+            builder.SetInsertPoint(&entry_block, entry_block.getFirstInsertionPt());
+
+
+        llvm::AllocaInst* al = builder.CreateAlloca(g.frame_info_type, NULL, "frame_info");
+        assert(al->isStaticAlloca());
+
+        static_assert(offsetof(FrameInfo, exc_type) == 0, "");
+        llvm::Value* exctype_gep = builder.CreateConstInBoundsGEP2_32(al, 0, 0);
+        builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), exctype_gep);
+
+        frame_info = al;
+    }
+    return frame_info;
 }
 
 ScopeInfo* IRGenState::getScopeInfo() {
@@ -2239,6 +2262,8 @@ public:
     void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,
                               std::vector<llvm::Value*>& stackmap_args) override {
         int initial_args = stackmap_args.size();
+
+        stackmap_args.push_back(irstate->getFrameInfoVar());
 
         assert(INT->llvmType() == g.i64);
         stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));

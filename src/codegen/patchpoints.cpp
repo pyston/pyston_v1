@@ -63,12 +63,28 @@ int PatchpointInfo::patchpointSize() {
     return CALL_ONLY_SIZE;
 }
 
+bool StackMap::Record::Location::operator==(const StackMap::Record::Location& rhs) {
+    // TODO: this check is overly-strict.  Some fields are not used depending
+    // on the value of type, and I don't think "flags" is used at all currently.
+    return (type == rhs.type) && (flags == rhs.flags) && (regnum == rhs.regnum) && (offset == rhs.offset);
+}
+
 void PatchpointInfo::parseLocationMap(StackMap::Record* r, LocationMap* map) {
     assert(r->locations.size() == totalStackmapArgs());
 
     int cur_arg = frameStackmapArgsStart();
 
     // printf("parsing pp %ld:\n", reinterpret_cast<int64_t>(this));
+
+    StackMap::Record::Location frame_info_location = r->locations[cur_arg];
+    cur_arg++;
+    // We could allow the frame_info to exist in a different location for each callsite,
+    // but in reality it will always live at a fixed stack offset.
+    if (map->frameInfoFound()) {
+        assert(frame_info_location == map->frame_info_location);
+    } else {
+        map->frame_info_location = frame_info_location;
+    }
 
     for (FrameVarInfo& frame_var : frame_vars) {
         int num_args = frame_var.type->numFrameArgs();

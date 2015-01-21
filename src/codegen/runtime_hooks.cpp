@@ -146,6 +146,9 @@ void initGlobalFuncs(GlobalState& g) {
     g.llvm_excinfo_type = g.stdlib_module->getTypeByName("struct.pyston::ExcInfo");
     assert(g.llvm_excinfo_type);
 
+    g.frame_info_type = g.stdlib_module->getTypeByName("struct.pyston::FrameInfo");
+    assert(g.frame_info_type);
+
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
     g.funcs.printf = addFunc((void*)printf, g.i8_ptr, true);
