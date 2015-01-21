@@ -1944,6 +1944,79 @@ public:
         return true;
     }
 
+    bool visit_tryfinally(AST_TryFinally* node) override {
+        CFGBlock* exc_handler_block = cfg->addDeferredBlock();
+        std::string exc_type_name = nodeName(node, "type");
+        std::string exc_value_name = nodeName(node, "value");
+        std::string exc_traceback_name = nodeName(node, "traceback");
+        std::string exc_occurred_name = nodeName(node, "occurred");
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
+
+        for (AST_stmt* subnode : node->body) {
+            subnode->accept(this);
+        }
+
+        exc_handlers.pop_back();
+
+        CFGBlock* finally_block = cfg->addDeferredBlock();
+
+        if (curblock) {
+            // assign the exc_*_name variables to tell irgen that they won't be undefined?
+            // have an :UNDEF() langprimitive to not have to do any loading there?
+            pushAssign(exc_occurred_name, makeNum(0));
+            AST_Jump* j = new AST_Jump();
+            j->target = finally_block;
+            push_back(j);
+            curblock->connectTo(finally_block);
+        }
+
+        if (exc_handler_block->predecessors.size() == 0) {
+            delete exc_handler_block;
+        } else {
+            cfg->placeBlock(exc_handler_block);
+            curblock = exc_handler_block;
+
+            pushAssign(exc_occurred_name, makeNum(1));
+
+            AST_Jump* j = new AST_Jump();
+            j->target = finally_block;
+            push_back(j);
+            curblock->connectTo(finally_block);
+        }
+
+        cfg->placeBlock(finally_block);
+        curblock = finally_block;
+
+        for (AST_stmt* subnode : node->finalbody) {
+            subnode->accept(this);
+        }
+
+        if (curblock) {
+            CFGBlock* reraise = cfg->addBlock();
+            CFGBlock* noexc = cfg->addBlock();
+
+            AST_Branch* br = new AST_Branch();
+            br->test = callNonzero(makeName(exc_occurred_name, AST_TYPE::Load, node->lineno));
+            br->iftrue = reraise;
+            br->iffalse = noexc;
+            curblock->connectTo(reraise);
+            curblock->connectTo(noexc);
+            push_back(br);
+
+            curblock = reraise;
+            AST_Raise* raise = new AST_Raise();
+            raise->arg0 = makeName(exc_type_name, AST_TYPE::Load, node->lineno);
+            raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
+            raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
+            push_back(raise);
+            curblock->push_back(new AST_Unreachable());
+
+            curblock = noexc;
+        }
+
+        return true;
+    }
+
     bool visit_with(AST_With* node) override {
         char ctxmgrname_buf[80];
         snprintf(ctxmgrname_buf, 80, "#ctxmgr_%p", node);

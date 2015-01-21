@@ -22,6 +22,19 @@ print basic_finally(1)
 print basic_finally(0)
 print
 
+# If we return from inside the try part of a try-finally, we have to save the return value,
+# execute the finally block, then do the actual return.
+print "finally_after_return"
+def finally_after_return():
+    try:
+        print 1
+        return 2
+    finally:
+        print 3
+    print 4
+print finally_after_return()
+print
+
 # Return from a finally will disable any exception propagation:
 print "return_from_finally"
 def return_from_finally(to_throw=None):
@@ -85,19 +98,6 @@ try:
             pass
 except Exception, e:
     print e
-print
-
-# If we return from inside the try part of a try-finally, we have to save the return value,
-# execute the finally block, then do the actual return.
-print "finally_after_return"
-def finally_after_return():
-    try:
-        print 1
-        return 2
-    finally:
-        print 3
-    print 4
-print finally_after_return()
 print
 
 # Similarly for continues
