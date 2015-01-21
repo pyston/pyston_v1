@@ -2178,10 +2178,6 @@ private:
             case AST_TYPE::Raise:
                 doRaise(ast_cast<AST_Raise>(node), unw_info);
                 break;
-            case AST_TYPE::Unreachable:
-                emitter.getBuilder()->CreateUnreachable();
-                endBlock(FINISHED);
-                break;
             default:
                 printf("Unhandled stmt type at " __FILE__ ":" STRINGIFY(__LINE__) ": %d\n", node->type);
                 exit(1);

@@ -1821,7 +1821,6 @@ public:
         if (!curblock)
             return true;
 
-        curblock->push_back(new AST_Unreachable());
         curblock = NULL;
 
         return true;
@@ -1928,7 +1927,6 @@ public:
                 raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
                 raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
                 push_back(raise);
-                curblock->push_back(new AST_Unreachable());
                 curblock = NULL;
             }
         }
@@ -2009,7 +2007,6 @@ public:
             raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
             raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
             push_back(raise);
-            curblock->push_back(new AST_Unreachable());
 
             curblock = noexc;
         }
@@ -2236,7 +2233,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (b->successors.size() == 0) {
             AST_stmt* terminator = b->body.back();
             assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
-                   || terminator->type == AST_TYPE::Unreachable);
+                   || terminator->type == AST_TYPE::Raise);
         }
 
         if (b->predecessors.size() == 0)
@@ -2297,6 +2294,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             no_dups = false;
         }
     }
+    if (!no_dups)
+        rtn->print();
     assert(no_dups);
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path

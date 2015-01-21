@@ -869,16 +869,6 @@ void* AST_UnaryOp::accept_expr(ExprVisitor* v) {
     return v->visit_unaryop(this);
 }
 
-void AST_Unreachable::accept(ASTVisitor* v) {
-    bool skip = v->visit_unreachable(this);
-    if (skip)
-        return;
-}
-
-void AST_Unreachable::accept_stmt(StmtVisitor* v) {
-    v->visit_unreachable(this);
-}
-
 void AST_While::accept(ASTVisitor* v) {
     bool skip = v->visit_while(this);
     if (skip)
@@ -1726,11 +1716,6 @@ bool PrintVisitor::visit_unaryop(AST_UnaryOp* node) {
     return true;
 }
 
-bool PrintVisitor::visit_unreachable(AST_Unreachable* node) {
-    printf("<unreachable>");
-    return true;
-}
-
 bool PrintVisitor::visit_while(AST_While* node) {
     printf("while ");
     node->test->accept(this);
@@ -2022,10 +2007,6 @@ public:
         return false;
     }
     virtual bool visit_unaryop(AST_UnaryOp* node) {
-        output->push_back(node);
-        return false;
-    }
-    virtual bool visit_unreachable(AST_Unreachable* node) {
         output->push_back(node);
         return false;
     }

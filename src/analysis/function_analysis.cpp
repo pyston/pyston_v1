@@ -297,7 +297,6 @@ public:
     virtual bool visit_print(AST_Print* node) { return true; }
     virtual bool visit_raise(AST_Raise* node) { return true; }
     virtual bool visit_return(AST_Return* node) { return true; }
-    virtual bool visit_unreachable(AST_Unreachable* node) { return true; }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
         _doSet(node->name);
