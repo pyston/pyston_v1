@@ -78,7 +78,7 @@ private:
 
     struct ExcBlockInfo {
         CFGBlock* exc_dest;
-        std::string exc_obj_name;
+        std::string exc_type_name, exc_value_name, exc_traceback_name;
     };
     std::vector<ExcBlockInfo> exc_handlers;
 
@@ -458,6 +458,12 @@ private:
 #else
         return std::string(buf);
 #endif
+    }
+
+    std::string nodeName(AST* node, const std::string& suffix) {
+        char buf[50];
+        snprintf(buf, 50, "#%p_%s", node, suffix.c_str());
+        return std::string(buf);
     }
 
     std::string nodeName(AST* node, const std::string& suffix, int idx) {
@@ -1102,7 +1108,12 @@ public:
 
         curblock = exc_dest;
         AST_Assign* exc_asgn = new AST_Assign();
-        exc_asgn->targets.push_back(makeName(exc_info.exc_obj_name, AST_TYPE::Store, node->lineno));
+        AST_Tuple* target = new AST_Tuple();
+        target->elts.push_back(makeName(exc_info.exc_type_name, AST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_value_name, AST_TYPE::Store, node->lineno));
+        target->elts.push_back(makeName(exc_info.exc_traceback_name, AST_TYPE::Store, node->lineno));
+        exc_asgn->targets.push_back(target);
+
         exc_asgn->value = new AST_LangPrimitive(AST_LangPrimitive::LANDINGPAD);
         curblock->push_back(exc_asgn);
 
@@ -1811,8 +1822,10 @@ public:
         assert(node->handlers.size() > 0);
 
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
-        std::string exc_obj_name = nodeName(node);
-        exc_handlers.push_back({ exc_handler_block, exc_obj_name });
+        std::string exc_type_name = nodeName(node, "type");
+        std::string exc_value_name = nodeName(node, "value");
+        std::string exc_traceback_name = nodeName(node, "traceback");
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
@@ -1838,7 +1851,8 @@ public:
             cfg->placeBlock(exc_handler_block);
             curblock = exc_handler_block;
 
-            AST_expr* exc_obj = makeName(exc_obj_name, AST_TYPE::Load, node->lineno);
+            // TODO: this should be an EXCEPTION_MATCHES(exc_type_name)
+            AST_expr* exc_obj = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
 
             bool caught_all = false;
             for (AST_ExceptHandler* exc_handler : node->handlers) {
@@ -2231,7 +2245,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         }
     }
 
-    if (VERBOSITY("cfg") >= 2) {
+    if (VERBOSITY("cfg") >= 1) {
         printf("Final cfg:\n");
         rtn->print();
     }

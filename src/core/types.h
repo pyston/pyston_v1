@@ -476,7 +476,6 @@ struct ExcInfo {
     ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
     bool matches(BoxedClass* cls) const;
 };
-
 }
 
 #endif
