@@ -100,7 +100,7 @@ Box* generatorThrow(Box* s, BoxedClass* e) {
     assert(isSubclass(e, Exception));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
     Box* ex = exceptionNew1(e);
-    self->exception = ExcInfo(ex->cls, ex, NULL);
+    self->exception = ExcInfo(ex->cls, ex, None);
     return generatorSend(self, None);
 }
 

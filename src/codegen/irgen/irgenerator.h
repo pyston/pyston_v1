@@ -58,11 +58,13 @@ private:
     llvm::MDNode* func_dbg_info;
 
     llvm::AllocaInst* scratch_space;
+    llvm::Value* frame_info;
     int scratch_size;
 
 public:
     IRGenState(CompiledFunction* cf, SourceInfo* source_info, GCBuilder* gc, llvm::MDNode* func_dbg_info)
-        : cf(cf), source_info(source_info), gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), scratch_size(0) {
+        : cf(cf), source_info(source_info), gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), frame_info(NULL),
+          scratch_size(0) {
         assert(cf->func);
         assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
     }
@@ -76,6 +78,7 @@ public:
     GCBuilder* getGC() { return gc; }
 
     llvm::Value* getScratchSpace(int min_bytes);
+    llvm::Value* getFrameInfoVar();
 
     ConcreteCompilerType* getReturnType() {
         assert(cf->spec);

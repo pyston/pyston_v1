@@ -236,6 +236,9 @@ public:
         if (loc.type == StackMap::Record::Location::LocationType::Register) {
             // TODO: need to make sure we deal with patchpoints appropriately
             return getReg(loc.regnum);
+        } else if (loc.type == StackMap::Record::Location::LocationType::Direct) {
+            uint64_t reg_val = getReg(loc.regnum);
+            return reg_val + loc.offset;
         } else if (loc.type == StackMap::Record::Location::LocationType::Indirect) {
             uint64_t reg_val = getReg(loc.regnum);
             uint64_t addr = reg_val + loc.offset;
@@ -277,6 +280,19 @@ public:
             abort();
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getCurrentStatementForInterpretedFrame((void*)id.bp);
+        }
+        abort();
+    }
+
+    FrameInfo* getFrameInfo() {
+        if (id.type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = getCF();
+            assert(cf->location_map->frameInfoFound());
+            const auto& frame_info_loc = cf->location_map->frame_info_location;
+
+            return reinterpret_cast<FrameInfo*>(readLocation(frame_info_loc));
+        } else if (id.type == PythonFrameId::INTERPRETED) {
+            return getFrameInfoForInterpretedFrame((void*)id.bp);
         }
         abort();
     }
@@ -450,6 +466,37 @@ const LineInfo* getMostRecentLineInfo() {
     return lineInfoForFrame(*frame);
 }
 
+ExcInfo getFrameExcInfo() {
+    std::vector<ExcInfo*> to_update;
+    ExcInfo* cur_exc = NULL;
+    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+        FrameInfo* frame_info = frame_iter.getFrameInfo();
+
+        cur_exc = &frame_info->exc;
+        if (!cur_exc->type) {
+            to_update.push_back(cur_exc);
+            continue;
+        }
+
+        break;
+    }
+
+    assert(cur_exc); // Only way this could still be NULL is if there weren't any python frames
+
+    if (!cur_exc->type) {
+        // No exceptions found:
+        *cur_exc = ExcInfo(None, None, None);
+    }
+
+    assert(cur_exc->value);
+    assert(cur_exc->traceback);
+
+    for (auto* ex : to_update) {
+        *ex = *cur_exc;
+    }
+    return *cur_exc;
+}
+
 CompiledFunction* getTopCompiledFunction() {
     return getTopPythonFrame()->getCF();
 }
@@ -458,13 +505,6 @@ BoxedModule* getCurrentModule() {
     CompiledFunction* compiledFunction = getTopCompiledFunction();
     assert(compiledFunction);
     return compiledFunction->clfunc->source->parent_module;
-}
-
-ExecutionPoint getExecutionPoint() {
-    auto frame = getTopPythonFrame();
-    auto cf = frame->getCF();
-    auto current_stmt = frame->getCurrentStatement();
-    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
 }
 
 BoxedDict* getLocals(bool only_user_visible) {

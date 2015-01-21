@@ -19,6 +19,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
+#include "codegen/unwinding.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/inline/boxing.h"
@@ -32,9 +33,11 @@ BoxedModule* sys_module;
 BoxedDict* sys_modules_dict;
 
 Box* sysExcInfo() {
-    return new BoxedTuple({ cur_thread_state.curexc_type ? cur_thread_state.curexc_type : None,
-                            cur_thread_state.curexc_value ? cur_thread_state.curexc_value : None,
-                            cur_thread_state.curexc_traceback ? cur_thread_state.curexc_traceback : None });
+    ExcInfo exc = getFrameExcInfo();
+    assert(exc.type);
+    assert(exc.value);
+    assert(exc.traceback);
+    return new BoxedTuple({ exc.type, exc.value, exc.traceback });
 }
 
 static Box* sysExit(Box* arg) {

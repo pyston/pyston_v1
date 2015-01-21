@@ -476,6 +476,16 @@ struct ExcInfo {
     ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
     bool matches(BoxedClass* cls) const;
 };
+
+struct FrameInfo {
+    // *Not the same semantics as CPython's frame->f_exc*
+    // In CPython, f_exc is the saved exc_info from the previous frame.
+    // In Pyston, exc is the frame-local value of sys.exc_info.
+    // - This makes frame entering+leaving faster at the expense of slower exceptions.
+    ExcInfo exc;
+
+    FrameInfo(ExcInfo exc) : exc(exc) {}
+};
 }
 
 #endif

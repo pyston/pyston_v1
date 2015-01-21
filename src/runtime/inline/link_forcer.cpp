@@ -35,12 +35,10 @@ static void forceLink(void* x) {
     printf("%p\n", x);
 }
 
-extern "C" void __py_personality_v0() {
-    RELEASE_ASSERT(0, "not used");
-}
-
-
 namespace _force {
+
+// Force the "FrameInfo" type to make it into the stdlib:
+FrameInfo* _frame_info_forcer;
 
 #define FORCE(name) forceLink((void*)name)
 void force() {

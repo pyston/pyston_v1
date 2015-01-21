@@ -30,11 +30,8 @@ CompiledFunction* getCFForAddress(uint64_t addr);
 class BoxedDict;
 BoxedDict* getLocals(bool only_user_visible);
 
-struct ExecutionPoint {
-    CompiledFunction* cf;
-    AST_stmt* current_stmt;
-};
-ExecutionPoint getExecutionPoint();
+// Fetches the frame-local excinfo object, calculating it if necessary (from previous frames):
+ExcInfo getFrameExcInfo();
 }
 
 #endif

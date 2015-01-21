@@ -1455,6 +1455,9 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
         case AST_LangPrimitive::NONZERO:
             printf("NONZERO");
             break;
+        case AST_LangPrimitive::SET_EXC_INFO:
+            printf("SET_EXC_INFO");
+            break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }
