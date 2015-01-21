@@ -35,6 +35,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_stmt* start_at, BoxedDict* local
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
 CompiledFunction* getCFForInterpretedFrame(void* frame_ptr);
+struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
 
 void gatherInterpreterRoots(gc::GCVisitor* visitor);

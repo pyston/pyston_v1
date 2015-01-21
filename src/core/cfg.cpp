@@ -527,6 +527,13 @@ private:
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
+        } else if (val->type == AST_TYPE::Index) {
+            AST_Index* orig = ast_cast<AST_Index>(val);
+            AST_Index* made = new AST_Index();
+            made->value = _dup(orig->value);
+            made->col_offset = orig->col_offset;
+            made->lineno = orig->lineno;
+            return made;
         } else {
             RELEASE_ASSERT(0, "%d", val->type);
         }

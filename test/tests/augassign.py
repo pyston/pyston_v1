@@ -44,4 +44,7 @@ def f2():
 f2()
 
 print f(4, 2)
-print f(4.1, 2.3)
+try:
+    print f(4.1, 2.3)
+except TypeError, e:
+    print e

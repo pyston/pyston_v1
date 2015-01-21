@@ -221,7 +221,7 @@ extern "C" void exit(int code) {
 }
 
 void raise0() {
-    raiseRaw(ExcInfo(last_exc->cls, last_exc, NULL));
+    raiseRaw(ExcInfo(last_exc->cls, last_exc, None));
 }
 
 bool ExcInfo::matches(BoxedClass* cls) const {

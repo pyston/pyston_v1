@@ -619,7 +619,8 @@ private:
                 builder->CreateStore(converted_value->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
                 converted_value->decvref(emitter);
                 ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
-                builder->CreateStore(converted_traceback->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+                builder->CreateStore(converted_traceback->getValue(),
+                                     builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
                 converted_traceback->decvref(emitter);
 
                 return getNone();
