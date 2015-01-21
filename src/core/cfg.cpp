@@ -968,6 +968,8 @@ private:
                 rtn = remapIfExp(ast_cast<AST_IfExp>(node));
                 break;
             case AST_TYPE::Index:
+                if (ast_cast<AST_Index>(node)->value->type == AST_TYPE::Num)
+                    return node;
                 rtn = remapIndex(ast_cast<AST_Index>(node));
                 break;
             case AST_TYPE::Lambda:
@@ -1851,7 +1853,7 @@ public:
             cfg->placeBlock(exc_handler_block);
             curblock = exc_handler_block;
 
-            // TODO: this should be an EXCEPTION_MATCHES(exc_type_name)
+            // TODO This is supposed to be exc_type_name (value doesn't matter for checking matches)
             AST_expr* exc_obj = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
 
             bool caught_all = false;
@@ -1862,6 +1864,7 @@ public:
                 if (exc_handler->type) {
                     AST_expr* handled_type = remapExpr(exc_handler->type);
 
+                    // TODO: this should be an EXCEPTION_MATCHES(exc_type_name)
                     AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::ISINSTANCE);
                     is_caught_here->args.push_back(_dup(exc_obj));
                     is_caught_here->args.push_back(handled_type);
@@ -1882,6 +1885,12 @@ public:
                 } else {
                     caught_all = true;
                 }
+
+                AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
+                set_exc_info->args.push_back(makeName(exc_type_name, AST_TYPE::Load, node->lineno));
+                set_exc_info->args.push_back(makeName(exc_value_name, AST_TYPE::Load, node->lineno));
+                set_exc_info->args.push_back(makeName(exc_traceback_name, AST_TYPE::Load, node->lineno));
+                push_back(makeExpr(set_exc_info));
 
                 if (exc_handler->name) {
                     pushAssign(exc_handler->name, _dup(exc_obj));

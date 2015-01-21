@@ -598,6 +598,18 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
         v = boxBool(nonzero(obj.o));
+    } else if (node->opcode == AST_LangPrimitive::SET_EXC_INFO) {
+        assert(node->args.size() == 3);
+
+        Value type = visit_expr(node->args[0]);
+        assert(type.o);
+        Value value = visit_expr(node->args[1]);
+        assert(value.o);
+        Value traceback = visit_expr(node->args[2]);
+        assert(traceback.o);
+
+        getFrameInfo()->exc = ExcInfo(type.o, value.o, traceback.o);
+        v = None;
     } else
         RELEASE_ASSERT(0, "not implemented");
     return v;

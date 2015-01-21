@@ -977,6 +977,7 @@ public:
         IMPORT_STAR,
         NONE,
         NONZERO,
+        SET_EXC_INFO,
     } opcode;
     std::vector<AST_expr*> args;
 
