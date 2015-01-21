@@ -80,9 +80,11 @@ private:
 public:
     void registerCF(CompiledFunction* cf) { cfs.push_back(cf); }
 
+    // addr is the return address of the callsite, so we will check it against
+    // the region (start, end] (opposite-endedness of normal half-open regions)
     CompiledFunction* getCFForAddress(uint64_t addr) {
         for (auto* cf : cfs) {
-            if (cf->code_start <= addr && addr < cf->code_start + cf->code_size)
+            if (cf->code_start < addr && addr <= cf->code_start + cf->code_size)
                 return cf;
         }
         return NULL;

@@ -95,7 +95,6 @@ void unwindExc(Box* exc_obj) {
     abort();
 }
 
-static gc::GCRootHandle last_exc;
 static std::vector<const LineInfo*> last_tb;
 
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
@@ -115,7 +114,6 @@ void raiseRaw(const ExcInfo& e) {
 void raiseExc(Box* exc_obj) {
     auto entries = getTracebackEntries();
     last_tb = std::move(entries);
-    last_exc = exc_obj;
 
     raiseRaw(ExcInfo(exc_obj->cls, exc_obj, None));
 }
@@ -123,14 +121,14 @@ void raiseExc(Box* exc_obj) {
 // Have a special helper function for syntax errors, since we want to include the location
 // of the syntax error in the traceback, even though it is not part of the execution:
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func) {
-    last_exc = exceptionNew2(SyntaxError, boxStrConstant(msg));
+    Box* exc = exceptionNew2(SyntaxError, boxStrConstant(msg));
 
     auto entries = getTracebackEntries();
     last_tb = std::move(entries);
     // TODO: leaks this!
     last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
 
-    raiseRaw(ExcInfo(SyntaxError, last_exc, None));
+    raiseRaw(ExcInfo(exc->cls, exc, None));
 }
 
 static void _printTraceback(const std::vector<const LineInfo*>& tb) {
@@ -221,7 +219,7 @@ extern "C" void exit(int code) {
 }
 
 void raise0() {
-    raiseRaw(ExcInfo(last_exc->cls, last_exc, None));
+    raiseRaw(getFrameExcInfo());
 }
 
 bool ExcInfo::matches(BoxedClass* cls) const {

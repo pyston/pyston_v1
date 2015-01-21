@@ -50,6 +50,8 @@ struct GlobalFuncs {
     llvm::Value* raise0, *raise3;
 
     llvm::Value* div_float_float, *floordiv_float_float, *mod_float_float, *pow_float_float;
+
+    llvm::Value* dump;
 };
 }
 

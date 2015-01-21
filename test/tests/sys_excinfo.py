@@ -107,6 +107,26 @@ def f4():
         print "caught attribute error (makes sense, but wrong)"
     except NotImplementedError:
         print "caught not implemented error (weird, but right)"
+
+    # As a variant, if we put the inner exception inside a function call,
+    # it only sets that frame's exc_info.
+    try:
+        try:
+            raise AttributeError()
+        except AttributeError:
+            def thrower():
+                try:
+                    raise NotImplementedError()
+                except:
+                    pass
+            thrower()
+
+            # This time, it should throw the AttributeError
+            raise
+    except AttributeError:
+        print "caught attribute error (right this time)"
+    except NotImplementedError:
+        print "caught not implemented error (wrong this time)"
 f4()
 
 def f5():

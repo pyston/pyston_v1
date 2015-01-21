@@ -26,7 +26,6 @@ const LineInfo* getMostRecentLineInfo();
 class BoxedModule;
 BoxedModule* getCurrentModule();
 
-CompiledFunction* getCFForAddress(uint64_t addr);
 class BoxedDict;
 BoxedDict* getLocals(bool only_user_visible);
 

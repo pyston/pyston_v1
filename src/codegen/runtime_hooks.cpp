@@ -253,5 +253,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(floordiv_float_float);
     GET(mod_float_float);
     GET(pow_float_float);
+
+    GET(dump);
 }
 }
