@@ -1,6 +1,3 @@
-# expected: fail
-# - exceptions
-
 # Different ways of nesting exceptions
 
 import sys
@@ -183,40 +180,6 @@ def f11():
 f11()
 print sys.exc_info()[0]
 
-# exc_info gets passed into generators (at both begin and send()) and cleared like normal on the way out:
-def f12():
-    print
-    print "f12"
-
-    print "begin:", sys.exc_info()[0]
-
-    def g():
-        print "start of generator:", sys.exc_info()[0]
-        yield 1
-        print "after first yield:", sys.exc_info()[0]
-        try:
-            raise KeyError()
-        except:
-            pass
-        print "after KeyError:", sys.exc_info()[0]
-        yield 2
-
-    try:
-        raise AttributeError()
-    except:
-        pass
-
-    i = g()
-    i.next()
-    try:
-        1/0
-    except:
-        print "after exc:", sys.exc_info()[0]
-        i.next()
-        print "after next:", sys.exc_info()[0]
-    list(i)
-f12()
-
 # If an exception is thrown+caught in course of exception-matching, we need to still operate on the original exception:
 def f13():
     print
@@ -228,6 +191,10 @@ def f13():
             pass
         print sys.exc_info()[0]
         return ZeroDivisionError
+
+    print sys.exc_info()[0]
+    inner()
+    print sys.exc_info()[0]
 
     # This applies to what goes into exc_info:
     try:

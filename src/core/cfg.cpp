@@ -1924,6 +1924,9 @@ public:
 
             if (!caught_all) {
                 AST_Raise* raise = new AST_Raise();
+                raise->arg0 = makeName(exc_type_name, AST_TYPE::Load, node->lineno);
+                raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
+                raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
                 push_back(raise);
                 curblock->push_back(new AST_Unreachable());
                 curblock = NULL;

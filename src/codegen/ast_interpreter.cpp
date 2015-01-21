@@ -622,6 +622,12 @@ Value ASTInterpreter::visit_yield(AST_Yield* node) {
 }
 
 Value __attribute__((flatten)) ASTInterpreter::visit_stmt(AST_stmt* node) {
+    if (0) {
+        printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
+        print_ast(node);
+        printf("\n");
+    }
+
     switch (node->type) {
         case AST_TYPE::Assert:
             return visit_assert((AST_Assert*)node);
