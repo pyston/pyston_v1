@@ -236,6 +236,9 @@ public:
         if (loc.type == StackMap::Record::Location::LocationType::Register) {
             // TODO: need to make sure we deal with patchpoints appropriately
             return getReg(loc.regnum);
+        } else if (loc.type == StackMap::Record::Location::LocationType::Direct) {
+            uint64_t reg_val = getReg(loc.regnum);
+            return reg_val + loc.offset;
         } else if (loc.type == StackMap::Record::Location::LocationType::Indirect) {
             uint64_t reg_val = getReg(loc.regnum);
             uint64_t addr = reg_val + loc.offset;
@@ -283,6 +286,11 @@ public:
 
     FrameInfo* getFrameInfo() {
         if (id.type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = getCF();
+            assert(cf->location_map->frameInfoFound());
+            const auto& frame_info_loc = cf->location_map->frame_info_location;
+
+            return reinterpret_cast<FrameInfo*>(readLocation(frame_info_loc));
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getFrameInfoForInterpretedFrame((void*)id.bp);
         }

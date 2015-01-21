@@ -100,6 +100,11 @@ static std::vector<const LineInfo*> last_tb;
 
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) {
+    // Should set these to None before getting here:
+    assert(e.type);
+    assert(e.value);
+    assert(e.traceback);
+
     // Using libgcc:
     throw e;
 
@@ -112,7 +117,7 @@ void raiseExc(Box* exc_obj) {
     last_tb = std::move(entries);
     last_exc = exc_obj;
 
-    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, NULL));
+    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, None));
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -125,7 +130,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     // TODO: leaks this!
     last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
 
-    raiseRaw(ExcInfo(SyntaxError, last_exc, NULL));
+    raiseRaw(ExcInfo(SyntaxError, last_exc, None));
 }
 
 static void _printTraceback(const std::vector<const LineInfo*>& tb) {

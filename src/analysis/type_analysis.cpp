@@ -371,6 +371,7 @@ private:
             case AST_LangPrimitive::IMPORT_NAME:
                 return UNKNOWN;
             case AST_LangPrimitive::NONE:
+            case AST_LangPrimitive::SET_EXC_INFO:
                 return NONE;
             case AST_LangPrimitive::NONZERO:
                 return BOOL;

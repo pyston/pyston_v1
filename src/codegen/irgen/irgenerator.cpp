@@ -600,6 +600,30 @@ private:
 
                 return boolFromI1(emitter, v);
             }
+            case AST_LangPrimitive::SET_EXC_INFO: {
+                assert(node->args.size() == 3);
+                CompilerVariable* type = evalExpr(node->args[0], unw_info);
+                CompilerVariable* value = evalExpr(node->args[1], unw_info);
+                CompilerVariable* traceback = evalExpr(node->args[2], unw_info);
+
+                auto* builder = emitter.getBuilder();
+
+                llvm::Value* frame_info = irstate->getFrameInfoVar();
+                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
+                assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
+
+                ConcreteCompilerVariable* converted_type = type->makeConverted(emitter, UNKNOWN);
+                builder->CreateStore(converted_type->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
+                converted_type->decvref(emitter);
+                ConcreteCompilerVariable* converted_value = value->makeConverted(emitter, UNKNOWN);
+                builder->CreateStore(converted_value->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
+                converted_value->decvref(emitter);
+                ConcreteCompilerVariable* converted_traceback = traceback->makeConverted(emitter, UNKNOWN);
+                builder->CreateStore(converted_traceback->getValue(), builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+                converted_traceback->decvref(emitter);
+
+                return getNone();
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }
