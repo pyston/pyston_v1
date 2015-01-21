@@ -483,6 +483,8 @@ struct FrameInfo {
     // In Pyston, exc is the frame-local value of sys.exc_info.
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
     ExcInfo exc;
+
+    FrameInfo(ExcInfo exc) : exc(exc) {}
 };
 }
 

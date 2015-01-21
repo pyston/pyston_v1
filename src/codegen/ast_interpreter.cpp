@@ -127,6 +127,7 @@ private:
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
+    FrameInfo frame_info;
 
 public:
     AST_stmt* getCurrentStatement() {
@@ -135,6 +136,7 @@ public:
     }
 
     CompiledFunction* getCF() { return compiled_func; }
+    FrameInfo* getFrameInfo() { return &frame_info; }
     const SymMap& getSymbolTable() { return sym_table; }
     void gcVisit(GCVisitor* visitor);
 };
@@ -189,6 +191,12 @@ CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {
     return interpreter->getCF();
 }
 
+FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getFrameInfo();
+}
+
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
@@ -225,7 +233,7 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
     : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), next_block(0),
       current_block(0), current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0),
-      generator(0), edgecount(0) {
+      generator(0), edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)

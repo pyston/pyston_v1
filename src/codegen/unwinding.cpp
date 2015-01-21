@@ -281,6 +281,14 @@ public:
         abort();
     }
 
+    FrameInfo* getFrameInfo() {
+        if (id.type == PythonFrameId::COMPILED) {
+        } else if (id.type == PythonFrameId::INTERPRETED) {
+            return getFrameInfoForInterpretedFrame((void*)id.bp);
+        }
+        abort();
+    }
+
     const PythonFrameId& getId() const { return id; }
 
     static std::unique_ptr<PythonFrameIterator> end() { return std::unique_ptr<PythonFrameIterator>(nullptr); }
@@ -450,15 +458,35 @@ const LineInfo* getMostRecentLineInfo() {
     return lineInfoForFrame(*frame);
 }
 
-FrameInfo* getTopFrameInfo() {
-    std::unique_ptr<PythonFrameIterator> frame = getTopPythonFrame();
-    if (frame.get_id().type == PythonFrameId::COMPILED) {
-        abort();
-    } else if (frame.get_id().type == PythonFrameId::INTERPRETED) {
-        abort();
-    } else {
-        abort();
+ExcInfo getFrameExcInfo() {
+    std::vector<ExcInfo*> to_update;
+    ExcInfo* cur_exc = NULL;
+    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+        FrameInfo* frame_info = frame_iter.getFrameInfo();
+
+        cur_exc = &frame_info->exc;
+        if (!cur_exc->type) {
+            to_update.push_back(cur_exc);
+            continue;
+        }
+
+        break;
     }
+
+    assert(cur_exc); // Only way this could still be NULL is if there weren't any python frames
+
+    if (!cur_exc->type) {
+        // No exceptions found:
+        *cur_exc = ExcInfo(None, None, None);
+    }
+
+    assert(cur_exc->value);
+    assert(cur_exc->traceback);
+
+    for (auto* ex : to_update) {
+        *ex = *cur_exc;
+    }
+    return *cur_exc;
 }
 
 CompiledFunction* getTopCompiledFunction() {

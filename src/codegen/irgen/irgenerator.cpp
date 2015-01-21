@@ -85,8 +85,10 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         llvm::AllocaInst* al = builder.CreateAlloca(g.frame_info_type, NULL, "frame_info");
         assert(al->isStaticAlloca());
 
-        static_assert(offsetof(FrameInfo, exc_type) == 0, "");
-        llvm::Value* exctype_gep = builder.CreateConstInBoundsGEP2_32(al, 0, 0);
+        static_assert(offsetof(FrameInfo, exc) == 0, "");
+        static_assert(offsetof(ExcInfo, type) == 0, "");
+        llvm::Value* exctype_gep
+            = builder.CreateConstInBoundsGEP2_32(builder.CreateConstInBoundsGEP2_32(al, 0, 0), 0, 0);
         builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), exctype_gep);
 
         frame_info = al;
