@@ -42,6 +42,7 @@ public:
     void operator=(Box* b) { value = b; }
 
     operator Box*() { return value; }
+    Box* operator->() { return value; }
 };
 
 void runCollection();

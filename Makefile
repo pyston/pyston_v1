@@ -647,7 +647,7 @@ $$(SRCS:.cpp=$1.o.bc): CXXFLAGS:=$2
 %$1.h.pch: %.h $$(BUILD_SYSTEM_DEPS)
 	$$(ECHO) Compiling $$@
 	$$(VERB) rm -f $$@-*
-	$$(VERB) $$(CLANGPP_EXE) $$(CXXFLAGS) -MMD -MP -MF $$<.d -x c++-header $$< -o $$@
+	$$(VERB) $$(CLANGPP_EXE) $$(CXXFLAGS) -MMD -MP -MF $$(patsubst %.pch,%.d,$$@) -x c++-header $$< -o $$@
 $$(CODEGEN_SRCS:.cpp=$1.o): CXXFLAGS += -include src/codegen/irgen$1.h
 $$(CODEGEN_SRCS:.cpp=$1.o): src/codegen/irgen$1.h.pch
 

@@ -158,7 +158,7 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept
     try {
         Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
         return r;
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -174,8 +174,8 @@ extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* f
 extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
     try {
         return len(o)->n;
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return -1;
     }
 }
@@ -183,8 +183,8 @@ extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
 extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
     try {
         return getiter(o);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -192,8 +192,8 @@ extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
 extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
     try {
         return repr(obj);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -352,7 +352,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 
     try {
         return getattr(o, static_cast<BoxedString*>(attr_name)->s.c_str());
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -364,8 +364,8 @@ extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexce
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
     try {
         return getitem(o, key);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -389,7 +389,7 @@ int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
 extern "C" long PyObject_Hash(PyObject* o) noexcept {
     try {
         return hash(o)->n;
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -419,7 +419,7 @@ extern "C" long _Py_HashPointer(void* p) noexcept {
 extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
     try {
         return nonzero(o);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -459,7 +459,7 @@ extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, Py
             return runtimeCall(callable_object, ArgPassSpec(0, 0, true, true), args, kw, NULL, NULL, NULL);
         else
             return runtimeCall(callable_object, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -496,7 +496,7 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
     try {
         // Not sure if this is really the same:
         return getitem(o, boxInt(i));
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -505,7 +505,7 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t 
     try {
         // Not sure if this is really the same:
         return getitem(o, new BoxedSlice(boxInt(i1), boxInt(i2), None));
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -551,8 +551,8 @@ extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
     try {
         return callattr(iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -670,6 +670,12 @@ finally:
     }
     PyErr_NormalizeException(exc, val, tb);
     --tstate->recursion_depth;
+}
+
+void setCAPIException(const ExcInfo& e) {
+    cur_thread_state.curexc_type = e.type;
+    cur_thread_state.curexc_value = e.value;
+    cur_thread_state.curexc_traceback = e.traceback;
 }
 
 void checkAndThrowCAPIException() {
@@ -859,7 +865,7 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
 
     try {
         return import(-1, None, &static_cast<BoxedString*>(module_name)->s);
-    } catch (Box* e) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -895,7 +901,7 @@ extern "C" int PyNumber_Check(PyObject* obj) noexcept {
 extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Add);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -903,7 +909,7 @@ extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
 extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Sub);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -911,7 +917,7 @@ extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
 extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mult);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -919,7 +925,7 @@ extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
 extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Div);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -935,7 +941,7 @@ extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) noexcept {
 extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mod);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -959,7 +965,7 @@ extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
 extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
     try {
         return abs_(o);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -975,7 +981,7 @@ extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) noexcept {
 extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::RShift);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
@@ -983,7 +989,7 @@ extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
 extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::BitAnd);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }

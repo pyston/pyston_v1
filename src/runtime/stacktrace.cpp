@@ -98,10 +98,10 @@ void unwindExc(Box* exc_obj) {
 static gc::GCRootHandle last_exc;
 static std::vector<const LineInfo*> last_tb;
 
-void raiseRaw(Box* exc_obj) __attribute__((__noreturn__));
-void raiseRaw(Box* exc_obj) {
+void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
+void raiseRaw(const ExcInfo& e) {
     // Using libgcc:
-    throw exc_obj;
+    throw e;
 
     // Using libunwind
     // unwindExc(exc_obj);
@@ -112,7 +112,7 @@ void raiseExc(Box* exc_obj) {
     last_tb = std::move(entries);
     last_exc = exc_obj;
 
-    raiseRaw(exc_obj);
+    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, NULL));
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -125,7 +125,7 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     // TODO: leaks this!
     last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
 
-    raiseRaw(last_exc);
+    raiseRaw(ExcInfo(SyntaxError, last_exc, NULL));
 }
 
 static void _printTraceback(const std::vector<const LineInfo*>& tb) {
@@ -216,7 +216,12 @@ extern "C" void exit(int code) {
 }
 
 void raise0() {
-    raiseRaw(last_exc);
+    raiseRaw(ExcInfo(last_exc->cls, last_exc, NULL));
+}
+
+bool ExcInfo::matches(BoxedClass* cls) const {
+    RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet");
+    return isSubclass(static_cast<BoxedClass*>(this->type), cls);
 }
 
 void raise3(Box* arg0, Box* arg1, Box* arg2) {

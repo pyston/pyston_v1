@@ -14,6 +14,7 @@
 
 #include "runtime/dict.h"
 
+#include "capi/types.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -136,8 +137,8 @@ extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
     RELEASE_ASSERT(PyDict_Check(o), "");
     try {
         return dictCopy(static_cast<BoxedDict*>(o));
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -179,7 +180,7 @@ extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noe
     try {
         // TODO should demote GIL?
         setitem(b, key, item);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
     return 0;
@@ -189,7 +190,7 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
     Box* key_s;
     try {
         key_s = boxStrConstant(key);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
 
@@ -200,8 +201,8 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
     ASSERT(dict->cls == dict_cls || dict->cls == attrwrapper_cls, "%s", getTypeName(dict)->c_str());
     try {
         return getitem(dict, key);
-    } catch (Box* b) {
-        if (isSubclass(b->cls, KeyError))
+    } catch (ExcInfo e) {
+        if (e.matches(KeyError))
             return NULL;
         abort();
     }
@@ -215,7 +216,7 @@ extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexc
     Box* key_s;
     try {
         key_s = boxStrConstant(key);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
     return PyDict_GetItem(dict, key_s);
@@ -404,8 +405,8 @@ extern "C" int PyDict_Merge(PyObject* a, PyObject* b, int override_) noexcept {
     try {
         dictMerge(static_cast<BoxedDict*>(a), b);
         return 0;
-    } catch (Box* e) {
-        PyErr_SetObject(e->cls, e);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return -1;
     }
 }

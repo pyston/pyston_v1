@@ -1748,7 +1748,7 @@ extern "C" BoxedString* reprOrNull(Box* obj) {
         Box* r = repr(obj);
         assert(r->cls == str_cls); // this should be checked by repr()
         return static_cast<BoxedString*>(r);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         return nullptr;
     }
 }
@@ -1757,7 +1757,7 @@ extern "C" BoxedString* strOrNull(Box* obj) {
     try {
         BoxedString* r = str(obj);
         return static_cast<BoxedString*>(r);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         return nullptr;
     }
 }
@@ -3879,10 +3879,10 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
             Box* attr_name;
             try {
                 attr_name = runtimeCallInternal2(all_getitem, NULL, ArgPassSpec(2), all, boxInt(idx));
-            } catch (Box* b) {
-                if (b->cls == IndexError)
+            } catch (ExcInfo e) {
+                if (e.matches(IndexError))
                     break;
-                throw;
+                throw e;
             }
             idx++;
 

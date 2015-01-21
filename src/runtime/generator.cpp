@@ -53,7 +53,7 @@ static void generatorEntry(BoxedGenerator* g) {
 
         Box** args = g->args ? &g->args->elts[0] : nullptr;
         callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, g->arg1, g->arg2, g->arg3, args);
-    } catch (Box* e) {
+    } catch (ExcInfo e) {
         // unhandled exception: propagate the exception to the caller
         g->exception = e;
     }
@@ -85,8 +85,8 @@ Box* generatorSend(Box* s, Box* v) {
     self->running = false;
 
     // propagate exception to the caller
-    if (self->exception)
-        raiseExc(self->exception);
+    if (self->exception.type)
+        raiseRaw(self->exception);
 
     // throw StopIteration if the generator exited
     if (self->entryExited)
@@ -99,7 +99,8 @@ Box* generatorThrow(Box* s, BoxedClass* e) {
     assert(s->cls == generator_cls);
     assert(isSubclass(e, Exception));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
-    self->exception = exceptionNew1(e);
+    Box* ex = exceptionNew1(e);
+    self->exception = ExcInfo(ex->cls, ex, NULL);
     return generatorSend(self, None);
 }
 
@@ -128,10 +129,10 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     threading::pushGenerator(obj, obj->stack_begin, (void*)obj->returnContext.uc_mcontext.gregs[REG_RSP]);
 
     // if the generator receives a exception from the caller we have to throw it
-    if (self->exception) {
-        Box* exception = self->exception;
-        self->exception = nullptr;
-        raiseExc(exception);
+    if (self->exception.type) {
+        ExcInfo e = self->exception;
+        self->exception = ExcInfo(NULL, NULL, NULL);
+        raiseRaw(e);
     }
     return self->returnValue;
 }
@@ -146,7 +147,7 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, B
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
     : function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false), running(false),
-      returnValue(nullptr), exception(nullptr) {
+      returnValue(nullptr), exception(nullptr, nullptr, nullptr) {
 
     giveAttr("__name__", boxString(function->f->source->getName()));
 
@@ -214,8 +215,12 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
                                reinterpret_cast<void* const*>(&g->args->elts[num_args - 3]));
     if (g->returnValue)
         v->visit(g->returnValue);
-    if (g->exception)
-        v->visit(g->exception);
+    if (g->exception.type)
+        v->visit(g->exception.type);
+    if (g->exception.value)
+        v->visit(g->exception.value);
+    if (g->exception.traceback)
+        v->visit(g->exception.traceback);
 
     if (g->running) {
         v->visitPotentialRange((void**)&g->returnContext,

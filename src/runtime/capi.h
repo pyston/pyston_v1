@@ -23,6 +23,8 @@ class BoxedModule;
 BoxedModule* importTestExtension(const std::string&);
 
 void checkAndThrowCAPIException();
+struct ExcInfo;
+void setCAPIException(const ExcInfo& e);
 }
 
 #endif

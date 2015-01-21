@@ -31,8 +31,8 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
 
     try {
         runtimeCall(target, ArgPassSpec(0, 0, true, kwargs != NULL), varargs, kwargs, NULL, NULL, NULL);
-    } catch (Box* b) {
-        std::string msg = formatException(b);
+    } catch (ExcInfo e) {
+        std::string msg = formatException(e.value);
         printLastTraceback();
         fprintf(stderr, "%s\n", msg.c_str());
     }

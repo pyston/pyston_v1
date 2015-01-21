@@ -380,6 +380,22 @@ public:
         assert(vals.size() == 1);
         return reinterpret_cast<Box*>(vals[0]);
     }
+
+    std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, VAR* var, int num_into) override {
+        llvm::Value* unpacked = emitter.createCall2(info.unw_info, g.funcs.unpackIntoArray, var->getValue(),
+                                                    getConstantInt(num_into, g.i64));
+        assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());
+
+        std::vector<CompilerVariable*> rtn;
+        for (int i = 0; i < num_into; i++) {
+            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(unpacked, i);
+            llvm::Value* val = emitter.getBuilder()->CreateLoad(ptr);
+            assert(val->getType() == g.llvm_value_type_ptr);
+
+            rtn.push_back(new ConcreteCompilerVariable(UNKNOWN, val, true));
+        }
+        return rtn;
+    }
 };
 
 ConcreteCompilerType* UNKNOWN = new UnknownType();
@@ -1985,6 +2001,18 @@ public:
         for (auto e : elt_types)
             rtn += e->numFrameArgs();
         return rtn;
+    }
+
+    std::vector<CompilerVariable*> unpack(IREmitter& emitter, const OpInfo& info, VAR* var, int num_into) override {
+        if (num_into != elt_types.size()) {
+            return ValuedCompilerType::unpack(emitter, info, var, num_into);
+        }
+
+        // Not sure if this is right:
+        for (auto e : *var->getValue())
+            e->incvref();
+
+        return *var->getValue();
     }
 };
 

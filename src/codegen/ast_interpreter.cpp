@@ -123,7 +123,7 @@ private:
     SymMap sym_table;
     CFGBlock* next_block, *current_block;
     AST_stmt* current_inst;
-    Box* last_exception;
+    ExcInfo last_exception;
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
     unsigned edgecount;
@@ -224,8 +224,8 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
     : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), next_block(0),
-      current_block(0), current_inst(0), last_exception(0), passed_closure(0), created_closure(0), generator(0),
-      edgecount(0) {
+      current_block(0), current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0),
+      generator(0), edgecount(0) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
@@ -506,9 +506,9 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
     try {
         v = visit_stmt(node->stmt);
         next_block = node->normal_dest;
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         next_block = node->exc_dest;
-        last_exception = b;
+        last_exception = e;
     }
 
     return v;
@@ -561,8 +561,12 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = None;
     } else if (node->opcode == AST_LangPrimitive::LANDINGPAD) {
-        v = last_exception;
-        last_exception = nullptr;
+        assert(last_exception.type);
+        Box* type = last_exception.type;
+        Box* value = last_exception.value ? last_exception.value : None;
+        Box* traceback = last_exception.traceback ? last_exception.traceback : None;
+        v = new BoxedTuple({ type, value, traceback });
+        last_exception = ExcInfo(NULL, NULL, NULL);
     } else if (node->opcode == AST_LangPrimitive::ISINSTANCE) {
         assert(node->args.size() == 3);
         Value obj = visit_expr(node->args[0]);

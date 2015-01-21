@@ -446,8 +446,8 @@ Box* hasattr(Box* obj, Box* _str) {
     Box* attr;
     try {
         attr = getattrInternal(obj, str->s, NULL);
-    } catch (Box* e) {
-        if (isSubclass(e->cls, Exception))
+    } catch (ExcInfo e) {
+        if (e.matches(Exception))
             return False;
         throw;
     }
@@ -623,7 +623,7 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         // TODO Not sure if this should be called here
         fixup_slot_dispatchers(cls);
         return cls;
-    } catch (Box* e) {
+    } catch (ExcInfo e) {
         abort();
     }
 }

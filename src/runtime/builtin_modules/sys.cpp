@@ -82,7 +82,7 @@ extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
                 sys_module->delattr(name, NULL);
         } else
             sys_module->setattr(name, v, NULL);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
     return 0;

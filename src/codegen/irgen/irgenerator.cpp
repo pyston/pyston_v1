@@ -37,6 +37,10 @@
 
 namespace pyston {
 
+extern "C" void dumpLLVM(llvm::Value* v) {
+    v->dump();
+}
+
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
 
@@ -397,22 +401,36 @@ private:
                     llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
                 landing_pad->addClause(embedConstantPtr(NULL, g.i8_ptr));
 
-                llvm::Value* exc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
+                llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
 
-                llvm::Value* exc_obj;
                 if (irstate->getEffortLevel() != EffortLevel::INTERPRETED) {
-                    llvm::Value* exc_obj_pointer
-                        = emitter.getBuilder()->CreateCall(g.funcs.__cxa_begin_catch, exc_pointer);
-                    llvm::Value* exc_obj_pointer_casted
-                        = emitter.getBuilder()->CreateBitCast(exc_obj_pointer, g.llvm_value_type_ptr->getPointerTo());
-                    exc_obj = emitter.getBuilder()->CreateLoad(exc_obj_pointer_casted);
-                    emitter.getBuilder()->CreateCall(g.funcs.__cxa_end_catch);
+                    llvm::Value* excinfo_pointer
+                        = emitter.getBuilder()->CreateCall(g.funcs.__cxa_begin_catch, cxaexc_pointer);
+                    llvm::Value* excinfo_pointer_casted
+                        = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
+
+                    auto* builder = emitter.getBuilder();
+                    llvm::Value* exc_type
+                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 0));
+                    llvm::Value* exc_value
+                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 1));
+                    llvm::Value* exc_traceback
+                        = builder->CreateLoad(builder->CreateConstInBoundsGEP2_32(excinfo_pointer_casted, 0, 2));
+                    assert(exc_type->getType() == g.llvm_value_type_ptr);
+                    assert(exc_value->getType() == g.llvm_value_type_ptr);
+                    assert(exc_traceback->getType() == g.llvm_value_type_ptr);
+
+                    return makeTuple({ new ConcreteCompilerVariable(UNKNOWN, exc_type, true),
+                                       new ConcreteCompilerVariable(UNKNOWN, exc_value, true),
+                                       new ConcreteCompilerVariable(UNKNOWN, exc_traceback, true) });
                 } else {
+                    // TODO This doesn't get hit, right?
+                    abort();
+
                     // The interpreter can't really support the full C++ exception handling model since it's
                     // itself written in C++.  Let's make it easier for the interpreter and use a simpler interface:
-                    exc_obj = emitter.getBuilder()->CreateBitCast(exc_pointer, g.llvm_value_type_ptr);
+                    llvm::Value* exc_obj = emitter.getBuilder()->CreateBitCast(cxaexc_pointer, g.llvm_value_type_ptr);
                 }
-                return new ConcreteCompilerVariable(UNKNOWN, exc_obj, true);
             }
             case AST_LangPrimitive::LOCALS: {
                 assert(node->args.size() == 0);
@@ -1388,9 +1406,7 @@ private:
         assert(state != PARTIAL);
         int ntargets = target->elts.size();
 
-// TODO can do faster unpacking of non-instantiated tuples; ie for something like
-// a, b = 1, 2
-// We shouldn't need to do any runtime error checking or allocations
+        std::vector<CompilerVariable*> unpacked = val->unpack(emitter, getOpInfoForNode(target, unw_info), ntargets);
 
 #ifndef NDEBUG
         for (auto e : target->elts) {
@@ -1399,19 +1415,8 @@ private:
         }
 #endif
 
-        ConcreteCompilerVariable* converted_val = val->makeConverted(emitter, val->getBoxType());
-
-        llvm::Value* unpacked = emitter.createCall2(unw_info, g.funcs.unpackIntoArray, converted_val->getValue(),
-                                                    getConstantInt(ntargets, g.i64));
-        assert(unpacked->getType() == g.llvm_value_type_ptr->getPointerTo());
-        converted_val->decvref(emitter);
-
         for (int i = 0; i < ntargets; i++) {
-            llvm::Value* ptr = emitter.getBuilder()->CreateConstGEP1_32(unpacked, i);
-            llvm::Value* val = emitter.getBuilder()->CreateLoad(ptr);
-            assert(val->getType() == g.llvm_value_type_ptr);
-
-            CompilerVariable* thisval = new ConcreteCompilerVariable(UNKNOWN, val, true);
+            CompilerVariable* thisval = unpacked[i];
             _doSet(target->elts[i], thisval, unw_info);
             thisval->decvref(emitter);
         }

@@ -18,6 +18,7 @@
 #include <cstring>
 #include <sstream>
 
+#include "capi/types.h"
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/stats.h"
@@ -32,7 +33,7 @@ namespace pyston {
 extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     try {
         listAppend(op, newitem);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
     return 0;
@@ -149,7 +150,7 @@ extern "C" PyObject* PyList_GetItem(PyObject* op, Py_ssize_t i) noexcept {
     RELEASE_ASSERT(i >= 0, ""); // unlike list.__getitem__, PyList_GetItem doesn't do index wrapping
     try {
         return listGetitemUnboxed(static_cast<BoxedList*>(op), i);
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
 }
@@ -539,7 +540,7 @@ extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
     RELEASE_ASSERT(size == 0, "");
     try {
         return new BoxedList();
-    } catch (Box* b) {
+    } catch (ExcInfo e) {
         abort();
     }
 }
@@ -622,8 +623,8 @@ extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
 
     try {
         return listIAdd(l, b);
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return NULL;
     }
 }
@@ -643,8 +644,8 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
         else
             listDelitemSlice(l, new BoxedSlice(boxInt(ilow), boxInt(ihigh), None));
         return 0;
-    } catch (Box* b) {
-        PyErr_SetObject(b->cls, b);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
         return -1;
     }
 }
