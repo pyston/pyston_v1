@@ -262,6 +262,18 @@ apt-get source python2.7-dbg
 
 Then, run `make dbgpy_TESTNAME` and it will launch the test under gdb.  There's also a [wiki page](https://wiki.python.org/moin/DebuggingWithGdb) with some extra Python-specific GDB commands.
 
+### doxygen
+```
+sudo apt-get install doxygen graphviz
+
+# then run cmake (see below) and invoke the docs target
+ninja docs
+
+# now within the Pyston build directory open docs/html/index.html with a browser
+```
+
+Generate doxygen documentation for Pyston. Requires using the cmake build system.
+
 # (Experimental) CMake build system
 
 To use the toolchain from this document, do:
