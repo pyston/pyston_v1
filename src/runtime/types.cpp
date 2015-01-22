@@ -860,6 +860,32 @@ public:
         return r ? True : False;
     }
 
+    static Box* keys(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        BoxedList* rtn = new BoxedList();
+
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
+        for (const auto& p : attrs->hcls->attr_offsets) {
+            listAppend(rtn, boxString(p.first));
+        }
+        return rtn;
+    }
+
+    static Box* values(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        BoxedList* rtn = new BoxedList();
+
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
+        for (const auto& p : attrs->hcls->attr_offsets) {
+            listAppend(rtn, attrs->attr_list->attrs[p.second]);
+        }
+        return rtn;
+    }
+
     static Box* items(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1112,6 +1138,8 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__contains__",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::contains, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
+    attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
     attrwrapper_cls->freeze();
 

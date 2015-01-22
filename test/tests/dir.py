@@ -69,3 +69,11 @@ print len(fake()) == len(dir(TestClass()))
 
 for t in [str, int, list, set, dict]:
     test_in_dir(['__str__', '__new__', '__repr__', '__dir__', '__module__'], t)
+
+class C1(object):
+    a = 1
+    b = 2
+class C2(C1):
+    b = 3
+    c = 4
+print sorted([s for s in dir(C2) if s[0] != '_'])

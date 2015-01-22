@@ -1507,10 +1507,18 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
                 return makeAttrWrapper(obj);
         }
 
-        // I'm not sure if there's more to it than this:
+        // There's more to it than this:
         if (strcmp(attr, "__class__") == 0) {
             assert(obj->cls != instance_cls); // I think in this case __class__ is supposed to be the classobj?
             return obj->cls;
+        }
+
+        // This doesn't belong here either:
+        if (strcmp(attr, "__bases__") == 0 && isSubclass(obj->cls, type_cls)) {
+            BoxedClass* cls = static_cast<BoxedClass*>(obj);
+            if (cls->tp_base)
+                return new BoxedTuple({ static_cast<BoxedClass*>(obj)->tp_base });
+            return EmptyTuple;
         }
     }
 

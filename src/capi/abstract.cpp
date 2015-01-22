@@ -374,6 +374,22 @@ extern "C" int PySequence_Check(PyObject* s) noexcept {
     return s->cls->tp_as_sequence && s->cls->tp_as_sequence->sq_item != NULL;
 }
 
+extern "C" Py_ssize_t PySequence_Size(PyObject* s) noexcept {
+    PySequenceMethods* m;
+
+    if (s == NULL) {
+        null_error();
+        return -1;
+    }
+
+    m = s->cls->tp_as_sequence;
+    if (m && m->sq_length)
+        return m->sq_length(s);
+
+    type_error("object of type '%.200s' has no len()", s);
+    return -1;
+}
+
 static PyObject* binary_op1(PyObject* v, PyObject* w, const int op_slot) {
     PyObject* x;
     binaryfunc slotv = NULL;

@@ -96,6 +96,20 @@ Box* dictKeys(BoxedDict* self) {
     return rtn;
 }
 
+extern "C" PyObject* PyDict_Keys(PyObject* mp) noexcept {
+    if (mp == NULL || !PyDict_Check(mp)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    try {
+        return dictKeys(static_cast<BoxedDict*>(mp));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* dictViewKeys(BoxedDict* self) {
     if (!isSubclass(self->cls, dict_cls)) {
         raiseExcHelper(TypeError, "descriptor 'viewkeys' requires a 'dict' object but received a '%s'",
@@ -149,6 +163,10 @@ extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
         setCAPIException(e);
         return NULL;
     }
+}
+
+extern "C" int PyDict_Update(PyObject* a, PyObject* b) noexcept {
+    return PyDict_Merge(a, b, 1);
 }
 
 Box* dictGetitem(BoxedDict* self, Box* k) {
