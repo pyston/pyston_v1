@@ -2155,6 +2155,10 @@ extern "C" Box* callattr(Box* obj, const std::string* attr, CallattrFlags flags,
     int num_orig_args = 4 + std::min(4, npassed_args);
     if (argspec.num_keywords)
         num_orig_args++;
+
+    // Uncomment this to help debug if callsites aren't getting rewritten:
+    // printf("Slowpath call: %p (%s.%s)\n", __builtin_return_address(0), obj->cls->tp_name, attr->c_str());
+
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, "callattr"));
     Box* rtn;
