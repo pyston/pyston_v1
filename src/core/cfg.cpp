@@ -2200,6 +2200,8 @@ public:
             node->body[i]->accept(this);
         }
 
+        popRegion(); // for the retrun
+
         AST_Call* exit_call = makeCall(makeName(exitname_buf, AST_TYPE::Load, node->lineno));
         exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
         exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
@@ -2242,7 +2244,6 @@ public:
             curblock = orig_ending_block;
         }
 
-        popRegion(); // for the retrun
         if (return_dest->predecessors.size() == 0) {
             delete return_dest;
         } else {

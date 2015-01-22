@@ -2204,6 +2204,8 @@ private:
         SourceInfo* source = irstate->getSourceInfo();
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
+        // Additional names to remove; remove them after iteration is done to new mess up the iterators
+        std::vector<std::string> also_remove;
         for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
             if (allowableFakeEndingSymbol(it->first)) {
                 ++it;
@@ -2216,6 +2218,8 @@ private:
             if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
                 // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", it->first.c_str(), myblock->idx,
                 // it->second->isGrabbed(), it->second->getVrefs());
+                also_remove.push_back(getIsDefinedName(it->first));
+
                 it->second->decvref(emitter);
                 it = symbol_table.erase(it);
             } else if (source->phis->isRequiredAfter(it->first, myblock)) {
@@ -2243,6 +2247,10 @@ private:
 
                 ++it;
             }
+        }
+
+        for (const auto& s : also_remove) {
+            symbol_table.erase(s);
         }
 
         const PhiAnalysis::RequiredSet& all_phis = source->phis->getAllRequiredAfter(myblock);
