@@ -1695,7 +1695,9 @@ extern "C" bool nonzero(Box* obj) {
         func = getclsattr_internal(obj, "__len__", NULL);
 
     if (func == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls, "%s.__nonzero__",
+        ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
+                   || isSubclass(obj->cls, Exception),
+               "%s.__nonzero__",
                getTypeName(obj)->c_str()); // TODO
         return true;
     }

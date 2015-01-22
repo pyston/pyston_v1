@@ -1,6 +1,3 @@
-# expected: fail
-# - try-finally not supported yet
-#
 # try-finally support
 
 import sys
@@ -20,6 +17,19 @@ def basic_finally(n):
     print "5"
 print basic_finally(1)
 print basic_finally(0)
+print
+
+# If we return from inside the try part of a try-finally, we have to save the return value,
+# execute the finally block, then do the actual return.
+print "finally_after_return"
+def finally_after_return():
+    try:
+        print 1
+        return 2
+    finally:
+        print 3
+    print 4
+print finally_after_return()
 print
 
 # Return from a finally will disable any exception propagation:
@@ -85,19 +95,6 @@ try:
             pass
 except Exception, e:
     print e
-print
-
-# If we return from inside the try part of a try-finally, we have to save the return value,
-# execute the finally block, then do the actual return.
-print "finally_after_return"
-def finally_after_return():
-    try:
-        print 1
-        return 2
-    finally:
-        print 3
-    print 4
-print finally_after_return()
 print
 
 # Similarly for continues
@@ -278,7 +275,7 @@ def f6():
                 except:
                     pass
 
-            print sys.exc_info()
+            print sys.exc_info()[0]
             if reraise:
                 raise
 
@@ -299,8 +296,9 @@ def f6():
         inner(False, True)
         # Shouldn't get here
         raise Exception()
-    except TypeError:
+    except TypeError, e:
         print "Got TypeError as expected, since exc_info was None"
+        print e
 f6()
 
 def f7():

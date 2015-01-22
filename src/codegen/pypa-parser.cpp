@@ -61,7 +61,7 @@ AST_TYPE::AST_TYPE readItem(pypa::AstBoolOpType type) {
             break;
     }
     assert("Unknown AstBoolOpType" && false);
-    return AST_TYPE::Unreachable;
+    abort();
 }
 
 AST_TYPE::AST_TYPE readItem(pypa::AstBinOpType type) {
@@ -94,7 +94,7 @@ AST_TYPE::AST_TYPE readItem(pypa::AstBinOpType type) {
             break;
     }
     assert("Unknown AstBinOpType" && false);
-    return AST_TYPE::Unreachable;
+    abort();
 }
 
 AST_TYPE::AST_TYPE readItem(pypa::AstUnaryOpType type) {
@@ -111,7 +111,7 @@ AST_TYPE::AST_TYPE readItem(pypa::AstUnaryOpType type) {
             break;
     }
     assert("Unknown AstUnaryOpType" && false);
-    return AST_TYPE::Unreachable;
+    abort();
 }
 
 
@@ -162,7 +162,7 @@ AST_TYPE::AST_TYPE readItem(pypa::AstCompareOpType type) {
             break;
     }
     assert("Unknown AstCompareOpType" && false);
-    return AST_TYPE::Unreachable;
+    abort();
 }
 
 std::string readName(pypa::AstExpression& e) {

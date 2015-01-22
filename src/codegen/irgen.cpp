@@ -827,7 +827,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
                 continue;
 
-            // printf("%d %d %ld %ld\n", b->idx, b2->idx, phi_ending_symbol_tables[b2]->size(), phis->size());
+            // printf("(%d %ld) -> (%d %ld)\n", b2->idx, phi_ending_symbol_tables[b2]->size(), b->idx, phis->size());
             compareKeyset(phi_ending_symbol_tables[b2], phis);
             assert(phi_ending_symbol_tables[b2]->size() == phis->size());
         }

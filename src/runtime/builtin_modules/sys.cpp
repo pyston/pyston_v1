@@ -33,11 +33,24 @@ BoxedModule* sys_module;
 BoxedDict* sys_modules_dict;
 
 Box* sysExcInfo() {
-    ExcInfo exc = getFrameExcInfo();
-    assert(exc.type);
-    assert(exc.value);
-    assert(exc.traceback);
-    return new BoxedTuple({ exc.type, exc.value, exc.traceback });
+    ExcInfo* exc = getFrameExcInfo();
+    assert(exc->type);
+    assert(exc->value);
+    assert(exc->traceback);
+    return new BoxedTuple({ exc->type, exc->value, exc->traceback });
+}
+
+Box* sysExcClear() {
+    ExcInfo* exc = getFrameExcInfo();
+    assert(exc->type);
+    assert(exc->value);
+    assert(exc->traceback);
+
+    exc->type = None;
+    exc->value = None;
+    exc->traceback = None;
+
+    return None;
 }
 
 static Box* sysExit(Box* arg) {
@@ -212,6 +225,7 @@ void setupSys() {
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
 
     sys_module->giveAttr("exc_info", new BoxedFunction(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0)));
+    sys_module->giveAttr("exc_clear", new BoxedFunction(boxRTFunction((void*)sysExcClear, NONE, 0)));
     sys_module->giveAttr("exit", new BoxedFunction(boxRTFunction((void*)sysExit, NONE, 1, 1, false, false), { None }));
 
     sys_module->giveAttr("warnoptions", new BoxedList());

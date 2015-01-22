@@ -29,8 +29,9 @@ BoxedModule* getCurrentModule();
 class BoxedDict;
 BoxedDict* getLocals(bool only_user_visible);
 
-// Fetches the frame-local excinfo object, calculating it if necessary (from previous frames):
-ExcInfo getFrameExcInfo();
+// Fetches a writeable pointer to the frame-local excinfo object,
+// calculating it if necessary (from previous frames).
+ExcInfo* getFrameExcInfo();
 }
 
 #endif

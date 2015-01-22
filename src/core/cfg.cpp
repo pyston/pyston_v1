@@ -19,6 +19,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
+
 #include "analysis/scoping_analysis.h"
 #include "core/ast.h"
 #include "core/options.h"
@@ -62,6 +64,8 @@ static AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, in
     return name;
 }
 
+static const std::string RETURN_NAME("#rtnval");
+
 class CFGVisitor : public ASTVisitor {
 private:
     AST_TYPE::AST_TYPE root_type;
@@ -70,11 +74,28 @@ private:
     CFGBlock* curblock;
     ScopingAnalysis* scoping_analysis;
 
-    struct LoopInfo {
-        CFGBlock* continue_dest, *break_dest;
+    enum Why : int8_t {
+        FALLTHROUGH,
+        CONTINUE,
+        BREAK,
+        RETURN,
+        EXCEPTION,
     };
-    std::vector<LoopInfo> loops;
-    std::vector<CFGBlock*> returns;
+
+    // My first thought is to call this BlockInfo, but this is separate from the idea of cfg blocks.
+    struct RegionInfo {
+        CFGBlock* continue_dest, *break_dest, *return_dest;
+        bool say_why;
+        int did_why;
+        std::string why_name;
+
+        RegionInfo(CFGBlock* continue_dest, CFGBlock* break_dest, CFGBlock* return_dest, bool say_why,
+                   const std::string& why_name)
+            : continue_dest(continue_dest), break_dest(break_dest), return_dest(return_dest), say_why(say_why),
+              did_why(0), why_name(why_name) {}
+    };
+
+    std::vector<RegionInfo> regions;
 
     struct ExcBlockInfo {
         CFGBlock* exc_dest;
@@ -82,53 +103,88 @@ private:
     };
     std::vector<ExcBlockInfo> exc_handlers;
 
-    void pushLoop(CFGBlock* continue_dest, CFGBlock* break_dest) {
-        LoopInfo loop;
-        loop.continue_dest = continue_dest;
-        loop.break_dest = break_dest;
-        loops.push_back(loop);
+    void pushLoopRegion(CFGBlock* continue_dest, CFGBlock* break_dest) {
+        assert(continue_dest
+               != break_dest); // I guess this doesn't have to be true, but validates passing say_why=false
+        regions.emplace_back(continue_dest, break_dest, nullptr, false, "");
     }
 
-    void popLoop() { loops.pop_back(); }
+    void pushFinallyRegion(CFGBlock* finally_block, const std::string& why_name) {
+        regions.emplace_back(finally_block, finally_block, finally_block, true, why_name);
+    }
 
-    void pushReturn(CFGBlock* return_dest) { returns.push_back(return_dest); }
+    void popRegion() { regions.pop_back(); }
 
-    void popReturn() { returns.pop_back(); }
+    // XXX get rid of this
+    void pushReturnRegion(CFGBlock* return_dest) { regions.emplace_back(nullptr, nullptr, return_dest, false, ""); }
 
     void doReturn(AST_expr* value) {
         assert(value);
-        CFGBlock* rtn_dest = getReturn();
-        if (rtn_dest != NULL) {
-            pushAssign("#rtnval", value);
 
-            AST_Jump* j = makeJump();
-            j->target = rtn_dest;
-            curblock->connectTo(rtn_dest);
-            push_back(j);
-        } else {
-            AST_Return* node = new AST_Return();
-            node->value = value;
-            node->col_offset = value->col_offset;
-            node->lineno = value->lineno;
-            push_back(node);
+        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
+            if (region.return_dest) {
+                if (region.say_why) {
+                    pushAssign(region.why_name, makeNum(Why::RETURN));
+                    region.did_why |= (1 << Why::RETURN);
+                }
+
+                pushAssign(RETURN_NAME, value);
+
+                AST_Jump* j = makeJump();
+                j->target = region.return_dest;
+                curblock->connectTo(region.return_dest);
+                push_back(j);
+                curblock = NULL;
+                return;
+            }
         }
+
+        AST_Return* node = new AST_Return();
+        node->value = value;
+        node->col_offset = value->col_offset;
+        node->lineno = value->lineno;
+        push_back(node);
         curblock = NULL;
     }
 
-    CFGBlock* getContinue() {
-        assert(loops.size());
-        return loops.back().continue_dest;
+    void doContinue() {
+        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
+            if (region.continue_dest) {
+                if (region.say_why) {
+                    pushAssign(region.why_name, makeNum(Why::CONTINUE));
+                    region.did_why |= (1 << Why::CONTINUE);
+                }
+
+                AST_Jump* j = makeJump();
+                j->target = region.continue_dest;
+                curblock->connectTo(region.continue_dest, true);
+                push_back(j);
+                curblock = NULL;
+                return;
+            }
+        }
+
+        raiseExcHelper(SyntaxError, "'continue' not properly in loop");
     }
 
-    CFGBlock* getBreak() {
-        assert(loops.size());
-        return loops.back().break_dest;
-    }
+    void doBreak() {
+        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
+            if (region.break_dest) {
+                if (region.say_why) {
+                    pushAssign(region.why_name, makeNum(Why::BREAK));
+                    region.did_why |= (1 << Why::BREAK);
+                }
 
-    CFGBlock* getReturn() {
-        if (returns.size())
-            return returns.back();
-        return NULL;
+                AST_Jump* j = makeJump();
+                j->target = region.break_dest;
+                curblock->connectTo(region.break_dest, true);
+                push_back(j);
+                curblock = NULL;
+                return;
+            }
+        }
+
+        raiseExcHelper(SyntaxError, "'break' outside loop");
     }
 
     AST_expr* callNonzero(AST_expr* e) {
@@ -1040,8 +1096,7 @@ public:
     }
 
     ~CFGVisitor() {
-        assert(loops.size() == 0);
-        assert(returns.size() == 0);
+        assert(regions.size() == 0);
         assert(exc_handlers.size() == 0);
     }
 
@@ -1095,13 +1150,27 @@ public:
                     // Assigning from one temporary name to another:
                     curblock->push_back(node);
                     return;
+                } else if (asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str) {
+                    // Assigning to a temporary name from an expression that can't throw:
+                    curblock->push_back(node);
+                    return;
                 }
             }
         }
 
+        bool is_raise = (node->type == AST_TYPE::Raise);
+        // If we invoke a raise statement, generate an invoke where both destinations
+        // are the exception handler, since we know the non-exceptional path won't be taken.
+        // TODO: would be much better (both more efficient and require less special casing)
+        // if we just didn't generate this control flow as exceptions.
+
         CFGBlock* normal_dest = cfg->addBlock();
         // Add an extra exc_dest trampoline to prevent critical edges:
-        CFGBlock* exc_dest = cfg->addBlock();
+        CFGBlock* exc_dest;
+        if (is_raise)
+            exc_dest = normal_dest;
+        else
+            exc_dest = cfg->addBlock();
 
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
@@ -1111,7 +1180,8 @@ public:
 
         curblock->push_back(invoke);
         curblock->connectTo(normal_dest);
-        curblock->connectTo(exc_dest);
+        if (!is_raise)
+            curblock->connectTo(exc_dest);
 
         ExcBlockInfo& exc_info = exc_handlers.back();
 
@@ -1131,7 +1201,10 @@ public:
         curblock->push_back(j);
         curblock->connectTo(exc_info.exc_dest);
 
-        curblock = normal_dest;
+        if (is_raise)
+            curblock = NULL;
+        else
+            curblock = normal_dest;
     }
 
     bool visit_classdef(AST_ClassDef* node) override {
@@ -1530,6 +1603,9 @@ public:
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
 
+        if (!curblock)
+            return true;
+
         AST_expr* value = remapExpr(node->value);
         if (value == NULL)
             value = makeName("None", AST_TYPE::Load, node->lineno);
@@ -1596,17 +1672,8 @@ public:
         if (!curblock)
             return true;
 
-        if (loops.size() == 0) {
-            raiseExcHelper(SyntaxError, "'break' outside loop");
-        }
-
-        AST_Jump* j = makeJump();
-        push_back(j);
-        assert(loops.size());
-        j->target = getBreak();
-        curblock->connectTo(j->target, true);
-
-        curblock = NULL;
+        doBreak();
+        assert(!curblock);
         return true;
     }
 
@@ -1614,18 +1681,8 @@ public:
         if (!curblock)
             return true;
 
-        if (loops.size() == 0) {
-            // Note: error message is different than the 'break' case
-            raiseExcHelper(SyntaxError, "'continue' not properly in loop");
-        }
-
-        AST_Jump* j = makeJump();
-        push_back(j);
-        assert(loops.size());
-        j->target = getContinue();
-        curblock->connectTo(j->target, true);
-
-        curblock = NULL;
+        doContinue();
+        assert(!curblock);
         return true;
     }
 
@@ -1652,7 +1709,7 @@ public:
         // but we don't want it to be placed until after the orelse.
         CFGBlock* end = cfg->addDeferredBlock();
         end->info = "while_exit";
-        pushLoop(test_block, end);
+        pushLoopRegion(test_block, end);
 
         CFGBlock* body = cfg->addBlock();
         body->info = "while_body_start";
@@ -1669,7 +1726,7 @@ public:
             jbody->target = test_block;
             curblock->connectTo(test_block, true);
         }
-        popLoop();
+        popRegion();
 
         CFGBlock* orelse = cfg->addBlock();
         orelse->info = "while_orelse_start";
@@ -1749,7 +1806,7 @@ public:
         push_back(test_false_jump);
         test_false->connectTo(else_block);
 
-        pushLoop(test_block, end_block);
+        pushLoopRegion(test_block, end_block);
 
         curblock = loop_block;
         std::string next_name(nodeName(next_attr));
@@ -1759,7 +1816,7 @@ public:
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
         }
-        popLoop();
+        popRegion();
 
         if (curblock) {
             AST_expr* end_call = makeCall((hasnext_attr()));
@@ -1821,13 +1878,24 @@ public:
         if (!curblock)
             return true;
 
-        curblock->push_back(new AST_Unreachable());
         curblock = NULL;
 
         return true;
     }
 
     bool visit_tryexcept(AST_TryExcept* node) override {
+        // The pypa parser will generate a tryexcept node inside a try-finally block with
+        // no except clauses
+        if (node->handlers.size() == 0) {
+            assert(ENABLE_PYPA_PARSER);
+            assert(node->orelse.size() == 0);
+
+            for (AST_stmt* subnode : node->body) {
+                subnode->accept(this);
+            }
+            return true;
+        }
+
         assert(node->handlers.size() > 0);
 
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
@@ -1928,7 +1996,6 @@ public:
                 raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
                 raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
                 push_back(raise);
-                curblock->push_back(new AST_Unreachable());
                 curblock = NULL;
             }
         }
@@ -1939,6 +2006,158 @@ public:
         } else {
             cfg->placeBlock(join_block);
             curblock = join_block;
+        }
+
+        return true;
+    }
+
+    bool visit_tryfinally(AST_TryFinally* node) override {
+        CFGBlock* exc_handler_block = cfg->addDeferredBlock();
+        std::string exc_type_name = nodeName(node, "type");
+        std::string exc_value_name = nodeName(node, "value");
+        std::string exc_traceback_name = nodeName(node, "traceback");
+        std::string exc_why_name = nodeName(node, "why");
+        exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
+
+        CFGBlock* finally_block = cfg->addDeferredBlock();
+        pushFinallyRegion(finally_block, exc_why_name);
+
+        for (AST_stmt* subnode : node->body) {
+            subnode->accept(this);
+        }
+
+        exc_handlers.pop_back();
+
+        int did_why = regions.back().did_why; // bad to just reach in like this
+        popRegion();                          // finally region
+
+        if (curblock) {
+            // assign the exc_*_name variables to tell irgen that they won't be undefined?
+            // have an :UNDEF() langprimitive to not have to do any loading there?
+            pushAssign(exc_why_name, makeNum(Why::FALLTHROUGH));
+            AST_Jump* j = new AST_Jump();
+            j->target = finally_block;
+            push_back(j);
+            curblock->connectTo(finally_block);
+        }
+
+        if (exc_handler_block->predecessors.size() == 0) {
+            delete exc_handler_block;
+        } else {
+            cfg->placeBlock(exc_handler_block);
+            curblock = exc_handler_block;
+
+            pushAssign(exc_why_name, makeNum(Why::EXCEPTION));
+
+            AST_Jump* j = new AST_Jump();
+            j->target = finally_block;
+            push_back(j);
+            curblock->connectTo(finally_block);
+        }
+
+        cfg->placeBlock(finally_block);
+        curblock = finally_block;
+
+        for (AST_stmt* subnode : node->finalbody) {
+            subnode->accept(this);
+        }
+
+        if (curblock) {
+            // TODO: these 4 cases are pretty copy-pasted from each other:
+            if (did_why & (1 << Why::RETURN)) {
+                CFGBlock* doreturn = cfg->addBlock();
+                CFGBlock* otherwise = cfg->addBlock();
+
+                AST_Compare* compare = new AST_Compare();
+                compare->ops.push_back(AST_TYPE::Eq);
+                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
+                compare->comparators.push_back(makeNum(Why::RETURN));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = callNonzero(compare);
+                br->iftrue = doreturn;
+                br->iffalse = otherwise;
+                curblock->connectTo(doreturn);
+                curblock->connectTo(otherwise);
+                push_back(br);
+
+                curblock = doreturn;
+                doReturn(makeName(RETURN_NAME, AST_TYPE::Load, node->lineno));
+
+                curblock = otherwise;
+            }
+
+            if (did_why & (1 << Why::BREAK)) {
+                CFGBlock* doreturn = cfg->addBlock();
+                CFGBlock* otherwise = cfg->addBlock();
+
+                AST_Compare* compare = new AST_Compare();
+                compare->ops.push_back(AST_TYPE::Eq);
+                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
+                compare->comparators.push_back(makeNum(Why::BREAK));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = callNonzero(compare);
+                br->iftrue = doreturn;
+                br->iffalse = otherwise;
+                curblock->connectTo(doreturn);
+                curblock->connectTo(otherwise);
+                push_back(br);
+
+                curblock = doreturn;
+                doBreak();
+
+                curblock = otherwise;
+            }
+
+            if (did_why & (1 << Why::CONTINUE)) {
+                CFGBlock* doreturn = cfg->addBlock();
+                CFGBlock* otherwise = cfg->addBlock();
+
+                AST_Compare* compare = new AST_Compare();
+                compare->ops.push_back(AST_TYPE::Eq);
+                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
+                compare->comparators.push_back(makeNum(Why::CONTINUE));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = callNonzero(compare);
+                br->iftrue = doreturn;
+                br->iffalse = otherwise;
+                curblock->connectTo(doreturn);
+                curblock->connectTo(otherwise);
+                push_back(br);
+
+                curblock = doreturn;
+                doContinue();
+
+                curblock = otherwise;
+            }
+
+            AST_Compare* compare = new AST_Compare();
+            compare->ops.push_back(AST_TYPE::Eq);
+            compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
+            compare->comparators.push_back(makeNum(Why::EXCEPTION));
+
+            AST_Branch* br = new AST_Branch();
+            br->test = callNonzero(compare);
+
+            CFGBlock* reraise = cfg->addBlock();
+            CFGBlock* noexc = cfg->addBlock();
+
+            br->iftrue = reraise;
+            br->iffalse = noexc;
+            curblock->connectTo(reraise);
+            curblock->connectTo(noexc);
+            push_back(br);
+
+            curblock = reraise;
+            AST_Raise* raise = new AST_Raise();
+            raise->arg0 = makeName(exc_type_name, AST_TYPE::Load, node->lineno);
+            raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
+            raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
+            push_back(raise);
+
+            curblock = noexc;
         }
 
         return true;
@@ -1964,26 +2183,24 @@ public:
         }
 
         CFGBlock* continue_dest = NULL, * break_dest = NULL;
-        CFGBlock* orig_continue_dest = NULL, * orig_break_dest = NULL;
-        if (loops.size()) {
+        if (regions.size()) {
             continue_dest = cfg->addDeferredBlock();
             continue_dest->info = "with_continue";
             break_dest = cfg->addDeferredBlock();
             break_dest->info = "with_break";
 
-            orig_continue_dest = getContinue();
-            orig_break_dest = getBreak();
-
-            pushLoop(continue_dest, break_dest);
+            pushLoopRegion(continue_dest, break_dest);
         }
 
         CFGBlock* return_dest = cfg->addDeferredBlock();
         return_dest->info = "with_return";
-        pushReturn(return_dest);
+        pushReturnRegion(return_dest);
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
         }
+
+        popRegion(); // for the retrun
 
         AST_Call* exit_call = makeCall(makeName(exitname_buf, AST_TYPE::Load, node->lineno));
         exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
@@ -1994,6 +2211,7 @@ public:
         CFGBlock* orig_ending_block = curblock;
 
         if (continue_dest) {
+            popRegion(); // for the loop region
             if (continue_dest->predecessors.size() == 0) {
                 delete continue_dest;
             } else {
@@ -2006,10 +2224,7 @@ public:
                 push_back(makeExpr(exit_call));
 
                 cfg->placeBlock(continue_dest);
-                AST_Jump* jcontinue = makeJump();
-                jcontinue->target = orig_continue_dest;
-                push_back(jcontinue);
-                continue_dest->connectTo(orig_continue_dest, true);
+                doContinue();
             }
 
             if (break_dest->predecessors.size() == 0) {
@@ -2024,16 +2239,11 @@ public:
                 push_back(makeExpr(exit_call));
 
                 cfg->placeBlock(break_dest);
-                AST_Jump* jbreak = makeJump();
-                jbreak->target = orig_break_dest;
-                push_back(jbreak);
-                break_dest->connectTo(orig_break_dest, true);
+                doBreak();
             }
-            popLoop();
             curblock = orig_ending_block;
         }
 
-        popReturn();
         if (return_dest->predecessors.size() == 0) {
             delete return_dest;
         } else {
@@ -2046,7 +2256,7 @@ public:
             exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
             push_back(makeExpr(exit_call));
 
-            doReturn(makeName("#rtnval", AST_TYPE::Load, node->lineno));
+            doReturn(makeName(RETURN_NAME, AST_TYPE::Load, node->lineno));
             curblock = orig_ending_block;
         }
 
@@ -2163,7 +2373,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (b->successors.size() == 0) {
             AST_stmt* terminator = b->body.back();
             assert(terminator->type == AST_TYPE::Return || terminator->type == AST_TYPE::Raise
-                   || terminator->type == AST_TYPE::Unreachable);
+                   || terminator->type == AST_TYPE::Raise);
         }
 
         if (b->predecessors.size() == 0)
@@ -2224,6 +2434,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             no_dups = false;
         }
     }
+    if (!no_dups)
+        rtn->print();
     assert(no_dups);
 
 // TODO make sure the result of Invoke nodes are not used on the exceptional path
@@ -2243,12 +2455,19 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             if (b2->predecessors.size() != 1)
                 break;
 
+            AST_TYPE::AST_TYPE end_ast_type = b->body[b->body.size() - 1]->type;
+            assert(end_ast_type == AST_TYPE::Jump || end_ast_type == AST_TYPE::Invoke);
+            if (end_ast_type == AST_TYPE::Invoke) {
+                // TODO probably shouldn't be generating these anyway:
+                auto invoke = ast_cast<AST_Invoke>(b->body.back());
+                assert(invoke->normal_dest == invoke->exc_dest);
+                break;
+            }
+
             if (VERBOSITY()) {
                 // rtn->print();
                 printf("Joining blocks %d and %d\n", b->idx, b2->idx);
             }
-
-            assert(b->body[b->body.size() - 1]->type == AST_TYPE::Jump);
 
             b->body.pop_back();
             b->body.insert(b->body.end(), b2->body.begin(), b2->body.end());

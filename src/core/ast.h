@@ -125,7 +125,6 @@ enum AST_TYPE {
     AugBinOp = 203,
     Invoke = 204,
     LangPrimitive = 205,
-    Unreachable = 206,
 
     // These aren't real AST types, but since we use AST types to represent binexp types
     // and divmod+truediv are essentially types of binops, we add them here (at least for now):
@@ -989,16 +988,6 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::LangPrimitive;
 };
 
-class AST_Unreachable : public AST_stmt {
-public:
-    virtual void accept(ASTVisitor* v);
-    virtual void accept_stmt(StmtVisitor* v);
-
-    AST_Unreachable() : AST_stmt(AST_TYPE::Unreachable) {}
-
-    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Unreachable;
-};
-
 template <typename T> T* ast_cast(AST* node) {
     assert(node->type == T::TYPE);
     return static_cast<T*>(node);
@@ -1066,7 +1055,6 @@ public:
     virtual bool visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
-    virtual bool visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
@@ -1135,7 +1123,6 @@ public:
     virtual bool visit_tryfinally(AST_TryFinally* node) { return false; }
     virtual bool visit_tuple(AST_Tuple* node) { return false; }
     virtual bool visit_unaryop(AST_UnaryOp* node) { return false; }
-    virtual bool visit_unreachable(AST_Unreachable* node) { return false; }
     virtual bool visit_while(AST_While* node) { return false; }
     virtual bool visit_with(AST_With* node) { return false; }
     virtual bool visit_yield(AST_Yield* node) { return false; }
@@ -1206,7 +1193,6 @@ public:
     virtual void visit_return(AST_Return* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_tryexcept(AST_TryExcept* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_tryfinally(AST_TryFinally* node) { RELEASE_ASSERT(0, ""); }
-    virtual void visit_unreachable(AST_Unreachable* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_while(AST_While* node) { RELEASE_ASSERT(0, ""); }
     virtual void visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
 
@@ -1279,7 +1265,6 @@ public:
     virtual bool visit_tryexcept(AST_TryExcept* node);
     virtual bool visit_tryfinally(AST_TryFinally* node);
     virtual bool visit_unaryop(AST_UnaryOp* node);
-    virtual bool visit_unreachable(AST_Unreachable* node);
     virtual bool visit_while(AST_While* node);
     virtual bool visit_with(AST_With* node);
     virtual bool visit_yield(AST_Yield* node);
