@@ -598,6 +598,8 @@ private:
                 llvm::Value* v = i1FromBool(emitter, rtn);
                 assert(v->getType() == g.i1);
 
+                obj->decvref(emitter);
+
                 return boolFromI1(emitter, v);
             }
             case AST_LangPrimitive::SET_EXC_INFO: {
