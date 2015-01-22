@@ -1,6 +1,3 @@
-# expected: fail
-# - working on it
-
 import sys
 
 def compact(s):
@@ -13,7 +10,7 @@ def compact(s):
     return s
 
 # TODO This should be a subclass of Exception not object:
-class NotPossible(object):
+class NotPossible(Exception):
     pass
 
 P = 1000000007

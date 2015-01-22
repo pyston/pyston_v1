@@ -473,7 +473,11 @@ public:
 struct ExcInfo {
     Box* type, *value, *traceback;
 
+#ifndef NDEBUG
+    ExcInfo(Box* type, Box* value, Box* traceback);
+#else
     ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
+#endif
     bool matches(BoxedClass* cls) const;
 };
 

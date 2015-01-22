@@ -899,6 +899,14 @@ public:
         }
         return rtn;
     }
+
+    static Box* len(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
+        return boxInt(attrs->hcls->attr_offsets.size());
+    }
 };
 
 Box* makeAttrWrapper(Box* b) {
@@ -1141,6 +1149,7 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
+    attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules

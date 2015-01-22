@@ -229,19 +229,27 @@ void raise0() {
     raiseRaw(*exc_info);
 }
 
+#ifndef NDEBUG
+ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {
+    if (this->type && this->type != None)
+        RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
+                       getTypeName(this->type)->c_str());
+}
+#endif
+
 bool ExcInfo::matches(BoxedClass* cls) const {
-    RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet");
+    assert(this->type);
+    RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
+                   getTypeName(this->type)->c_str());
     return isSubclass(static_cast<BoxedClass*>(this->type), cls);
 }
 
 void raise3(Box* arg0, Box* arg1, Box* arg2) {
-    RELEASE_ASSERT(arg2 == None, "unsupported");
-
     // TODO switch this to PyErr_Normalize
 
     if (isSubclass(arg0->cls, type_cls)) {
         BoxedClass* c = static_cast<BoxedClass*>(arg0);
-        if (isSubclass(c, Exception)) {
+        if (isSubclass(c, BaseException)) {
             Box* exc_obj;
             if (arg1 != None)
                 exc_obj = exceptionNew2(c, arg1);
@@ -249,16 +257,17 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
                 exc_obj = exceptionNew1(c);
 
             raiseRaw(ExcInfo(c, exc_obj, arg2));
-        } else {
-            raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
-                           getTypeName(arg0)->c_str());
         }
     }
 
-    if (arg1 != None)
-        raiseExcHelper(TypeError, "instance exception may not have a separate value");
+    if (isSubclass(arg0->cls, BaseException)) {
+        if (arg1 != None)
+            raiseExcHelper(TypeError, "instance exception may not have a separate value");
+        raiseRaw(ExcInfo(arg0->cls, arg0, arg2));
+    }
 
-    raiseRaw(ExcInfo(arg0, arg1, arg2));
+    raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
+                   getTypeName(arg0)->c_str());
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
