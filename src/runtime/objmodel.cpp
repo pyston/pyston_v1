@@ -1455,6 +1455,16 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     static StatCounter slowpath_getattr("slowpath_getattr");
     slowpath_getattr.log();
 
+    bool is_dunder = (attr[0] == '_' && attr[1] == '_');
+
+    if (is_dunder) {
+        if (strcmp(attr, "__dict__") == 0) {
+            // TODO this is wrong, should be added at the class level as a getset
+            if (obj->cls->instancesHaveHCAttrs())
+                return makeAttrWrapper(obj);
+        }
+    }
+
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
@@ -1500,13 +1510,7 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
         return val;
     }
 
-    if (attr[0] == '_' && attr[1] == '_') {
-        if (strcmp(attr, "__dict__") == 0) {
-            // TODO this is wrong, should be added at the class level as a getset
-            if (obj->cls->instancesHaveHCAttrs())
-                return makeAttrWrapper(obj);
-        }
-
+    if (is_dunder) {
         // There's more to it than this:
         if (strcmp(attr, "__class__") == 0) {
             assert(obj->cls != instance_cls); // I think in this case __class__ is supposed to be the classobj?
