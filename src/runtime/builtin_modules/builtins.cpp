@@ -979,6 +979,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("None", None);
 
+    builtins_module->giveAttr("__debug__", False);
+
     builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
     notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
