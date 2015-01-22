@@ -1,6 +1,3 @@
-# expected: fail
-# - try-finally not supported yet
-#
 # try-finally support
 
 import sys
@@ -278,7 +275,7 @@ def f6():
                 except:
                     pass
 
-            print sys.exc_info()
+            print sys.exc_info()[0]
             if reraise:
                 raise
 
@@ -299,8 +296,9 @@ def f6():
         inner(False, True)
         # Shouldn't get here
         raise Exception()
-    except TypeError:
+    except TypeError, e:
         print "Got TypeError as expected, since exc_info was None"
+        print e
 f6()
 
 def f7():

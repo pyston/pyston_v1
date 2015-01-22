@@ -219,7 +219,14 @@ extern "C" void exit(int code) {
 }
 
 void raise0() {
-    raiseRaw(getFrameExcInfo());
+    ExcInfo* exc_info = getFrameExcInfo();
+    assert(exc_info->type);
+
+    // TODO need to clean up when we call normalize, do_raise, etc
+    if (exc_info->type == None)
+        raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not NoneType");
+
+    raiseRaw(*exc_info);
 }
 
 bool ExcInfo::matches(BoxedClass* cls) const {
@@ -229,6 +236,8 @@ bool ExcInfo::matches(BoxedClass* cls) const {
 
 void raise3(Box* arg0, Box* arg1, Box* arg2) {
     RELEASE_ASSERT(arg2 == None, "unsupported");
+
+    // TODO switch this to PyErr_Normalize
 
     if (isSubclass(arg0->cls, type_cls)) {
         BoxedClass* c = static_cast<BoxedClass*>(arg0);

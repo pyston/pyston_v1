@@ -468,35 +468,40 @@ const LineInfo* getMostRecentLineInfo() {
     return lineInfoForFrame(*frame);
 }
 
-ExcInfo getFrameExcInfo() {
+ExcInfo* getFrameExcInfo() {
     std::vector<ExcInfo*> to_update;
+    ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
     for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
         FrameInfo* frame_info = frame_iter.getFrameInfo();
 
-        cur_exc = &frame_info->exc;
-        if (!cur_exc->type) {
-            to_update.push_back(cur_exc);
+        copy_from_exc = &frame_info->exc;
+        if (!cur_exc)
+            cur_exc = copy_from_exc;
+
+        if (!copy_from_exc->type) {
+            to_update.push_back(copy_from_exc);
             continue;
         }
 
         break;
     }
 
-    assert(cur_exc); // Only way this could still be NULL is if there weren't any python frames
+    assert(copy_from_exc); // Only way this could still be NULL is if there weren't any python frames
 
-    if (!cur_exc->type) {
+    if (!copy_from_exc->type) {
         // No exceptions found:
-        *cur_exc = ExcInfo(None, None, None);
+        *copy_from_exc = ExcInfo(None, None, None);
     }
 
-    assert(cur_exc->value);
-    assert(cur_exc->traceback);
+    assert(copy_from_exc->value);
+    assert(copy_from_exc->traceback);
 
     for (auto* ex : to_update) {
-        *ex = *cur_exc;
+        *ex = *copy_from_exc;
     }
-    return *cur_exc;
+    assert(cur_exc);
+    return cur_exc;
 }
 
 CompiledFunction* getTopCompiledFunction() {

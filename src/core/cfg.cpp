@@ -157,7 +157,7 @@ private:
 
                 AST_Jump* j = makeJump();
                 j->target = region.continue_dest;
-                curblock->connectTo(region.continue_dest);
+                curblock->connectTo(region.continue_dest, true);
                 push_back(j);
                 curblock = NULL;
                 return;
@@ -177,7 +177,7 @@ private:
 
                 AST_Jump* j = makeJump();
                 j->target = region.break_dest;
-                curblock->connectTo(region.break_dest);
+                curblock->connectTo(region.break_dest, true);
                 push_back(j);
                 curblock = NULL;
                 return;
@@ -2016,10 +2016,8 @@ public:
 
         exc_handlers.pop_back();
 
-        int did_why = regions.back().did_why;          // bad to just reach in like this
-        assert((did_why & (1 << Why::BREAK)) == 0);    // haven't added this yet
-        assert((did_why & (1 << Why::CONTINUE)) == 0); // haven't added this yet
-        popRegion();                                   // finally region
+        int did_why = regions.back().did_why; // bad to just reach in like this
+        popRegion();                          // finally region
 
         if (curblock) {
             // assign the exc_*_name variables to tell irgen that they won't be undefined?
@@ -2053,6 +2051,7 @@ public:
         }
 
         if (curblock) {
+            // TODO: these 4 cases are pretty copy-pasted from each other:
             if (did_why & (1 << Why::RETURN)) {
                 CFGBlock* doreturn = cfg->addBlock();
                 CFGBlock* otherwise = cfg->addBlock();
@@ -2076,8 +2075,51 @@ public:
                 curblock = otherwise;
             }
 
-            CFGBlock* reraise = cfg->addBlock();
-            CFGBlock* noexc = cfg->addBlock();
+            if (did_why & (1 << Why::BREAK)) {
+                CFGBlock* doreturn = cfg->addBlock();
+                CFGBlock* otherwise = cfg->addBlock();
+
+                AST_Compare* compare = new AST_Compare();
+                compare->ops.push_back(AST_TYPE::Eq);
+                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
+                compare->comparators.push_back(makeNum(Why::BREAK));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = callNonzero(compare);
+                br->iftrue = doreturn;
+                br->iffalse = otherwise;
+                curblock->connectTo(doreturn);
+                curblock->connectTo(otherwise);
+                push_back(br);
+
+                curblock = doreturn;
+                doBreak();
+
+                curblock = otherwise;
+            }
+
+            if (did_why & (1 << Why::CONTINUE)) {
+                CFGBlock* doreturn = cfg->addBlock();
+                CFGBlock* otherwise = cfg->addBlock();
+
+                AST_Compare* compare = new AST_Compare();
+                compare->ops.push_back(AST_TYPE::Eq);
+                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
+                compare->comparators.push_back(makeNum(Why::CONTINUE));
+
+                AST_Branch* br = new AST_Branch();
+                br->test = callNonzero(compare);
+                br->iftrue = doreturn;
+                br->iffalse = otherwise;
+                curblock->connectTo(doreturn);
+                curblock->connectTo(otherwise);
+                push_back(br);
+
+                curblock = doreturn;
+                doContinue();
+
+                curblock = otherwise;
+            }
 
             AST_Compare* compare = new AST_Compare();
             compare->ops.push_back(AST_TYPE::Eq);
@@ -2086,6 +2128,10 @@ public:
 
             AST_Branch* br = new AST_Branch();
             br->test = callNonzero(compare);
+
+            CFGBlock* reraise = cfg->addBlock();
+            CFGBlock* noexc = cfg->addBlock();
+
             br->iftrue = reraise;
             br->iffalse = noexc;
             curblock->connectTo(reraise);
