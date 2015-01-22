@@ -476,10 +476,6 @@ extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
     Py_FatalError("unimplemented");
 };
 
-extern "C" Py_ssize_t PySequence_Size(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {
     Py_FatalError("unimplemented");
 }
@@ -497,7 +493,8 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
         // Not sure if this is really the same:
         return getitem(o, boxInt(i));
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return NULL;
     }
 }
 
@@ -1304,7 +1301,6 @@ void setupCAPI() {
 
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
-    capifunc_cls->giveAttr("__str__", capifunc_cls->getattr("__repr__"));
 
     capifunc_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true)));

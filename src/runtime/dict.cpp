@@ -48,13 +48,18 @@ Box* dictRepr(BoxedDict* self) {
 }
 
 Box* dictClear(BoxedDict* self) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'clear' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     self->d.clear();
     return None;
 }
 
 Box* dictCopy(BoxedDict* self) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'copy' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     BoxedDict* r = new BoxedDict();
     r->d.insert(self->d.begin(), self->d.end());
@@ -91,6 +96,20 @@ Box* dictKeys(BoxedDict* self) {
     return rtn;
 }
 
+extern "C" PyObject* PyDict_Keys(PyObject* mp) noexcept {
+    if (mp == NULL || !PyDict_Check(mp)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    try {
+        return dictKeys(static_cast<BoxedDict*>(mp));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* dictViewKeys(BoxedDict* self) {
     if (!isSubclass(self->cls, dict_cls)) {
         raiseExcHelper(TypeError, "descriptor 'viewkeys' requires a 'dict' object but received a '%s'",
@@ -119,7 +138,10 @@ Box* dictViewItems(BoxedDict* self) {
 }
 
 Box* dictLen(BoxedDict* self) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__len__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     return boxInt(self->d.size());
 }
 
@@ -143,8 +165,14 @@ extern "C" PyObject* PyDict_Copy(PyObject* o) noexcept {
     }
 }
 
+extern "C" int PyDict_Update(PyObject* a, PyObject* b) noexcept {
+    return PyDict_Merge(a, b, 1);
+}
+
 Box* dictGetitem(BoxedDict* self, Box* k) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__getitem__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
@@ -237,7 +265,9 @@ Box* dictSetitem(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictDelitem(BoxedDict* self, Box* k) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__delitem__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
@@ -255,7 +285,9 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
 }
 
 Box* dictPop(BoxedDict* self, Box* k, Box* d) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'pop' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
@@ -276,7 +308,9 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
 }
 
 Box* dictPopitem(BoxedDict* self) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'popitem' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.begin();
     if (it == self->d.end()) {
@@ -292,7 +326,9 @@ Box* dictPopitem(BoxedDict* self) {
 }
 
 Box* dictGet(BoxedDict* self, Box* k, Box* d) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'get' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it == self->d.end())
@@ -302,7 +338,9 @@ Box* dictGet(BoxedDict* self, Box* k, Box* d) {
 }
 
 Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'setdefault' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto it = self->d.find(k);
     if (it != self->d.end())
@@ -313,7 +351,10 @@ Box* dictSetdefault(BoxedDict* self, Box* k, Box* v) {
 }
 
 Box* dictContains(BoxedDict* self, Box* k) {
-    assert(self->cls == dict_cls);
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__contains__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
+
     return boxBool(self->d.count(k) != 0);
 }
 
@@ -322,7 +363,9 @@ Box* dictNonzero(BoxedDict* self) {
 }
 
 Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
-    RELEASE_ASSERT(self->cls == dict_cls, "");
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor 'fromkeys' requires a 'dict' object but received a '%s'",
+                       getTypeName(self)->c_str());
 
     auto rtn = new BoxedDict();
     for (Box* e : iterable->pyElements()) {
@@ -343,9 +386,7 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
         raiseExcHelper(TypeError, "dict.__new__(%s): %s is not a subtype of dict", getNameOfClass(cls)->c_str(),
                        getNameOfClass(cls)->c_str());
 
-    RELEASE_ASSERT(cls == dict_cls, "");
-
-    return new BoxedDict();
+    return new (cls) BoxedDict();
 }
 
 void dictMerge(BoxedDict* self, Box* other) {
@@ -505,7 +546,6 @@ void setupDict() {
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));
     dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NONE, 1, 0, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
-    dict_cls->giveAttr("__str__", dict_cls->getattr("__repr__"));
 
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));

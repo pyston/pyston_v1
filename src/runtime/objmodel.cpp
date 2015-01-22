@@ -1463,12 +1463,6 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
 #endif
     }
 
-    if (strcmp(attr, "__dict__") == 0) {
-        // TODO this is wrong, should be added at the class level as a getset
-        if (obj->cls->instancesHaveHCAttrs())
-            return makeAttrWrapper(obj);
-    }
-
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getattr"));
 
@@ -1505,6 +1499,29 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     if (val) {
         return val;
     }
+
+    if (attr[0] == '_' && attr[1] == '_') {
+        if (strcmp(attr, "__dict__") == 0) {
+            // TODO this is wrong, should be added at the class level as a getset
+            if (obj->cls->instancesHaveHCAttrs())
+                return makeAttrWrapper(obj);
+        }
+
+        // There's more to it than this:
+        if (strcmp(attr, "__class__") == 0) {
+            assert(obj->cls != instance_cls); // I think in this case __class__ is supposed to be the classobj?
+            return obj->cls;
+        }
+
+        // This doesn't belong here either:
+        if (strcmp(attr, "__bases__") == 0 && isSubclass(obj->cls, type_cls)) {
+            BoxedClass* cls = static_cast<BoxedClass*>(obj);
+            if (cls->tp_base)
+                return new BoxedTuple({ static_cast<BoxedClass*>(obj)->tp_base });
+            return EmptyTuple;
+        }
+    }
+
     raiseAttributeError(obj, attr);
 }
 
@@ -1723,6 +1740,8 @@ extern "C" BoxedString* str(Box* obj) {
 
     if (obj->cls != str_cls) {
         static const std::string str_str("__str__");
+        // TODO could do an IC optimization here (once we do rewrites here at all):
+        // if __str__ is objectStr, just guard on that and call repr directly.
         obj = callattrInternal(obj, &str_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
@@ -2136,6 +2155,10 @@ extern "C" Box* callattr(Box* obj, const std::string* attr, CallattrFlags flags,
     int num_orig_args = 4 + std::min(4, npassed_args);
     if (argspec.num_keywords)
         num_orig_args++;
+
+    // Uncomment this to help debug if callsites aren't getting rewritten:
+    // printf("Slowpath call: %p (%s.%s)\n", __builtin_return_address(0), obj->cls->tp_name, attr->c_str());
+
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
         __builtin_extract_return_addr(__builtin_return_address(0)), num_orig_args, "callattr"));
     Box* rtn;
