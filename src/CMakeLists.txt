@@ -20,7 +20,15 @@ file(GLOB GC_SRCS gc/*.cpp)
 file(GLOB RUNTIME_BUILTIN_MODULES_SRCS runtime/builtin_modules/*.cpp)
 file(GLOB RUNTIME_SRCS runtime/*.cpp)
 
-add_library(PYSTON_OBJECTS OBJECT codegen/profiling/profiling.cpp ${ANALYSIS_SRCS} ${ASM_WRITING_SRCS} ${CAPI_SRCS} ${CODEGEN_SRCS} ${CODEGEN_IRGEN_SRCS} ${CODEGEN_OPT_SRCS} ${CORE_SRCS} ${GC_SRCS} ${RUNTIME_BUILTIN_MODULES_SRCS} ${RUNTIME_SRCS})
+if(ENABLE_GPERFTOOLS)
+  set(OPTIONAL_SRCS ${OPTIONAL_SRCS} codegen/profiling/pprof.cpp)
+endif()
+
+if(ENABLE_OPROFILE)
+  set(OPTIONAL_SRCS codegen/profiling/oprofile.cpp)
+endif()
+
+add_library(PYSTON_OBJECTS OBJECT codegen/profiling/profiling.cpp ${ANALYSIS_SRCS} ${ASM_WRITING_SRCS} ${CAPI_SRCS} ${CODEGEN_SRCS} ${CODEGEN_IRGEN_SRCS} ${CODEGEN_OPT_SRCS} ${CORE_SRCS} ${GC_SRCS} ${RUNTIME_BUILTIN_MODULES_SRCS} ${RUNTIME_SRCS} ${OPTIONAL_SRCS})
 add_dependencies(PYSTON_OBJECTS libunwind pypa ${LLVM_LIBS})
 add_library(PYSTON_MAIN_OBJECT OBJECT jit.cpp)
 add_dependencies(PYSTON_MAIN_OBJECT ${LLVM_LIBS})
