@@ -1,5 +1,7 @@
-from thread import start_new_thread
+from thread import start_new_thread, allocate_lock
 import time
+
+print type(allocate_lock())
 
 done = 0
 def run(arg):

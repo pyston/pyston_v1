@@ -45,9 +45,27 @@ Box* startNewThread(Box* target, Box* args) {
     return boxInt(thread_id ^ 0x12345678901L);
 }
 
+static BoxedClass* thread_lock_cls;
+class BoxedThreadLock : public Box {
+public:
+    BoxedThreadLock() {}
+
+    DEFAULT_CLASS(thread_lock_cls);
+};
+
+Box* allocateLock() {
+    return new BoxedThreadLock();
+}
+
 void setupThread() {
     thread_module = createModule("thread", "__builtin__");
 
     thread_module->giveAttr("start_new_thread", new BoxedFunction(boxRTFunction((void*)startNewThread, BOXED_INT, 2)));
+    thread_module->giveAttr("allocate_lock", new BoxedFunction(boxRTFunction((void*)allocateLock, UNKNOWN, 0)));
+
+    thread_lock_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLock), false);
+    thread_lock_cls->giveAttr("__name__", boxStrConstant("lock"));
+    thread_lock_cls->giveAttr("__module__", boxStrConstant("thread"));
+    thread_lock_cls->freeze();
 }
 }

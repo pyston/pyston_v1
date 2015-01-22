@@ -28,8 +28,8 @@ namespace pyston {
 int AST::next_lineno = 100000;
 
 AST::AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {
-    //if (lineno == 100644)
-        //raise(SIGTRAP);
+    // if (lineno == 100644)
+    // raise(SIGTRAP);
 }
 
 #endif
