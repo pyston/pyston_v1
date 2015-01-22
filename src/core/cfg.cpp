@@ -148,9 +148,19 @@ private:
     }
 
     void doContinue() {
-        for (const auto& region : llvm::make_range(regions.rend(), regions.rbegin())) {
+        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
             if (region.continue_dest) {
-                abort();
+                if (region.say_why) {
+                    pushAssign(region.why_name, makeNum(Why::CONTINUE));
+                    region.did_why |= (1 << Why::CONTINUE);
+                }
+
+                AST_Jump* j = makeJump();
+                j->target = region.continue_dest;
+                curblock->connectTo(region.continue_dest);
+                push_back(j);
+                curblock = NULL;
+                return;
             }
         }
 
@@ -158,9 +168,19 @@ private:
     }
 
     void doBreak() {
-        for (const auto& region : llvm::make_range(regions.rend(), regions.rbegin())) {
+        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
             if (region.break_dest) {
-                abort();
+                if (region.say_why) {
+                    pushAssign(region.why_name, makeNum(Why::BREAK));
+                    region.did_why |= (1 << Why::BREAK);
+                }
+
+                AST_Jump* j = makeJump();
+                j->target = region.break_dest;
+                curblock->connectTo(region.break_dest);
+                push_back(j);
+                curblock = NULL;
+                return;
             }
         }
 
@@ -1138,9 +1158,19 @@ public:
             }
         }
 
+        bool is_raise = (node->type == AST_TYPE::Raise);
+        // If we invoke a raise statement, generate an invoke where both destinations
+        // are the exception handler, since we know the non-exceptional path won't be taken.
+        // TODO: would be much better (both more efficient and require less special casing)
+        // if we just didn't generate this control flow as exceptions.
+
         CFGBlock* normal_dest = cfg->addBlock();
         // Add an extra exc_dest trampoline to prevent critical edges:
-        CFGBlock* exc_dest = cfg->addBlock();
+        CFGBlock* exc_dest;
+        if (is_raise)
+            exc_dest = normal_dest;
+        else
+            exc_dest = cfg->addBlock();
 
         AST_Invoke* invoke = new AST_Invoke(node);
         invoke->normal_dest = normal_dest;
@@ -1150,7 +1180,8 @@ public:
 
         curblock->push_back(invoke);
         curblock->connectTo(normal_dest);
-        curblock->connectTo(exc_dest);
+        if (!is_raise)
+            curblock->connectTo(exc_dest);
 
         ExcBlockInfo& exc_info = exc_handlers.back();
 
@@ -1170,7 +1201,10 @@ public:
         curblock->push_back(j);
         curblock->connectTo(exc_info.exc_dest);
 
-        curblock = normal_dest;
+        if (is_raise)
+            curblock = NULL;
+        else
+            curblock = normal_dest;
     }
 
     bool visit_classdef(AST_ClassDef* node) override {
@@ -1568,6 +1602,9 @@ public:
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda) {
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
+
+        if (!curblock)
+            return true;
 
         AST_expr* value = remapExpr(node->value);
         if (value == NULL)
@@ -1979,8 +2016,10 @@ public:
 
         exc_handlers.pop_back();
 
-        int did_why = regions.back().did_why; // bad to just reach in like this
-        popRegion();                          // finally region
+        int did_why = regions.back().did_why;          // bad to just reach in like this
+        assert((did_why & (1 << Why::BREAK)) == 0);    // haven't added this yet
+        assert((did_why & (1 << Why::CONTINUE)) == 0); // haven't added this yet
+        popRegion();                                   // finally region
 
         if (curblock) {
             // assign the exc_*_name variables to tell irgen that they won't be undefined?
@@ -2357,12 +2396,19 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             if (b2->predecessors.size() != 1)
                 break;
 
+            AST_TYPE::AST_TYPE end_ast_type = b->body[b->body.size() - 1]->type;
+            assert(end_ast_type == AST_TYPE::Jump || end_ast_type == AST_TYPE::Invoke);
+            if (end_ast_type == AST_TYPE::Invoke) {
+                // TODO probably shouldn't be generating these anyway:
+                auto invoke = ast_cast<AST_Invoke>(b->body.back());
+                assert(invoke->normal_dest == invoke->exc_dest);
+                break;
+            }
+
             if (VERBOSITY()) {
                 // rtn->print();
                 printf("Joining blocks %d and %d\n", b->idx, b2->idx);
             }
-
-            assert(b->body[b->body.size() - 1]->type == AST_TYPE::Jump);
 
             b->body.pop_back();
             b->body.insert(b->body.end(), b2->body.begin(), b2->body.end());
