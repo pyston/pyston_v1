@@ -247,7 +247,8 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
                 exc_obj = exceptionNew2(c, arg1);
             else
                 exc_obj = exceptionNew1(c);
-            raiseExc(exc_obj);
+
+            raiseRaw(ExcInfo(c, exc_obj, arg2));
         } else {
             raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
                            getTypeName(arg0)->c_str());
@@ -257,9 +258,7 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
     if (arg1 != None)
         raiseExcHelper(TypeError, "instance exception may not have a separate value");
 
-    // TODO: should only allow throwing of old-style classes or things derived
-    // from BaseException:
-    raiseExc(arg0);
+    raiseRaw(ExcInfo(arg0, arg1, arg2));
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {

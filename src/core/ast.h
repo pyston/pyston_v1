@@ -149,12 +149,12 @@ public:
 
 #ifndef NDEBUG
 private:
+    // In debug mode, initialize lineno to something unique, so that if we see something ridiculous
+    // appear in the traceback, we can isolate the allocation which created it.
     static int next_lineno;
 
 public:
-    // In debug mode, initialize lineno to something unique, so that if we see something ridiculous
-    // appear in the traceback, we can isolate the allocation which created it.
-    AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {}
+    AST(AST_TYPE::AST_TYPE type);
 #else
     AST(AST_TYPE::AST_TYPE type) : type(type) {}
 #endif
