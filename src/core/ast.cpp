@@ -26,6 +26,12 @@ namespace pyston {
 
 #ifndef NDEBUG
 int AST::next_lineno = 100000;
+
+AST::AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {
+    // if (lineno == 100644)
+    // raise(SIGTRAP);
+}
+
 #endif
 
 llvm::StringRef getOpSymbol(int op_type) {

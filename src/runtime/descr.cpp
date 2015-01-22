@@ -25,7 +25,10 @@ static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
         return self;
 
     if (self->type == BoxedMemberDescriptor::OBJECT) {
-        return *(Box**)(((char*)inst) + self->offset);
+        Box* rtn = *(Box**)(((char*)inst) + self->offset);
+        if (!rtn)
+            rtn = None;
+        return rtn;
     }
 
     Py_FatalError("unimplemented");
@@ -83,6 +86,43 @@ static Box* propertySet(Box* self, Box* obj, Box* val) {
     return None;
 }
 
+static Box* propertyDel(Box* self, Box* obj) {
+    return propertySet(self, obj, NULL);
+}
+
+static Box* property_copy(BoxedProperty* old, Box* get, Box* set, Box* del) {
+    // In CPython, I think this can take a subclass of property, and will call the subclass's
+    // constructor... for now just enforce that it's a property object and inline the constructor:
+    RELEASE_ASSERT(old->cls == property_cls, "");
+
+    if (!get)
+        get = old->prop_get;
+    if (!set)
+        set = old->prop_set;
+    if (!del)
+        del = old->prop_del;
+
+    return new BoxedProperty(get, set, del, old->prop_doc);
+}
+
+static Box* propertyGetter(Box* self, Box* obj) {
+    RELEASE_ASSERT(self->cls == property_cls, "");
+    BoxedProperty* prop = static_cast<BoxedProperty*>(self);
+    return property_copy(prop, obj, NULL, NULL);
+}
+
+static Box* propertySetter(Box* self, Box* obj) {
+    RELEASE_ASSERT(self->cls == property_cls, "");
+    BoxedProperty* prop = static_cast<BoxedProperty*>(self);
+    return property_copy(prop, NULL, obj, NULL);
+}
+
+static Box* propertyDeleter(Box* self, Box* obj) {
+    RELEASE_ASSERT(self->cls == property_cls, "");
+    BoxedProperty* prop = static_cast<BoxedProperty*>(self);
+    return property_copy(prop, NULL, NULL, obj);
+}
+
 static Box* staticmethodInit(Box* _self, Box* f) {
     RELEASE_ASSERT(_self->cls == staticmethod_cls, "");
     BoxedStaticmethod* self = static_cast<BoxedStaticmethod*>(_self);
@@ -135,11 +175,13 @@ void setupDescr() {
     property_cls->giveAttr("__name__", boxStrConstant("property"));
     property_cls->giveAttr(
         "__init__",
-        new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false), { None, None, None, None }));
-    property_cls->giveAttr("__get__",
-                           new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3, 0, false, false)));
-    property_cls->giveAttr("__set__",
-                           new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3, 0, false, false)));
+        new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false), { NULL, NULL, NULL, NULL }));
+    property_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3)));
+    property_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3)));
+    property_cls->giveAttr("__delete__", new BoxedFunction(boxRTFunction((void*)propertyDel, UNKNOWN, 2)));
+    property_cls->giveAttr("getter", new BoxedFunction(boxRTFunction((void*)propertyGetter, UNKNOWN, 2)));
+    property_cls->giveAttr("setter", new BoxedFunction(boxRTFunction((void*)propertySetter, UNKNOWN, 2)));
+    property_cls->giveAttr("deleter", new BoxedFunction(boxRTFunction((void*)propertyDeleter, UNKNOWN, 2)));
     property_cls->giveAttr("fget",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_get)));
     property_cls->giveAttr("fset",
