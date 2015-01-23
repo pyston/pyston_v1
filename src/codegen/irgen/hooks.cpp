@@ -42,23 +42,34 @@
 namespace pyston {
 
 // TODO terrible place for these!
-SourceInfo::ArgNames::ArgNames(AST* ast) {
+ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef) {
-        args = NULL;
-        kwarg = vararg = NULL;
-    } else if (ast->type == AST_TYPE::FunctionDef) {
-        AST_FunctionDef* f = ast_cast<AST_FunctionDef>(ast);
-        args = &f->args->args;
-        vararg = &f->args->vararg;
-        kwarg = &f->args->kwarg;
-    } else if (ast->type == AST_TYPE::Lambda) {
-        AST_Lambda* l = ast_cast<AST_Lambda>(ast);
-        args = &l->args->args;
-        vararg = &l->args->vararg;
-        kwarg = &l->args->kwarg;
+        kwarg = "";
+        vararg = "";
+    } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
+        AST_arguments* arguments = ast->type == AST_TYPE::FunctionDef ? ast_cast<AST_FunctionDef>(ast)->args
+                                                                      : ast_cast<AST_Lambda>(ast)->args;
+        for (int i = 0; i < arguments->args.size(); i++) {
+            AST_expr* arg = arguments->args[i];
+            if (arg->type == AST_TYPE::Name) {
+                args.push_back(ast_cast<AST_Name>(arg)->id);
+            } else {
+                args.push_back("." + std::to_string(i + 1));
+            }
+        }
+
+        vararg = arguments->vararg;
+        kwarg = arguments->kwarg;
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
+}
+
+ParamNames::ParamNames(const std::vector<std::string>& args, const std::string& vararg, const std::string& kwarg)
+    : takes_param_names(true) {
+    this->args = args;
+    this->vararg = vararg;
+    this->kwarg = kwarg;
 }
 
 std::string SourceInfo::mangleName(const std::string& id) {
@@ -192,8 +203,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             source->liveness = computeLivenessInfo(source->cfg);
 
         if (source->phis == NULL)
-            source->phis
-                = computeRequiredPhis(source->arg_names, source->cfg, source->liveness, source->getScopeInfo());
+            source->phis = computeRequiredPhis(f->param_names, source->cfg, source->liveness, source->getScopeInfo());
     }
 
 
@@ -202,7 +212,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     if (effort == EffortLevel::INTERPRETED) {
         cf = new CompiledFunction(0, spec, true, NULL, NULL, effort, 0);
     } else {
-        cf = doCompile(source, entry, effort, spec, name);
+        cf = doCompile(source, &f->param_names, entry, effort, spec, name);
         compileIR(cf, effort);
     }
 
@@ -370,17 +380,26 @@ extern "C" char* reoptCompiledFunc(CompiledFunction* cf) {
     return (char*)reoptCompiledFuncInternal(cf)->code;
 }
 
-CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs) {
-    return new CLFunction(num_args, num_defaults, takes_varargs, takes_kwargs, NULL);
+CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+                             const ParamNames& param_names) {
+    return new CLFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
 }
 
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args) {
-    return boxRTFunction(f, rtn_type, num_args, 0, false, false);
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, const ParamNames& param_names) {
+    assert(!param_names.takes_param_names || num_args == param_names.args.size());
+    assert(param_names.vararg == "");
+    assert(param_names.kwarg == "");
+
+    return boxRTFunction(f, rtn_type, num_args, 0, false, false, param_names);
 }
 
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs) {
-    CLFunction* cl_f = createRTFunction(num_args, num_defaults, takes_varargs, takes_kwargs);
+                          bool takes_kwargs, const ParamNames& param_names) {
+    assert(!param_names.takes_param_names || num_args == param_names.args.size());
+    assert(takes_varargs || param_names.vararg == "");
+    assert(takes_kwargs || param_names.kwarg == "");
+
+    CLFunction* cl_f = createRTFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
 
     addRTFunction(cl_f, f, rtn_type);
     return cl_f;

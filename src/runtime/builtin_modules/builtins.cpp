@@ -425,7 +425,9 @@ Box* notimplementedRepr(Box* self) {
     return boxStrConstant("NotImplemented");
 }
 
-Box* sorted(Box* obj) {
+Box* sorted(Box* obj, Box* key, Box* cmp, Box** args) {
+    Box* reverse = args[0];
+
     BoxedList* rtn = new BoxedList();
     for (Box* e : obj->pyElements()) {
         listAppendInternal(rtn, e);
@@ -1115,10 +1117,10 @@ void setupBuiltins() {
     builtins_module->giveAttr("enumerate", enumerate_cls);
 
 
-    CLFunction* sorted_func = createRTFunction(1, 0, false, false);
-    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST });
-    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN });
-    builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func));
+    CLFunction* sorted_func = createRTFunction(4, 3, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
+    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST, UNKNOWN, UNKNOWN, UNKNOWN });
+    addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
+    builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func, { None, None, False }));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);
@@ -1129,8 +1131,9 @@ void setupBuiltins() {
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    open_obj = new BoxedFunction(boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false),
-                                 { boxStrConstant("r") });
+    open_obj = new BoxedFunction(
+        boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false, ParamNames({ "name", "mode" }, "", "")),
+        { boxStrConstant("r") });
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));

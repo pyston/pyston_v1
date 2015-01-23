@@ -235,10 +235,10 @@ private:
     typedef DefinednessAnalysis::DefinitionLevel DefinitionLevel;
 
     CFG* cfg;
-    const SourceInfo::ArgNames& arg_names;
+    const ParamNames& arg_names;
 
 public:
-    DefinednessBBAnalyzer(CFG* cfg, const SourceInfo::ArgNames& arg_names) : cfg(cfg), arg_names(arg_names) {}
+    DefinednessBBAnalyzer(CFG* cfg, const ParamNames& arg_names) : cfg(cfg), arg_names(arg_names) {}
 
     virtual DefinitionLevel merge(DefinitionLevel from, DefinitionLevel into) const {
         assert(from != DefinednessAnalysis::Undefined);
@@ -343,13 +343,13 @@ public:
 void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     DefinednessVisitor visitor(starting);
 
-    if (block == cfg->getStartingBlock() && arg_names.args) {
-        for (auto e : (*arg_names.args))
+    if (block == cfg->getStartingBlock()) {
+        for (auto e : arg_names.args)
             visitor._doSet(e);
-        if (arg_names.vararg->size())
-            visitor._doSet(*arg_names.vararg);
-        if (arg_names.kwarg->size())
-            visitor._doSet(*arg_names.kwarg);
+        if (arg_names.vararg.size())
+            visitor._doSet(arg_names.vararg);
+        if (arg_names.kwarg.size())
+            visitor._doSet(arg_names.kwarg);
     }
 
     for (int i = 0; i < block->body.size(); i++) {
@@ -364,7 +364,7 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     }
 }
 
-DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, ScopeInfo* scope_info)
+DefinednessAnalysis::DefinednessAnalysis(const ParamNames& arg_names, CFG* cfg, ScopeInfo* scope_info)
     : scope_info(scope_info) {
     Timer _t("DefinednessAnalysis()", 10);
 
@@ -397,8 +397,7 @@ const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEn
     return defined_at_end[block];
 }
 
-PhiAnalysis::PhiAnalysis(const SourceInfo::ArgNames& arg_names, CFG* cfg, LivenessAnalysis* liveness,
-                         ScopeInfo* scope_info)
+PhiAnalysis::PhiAnalysis(const ParamNames& arg_names, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info)
     : definedness(arg_names, cfg, scope_info), liveness(liveness) {
     Timer _t("PhiAnalysis()", 10);
 
@@ -476,8 +475,7 @@ LivenessAnalysis* computeLivenessInfo(CFG* cfg) {
     return new LivenessAnalysis(cfg);
 }
 
-PhiAnalysis* computeRequiredPhis(const SourceInfo::ArgNames& args, CFG* cfg, LivenessAnalysis* liveness,
-                                 ScopeInfo* scope_info) {
+PhiAnalysis* computeRequiredPhis(const ParamNames& args, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info) {
     return new PhiAnalysis(args, cfg, liveness, scope_info);
 }
 }

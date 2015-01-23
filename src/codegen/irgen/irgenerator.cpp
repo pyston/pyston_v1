@@ -2413,9 +2413,8 @@ public:
         return CLOSURE;
     }
 
-    void doFunctionEntry(const SourceInfo::ArgNames& arg_names,
-                         const std::vector<ConcreteCompilerType*>& arg_types) override {
-        assert(arg_names.totalParameters() == arg_types.size());
+    void doFunctionEntry(const ParamNames& param_names, const std::vector<ConcreteCompilerType*>& arg_types) override {
+        assert(param_names.totalParameters() == arg_types.size());
 
         auto scope_info = irstate->getScopeInfo();
 
@@ -2467,26 +2466,24 @@ public:
         }
 
         assert(AI == irstate->getLLVMFunction()->arg_end());
-        assert(python_parameters.size() == arg_names.totalParameters());
+        assert(python_parameters.size() == param_names.totalParameters());
 
-        if (arg_names.args) {
-            int i = 0;
-            for (; i < arg_names.args->size(); i++) {
-                loadArgument((*arg_names.args)[i], arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
-            }
-
-            if (arg_names.vararg->size()) {
-                loadArgument(*arg_names.vararg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
-                i++;
-            }
-
-            if (arg_names.kwarg->size()) {
-                loadArgument(*arg_names.kwarg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
-                i++;
-            }
-
-            assert(i == arg_types.size());
+        int i = 0;
+        for (; i < param_names.args.size(); i++) {
+            loadArgument(param_names.args[i], arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
         }
+
+        if (param_names.vararg.size()) {
+            loadArgument(param_names.vararg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+            i++;
+        }
+
+        if (param_names.kwarg.size()) {
+            loadArgument(param_names.kwarg, arg_types[i], python_parameters[i], UnwindInfo::cantUnwind());
+            i++;
+        }
+
+        assert(i == arg_types.size());
     }
 
     void run(const CFGBlock* block) override {

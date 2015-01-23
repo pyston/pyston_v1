@@ -212,6 +212,21 @@ public:
     ~CompiledFunction();
 };
 
+struct ParamNames {
+    bool takes_param_names;
+    std::vector<std::string> args;
+    std::string vararg, kwarg;
+
+    explicit ParamNames(AST* ast);
+    ParamNames(const std::vector<std::string>& args, const std::string& vararg, const std::string& kwarg);
+    static ParamNames empty() { return ParamNames(); }
+
+    int totalParameters() const { return args.size() + (vararg.size() == 0 ? 0 : 1) + (kwarg.size() == 0 ? 0 : 1); }
+
+private:
+    ParamNames() : takes_param_names(false) {}
+};
+
 class BoxedModule;
 class ScopeInfo;
 class SourceInfo {
@@ -226,20 +241,6 @@ public:
 
     ScopeInfo* getScopeInfo();
 
-    struct ArgNames {
-        const std::vector<AST_expr*>* args;
-        const std::string* vararg, *kwarg;
-
-        explicit ArgNames(AST* ast);
-
-        int totalParameters() const {
-            if (!args)
-                return 0;
-            return args->size() + (vararg->size() == 0 ? 0 : 1) + (kwarg->size() == 0 ? 0 : 1);
-        }
-    };
-
-    ArgNames arg_names;
     // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
     // body and we have to create one.  Ideally, we'd be able to avoid the space duplication for non-lambdas.
     const std::vector<AST_stmt*> body;
@@ -259,6 +260,8 @@ public:
     bool takes_varargs, takes_kwargs;
 
     SourceInfo* source;
+    ParamNames param_names;
+
     FunctionList
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
@@ -273,13 +276,16 @@ public:
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(source) {
+          source(source), param_names(source->ast) {
+        assert(num_args >= num_defaults);
+    }
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
+        : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
+          source(NULL), param_names(param_names) {
         assert(num_args >= num_defaults);
     }
 
     int numReceivedArgs() { return num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0); }
-
-    // const std::vector<AST_expr*>* getArgNames();
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
@@ -296,10 +302,12 @@ public:
     }
 };
 
-CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs);
+CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+                             const ParamNames& param_names = ParamNames::empty());
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs, int num_defaults, bool takes_varargs,
-                          bool takes_kwargs);
-CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs);
+                          bool takes_kwargs, const ParamNames& param_names = ParamNames::empty());
+CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int nargs,
+                          const ParamNames& param_names = ParamNames::empty());
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type);
 void addRTFunction(CLFunction* cf, void* f, ConcreteCompilerType* rtn_type,
                    const std::vector<ConcreteCompilerType*>& arg_types);
