@@ -214,6 +214,11 @@ private:
         return makeCall(makeLoadAttribute(name, "append", true), elt);
     }
 
+    AST_expr* applyComprehensionCall(AST_SetComp* node, AST_Name* name) {
+        AST_expr* elt = remapExpr(node->elt);
+        return makeCall(makeLoadAttribute(name, "add", true), elt);
+    }
+
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         std::string rtn_name = nodeName(node);
         pushAssign(rtn_name, new ResultASTType());
@@ -1057,6 +1062,9 @@ private:
                 break;
             case AST_TYPE::Set:
                 rtn = remapSet(ast_cast<AST_Set>(node));
+                break;
+            case AST_TYPE::SetComp:
+                rtn = remapComprehension<AST_Set>(ast_cast<AST_SetComp>(node));
                 break;
             case AST_TYPE::Slice:
                 rtn = remapSlice(ast_cast<AST_Slice>(node));
