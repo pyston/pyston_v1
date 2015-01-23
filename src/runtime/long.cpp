@@ -385,7 +385,6 @@ Box* longRepr(BoxedLong* v) {
     strcat(buf, "L");
 
     auto rtn = new BoxedString(buf);
-    free(buf);
 
     return rtn;
 }
@@ -397,7 +396,6 @@ Box* longStr(BoxedLong* v) {
 
     char* buf = mpz_get_str(NULL, 10, v->n);
     auto rtn = new BoxedString(buf);
-    free(buf);
 
     return rtn;
 }
@@ -866,7 +864,21 @@ Box* longHash(BoxedLong* self) {
     return boxInt(n);
 }
 
+void* customised_allocation(size_t alloc_size) {
+    return gc::gc_alloc(alloc_size, gc::GCKind::CONSERVATIVE);
+}
+
+void* customised_realloc(void* ptr, size_t old_size, size_t new_size) {
+    return gc::gc_realloc(ptr, new_size);
+}
+
+void customised_free(void* ptr, size_t size) {
+    gc::gc_free(ptr);
+}
+
 void setupLong() {
+    mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
+
     long_cls->giveAttr("__name__", boxStrConstant("long"));
 
     long_cls->giveAttr(
