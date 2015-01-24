@@ -1591,7 +1591,7 @@ private:
             decorators[i]->decvref(emitter);
         }
 
-        _doSet(node->name, cls, unw_info);
+        _doSet(irstate->getSourceInfo()->mangleName(node->name), cls, unw_info);
         cls->decvref(emitter);
     }
 
@@ -1751,7 +1751,7 @@ private:
             decorators[i]->decvref(emitter);
         }
 
-        _doSet(node->name, func, unw_info);
+        _doSet(irstate->getSourceInfo()->mangleName(node->name), func, unw_info);
         func->decvref(emitter);
     }
 

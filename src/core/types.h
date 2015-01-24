@@ -245,6 +245,7 @@ public:
     const std::vector<AST_stmt*> body;
 
     const std::string getName();
+    std::string mangleName(const std::string& id);
 
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
 };

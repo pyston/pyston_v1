@@ -158,6 +158,8 @@ public:
 #else
     AST(AST_TYPE::AST_TYPE type) : type(type) {}
 #endif
+    AST(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0)
+        : type(type), lineno(lineno), col_offset(col_offset) {}
 };
 
 class AST_expr : public AST {
@@ -165,6 +167,7 @@ public:
     virtual void* accept_expr(ExprVisitor* v) = 0;
 
     AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
+    AST_expr(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0) : AST(type, lineno, col_offset) {}
 };
 
 class AST_stmt : public AST {
@@ -178,7 +181,7 @@ public:
 
 class AST_alias : public AST {
 public:
-    const std::string name, asname;
+    std::string name, asname;
 
     virtual void accept(ASTVisitor* v);
 
@@ -658,7 +661,8 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Name() : AST_expr(AST_TYPE::Name) {}
+    AST_Name(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
+        : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };

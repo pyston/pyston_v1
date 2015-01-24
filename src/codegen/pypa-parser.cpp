@@ -441,18 +441,12 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstName& a) {
-        AST_Name* ptr = new AST_Name();
-        location(ptr, a);
-        ptr->ctx_type = readItem(a.context);
-        ptr->id = a.id;
+        AST_Name* ptr = new AST_Name(a.id, readItem(a.context), a.line, a.column);
         return ptr;
     }
 
     ResultPtr read(pypa::AstNone& n) {
-        AST_Name* ptr = new AST_Name();
-        location(ptr, n);
-        ptr->ctx_type = AST_TYPE::Load;
-        ptr->id = "None";
+        AST_Name* ptr = new AST_Name("None", AST_TYPE::Load, n.line, n.column);
         return ptr;
     }
 

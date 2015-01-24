@@ -2278,7 +2278,7 @@ static std::string getFunctionName(CLFunction* f) {
 
 static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bool>& params_filled,
                          const std::string& kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
-                         BoxedDict* okwargs) {
+                         BoxedDict* okwargs, CLFunction* cl) {
     assert(kw_val);
 
     bool found = false;
@@ -2290,8 +2290,8 @@ static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bo
         AST_Name* n = ast_cast<AST_Name>(e);
         if (n->id == kw_name) {
             if (params_filled[j]) {
-                raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
-                               kw_name.c_str());
+                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
+                               getFunctionName(cl).c_str(), kw_name.c_str());
             }
 
             getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
@@ -2306,12 +2306,13 @@ static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bo
         if (okwargs) {
             Box*& v = okwargs->d[boxString(kw_name)];
             if (v) {
-                raiseExcHelper(TypeError, "<function>() got multiple values for keyword argument '%s'",
-                               kw_name.c_str());
+                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
+                               getFunctionName(cl).c_str(), kw_name.c_str());
             }
             v = kw_val;
         } else {
-            raiseExcHelper(TypeError, "<function>() got an unexpected keyword argument '%s'", kw_name.c_str());
+            raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", getFunctionName(cl).c_str(),
+                           kw_name.c_str());
         }
     }
 }
@@ -2497,7 +2498,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         assert(arg_names);
 
-        placeKeyword(*arg_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs, okwargs);
+        placeKeyword(*arg_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs, okwargs, f);
     }
 
     if (argspec.has_kwargs) {
@@ -2515,7 +2516,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             BoxedString* s = static_cast<BoxedString*>(p.first);
 
             if (arg_names) {
-                placeKeyword(*arg_names, params_filled, s->s, p.second, oarg1, oarg2, oarg3, oargs, okwargs);
+                placeKeyword(*arg_names, params_filled, s->s, p.second, oarg1, oarg2, oarg3, oargs, okwargs, f);
             } else {
                 assert(okwargs);
 

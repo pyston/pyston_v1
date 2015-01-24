@@ -55,25 +55,32 @@ void CFGBlock::unconnectFrom(CFGBlock* successor) {
                                   successor->predecessors.end());
 }
 
-static AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
-    AST_Name* name = new AST_Name();
-    name->id = id;
-    name->col_offset = col_offset;
-    name->lineno = lineno;
-    name->ctx_type = ctx_type;
-    return name;
-}
-
 static const std::string RETURN_NAME("#rtnval");
 
 class CFGVisitor : public ASTVisitor {
 private:
+    SourceInfo* source;
     AST_TYPE::AST_TYPE root_type;
     FutureFlags future_flags;
     CFG* cfg;
     CFGBlock* curblock;
     ScopingAnalysis* scoping_analysis;
 
+public:
+    CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
+               ScopingAnalysis* scoping_analysis, CFG* cfg)
+        : source(source), root_type(root_type), future_flags(future_flags), cfg(cfg),
+          scoping_analysis(scoping_analysis) {
+        curblock = cfg->addBlock();
+        curblock->info = "entry";
+    }
+
+    ~CFGVisitor() {
+        assert(regions.size() == 0);
+        assert(exc_handlers.size() == 0);
+    }
+
+private:
     enum Why : int8_t {
         FALLTHROUGH,
         CONTINUE,
@@ -94,6 +101,11 @@ private:
             : continue_dest(continue_dest), break_dest(break_dest), return_dest(return_dest), say_why(say_why),
               did_why(0), why_name(why_name) {}
     };
+
+    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
+        AST_Name* name = new AST_Name(id, ctx_type, lineno, col_offset);
+        return name;
+    }
 
     std::vector<RegionInfo> regions;
 
@@ -202,6 +214,8 @@ private:
         pushAssign(name, call);
         return makeName(name, AST_TYPE::Load, e->lineno);
     }
+
+    AST_Name* remapName(AST_Name* name) { return name; }
 
     AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
         AST_expr* key = remapExpr(node->key);
@@ -422,7 +436,7 @@ private:
         assign->lineno = val->lineno;
 
         if (target->type == AST_TYPE::Name) {
-            assign->targets.push_back(target);
+            assign->targets.push_back(remapName(ast_cast<AST_Name>(target)));
             push_back(assign);
         } else if (target->type == AST_TYPE::Subscript) {
             AST_Subscript* s = ast_cast<AST_Subscript>(target);
@@ -443,7 +457,7 @@ private:
 
             AST_Attribute* a_target = new AST_Attribute();
             a_target->value = remapExpr(a->value);
-            a_target->attr = a->attr;
+            a_target->attr = source->mangleName(a->attr);
             a_target->ctx_type = AST_TYPE::Store;
             a_target->col_offset = a->col_offset;
             a_target->lineno = a->lineno;
@@ -534,7 +548,7 @@ private:
         rtn->col_offset = node->col_offset;
         rtn->lineno = node->lineno;
         rtn->ctx_type = node->ctx_type;
-        rtn->attr = node->attr;
+        rtn->attr = source->mangleName(node->attr);
         rtn->value = remapExpr(node->value);
         return rtn;
     }
@@ -560,11 +574,7 @@ private:
 
         if (val->type == AST_TYPE::Name) {
             AST_Name* orig = ast_cast<AST_Name>(val);
-            AST_Name* made = new AST_Name();
-            made->id = orig->id;
-            made->col_offset = orig->col_offset;
-            made->lineno = orig->lineno;
-            made->ctx_type = orig->ctx_type;
+            AST_Name* made = makeName(orig->id, orig->ctx_type, orig->lineno, orig->col_offset);
             return made;
         } else if (val->type == AST_TYPE::Num) {
             AST_Num* orig = ast_cast<AST_Num>(val);
@@ -1048,7 +1058,7 @@ private:
                 rtn = remapComprehension<AST_List>(ast_cast<AST_ListComp>(node));
                 break;
             case AST_TYPE::Name:
-                rtn = node;
+                rtn = remapName(ast_cast<AST_Name>(node));
                 break;
             case AST_TYPE::Num:
                 return node;
@@ -1089,17 +1099,6 @@ private:
     }
 
 public:
-    CFGVisitor(AST_TYPE::AST_TYPE root_type, FutureFlags future_flags, ScopingAnalysis* scoping_analysis, CFG* cfg)
-        : root_type(root_type), future_flags(future_flags), cfg(cfg), scoping_analysis(scoping_analysis) {
-        curblock = cfg->addBlock();
-        curblock->info = "entry";
-    }
-
-    ~CFGVisitor() {
-        assert(regions.size() == 0);
-        assert(exc_handlers.size() == 0);
-    }
-
     void push_back(AST_stmt* node) {
         assert(node->type != AST_TYPE::Invoke);
 
@@ -1539,7 +1538,7 @@ public:
                     break;
                 }
                 case AST_TYPE::Name: {
-                    target = t;
+                    target = remapName(ast_cast<AST_Name>(t));
                     break;
                 }
                 default:
@@ -2298,7 +2297,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     ScopingAnalysis* scoping_analysis = source->scoping;
 
-    CFGVisitor visitor(source->ast->type, source->parent_module->future_flags, scoping_analysis, rtn);
+    CFGVisitor visitor(source, source->ast->type, source->parent_module->future_flags, scoping_analysis, rtn);
 
     bool skip_first = false;
 
@@ -2307,7 +2306,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         Box* module_name = source->parent_module->getattr("__name__", NULL);
         assert(module_name->cls == str_cls);
         AST_Assign* module_assign = new AST_Assign();
-        module_assign->targets.push_back(makeName("__module__", AST_TYPE::Store, source->ast->lineno));
+        module_assign->targets.push_back(new AST_Name("__module__", AST_TYPE::Store, source->ast->lineno));
         module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
         module_assign->lineno = 0;
         visitor.push_back(module_assign);
@@ -2317,7 +2316,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
             if (first_expr->value->type == AST_TYPE::Str) {
                 AST_Assign* doc_assign = new AST_Assign();
-                doc_assign->targets.push_back(makeName("__doc__", AST_TYPE::Store, source->ast->lineno));
+                doc_assign->targets.push_back(new AST_Name("__doc__", AST_TYPE::Store, source->ast->lineno));
                 doc_assign->value = first_expr->value;
                 doc_assign->lineno = 0;
                 visitor.push_back(doc_assign);

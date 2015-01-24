@@ -49,6 +49,34 @@ bool containsYield(AST* ast) {
     return visitor.containsYield;
 }
 
+static void mangleNameInPlace(std::string& id, const std::string* private_name) {
+    if (!private_name)
+        return;
+
+    int len = id.size();
+    if (len < 2 || id[0] != '_' || id[1] != '_')
+        return;
+
+    if ((id[len - 2] == '_' && id[len - 1] == '_') || id.find('.') != std::string::npos)
+        return;
+
+    const char* p = private_name->c_str();
+    while (*p == '_') {
+        p++;
+        len--;
+    }
+    if (*p == '\0')
+        return;
+
+    id = "_" + (p + id);
+}
+
+static std::string mangleName(const std::string& id, const std::string* private_name) {
+    std::string rtn(id);
+    mangleNameInPlace(rtn, private_name);
+    return rtn;
+}
+
 static bool isCompilerCreatedName(const std::string& name) {
     return name[0] == '!' || name[0] == '#';
 }
@@ -74,11 +102,14 @@ public:
     bool saveInClosure(const std::string& name) override { return false; }
 
     const std::unordered_set<std::string>& getClassDefLocalNames() override { RELEASE_ASSERT(0, ""); }
+
+    std::string mangleName(const std::string& id) override { return id; }
 };
 
 struct ScopingAnalysis::ScopeNameUsage {
     AST* node;
     ScopeNameUsage* parent;
+    const std::string* private_name;
 
     typedef std::unordered_set<std::string> StrSet;
 
@@ -106,6 +137,14 @@ struct ScopingAnalysis::ScopeNameUsage {
                 }
             }
         }
+
+        if (node->type == AST_TYPE::ClassDef) {
+            private_name = &ast_cast<AST_ClassDef>(node)->name;
+        } else if (parent) {
+            private_name = parent->private_name;
+        } else {
+            private_name = NULL;
+        }
     }
 };
 
@@ -113,11 +152,14 @@ class ScopeInfoBase : public ScopeInfo {
 private:
     ScopeInfo* parent;
     ScopingAnalysis::ScopeNameUsage* usage;
+    AST* ast;
 
 public:
-    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage) : parent(parent), usage(usage) {
+    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast)
+        : parent(parent), usage(usage), ast(ast) {
         assert(parent);
         assert(usage);
+        assert(ast);
     }
 
     ~ScopeInfoBase() override { delete this->usage; }
@@ -158,6 +200,8 @@ public:
         RELEASE_ASSERT(usage->node->type == AST_TYPE::ClassDef, "");
         return usage->written;
     }
+
+    std::string mangleName(const std::string& id) override { return pyston::mangleName(id, usage->private_name); }
 };
 
 class NameCollectorVisitor : public ASTVisitor {
@@ -173,13 +217,19 @@ private:
 
 public:
     void doWrite(const std::string& name) {
+        assert(name == mangleName(name, cur->private_name));
         cur->read.insert(name);
         cur->written.insert(name);
     }
 
-    void doRead(const std::string& name) { cur->read.insert(name); }
+    void doRead(const std::string& name) {
+        assert(name == mangleName(name, cur->private_name));
+        cur->read.insert(name);
+    }
 
     bool visit_name(AST_Name* node) override {
+        mangleNameInPlace(node->id, cur->private_name);
+
         switch (node->ctx_type) {
             case AST_TYPE::Load:
                 doRead(node->id);
@@ -243,19 +293,12 @@ public:
     bool visit_jump(AST_Jump* node) override { return false; }
 
 
-    bool visit_delete(AST_Delete* node) override {
-        for (auto t : node->targets) {
-            if (t->type == AST_TYPE::Name) {
-                doWrite(ast_cast<AST_Name>(t)->id);
-            }
-        }
-        return false;
-    }
+    bool visit_delete(AST_Delete* node) override { return false; }
 
     bool visit_global(AST_Global* node) override {
         for (int i = 0; i < node->names.size(); i++) {
-            const std::string& name = node->names[i];
-            cur->forced_globals.insert(name);
+            mangleNameInPlace(node->names[i], cur->private_name);
+            cur->forced_globals.insert(node->names[i]);
         }
         return true;
     }
@@ -271,7 +314,10 @@ public:
             for (auto* e : node->decorator_list)
                 e->accept(this);
 
-            doWrite(node->name);
+            // TODO: this is one of very few places we don't mangle in place.
+            // The AST doesn't have a way of representing that the class name is the
+            // unmangled name but the name it gets stored as is the mangled name.
+            doWrite(mangleName(node->name, cur->private_name));
             (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
             collect(node, map);
             return true;
@@ -282,10 +328,14 @@ public:
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
-            if (node->args->vararg.size())
+            if (node->args->vararg.size()) {
+                mangleNameInPlace(node->args->vararg, cur->private_name);
                 doWrite(node->args->vararg);
-            if (node->args->kwarg.size())
+            }
+            if (node->args->kwarg.size()) {
+                mangleNameInPlace(node->args->kwarg, cur->private_name);
                 doWrite(node->args->kwarg);
+            }
             for (AST_stmt* s : node->body)
                 s->accept(this);
             return true;
@@ -295,7 +345,10 @@ public:
             for (auto* e : node->decorator_list)
                 e->accept(this);
 
-            doWrite(node->name);
+            // TODO: this is one of very few places we don't mangle in place.
+            // The AST doesn't have a way of representing that the class name is the
+            // unmangled name but the name it gets stored as is the mangled name.
+            doWrite(mangleName(node->name, cur->private_name));
             (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
             collect(node, map);
             return true;
@@ -326,10 +379,14 @@ public:
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
-            if (node->args->vararg.size())
+            if (node->args->vararg.size()) {
+                mangleNameInPlace(node->args->vararg, cur->private_name);
                 doWrite(node->args->vararg);
-            if (node->args->kwarg.size())
+            }
+            if (node->args->kwarg.size()) {
+                mangleNameInPlace(node->args->kwarg, cur->private_name);
                 doWrite(node->args->kwarg);
+            }
             node->body->accept(this);
         } else {
             for (auto* e : node->args->defaults)
@@ -344,6 +401,8 @@ public:
     bool visit_import(AST_Import* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
+            mangleNameInPlace(alias->asname, cur->private_name);
+            mangleNameInPlace(alias->name, cur->private_name);
             if (alias->asname.size())
                 doWrite(alias->asname);
             else
@@ -355,6 +414,8 @@ public:
     bool visit_importfrom(AST_ImportFrom* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
+            mangleNameInPlace(alias->asname, cur->private_name);
+            mangleNameInPlace(alias->name, cur->private_name);
             if (alias->asname.size())
                 doWrite(alias->asname);
             else
@@ -447,12 +508,12 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::ClassDef:
             case AST_TYPE::FunctionDef:
             case AST_TYPE::Lambda: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage);
+                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node);
                 this->scopes[node] = scopeInfo;
                 break;
             }
             case AST_TYPE::GeneratorExp: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage);
+                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node);
                 this->scopes[node] = scopeInfo;
                 break;
             }

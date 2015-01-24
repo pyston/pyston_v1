@@ -731,7 +731,7 @@ Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {
     for (int i = decorators.size() - 1; i >= 0; i--)
         func = runtimeCall(decorators[i], ArgPassSpec(1), func, 0, 0, 0, 0);
 
-    doStore(node->name, func);
+    doStore(source_info->mangleName(node->name), func);
     return Value();
 }
 
@@ -758,7 +758,7 @@ Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
     for (int i = decorators.size() - 1; i >= 0; i--)
         classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
 
-    doStore(node->name, classobj);
+    doStore(source_info->mangleName(node->name), classobj);
     return Value();
 }
 

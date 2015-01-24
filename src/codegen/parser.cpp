@@ -522,13 +522,12 @@ AST_Module* read_module(BufferedReader* reader) {
 }
 
 AST_Name* read_name(BufferedReader* reader) {
-    AST_Name* rtn = new AST_Name();
+    auto col_offset = readColOffset(reader);
+    auto ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
+    auto id = readString(reader);
+    auto lineno = reader->readULL();
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
-    rtn->id = readString(reader);
-    rtn->lineno = reader->readULL();
-    return rtn;
+    return new AST_Name(std::move(id), ctx_type, lineno, col_offset);
 }
 
 AST_Num* read_num(BufferedReader* reader) {

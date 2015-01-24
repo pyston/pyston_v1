@@ -202,10 +202,7 @@ int main(int argc, char** argv) {
                 if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
                     AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
                     AST_Call* c = new AST_Call();
-                    AST_Name* r = new AST_Name();
-                    r->id = "repr";
-                    r->ctx_type = AST_TYPE::Load;
-                    r->lineno = 0;
+                    AST_Name* r = new AST_Name("repr", AST_TYPE::Load, 0);
                     c->func = r;
                     c->starargs = NULL;
                     c->kwargs = NULL;

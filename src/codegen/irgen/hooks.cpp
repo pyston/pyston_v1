@@ -61,6 +61,13 @@ SourceInfo::ArgNames::ArgNames(AST* ast) {
     }
 }
 
+std::string SourceInfo::mangleName(const std::string& id) {
+    assert(ast);
+    if (ast->type == AST_TYPE::Module)
+        return id;
+    return getScopeInfo()->mangleName(id);
+}
+
 const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {

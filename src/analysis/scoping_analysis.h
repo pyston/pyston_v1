@@ -40,6 +40,8 @@ public:
     // the metaclass constructor.
     // An error to call this on a non-classdef node.
     virtual const std::unordered_set<std::string>& getClassDefLocalNames() = 0;
+
+    virtual std::string mangleName(const std::string& id) = 0;
 };
 
 class ScopingAnalysis {
