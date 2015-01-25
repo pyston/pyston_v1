@@ -976,6 +976,59 @@ extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
     return boxBool(lhs->s != srhs->s);
 }
 
+#define JUST_LEFT 0
+#define JUST_RIGHT 1
+#define JUST_CENTER 2
+static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
+    assert(width->cls == int_cls);
+    assert(fillchar->cls == str_cls);
+    assert(static_cast<BoxedString*>(fillchar)->s.size() == 1);
+    int64_t curWidth = self->s.size();
+    int64_t targetWidth = static_cast<BoxedInt*>(width)->n;
+
+    if (curWidth >= targetWidth) {
+        if (self->cls == str_cls) {
+            return self;
+        } else {
+            // If self isn't a string but a subclass of str, then make a new string to return
+            return new BoxedString(self->s);
+        }
+    }
+
+    char c = static_cast<BoxedString*>(fillchar)->s[0];
+
+    int padLeft, padRight;
+    int nNeeded = targetWidth - curWidth;
+    switch (justType) {
+        case JUST_LEFT:
+            padLeft = 0;
+            padRight = nNeeded;
+            break;
+        case JUST_RIGHT:
+            padLeft = nNeeded;
+            padRight = 0;
+            break;
+        case JUST_CENTER:
+            padLeft = nNeeded / 2 + (nNeeded & targetWidth & 1);
+            padRight = nNeeded - padLeft;
+            break;
+    }
+
+    // TODO this is probably slow
+    std::string res = std::string(padLeft, c) + self->s + std::string(padRight, c);
+
+    return new BoxedString(std::move(res));
+}
+extern "C" Box* strLjust(BoxedString* lhs, Box* width, Box* fillchar) {
+    return pad(lhs, width, fillchar, JUST_LEFT);
+}
+extern "C" Box* strRjust(BoxedString* lhs, Box* width, Box* fillchar) {
+    return pad(lhs, width, fillchar, JUST_RIGHT);
+}
+extern "C" Box* strCenter(BoxedString* lhs, Box* width, Box* fillchar) {
+    return pad(lhs, width, fillchar, JUST_CENTER);
+}
+
 extern "C" Box* strLen(BoxedString* self) {
     assert(self->cls == str_cls);
 
@@ -1881,6 +1934,14 @@ void setupStr() {
     str_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)strGe, UNKNOWN, 2)));
     str_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)strEq, UNKNOWN, 2)));
     str_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)strNe, UNKNOWN, 2)));
+
+    BoxedString* spaceChar = new BoxedString(" ");
+    str_cls->giveAttr("ljust",
+                      new BoxedFunction(boxRTFunction((void*)strLjust, UNKNOWN, 3, 1, false, false), { spaceChar }));
+    str_cls->giveAttr("rjust",
+                      new BoxedFunction(boxRTFunction((void*)strRjust, UNKNOWN, 3, 1, false, false), { spaceChar }));
+    str_cls->giveAttr("center",
+                      new BoxedFunction(boxRTFunction((void*)strCenter, UNKNOWN, 3, 1, false, false), { spaceChar }));
 
     str_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)strGetitem, STR, 2)));
 
