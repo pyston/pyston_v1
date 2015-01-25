@@ -385,6 +385,7 @@ Box* longRepr(BoxedLong* v) {
     strcat(buf, "L");
 
     auto rtn = new BoxedString(buf);
+    free(buf);
 
     return rtn;
 }
@@ -393,9 +394,12 @@ Box* longStr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'",
                        getTypeName(v)->c_str());
+    int space_required = mpz_sizeinbase(v->n, 10) + 2;
+    char* buf = (char*)malloc(space_required);
+    mpz_get_str(buf, 10, v->n);
 
-    char* buf = mpz_get_str(NULL, 10, v->n);
     auto rtn = new BoxedString(buf);
+    free(buf);
 
     return rtn;
 }
