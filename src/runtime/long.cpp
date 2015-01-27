@@ -394,8 +394,10 @@ Box* longStr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'",
                        getTypeName(v)->c_str());
+    int space_required = mpz_sizeinbase(v->n, 10) + 2;
+    char* buf = (char*)malloc(space_required);
+    mpz_get_str(buf, 10, v->n);
 
-    char* buf = mpz_get_str(NULL, 10, v->n);
     auto rtn = new BoxedString(buf);
     free(buf);
 
@@ -866,7 +868,21 @@ Box* longHash(BoxedLong* self) {
     return boxInt(n);
 }
 
+void* customised_allocation(size_t alloc_size) {
+    return gc::gc_alloc(alloc_size, gc::GCKind::CONSERVATIVE);
+}
+
+void* customised_realloc(void* ptr, size_t old_size, size_t new_size) {
+    return gc::gc_realloc(ptr, new_size);
+}
+
+void customised_free(void* ptr, size_t size) {
+    gc::gc_free(ptr);
+}
+
 void setupLong() {
+    mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
+
     long_cls->giveAttr("__name__", boxStrConstant("long"));
 
     long_cls->giveAttr(
