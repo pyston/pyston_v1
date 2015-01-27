@@ -57,6 +57,8 @@ extern "C" void initsignal();
 
 namespace pyston {
 
+void setupGC();
+
 bool IN_SHUTDOWN = false;
 
 #define SLICE_START_OFFSET ((char*)&(((BoxedSlice*)0x01)->start) - (char*)0x1)
@@ -1161,6 +1163,7 @@ void setupRuntime() {
     setupBuiltins();
     setupTime();
     setupThread();
+    setupGC();
 
     setupCAPI();
 
