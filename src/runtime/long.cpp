@@ -35,6 +35,14 @@ BoxedClass* long_cls;
 #define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0 - (unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
+void BoxedLong::gchandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    BoxedLong* l = (BoxedLong*)b;
+
+    v->visitPotentialRange((void**)&l->n, (void**)((&l->n) + 1));
+}
+
 extern "C" int _PyLong_Sign(PyObject* l) noexcept {
     return mpz_sgn(static_cast<BoxedLong*>(l)->n);
 }

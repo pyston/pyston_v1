@@ -1024,7 +1024,7 @@ void setupRuntime() {
     bool_cls = new BoxedHeapClass(int_cls, NULL, 0, sizeof(BoxedBool), false);
     complex_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedComplex), false);
     // TODO we're leaking long memory!
-    long_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedLong), false);
+    long_cls = new BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, sizeof(BoxedLong), false);
     float_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFloat), false);
     function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
                                       sizeof(BoxedFunction), false);
