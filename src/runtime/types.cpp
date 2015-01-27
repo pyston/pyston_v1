@@ -52,6 +52,7 @@ extern "C" void initdatetime();
 extern "C" void init_functools();
 extern "C" void init_collections();
 extern "C" void inititertools();
+extern "C" void initresource();
 
 namespace pyston {
 
@@ -1181,6 +1182,7 @@ void setupRuntime() {
     init_functools();
     init_collections();
     inititertools();
+    initresource();
 
     setupSysEnd();
 
