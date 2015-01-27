@@ -65,7 +65,7 @@ public:
 
 class BinopIC : public RuntimeIC {
 public:
-    BinopIC() : RuntimeIC((void*)binop, 1, 160) {}
+    BinopIC() : RuntimeIC((void*)binop, 2, 160) {}
 
     Box* call(Box* lhs, Box* rhs, int op_type) { return (Box*)call_ptr(lhs, rhs, op_type); }
 };
@@ -75,6 +75,56 @@ public:
     NonzeroIC() : RuntimeIC((void*)nonzero, 1, 40) {}
 
     bool call(Box* obj) { return call_bool(obj); }
+};
+
+template <class ICType, unsigned cache_size> class RuntimeICCache {
+private:
+    struct PerCallerIC {
+        void* caller_addr;
+        std::shared_ptr<ICType> ic;
+    };
+    PerCallerIC ics[cache_size];
+    unsigned next_to_replace;
+
+    RuntimeICCache(const RuntimeICCache&) = delete;
+    void operator=(const RuntimeICCache&) = delete;
+
+    PerCallerIC* findBestSlotToReplace() {
+        // search for an unassigned slot
+        for (unsigned i = 0; i < cache_size; ++i) {
+            if (!ics[i].caller_addr)
+                return &ics[i];
+        }
+
+        PerCallerIC* ic = &ics[next_to_replace];
+        ++next_to_replace;
+        if (next_to_replace >= cache_size)
+            next_to_replace = 0;
+        return ic;
+    }
+
+public:
+    RuntimeICCache() : next_to_replace(0) {
+        for (unsigned i = 0; i < cache_size; ++i)
+            ics[i].caller_addr = 0;
+    }
+
+    std::shared_ptr<ICType> getIC(void* caller_addr) {
+        assert(caller_addr);
+
+        // try to find a cached IC for the caller
+        for (unsigned i = 0; i < cache_size; ++i) {
+            if (ics[i].caller_addr == caller_addr)
+                return ics[i].ic;
+        }
+
+        // could not find a cached runtime IC, create new one and save it
+        PerCallerIC* slot_to_replace = findBestSlotToReplace();
+        std::shared_ptr<ICType> ic = std::make_shared<ICType>();
+        slot_to_replace->caller_addr = caller_addr;
+        slot_to_replace->ic = ic;
+        return ic;
+    }
 };
 
 } // namespace pyston

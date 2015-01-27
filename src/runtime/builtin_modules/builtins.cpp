@@ -311,11 +311,12 @@ extern "C" Box* sum(Box* container, Box* initial) {
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
 
-    BinopIC pp;
+    static RuntimeICCache<BinopIC, 3> runtime_ic_cache;
+    std::shared_ptr<BinopIC> pp = runtime_ic_cache.getIC(__builtin_return_address(0));
 
     Box* cur = initial;
     for (Box* e : container->pyElements()) {
-        cur = pp.call(cur, e, AST_TYPE::Add);
+        cur = pp->call(cur, e, AST_TYPE::Add);
     }
     return cur;
 }
