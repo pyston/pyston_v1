@@ -892,6 +892,10 @@ finisignal(void)
 int
 PyErr_CheckSignals(void)
 {
+    // Pyston change:
+    Py_FatalError("TODO");
+
+#if 0
     int i;
     PyObject *f;
 
@@ -939,6 +943,7 @@ PyErr_CheckSignals(void)
             Py_DECREF(result);
         }
     }
+#endif
 
     return 0;
 }

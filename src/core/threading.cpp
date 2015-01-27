@@ -607,5 +607,29 @@ void allowGLReadPreemption() {
 }
 #endif
 
+extern "C" long PyThread_get_thread_ident(void) noexcept {
+    return pthread_self();
+}
+
+// We don't support CPython's TLS (yet?)
+extern "C" void PyThread_ReInitTLS(void) noexcept {
+    // don't have to do anything since we don't support TLS
+}
+extern "C" int PyThread_create_key(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyThread_delete_key(int) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" int PyThread_set_key_value(int, void*) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" void* PyThread_get_key_value(int) noexcept {
+    Py_FatalError("unimplemented");
+}
+extern "C" void PyThread_delete_key_value(int key) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 } // namespace threading
 } // namespace pyston

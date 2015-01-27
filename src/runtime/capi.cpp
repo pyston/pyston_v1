@@ -735,10 +735,6 @@ extern "C" PyObject* PyErr_NoMemory() noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyErr_CheckSignals() noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PyExceptionClass_Check(PyObject* o) noexcept {
     return PyClass_Check(o) || (PyType_Check(o) && isSubclass(static_cast<BoxedClass*>(o), BaseException));
 }
@@ -1169,27 +1165,6 @@ Done:
 #undef _PyOS_vsnprintf_EXTRA_SPACE
 }
 
-extern "C" void PyOS_AfterFork(void) noexcept {
-    // TODO CPython does a number of things after a fork:
-    // - clears pending signals
-    // - updates the cached "main_pid"
-    // - reinitialize and reacquire the GIL
-    // - reinitialize the import lock
-    // - change the definition of the main thread to the current thread
-    // - call threading._after_fork
-    // Also see PyEval_ReInitThreads
-
-    // Should we disable finalizers after a fork?
-    // In CPython, I think all garbage from other threads will never be freed and
-    // their destructors never run.  I think for us, we will presumably collect it
-    // and run the finalizers.  It's probably just safer to run no finalizers?
-
-    // Our handling right now is pretty minimal... you better just call exec().
-
-    PyEval_ReInitThreads();
-    _PyImport_ReInitLock();
-}
-
 extern "C" {
 static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
     int fd;
@@ -1259,6 +1234,79 @@ extern "C" int _PyOS_URandom(void* buffer, Py_ssize_t size) noexcept {
     return dev_urandom_python((char*)buffer, size);
 #endif
 #endif
+}
+
+extern "C" PyOS_sighandler_t PyOS_getsig(int sig) noexcept {
+#ifdef HAVE_SIGACTION
+    struct sigaction context;
+    if (sigaction(sig, NULL, &context) == -1)
+        return SIG_ERR;
+    return context.sa_handler;
+#else
+    PyOS_sighandler_t handler;
+/* Special signal handling for the secure CRT in Visual Studio 2005 */
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+    switch (sig) {
+        /* Only these signals are valid */
+        case SIGINT:
+        case SIGILL:
+        case SIGFPE:
+        case SIGSEGV:
+        case SIGTERM:
+        case SIGBREAK:
+        case SIGABRT:
+            break;
+        /* Don't call signal() with other values or it will assert */
+        default:
+            return SIG_ERR;
+    }
+#endif /* _MSC_VER && _MSC_VER >= 1400 */
+    handler = signal(sig, SIG_IGN);
+    if (handler != SIG_ERR)
+        signal(sig, handler);
+    return handler;
+#endif
+}
+
+extern "C" PyOS_sighandler_t PyOS_setsig(int sig, PyOS_sighandler_t handler) noexcept {
+    if (sig == SIGUSR2) {
+        Py_FatalError("SIGUSR2 is reserved for Pyston internal use");
+    }
+
+#ifdef HAVE_SIGACTION
+    /* Some code in Modules/signalmodule.c depends on sigaction() being
+     * used here if HAVE_SIGACTION is defined.  Fix that if this code
+     * changes to invalidate that assumption.
+     */
+    struct sigaction context, ocontext;
+    context.sa_handler = handler;
+    sigemptyset(&context.sa_mask);
+    context.sa_flags = 0;
+    if (sigaction(sig, &context, &ocontext) == -1)
+        return SIG_ERR;
+    return ocontext.sa_handler;
+#else
+    PyOS_sighandler_t oldhandler;
+    oldhandler = signal(sig, handler);
+#ifdef HAVE_SIGINTERRUPT
+    siginterrupt(sig, 1);
+#endif
+    return oldhandler;
+#endif
+}
+
+extern "C" int Py_AddPendingCall(int (*func)(void*), void* arg) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* _PyImport_FixupExtension(char* name, char* filename) noexcept {
+    // Don't have to do anything here, since we will error in _PyImport_FindExtension
+    // TODO is this ok?
+    return NULL;
+}
+
+extern "C" PyObject* _PyImport_FindExtension(char* name, char* filename) noexcept {
+    Py_FatalError("unimplemented");
 }
 
 BoxedModule* importTestExtension(const std::string& name) {
