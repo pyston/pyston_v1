@@ -23,6 +23,16 @@
 
 namespace pyston {
 
+BoxedFloat* floatZero;
+BoxedFloat* floatNegZero;
+BoxedFloat* floatOne;
+BoxedFloat* floatNegOne;
+BoxedFloat* floatTwo;
+BoxedFloat* floatNegTwo;
+BoxedFloat* floatNaN;
+BoxedFloat* floatInf;
+BoxedFloat* floatNegInf;
+
 extern "C" PyObject* PyFloat_FromDouble(double d) noexcept {
     return boxFloat(d);
 }
@@ -548,9 +558,9 @@ BoxedFloat* _floatNew(Box* a) {
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
     } else if (isSubclass(a->cls, float_cls)) {
-        return new BoxedFloat(static_cast<BoxedFloat*>(a)->d);
+        return static_cast<BoxedFloat*>(boxFloat((static_cast<BoxedFloat*>(a)->d)));
     } else if (isSubclass(a->cls, int_cls)) {
-        return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
+        return static_cast<BoxedFloat*>(boxFloat(static_cast<BoxedInt*>(a)->n));
     } else if (a->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(a)->s;
         if (s == "nan")
@@ -562,7 +572,7 @@ BoxedFloat* _floatNew(Box* a) {
         if (s == "-inf")
             return new BoxedFloat(-INFINITY);
 
-        return new BoxedFloat(strtod(s.c_str(), NULL));
+        return static_cast<BoxedFloat*>(boxFloat(strtod(s.c_str(), NULL)));
     } else {
         static const std::string float_str("__float__");
         Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -674,6 +684,33 @@ void setupFloat() {
     float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, STR, 1)));
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
     float_cls->freeze();
+
+    floatZero = new BoxedFloat(0.0);
+    gc::registerPermanentRoot(floatZero);
+
+    floatNegZero = new BoxedFloat(-0.0);
+    gc::registerPermanentRoot(floatNegZero);
+
+    floatOne = new BoxedFloat(1.0);
+    gc::registerPermanentRoot(floatOne);
+
+    floatNegOne = new BoxedFloat(-1.0);
+    gc::registerPermanentRoot(floatNegOne);
+
+    floatTwo = new BoxedFloat(2.0);
+    gc::registerPermanentRoot(floatTwo);
+
+    floatNegTwo = new BoxedFloat(-2.0);
+    gc::registerPermanentRoot(floatNegTwo);
+
+    floatNaN = new BoxedFloat(NAN);
+    gc::registerPermanentRoot(floatNaN);
+
+    floatInf = new BoxedFloat(INFINITY);
+    gc::registerPermanentRoot(floatInf);
+
+    floatNegInf = new BoxedFloat(-INFINITY);
+    gc::registerPermanentRoot(floatNegInf);
 }
 
 void teardownFloat() {
