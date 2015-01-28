@@ -86,3 +86,33 @@ print "%.3s" % "hello world"
 for i in xrange(-5, 15):
     for j in xrange(-5, 15):
         print i, j, "banana".startswith("ana", i, j), "banana".endswith("ana", i, j)
+
+def test_just_funcs(s, w):
+    t1 = s.ljust(w, 'x')
+    t2 = s.rjust(w, 'x')
+    t3 = s.center(w, 'x')
+
+    t4 = s.ljust(w)
+    t5 = s.rjust(w)
+    t6 = s.center(w)
+
+    print t1, t1 == s, t1 is s, type(t1)
+    print t2, t2 == s, t2 is s, type(t2)
+    print t3, t3 == s, t3 is s, type(t3)
+
+    print t4, t4 == s, t4 is s, type(t4)
+    print t5, t5 == s, t5 is s, type(t5)
+    print t6, t6 == s, t6 is s, type(t6)
+
+test_just_funcs("abcd", 3)
+test_just_funcs("abcd", 4)
+test_just_funcs("abcd", 5)
+test_just_funcs("abcd", 6)
+test_just_funcs("abcd", 7)
+test_just_funcs("abcd", 8)
+test_just_funcs("abcde", 3)
+test_just_funcs("abcde", 4)
+test_just_funcs("abcde", 5)
+test_just_funcs("abcde", 6)
+test_just_funcs("abcde", 7)
+test_just_funcs("abcde", 8)
