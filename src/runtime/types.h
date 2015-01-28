@@ -255,7 +255,7 @@ static_assert(offsetof(pyston::BoxedHeapClass, as_buffer) == offsetof(PyHeapType
 static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 
 
-class HiddenClass : public ConservativeGCObject {
+class HiddenClass : public GCAllocated<gc::GCKind::HIDDEN_CLASS> {
 private:
     HiddenClass() {}
     HiddenClass(const HiddenClass* parent) : attr_offsets(parent->attr_offsets) {}
@@ -270,8 +270,8 @@ public:
         return new HiddenClass();
     }
 
-    conservative_unordered_map<std::string, int> attr_offsets;
-    conservative_unordered_map<std::string, HiddenClass*> children;
+    std::unordered_map<std::string, int> attr_offsets;
+    std::unordered_map<std::string, HiddenClass*> children;
 
     HiddenClass* getOrMakeChild(const std::string& attr);
 
@@ -282,6 +282,12 @@ public:
         return it->second;
     }
     HiddenClass* delAttrToMakeHC(const std::string& attr);
+
+    void gc_visit(GCVisitor* visitor) {
+        for (const auto& p : children) {
+            visitor->visit(p.second);
+        }
+    }
 };
 
 class BoxedInt : public Box {

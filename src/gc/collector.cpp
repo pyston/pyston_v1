@@ -256,6 +256,9 @@ static void markPhase() {
         } else if (kind_id == GCKind::CONSERVATIVE) {
             uint32_t bytes = al->kind_data;
             visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+        } else if (kind_id == GCKind::PRECISE) {
+            uint32_t bytes = al->kind_data;
+            visitor.visitRange((void**)p, (void**)((char*)p + bytes));
         } else if (kind_id == GCKind::PYTHON) {
             Box* b = reinterpret_cast<Box*>(p);
             BoxedClass* cls = b->cls;
@@ -268,6 +271,9 @@ static void markPhase() {
                 ASSERT(cls->gc_visit, "%s", getTypeName(b)->c_str());
                 cls->gc_visit(&visitor, b);
             }
+        } else if (kind_id == GCKind::HIDDEN_CLASS) {
+            HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
+            hcls->gc_visit(&visitor);
         } else {
             RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
         }
