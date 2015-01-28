@@ -130,6 +130,9 @@ static Block* alloc_block(uint64_t size, Block** prev) {
     Block* rtn = (Block*)small_arena.doMmap(sizeof(Block));
     assert(rtn);
     rtn->size = size;
+    rtn->num_obj = BLOCK_SIZE / size;
+    rtn->min_obj_index = (BLOCK_HEADER_SIZE + size - 1) / size;
+    rtn->atoms_per_obj = size / ATOM_SIZE;
     rtn->prev = prev;
     rtn->next = NULL;
 
@@ -371,7 +374,7 @@ GCAllocation* Heap::getAllocationFromInteriorPointer(void* ptr) {
     if (obj_idx < b->minObjIndex() || obj_idx >= b->numObjects())
         return NULL;
 
-    int atom_idx = obj_idx * (size / ATOM_SIZE);
+    int atom_idx = obj_idx * b->atomsPerObj();
 
     if (b->isfree.isSet(atom_idx))
         return NULL;
