@@ -55,6 +55,7 @@ extern "C" void inititertools();
 extern "C" void initresource();
 extern "C" void initsignal();
 extern "C" void initselect();
+extern "C" void initfcntl();
 
 namespace pyston {
 
@@ -1190,6 +1191,7 @@ void setupRuntime() {
     initresource();
     initsignal();
     initselect();
+    initfcntl();
 
     setupSysEnd();
 
