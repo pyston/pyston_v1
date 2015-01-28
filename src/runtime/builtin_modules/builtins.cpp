@@ -493,7 +493,14 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    Box* rtn = getattrInternal(obj, str->s, NULL);
+
+    Box* rtn = NULL;
+    try {
+        rtn = getattrInternal(obj, str->s, NULL);
+    } catch (ExcInfo e) {
+        if (!e.matches(AttributeError))
+            throw e;
+    }
 
     if (!rtn) {
         if (default_value)
@@ -528,7 +535,7 @@ Box* hasattr(Box* obj, Box* _str) {
     } catch (ExcInfo e) {
         if (e.matches(Exception))
             return False;
-        throw;
+        throw e;
     }
 
     Box* rtn = attr ? True : False;

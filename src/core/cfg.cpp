@@ -2173,7 +2173,7 @@ public:
         AST_expr* enter = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load, node->lineno), "__enter__", true);
         AST_expr* exit = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load, node->lineno), "__exit__", true);
         pushAssign(exitname_buf, exit);
-        enter = makeCall(enter);
+        enter = remapExpr(makeCall(enter));
 
         if (node->optional_vars) {
             pushAssign(node->optional_vars, enter);

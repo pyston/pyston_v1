@@ -266,7 +266,40 @@ extern "C" int _PyFile_SanitizeMode(char* mode) noexcept {
 }
 
 extern "C" int PyObject_AsFileDescriptor(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    int fd;
+    PyObject* meth;
+
+    if (PyInt_Check(o)) {
+        fd = _PyInt_AsInt(o);
+    } else if (PyLong_Check(o)) {
+        fd = _PyLong_AsInt(o);
+    } else if ((meth = PyObject_GetAttrString(o, "fileno")) != NULL) {
+        PyObject* fno = PyEval_CallObject(meth, NULL);
+        Py_DECREF(meth);
+        if (fno == NULL)
+            return -1;
+
+        if (PyInt_Check(fno)) {
+            fd = _PyInt_AsInt(fno);
+            Py_DECREF(fno);
+        } else if (PyLong_Check(fno)) {
+            fd = _PyLong_AsInt(fno);
+            Py_DECREF(fno);
+        } else {
+            PyErr_SetString(PyExc_TypeError, "fileno() returned a non-integer");
+            Py_DECREF(fno);
+            return -1;
+        }
+    } else {
+        PyErr_SetString(PyExc_TypeError, "argument must be an int, or have a fileno() method.");
+        return -1;
+    }
+
+    if (fd < 0) {
+        PyErr_Format(PyExc_ValueError, "file descriptor cannot be a negative integer (%i)", fd);
+        return -1;
+    }
+    return fd;
 }
 
 extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
