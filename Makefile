@@ -969,6 +969,7 @@ test_cpp_ll:
 	$(CLANGPP_EXE) $(TEST_DIR)/test.cpp -o test.ll -c -O3 -emit-llvm -S -std=c++11 -g
 	less test.ll
 	rm test.ll
+.PHONY: bench_exceptions
 bench_exceptions:
 	$(CLANGPP_EXE) $(TEST_DIR)/bench_exceptions.cpp -o bench_exceptions -O3 -std=c++11
 	zsh -c 'ulimit -v $(MAX_MEM_KB); ulimit -d $(MAX_MEM_KB); time ./bench_exceptions'
