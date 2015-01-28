@@ -59,3 +59,7 @@ s = set(range(5))
 print len(s)
 s.clear()
 print s
+
+def f2():
+    print {5}
+f2()
