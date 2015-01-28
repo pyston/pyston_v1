@@ -66,6 +66,18 @@ extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLong(PyObject* vv) noexcep
         return bytes;
 }
 
+extern "C" int _PyLong_AsInt(PyObject* obj) noexcept {
+    int overflow;
+    long result = PyLong_AsLongAndOverflow(obj, &overflow);
+    if (overflow || result > INT_MAX || result < INT_MIN) {
+        /* XXX: could be cute and give a different
+           message for overflow == -1 */
+        PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C int");
+        return -1;
+    }
+    return (int)result;
+}
+
 extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) noexcept {
     Py_FatalError("unimplemented");
 }

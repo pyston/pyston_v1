@@ -19,6 +19,8 @@
 
 #include "Python.h"
 
+#include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
+
 #include "capi/types.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -675,6 +677,11 @@ void setCAPIException(const ExcInfo& e) {
     cur_thread_state.curexc_traceback = e.traceback;
 }
 
+void throwCAPIException() {
+    checkAndThrowCAPIException();
+    llvm_unreachable("No exception was thrown?");
+}
+
 void checkAndThrowCAPIException() {
     Box* _type = cur_thread_state.curexc_type;
     if (!_type)
@@ -1307,6 +1314,97 @@ extern "C" PyObject* _PyImport_FixupExtension(char* name, char* filename) noexce
 
 extern "C" PyObject* _PyImport_FindExtension(char* name, char* filename) noexcept {
     Py_FatalError("unimplemented");
+}
+
+static PyObject* listmethodchain(PyMethodChain* chain) noexcept {
+    PyMethodChain* c;
+    PyMethodDef* ml;
+    int i, n;
+    PyObject* v;
+
+    n = 0;
+    for (c = chain; c != NULL; c = c->link) {
+        for (ml = c->methods; ml->ml_name != NULL; ml++)
+            n++;
+    }
+    v = PyList_New(n);
+    if (v == NULL)
+        return NULL;
+    i = 0;
+    for (c = chain; c != NULL; c = c->link) {
+        for (ml = c->methods; ml->ml_name != NULL; ml++) {
+            PyList_SetItem(v, i, PyString_FromString(ml->ml_name));
+            i++;
+        }
+    }
+    if (PyErr_Occurred()) {
+        Py_DECREF(v);
+        return NULL;
+    }
+    PyList_Sort(v);
+    return v;
+}
+
+extern "C" PyObject* Py_FindMethodInChain(PyMethodChain* chain, PyObject* self, const char* name) noexcept {
+    if (name[0] == '_' && name[1] == '_') {
+        if (strcmp(name, "__methods__") == 0) {
+            if (PyErr_WarnPy3k("__methods__ not supported in 3.x", 1) < 0)
+                return NULL;
+            return listmethodchain(chain);
+        }
+        if (strcmp(name, "__doc__") == 0) {
+            const char* doc = self->cls->tp_doc;
+            if (doc != NULL)
+                return PyString_FromString(doc);
+        }
+    }
+    while (chain != NULL) {
+        PyMethodDef* ml = chain->methods;
+        for (; ml->ml_name != NULL; ml++) {
+            if (name[0] == ml->ml_name[0] && strcmp(name + 1, ml->ml_name + 1) == 0)
+                /* XXX */
+                return PyCFunction_New(ml, self);
+        }
+        chain = chain->link;
+    }
+    PyErr_SetString(PyExc_AttributeError, name);
+    return NULL;
+}
+
+/* Find a method in a single method list */
+
+extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const char* name) noexcept {
+    PyMethodChain chain;
+    chain.methods = methods;
+    chain.link = NULL;
+    return Py_FindMethodInChain(&chain, self, name);
+}
+
+extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
+    if (v != NULL) {
+        Py_ssize_t x;
+        if (PyInt_Check(v)) {
+            /* XXX(nnorwitz): I think PyInt_AS_LONG is correct,
+               however, it looks like it should be AsSsize_t.
+               There should be a comment here explaining why.
+            */
+            x = PyInt_AS_LONG(v);
+        } else if (PyIndex_Check(v)) {
+            x = PyNumber_AsSsize_t(v, NULL);
+            if (x == -1 && PyErr_Occurred())
+                return 0;
+        } else {
+            PyErr_SetString(PyExc_TypeError, "slice indices must be integers or "
+                                             "None or have an __index__ method");
+            return 0;
+        }
+        *pi = x;
+    }
+    return 1;
 }
 
 BoxedModule* importTestExtension(const std::string& name) {

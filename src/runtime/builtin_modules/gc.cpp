@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_RUNTIME_CAPI_H
-#define PYSTON_RUNTIME_CAPI_H
-
-#include <string>
+#include "core/types.h"
+#include "gc/collector.h"
+#include "runtime/types.h"
 
 namespace pyston {
 
-class BoxedModule;
-BoxedModule* importTestExtension(const std::string&);
-
-void checkAndThrowCAPIException();
-void throwCAPIException() __attribute__((noreturn));
-struct ExcInfo;
-void setCAPIException(const ExcInfo& e);
+Box* gcCollect() {
+    gc::runCollection();
+    return None;
 }
 
-#endif
+void setupGC() {
+    BoxedModule* gc_module = createModule("gc", "__builtin__");
+
+    gc_module->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)gcCollect, NONE, 0)));
+}
+}

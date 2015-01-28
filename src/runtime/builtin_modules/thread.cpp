@@ -47,10 +47,29 @@ Box* startNewThread(Box* target, Box* args) {
 
 static BoxedClass* thread_lock_cls;
 class BoxedThreadLock : public Box {
+private:
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
 public:
     BoxedThreadLock() {}
 
     DEFAULT_CLASS(thread_lock_cls);
+
+    static Box* acquire(Box* _self) {
+        RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
+        BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
+
+        pthread_mutex_lock(&self->lock);
+        return None;
+    }
+
+    static Box* release(Box* _self) {
+        RELEASE_ASSERT(_self->cls == thread_lock_cls, "");
+        BoxedThreadLock* self = static_cast<BoxedThreadLock*>(_self);
+
+        pthread_mutex_unlock(&self->lock);
+        return None;
+    }
 };
 
 Box* allocateLock() {
@@ -71,6 +90,10 @@ void setupThread() {
     thread_lock_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLock), false);
     thread_lock_cls->giveAttr("__name__", boxStrConstant("lock"));
     thread_lock_cls->giveAttr("__module__", boxStrConstant("thread"));
+    thread_lock_cls->giveAttr("acquire", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, NONE, 1)));
+    thread_lock_cls->giveAttr("release", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::release, NONE, 1)));
+    thread_lock_cls->giveAttr("acquire_lock", thread_lock_cls->getattr("acquire"));
+    thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr("release"));
     thread_lock_cls->freeze();
 
     BoxedClass* ThreadError

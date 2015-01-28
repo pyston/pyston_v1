@@ -1494,7 +1494,9 @@ Box* strContains(BoxedString* self, Box* elt) {
     return True;
 }
 
-Box* strStartswith(BoxedString* self, Box* elt) {
+Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
+    Box* end = _args[0];
+
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
                        getTypeName(self)->c_str());
@@ -1502,12 +1504,44 @@ Box* strStartswith(BoxedString* self, Box* elt) {
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
 
+    Py_ssize_t istart = 0, iend = PY_SSIZE_T_MAX;
+    if (start) {
+        int r = _PyEval_SliceIndex(start, &istart);
+        if (!r)
+            throwCAPIException();
+    }
+
+    if (end) {
+        int r = _PyEval_SliceIndex(end, &iend);
+        if (!r)
+            throwCAPIException();
+    }
+
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
-    return boxBool(startswith(self->s, sub->s));
+    Py_ssize_t n = self->s.size();
+    iend = std::min(iend, n);
+    if (iend < 0)
+        iend += n;
+    if (iend < 0)
+        iend = 0;
+
+    if (istart < 0)
+        istart += n;
+    if (istart < 0)
+        istart = 0;
+
+    Py_ssize_t compare_len = iend - istart;
+    if (compare_len < 0)
+        return False;
+    if (sub->s.size() > compare_len)
+        return False;
+    return boxBool(self->s.compare(istart, sub->s.size(), sub->s) == 0);
 }
 
-Box* strEndswith(BoxedString* self, Box* elt) {
+Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
+    Box* end = _args[0];
+
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
                        getTypeName(self)->c_str());
@@ -1515,9 +1549,41 @@ Box* strEndswith(BoxedString* self, Box* elt) {
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
 
+    Py_ssize_t istart = 0, iend = PY_SSIZE_T_MAX;
+    if (start) {
+        int r = _PyEval_SliceIndex(start, &istart);
+        if (!r)
+            throwCAPIException();
+    }
+
+    if (end) {
+        int r = _PyEval_SliceIndex(end, &iend);
+        if (!r)
+            throwCAPIException();
+    }
+
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
-    return boxBool(endswith(self->s, sub->s));
+    Py_ssize_t n = self->s.size();
+    iend = std::min(iend, n);
+    if (iend < 0)
+        iend += n;
+    if (iend < 0)
+        iend = 0;
+
+    if (istart < 0)
+        istart += n;
+    if (istart < 0)
+        istart = 0;
+
+    Py_ssize_t compare_len = iend - istart;
+    if (compare_len < 0)
+        return False;
+    if (sub->s.size() > compare_len)
+        return False;
+    // XXX: this line is the only difference between startswith and endswith:
+    istart += compare_len - sub->s.size();
+    return boxBool(self->s.compare(istart, sub->s.size(), sub->s) == 0);
 }
 
 Box* strFind(BoxedString* self, Box* elt, Box* _start) {
@@ -1790,8 +1856,10 @@ void setupStr() {
 
     str_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)strContains, BOXED_BOOL, 2)));
 
-    str_cls->giveAttr("startswith", new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 2)));
-    str_cls->giveAttr("endswith", new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 2)));
+    str_cls->giveAttr("startswith",
+                      new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
+    str_cls->giveAttr("endswith",
+                      new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
 
     str_cls->giveAttr("find",
                       new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 3, 1, false, false), { boxInt(0) }));

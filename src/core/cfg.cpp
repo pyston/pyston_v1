@@ -19,8 +19,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
-
 #include "analysis/scoping_analysis.h"
 #include "core/ast.h"
 #include "core/options.h"
@@ -2173,7 +2171,7 @@ public:
         AST_expr* enter = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load, node->lineno), "__enter__", true);
         AST_expr* exit = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load, node->lineno), "__exit__", true);
         pushAssign(exitname_buf, exit);
-        enter = makeCall(enter);
+        enter = remapExpr(makeCall(enter));
 
         if (node->optional_vars) {
             pushAssign(node->optional_vars, enter);

@@ -62,8 +62,15 @@ extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int new
     Py_FatalError("unimplemented");
 }
 
-extern "C" int _PyInt_AsInt(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
+    long result = PyInt_AsLong(obj);
+    if (result == -1 && PyErr_Occurred())
+        return -1;
+    if (result > INT_MAX || result < INT_MIN) {
+        PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C int");
+        return -1;
+    }
+    return (int)result;
 }
 
 BoxedInt* interned_ints[NUM_INTERNED_INTS];

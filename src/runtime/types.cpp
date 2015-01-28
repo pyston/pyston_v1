@@ -54,8 +54,12 @@ extern "C" void init_collections();
 extern "C" void inititertools();
 extern "C" void initresource();
 extern "C" void initsignal();
+extern "C" void initselect();
+extern "C" void initfcntl();
 
 namespace pyston {
+
+void setupGC();
 
 bool IN_SHUTDOWN = false;
 
@@ -1161,6 +1165,7 @@ void setupRuntime() {
     setupBuiltins();
     setupTime();
     setupThread();
+    setupGC();
 
     setupCAPI();
 
@@ -1185,6 +1190,8 @@ void setupRuntime() {
     inititertools();
     initresource();
     initsignal();
+    initselect();
+    initfcntl();
 
     setupSysEnd();
 
