@@ -1309,6 +1309,74 @@ extern "C" PyObject* _PyImport_FindExtension(char* name, char* filename) noexcep
     Py_FatalError("unimplemented");
 }
 
+static PyObject* listmethodchain(PyMethodChain* chain) noexcept {
+    PyMethodChain* c;
+    PyMethodDef* ml;
+    int i, n;
+    PyObject* v;
+
+    n = 0;
+    for (c = chain; c != NULL; c = c->link) {
+        for (ml = c->methods; ml->ml_name != NULL; ml++)
+            n++;
+    }
+    v = PyList_New(n);
+    if (v == NULL)
+        return NULL;
+    i = 0;
+    for (c = chain; c != NULL; c = c->link) {
+        for (ml = c->methods; ml->ml_name != NULL; ml++) {
+            PyList_SetItem(v, i, PyString_FromString(ml->ml_name));
+            i++;
+        }
+    }
+    if (PyErr_Occurred()) {
+        Py_DECREF(v);
+        return NULL;
+    }
+    PyList_Sort(v);
+    return v;
+}
+
+extern "C" PyObject* Py_FindMethodInChain(PyMethodChain* chain, PyObject* self, const char* name) noexcept {
+    if (name[0] == '_' && name[1] == '_') {
+        if (strcmp(name, "__methods__") == 0) {
+            if (PyErr_WarnPy3k("__methods__ not supported in 3.x", 1) < 0)
+                return NULL;
+            return listmethodchain(chain);
+        }
+        if (strcmp(name, "__doc__") == 0) {
+            const char* doc = self->cls->tp_doc;
+            if (doc != NULL)
+                return PyString_FromString(doc);
+        }
+    }
+    while (chain != NULL) {
+        PyMethodDef* ml = chain->methods;
+        for (; ml->ml_name != NULL; ml++) {
+            if (name[0] == ml->ml_name[0] && strcmp(name + 1, ml->ml_name + 1) == 0)
+                /* XXX */
+                return PyCFunction_New(ml, self);
+        }
+        chain = chain->link;
+    }
+    PyErr_SetString(PyExc_AttributeError, name);
+    return NULL;
+}
+
+/* Find a method in a single method list */
+
+extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const char* name) noexcept {
+    PyMethodChain chain;
+    chain.methods = methods;
+    chain.link = NULL;
+    return Py_FindMethodInChain(&chain, self, name);
+}
+
+extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 BoxedModule* importTestExtension(const std::string& name) {
     std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
     const char* pathname = pathname_name.c_str();

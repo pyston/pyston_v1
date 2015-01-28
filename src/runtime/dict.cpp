@@ -284,6 +284,16 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
     return None;
 }
 
+extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
+    try {
+        dictDelitem((BoxedDict*)op, key);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+
+    return 0;
+}
 Box* dictPop(BoxedDict* self, Box* k, Box* d) {
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor 'pop' requires a 'dict' object but received a '%s'",

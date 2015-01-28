@@ -39,6 +39,10 @@ extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     return 0;
 }
 
+extern "C" int PyList_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 
@@ -426,6 +430,22 @@ Box* listSort1(BoxedList* self) {
     std::sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
 
     return None;
+}
+
+extern "C" int PyList_Sort(PyObject* v) noexcept {
+    if (v == NULL || !PyList_Check(v)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    try {
+        listSort1((BoxedList*)v);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+
+    return 0;
 }
 
 Box* listContains(BoxedList* self, Box* elt) {

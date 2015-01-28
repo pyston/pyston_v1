@@ -17,6 +17,8 @@
 #ifndef Py_PYCONFIG_H
 #define Py_PYCONFIG_H
 
+#define _GNU_SOURCE 1
+
 #define HAVE_STDARG_PROTOTYPES
 #define HAVE_LONG_LONG 1
 #define PY_LONG_LONG long long
@@ -41,6 +43,9 @@
 #define HAVE_UINTPTR_T 1
 #define HAVE_INT32_T 1
 #define HAVE_INT64_T 1
+#define HAVE_EPOLL 1
+#define HAVE_POLL 1
+#define HAVE_SELECT 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"
