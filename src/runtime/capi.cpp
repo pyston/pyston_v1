@@ -19,6 +19,8 @@
 
 #include "Python.h"
 
+#include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
+
 #include "capi/types.h"
 #include "core/threading.h"
 #include "core/types.h"
@@ -673,6 +675,11 @@ void setCAPIException(const ExcInfo& e) {
     cur_thread_state.curexc_type = e.type;
     cur_thread_state.curexc_value = e.value;
     cur_thread_state.curexc_traceback = e.traceback;
+}
+
+void throwCAPIException() {
+    checkAndThrowCAPIException();
+    llvm_unreachable("No exception was thrown?");
 }
 
 void checkAndThrowCAPIException() {
@@ -1375,6 +1382,29 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
     Py_FatalError("unimplemented");
+}
+
+extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
+    if (v != NULL) {
+        Py_ssize_t x;
+        if (PyInt_Check(v)) {
+            /* XXX(nnorwitz): I think PyInt_AS_LONG is correct,
+               however, it looks like it should be AsSsize_t.
+               There should be a comment here explaining why.
+            */
+            x = PyInt_AS_LONG(v);
+        } else if (PyIndex_Check(v)) {
+            x = PyNumber_AsSsize_t(v, NULL);
+            if (x == -1 && PyErr_Occurred())
+                return 0;
+        } else {
+            PyErr_SetString(PyExc_TypeError, "slice indices must be integers or "
+                                             "None or have an __index__ method");
+            return 0;
+        }
+        *pi = x;
+    }
+    return 1;
 }
 
 BoxedModule* importTestExtension(const std::string& name) {

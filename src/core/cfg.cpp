@@ -19,8 +19,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
-
 #include "analysis/scoping_analysis.h"
 #include "core/ast.h"
 #include "core/options.h"

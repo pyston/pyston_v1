@@ -81,3 +81,8 @@ print "hello world"[False:True:True]
 
 print "{hello}".format(hello="world")
 print "%.3s" % "hello world"
+
+
+for i in xrange(-5, 15):
+    for j in xrange(-5, 15):
+        print i, j, "banana".startswith("ana", i, j), "banana".endswith("ana", i, j)
