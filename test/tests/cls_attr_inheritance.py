@@ -1,6 +1,3 @@
-# expected: fail
-# - inheritance not implemented
-
 class C(object):
     x = 1
 
@@ -13,4 +10,5 @@ print d.x
 # But also when doing instance-level lookups!
 print D.x
 
-print D.__dict__
+print 'x' in C.__dict__
+print 'x' in D.__dict__

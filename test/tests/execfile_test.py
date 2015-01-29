@@ -1,5 +1,5 @@
 # expected: fail
-# execfile() not implemented yet
+# - we throw some very weird error here
 
 try:
     execfile("doesnt_exist.py")

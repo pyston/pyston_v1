@@ -1,5 +1,5 @@
 # expected: fail
-# - need to support closures
+# - long % int
 
 import sys
 

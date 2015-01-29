@@ -1,5 +1,5 @@
 # expected: fail
-# - setattr() not supported
+# - memory explosion
 
 class C(object):
     pass

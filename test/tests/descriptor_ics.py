@@ -1,13 +1,13 @@
-# expected: fail
-# - descriptors not implemented yet
-
 # Make sure that we guard in a getattr IC to make sure that
 # we don't subsequently get an object with a __get__ defined.
 
 class D(object):
-    pass
+    def __repr__(self):
+        return "<D>"
 
 class C(object):
+    def __repr__(self):
+        return "<C>"
     d = D()
 
 c = C()

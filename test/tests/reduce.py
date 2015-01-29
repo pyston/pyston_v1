@@ -6,6 +6,12 @@ print reduce(operator.add, "hello world")
 
 print reduce(operator.add, "", 0)
 
+try:
+    print reduce(operator.add, "hello world", 0)
+except TypeError, e:
+    print e
+
+
 def f(a, b):
     print "f", a, b
     return b

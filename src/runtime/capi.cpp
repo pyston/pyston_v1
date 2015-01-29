@@ -688,7 +688,8 @@ void checkAndThrowCAPIException() {
         assert(!cur_thread_state.curexc_value);
 
     if (_type) {
-        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL, "unsupported");
+        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL || cur_thread_state.curexc_traceback == None,
+                       "unsupported");
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
@@ -902,7 +903,8 @@ extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Add);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return NULL;
     }
 }
 
