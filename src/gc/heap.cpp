@@ -45,6 +45,9 @@ void _collectIfNeeded(size_t bytes) {
         thread_bytesAllocatedSinceCollection = 0;
 
         if (bytesAllocatedSinceCollection >= ALLOCBYTES_PER_COLLECTION) {
+            if (!gcIsEnabled())
+                return;
+
             // bytesAllocatedSinceCollection = 0;
             // threading::GLPromoteRegion _lock;
             // runCollection();

@@ -47,6 +47,13 @@ public:
 
 void runCollection();
 
+// Python programs are allowed to pause the GC.  This is supposed to pause automatic GC,
+// but does not seem to pause manual calls to gc.collect().  So, callers should check gcIsEnabled(),
+// if appropriate, before calling runCollection().
+bool gcIsEnabled();
+void disableGC();
+void enableGC();
+
 // These are mostly for debugging:
 bool isValidGCObject(void* p);
 bool isNonheapRoot(void* p);

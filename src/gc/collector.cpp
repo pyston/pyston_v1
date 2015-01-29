@@ -288,6 +288,17 @@ static void sweepPhase() {
     global_heap.freeUnmarked();
 }
 
+static bool gc_enabled = true;
+bool gcIsEnabled() {
+    return gc_enabled;
+}
+void enableGC() {
+    gc_enabled = true;
+}
+void disableGC() {
+    gc_enabled = false;
+}
+
 static int ncollections = 0;
 void runCollection() {
     static StatCounter sc("gc_collections");

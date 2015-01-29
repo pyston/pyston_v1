@@ -1717,7 +1717,7 @@ extern "C" bool nonzero(Box* obj) {
 
     if (func == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
-                   || isSubclass(obj->cls, Exception),
+                   || isSubclass(obj->cls, Exception) || obj->cls == file_cls,
                "%s.__nonzero__",
                getTypeName(obj)->c_str()); // TODO
         return true;
