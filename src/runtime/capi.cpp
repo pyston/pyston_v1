@@ -34,12 +34,10 @@ namespace pyston {
 BoxedClass* method_cls;
 
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
-    extern "C" bool Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
-#define MAKE_CHECK2(NAME, cls_name)                                                                                    \
     extern "C" bool _Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
 
-MAKE_CHECK2(Int, int_cls)
-MAKE_CHECK2(String, str_cls)
+MAKE_CHECK(Int, int_cls)
+MAKE_CHECK(String, str_cls)
 MAKE_CHECK(Long, long_cls)
 MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)

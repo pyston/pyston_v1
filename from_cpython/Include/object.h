@@ -499,7 +499,8 @@ PyAPI_DATA(PyTypeObject*) type_cls;
 //PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyType_Check(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(bool) _PyType_Check(PyObject*) PYSTON_NOEXCEPT;
+#define PyType_Check(op) _PyType_Check((PyObject*)(op))
 #if 0
 #define PyType_Check(op) \
     PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS)
