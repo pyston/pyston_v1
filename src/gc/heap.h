@@ -87,18 +87,19 @@ public:
     void clear(int idx) { data[idx / 64] &= ~(1UL << (idx % 64)); }
 
     int scanForNext(Scanner& sc) {
-        uint64_t mask = 0;
+        uint64_t mask = data[sc.next_to_check];
 
-        while (true) {
-            mask = data[sc.next_to_check];
-            if (likely(mask != 0L)) {
-                break;
-            }
-
-            sc.next_to_check++;
-            if (sc.next_to_check == N / 64) {
-                sc.next_to_check = 0;
-                return -1;
+        if (unlikely(mask == 0L)) {
+            while (true) {
+                sc.next_to_check++;
+                if (sc.next_to_check == N / 64) {
+                    sc.next_to_check = 0;
+                    return -1;
+                }
+                mask = data[sc.next_to_check];
+                if (likely(mask != 0L)) {
+                    break;
+                }
             }
         }
 
@@ -134,7 +135,10 @@ struct Block {
     union {
         struct {
             Block* next, **prev;
-            uint64_t size;
+            uint32_t size;
+            uint16_t num_obj;
+            uint8_t min_obj_index;
+            uint8_t atoms_per_obj;
             Bitmap<ATOMS_PER_BLOCK> isfree;
             Bitmap<ATOMS_PER_BLOCK>::Scanner next_to_check;
             void* _header_end[0];
@@ -142,11 +146,11 @@ struct Block {
         Atoms atoms[ATOMS_PER_BLOCK];
     };
 
-    inline int minObjIndex() { return (BLOCK_HEADER_SIZE + size - 1) / size; }
+    inline int minObjIndex() const { return min_obj_index; }
 
-    inline int numObjects() { return BLOCK_SIZE / size; }
+    inline int numObjects() const { return num_obj; }
 
-    inline int atomsPerObj() { return size / ATOM_SIZE; }
+    inline int atomsPerObj() const { return atoms_per_obj; }
 
     static Block* forPointer(void* ptr) { return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE - 1)); }
 };

@@ -349,17 +349,17 @@ namespace gc {
 enum class GCKind : uint8_t {
     PYTHON = 1,
     CONSERVATIVE = 2,
-    UNTRACKED = 3,
+    PRECISE = 3,
+    UNTRACKED = 4,
+    HIDDEN_CLASS = 5,
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
 }
 
-class ConservativeGCObject {
+template <gc::GCKind gc_kind> class GCAllocated {
 public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) {
-        return gc_alloc(size, gc::GCKind::CONSERVATIVE);
-    }
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc_alloc(size, gc_kind); }
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 };
 
@@ -372,7 +372,7 @@ struct DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
-    struct AttrList : ConservativeGCObject {
+    struct AttrList : public GCAllocated<gc::GCKind::PRECISE> {
         Box* attrs[0];
     };
 
