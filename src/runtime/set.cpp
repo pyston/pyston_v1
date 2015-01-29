@@ -201,6 +201,24 @@ Box* setClear(BoxedSet* self, Box* v) {
     return None;
 }
 
+Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
+    assert(self->cls == set_cls);
+    assert(args->cls == tuple_cls);
+
+    for (auto l : args->elts) {
+        if (l->cls == set_cls) {
+            BoxedSet* s2 = static_cast<BoxedSet*>(l);
+            self->s.insert(s2->s.begin(), s2->s.end());
+        } else {
+            for (auto e : l->pyElements()) {
+                self->s.insert(e);
+            }
+        }
+    }
+
+    return None;
+}
+
 Box* setContains(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls || self->cls == frozenset_cls);
     return boxBool(self->s.count(v) != 0);
@@ -283,6 +301,7 @@ void setupSet() {
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
+    set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
 
     set_cls->freeze();
     frozenset_cls->freeze();

@@ -60,6 +60,11 @@ print len(s)
 s.clear()
 print s
 
+s.update((10, 15))
+print sorted(s)
+s.update((10, 15), range(8))
+print sorted(s)
+
 def f2():
     print {5}
 f2()
