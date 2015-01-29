@@ -49,7 +49,8 @@ PyAPI_DATA(PyTypeObject*) list_cls;
 #define PyList_Type (*list_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyList_Check(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(bool) _PyList_Check(PyObject*) PYSTON_NOEXCEPT;
+#define PyList_Check(op) _PyList_Check((PyObject*)(op))
 #if 0
 #define PyList_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LIST_SUBCLASS)
@@ -71,9 +72,9 @@ PyAPI_FUNC(PyObject *) _PyList_Extend(PyListObject *, PyObject *) PYSTON_NOEXCEP
 
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-#define PyList_GET_ITEM(op, i) PyList_GetItem(op, i)
-#define PyList_SET_ITEM(op, i, v) PyList_SetItem(op, i, v)
-#define PyList_GET_SIZE(op)    PyList_Size(op)
+#define PyList_GET_ITEM(op, i) PyList_GetItem((PyObject*)(op), (i))
+#define PyList_SET_ITEM(op, i, v) PyList_SetItem((PyObject*)(op), (i), (v))
+#define PyList_GET_SIZE(op)    PyList_Size((PyObject*)(op))
 //#define PyList_GET_ITEM(op, i) (((PyListObject *)(op))->ob_item[i])
 //#define PyList_SET_ITEM(op, i, v) (((PyListObject *)(op))->ob_item[i] = (v))
 //#define PyList_GET_SIZE(op)    Py_SIZE(op)

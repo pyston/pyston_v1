@@ -39,10 +39,6 @@ extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     return 0;
 }
 
-extern "C" int PyList_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 
@@ -180,14 +176,7 @@ extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
     }
 }
 
-
-extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
-    // I think r lock is ok here, since we don't change the list structure:
-    LOCK_REGION(self->lock.asRead());
-
-    assert(self->cls == list_cls);
-    assert(isSubclass(slice->cls, int_cls));
-    int64_t n = slice->n;
+static void _listSetitem(BoxedList* self, int64_t n, Box* v) {
     if (n < 0)
         n = self->size + n;
 
@@ -196,7 +185,29 @@ extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
     }
 
     self->elts->elts[n] = v;
+}
+
+extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
+    // I think r lock is ok here, since we don't change the list structure:
+    LOCK_REGION(self->lock.asRead());
+
+    assert(self->cls == list_cls);
+    assert(isSubclass(slice->cls, int_cls));
+    int64_t n = slice->n;
+
+    _listSetitem(self, n, v);
+
     return None;
+}
+
+extern "C" int PyList_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
+    assert(op->cls == list_cls);
+    try {
+        _listSetitem(static_cast<BoxedList*>(op), i, newitem);
+    } catch (ExcInfo e) {
+        abort();
+    }
+    return 0;
 }
 
 Box* listIAdd(BoxedList* self, Box* _rhs);
@@ -554,12 +565,21 @@ extern "C" Box* listNew(Box* cls, Box* container) {
 }
 
 extern "C" PyObject* PyList_New(Py_ssize_t size) noexcept {
-    // This function is supposed to return a list of `size` NULL elements.
-    // That will probably trip an assert somewhere if we try to create that (ex
-    // I think the GC will expect them to be real objects so they can be relocated).
-    RELEASE_ASSERT(size == 0, "");
     try {
-        return new BoxedList();
+        BoxedList* l = new BoxedList();
+        if (size) {
+            // This function is supposed to return a list of `size` NULL elements.
+            // That will probably trip an assert somewhere if we try to create that (ex
+            // I think the GC will expect them to be real objects so they can be relocated),
+            // so put None in instead
+            l->ensure(size);
+
+            for (Py_ssize_t i = 0; i < size; i++) {
+                l->elts->elts[i] = None;
+            }
+            l->size = size;
+        }
+        return l;
     } catch (ExcInfo e) {
         abort();
     }
