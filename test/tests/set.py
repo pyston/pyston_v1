@@ -64,6 +64,12 @@ s.update((10, 15))
 print sorted(s)
 s.update((10, 15), range(8))
 print sorted(s)
+s.remove(6)
+print sorted(s)
+try:
+    s.remove(6)
+except KeyError, e:
+    print e
 
 def f2():
     print {5}

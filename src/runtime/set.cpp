@@ -195,6 +195,23 @@ Box* setAdd(BoxedSet* self, Box* v) {
     return None;
 }
 
+Box* setRemove(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls);
+
+    auto it = self->s.find(v);
+    if (it == self->s.end()) {
+        BoxedString* s = reprOrNull(v);
+
+        if (s)
+            raiseExcHelper(KeyError, "%s", s->s.c_str());
+        else
+            raiseExcHelper(KeyError, "");
+    }
+
+    self->s.erase(it);
+    return None;
+}
+
 Box* setClear(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls);
     self->s.clear();
@@ -299,6 +316,7 @@ void setupSet() {
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
+    set_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)setRemove, NONE, 2)));
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
