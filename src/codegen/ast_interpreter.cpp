@@ -65,7 +65,7 @@ public:
 
     void initArguments(int nargs, BoxedClosure* closure, BoxedGenerator* generator, Box* arg1, Box* arg2, Box* arg3,
                        Box** args);
-    static Value execute(ASTInterpreter& interpreter, AST_stmt* start_at = NULL);
+    static Value execute(ASTInterpreter& interpreter, CFGBlock* start_block = NULL, AST_stmt* start_at = NULL);
 
 private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
@@ -138,6 +138,7 @@ public:
     CompiledFunction* getCF() { return compiled_func; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     const SymMap& getSymbolTable() { return sym_table; }
+    void addSymbol(const std::string& name, Box* value, bool allow_duplicates);
     void gcVisit(GCVisitor* visitor);
 };
 
@@ -169,12 +170,76 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFrom(CompiledFunction* cf, AST_stmt* start_at, BoxedDict* locals) {
-    assert(locals->d.size() == 0);
+void ASTInterpreter::addSymbol(const std::string& name, Box* value, bool allow_duplicates) {
+    if (!allow_duplicates)
+        assert(sym_table.count(name) == 0);
+    sym_table[name] = value;
+}
+
+Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                      BoxedDict* locals) {
+    assert(cf);
+    assert(enclosing_stmt);
+    assert(locals);
+    assert(after_expr);
+    assert(expr_val);
 
     ASTInterpreter interpreter(cf);
 
-    Value v = ASTInterpreter::execute(interpreter, start_at);
+    for (const auto& p : locals->d) {
+        assert(p.first->cls == str_cls);
+        interpreter.addSymbol(static_cast<BoxedString*>(p.first)->s, p.second, false);
+    }
+
+    CFGBlock* start_block = NULL;
+    AST_stmt* starting_statement = NULL;
+    while (true) {
+        if (enclosing_stmt->type == AST_TYPE::Assign) {
+            auto asgn = ast_cast<AST_Assign>(enclosing_stmt);
+            assert(asgn->value == after_expr);
+            assert(asgn->targets.size() == 1);
+            assert(asgn->targets[0]->type == AST_TYPE::Name);
+            auto name = ast_cast<AST_Name>(asgn->targets[0]);
+            assert(name->id[0] == '#');
+            interpreter.addSymbol(name->id, expr_val, true);
+            break;
+        } else if (enclosing_stmt->type == AST_TYPE::Expr) {
+            auto expr = ast_cast<AST_Expr>(enclosing_stmt);
+            assert(expr->value == after_expr);
+            break;
+        } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
+            auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);
+            start_block = invoke->normal_dest;
+            starting_statement = start_block->body[0];
+            enclosing_stmt = invoke->stmt;
+        } else {
+            RELEASE_ASSERT(0, "should not be able to reach here with anything other than an Assign (got %d)",
+                           enclosing_stmt->type);
+        }
+    }
+
+    if (start_block == NULL) {
+        // TODO innefficient
+        for (auto block : cf->clfunc->source->cfg->blocks) {
+            int n = block->body.size();
+            for (int i = 0; i < n; i++) {
+                if (block->body[i] == enclosing_stmt) {
+                    ASSERT(i + 1 < n, "how could we deopt from a non-invoke terminator?");
+                    start_block = block;
+                    starting_statement = block->body[i + 1];
+                    break;
+                }
+            }
+
+            if (start_block)
+                break;
+        }
+
+        ASSERT(start_block, "was unable to find the starting block??");
+        assert(starting_statement);
+    }
+
+    Value v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
 
     return v.o ? v.o : None;
 }
@@ -288,16 +353,33 @@ public:
 };
 }
 
-Value ASTInterpreter::execute(ASTInterpreter& interpreter, AST_stmt* start_at) {
+Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     threading::allowGLReadPreemption();
-
-    assert(start_at == NULL);
 
     void* frame_addr = __builtin_frame_address(0);
     RegisterHelper frame_registerer(&interpreter, frame_addr);
 
     Value v;
-    interpreter.next_block = interpreter.source_info->cfg->getStartingBlock();
+
+    assert((start_block == NULL) == (start_at == NULL));
+    if (start_block == NULL) {
+        start_block = interpreter.source_info->cfg->getStartingBlock();
+        start_at = start_block->body[0];
+    }
+
+    interpreter.current_block = start_block;
+    bool started = false;
+    for (auto s : start_block->body) {
+        if (!started) {
+            if (s != start_at)
+                continue;
+            started = true;
+        }
+
+        interpreter.current_inst = s;
+        v = interpreter.visit_stmt(s);
+    }
+
     while (interpreter.next_block) {
         interpreter.current_block = interpreter.next_block;
         interpreter.next_block = 0;

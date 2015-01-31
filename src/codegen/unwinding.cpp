@@ -586,6 +586,12 @@ BoxedDict* getLocals(bool only_user_visible) {
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }
 
+ExecutionPoint getExecutionPoint() {
+    auto frame = getTopPythonFrame();
+    auto cf = frame->getCF();
+    auto current_stmt = frame->getCurrentStatement();
+    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
+}
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();

@@ -31,6 +31,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
 #include "codegen/type_recording.h"
+#include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -224,6 +225,15 @@ bool PyLt::operator()(Box* lhs, Box* rhs) const {
     Box* cmp = compareInternal(lhs, rhs, AST_TYPE::Lt, NULL);
     assert(cmp->cls == bool_cls);
     return cmp == True;
+}
+
+extern "C" Box* deopt(AST_expr* expr, Box* value) {
+    static StatCounter num_deopt("num_deopt");
+    num_deopt.log();
+
+    auto locals = getLocals(false /* filter */);
+    auto execution_point = getExecutionPoint();
+    return astInterpretFrom(execution_point.cf, expr, execution_point.current_stmt, value, locals);
 }
 
 extern "C" bool softspace(Box* b, bool newval) {

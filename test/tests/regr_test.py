@@ -16,3 +16,6 @@ c = C()
 c.pid = 1
 for i in xrange(20000):
     f(c, None)
+
+    if i == 15000:
+        c.pid = 1.0

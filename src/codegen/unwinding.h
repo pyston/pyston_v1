@@ -32,6 +32,12 @@ BoxedDict* getLocals(bool only_user_visible);
 // Fetches a writeable pointer to the frame-local excinfo object,
 // calculating it if necessary (from previous frames).
 ExcInfo* getFrameExcInfo();
+
+struct ExecutionPoint {
+    CompiledFunction* cf;
+    AST_stmt* current_stmt;
+};
+ExecutionPoint getExecutionPoint();
 }
 
 #endif
