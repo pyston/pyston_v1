@@ -233,6 +233,10 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
 
     auto locals = getLocals(false /* filter */);
     auto execution_point = getExecutionPoint();
+
+    // Should we only do this selectively?
+    execution_point.cf->speculationFailed();
+
     return astInterpretFrom(execution_point.cf, expr, execution_point.current_stmt, value, locals);
 }
 

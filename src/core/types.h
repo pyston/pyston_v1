@@ -192,7 +192,7 @@ public:
 
     EffortLevel::EffortLevel effort;
 
-    int64_t times_called;
+    int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
 
     LocationMap* location_map; // only meaningful if this is a compiled frame
@@ -203,13 +203,17 @@ public:
                      llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
                      const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), llvm_code(llvm_code), effort(effort), times_called(0), location_map(nullptr) {}
+          code(code), llvm_code(llvm_code), effort(effort), times_called(0), times_speculation_failed(0),
+          location_map(nullptr) {}
 
     // TODO this will need to be implemented eventually; things to delete:
     // - line_table if it exists
     // - location_map if it exists
     // - all entries in ics (after deregistering them)
     ~CompiledFunction();
+
+    // Call this when a speculation inside this version failed
+    void speculationFailed();
 };
 
 class BoxedModule;
