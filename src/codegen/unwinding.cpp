@@ -552,7 +552,10 @@ BoxedDict* getLocals(bool only_user_visible) {
             }
 
             for (const auto& p : cf->location_map->names) {
-                if (only_user_visible && (p.first[0] == '#' || p.first[0] == '!'))
+                if (p.first[0] == '!')
+                    continue;
+
+                if (only_user_visible && p.first[0] == '#')
                     continue;
 
                 if (is_undefined.count(p.first))
