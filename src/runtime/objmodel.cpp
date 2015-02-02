@@ -3617,7 +3617,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
         allowable_news.push_back(object_new);
 
-        for (BoxedClass* allowed_cls : { xrange_cls }) {
+        for (BoxedClass* allowed_cls : { enumerate_cls, xrange_cls }) {
             auto new_obj = typeLookup(allowed_cls, _new_str, NULL);
             gc::registerPermanentRoot(new_obj);
             allowable_news.push_back(new_obj);
