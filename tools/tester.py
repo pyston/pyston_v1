@@ -280,7 +280,7 @@ def run_test(fn, check_stats, run_memcheck):
                         statname = m.group(1)
                         raise Exception((l, statname, stats[statname]))
 
-                    m = re.match("""noninit_count\(['"]([\w_]+)['"]\)""", l)
+                    m = re.search("""noninit_count\(['"]([\w_]+)['"]\)""", l)
                     if m:
                         statname = m.group(1)
                         raise Exception((l, statname, noninit_count(statname)))

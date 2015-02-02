@@ -346,7 +346,8 @@ private:
 
     OpInfo getEmptyOpInfo(UnwindInfo unw_info) { return OpInfo(irstate->getEffortLevel(), NULL, unw_info); }
 
-    void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, CompilerVariable* node_value) {
+    void createExprTypeGuard(llvm::Value* check_val, AST_expr* node, llvm::Value* node_value,
+                             AST_stmt* current_statement) {
         assert(check_val->getType() == g.i1);
 
         llvm::Metadata* md_vals[]
@@ -361,17 +362,18 @@ private:
             = llvm::BasicBlock::Create(g.context, "check_succeeded", irstate->getLLVMFunction());
         success_bb->moveAfter(curblock);
 
-        // Create the guard with both branches leading to the success_bb,
-        // and let the deopt path change the failure case to point to the
-        // as-yet-unknown deopt block.
-        // TODO Not the best approach since if we fail to do that patching,
-        // the guard will just silently be ignored.
-        llvm::BranchInst* guard = emitter.getBuilder()->CreateCondBr(check_val, success_bb, success_bb, branch_weights);
+        llvm::BasicBlock* deopt_bb = llvm::BasicBlock::Create(g.context, "check_failed", irstate->getLLVMFunction());
+
+        llvm::BranchInst* guard = emitter.getBuilder()->CreateCondBr(check_val, success_bb, deopt_bb, branch_weights);
+
+        curblock = deopt_bb;
+        emitter.getBuilder()->SetInsertPoint(curblock);
+        llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
+                                             embedConstantPtr(node, g.i8->getPointerTo()), node_value);
+        emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
-
-        out_guards.addExprTypeGuard(myblock, guard, node, node_value, symbol_table);
     }
 
     CompilerVariable* evalAttribute(AST_Attribute* node, UnwindInfo unw_info) {
@@ -1244,7 +1246,7 @@ private:
 
                 llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
                 assert(guard_check->getType() == g.i1);
-                createExprTypeGuard(guard_check, node, old_rtn);
+                createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
 
                 rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
             }

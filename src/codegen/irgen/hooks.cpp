@@ -280,6 +280,42 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
+// If a function version keeps failing its speculations, kill it (remove it
+// from the list of valid function versions).  The next time we go to call
+// the function, we will have to pick a different version, potentially recompiling.
+//
+// TODO we should have logic like this at the CLFunc level that detects that we keep
+// on creating functions with failing speculations, and then stop speculating.
+void CompiledFunction::speculationFailed() {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
+    this->times_speculation_failed++;
+
+    if (this->times_speculation_failed >= 4) {
+        // printf("Killing %p because it failed too many speculations\n", this);
+
+        CLFunction* cl = this->clfunc;
+        assert(cl);
+
+        bool found = false;
+        for (int i = 0; i < clfunc->versions.size(); i++) {
+            if (clfunc->versions[i] == this) {
+                clfunc->versions.erase(clfunc->versions.begin() + i);
+                this->dependent_callsites.invalidateAll();
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            for (int i = 0; i < clfunc->versions.size(); i++) {
+                printf("%p\n", clfunc->versions[i]);
+            }
+        }
+        assert(found);
+    }
+}
+
 /// Reoptimizes the given function version at the new effort level.
 /// The cf must be an active version in its parents CLFunction; the given
 /// version will be replaced by the new version, which will be returned.

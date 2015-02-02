@@ -158,6 +158,7 @@ public:
 
     void addExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val,
                           const SymbolTable& st) {
+        abort();
         ExprTypeGuard*& g = expr_type_guards[ast_node];
         assert(g == NULL);
         g = new ExprTypeGuard(cfg_block, branch, ast_node, val, st);

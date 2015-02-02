@@ -36,6 +36,8 @@ extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 
+extern "C" Box* deopt(AST_expr* expr, Box* value);
+
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 

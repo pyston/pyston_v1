@@ -106,6 +106,7 @@ void force() {
 
     FORCE(raise0);
     FORCE(raise3);
+    FORCE(deopt);
 
     FORCE(div_i64_i64);
     FORCE(mod_i64_i64);

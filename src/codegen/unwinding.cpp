@@ -552,7 +552,10 @@ BoxedDict* getLocals(bool only_user_visible) {
             }
 
             for (const auto& p : cf->location_map->names) {
-                if (only_user_visible && (p.first[0] == '#' || p.first[0] == '!'))
+                if (p.first[0] == '!')
+                    continue;
+
+                if (only_user_visible && p.first[0] == '#')
                     continue;
 
                 if (is_undefined.count(p.first))
@@ -586,6 +589,12 @@ BoxedDict* getLocals(bool only_user_visible) {
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }
 
+ExecutionPoint getExecutionPoint() {
+    auto frame = getTopPythonFrame();
+    auto cf = frame->getCF();
+    auto current_stmt = frame->getCurrentStatement();
+    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
+}
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();
