@@ -31,11 +31,12 @@ def f3():
     print sorted(locals().items())
 f3()
 
-def f4():
+def f4(t):
     """testing synthetic 'is_defined' variables"""
-    if 0:
+    if t:
         x = 1
     else:
         y = 2
     print sorted(locals().items())
-# f4()
+f4(0)
+f4(1)
