@@ -16,8 +16,9 @@ install:
   - git config --global user.email "you@example.com"
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
+  - python ~/pyston/tools/git_svn_gotorev.py ~/pyston_deps/llvm-trunk `cat ~/pyston/llvm_revision.txt` ~/pyston/llvm_patches
+  - python ~/pyston/tools/git_svn_gotorev.py ~/pyston_deps/llvm-trunk/tools/clang `cat ~/pyston/llvm_revision.txt` ~/pyston/clang_patches
   - cmake -GNinja $TRAVIS_BUILD_DIR
-  - ninja llvm_up
   - ninja libunwind ext_cpython
 
 script:
