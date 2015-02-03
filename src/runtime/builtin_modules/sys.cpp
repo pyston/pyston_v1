@@ -254,8 +254,7 @@ void setupSys() {
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
 
-    sys_flags_cls = new BoxedHeapClass(object_cls, BoxedSysFlags::gcHandler, 0, sizeof(BoxedSysFlags), false);
-    sys_flags_cls->giveAttr("__name__", boxStrConstant("flags"));
+    sys_flags_cls = new BoxedHeapClass(object_cls, BoxedSysFlags::gcHandler, 0, sizeof(BoxedSysFlags), false, "flags");
     sys_flags_cls->giveAttr("__new__",
                             new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, 0, true, true)));
 #define ADD(name)                                                                                                      \

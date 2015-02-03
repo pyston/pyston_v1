@@ -233,14 +233,14 @@ void raise0() {
 ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {
     if (this->type && this->type != None)
         RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
-                       getTypeName(this->type)->c_str());
+                       getTypeName(this->type));
 }
 #endif
 
 bool ExcInfo::matches(BoxedClass* cls) const {
     assert(this->type);
     RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
-                   getTypeName(this->type)->c_str());
+                   getTypeName(this->type));
     return isSubclass(static_cast<BoxedClass*>(this->type), cls);
 }
 
@@ -267,7 +267,7 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
     }
 
     raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
-                   getTypeName(arg0)->c_str());
+                   getTypeName(arg0));
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
@@ -295,16 +295,16 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 }
 
 std::string formatException(Box* b) {
-    const std::string* name = getTypeName(b);
+    std::string name = getTypeName(b);
 
     BoxedString* r = strOrNull(b);
     if (!r)
-        return *name;
+        return name;
 
     assert(r->cls == str_cls);
     const std::string* msg = &r->s;
     if (msg->size())
-        return *name + ": " + *msg;
-    return *name;
+        return name + ": " + *msg;
+    return name;
 }
 }

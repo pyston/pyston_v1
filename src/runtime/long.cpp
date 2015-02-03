@@ -358,7 +358,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
 
             if (!r) {
                 fprintf(stderr, "TypeError: long() argument must be a string or a number, not '%s'\n",
-                        getTypeName(val)->c_str());
+                        getTypeName(val));
                 raiseExcHelper(TypeError, "");
             }
 
@@ -376,12 +376,12 @@ BoxedLong* _longNew(Box* val, Box* _base) {
 
 extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
     if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+        raiseExcHelper(TypeError, "long.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, long_cls))
-        raiseExcHelper(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "long.__new__(%s): %s is not a subtype of long", getNameOfClass(cls),
+                       getNameOfClass(cls));
 
     BoxedLong* l = _longNew(val, _base);
     if (cls == long_cls)
@@ -395,8 +395,7 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
 
 Box* longRepr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'",
-                       getTypeName(v)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
 
     int space_required = mpz_sizeinbase(v->n, 10) + 2; // basic size
     space_required += 1;                               // 'L' suffix
@@ -412,8 +411,7 @@ Box* longRepr(BoxedLong* v) {
 
 Box* longStr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'",
-                       getTypeName(v)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'", getTypeName(v));
     int space_required = mpz_sizeinbase(v->n, 10) + 2;
     char* buf = (char*)malloc(space_required);
     mpz_get_str(buf, 10, v->n);
@@ -426,8 +424,7 @@ Box* longStr(BoxedLong* v) {
 
 Box* longNeg(BoxedLong* v1) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
@@ -445,8 +442,7 @@ Box* longAbs(BoxedLong* v1) {
 
 Box* longAdd(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -472,8 +468,7 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
 
 extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'", getTypeName(v1));
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
         BoxedLong* r = new BoxedLong();
@@ -499,8 +494,7 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
 
 extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'long' object but received a '%s'", getTypeName(v1));
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
         BoxedLong* r = new BoxedLong();
@@ -527,8 +521,7 @@ extern "C" Box* longXor(BoxedLong* v1, Box* _v2) {
 // TODO reduce duplication between these 6 functions, and add double support
 Box* longGt(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -545,8 +538,7 @@ Box* longGt(BoxedLong* v1, Box* _v2) {
 
 Box* longGe(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -563,8 +555,7 @@ Box* longGe(BoxedLong* v1, Box* _v2) {
 
 Box* longLt(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -581,8 +572,7 @@ Box* longLt(BoxedLong* v1, Box* _v2) {
 
 Box* longLe(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -599,8 +589,7 @@ Box* longLe(BoxedLong* v1, Box* _v2) {
 
 Box* longEq(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -617,8 +606,7 @@ Box* longEq(BoxedLong* v1, Box* _v2) {
 
 Box* longNe(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -636,7 +624,7 @@ Box* longNe(BoxedLong* v1, Box* _v2) {
 Box* longLshift(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+                       getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -666,7 +654,7 @@ Box* longLshift(BoxedLong* v1, Box* _v2) {
 Box* longRshift(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+                       getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -695,8 +683,7 @@ Box* longRshift(BoxedLong* v1, Box* _v2) {
 
 Box* longSub(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -723,15 +710,14 @@ Box* longSub(BoxedLong* v1, Box* _v2) {
 Box* longRsub(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__rsub__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+                       getTypeName(v1));
 
     return longAdd(static_cast<BoxedLong*>(longNeg(v1)), _v2);
 }
 
 Box* longMul(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -754,8 +740,7 @@ Box* longMul(BoxedLong* v1, Box* _v2) {
 
 Box* longDiv(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (isSubclass(_v2->cls, long_cls)) {
         BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
@@ -785,7 +770,7 @@ Box* longDiv(BoxedLong* v1, Box* _v2) {
 extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
     if (!isSubclass(lhs->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+                       getTypeName(lhs));
 
     if (isSubclass(_rhs->cls, long_cls)) {
         BoxedLong* rhs = static_cast<BoxedLong*>(_rhs);
@@ -818,8 +803,7 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
 
 Box* longRdiv(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (mpz_cmp_si(v1->n, 0) == 0)
         raiseExcHelper(ZeroDivisionError, "long division or modulo by zero");
@@ -845,8 +829,7 @@ Box* longRdiv(BoxedLong* v1, Box* _v2) {
 
 Box* longPow(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
-        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
-                       getTypeName(v1)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
     if (!isSubclass(_v2->cls, long_cls))
         return NotImplemented;
@@ -866,7 +849,7 @@ Box* longPow(BoxedLong* v1, Box* _v2) {
 Box* longNonzero(BoxedLong* self) {
     if (!isSubclass(self->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     if (mpz_cmp_si(self->n, 0) == 0)
         return False;
@@ -876,7 +859,7 @@ Box* longNonzero(BoxedLong* self) {
 Box* longHash(BoxedLong* self) {
     if (!isSubclass(self->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     // Not sure if this is a good hash function or not;
     // simple, but only includes top bits:
@@ -902,8 +885,6 @@ void customised_free(void* ptr, size_t size) {
 
 void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
-
-    long_cls->giveAttr("__name__", boxStrConstant("long"));
 
     long_cls->giveAttr(
         "__new__", new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));

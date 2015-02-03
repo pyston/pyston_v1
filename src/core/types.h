@@ -324,7 +324,7 @@ EffortLevel::EffortLevel initialEffort();
 typedef bool i1;
 typedef int64_t i64;
 
-extern "C" const std::string* getNameOfClass(BoxedClass* cls);
+const char* getNameOfClass(BoxedClass* cls);
 std::string getFullNameOfClass(BoxedClass* cls);
 
 class Rewriter;
@@ -446,10 +446,8 @@ public:
 };
 static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
 
-extern "C" const std::string* getTypeName(Box* o);
 std::string getFullTypeName(Box* o);
-
-
+const char* getTypeName(Box* b);
 
 class BoxedClass;
 

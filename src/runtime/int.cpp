@@ -235,8 +235,7 @@ extern "C" Box* intAddFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* intAdd(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__add__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -257,8 +256,7 @@ extern "C" Box* intAndInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intAnd(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -275,8 +273,7 @@ extern "C" Box* intOrInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intOr(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -293,8 +290,7 @@ extern "C" Box* intXorInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intXor(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -321,8 +317,7 @@ extern "C" Box* intDivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* intDiv(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__div__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         return intDivInt(lhs, static_cast<BoxedInt*>(rhs));
@@ -352,7 +347,7 @@ extern "C" Box* intFloordivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 extern "C" Box* intFloordiv(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__floordiv__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+                       getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         return intFloordivInt(lhs, static_cast<BoxedInt*>(rhs));
@@ -386,7 +381,7 @@ extern "C" Box* intTruedivFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 extern "C" Box* intTruediv(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__truediv__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+                       getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         return intTruedivInt(lhs, static_cast<BoxedInt*>(rhs));
@@ -405,8 +400,7 @@ extern "C" Box* intEqInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intEq(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -424,8 +418,7 @@ extern "C" Box* intNeInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intNe(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__ne__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -442,8 +435,7 @@ extern "C" Box* intLtInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intLt(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__lt__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -460,8 +452,7 @@ extern "C" Box* intLeInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intLe(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__le__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -478,8 +469,7 @@ extern "C" Box* intGtInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intGt(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__gt__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -496,8 +486,7 @@ extern "C" Box* intGeInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intGe(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__ge__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -520,7 +509,7 @@ extern "C" Box* intLShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
 extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+                       getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -537,8 +526,7 @@ extern "C" Box* intModInt(BoxedInt* lhs, BoxedInt* rhs) {
 
 extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__mod__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -550,7 +538,7 @@ extern "C" Box* intMod(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intDivmod(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__divmod__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+                       getTypeName(lhs));
 
     Box* divResult = intDiv(lhs, rhs);
 
@@ -583,8 +571,7 @@ extern "C" Box* intMulFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* intMul(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__mul__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -612,8 +599,7 @@ extern "C" Box* intPowFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* intPow(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -639,7 +625,7 @@ extern "C" Box* intRShiftInt(BoxedInt* lhs, BoxedInt* rhs) {
 extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+                       getTypeName(lhs));
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -662,8 +648,7 @@ extern "C" Box* intSubFloat(BoxedInt* lhs, BoxedFloat* rhs) {
 
 extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'int' object but received a '%s'",
-                       getTypeName(lhs)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__sub__' requires a 'int' object but received a '%s'", getTypeName(lhs));
 
     if (isSubclass(rhs->cls, int_cls)) {
         BoxedInt* rhs_int = static_cast<BoxedInt*>(rhs);
@@ -679,15 +664,14 @@ extern "C" Box* intSub(BoxedInt* lhs, Box* rhs) {
 extern "C" Box* intInvert(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__invert__' requires a 'int' object but received a '%s'",
-                       getTypeName(v)->c_str());
+                       getTypeName(v));
 
     return boxInt(~v->n);
 }
 
 extern "C" Box* intPos(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'",
-                       getTypeName(v)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     if (v->cls == int_cls)
         return v;
@@ -696,8 +680,7 @@ extern "C" Box* intPos(BoxedInt* v) {
 
 extern "C" Box* intNeg(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'int' object but received a '%s'",
-                       getTypeName(v)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__neg__' requires a 'int' object but received a '%s'", getTypeName(v));
 
 
 // It's possible for this to overflow:
@@ -715,15 +698,14 @@ extern "C" Box* intNeg(BoxedInt* v) {
 extern "C" Box* intNonzero(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__nonzer__' requires a 'int' object but received a '%s'",
-                       getTypeName(v)->c_str());
+                       getTypeName(v));
 
     return boxBool(v->n != 0);
 }
 
 extern "C" BoxedString* intRepr(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'",
-                       getTypeName(v)->c_str());
+        raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'int' object but received a '%s'", getTypeName(v));
 
     char buf[80];
     int len = snprintf(buf, 80, "%ld", v->n);
@@ -733,7 +715,7 @@ extern "C" BoxedString* intRepr(BoxedInt* v) {
 extern "C" Box* intHash(BoxedInt* self) {
     if (!isSubclass(self->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__hash__' requires a 'int' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     if (self->cls == int_cls)
         return self;
@@ -743,7 +725,7 @@ extern "C" Box* intHash(BoxedInt* self) {
 extern "C" Box* intHex(BoxedInt* self) {
     if (!isSubclass(self->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'int' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     char buf[80];
     int len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
@@ -753,7 +735,7 @@ extern "C" Box* intHex(BoxedInt* self) {
 extern "C" Box* intOct(BoxedInt* self) {
     if (!isSubclass(self->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'int' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     char buf[80];
     int len = snprintf(buf, sizeof(buf), "%#lo", self->n);
@@ -782,8 +764,7 @@ BoxedInt* _intNew(Box* val) {
                           ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
-            fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n",
-                    getTypeName(val)->c_str());
+            fprintf(stderr, "TypeError: int() argument must be a string or a number, not '%s'\n", getTypeName(val));
             raiseExcHelper(TypeError, "");
         }
 
@@ -796,12 +777,12 @@ BoxedInt* _intNew(Box* val) {
 
 extern "C" Box* intNew(Box* _cls, Box* val) {
     if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+        raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, int_cls))
-        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "int.__new__(%s): %s is not a subtype of int", getNameOfClass(cls),
+                       getNameOfClass(cls));
 
     if (cls == int_cls)
         return _intNew(val);
@@ -853,8 +834,6 @@ void setupInt() {
         interned_ints[i] = new BoxedInt(i);
         gc::registerPermanentRoot(interned_ints[i]);
     }
-
-    int_cls->giveAttr("__name__", boxStrConstant("int"));
 
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);

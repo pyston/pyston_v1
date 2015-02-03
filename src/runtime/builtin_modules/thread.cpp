@@ -144,8 +144,7 @@ void setupThread() {
     thread_module->giveAttr("get_ident", new BoxedFunction(boxRTFunction((void*)getIdent, BOXED_INT, 0)));
     thread_module->giveAttr("stack_size", new BoxedFunction(boxRTFunction((void*)stackSize, BOXED_INT, 0)));
 
-    thread_lock_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLock), false);
-    thread_lock_cls->giveAttr("__name__", boxStrConstant("lock"));
+    thread_lock_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLock), false, "lock");
     thread_lock_cls->giveAttr("__module__", boxStrConstant("thread"));
     thread_lock_cls->giveAttr(
         "acquire",
@@ -157,15 +156,13 @@ void setupThread() {
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->freeze();
 
-    thread_local_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLocal), false);
-    thread_local_cls->giveAttr("__name__", boxStrConstant("_local"));
+    thread_local_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLocal), false, "_local");
     thread_local_cls->giveAttr("__module__", boxStrConstant("thread"));
     thread_local_cls->freeze();
     thread_module->giveAttr("_local", thread_local_cls);
 
     BoxedClass* ThreadError
-        = new BoxedHeapClass(Exception, NULL, Exception->attrs_offset, Exception->tp_basicsize, false);
-    ThreadError->giveAttr("__name__", boxStrConstant("error"));
+        = new BoxedHeapClass(Exception, NULL, Exception->attrs_offset, Exception->tp_basicsize, false, "error");
     ThreadError->giveAttr("__module__", boxStrConstant("thread"));
     ThreadError->freeze();
 

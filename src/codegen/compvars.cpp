@@ -1219,7 +1219,7 @@ private:
     KnownClassobjType(BoxedClass* cls) : cls(cls) { assert(cls); }
 
 public:
-    std::string debugName() override { return "class '" + *getNameOfClass(cls) + "'"; }
+    std::string debugName() override { return "class '" + std::string(getNameOfClass(cls)) + "'"; }
 
     void assertMatches(BoxedClass* cls) override { assert(cls == this->cls); }
 
@@ -1276,7 +1276,7 @@ public:
         assert(cls);
         // TODO add getTypeName
 
-        return "NormalType(" + *getNameOfClass(cls) + ")";
+        return "NormalType(" + std::string(getNameOfClass(cls)) + ")";
     }
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                             ConcreteCompilerType* other_type) override {
@@ -1332,7 +1332,7 @@ public:
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
-                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(std::string(getNameOfClass(cls)) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
                 return undefVariable();
@@ -1383,7 +1383,7 @@ public:
                 *no_attribute = true;
             } else {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
-                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(std::string(getNameOfClass(cls)) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
             }

@@ -84,10 +84,10 @@ Box* superRepr(Box* _s) {
     BoxedSuper* s = static_cast<BoxedSuper*>(_s);
 
     if (s->obj_type) {
-        return boxString("<super: <class '" + (s->type ? *getNameOfClass(s->type) : "NULL") + "'>, <"
-                         + *getNameOfClass(s->obj_type) + " object>>");
+        return boxString("<super: <class '" + std::string(s->type ? getNameOfClass(s->type) : "NULL") + "'>, <"
+                         + std::string(getNameOfClass(s->obj_type)) + " object>>");
     } else {
-        return boxString("<super: <class '" + (s->type ? *getNameOfClass(s->type) : "NULL") + "'>, <NULL>>");
+        return boxString("<super: <class '" + std::string(s->type ? getNameOfClass(s->type) : "NULL") + "'>, <NULL>>");
     }
 }
 
@@ -115,7 +115,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
     BoxedSuper* self = static_cast<BoxedSuper*>(_self);
 
     if (!isSubclass(_type->cls, type_cls))
-        raiseExcHelper(TypeError, "must be type, not %s", getTypeName(_type)->c_str());
+        raiseExcHelper(TypeError, "must be type, not %s", getTypeName(_type));
     BoxedClass* type = static_cast<BoxedClass*>(_type);
 
     BoxedClass* obj_type = NULL;
@@ -132,9 +132,7 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
 }
 
 void setupSuper() {
-    super_cls = new BoxedHeapClass(object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false);
-
-    super_cls->giveAttr("__name__", boxStrConstant("super"));
+    super_cls = new BoxedHeapClass(object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false, "super");
 
     super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
     super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));

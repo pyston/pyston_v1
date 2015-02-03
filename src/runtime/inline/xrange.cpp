@@ -88,21 +88,21 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
     Box* step = args[0];
 
     if (stop == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
 
         i64 istop = static_cast<BoxedInt*>(start)->n;
         return new BoxedXrange(0, istop, 1);
     } else if (step == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
 
         i64 istart = static_cast<BoxedInt*>(start)->n;
         i64 istop = static_cast<BoxedInt*>(stop)->n;
         return new BoxedXrange(istart, istop, 1);
     } else {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
-        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
+        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step));
 
         i64 istart = static_cast<BoxedInt*>(start)->n;
         i64 istop = static_cast<BoxedInt*>(stop)->n;
@@ -120,11 +120,9 @@ Box* xrangeIter(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedXrange), false);
-    xrange_cls->giveAttr("__name__", boxStrConstant("xrange"));
+    xrange_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedXrange), false, "xrange");
     xrange_iterator_cls = new BoxedHeapClass(object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
-                                             sizeof(BoxedXrangeIterator), false);
-    xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
+                                             sizeof(BoxedXrangeIterator), false, "rangeiterator");
 
     xrange_cls->giveAttr(
         "__new__",

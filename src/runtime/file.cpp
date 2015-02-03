@@ -367,8 +367,6 @@ extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
 }
 
 void setupFile() {
-    file_cls->giveAttr("__name__", boxStrConstant("file"));
-
     file_cls->giveAttr("read",
                        new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));
 

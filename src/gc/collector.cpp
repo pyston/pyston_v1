@@ -232,7 +232,7 @@ static void markPhase() {
         BoxedClass* cls = b->cls;
 
         if (cls) {
-            ASSERT(cls->gc_visit, "%s", getTypeName(b)->c_str());
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
             cls->gc_visit(&visitor, b);
         }
     }
@@ -268,7 +268,7 @@ static void markPhase() {
                 // An arbitrary amount of stuff can happen between the 'new' and
                 // the call to the constructor (ie the args get evaluated), which
                 // can trigger a collection.
-                ASSERT(cls->gc_visit, "%s", getTypeName(b)->c_str());
+                ASSERT(cls->gc_visit, "%s", getTypeName(b));
                 cls->gc_visit(&visitor, b);
             }
         } else if (kind_id == GCKind::HIDDEN_CLASS) {

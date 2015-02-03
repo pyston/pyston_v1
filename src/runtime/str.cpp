@@ -274,7 +274,7 @@ extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
 
     if (_rhs->cls != str_cls) {
-        raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs)->c_str());
+        raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));
     }
 
     BoxedString* rhs = static_cast<BoxedString*>(_rhs);
@@ -1537,7 +1537,7 @@ Box* strSwapcase(BoxedString* self) {
 Box* strContains(BoxedString* self, Box* elt) {
     assert(self->cls == str_cls);
     if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt)->c_str());
+        raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
@@ -1552,7 +1552,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -1597,7 +1597,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -1641,8 +1641,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 
 Box* strFind(BoxedString* self, Box* elt, Box* _start) {
     if (self->cls != str_cls)
-        raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'",
-                       getTypeName(self)->c_str());
+        raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'", getTypeName(self));
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -1669,8 +1668,7 @@ Box* strFind(BoxedString* self, Box* elt, Box* _start) {
 
 Box* strRfind(BoxedString* self, Box* elt) {
     if (self->cls != str_cls)
-        raiseExcHelper(TypeError, "descriptor 'rfind' requires a 'str' object but received a '%s'",
-                       getTypeName(self)->c_str());
+        raiseExcHelper(TypeError, "descriptor 'rfind' requires a 'str' object but received a '%s'", getTypeName(self));
 
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
@@ -1707,7 +1705,7 @@ extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
         parseSlice(sslice, self->s.size(), &start, &stop, &step, &length);
         return _strSlice(self, start, stop, step, length);
     } else {
-        raiseExcHelper(TypeError, "string indices must be integers, not %s", getTypeName(slice)->c_str());
+        raiseExcHelper(TypeError, "string indices must be integers, not %s", getTypeName(slice));
     }
 }
 
@@ -1868,16 +1866,14 @@ static PyBufferProcs string_as_buffer = {
 };
 
 void setupStr() {
-    str_iterator_cls = new BoxedHeapClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedStringIterator), false);
-    str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
+    str_iterator_cls
+        = new BoxedHeapClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
 
     str_cls->tp_as_buffer = &string_as_buffer;
-
-    str_cls->giveAttr("__name__", boxStrConstant("str"));
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));
@@ -1970,7 +1966,6 @@ void setupStr() {
         "__doc__", boxStrConstant("Type basestring cannot be instantiated; it is the base for str and unicode."));
     basestring_cls->giveAttr("__new__",
                              new BoxedFunction(boxRTFunction((void*)basestringNew, UNKNOWN, 1, 0, true, true)));
-    basestring_cls->giveAttr("__name__", boxStrConstant("basestring"));
     basestring_cls->freeze();
 }
 

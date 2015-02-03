@@ -331,13 +331,11 @@ Box* open(Box* arg1, Box* arg2) {
     assert(arg2);
 
     if (arg1->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
-                getTypeName(arg1)->c_str());
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg1));
         raiseExcHelper(TypeError, "");
     }
     if (arg2->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
-                getTypeName(arg2)->c_str());
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg2));
         raiseExcHelper(TypeError, "");
     }
 
@@ -368,7 +366,7 @@ extern "C" Box* chr(Box* arg) {
 
 extern "C" Box* ord(Box* arg) {
     if (arg->cls != str_cls) {
-        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg)->c_str());
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg));
     }
     const std::string& s = static_cast<BoxedString*>(arg)->s;
 
@@ -381,22 +379,22 @@ extern "C" Box* ord(Box* arg) {
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
 
         istart = 0;
         istop = static_cast<BoxedInt*>(start)->n;
         istep = 1;
     } else if (step == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
 
         istart = static_cast<BoxedInt*>(start)->n;
         istop = static_cast<BoxedInt*>(stop)->n;
         istep = 1;
     } else {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
-        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
+        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step));
 
         istart = static_cast<BoxedInt*>(start)->n;
         istop = static_cast<BoxedInt*>(stop)->n;
@@ -481,7 +479,7 @@ Box* issubclass_func(Box* child, Box* parent) {
 
 Box* bltinImport(Box* arg) {
     if (arg->cls != str_cls) {
-        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(arg)->c_str());
+        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(arg));
     }
 
     return import(-1, new BoxedTuple({}), &static_cast<BoxedString*>(arg)->s);
@@ -506,8 +504,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         if (default_value)
             return default_value;
         else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj)->c_str(),
-                           str->s.c_str());
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.c_str());
     }
 
     return rtn;
@@ -635,11 +632,11 @@ Box* exceptionNew2(BoxedClass* cls, Box* message) {
 
 Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
     if (!isSubclass(cls->cls, type_cls))
-        raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls)->c_str());
+        raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls));
 
     if (!isSubclass(cls, BaseException))
         raiseExcHelper(TypeError, "BaseException.__new__(%s): %s is not a subtype of BaseException",
-                       getNameOfClass(cls)->c_str(), getNameOfClass(cls)->c_str());
+                       getNameOfClass(cls), getNameOfClass(cls));
 
     BoxedException* rtn = new (cls) BoxedException();
 
@@ -669,15 +666,14 @@ Box* exceptionRepr(Box* b) {
     assert(message->cls == str_cls);
 
     BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxString(*getTypeName(b) + "(" + message_s->s + ",)");
+    return boxString(std::string(getTypeName(b)) + "(" + message_s->s + ",)");
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), size, false);
-    cls->giveAttr("__name__", boxStrConstant(name));
+    BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), size, false, name);
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {
@@ -697,15 +693,16 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
     RELEASE_ASSERT(dict == NULL, "unimplemented");
 
     try {
-        BoxedClass* base = Exception;
-        BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
-
         char* dot_pos = strchr(name, '.');
         RELEASE_ASSERT(dot_pos, "");
         int n = strlen(name);
+        BoxedString* boxedName = boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1);
+
+        BoxedClass* base = Exception;
+        BoxedClass* cls
+            = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true, boxedName);
 
         cls->giveAttr("__module__", boxStrConstantSize(name, dot_pos - name));
-        cls->giveAttr("__name__", boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1));
         // TODO Not sure if this should be called here
         fixup_slot_dispatchers(cls);
         return cls;
@@ -781,7 +778,7 @@ Box* divmod(Box* lhs, Box* rhs) {
 Box* execfile(Box* _fn) {
     // The "globals" and "locals" arguments aren't implemented for now
     if (!isSubclass(_fn->cls, str_cls)) {
-        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn)->c_str());
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn));
     }
 
     BoxedString* fn = static_cast<BoxedString*>(_fn);
@@ -991,8 +988,7 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
-    notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
-    notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
+    notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
@@ -1101,8 +1097,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("__import__", new BoxedFunction(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
 
-    enumerate_cls = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
-    enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
+    enumerate_cls
+        = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false, "enumerate");
     enumerate_cls->giveAttr(
         "__new__",
         new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
