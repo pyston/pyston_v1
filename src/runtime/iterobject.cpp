@@ -107,16 +107,15 @@ extern "C" PyObject* PySeqIter_New(PyObject* seq) noexcept {
 }
 
 void setupIter() {
-    seqiter_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedSeqIter), false);
-    seqiter_cls->giveAttr("__name__", boxStrConstant("iterator"));
+    seqiter_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedSeqIter), false, "iterator");
 
     seqiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));
 
     seqiter_cls->freeze();
 
-    iterwrapper_cls = new BoxedHeapClass(object_cls, iterwrapperGCVisit, 0, sizeof(BoxedIterWrapper), false);
-    iterwrapper_cls->giveAttr("__name__", boxStrConstant("iterwrapper"));
+    iterwrapper_cls
+        = new BoxedHeapClass(object_cls, iterwrapperGCVisit, 0, sizeof(BoxedIterWrapper), false, "iterwrapper");
 
     iterwrapper_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)iterwrapperNext, UNKNOWN, 1)));
     iterwrapper_cls->giveAttr("__hasnext__",

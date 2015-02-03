@@ -79,7 +79,7 @@ extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
-    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls;
+    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *getset_cls;
 }
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;
@@ -232,8 +232,18 @@ public:
     PyMappingMethods as_mapping;
     PySequenceMethods as_sequence;
     PyBufferProcs as_buffer;
-    PyObject* ht_name, *ht_slots;
 
+    BoxedString* ht_name;
+    PyObject** ht_slots;
+
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
+                   const std::string& name);
+
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
+                   BoxedString* name);
+
+    // This constructor is only used for bootstrapping purposes to be called for types that
+    // are initialized before str_cls.
     BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
 };
 
@@ -508,6 +518,18 @@ public:
     BoxedMemberDescriptor(PyMemberDef* member) : type((MemberType)member->type), offset(member->offset) {}
 
     DEFAULT_CLASS(member_cls);
+};
+
+class BoxedGetsetDescriptor : public Box {
+public:
+    Box* (*get)(Box*, void*);
+    int (*set)(Box*, Box*, void*);
+    void* closure;
+
+    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*), void* closure)
+        : get(get), set(set), closure(closure) {}
+
+    DEFAULT_CLASS(getset_cls);
 };
 
 class BoxedProperty : public Box {

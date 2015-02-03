@@ -48,13 +48,13 @@ Box* boxString(std::string&& s) {
 }
 
 extern "C" double unboxFloat(Box* b) {
-    ASSERT(b->cls == float_cls, "%s", getTypeName(b)->c_str());
+    ASSERT(b->cls == float_cls, "%s", getTypeName(b));
     BoxedFloat* f = (BoxedFloat*)b;
     return f->d;
 }
 
 i64 unboxInt(Box* b) {
-    ASSERT(b->cls == int_cls, "%s", getTypeName(b)->c_str());
+    ASSERT(b->cls == int_cls, "%s", getTypeName(b));
     return ((BoxedInt*)b)->n;
 }
 

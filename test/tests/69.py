@@ -1,6 +1,3 @@
-# expected: fail
-# - type.__name__ is a descriptor
-
 class C(object):
     pass
 

@@ -172,7 +172,7 @@ extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
     } else if (slice->cls == slice_cls) {
         return listGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
-        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice));
     }
 }
 
@@ -254,7 +254,7 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
 
     assert(0 <= start && start <= stop && stop <= self->size);
 
-    RELEASE_ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v)->c_str());
+    RELEASE_ASSERT(v->cls == list_cls, "unsupported %s", getTypeName(v));
     BoxedList* lv = static_cast<BoxedList*>(v);
 
     RELEASE_ASSERT(self->elts != lv->elts, "Slice self-assignment currently unsupported");
@@ -281,7 +281,7 @@ extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
     } else {
-        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice));
     }
 }
 
@@ -329,7 +329,7 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
     } else if (slice->cls == slice_cls) {
         rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
-        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice)->c_str());
+        raiseExcHelper(TypeError, "list indices must be integers, not %s", getTypeName(slice));
     }
     self->shrink();
     return rtn;
@@ -365,7 +365,7 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
 
 Box* listMul(BoxedList* self, Box* rhs) {
     if (rhs->cls != int_cls) {
-        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
 
     LOCK_REGION(self->lock.asRead());
@@ -414,7 +414,7 @@ Box* listIAdd(BoxedList* self, Box* _rhs) {
 
 Box* listAdd(BoxedList* self, Box* _rhs) {
     if (_rhs->cls != list_cls) {
-        raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs)->c_str());
+        raiseExcHelper(TypeError, "can only concatenate list (not \"%s\") to list", getTypeName(_rhs));
     }
 
     LOCK_REGION(self->lock.asRead());
@@ -691,9 +691,8 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 }
 
 void setupList() {
-    list_iterator_cls = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false);
-
-    list_cls->giveAttr("__name__", boxStrConstant("list"));
+    list_iterator_cls
+        = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false, "listiterator");
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 
@@ -747,9 +746,6 @@ void setupList() {
     list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2)));
     list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1)));
     list_cls->freeze();
-
-
-    list_iterator_cls->giveAttr("__name__", boxStrConstant("listiterator"));
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);

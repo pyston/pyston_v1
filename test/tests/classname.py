@@ -1,3 +1,8 @@
+# expected: fail
+
+# This fails becasue we currently don't support setting for getset descriptors,
+# and __name__ is a getset descriptor.
+
 class C(object):
     pass
 

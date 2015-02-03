@@ -234,9 +234,9 @@ extern "C" void raiseAttributeError(Box* obj, const char* attr) {
     if (obj->cls == type_cls) {
         // Slightly different error message:
         raiseExcHelper(AttributeError, "type object '%s' has no attribute '%s'",
-                       getNameOfClass(static_cast<BoxedClass*>(obj))->c_str(), attr);
+                       getNameOfClass(static_cast<BoxedClass*>(obj)), attr);
     } else {
-        raiseAttributeErrorStr(getTypeName(obj)->c_str(), attr);
+        raiseAttributeErrorStr(getTypeName(obj), attr);
     }
 }
 
@@ -286,7 +286,7 @@ extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
 
 void BoxedClass::freeze() {
     assert(!is_constant);
-    assert(getattr("__name__")); // otherwise debugging will be very hard
+    assert(tp_name); // otherwise debugging will be very hard
 
     fixup_slot_dispatchers(this);
 
@@ -357,8 +357,19 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+                               bool is_user_defined, const std::string& name)
+    : BoxedHeapClass(base, gc_visit, attrs_offset, instance_size, is_user_defined, new BoxedString(name)) {
+}
+
+BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
                                bool is_user_defined)
     : BoxedClass(base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(NULL), ht_slots(NULL) {
+
+    // This constructor is only used for bootstrapping purposes to be called for types that
+    // are initialized before str_cls.
+    // Therefore, we assert that str_cls is uninitialized to make sure this isn't called at
+    // an inappropriate time.
+    assert(str_cls == NULL);
 
     tp_as_number = &as_number;
     tp_as_mapping = &as_mapping;
@@ -371,38 +382,45 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     memset(&as_buffer, 0, sizeof(as_buffer));
 }
 
-std::string getFullNameOfClass(BoxedClass* cls) {
-    Box* b = cls->getattr("__name__");
-    assert(b);
-    ASSERT(b->cls == str_cls, "%p", b->cls);
-    BoxedString* name = static_cast<BoxedString*>(b);
+BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+                               bool is_user_defined, BoxedString* name)
+    : BoxedClass(base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(name), ht_slots(NULL) {
 
-    b = cls->getattr("__module__");
+    tp_as_number = &as_number;
+    tp_as_mapping = &as_mapping;
+    tp_as_sequence = &as_sequence;
+    tp_as_buffer = &as_buffer;
+    tp_name = ht_name->s.c_str();
+
+    memset(&as_number, 0, sizeof(as_number));
+    memset(&as_mapping, 0, sizeof(as_mapping));
+    memset(&as_sequence, 0, sizeof(as_sequence));
+    memset(&as_buffer, 0, sizeof(as_buffer));
+}
+
+std::string getFullNameOfClass(BoxedClass* cls) {
+    Box* b = cls->getattr("__module__");
     if (!b)
-        return name->s;
+        return cls->tp_name;
     assert(b);
     if (b->cls != str_cls)
-        return name->s;
+        return cls->tp_name;
 
     BoxedString* module = static_cast<BoxedString*>(b);
 
-    return module->s + "." + name->s;
+    return module->s + "." + cls->tp_name;
 }
 
 std::string getFullTypeName(Box* o) {
     return getFullNameOfClass(o->cls);
 }
 
-extern "C" const std::string* getNameOfClass(BoxedClass* cls) {
-    Box* b = cls->getattr("__name__");
-    assert(b);
-    ASSERT(b->cls == str_cls, "%p", b->cls);
-    BoxedString* sb = static_cast<BoxedString*>(b);
-    return &sb->s;
+const char* getTypeName(Box* b) {
+    return b->cls->tp_name;
 }
 
-extern "C" const std::string* getTypeName(Box* o) {
-    return getNameOfClass(o->cls);
+const char* getNameOfClass(BoxedClass* cls) {
+    return cls->tp_name;
 }
 
 HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
@@ -965,6 +983,38 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
         return runtimeCallInternal1(prop->prop_get, NULL, ArgPassSpec(1), obj);
     }
 
+    // Special case: data descriptor: getset descriptor
+    else if (descr->cls == getset_cls) {
+        BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
+
+        // TODO some more checks should go here
+        // getset descriptors (and some other types of builtin descriptors I think) should have
+        // a field which gives the type that the descriptor should apply to. We need to check that obj
+        // is of that type.
+
+        if (getset_descr->get == NULL) {
+            raiseExcHelper(AttributeError, "attribute '%s' of '%s' object is not readable", attr_name.c_str(),
+                           getTypeName(getset_descr));
+        }
+
+        // Abort because right now we can't call twice in a rewrite
+        if (for_call) {
+            rewrite_args = NULL;
+        }
+
+        if (rewrite_args) {
+            // hmm, maybe we should write assembly which can look up the function address and call any function
+            r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
+
+            RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                /* can_call_into_python */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
+            rewrite_args->out_success = true;
+        }
+
+        return getset_descr->get(obj, getset_descr->closure);
+    }
+
     return NULL;
 }
 
@@ -1009,7 +1059,7 @@ extern "C" Box* getclsattr(Box* obj, const char* attr) {
 else {
     gotten = getclsattr_internal(obj, attr, NULL);
 }
-RELEASE_ASSERT(gotten, "%s:%s", getTypeName(obj)->c_str(), attr);
+RELEASE_ASSERT(gotten, "%s:%s", getTypeName(obj), attr);
 
 return gotten;
 }
@@ -1567,8 +1617,7 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
         if (!isUserDefined(cobj)) {
-            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'",
-                           getNameOfClass(cobj)->c_str());
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
         }
     }
 
@@ -1660,7 +1709,7 @@ extern "C" bool nonzero(Box* obj) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls,
                "%s.__nonzero__",
-               getTypeName(obj)->c_str()); // TODO
+               getTypeName(obj)); // TODO
         return true;
     }
 
@@ -1675,7 +1724,7 @@ extern "C" bool nonzero(Box* obj) {
         bool rtn = b->n != 0;
         return rtn;
     } else {
-        raiseExcHelper(TypeError, "__nonzero__ should return bool or int, returned %s", getTypeName(r)->c_str());
+        raiseExcHelper(TypeError, "__nonzero__ should return bool or int, returned %s", getTypeName(r));
     }
 }
 
@@ -1766,7 +1815,7 @@ extern "C" BoxedInt* hash(Box* obj) {
     Box* hash = getclsattr_internal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls), "%s.__hash__", getTypeName(obj)->c_str());
+        ASSERT(isUserDefined(obj->cls), "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));
     }
@@ -1792,7 +1841,7 @@ extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     }
 
     if (rtn == NULL) {
-        raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj)->c_str());
+        raiseExcHelper(TypeError, "object of type '%s' has no len()", getTypeName(obj));
     }
 
     if (rtn->cls != int_cls) {
@@ -2076,7 +2125,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         }
 
         if (!rtn) {
-            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(val)->c_str());
+            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(val));
         }
 
         if (rewrite_args)
@@ -2598,7 +2647,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rtn = callattrInternal(obj, &call_str, CLASS_ONLY, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
         }
         if (!rtn)
-            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(obj)->c_str());
+            raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(obj));
         return rtn;
     }
 
@@ -2850,24 +2899,23 @@ extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, Bin
         if (inplace) {
             std::string iop_name = getInplaceOpName(op_type);
             if (irtn)
-                fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(),
-                        iop_name.c_str());
+                fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs), iop_name.c_str());
             else
-                fprintf(stderr, "%s does not have %s\n", getTypeName(lhs)->c_str(), iop_name.c_str());
+                fprintf(stderr, "%s does not have %s\n", getTypeName(lhs), iop_name.c_str());
         }
 
         if (lrtn)
-            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs)->c_str(), op_name.c_str());
+            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(lhs), op_name.c_str());
         else
-            fprintf(stderr, "%s does not have %s\n", getTypeName(lhs)->c_str(), op_name.c_str());
+            fprintf(stderr, "%s does not have %s\n", getTypeName(lhs), op_name.c_str());
         if (rrtn)
-            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(rhs)->c_str(), rop_name.c_str());
+            fprintf(stderr, "%s has %s, but returned NotImplemented\n", getTypeName(rhs), rop_name.c_str());
         else
-            fprintf(stderr, "%s does not have %s\n", getTypeName(rhs)->c_str(), rop_name.c_str());
+            fprintf(stderr, "%s does not have %s\n", getTypeName(rhs), rop_name.c_str());
     }
 
     raiseExcHelper(TypeError, "unsupported operand type(s) for %s%s: '%s' and '%s'", op_sym.data(), op_sym_suffix,
-                   getTypeName(lhs)->c_str(), getTypeName(rhs)->c_str());
+                   getTypeName(lhs), getTypeName(rhs));
 }
 
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type) {
@@ -2962,15 +3010,15 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
         if (contained == NULL) {
             Box* iter = callattrInternal0(rhs, &iter_str, CLASS_ONLY, NULL, ArgPassSpec(0));
             if (iter)
-                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
+                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs));
             RELEASE_ASSERT(iter == NULL, "need to try iterating");
 
             Box* getitem = typeLookup(rhs->cls, getitem_str, NULL);
             if (getitem)
-                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
+                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs));
             RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
 
-            raiseExcHelper(TypeError, "argument of type '%s' is not iterable", getTypeName(rhs)->c_str());
+            raiseExcHelper(TypeError, "argument of type '%s' is not iterable", getTypeName(rhs));
         }
 
         bool b = nonzero(contained);
@@ -3111,7 +3159,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     Box* attr_func = getclsattr_internal(operand, op_name, NULL);
 
-    ASSERT(attr_func, "%s.%s", getTypeName(operand)->c_str(), op_name.c_str());
+    ASSERT(attr_func, "%s.%s", getTypeName(operand), op_name.c_str());
 
     Box* rtn = runtimeCall0(attr_func, ArgPassSpec(0));
     return rtn;
@@ -3146,14 +3194,13 @@ extern "C" Box* getitem(Box* value, Box* slice) {
     if (rtn == NULL) {
         // different versions of python give different error messages for this:
         if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR < 7) {
-            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(value)->c_str()); // tested on 2.6.6
+            raiseExcHelper(TypeError, "'%s' object is unsubscriptable", getTypeName(value)); // tested on 2.6.6
         } else if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 3) {
-            raiseExcHelper(TypeError, "'%s' object is not subscriptable",
-                           getTypeName(value)->c_str()); // tested on 2.7.1
+            raiseExcHelper(TypeError, "'%s' object is not subscriptable", getTypeName(value)); // tested on 2.7.1
         } else {
             // Changed to this in 2.7.3:
             raiseExcHelper(TypeError, "'%s' object has no attribute '__getitem__'",
-                           getTypeName(value)->c_str()); // tested on 2.7.3
+                           getTypeName(value)); // tested on 2.7.3
         }
     }
 
@@ -3184,7 +3231,7 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
     }
 
     if (rtn == NULL) {
-        raiseExcHelper(TypeError, "'%s' object does not support item assignment", getTypeName(target)->c_str());
+        raiseExcHelper(TypeError, "'%s' object does not support item assignment", getTypeName(target));
     }
 
     if (rewriter.get()) {
@@ -3216,7 +3263,7 @@ extern "C" void delitem(Box* target, Box* slice) {
     }
 
     if (rtn == NULL) {
-        raiseExcHelper(TypeError, "'%s' object does not support item deletion", getTypeName(target)->c_str());
+        raiseExcHelper(TypeError, "'%s' object does not support item deletion", getTypeName(target));
     }
 
     if (rewriter.get()) {
@@ -3286,8 +3333,7 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
     } else {
         // the exception cpthon throws is different when the class contains the attribute
         if (clsAttr != NULL) {
-            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj)->c_str(),
-                           attr.c_str());
+            raiseExcHelper(AttributeError, "'%s' object attribute '%s' is read-only", getTypeName(obj), attr.c_str());
         } else {
             raiseAttributeError(obj, attr.c_str());
         }
@@ -3302,8 +3348,7 @@ extern "C" void delattr(Box* obj, const char* attr) {
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
         if (!isUserDefined(cobj)) {
-            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n",
-                           getNameOfClass(cobj)->c_str());
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'\n", getNameOfClass(cobj));
         }
     }
 
@@ -3328,7 +3373,7 @@ Box* getiter(Box* o) {
         return new BoxedSeqIter(o);
     }
 
-    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o)->c_str());
+    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {
@@ -3341,7 +3386,7 @@ llvm::iterator_range<BoxIterator> Box::pyElements() {
 // For use on __init__ return values
 static void assertInitNone(Box* obj) {
     if (obj != None) {
-        raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj)->c_str());
+        raiseExcHelper(TypeError, "__init__() should return None, not '%s'", getTypeName(obj));
     }
 }
 
@@ -3349,12 +3394,12 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     Box* arg3 = _args[0];
 
     if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+        raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, type_cls))
-        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(cls),
+                       getNameOfClass(cls));
 
     if (arg2 == NULL) {
         assert(arg3 == NULL);
@@ -3362,7 +3407,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         return rtn;
     }
 
-    RELEASE_ASSERT(arg3->cls == dict_cls, "%s", getTypeName(arg3)->c_str());
+    RELEASE_ASSERT(arg3->cls == dict_cls, "%s", getTypeName(arg3));
     BoxedDict* attr_dict = static_cast<BoxedDict*>(arg3);
 
     RELEASE_ASSERT(arg2->cls == tuple_cls, "");
@@ -3388,10 +3433,11 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     BoxedClass* made;
 
     if (base->instancesHaveDictAttrs() || base->instancesHaveHCAttrs()) {
-        made = new (cls) BoxedHeapClass(base, NULL, base->attrs_offset, base->tp_basicsize, true);
+        made = new (cls) BoxedHeapClass(base, NULL, base->attrs_offset, base->tp_basicsize, true, name);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = new (cls) BoxedHeapClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true);
+        made = new (cls)
+            BoxedHeapClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true, name);
     }
 
     made->tp_dictoffset = base->tp_dictoffset;
@@ -3402,9 +3448,6 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         assert(p.first->cls == str_cls);
         made->setattr(static_cast<BoxedString*>(p.first)->s, p.second, NULL);
     }
-
-    // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
-    made->setattr("__name__", name, NULL);
 
     made->tp_new = base->tp_new;
 
@@ -3471,7 +3514,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
     if (!isSubclass(_cls->cls, type_cls)) {
         raiseExcHelper(TypeError, "descriptor '__call__' requires a 'type' object but received an '%s'",
-                       getTypeName(_cls)->c_str());
+                       getTypeName(_cls));
     }
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
@@ -3831,7 +3874,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     if (all) {
         Box* all_getitem = typeLookup(all->cls, getitem_str, NULL);
         if (!all_getitem)
-            raiseExcHelper(TypeError, "'%s' object does not support indexing", getTypeName(all)->c_str());
+            raiseExcHelper(TypeError, "'%s' object does not support indexing", getTypeName(all));
 
         int idx = 0;
         while (true) {
@@ -3846,7 +3889,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
             idx++;
 
             if (attr_name->cls != str_cls)
-                raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name)->c_str());
+                raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name));
 
             BoxedString* casted_attr_name = static_cast<BoxedString*>(attr_name);
             Box* attr_value = from_module->getattr(casted_attr_name->s);
