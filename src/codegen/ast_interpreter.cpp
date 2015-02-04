@@ -1126,23 +1126,55 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
 }
 
 Value ASTInterpreter::visit_name(AST_Name* node) {
-    if (scope_info->refersToGlobal(node->id))
-        return getGlobal(source_info->parent_module, &node->id.str());
-    else if (scope_info->refersToClosure(node->id)) {
-        return getattr(passed_closure, node->id.c_str());
-    } else {
-        SymMap::iterator it = sym_table.find(node->id);
-        if (it != sym_table.end()) {
-            Box* value = it->second;
-            return value;
+    switch (node->lookup_type) {
+        case AST_Name::UNKNOWN: {
+            if (scope_info->refersToGlobal(node->id)) {
+                node->lookup_type = AST_Name::GLOBAL;
+                return getGlobal(source_info->parent_module, &node->id.str());
+            } else if (scope_info->refersToClosure(node->id)) {
+                node->lookup_type = AST_Name::CLOSURE;
+                return getattr(passed_closure, node->id.c_str());
+            } else {
+                bool is_old_local = (source_info->ast->type == AST_TYPE::ClassDef);
+                node->lookup_type = is_old_local ? AST_Name::LOCAL : AST_Name::FAST_LOCAL;
+
+                SymMap::iterator it = sym_table.find(node->id);
+                if (it != sym_table.end()) {
+                    Box* value = it->second;
+                    return value;
+                }
+
+                // classdefs have different scoping rules than functions:
+                if (source_info->ast->type == AST_TYPE::ClassDef)
+                    return getGlobal(source_info->parent_module, &node->id.str());
+
+                assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+                return Value();
+            }
         }
-
-        // classdefs have different scoping rules than functions:
-        if (source_info->ast->type == AST_TYPE::ClassDef)
+        case AST_Name::GLOBAL:
             return getGlobal(source_info->parent_module, &node->id.str());
+        case AST_Name::CLOSURE:
+            return getattr(passed_closure, node->id.c_str());
+        case AST_Name::FAST_LOCAL: {
+            SymMap::iterator it = sym_table.find(node->id);
+            if (it != sym_table.end())
+                return it->second;
 
-        assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
-        return Value();
+            assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+            return Value();
+        }
+        case AST_Name::LOCAL: {
+            SymMap::iterator it = sym_table.find(node->id);
+            if (it != sym_table.end()) {
+                Box* value = it->second;
+                return value;
+            }
+
+            return getGlobal(source_info->parent_module, &node->id.str());
+        }
+        default:
+            abort();
     }
 }
 
