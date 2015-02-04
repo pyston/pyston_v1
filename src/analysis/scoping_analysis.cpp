@@ -14,6 +14,8 @@
 
 #include "analysis/scoping_analysis.h"
 
+#include "llvm/ADT/DenseSet.h"
+
 #include "core/ast.h"
 #include "core/common.h"
 #include "core/util.h"
@@ -112,7 +114,7 @@ struct ScopingAnalysis::ScopeNameUsage {
     const std::string* private_name;
     ScopingAnalysis* scoping;
 
-    typedef std::unordered_set<InternedString> StrSet;
+    typedef llvm::DenseSet<InternedString> StrSet;
 
     // Properties determined from crawling the scope:
     StrSet read;
