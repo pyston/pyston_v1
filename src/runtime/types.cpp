@@ -56,6 +56,7 @@ extern "C" void initresource();
 extern "C" void initsignal();
 extern "C" void initselect();
 extern "C" void initfcntl();
+extern "C" void inittime();
 
 namespace pyston {
 
@@ -1162,7 +1163,6 @@ void setupRuntime() {
     setupSys();
 
     setupBuiltins();
-    setupTime();
     setupThread();
     setupGC();
 
@@ -1191,6 +1191,7 @@ void setupRuntime() {
     initsignal();
     initselect();
     initfcntl();
+    inittime();
 
     setupSysEnd();
 
