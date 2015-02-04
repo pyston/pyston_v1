@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <sys/time.h>
 
+#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -78,6 +79,7 @@ public:
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
     friend struct std::less<InternedString>;
+    friend struct llvm::DenseMapInfo<pyston::InternedString>;
 };
 
 class InternedStringPool {
@@ -129,5 +131,19 @@ template <> struct less<pyston::InternedString> {
     }
 };
 }
+
+template <> struct llvm::DenseMapInfo<pyston::InternedString> {
+    static inline pyston::InternedString getEmptyKey() { return pyston::InternedString(); }
+    static inline pyston::InternedString getTombstoneKey() {
+        pyston::InternedString str;
+        str._str = (const std::string*)-1;
+        return str;
+    }
+    static unsigned getHashValue(const pyston::InternedString& val) { return std::hash<pyston::InternedString>()(val); }
+    static bool isEqual(const pyston::InternedString& lhs, const pyston::InternedString& rhs) {
+        // Have to reimplement InternedString comparison otherwise asserts would trigger because of the empty keys.
+        return lhs._str == rhs._str;
+    }
+};
 
 #endif
