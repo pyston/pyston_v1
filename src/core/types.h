@@ -28,6 +28,7 @@
 
 #include "core/common.h"
 #include "core/stats.h"
+#include "core/stringpool.h"
 
 namespace llvm {
 class Function;
@@ -218,6 +219,7 @@ public:
 
 class BoxedModule;
 class ScopeInfo;
+class InternedStringPool;
 class SourceInfo {
 public:
     BoxedModule* parent_module;
@@ -228,18 +230,20 @@ public:
     PhiAnalysis* phis;
     bool is_generator;
 
+    InternedStringPool& getInternedStrings();
+
     ScopeInfo* getScopeInfo();
 
     struct ArgNames {
         const std::vector<AST_expr*>* args;
-        const std::string* vararg, *kwarg;
+        InternedString vararg, kwarg;
 
-        explicit ArgNames(AST* ast);
+        explicit ArgNames(AST* ast, ScopingAnalysis* scoping);
 
         int totalParameters() const {
             if (!args)
                 return 0;
-            return args->size() + (vararg->size() == 0 ? 0 : 1) + (kwarg->size() == 0 ? 0 : 1);
+            return args->size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
         }
     };
 
@@ -249,7 +253,7 @@ public:
     const std::vector<AST_stmt*> body;
 
     const std::string getName();
-    std::string mangleName(const std::string& id);
+    InternedString mangleName(InternedString id);
 
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
 };

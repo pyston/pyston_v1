@@ -49,15 +49,16 @@ bool containsYield(AST* ast) {
     return visitor.containsYield;
 }
 
-static void mangleNameInPlace(std::string& id, const std::string* private_name) {
+static void mangleNameInPlace(InternedString& id, const std::string* private_name,
+                              InternedStringPool& interned_strings) {
     if (!private_name)
         return;
 
-    int len = id.size();
-    if (len < 2 || id[0] != '_' || id[1] != '_')
+    int len = id.str().size();
+    if (len < 2 || id.str()[0] != '_' || id.str()[1] != '_')
         return;
 
-    if ((id[len - 2] == '_' && id[len - 1] == '_') || id.find('.') != std::string::npos)
+    if ((id.str()[len - 2] == '_' && id.str()[len - 1] == '_') || id.str().find('.') != std::string::npos)
         return;
 
     const char* p = private_name->c_str();
@@ -68,17 +69,18 @@ static void mangleNameInPlace(std::string& id, const std::string* private_name) 
     if (*p == '\0')
         return;
 
-    id = "_" + (p + id);
+    id = interned_strings.get("_" + (p + id.str()));
 }
 
-static std::string mangleName(const std::string& id, const std::string* private_name) {
-    std::string rtn(id);
-    mangleNameInPlace(rtn, private_name);
+static InternedString mangleName(InternedString id, const std::string* private_name,
+                                 InternedStringPool& interned_strings) {
+    InternedString rtn(id);
+    mangleNameInPlace(rtn, private_name, interned_strings);
     return rtn;
 }
 
-static bool isCompilerCreatedName(const std::string& name) {
-    return name[0] == '!' || name[0] == '#';
+static bool isCompilerCreatedName(InternedString name) {
+    return name.str()[0] == '!' || name.str()[0] == '#';
 }
 
 class ModuleScopeInfo : public ScopeInfo {
@@ -91,27 +93,26 @@ public:
 
     bool passesThroughClosure() override { return false; }
 
-    bool refersToGlobal(const std::string& name) override {
+    bool refersToGlobal(InternedString name) override {
         if (isCompilerCreatedName(name))
             return false;
 
         // assert(name[0] != '#' && "should test this");
         return true;
     }
-    bool refersToClosure(const std::string& name) override { return false; }
-    bool saveInClosure(const std::string& name) override { return false; }
+    bool refersToClosure(InternedString name) override { return false; }
+    bool saveInClosure(InternedString name) override { return false; }
 
-    const std::unordered_set<std::string>& getClassDefLocalNames() override { RELEASE_ASSERT(0, ""); }
-
-    std::string mangleName(const std::string& id) override { return id; }
+    InternedString mangleName(InternedString id) override { return id; }
 };
 
 struct ScopingAnalysis::ScopeNameUsage {
     AST* node;
     ScopeNameUsage* parent;
     const std::string* private_name;
+    ScopingAnalysis* scoping;
 
-    typedef std::unordered_set<std::string> StrSet;
+    typedef std::unordered_set<InternedString> StrSet;
 
     // Properties determined from crawling the scope:
     StrSet read;
@@ -123,28 +124,45 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet got_from_closure;
     StrSet passthrough_accesses; // what names a child scope accesses a name from a parent scope
 
-    ScopeNameUsage(AST* node, ScopeNameUsage* parent) : node(node), parent(parent) {
+    ScopeNameUsage(AST* node, ScopeNameUsage* parent, ScopingAnalysis* scoping)
+        : node(node), parent(parent), scoping(scoping) {
         if (node->type == AST_TYPE::ClassDef) {
             AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
 
             // classes have an implicit write to "__module__"
-            written.insert("__module__");
+            written.insert(scoping->getInternedStrings().get("__module__"));
 
             if (classdef->body.size() && classdef->body[0]->type == AST_TYPE::Expr) {
                 AST_Expr* first_expr = ast_cast<AST_Expr>(classdef->body[0]);
                 if (first_expr->value->type == AST_TYPE::Str) {
-                    written.insert("__doc__");
+                    written.insert(scoping->getInternedStrings().get("__doc__"));
                 }
             }
         }
 
         if (node->type == AST_TYPE::ClassDef) {
-            private_name = &ast_cast<AST_ClassDef>(node)->name;
+            private_name = &ast_cast<AST_ClassDef>(node)->name.str();
         } else if (parent) {
             private_name = parent->private_name;
         } else {
             private_name = NULL;
         }
+    }
+
+    void dump() {
+#define DUMP(n)                                                                                                        \
+    printf(STRINGIFY(n) ":\n");                                                                                        \
+    for (auto s : n) {                                                                                                 \
+        printf("%s\n", s.c_str());                                                                                     \
+    }
+
+        DUMP(read);
+        DUMP(written);
+        DUMP(forced_globals);
+        printf("\n");
+        DUMP(referenced_from_nested);
+        DUMP(got_from_closure);
+        DUMP(passthrough_accesses);
     }
 };
 
@@ -174,34 +192,33 @@ public:
 
     bool passesThroughClosure() override { return usage->passthrough_accesses.size() > 0 && !createsClosure(); }
 
-    bool refersToGlobal(const std::string& name) override {
+    bool refersToGlobal(InternedString name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
 
         if (usage->forced_globals.count(name))
             return true;
+        if (name.c_str() != name.c_str())
+            usage->dump();
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
-    bool refersToClosure(const std::string& name) override {
+    bool refersToClosure(InternedString name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
         return usage->got_from_closure.count(name) != 0;
     }
-    bool saveInClosure(const std::string& name) override {
+    bool saveInClosure(InternedString name) override {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
         return usage->referenced_from_nested.count(name) != 0;
     }
 
-    const std::unordered_set<std::string>& getClassDefLocalNames() override {
-        RELEASE_ASSERT(usage->node->type == AST_TYPE::ClassDef, "");
-        return usage->written;
+    InternedString mangleName(const InternedString id) override {
+        return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());
     }
-
-    std::string mangleName(const std::string& id) override { return pyston::mangleName(id, usage->private_name); }
 };
 
 class NameCollectorVisitor : public ASTVisitor {
@@ -209,26 +226,28 @@ private:
     AST* orig_node;
     ScopingAnalysis::NameUsageMap* map;
     ScopingAnalysis::ScopeNameUsage* cur;
-    NameCollectorVisitor(AST* node, ScopingAnalysis::NameUsageMap* map) : orig_node(node), map(map) {
+    ScopingAnalysis* scoping;
+    NameCollectorVisitor(AST* node, ScopingAnalysis::NameUsageMap* map, ScopingAnalysis* scoping)
+        : orig_node(node), map(map), scoping(scoping) {
         assert(map);
         cur = (*map)[node];
         assert(cur);
     }
 
 public:
-    void doWrite(const std::string& name) {
-        assert(name == mangleName(name, cur->private_name));
+    void doWrite(InternedString name) {
+        assert(name == mangleName(name, cur->private_name, scoping->getInternedStrings()));
         cur->read.insert(name);
         cur->written.insert(name);
     }
 
-    void doRead(const std::string& name) {
-        assert(name == mangleName(name, cur->private_name));
+    void doRead(InternedString name) {
+        assert(name == mangleName(name, cur->private_name, scoping->getInternedStrings()));
         cur->read.insert(name);
     }
 
     bool visit_name(AST_Name* node) override {
-        mangleNameInPlace(node->id, cur->private_name);
+        mangleNameInPlace(node->id, cur->private_name, scoping->getInternedStrings());
 
         switch (node->ctx_type) {
             case AST_TYPE::Load:
@@ -298,7 +317,7 @@ public:
 
     bool visit_global(AST_Global* node) override {
         for (int i = 0; i < node->names.size(); i++) {
-            mangleNameInPlace(node->names[i], cur->private_name);
+            mangleNameInPlace(node->names[i], cur->private_name, scoping->getInternedStrings());
             cur->forced_globals.insert(node->names[i]);
         }
         return true;
@@ -318,9 +337,9 @@ public:
             // TODO: this is one of very few places we don't mangle in place.
             // The AST doesn't have a way of representing that the class name is the
             // unmangled name but the name it gets stored as is the mangled name.
-            doWrite(mangleName(node->name, cur->private_name));
-            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
-            collect(node, map);
+            doWrite(mangleName(node->name, cur->private_name, scoping->getInternedStrings()));
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur, scoping);
+            collect(node, map, scoping);
             return true;
         }
     }
@@ -329,12 +348,12 @@ public:
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
-            if (node->args->vararg.size()) {
-                mangleNameInPlace(node->args->vararg, cur->private_name);
+            if (node->args->vararg.str().size()) {
+                mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->vararg);
             }
-            if (node->args->kwarg.size()) {
-                mangleNameInPlace(node->args->kwarg, cur->private_name);
+            if (node->args->kwarg.str().size()) {
+                mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->kwarg);
             }
             for (AST_stmt* s : node->body)
@@ -349,9 +368,9 @@ public:
             // TODO: this is one of very few places we don't mangle in place.
             // The AST doesn't have a way of representing that the class name is the
             // unmangled name but the name it gets stored as is the mangled name.
-            doWrite(mangleName(node->name, cur->private_name));
-            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
-            collect(node, map);
+            doWrite(mangleName(node->name, cur->private_name, scoping->getInternedStrings()));
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur, scoping);
+            collect(node, map, scoping);
             return true;
         }
     }
@@ -369,8 +388,8 @@ public:
             node->elt->accept(this);
         } else {
             node->generators[0]->iter->accept(this);
-            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
-            collect(node, map);
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur, scoping);
+            collect(node, map, scoping);
         }
 
         return true;
@@ -380,20 +399,20 @@ public:
         if (node == orig_node) {
             for (AST_expr* e : node->args->args)
                 e->accept(this);
-            if (node->args->vararg.size()) {
-                mangleNameInPlace(node->args->vararg, cur->private_name);
+            if (node->args->vararg.str().size()) {
+                mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->vararg);
             }
-            if (node->args->kwarg.size()) {
-                mangleNameInPlace(node->args->kwarg, cur->private_name);
+            if (node->args->kwarg.str().size()) {
+                mangleNameInPlace(node->args->kwarg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->kwarg);
             }
             node->body->accept(this);
         } else {
             for (auto* e : node->args->defaults)
                 e->accept(this);
-            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur);
-            collect(node, map);
+            (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur, scoping);
+            collect(node, map, scoping);
         }
 
         return true;
@@ -402,9 +421,9 @@ public:
     bool visit_import(AST_Import* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
-            mangleNameInPlace(alias->asname, cur->private_name);
-            mangleNameInPlace(alias->name, cur->private_name);
-            if (alias->asname.size())
+            mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
+            mangleNameInPlace(alias->name, cur->private_name, scoping->getInternedStrings());
+            if (alias->asname.str().size())
                 doWrite(alias->asname);
             else
                 doWrite(alias->name);
@@ -415,9 +434,9 @@ public:
     bool visit_importfrom(AST_ImportFrom* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
-            mangleNameInPlace(alias->asname, cur->private_name);
-            mangleNameInPlace(alias->name, cur->private_name);
-            if (alias->asname.size())
+            mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
+            mangleNameInPlace(alias->name, cur->private_name, scoping->getInternedStrings());
+            if (alias->asname.str().size())
                 doWrite(alias->asname);
             else
                 doWrite(alias->name);
@@ -425,11 +444,11 @@ public:
         return true;
     }
 
-    static void collect(AST* node, ScopingAnalysis::NameUsageMap* map) {
+    static void collect(AST* node, ScopingAnalysis::NameUsageMap* map, ScopingAnalysis* scoping) {
         assert(map);
         assert(map->count(node));
 
-        NameCollectorVisitor vis(node, map);
+        NameCollectorVisitor vis(node, map, scoping);
         node->accept(&vis);
     }
 };
@@ -525,10 +544,15 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
     }
 }
 
+InternedStringPool& ScopingAnalysis::getInternedStrings() {
+    assert(parent_module);
+    return *parent_module->interned_strings.get();
+}
+
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
     NameUsageMap usages;
-    usages[node] = new ScopeNameUsage(node, NULL);
-    NameCollectorVisitor::collect(node, &usages);
+    usages[node] = new ScopeNameUsage(node, NULL, this);
+    NameCollectorVisitor::collect(node, &usages, this);
 
     processNameUsages(&usages);
 
@@ -566,7 +590,7 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     return analyzeSubtree(node);
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m) {
+ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_strings(*m->interned_strings.get()) {
     scopes[m] = new ModuleScopeInfo();
 }
 

@@ -118,7 +118,7 @@ extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
                               std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createUserClass(std::string* name, Box* base, Box* attr_dict);
+extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();

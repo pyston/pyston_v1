@@ -967,7 +967,7 @@ void PrintVisitor::printIndent() {
 
 bool PrintVisitor::visit_alias(AST_alias* node) {
     printf("%s", node->name.c_str());
-    if (node->asname.size())
+    if (node->asname.str().size())
         printf(" as %s", node->asname.c_str());
     return true;
 }

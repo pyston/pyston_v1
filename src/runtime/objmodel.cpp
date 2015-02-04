@@ -60,10 +60,26 @@
 
 namespace pyston {
 
-// TODO should centralize all of these:
-static const std::string _call_str("__call__"), _new_str("__new__"), _init_str("__init__"), _get_str("__get__");
-static const std::string _getattr_str("__getattr__");
-static const std::string _getattribute_str("__getattribute__");
+static const std::string all_str("__all__");
+static const std::string attr_str("__len__");
+static const std::string call_str("__call__");
+static const std::string contains_str("__contains__");
+static const std::string delattr_str("__delattr__");
+static const std::string delete_str("__delete__");
+static const std::string delitem_str("__delitem__");
+static const std::string getattribute_str("__getattribute__");
+static const std::string getattr_str("__getattr__");
+static const std::string getitem_str("__getitem__");
+static const std::string get_str("__get__");
+static const std::string hasnext_str("__hasnext__");
+static const std::string init_str("__init__");
+static const std::string iter_str("__iter__");
+static const std::string new_str("__new__");
+static const std::string none_str("None");
+static const std::string repr_str("__repr__");
+static const std::string setitem_str("__setitem__");
+static const std::string set_str("__set__");
+static const std::string str_str("__str__");
 
 #if 0
 void REWRITE_ABORTED(const char* reason) {
@@ -615,8 +631,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     if (rewrite_args)
         rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
 
-    static const std::string none_str("None");
-
     RELEASE_ASSERT(attr != none_str || this == builtins_module, "can't assign to None");
 
     if (cls->instancesHaveHCAttrs()) {
@@ -1092,8 +1106,8 @@ return gotten;
 // this function is useful for custom getattribute implementations that already know whether the descriptor
 // came from the class or not.
 Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner) {
-    Box* descr_r = callattrInternal(obj, &_get_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), inst, owner, NULL,
-                                    NULL, NULL);
+    Box* descr_r
+        = callattrInternal(obj, &get_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), inst, owner, NULL, NULL, NULL);
     return descr_r;
 }
 
@@ -1155,7 +1169,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // Don't need to pass icentry args, since we special-case __getattribtue__ and __getattr__ to use
         // invalidation rather than guards
         // TODO since you changed this to typeLookup you need to guard
-        Box* getattribute = typeLookup(obj->cls, "__getattribute__", NULL);
+        Box* getattribute = typeLookup(obj->cls, getattribute_str, NULL);
         if (getattribute) {
             // TODO this is a good candidate for interning?
             Box* boxstr = boxString(attr);
@@ -1223,14 +1237,14 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             if (rewrite_args) {
                 RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
                 GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
-                _get_ = typeLookup(descr->cls, _get_str, &grewrite_args);
+                _get_ = typeLookup(descr->cls, get_str, &grewrite_args);
                 if (!grewrite_args.out_success) {
                     rewrite_args = NULL;
                 } else if (_get_) {
                     r_get = grewrite_args.out_rtn;
                 }
             } else {
-                _get_ = typeLookup(descr->cls, _get_str, NULL);
+                _get_ = typeLookup(descr->cls, get_str, NULL);
             }
 
             // As an optimization, don't check for __set__ if we're in cls_only mode, since it won't matter.
@@ -1240,12 +1254,12 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                 if (rewrite_args) {
                     RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
-                    _set_ = typeLookup(descr->cls, "__set__", &grewrite_args);
+                    _set_ = typeLookup(descr->cls, set_str, &grewrite_args);
                     if (!grewrite_args.out_success) {
                         rewrite_args = NULL;
                     }
                 } else {
-                    _set_ = typeLookup(descr->cls, "__set__", NULL);
+                    _set_ = typeLookup(descr->cls, set_str, NULL);
                 }
 
                 // Call __get__(descr, obj, obj->cls)
@@ -1341,14 +1355,14 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
                 if (rewrite_args) {
                     RewriterVar* r_val_cls = r_val->getAttr(BOX_CLS_OFFSET, Location::any());
                     GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_val_cls, Location::any());
-                    local_get = typeLookup(val->cls, _get_str, &grewrite_args);
+                    local_get = typeLookup(val->cls, get_str, &grewrite_args);
                     if (!grewrite_args.out_success) {
                         rewrite_args = NULL;
                     } else if (local_get) {
                         r_get = grewrite_args.out_rtn;
                     }
                 } else {
-                    local_get = typeLookup(val->cls, _get_str, NULL);
+                    local_get = typeLookup(val->cls, get_str, NULL);
                 }
 
                 // Call __get__(val, None, obj)
@@ -1441,7 +1455,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // invalidation rather than guards
         rewrite_args = NULL;
         REWRITE_ABORTED("");
-        Box* getattr = typeLookup(obj->cls, "__getattr__", NULL);
+        Box* getattr = typeLookup(obj->cls, getattr_str, NULL);
         if (getattr) {
             Box* boxstr = boxString(attr);
             Box* rtn = runtimeCall2(getattr, ArgPassSpec(2), obj, boxstr);
@@ -1572,14 +1586,14 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         if (rewrite_args) {
             RewriterVar* r_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
             GetattrRewriteArgs trewrite_args(rewrite_args->rewriter, r_cls, Location::any());
-            _set_ = typeLookup(descr->cls, "__set__", &trewrite_args);
+            _set_ = typeLookup(descr->cls, set_str, &trewrite_args);
             if (!trewrite_args.out_success) {
                 rewrite_args = NULL;
             } else if (_set_) {
                 r_set = trewrite_args.out_rtn;
             }
         } else {
-            _set_ = typeLookup(descr->cls, "__set__", NULL);
+            _set_ = typeLookup(descr->cls, set_str, NULL);
         }
     }
 
@@ -1605,7 +1619,7 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
     if (isSubclass(obj->cls, type_cls)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
-        if (attr == _getattr_str || attr == _getattribute_str) {
+        if (attr == getattr_str || attr == getattribute_str) {
             if (rewrite_args)
                 REWRITE_ABORTED("");
             // Will have to embed the clear in the IC, so just disable the patching for now:
@@ -1757,7 +1771,6 @@ extern "C" BoxedString* str(Box* obj) {
     slowpath_str.log();
 
     if (obj->cls != str_cls) {
-        static const std::string str_str("__str__");
         // TODO could do an IC optimization here (once we do rewrites here at all):
         // if __str__ is objectStr, just guard on that and call repr directly.
         obj = callattrInternal(obj, &str_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
@@ -1773,7 +1786,6 @@ extern "C" BoxedString* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();
 
-    static const std::string repr_str("__repr__");
     obj = callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
     if (obj->cls != str_cls) {
@@ -1855,7 +1867,6 @@ extern "C" BoxedInt* hash(Box* obj) {
 
 extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     Box* rtn;
-    static std::string attr_str("__len__");
     if (rewrite_args) {
         CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
         rtn = callattrInternal0(obj, &attr_str, CLASS_ONLY, &crewrite_args, ArgPassSpec(0));
@@ -2302,7 +2313,7 @@ static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bo
             continue;
 
         AST_Name* n = ast_cast<AST_Name>(e);
-        if (n->id == kw_name) {
+        if (n->id.str() == kw_name) {
             if (params_filled[j]) {
                 raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
                                getFunctionName(cl).c_str(), kw_name.c_str());
@@ -2666,10 +2677,10 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         if (rewrite_args) {
             // TODO is this ok?
             // rewrite_args->rewriter->trap();
-            rtn = callattrInternal(obj, &_call_str, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
+            rtn = callattrInternal(obj, &call_str, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
                                    keyword_names);
         } else {
-            rtn = callattrInternal(obj, &_call_str, CLASS_ONLY, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+            rtn = callattrInternal(obj, &call_str, CLASS_ONLY, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
         }
         if (!rtn)
             raiseExcHelper(TypeError, "'%s' object is not callable", getTypeName(obj)->c_str());
@@ -3032,16 +3043,14 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     if (op_type == AST_TYPE::In || op_type == AST_TYPE::NotIn) {
         // TODO do rewrite
 
-        static const std::string str_contains("__contains__");
-        Box* contained = callattrInternal1(rhs, &str_contains, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
+        Box* contained = callattrInternal1(rhs, &contains_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
         if (contained == NULL) {
-            static const std::string str_iter("__iter__");
-            Box* iter = callattrInternal0(rhs, &str_iter, CLASS_ONLY, NULL, ArgPassSpec(0));
+            Box* iter = callattrInternal0(rhs, &iter_str, CLASS_ONLY, NULL, ArgPassSpec(0));
             if (iter)
                 ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
             RELEASE_ASSERT(iter == NULL, "need to try iterating");
 
-            Box* getitem = typeLookup(rhs->cls, "__getitem__", NULL);
+            Box* getitem = typeLookup(rhs->cls, getitem_str, NULL);
             if (getitem)
                 ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs)->c_str());
             RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
@@ -3200,7 +3209,6 @@ extern "C" Box* getitem(Box* value, Box* slice) {
 
     static StatCounter slowpath_getitem("slowpath_getitem");
     slowpath_getitem.log();
-    static std::string str_getitem("__getitem__");
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "getitem"));
@@ -3210,14 +3218,14 @@ extern "C" Box* getitem(Box* value, Box* slice) {
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rewrite_args.arg1 = rewriter->getArg(1);
 
-        rtn = callattrInternal1(value, &str_getitem, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
+        rtn = callattrInternal1(value, &getitem_str, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         } else if (rtn)
             rewriter->commitReturning(rewrite_args.out_rtn);
     } else {
-        rtn = callattrInternal1(value, &str_getitem, CLASS_ONLY, NULL, ArgPassSpec(1), slice);
+        rtn = callattrInternal1(value, &getitem_str, CLASS_ONLY, NULL, ArgPassSpec(1), slice);
     }
 
     if (rtn == NULL) {
@@ -3241,7 +3249,6 @@ extern "C" Box* getitem(Box* value, Box* slice) {
 extern "C" void setitem(Box* target, Box* slice, Box* value) {
     static StatCounter slowpath_setitem("slowpath_setitem");
     slowpath_setitem.log();
-    static std::string str_setitem("__setitem__");
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setitem"));
@@ -3252,13 +3259,13 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
         rewrite_args.arg1 = rewriter->getArg(1);
         rewrite_args.arg2 = rewriter->getArg(2);
 
-        rtn = callattrInternal2(target, &str_setitem, CLASS_ONLY, &rewrite_args, ArgPassSpec(2), slice, value);
+        rtn = callattrInternal2(target, &setitem_str, CLASS_ONLY, &rewrite_args, ArgPassSpec(2), slice, value);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         }
     } else {
-        rtn = callattrInternal2(target, &str_setitem, CLASS_ONLY, NULL, ArgPassSpec(2), slice, value);
+        rtn = callattrInternal2(target, &setitem_str, CLASS_ONLY, NULL, ArgPassSpec(2), slice, value);
     }
 
     if (rtn == NULL) {
@@ -3274,7 +3281,6 @@ extern "C" void setitem(Box* target, Box* slice, Box* value) {
 extern "C" void delitem(Box* target, Box* slice) {
     static StatCounter slowpath_delitem("slowpath_delitem");
     slowpath_delitem.log();
-    static std::string str_delitem("__delitem__");
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, "delitem"));
@@ -3284,14 +3290,14 @@ extern "C" void delitem(Box* target, Box* slice) {
         CallRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
         rewrite_args.arg1 = rewriter->getArg(1);
 
-        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
+        rtn = callattrInternal1(target, &delitem_str, CLASS_ONLY, &rewrite_args, ArgPassSpec(1), slice);
 
         if (!rewrite_args.out_success) {
             rewriter.reset(NULL);
         }
 
     } else {
-        rtn = callattrInternal1(target, &str_delitem, CLASS_ONLY, NULL, ArgPassSpec(1), slice);
+        rtn = callattrInternal1(target, &delitem_str, CLASS_ONLY, NULL, ArgPassSpec(1), slice);
     }
 
     if (rtn == NULL) {
@@ -3336,9 +3342,6 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
 
 extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
                                  DelattrRewriteArgs* rewrite_args) {
-    static const std::string delattr_str("__delattr__");
-    static const std::string delete_str("__delete__");
-
     // custom __delattr__
     if (allow_custom) {
         Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
@@ -3395,7 +3398,6 @@ extern "C" void delattr(Box* obj, const char* attr) {
 
 extern "C" Box* getPystonIter(Box* o) {
     Box* r = getiter(o);
-    static const std::string hasnext_str("__hasnext__");
     if (typeLookup(r->cls, hasnext_str, NULL) == NULL)
         return new BoxedIterWrapper(r);
     return r;
@@ -3403,12 +3405,10 @@ extern "C" Box* getPystonIter(Box* o) {
 
 Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
-    static const std::string iter_str("__iter__");
     Box* r = callattrInternal0(o, &iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
     if (r)
         return r;
 
-    static const std::string getitem_str("__getitem__");
     if (typeLookup(o->cls, getitem_str, NULL)) {
         return new BoxedSeqIter(o);
     }
@@ -3578,7 +3578,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
         // TODO: if tp_new != Py_CallPythonNew, call that instead?
-        new_attr = typeLookup(cls, _new_str, &grewrite_args);
+        new_attr = typeLookup(cls, new_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -3598,7 +3598,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             }
         }
     } else {
-        new_attr = typeLookup(cls, _new_str, NULL);
+        new_attr = typeLookup(cls, new_str, NULL);
         new_attr = processDescriptor(new_attr, None, cls);
     }
     assert(new_attr && "This should always resolve");
@@ -3622,17 +3622,19 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
     static Box* object_init = NULL;
     static std::vector<Box*> allowable_news;
     if (!object_new) {
-        object_new = typeLookup(object_cls, _new_str, NULL);
+        object_new = typeLookup(object_cls, new_str, NULL);
+        assert(object_new);
         // I think this is unnecessary, but good form:
         gc::registerPermanentRoot(object_new);
 
-        object_init = typeLookup(object_cls, _init_str, NULL);
+        object_init = typeLookup(object_cls, init_str, NULL);
+        assert(object_init);
         gc::registerPermanentRoot(object_init);
 
         allowable_news.push_back(object_new);
 
         for (BoxedClass* allowed_cls : { enumerate_cls, xrange_cls }) {
-            auto new_obj = typeLookup(allowed_cls, _new_str, NULL);
+            auto new_obj = typeLookup(allowed_cls, new_str, NULL);
             gc::registerPermanentRoot(new_obj);
             allowable_news.push_back(new_obj);
         }
@@ -3665,7 +3667,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
 
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_ccls, rewrite_args->destination);
-        init_attr = typeLookup(cls, _init_str, &grewrite_args);
+        init_attr = typeLookup(cls, init_str, &grewrite_args);
 
         if (!grewrite_args.out_success)
             rewrite_args = NULL;
@@ -3676,7 +3678,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             }
         }
     } else {
-        init_attr = typeLookup(cls, _init_str, NULL);
+        init_attr = typeLookup(cls, init_str, NULL);
     }
     // The init_attr should always resolve as well, but doesn't yet
 
@@ -3736,7 +3738,7 @@ Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSp
             init_attr = NULL;
         } else {
             // We could have skipped the initial __init__ lookup
-            init_attr = typeLookup(made->cls, _init_str, NULL);
+            init_attr = typeLookup(made->cls, init_str, NULL);
         }
     }
 
@@ -3811,14 +3813,14 @@ Box* typeCall(Box* obj, BoxedList* vararg) {
         abort();
 }
 
-extern "C" void delGlobal(BoxedModule* m, std::string* name) {
+extern "C" void delGlobal(BoxedModule* m, const std::string* name) {
     if (!m->getattr(*name)) {
         raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
     }
     m->delattr(*name, NULL);
 }
 
-extern "C" Box* getGlobal(BoxedModule* m, std::string* name) {
+extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -3909,8 +3911,6 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     assert(_from_module->cls == module_cls);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
-    static std::string all_str("__all__");
-    static std::string getitem_str("__getitem__");
     Box* all = from_module->getattr(all_str);
 
     if (all) {

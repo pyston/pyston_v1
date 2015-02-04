@@ -43,6 +43,8 @@ private:
     int start, end;
     FILE* fp;
 
+    InternedStringPool* intern_pool;
+
     void ensure(int num) {
         if (end - start < num) {
             fill();
@@ -59,7 +61,7 @@ public:
             printf("filled, now at %d-%d\n", start, end);
     }
 
-    BufferedReader(FILE* fp) : start(0), end(0), fp(fp) {}
+    BufferedReader(FILE* fp) : start(0), end(0), fp(fp), intern_pool(NULL) {}
 
     int bytesBuffered() { return (end - start); }
 
@@ -81,7 +83,17 @@ public:
         raw = readULL();
         return d;
     }
+
+    std::unique_ptr<InternedStringPool> createInternedPool();
+    InternedString readAndInternString();
+    void readAndInternStringVector(std::vector<InternedString>& v);
 };
+
+std::unique_ptr<InternedStringPool> BufferedReader::createInternedPool() {
+    assert(this->intern_pool == NULL);
+    this->intern_pool = new InternedStringPool();
+    return std::unique_ptr<InternedStringPool>(this->intern_pool);
+}
 
 AST* readASTMisc(BufferedReader* reader);
 AST_expr* readASTExpr(BufferedReader* reader);
@@ -94,6 +106,20 @@ static std::string readString(BufferedReader* reader) {
         chars.push_back(reader->readByte());
     }
     return std::string(chars.begin(), chars.end());
+}
+
+InternedString BufferedReader::readAndInternString() {
+    std::string str = readString(this);
+    return intern_pool->get(std::move(str));
+}
+
+void BufferedReader::readAndInternStringVector(std::vector<InternedString>& v) {
+    int num_elts = readShort();
+    if (VERBOSITY("parsing") >= 2)
+        printf("%d elts to read\n", num_elts);
+    for (int i = 0; i < num_elts; i++) {
+        v.push_back(readAndInternString());
+    }
 }
 
 static void readStringVector(std::vector<std::string>& vec, BufferedReader* reader) {
@@ -142,8 +168,8 @@ static int readColOffset(BufferedReader* reader) {
 }
 
 AST_alias* read_alias(BufferedReader* reader) {
-    std::string asname = readString(reader);
-    std::string name = readString(reader);
+    InternedString asname = reader->readAndInternString();
+    InternedString name = reader->readAndInternString();
 
     AST_alias* rtn = new AST_alias(name, asname);
     rtn->col_offset = -1;
@@ -155,14 +181,15 @@ AST_alias* read_alias(BufferedReader* reader) {
 AST_arguments* read_arguments(BufferedReader* reader) {
     if (VERBOSITY("parsing") >= 2)
         printf("reading arguments\n");
+
     AST_arguments* rtn = new AST_arguments();
 
     readExprVector(rtn->args, reader);
     rtn->col_offset = -1;
     readExprVector(rtn->defaults, reader);
-    rtn->kwarg = readString(reader);
+    rtn->kwarg = reader->readAndInternString();
     rtn->lineno = -1;
-    rtn->vararg = readString(reader);
+    rtn->vararg = reader->readAndInternString();
     return rtn;
 }
 
@@ -200,7 +227,7 @@ AST_AugAssign* read_augassign(BufferedReader* reader) {
 AST_Attribute* read_attribute(BufferedReader* reader) {
     AST_Attribute* rtn = new AST_Attribute();
 
-    rtn->attr = readString(reader);
+    rtn->attr = reader->readAndInternString();
     rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
     rtn->lineno = reader->readULL();
@@ -293,7 +320,7 @@ AST_ClassDef* read_classdef(BufferedReader* reader) {
     rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->decorator_list, reader);
     rtn->lineno = reader->readULL();
-    rtn->name = readString(reader);
+    rtn->name = reader->readAndInternString();
 
     return rtn;
 }
@@ -395,7 +422,7 @@ AST_FunctionDef* read_functiondef(BufferedReader* reader) {
     rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->decorator_list, reader);
     rtn->lineno = reader->readULL();
-    rtn->name = readString(reader);
+    rtn->name = reader->readAndInternString();
     return rtn;
 }
 
@@ -414,7 +441,7 @@ AST_Global* read_global(BufferedReader* reader) {
 
     rtn->col_offset = readColOffset(reader);
     rtn->lineno = reader->readULL();
-    readStringVector(rtn->names, reader);
+    reader->readAndInternStringVector(rtn->names);
     return rtn;
 }
 
@@ -455,7 +482,7 @@ AST_ImportFrom* read_importfrom(BufferedReader* reader) {
     rtn->col_offset = readColOffset(reader);
     rtn->level = reader->readULL();
     rtn->lineno = reader->readULL();
-    rtn->module = readString(reader);
+    rtn->module = reader->readAndInternString();
     readMiscVector(rtn->names, reader);
     return rtn;
 }
@@ -473,7 +500,7 @@ AST_Index* read_index(BufferedReader* reader) {
 AST_keyword* read_keyword(BufferedReader* reader) {
     AST_keyword* rtn = new AST_keyword();
 
-    rtn->arg = readString(reader);
+    rtn->arg = reader->readAndInternString();
     rtn->col_offset = -1;
     rtn->lineno = -1;
     rtn->value = readASTExpr(reader);
@@ -513,7 +540,8 @@ AST_ListComp* read_listcomp(BufferedReader* reader) {
 AST_Module* read_module(BufferedReader* reader) {
     if (VERBOSITY("parsing") >= 2)
         printf("reading module\n");
-    AST_Module* rtn = new AST_Module();
+
+    AST_Module* rtn = new AST_Module(reader->createInternedPool());
 
     readStmtVector(rtn->body, reader);
     rtn->col_offset = -1;
@@ -524,7 +552,7 @@ AST_Module* read_module(BufferedReader* reader) {
 AST_Name* read_name(BufferedReader* reader) {
     auto col_offset = readColOffset(reader);
     auto ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
-    auto id = readString(reader);
+    auto id = reader->readAndInternString();
     auto lineno = reader->readULL();
 
     return new AST_Name(std::move(id), ctx_type, lineno, col_offset);

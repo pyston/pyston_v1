@@ -19,9 +19,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <pypa/ast/visitor.hh>
 #include <pypa/parser/parser.hh>
 #include <sys/stat.h>
+
+#include "llvm/ADT/STLExtras.h"
 
 #include "core/ast.h"
 #include "core/options.h"
@@ -40,14 +43,15 @@ void location(AST* t, pypa::Ast& a) {
     t->col_offset = a.column;
 }
 
-AST_expr* readItem(pypa::AstExpression& e);
-AST_stmt* readItem(pypa::AstStatement& s);
-AST_ExceptHandler* readItem(pypa::AstExcept&);
-AST_ExceptHandler* readItem(pypa::AstExceptPtr);
+AST_expr* readItem(pypa::AstExpression& e, InternedStringPool& interned_strings);
+AST_stmt* readItem(pypa::AstStatement& s, InternedStringPool& interned_strings);
+AST_ExceptHandler* readItem(pypa::AstExcept&, InternedStringPool& interned_strings);
+AST_ExceptHandler* readItem(pypa::AstExceptPtr, InternedStringPool& interned_strings);
 
-template <typename T> auto readItem(std::shared_ptr<T>& t) -> decltype(readItem(*t)) {
+template <typename T>
+auto readItem(std::shared_ptr<T>& t, InternedStringPool& interned_strings) -> decltype(readItem(*t, interned_strings)) {
     if (t)
-        return readItem(*t);
+        return readItem(*t, interned_strings);
     return nullptr;
 }
 
@@ -165,124 +169,128 @@ AST_TYPE::AST_TYPE readItem(pypa::AstCompareOpType type) {
     abort();
 }
 
-std::string readName(pypa::AstExpression& e) {
+InternedString readName(pypa::AstExpression& e, InternedStringPool& interned_strings) {
     assert(e.type == pypa::AstType::Name);
-    return static_cast<pypa::AstName&>(e).id;
+    return interned_strings.get(static_cast<pypa::AstName&>(e).id);
 }
 
-std::string readName(pypa::AstExpr& n) {
+InternedString readName(pypa::AstExpr& n, InternedStringPool& interned_strings) {
     if (!n) {
-        return std::string();
+        return interned_strings.get(std::string());
     }
-    return readName(*n);
+    return readName(*n, interned_strings);
 }
 
-AST_keyword* readItem(pypa::AstKeyword& k) {
+AST_keyword* readItem(pypa::AstKeyword& k, InternedStringPool& interned_strings) {
     AST_keyword* ptr = new AST_keyword();
     location(ptr, k);
-    ptr->arg = readName(k.name);
-    ptr->value = readItem(k.value);
+    ptr->arg = readName(k.name, interned_strings);
+    ptr->value = readItem(k.value, interned_strings);
     return ptr;
 }
 
-void readVector(std::vector<AST_keyword*>& t, pypa::AstExprList& items) {
+void readVector(std::vector<AST_keyword*>& t, pypa::AstExprList& items, InternedStringPool& interned_strings) {
     for (auto& item : items) {
         assert(item->type == pypa::AstType::Keyword);
-        t.push_back(readItem(static_cast<pypa::AstKeyword&>(*item)));
+        t.push_back(readItem(static_cast<pypa::AstKeyword&>(*item), interned_strings));
     }
 }
 
-template <typename T, typename U> void readVector(std::vector<T*>& t, std::vector<U>& u) {
+template <typename T, typename U>
+void readVector(std::vector<T*>& t, std::vector<U>& u, InternedStringPool& interned_strings) {
     for (auto& item : u) {
         if (!item) {
             t.push_back(nullptr);
         } else {
-            t.push_back(readItem(*item));
+            t.push_back(readItem(*item, interned_strings));
         }
     }
 }
 
-void readVector(std::vector<AST_expr*>& t, pypa::AstExpression& u) {
+void readVector(std::vector<AST_expr*>& t, pypa::AstExpression& u, InternedStringPool& interned_strings) {
     if (u.type == pypa::AstType::Tuple) {
         pypa::AstTuple& e = static_cast<pypa::AstTuple&>(u);
         for (auto& item : e.elements) {
             assert(item);
-            t.push_back(readItem(*item));
+            t.push_back(readItem(*item, interned_strings));
         }
     } else {
-        t.push_back(readItem(u));
+        t.push_back(readItem(u, interned_strings));
     }
 }
 
-void readVector(std::vector<AST_stmt*>& t, pypa::AstStatement& u) {
+void readVector(std::vector<AST_stmt*>& t, pypa::AstStatement& u, InternedStringPool& interned_strings) {
     if (u.type == pypa::AstType::Suite) {
         pypa::AstSuite& e = static_cast<pypa::AstSuite&>(u);
         for (auto& item : e.items) {
             assert(item);
-            t.push_back(readItem(*item));
+            t.push_back(readItem(*item, interned_strings));
         }
     } else {
-        t.push_back(readItem(u));
+        t.push_back(readItem(u, interned_strings));
     }
 }
 
-AST_comprehension* readItem(pypa::AstComprehension& c) {
+AST_comprehension* readItem(pypa::AstComprehension& c, InternedStringPool& interned_strings) {
     AST_comprehension* ptr = new AST_comprehension();
-    ptr->target = readItem(c.target);
-    ptr->iter = readItem(c.iter);
-    readVector(ptr->ifs, c.ifs);
+    ptr->target = readItem(c.target, interned_strings);
+    ptr->iter = readItem(c.iter, interned_strings);
+    readVector(ptr->ifs, c.ifs, interned_strings);
     return ptr;
 }
 
-AST_comprehension* readItem(pypa::AstComprPtr c) {
+AST_comprehension* readItem(pypa::AstComprPtr c, InternedStringPool& interned_strings) {
     if (c)
-        return readItem(*c);
+        return readItem(*c, interned_strings);
     return nullptr;
 }
 
-void readVector(std::vector<AST_comprehension*>& t, pypa::AstExprList& u) {
+void readVector(std::vector<AST_comprehension*>& t, pypa::AstExprList& u, InternedStringPool& interned_strings) {
     for (auto& e : u) {
         assert(e && e->type == pypa::AstType::Comprehension);
-        t.push_back(readItem(static_cast<pypa::AstComprehension&>(*e)));
+        t.push_back(readItem(static_cast<pypa::AstComprehension&>(*e), interned_strings));
     }
 }
 
-void readVector(std::vector<AST_stmt*>& t, pypa::AstStmt u) {
+void readVector(std::vector<AST_stmt*>& t, pypa::AstStmt u, InternedStringPool& interned_strings) {
     if (u) {
-        readVector(t, *u);
+        readVector(t, *u, interned_strings);
     }
 }
 
-AST_ExceptHandler* readItem(pypa::AstExcept& e) {
+AST_ExceptHandler* readItem(pypa::AstExcept& e, InternedStringPool& interned_strings) {
     AST_ExceptHandler* ptr = new AST_ExceptHandler();
     location(ptr, e);
-    readVector(ptr->body, e.body);
-    ptr->name = readItem(e.name);
-    ptr->type = readItem(e.type);
+    readVector(ptr->body, e.body, interned_strings);
+    ptr->name = readItem(e.name, interned_strings);
+    ptr->type = readItem(e.type, interned_strings);
     return ptr;
 }
 
-AST_ExceptHandler* readItem(pypa::AstExceptPtr ptr) {
+AST_ExceptHandler* readItem(pypa::AstExceptPtr ptr, InternedStringPool& interned_strings) {
     assert(ptr);
-    return readItem(*ptr);
+    return readItem(*ptr, interned_strings);
 }
 
-AST_alias* readItem(pypa::AstAlias& a) {
-    return new AST_alias(readName(a.name), readName(a.as_name));
+AST_alias* readItem(pypa::AstAlias& a, InternedStringPool& interned_strings) {
+    return new AST_alias(readName(a.name, interned_strings), readName(a.as_name, interned_strings));
 }
 
-AST_arguments* readItem(pypa::AstArguments& a) {
+AST_arguments* readItem(pypa::AstArguments& a, InternedStringPool& interned_strings) {
     AST_arguments* ptr = new AST_arguments();
     location(ptr, a);
-    readVector(ptr->defaults, a.defaults);
+    readVector(ptr->defaults, a.defaults, interned_strings);
     ptr->defaults.erase(std::remove(ptr->defaults.begin(), ptr->defaults.end(), nullptr), ptr->defaults.end());
-    readVector(ptr->args, a.arguments);
-    ptr->kwarg = readName(a.kwargs);
-    ptr->vararg = readName(a.args);
+    readVector(ptr->args, a.arguments, interned_strings);
+    ptr->kwarg = readName(a.kwargs, interned_strings);
+    ptr->vararg = readName(a.args, interned_strings);
     return ptr;
 }
 
 struct expr_dispatcher {
+    InternedStringPool& interned_strings;
+    expr_dispatcher(InternedStringPool& interned_strings) : interned_strings(interned_strings) {}
+
     typedef AST_expr* ResultPtr;
     template <typename T> ResultPtr operator()(std::shared_ptr<T> t) {
         if (t)
@@ -304,8 +312,8 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstAttribute& a) {
         AST_Attribute* ptr = new AST_Attribute();
         location(ptr, a);
-        ptr->value = readItem(a.value);
-        ptr->attr = readName(a.attribute);
+        ptr->value = readItem(a.value, interned_strings);
+        ptr->attr = readName(a.attribute, interned_strings);
         ptr->ctx_type = readItem(a.context);
         return ptr;
     }
@@ -314,7 +322,7 @@ struct expr_dispatcher {
         AST_BoolOp* ptr = new AST_BoolOp();
         location(ptr, b);
         ptr->op_type = readItem(b.op);
-        readVector(ptr->values, b.values);
+        readVector(ptr->values, b.values, interned_strings);
         return ptr;
     }
 
@@ -322,31 +330,31 @@ struct expr_dispatcher {
         AST_BinOp* ptr = new AST_BinOp();
         location(ptr, b);
         ptr->op_type = readItem(b.op);
-        ptr->left = readItem(b.left);
-        ptr->right = readItem(b.right);
+        ptr->left = readItem(b.left, interned_strings);
+        ptr->right = readItem(b.right, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstCall& c) {
         AST_Call* ptr = new AST_Call();
         location(ptr, c);
-        readVector(ptr->args, c.arglist.arguments);
-        readVector(ptr->keywords, c.arglist.keywords);
-        ptr->func = readItem(c.function);
-        ptr->starargs = readItem(c.arglist.args);
-        ptr->kwargs = readItem(c.arglist.kwargs);
+        readVector(ptr->args, c.arglist.arguments, interned_strings);
+        readVector(ptr->keywords, c.arglist.keywords, interned_strings);
+        ptr->func = readItem(c.function, interned_strings);
+        ptr->starargs = readItem(c.arglist.args, interned_strings);
+        ptr->kwargs = readItem(c.arglist.kwargs, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstCompare& c) {
         AST_Compare* ptr = new AST_Compare();
         location(ptr, c);
-        ptr->left = readItem(c.left);
+        ptr->left = readItem(c.left, interned_strings);
         ptr->ops.reserve(c.operators.size());
         for (auto op : c.operators) {
             ptr->ops.push_back(readItem(op));
         }
-        readVector(ptr->comparators, c.comparators);
+        readVector(ptr->comparators, c.comparators, interned_strings);
         return ptr;
     }
 
@@ -365,17 +373,17 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstDict& d) {
         AST_Dict* ptr = new AST_Dict();
         location(ptr, d);
-        readVector(ptr->keys, d.keys);
-        readVector(ptr->values, d.values);
+        readVector(ptr->keys, d.keys, interned_strings);
+        readVector(ptr->values, d.values, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstDictComp& d) {
         AST_DictComp* ptr = new AST_DictComp();
         location(ptr, d);
-        ptr->key = readItem(d.key);
-        ptr->value = readItem(d.value);
-        readVector(ptr->generators, d.generators);
+        ptr->key = readItem(d.key, interned_strings);
+        ptr->value = readItem(d.value, interned_strings);
+        readVector(ptr->generators, d.generators, interned_strings);
         return ptr;
     }
 
@@ -388,46 +396,46 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstExtSlice& e) {
         AST_ExtSlice* ptr = new AST_ExtSlice();
         location(ptr, e);
-        readVector(ptr->dims, e.dims);
+        readVector(ptr->dims, e.dims, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstIfExpr& i) {
         AST_IfExp* ptr = new AST_IfExp();
         location(ptr, i);
-        ptr->body = readItem(i.body);
-        ptr->test = readItem(i.test);
-        ptr->orelse = readItem(i.orelse);
+        ptr->body = readItem(i.body, interned_strings);
+        ptr->test = readItem(i.test, interned_strings);
+        ptr->orelse = readItem(i.orelse, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstGenerator& g) {
         AST_GeneratorExp* ptr = new AST_GeneratorExp();
         location(ptr, g);
-        ptr->elt = readItem(g.element);
-        readVector(ptr->generators, g.generators);
+        ptr->elt = readItem(g.element, interned_strings);
+        readVector(ptr->generators, g.generators, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstIndex& i) {
         AST_Index* ptr = new AST_Index();
         location(ptr, i);
-        ptr->value = readItem(i.value);
+        ptr->value = readItem(i.value, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstLambda& l) {
         AST_Lambda* ptr = new AST_Lambda();
         location(ptr, l);
-        ptr->args = readItem(l.arguments);
-        ptr->body = readItem(l.body);
+        ptr->args = readItem(l.arguments, interned_strings);
+        ptr->body = readItem(l.body, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstList& l) {
         AST_List* ptr = new AST_List();
         location(ptr, l);
-        readVector(ptr->elts, l.elements);
+        readVector(ptr->elts, l.elements, interned_strings);
         ptr->ctx_type = readItem(l.context);
         return ptr;
     }
@@ -435,18 +443,18 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstListComp& l) {
         AST_ListComp* ptr = new AST_ListComp();
         location(ptr, l);
-        readVector(ptr->generators, l.generators);
-        ptr->elt = readItem(l.element);
+        readVector(ptr->generators, l.generators, interned_strings);
+        ptr->elt = readItem(l.element, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstName& a) {
-        AST_Name* ptr = new AST_Name(a.id, readItem(a.context), a.line, a.column);
+        AST_Name* ptr = new AST_Name(interned_strings.get(a.id), readItem(a.context), a.line, a.column);
         return ptr;
     }
 
     ResultPtr read(pypa::AstNone& n) {
-        AST_Name* ptr = new AST_Name("None", AST_TYPE::Load, n.line, n.column);
+        AST_Name* ptr = new AST_Name(interned_strings.get("None"), AST_TYPE::Load, n.line, n.column);
         return ptr;
     }
 
@@ -473,23 +481,23 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstRepr& r) {
         AST_Repr* ptr = new AST_Repr();
         location(ptr, r);
-        ptr->value = readItem(r.value);
+        ptr->value = readItem(r.value, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstSet& s) {
         AST_Set* ptr = new AST_Set();
         location(ptr, s);
-        readVector(ptr->elts, s.elements);
+        readVector(ptr->elts, s.elements, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstSlice& s) {
         AST_Slice* ptr = new AST_Slice();
         location(ptr, s);
-        ptr->lower = readItem(s.lower);
-        ptr->upper = readItem(s.upper);
-        ptr->step = readItem(s.step);
+        ptr->lower = readItem(s.lower, interned_strings);
+        ptr->upper = readItem(s.upper, interned_strings);
+        ptr->step = readItem(s.step, interned_strings);
         return ptr;
     }
 
@@ -503,16 +511,16 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstSubscript& s) {
         AST_Subscript* ptr = new AST_Subscript();
         location(ptr, s);
-        ptr->value = readItem(s.value);
+        ptr->value = readItem(s.value, interned_strings);
         ptr->ctx_type = readItem(s.context);
-        ptr->slice = readItem(s.slice);
+        ptr->slice = readItem(s.slice, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstTuple& t) {
         AST_Tuple* ptr = new AST_Tuple();
         location(ptr, t);
-        readVector(ptr->elts, t.elements);
+        readVector(ptr->elts, t.elements, interned_strings);
         ptr->ctx_type = readItem(t.context);
         return ptr;
     }
@@ -521,19 +529,22 @@ struct expr_dispatcher {
         AST_UnaryOp* ptr = new AST_UnaryOp();
         location(ptr, b);
         ptr->op_type = readItem(b.op);
-        ptr->operand = readItem(b.operand);
+        ptr->operand = readItem(b.operand, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstYieldExpr& e) {
         AST_Yield* ptr = new AST_Yield();
         location(ptr, e);
-        ptr->value = readItem(e.args);
+        ptr->value = readItem(e.args, interned_strings);
         return ptr;
     }
 };
 
 struct stmt_dispatcher {
+    InternedStringPool& interned_strings;
+    stmt_dispatcher(InternedStringPool& interned_strings) : interned_strings(interned_strings) {}
+
     typedef AST_stmt* ResultPtr;
     template <typename T> ResultPtr operator()(std::shared_ptr<T> t) {
         if (t)
@@ -555,16 +566,16 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstAssign& a) {
         AST_Assign* ptr = new AST_Assign();
         location(ptr, a);
-        readVector(ptr->targets, a.targets);
-        ptr->value = readItem(a.value);
+        readVector(ptr->targets, a.targets, interned_strings);
+        ptr->value = readItem(a.value, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstAssert& a) {
         AST_Assert* ptr = new AST_Assert();
         location(ptr, a);
-        ptr->msg = readItem(a.expression);
-        ptr->test = readItem(a.test);
+        ptr->msg = readItem(a.expression, interned_strings);
+        ptr->test = readItem(a.test, interned_strings);
         return ptr;
     }
 
@@ -572,8 +583,8 @@ struct stmt_dispatcher {
         AST_AugAssign* ptr = new AST_AugAssign();
         location(ptr, a);
         ptr->op_type = readItem(a.op);
-        ptr->target = readItem(a.target);
-        ptr->value = readItem(a.value);
+        ptr->target = readItem(a.target, interned_strings);
+        ptr->value = readItem(a.value, interned_strings);
         return ptr;
     }
 
@@ -587,10 +598,10 @@ struct stmt_dispatcher {
         AST_ClassDef* ptr = new AST_ClassDef();
         location(ptr, c);
         if (c.bases)
-            readVector(ptr->bases, *c.bases);
-        readVector(ptr->decorator_list, c.decorators);
-        readVector(ptr->body, c.body);
-        ptr->name = readName(c.name);
+            readVector(ptr->bases, *c.bases, interned_strings);
+        readVector(ptr->decorator_list, c.decorators, interned_strings);
+        readVector(ptr->body, c.body, interned_strings);
+        ptr->name = readName(c.name, interned_strings);
         return ptr;
     }
 
@@ -603,48 +614,48 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstDelete& d) {
         AST_Delete* ptr = new AST_Delete();
         location(ptr, d);
-        readVector(ptr->targets, *d.targets);
+        readVector(ptr->targets, *d.targets, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstExec& e) {
         AST_Exec* ptr = new AST_Exec();
         location(ptr, e);
-        ptr->body = readItem(e.body);
+        ptr->body = readItem(e.body, interned_strings);
         if (e.globals)
-            ptr->globals = readItem(e.globals);
+            ptr->globals = readItem(e.globals, interned_strings);
         if (e.locals)
-            ptr->locals = readItem(e.locals);
+            ptr->locals = readItem(e.locals, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstExpressionStatement& e) {
         AST_Expr* ptr = new AST_Expr();
         location(ptr, e);
-        ptr->value = readItem(e.expr);
+        ptr->value = readItem(e.expr, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstFor& f) {
         AST_For* ptr = new AST_For();
         location(ptr, f);
-        ptr->target = readItem(f.target);
+        ptr->target = readItem(f.target, interned_strings);
         if (f.iter)
-            ptr->iter = readItem(f.iter);
+            ptr->iter = readItem(f.iter, interned_strings);
         if (f.body)
-            readVector(ptr->body, *f.body);
+            readVector(ptr->body, *f.body, interned_strings);
         if (f.orelse)
-            readVector(ptr->orelse, *f.orelse);
+            readVector(ptr->orelse, *f.orelse, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstFunctionDef& f) {
         AST_FunctionDef* ptr = new AST_FunctionDef();
         location(ptr, f);
-        readVector(ptr->decorator_list, f.decorators);
-        ptr->name = readName(f.name);
-        ptr->args = readItem(f.args);
-        readVector(ptr->body, f.body);
+        readVector(ptr->decorator_list, f.decorators, interned_strings);
+        ptr->name = readName(f.name, interned_strings);
+        ptr->args = readItem(f.args, interned_strings);
+        readVector(ptr->body, f.body, interned_strings);
         return ptr;
     }
 
@@ -653,7 +664,7 @@ struct stmt_dispatcher {
         location(ptr, g);
         ptr->names.resize(g.names.size());
         for (size_t i = 0; i < g.names.size(); ++i) {
-            ptr->names[i] = readName(*g.names[i]);
+            ptr->names[i] = readName(*g.names[i], interned_strings);
         }
         return ptr;
     }
@@ -661,10 +672,10 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstIf& i) {
         AST_If* ptr = new AST_If();
         location(ptr, i);
-        readVector(ptr->body, i.body);
-        ptr->test = readItem(i.test);
+        readVector(ptr->body, i.body, interned_strings);
+        ptr->test = readItem(i.test, interned_strings);
         assert(ptr->test != 0);
-        readVector(ptr->orelse, i.orelse);
+        readVector(ptr->orelse, i.orelse, interned_strings);
         return ptr;
     }
 
@@ -674,11 +685,11 @@ struct stmt_dispatcher {
         if (i.names->type == pypa::AstType::Tuple) {
             for (auto& name : static_cast<pypa::AstTuple&>(*i.names).elements) {
                 assert(name->type == pypa::AstType::Alias);
-                ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*name)));
+                ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*name), interned_strings));
             }
         } else {
             assert(i.names->type == pypa::AstType::Alias);
-            ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*i.names)));
+            ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*i.names), interned_strings));
         }
         return ptr;
     }
@@ -686,15 +697,15 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstImportFrom& i) {
         AST_ImportFrom* ptr = new AST_ImportFrom();
         location(ptr, i);
-        ptr->module = readName(i.module);
+        ptr->module = readName(i.module, interned_strings);
         if (i.names->type == pypa::AstType::Tuple) {
             for (auto& name : static_cast<pypa::AstTuple&>(*i.names).elements) {
                 assert(name->type == pypa::AstType::Alias);
-                ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*name)));
+                ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*name), interned_strings));
             }
         } else {
             assert(i.names->type == pypa::AstType::Alias);
-            ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*i.names)));
+            ptr->names.push_back(readItem(static_cast<pypa::AstAlias&>(*i.names), interned_strings));
         }
         ptr->level = i.level;
         return ptr;
@@ -709,18 +720,18 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstPrint& p) {
         AST_Print* ptr = new AST_Print();
         location(ptr, p);
-        ptr->dest = readItem(p.destination);
+        ptr->dest = readItem(p.destination, interned_strings);
         ptr->nl = p.newline;
-        readVector(ptr->values, p.values);
+        readVector(ptr->values, p.values, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstRaise& r) {
         AST_Raise* ptr = new AST_Raise();
         location(ptr, r);
-        ptr->arg0 = readItem(r.arg0);
-        ptr->arg1 = readItem(r.arg1);
-        ptr->arg2 = readItem(r.arg2);
+        ptr->arg0 = readItem(r.arg0, interned_strings);
+        ptr->arg1 = readItem(r.arg1, interned_strings);
+        ptr->arg2 = readItem(r.arg2, interned_strings);
         return ptr;
     }
 
@@ -729,49 +740,49 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstReturn& r) {
         AST_Return* ptr = new AST_Return();
         location(ptr, r);
-        ptr->value = readItem(r.value);
+        ptr->value = readItem(r.value, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstTryExcept& t) {
         AST_TryExcept* ptr = new AST_TryExcept();
         location(ptr, t);
-        readVector(ptr->body, t.body);
-        readVector(ptr->orelse, t.orelse);
-        readVector(ptr->handlers, t.handlers);
+        readVector(ptr->body, t.body, interned_strings);
+        readVector(ptr->orelse, t.orelse, interned_strings);
+        readVector(ptr->handlers, t.handlers, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstTryFinally& t) {
         AST_TryFinally* ptr = new AST_TryFinally();
         location(ptr, t);
-        readVector(ptr->body, t.body);
-        readVector(ptr->finalbody, t.final_body);
+        readVector(ptr->body, t.body, interned_strings);
+        readVector(ptr->finalbody, t.final_body, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstWith& w) {
         AST_With* ptr = new AST_With();
         location(ptr, w);
-        ptr->optional_vars = readItem(w.optional);
-        ptr->context_expr = readItem(w.context);
-        readVector(ptr->body, w.body);
+        ptr->optional_vars = readItem(w.optional, interned_strings);
+        ptr->context_expr = readItem(w.context, interned_strings);
+        readVector(ptr->body, w.body, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstWhile& w) {
         AST_While* ptr = new AST_While();
         location(ptr, w);
-        ptr->test = readItem(w.test);
-        readVector(ptr->body, w.body);
-        readVector(ptr->orelse, w.orelse);
+        ptr->test = readItem(w.test, interned_strings);
+        readVector(ptr->body, w.body, interned_strings);
+        readVector(ptr->orelse, w.orelse, interned_strings);
         return ptr;
     }
 
     ResultPtr read(pypa::AstYield& w) {
         AST_Expr* ptr = new AST_Expr();
         location(ptr, w);
-        ptr->value = readItem(w.yield);
+        ptr->value = readItem(w.yield, interned_strings);
         return ptr;
     }
 
@@ -786,20 +797,20 @@ struct stmt_dispatcher {
     }
 };
 
-AST_expr* readItem(pypa::AstExpression& e) {
-    return pypa::visit<AST_expr*>(expr_dispatcher(), e);
+AST_expr* readItem(pypa::AstExpression& e, InternedStringPool& interned_strings) {
+    return pypa::visit<AST_expr*>(expr_dispatcher(interned_strings), e);
 }
 
-AST_stmt* readItem(pypa::AstStatement& s) {
-    return pypa::visit<AST_stmt*>(stmt_dispatcher(), s);
+AST_stmt* readItem(pypa::AstStatement& s, InternedStringPool& interned_strings) {
+    return pypa::visit<AST_stmt*>(stmt_dispatcher(interned_strings), s);
 }
 
 AST_Module* readModule(pypa::AstModule& t) {
     if (VERBOSITY("PYPA parsing") >= 2) {
         printf("PYPA reading module\n");
     }
-    AST_Module* mod = new AST_Module();
-    readVector(mod->body, t.body->items);
+    AST_Module* mod = new AST_Module(llvm::make_unique<InternedStringPool>());
+    readVector(mod->body, t.body->items, *mod->interned_strings);
     return mod;
 }
 

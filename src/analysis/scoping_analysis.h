@@ -16,6 +16,7 @@
 #define PYSTON_ANALYSIS_SCOPINGANALYSIS_H
 
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 
@@ -32,16 +33,11 @@ public:
     virtual bool takesClosure() = 0;
     virtual bool passesThroughClosure() = 0;
 
-    virtual bool refersToGlobal(const std::string& name) = 0;
-    virtual bool refersToClosure(const std::string& name) = 0;
-    virtual bool saveInClosure(const std::string& name) = 0;
+    virtual bool refersToGlobal(InternedString name) = 0;
+    virtual bool refersToClosure(InternedString name) = 0;
+    virtual bool saveInClosure(InternedString name) = 0;
 
-    // Get the names set within a classdef that should be forwarded on to
-    // the metaclass constructor.
-    // An error to call this on a non-classdef node.
-    virtual const std::unordered_set<std::string>& getClassDefLocalNames() = 0;
-
-    virtual std::string mangleName(const std::string& id) = 0;
+    virtual InternedString mangleName(InternedString id) = 0;
 };
 
 class ScopingAnalysis {
@@ -52,6 +48,7 @@ public:
 private:
     std::unordered_map<AST*, ScopeInfo*> scopes;
     AST_Module* parent_module;
+    InternedStringPool& interned_strings;
 
     std::unordered_map<AST*, AST*> scope_replacements;
 
@@ -70,6 +67,8 @@ public:
 
     ScopingAnalysis(AST_Module* m);
     ScopeInfo* getScopeInfoForNode(AST* node);
+
+    InternedStringPool& getInternedStrings();
 };
 
 ScopingAnalysis* runScopingAnalysis(AST_Module* m);

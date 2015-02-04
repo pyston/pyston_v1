@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "core/stringpool.h"
 #include "core/types.h"
 
 namespace pyston {
@@ -36,12 +37,11 @@ public:
 
     virtual ~TypeAnalysis() {}
 
-    virtual ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) = 0;
-    virtual ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) = 0;
+    virtual ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) = 0;
+    virtual ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) = 0;
     virtual BoxedClass* speculatedExprClass(AST_expr*) = 0;
 };
 
-// TypeAnalysis* analyze(CFG *cfg, std::unordered_map<std::string, ConcreteCompilerType*> arg_types);
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
                              const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel::EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info);

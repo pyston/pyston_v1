@@ -20,6 +20,7 @@
 #include <sys/time.h>
 
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 
@@ -52,7 +53,7 @@ bool endswith(const std::string& s, const std::string& pattern);
 void removeDirectoryIfExists(const std::string& path);
 
 template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
-    std::vector<std::string> lv, rv;
+    std::vector<InternedString> lv, rv;
     for (typename T1::iterator it = lhs->begin(); it != lhs->end(); it++) {
         lv.push_back(it->first);
     }
@@ -63,8 +64,8 @@ template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
     std::sort(lv.begin(), lv.end());
     std::sort(rv.begin(), rv.end());
 
-    std::vector<std::string> lextra(lv.size());
-    std::vector<std::string>::iterator diffend
+    std::vector<InternedString> lextra(lv.size());
+    std::vector<InternedString>::iterator diffend
         = std::set_difference(lv.begin(), lv.end(), rv.begin(), rv.end(), lextra.begin());
     lextra.resize(diffend - lextra.begin());
 
@@ -77,7 +78,7 @@ template <class T1, class T2> void compareKeyset(T1* lhs, T2* rhs) {
         good = false;
     }
 
-    std::vector<std::string> rextra(rv.size());
+    std::vector<InternedString> rextra(rv.size());
     diffend = std::set_difference(rv.begin(), rv.end(), lv.begin(), lv.end(), rextra.begin());
     rextra.resize(diffend - rextra.begin());
 

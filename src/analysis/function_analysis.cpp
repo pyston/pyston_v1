@@ -51,27 +51,23 @@ private:
     };
 
     std::unordered_set<AST_Name*> kills;
-    std::unordered_map<int, AST_Name*> last_uses;
+    std::unordered_map<InternedString, AST_Name*> last_uses;
 
-    std::unordered_map<int, Status> statuses;
+    std::unordered_map<InternedString, Status> statuses;
     LivenessAnalysis* analysis;
 
-    void _doLoad(const std::string& name, AST_Name* node) {
-        int id = analysis->getStringIndex(name);
-
-        Status& status = statuses[id];
+    void _doLoad(InternedString name, AST_Name* node) {
+        Status& status = statuses[name];
         status.addUsage(Status::USED);
 
-        last_uses[id] = node;
+        last_uses[name] = node;
     }
 
-    void _doStore(const std::string& name) {
-        int id = analysis->getStringIndex(name);
-
-        Status& status = statuses[id];
+    void _doStore(InternedString name) {
+        Status& status = statuses[name];
         status.addUsage(Status::DEFINED);
 
-        auto it = last_uses.find(id);
+        auto it = last_uses.find(name);
         if (it != last_uses.end()) {
             kills.insert(it->second);
             last_uses.erase(it);
@@ -81,9 +77,9 @@ private:
 public:
     LivenessBBVisitor(LivenessAnalysis* analysis) : analysis(analysis) {}
 
-    bool firstIsUse(int idx) { return statuses[idx].first == Status::USED; }
+    bool firstIsUse(InternedString name) { return statuses[name].first == Status::USED; }
 
-    bool firstIsDef(int idx) { return statuses[idx].first == Status::DEFINED; }
+    bool firstIsDef(InternedString name) { return statuses[name].first == Status::DEFINED; }
 
     bool isKilledAt(AST_Name* node, bool is_live_at_end) {
         if (kills.count(node))
@@ -93,7 +89,7 @@ public:
         // even though we weren't able to determine that in a single
         // pass
         if (!is_live_at_end) {
-            auto it = last_uses.find(analysis->getStringIndex(node->id));
+            auto it = last_uses.find(node->id);
             if (it != last_uses.end() && node == it->second)
                 return true;
         }
@@ -141,22 +137,14 @@ public:
         return true;
     }
     bool visit_alias(AST_alias* node) {
-        const std::string* name = &node->name;
-        if (node->asname.size())
-            name = &node->asname;
+        InternedString name = node->name;
+        if (node->asname.str().size())
+            name = node->asname;
 
-        _doStore(*name);
+        _doStore(name);
         return true;
     }
 };
-
-int LivenessAnalysis::getStringIndex(const std::string& s) {
-    int& r = string_index_map[s];
-    if (r == 0) {
-        r = string_index_map.size(); // includes the '0' entry we just put in there
-    }
-    return r;
-}
 
 LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
     Timer _t("LivenessAnalysis()", 10);
@@ -174,31 +162,30 @@ LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
 }
 
 bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
-    if (node->id[0] != '#')
+    if (node->id.str()[0] != '#')
         return false;
 
     return liveness_cache[parent_block]->isKilledAt(node, isLiveAtEnd(node->id, parent_block));
 }
 
-bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
+bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
     Timer _t("LivenessAnalysis()", 10);
 
-    if (name[0] != '#')
+    if (name.str()[0] != '#')
         return true;
 
     if (block->successors.size() == 0)
         return false;
 
-    int idx = getStringIndex(name);
-    if (!result_cache.count(idx)) {
-        std::unordered_map<CFGBlock*, bool>& map = result_cache[idx];
+    if (!result_cache.count(name)) {
+        std::unordered_map<CFGBlock*, bool>& map = result_cache[name];
 
         // Approach:
         // - Find all uses (blocks where the status is USED)
         // - Trace backwards, marking all blocks as live-at-end
         // - If we hit a block that is DEFINED, stop
         for (CFGBlock* b : cfg->blocks) {
-            if (!liveness_cache[b]->firstIsUse(idx))
+            if (!liveness_cache[b]->firstIsUse(name))
                 continue;
 
             std::deque<CFGBlock*> q;
@@ -214,7 +201,7 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
                     continue;
 
                 map[thisblock] = true;
-                if (!liveness_cache[thisblock]->firstIsDef(idx)) {
+                if (!liveness_cache[thisblock]->firstIsDef(name)) {
                     for (CFGBlock* pred : thisblock->predecessors) {
                         q.push_back(pred);
                     }
@@ -227,7 +214,7 @@ bool LivenessAnalysis::isLiveAtEnd(const std::string& name, CFGBlock* block) {
     static StatCounter us_liveness("us_compiling_analysis_liveness");
     us_liveness.log(_t.end());
 
-    return result_cache[idx][block];
+    return result_cache[name][block];
 }
 
 class DefinednessBBAnalyzer : public BBAnalyzer<DefinednessAnalysis::DefinitionLevel> {
@@ -259,7 +246,7 @@ private:
     typedef DefinednessBBAnalyzer::Map Map;
     Map& state;
 
-    void _doSet(const std::string& s) { state[s] = DefinednessAnalysis::Defined; }
+    void _doSet(InternedString s) { state[s] = DefinednessAnalysis::Defined; }
 
     void _doSet(AST* t) {
         switch (t->type) {
@@ -309,11 +296,11 @@ public:
     }
 
     virtual bool visit_alias(AST_alias* node) {
-        const std::string* name = &node->name;
-        if (node->asname.size())
-            name = &node->asname;
+        InternedString name = node->name;
+        if (node->asname.str().size())
+            name = node->asname;
 
-        _doSet(*name);
+        _doSet(name);
         return true;
     }
     virtual bool visit_import(AST_Import* node) { return false; }
@@ -327,9 +314,9 @@ public:
     }
 
     virtual bool visit_arguments(AST_arguments* node) {
-        if (node->kwarg.size())
+        if (node->kwarg.str().size())
             _doSet(node->kwarg);
-        if (node->vararg.size())
+        if (node->vararg.str().size())
             _doSet(node->vararg);
         for (int i = 0; i < node->args.size(); i++) {
             _doSet(node->args[i]);
@@ -346,10 +333,10 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     if (block == cfg->getStartingBlock() && arg_names.args) {
         for (auto e : (*arg_names.args))
             visitor._doSet(e);
-        if (arg_names.vararg->size())
-            visitor._doSet(*arg_names.vararg);
-        if (arg_names.kwarg->size())
-            visitor._doSet(*arg_names.kwarg);
+        if (arg_names.vararg.str().size())
+            visitor._doSet(arg_names.vararg);
+        if (arg_names.kwarg.str().size())
+            visitor._doSet(arg_names.kwarg);
     }
 
     for (int i = 0; i < block->body.size(); i++) {
@@ -386,8 +373,8 @@ DefinednessAnalysis::DefinednessAnalysis(const SourceInfo::ArgNames& arg_names, 
     us_definedness.log(_t.end());
 }
 
-DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(const std::string& name, CFGBlock* block) {
-    std::unordered_map<std::string, DefinitionLevel>& map = results[block];
+DefinednessAnalysis::DefinitionLevel DefinednessAnalysis::isDefinedAtEnd(InternedString name, CFGBlock* block) {
+    auto& map = results[block];
     if (map.count(name) == 0)
         return Undefined;
     return map[name];
@@ -436,13 +423,13 @@ const PhiAnalysis::RequiredSet& PhiAnalysis::getAllRequiredFor(CFGBlock* block) 
     return required_phis[block];
 }
 
-bool PhiAnalysis::isRequired(const std::string& name, CFGBlock* block) {
-    assert(!startswith(name, "!"));
+bool PhiAnalysis::isRequired(InternedString name, CFGBlock* block) {
+    assert(!startswith(name.str(), "!"));
     return required_phis[block].count(name) != 0;
 }
 
-bool PhiAnalysis::isRequiredAfter(const std::string& name, CFGBlock* block) {
-    assert(!startswith(name, "!"));
+bool PhiAnalysis::isRequiredAfter(InternedString name, CFGBlock* block) {
+    assert(!startswith(name.str(), "!"));
     // If there are multiple successors, then none of them are allowed
     // to require any phi nodes
     if (block->successors.size() != 1)
@@ -452,8 +439,8 @@ bool PhiAnalysis::isRequiredAfter(const std::string& name, CFGBlock* block) {
     return isRequired(name, block->successors[0]);
 }
 
-bool PhiAnalysis::isPotentiallyUndefinedAfter(const std::string& name, CFGBlock* block) {
-    assert(!startswith(name, "!"));
+bool PhiAnalysis::isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block) {
+    assert(!startswith(name.str(), "!"));
 
     if (block->successors.size() != 1)
         return false;
@@ -461,8 +448,8 @@ bool PhiAnalysis::isPotentiallyUndefinedAfter(const std::string& name, CFGBlock*
     return isPotentiallyUndefinedAt(name, block->successors[0]);
 }
 
-bool PhiAnalysis::isPotentiallyUndefinedAt(const std::string& name, CFGBlock* block) {
-    assert(!startswith(name, "!"));
+bool PhiAnalysis::isPotentiallyUndefinedAt(InternedString name, CFGBlock* block) {
+    assert(!startswith(name.str(), "!"));
 
     for (CFGBlock* pred : block->predecessors) {
         DefinednessAnalysis::DefinitionLevel dlevel = definedness.isDefinedAtEnd(name, pred);

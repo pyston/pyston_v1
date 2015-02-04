@@ -272,14 +272,14 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
     return rtn;
 }
 
-static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, const std::string& name, CFGBlock* block) {
-    if (isIsDefinedName(name))
+static ConcreteCompilerType* getTypeAtBlockStart(TypeAnalysis* types, InternedString name, CFGBlock* block) {
+    if (isIsDefinedName(name.str()))
         return BOOL;
-    else if (name == PASSED_GENERATOR_NAME)
+    else if (name.str() == PASSED_GENERATOR_NAME)
         return GENERATOR;
-    else if (name == PASSED_CLOSURE_NAME)
+    else if (name.str() == PASSED_CLOSURE_NAME)
         return CLOSURE;
-    else if (name == CREATED_CLOSURE_NAME)
+    else if (name.str() == CREATED_CLOSURE_NAME)
         return CLOSURE;
     else
         return types->getTypeAtBlockStart(name, block);
@@ -450,9 +450,10 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 }
                 ASSERT(speculated_class, "%s", phi_type->debugName().c_str());
 
-                assert(p.first[0] != '!');
+                assert(p.first.str()[0] != '!');
 
-                std::string is_defined_name = getIsDefinedName(p.first);
+                // TODO cache this
+                InternedString is_defined_name = getIsDefinedName(p.first, source->getInternedStrings());
                 llvm::Value* prev_guard_val = NULL;
 
                 ConcreteCompilerVariable* is_defined_var = NULL;
@@ -507,7 +508,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             }
 
             if (VERBOSITY("irgen"))
-                v->setName("prev_" + p.first);
+                v->setName("prev_" + p.first.str());
 
             (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v, true);
         }
@@ -543,7 +544,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
     std::unordered_map<CFGBlock*, SymbolTable*> ending_symbol_tables;
     std::unordered_map<CFGBlock*, ConcreteSymbolTable*> phi_ending_symbol_tables;
-    typedef std::unordered_map<std::string, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
+    typedef std::unordered_map<InternedString, std::pair<ConcreteCompilerType*, llvm::PHINode*>> PHITable;
     std::unordered_map<CFGBlock*, PHITable*> created_phis;
 
     CFGBlock* initial_block = NULL;
@@ -680,7 +681,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 // analyzed_type->debugName().c_str());
 
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
-                                                                      block->predecessors.size() + 1, p.first);
+                                                                      block->predecessors.size() + 1, p.first.str());
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(analyzed_type, phi, true);
                 generator->giveLocalSymbol(p.first, var);
                 (*phis)[p.first] = std::make_pair(analyzed_type, phi);
@@ -696,27 +697,28 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             }
 
 
-            std::unordered_set<std::string> names;
+            std::unordered_set<InternedString> names;
             for (const auto& s : source->phis->getAllRequiredFor(block)) {
                 names.insert(s);
                 if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
-                    names.insert(getIsDefinedName(s));
+                    names.insert(getIsDefinedName(s, source->getInternedStrings()));
                 }
             }
 
             if (source->getScopeInfo()->createsClosure())
-                names.insert(CREATED_CLOSURE_NAME);
+                names.insert(source->getInternedStrings().get(CREATED_CLOSURE_NAME));
 
             if (source->getScopeInfo()->takesClosure())
-                names.insert(PASSED_CLOSURE_NAME);
+                names.insert(source->getInternedStrings().get(PASSED_CLOSURE_NAME));
 
             if (source->is_generator)
-                names.insert(PASSED_GENERATOR_NAME);
+                names.insert(source->getInternedStrings().get(PASSED_GENERATOR_NAME));
 
             for (const auto& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
-                llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s);
+                llvm::PHINode* phi
+                    = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.str());
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi, true);
                 generator->giveLocalSymbol(s, var);
 
@@ -776,7 +778,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 for (ConcreteSymbolTable::iterator it = pred_st->begin(); it != pred_st->end(); it++) {
                     // printf("adding phi for %s\n", it->first.c_str());
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(it->second->getType()->llvmType(),
-                                                                          block->predecessors.size(), it->first);
+                                                                          block->predecessors.size(), it->first.str());
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(it->second->getType(), phi, true);
                     generator->giveLocalSymbol(it->first, var);
@@ -882,7 +884,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 llvm_phi->addIncoming(v->getValue(), osr_unbox_block_end);
             }
 
-            std::string is_defined_name = getIsDefinedName(it->first);
+            InternedString is_defined_name = getIsDefinedName(it->first, source->getInternedStrings());
 
             for (int i = 0; i < block_guards.size(); i++) {
                 GuardList::BlockEntryGuard* guard = block_guards[i];

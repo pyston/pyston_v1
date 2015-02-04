@@ -59,7 +59,7 @@ union Value {
 
 class ASTInterpreter {
 public:
-    typedef llvm::StringMap<Box*> SymMap;
+    typedef std::unordered_map<InternedString, Box*> SymMap;
 
     ASTInterpreter(CompiledFunction* compiled_function);
 
@@ -71,7 +71,7 @@ private:
     Box* createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body);
     Value doBinOp(Box* left, Box* right, int op, BinExpType exp_type);
     void doStore(AST_expr* node, Value value);
-    void doStore(const std::string& name, Value value);
+    void doStore(InternedString name, Value value);
     void eraseDeadSymbols();
 
     Value visit_assert(AST_Assert* node);
@@ -138,7 +138,7 @@ public:
     CompiledFunction* getCF() { return compiled_func; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     const SymMap& getSymbolTable() { return sym_table; }
-    void addSymbol(const std::string& name, Box* value, bool allow_duplicates);
+    void addSymbol(InternedString name, Box* value, bool allow_duplicates);
     void gcVisit(GCVisitor* visitor);
 };
 
@@ -170,7 +170,7 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-void ASTInterpreter::addSymbol(const std::string& name, Box* value, bool allow_duplicates) {
+void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
     if (!allow_duplicates)
         assert(sym_table.count(name) == 0);
     sym_table[name] = value;
@@ -188,7 +188,9 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     for (const auto& p : locals->d) {
         assert(p.first->cls == str_cls);
-        interpreter.addSymbol(static_cast<BoxedString*>(p.first)->s, p.second, false);
+        auto name = static_cast<BoxedString*>(p.first)->s;
+        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
+        interpreter.addSymbol(interned, p.second, false);
     }
 
     CFGBlock* start_block = NULL;
@@ -200,7 +202,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
             assert(asgn->targets.size() == 1);
             assert(asgn->targets[0]->type == AST_TYPE::Name);
             auto name = ast_cast<AST_Name>(asgn->targets[0]);
-            assert(name->id[0] == '#');
+            assert(name->id.str()[0] == '#');
             interpreter.addSymbol(name->id, expr_val, true);
             break;
         } else if (enclosing_stmt->type == AST_TYPE::Expr) {
@@ -267,10 +269,10 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     assert(interpreter);
     BoxedDict* rtn = new BoxedDict();
     for (auto&& l : interpreter->getSymbolTable()) {
-        if (only_user_visible && (l.getKey()[0] == '!' || l.getKey()[0] == '#'))
+        if (only_user_visible && (l.first.str()[0] == '!' || l.first.str()[0] == '#'))
             continue;
 
-        rtn->d[new BoxedString(l.getKey())] = l.getValue();
+        rtn->d[new BoxedString(l.first.str())] = l.second;
     }
     return rtn;
 }
@@ -296,9 +298,9 @@ void gatherInterpreterRoots(GCVisitor* visitor) {
 
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
-    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), next_block(0),
-      current_block(0), current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0),
-      generator(0), edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
+    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), current_block(0),
+      current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0), generator(0),
+      edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
@@ -328,12 +330,12 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
         }
     }
 
-    if (source_info->arg_names.vararg && !source_info->arg_names.vararg->empty()) {
-        doStore(*source_info->arg_names.vararg, argsArray[i++]);
+    if (source_info->arg_names.vararg.str().size()) {
+        doStore(source_info->arg_names.vararg, argsArray[i++]);
     }
 
-    if (source_info->arg_names.kwarg && !source_info->arg_names.kwarg->empty()) {
-        doStore(*source_info->arg_names.kwarg, argsArray[i++]);
+    if (source_info->arg_names.kwarg.str().size()) {
+        doStore(source_info->arg_names.kwarg, argsArray[i++]);
     }
 }
 
@@ -400,12 +402,12 @@ void ASTInterpreter::eraseDeadSymbols() {
         source_info->phis
             = computeRequiredPhis(source_info->arg_names, source_info->cfg, source_info->liveness, scope_info);
 
-    std::vector<std::string> dead_symbols;
+    std::vector<InternedString> dead_symbols;
     for (auto&& it : sym_table) {
-        if (!source_info->liveness->isLiveAtEnd(it.getKey(), current_block)) {
-            dead_symbols.push_back(it.getKey());
-        } else if (source_info->phis->isRequiredAfter(it.getKey(), current_block)) {
-            assert(!scope_info->refersToGlobal(it.getKey()));
+        if (!source_info->liveness->isLiveAtEnd(it.first, current_block)) {
+            dead_symbols.push_back(it.first);
+        } else if (source_info->phis->isRequiredAfter(it.first, current_block)) {
+            assert(!scope_info->refersToGlobal(it.first));
         } else {
         }
     }
@@ -430,7 +432,7 @@ Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type
     return Value();
 }
 
-void ASTInterpreter::doStore(const std::string& name, Value value) {
+void ASTInterpreter::doStore(InternedString name, Value value) {
     if (scope_info->refersToGlobal(name)) {
         setattr(source_info->parent_module, name.c_str(), value.o);
     } else {
@@ -523,7 +525,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                 found_entry = p.first;
             }
 
-            std::map<std::string, Box*> sorted_symbol_table;
+            std::map<InternedString, Box*> sorted_symbol_table;
 
             auto phis = compiled_func->clfunc->source->phis;
             for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
@@ -533,37 +535,38 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
                 if (phis->isPotentiallyUndefinedAfter(name, current_block)) {
                     bool is_defined = it != sym_table.end();
-                    sorted_symbol_table[getIsDefinedName(name)] = (Box*)is_defined;
+                    // TODO only mangle once
+                    sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
                     if (is_defined)
-                        assert(it->getValue() != NULL);
-                    sorted_symbol_table[name] = is_defined ? it->getValue() : NULL;
+                        assert(it->second != NULL);
+                    sorted_symbol_table[name] = is_defined ? it->second : NULL;
                 } else {
                     ASSERT(it != sym_table.end(), "%s", name.c_str());
-                    sorted_symbol_table[it->getKey()] = it->getValue();
+                    sorted_symbol_table[it->first] = it->second;
                 }
             }
 
             if (generator)
-                sorted_symbol_table[PASSED_GENERATOR_NAME] = generator;
+                sorted_symbol_table[source_info->getInternedStrings().get(PASSED_GENERATOR_NAME)] = generator;
 
             if (passed_closure)
-                sorted_symbol_table[PASSED_CLOSURE_NAME] = passed_closure;
+                sorted_symbol_table[source_info->getInternedStrings().get(PASSED_CLOSURE_NAME)] = passed_closure;
 
             if (created_closure)
-                sorted_symbol_table[CREATED_CLOSURE_NAME] = created_closure;
+                sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
 
             if (found_entry == nullptr) {
                 OSREntryDescriptor* entry = OSREntryDescriptor::create(compiled_func, node);
 
                 for (auto& it : sorted_symbol_table) {
-                    if (isIsDefinedName(it.first))
+                    if (isIsDefinedName(it.first.str()))
                         entry->args[it.first] = BOOL;
-                    else if (it.first == PASSED_GENERATOR_NAME)
+                    else if (it.first.str() == PASSED_GENERATOR_NAME)
                         entry->args[it.first] = GENERATOR;
-                    else if (it.first == PASSED_CLOSURE_NAME || it.first == CREATED_CLOSURE_NAME)
+                    else if (it.first.str() == PASSED_CLOSURE_NAME || it.first.str() == CREATED_CLOSURE_NAME)
                         entry->args[it.first] = CLOSURE;
                     else {
-                        assert(it.first[0] != '!');
+                        assert(it.first.str()[0] != '!');
                         entry->args[it.first] = UNKNOWN;
                     }
                 }
@@ -669,8 +672,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 0);
         BoxedDict* dict = new BoxedDict;
         for (auto& p : sym_table) {
-            llvm::StringRef s = p.first();
-            if (s[0] == '!' || s[0] == '#')
+            auto s = p.first;
+            if (s.str()[0] == '!' || s.str()[0] == '#')
                 continue;
 
             dict->d[new BoxedString(s.str())] = p.second;
@@ -835,7 +838,7 @@ Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
     CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
     Box* attrDict = runtimeCall(boxCLFunction(cl, closure, false, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
 
-    Box* classobj = createUserClass(&node->name, basesTuple, attrDict);
+    Box* classobj = createUserClass(&node->name.str(), basesTuple, attrDict);
 
     for (int i = decorators.size() - 1; i >= 0; i--)
         classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
@@ -868,7 +871,7 @@ Value ASTInterpreter::visit_assert(AST_Assert* node) {
 }
 
 Value ASTInterpreter::visit_global(AST_Global* node) {
-    for (std::string& name : node->names)
+    for (auto name : node->names)
         sym_table.erase(name);
     return Value();
 }
@@ -892,7 +895,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 AST_Name* target = (AST_Name*)target_;
                 if (scope_info->refersToGlobal(target->id)) {
                     // Can't use delattr since the errors are different:
-                    delGlobal(source_info->parent_module, &target->id);
+                    delGlobal(source_info->parent_module, &target->id.str());
                     continue;
                 }
 
@@ -1015,7 +1018,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     Value v;
     Value func;
 
-    std::string* attr = nullptr;
+    InternedString attr;
 
     bool is_callattr = false;
     bool callattr_clsonly = false;
@@ -1024,15 +1027,16 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         callattr_clsonly = false;
         AST_Attribute* attr_ast = ast_cast<AST_Attribute>(node->func);
         func = visit_expr(attr_ast->value);
-        attr = &attr_ast->attr;
+        attr = attr_ast->attr;
     } else if (node->func->type == AST_TYPE::ClsAttribute) {
         is_callattr = true;
         callattr_clsonly = true;
         AST_ClsAttribute* attr_ast = ast_cast<AST_ClsAttribute>(node->func);
         func = visit_expr(attr_ast->value);
-        attr = &attr_ast->attr;
-    } else
+        attr = attr_ast->attr;
+    } else {
         func = visit_expr(node->func);
+    }
 
     std::vector<Box*> args;
     for (AST_expr* e : node->args)
@@ -1040,7 +1044,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
 
     std::vector<const std::string*> keywords;
     for (AST_keyword* k : node->keywords) {
-        keywords.push_back(&k->arg);
+        keywords.push_back(&k->arg.str());
         args.push_back(visit_expr(k->value).o);
     }
 
@@ -1053,9 +1057,10 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
     ArgPassSpec argspec(node->args.size(), node->keywords.size(), node->starargs, node->kwargs);
 
     if (is_callattr) {
-        return callattr(func.o, attr, CallattrFlags({.cls_only = callattr_clsonly, .null_on_nonexistent = false }),
-                        argspec, args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0,
-                        args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0, &keywords);
+        return callattr(func.o, &attr.str(),
+                        CallattrFlags({.cls_only = callattr_clsonly, .null_on_nonexistent = false }), argspec,
+                        args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0, args.size() > 2 ? args[2] : 0,
+                        args.size() > 3 ? &args[3] : 0, &keywords);
     } else {
         return runtimeCall(func.o, argspec, args.size() > 0 ? args[0] : 0, args.size() > 1 ? args[1] : 0,
                            args.size() > 2 ? args[2] : 0, args.size() > 3 ? &args[3] : 0, &keywords);
@@ -1122,7 +1127,7 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
 
 Value ASTInterpreter::visit_name(AST_Name* node) {
     if (scope_info->refersToGlobal(node->id))
-        return getGlobal(source_info->parent_module, &node->id);
+        return getGlobal(source_info->parent_module, &node->id.str());
     else if (scope_info->refersToClosure(node->id)) {
         return getattr(passed_closure, node->id.c_str());
     } else {
@@ -1134,7 +1139,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
         // classdefs have different scoping rules than functions:
         if (source_info->ast->type == AST_TYPE::ClassDef)
-            return getGlobal(source_info->parent_module, &node->id);
+            return getGlobal(source_info->parent_module, &node->id.str());
 
         assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
         return Value();

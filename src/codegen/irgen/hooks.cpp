@@ -42,39 +42,44 @@
 namespace pyston {
 
 // TODO terrible place for these!
-SourceInfo::ArgNames::ArgNames(AST* ast) {
+SourceInfo::ArgNames::ArgNames(AST* ast, ScopingAnalysis* scoping) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef) {
         args = NULL;
-        kwarg = vararg = NULL;
+        kwarg = vararg = scoping->getInternedStrings().get("");
     } else if (ast->type == AST_TYPE::FunctionDef) {
         AST_FunctionDef* f = ast_cast<AST_FunctionDef>(ast);
         args = &f->args->args;
-        vararg = &f->args->vararg;
-        kwarg = &f->args->kwarg;
+        vararg = f->args->vararg;
+        kwarg = f->args->kwarg;
     } else if (ast->type == AST_TYPE::Lambda) {
         AST_Lambda* l = ast_cast<AST_Lambda>(ast);
         args = &l->args->args;
-        vararg = &l->args->vararg;
-        kwarg = &l->args->kwarg;
+        vararg = l->args->vararg;
+        kwarg = l->args->kwarg;
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
 }
 
-std::string SourceInfo::mangleName(const std::string& id) {
+InternedString SourceInfo::mangleName(InternedString id) {
+    // TODO should cache the results of this
     assert(ast);
     if (ast->type == AST_TYPE::Module)
         return id;
     return getScopeInfo()->mangleName(id);
 }
 
+InternedStringPool& SourceInfo::getInternedStrings() {
+    return scoping->getInternedStrings();
+}
+
 const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name;
+            return ast_cast<AST_ClassDef>(ast)->name.str();
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name;
+            return ast_cast<AST_FunctionDef>(ast)->name.str();
         case AST_TYPE::Lambda:
             return "<lambda>";
         case AST_TYPE::Module:

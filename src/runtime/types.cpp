@@ -508,7 +508,7 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *
 BoxedTuple* EmptyTuple;
 }
 
-extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict) {
+extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr_dict) {
     ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict)->c_str());
     BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 

@@ -32,8 +32,8 @@ TEST_F(AnalysisTest, augassign) {
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    ASSERT_FALSE(scope_info->refersToGlobal("a"));
-    ASSERT_FALSE(scope_info->refersToGlobal("b"));
+    ASSERT_FALSE(scope_info->refersToGlobal(module->interned_strings->get("a")));
+    ASSERT_FALSE(scope_info->refersToGlobal(module->interned_strings->get("b")));
 
     SourceInfo* si = new SourceInfo(createModule("__main__", fn), scoping, func, func->body);
 
@@ -45,9 +45,9 @@ TEST_F(AnalysisTest, augassign) {
     for (CFGBlock* block : cfg->blocks) {
         //printf("%d\n", block->idx);
         if (block->body.back()->type != AST_TYPE::Return)
-            ASSERT_TRUE(liveness->isLiveAtEnd("a", block));
+            ASSERT_TRUE(liveness->isLiveAtEnd(module->interned_strings->get("a"), block));
     }
 
-    PhiAnalysis* phis = computeRequiredPhis(SourceInfo::ArgNames(func), cfg, liveness, scope_info);
+    PhiAnalysis* phis = computeRequiredPhis(SourceInfo::ArgNames(func, scoping), cfg, liveness, scope_info);
 }
 
