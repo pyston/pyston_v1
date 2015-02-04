@@ -68,7 +68,6 @@ void teardownDescr();
 
 void setupSys();
 void setupBuiltins();
-void setupTime();
 void setupThread();
 void setupSysEnd();
 

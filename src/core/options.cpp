@@ -63,4 +63,6 @@ bool ENABLE_RUNTIME_ICS = 1 && _GLOBAL_ENABLE;
 
 bool ENABLE_FRAME_INTROSPECTION = 1;
 bool BOOLS_AS_I64 = ENABLE_FRAME_INTROSPECTION;
+
+extern "C" int Py_IgnoreEnvironmentFlag = 1;
 }
