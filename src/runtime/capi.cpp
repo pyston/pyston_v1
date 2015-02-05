@@ -738,6 +738,12 @@ extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) 
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyErr_BadArgument() noexcept {
+    // TODO this is untested
+    PyErr_SetString(PyExc_TypeError, "bad argument type for built-in operation");
+    return 0;
+}
+
 extern "C" PyObject* PyErr_NoMemory() noexcept {
     Py_FatalError("unimplemented");
 }

@@ -20,6 +20,7 @@
 
 namespace pyston {
 
+// Provides the exact same behaviour as CPythons PySlice_GetIndicesEx apart from throwing c++ exceptions on error
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_step, i64* out_length) {
     BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
 
@@ -91,8 +92,7 @@ void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64*
         else
             *out_length = (istop - istart - 1) / istep + 1;
 
-        if (*out_length < 0)
-            *out_length = 0;
+        RELEASE_ASSERT(*out_length >= 0, "negative length, should never happen");
     }
 }
 }

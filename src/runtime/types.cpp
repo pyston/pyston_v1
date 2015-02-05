@@ -34,6 +34,7 @@
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/super.h"
+#include "runtime/util.h"
 
 extern "C" void initerrno();
 extern "C" void init_sha();
@@ -57,6 +58,7 @@ extern "C" void initsignal();
 extern "C" void initselect();
 extern "C" void initfcntl();
 extern "C" void inittime();
+extern "C" void initarray();
 
 namespace pyston {
 
@@ -727,9 +729,19 @@ extern "C" int PySlice_GetIndices(PySliceObject* r, Py_ssize_t length, Py_ssize_
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySlice_GetIndicesEx(PySliceObject* r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
+extern "C" int PySlice_GetIndicesEx(PySliceObject* _r, Py_ssize_t length, Py_ssize_t* start, Py_ssize_t* stop,
                                     Py_ssize_t* step, Py_ssize_t* slicelength) noexcept {
-    Py_FatalError("unimplemented");
+    try {
+        BoxedSlice* r = (BoxedSlice*)_r;
+        assert(r->cls == slice_cls);
+        // parseSlice has the exact same behaviour as CPythons PySlice_GetIndicesEx apart from throwing c++ exceptions
+        // on error.
+        parseSlice(r, length, start, stop, step, slicelength);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+    return 0;
 }
 
 Box* typeRepr(BoxedClass* self) {
@@ -1192,6 +1204,7 @@ void setupRuntime() {
     initselect();
     initfcntl();
     inittime();
+    initarray();
 
     setupSysEnd();
 

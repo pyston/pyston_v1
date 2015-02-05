@@ -1835,8 +1835,25 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     return 0;
 }
 
+extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) noexcept {
+    try {
+        if (*pv == NULL)
+            return;
+
+        if (w == NULL || !PyString_Check(*pv)) {
+            *pv = NULL;
+            return;
+        }
+
+        *pv = strAdd((BoxedString*)*pv, w);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        *pv = NULL;
+    }
+}
+
 extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject* w) noexcept {
-    Py_FatalError("unimplemented");
+    PyString_Concat(pv, w);
 }
 
 
