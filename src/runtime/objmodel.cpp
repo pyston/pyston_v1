@@ -25,6 +25,7 @@
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
 #include "capi/typeobject.h"
+#include "capi/types.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
@@ -2044,7 +2045,9 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         }
     } else {
         Box* rtn;
-        if (val->cls != function_cls && val->cls != instancemethod_cls) {
+        // I *think* this check is here to limit the recursion nesting for rewriting, and originates
+        // from a time when we didn't have silent-abort-when-patchpoint-full.
+        if (val->cls != function_cls && val->cls != instancemethod_cls && val->cls != capifunc_cls) {
             rewrite_args = NULL;
             REWRITE_ABORTED("");
         }
