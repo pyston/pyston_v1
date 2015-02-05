@@ -29,6 +29,7 @@ int PYTHON_VERSION_HEX = version_hex(PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR,
 
 int MAX_OPT_ITERATIONS = 1;
 
+bool FORCE_INTERPRETER = false;
 bool FORCE_OPTIMIZE = false;
 bool SHOW_DISASM = false;
 bool PROFILE = false;

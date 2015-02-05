@@ -381,7 +381,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
     if (ENABLE_OSR && backedge) {
         ++edgecount;
-        if (edgecount > OSR_THRESHOLD) {
+        if (edgecount > OSR_THRESHOLD && !FORCE_INTERPRETER) {
             eraseDeadSymbols();
 
             const OSREntryDescriptor* found_entry = nullptr;
@@ -1081,7 +1081,7 @@ const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
                           Box* arg3, Box** args) {
-    if (unlikely(cf->times_called > REOPT_THRESHOLD && ENABLE_REOPT)) {
+    if (unlikely(cf->times_called > REOPT_THRESHOLD && ENABLE_REOPT && !FORCE_INTERPRETER)) {
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
             return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
