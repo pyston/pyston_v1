@@ -42,6 +42,8 @@ private:
     // Only for testing purposes:
     InternedStringPool* pool;
     InternedString(const std::string* str, InternedStringPool* pool) : _str(str), pool(pool) {}
+
+    static InternedStringPool* invalidPool() { return reinterpret_cast<InternedStringPool*>(-1); }
 #else
     InternedString(const std::string* str) : _str(str) {}
 #endif
@@ -65,8 +67,9 @@ public:
     }
 
     bool operator==(InternedString rhs) const {
-        assert(this->_str);
-        assert(this->pool == rhs.pool);
+        assert(this->_str || this->pool == invalidPool());
+        assert(rhs._str || rhs.pool == invalidPool());
+        assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
         return this->_str == rhs._str;
     }
 
@@ -134,17 +137,22 @@ template <> struct less<pyston::InternedString> {
 
 namespace llvm {
 template <> struct DenseMapInfo<pyston::InternedString> {
-    static inline pyston::InternedString getEmptyKey() { return pyston::InternedString(); }
+    static inline pyston::InternedString getEmptyKey() {
+#ifndef NDEBUG
+        return pyston::InternedString(nullptr, pyston::InternedString::invalidPool());
+#else
+        return pyston::InternedString(nullptr);
+#endif
+    }
     static inline pyston::InternedString getTombstoneKey() {
-        pyston::InternedString str;
-        str._str = (const std::string*)-1;
-        return str;
+#ifndef NDEBUG
+        return pyston::InternedString((const std::string*)-1, pyston::InternedString::invalidPool());
+#else
+        return pyston::InternedString((const std::string*)-1);
+#endif
     }
     static unsigned getHashValue(const pyston::InternedString& val) { return std::hash<pyston::InternedString>()(val); }
-    static bool isEqual(const pyston::InternedString& lhs, const pyston::InternedString& rhs) {
-        // Have to reimplement InternedString comparison otherwise asserts would trigger because of the empty keys.
-        return lhs._str == rhs._str;
-    }
+    static bool isEqual(const pyston::InternedString& lhs, const pyston::InternedString& rhs) { return lhs == rhs; }
 };
 }
 
