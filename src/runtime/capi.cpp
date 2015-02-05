@@ -27,6 +27,7 @@
 #include "runtime/classobj.h"
 #include "runtime/import.h"
 #include "runtime/objmodel.h"
+#include "runtime/rewrite_args.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -1441,6 +1442,30 @@ BoxedModule* importTestExtension(const std::string& name) {
     return m;
 }
 
+Box* BoxedCApiFunction::callInternal(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+                                     Box* arg2, Box* arg3, Box** args,
+                                     const std::vector<const std::string*>* keyword_names) {
+    if (argspec != ArgPassSpec(2))
+        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+    assert(arg1->cls == capifunc_cls);
+    BoxedCApiFunction* capifunc = static_cast<BoxedCApiFunction*>(arg1);
+    if (capifunc->ml_flags != METH_O)
+        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+    if (rewrite_args) {
+        rewrite_args->arg1->addGuard((intptr_t)arg1);
+        rewrite_args->out_rtn
+            = rewrite_args->rewriter->call(true, (void*)capifunc->func, rewrite_args->arg1, rewrite_args->arg2);
+        rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+        rewrite_args->out_success = true;
+    }
+    Box* r = capifunc->func(arg1, arg2);
+    checkAndThrowCAPIException();
+    assert(r);
+    return r;
+}
+
 void setupCAPI() {
     capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
     capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
@@ -1448,8 +1473,9 @@ void setupCAPI() {
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
 
-    capifunc_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true)));
+    auto capi_call = new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true));
+    capi_call->f->internal_callable = BoxedCApiFunction::callInternal;
+    capifunc_cls->giveAttr("__call__", capi_call);
 
     capifunc_cls->freeze();
 

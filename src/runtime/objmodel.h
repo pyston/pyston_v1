@@ -103,6 +103,9 @@ struct CallRewriteArgs;
 Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
 
+Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
+              Box** args, const std::vector<const std::string*>* keyword_names);
+
 enum LookupScope {
     CLASS_ONLY = 1,
     INST_ONLY = 2,

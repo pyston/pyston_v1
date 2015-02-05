@@ -62,6 +62,8 @@ struct ArgPassSpec {
                && num_args == rhs.num_args;
     }
 
+    bool operator!=(ArgPassSpec rhs) { return !(*this == rhs); }
+
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
     uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }

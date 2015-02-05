@@ -445,6 +445,7 @@ public:
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
     RewriterVar* call(bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
                       const std::vector<RewriterVar*>& args_xmm = std::vector<RewriterVar*>());
+    RewriterVar* call(bool can_call_into_python, void* func_addr);
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0);
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);
     RewriterVar* add(RewriterVar* a, int64_t b, Location dest);

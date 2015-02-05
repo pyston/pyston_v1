@@ -508,6 +508,12 @@ void Rewriter::_loadConst(RewriterVar* result, int64_t val, Location dest) {
     assertConsistent();
 }
 
+RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr) {
+    std::vector<RewriterVar*> args = {};
+    std::vector<RewriterVar*> args_xmm = {};
+    return call(can_call_into_python, func_addr, args, args_xmm);
+}
+
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0) {
     std::vector<RewriterVar*> args = { arg0 };
     std::vector<RewriterVar*> args_xmm = {};

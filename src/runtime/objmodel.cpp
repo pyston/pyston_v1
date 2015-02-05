@@ -45,6 +45,7 @@
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/long.h"
+#include "runtime/rewrite_args.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -87,95 +88,6 @@ void REWRITE_ABORTED(const char* reason) {
 #else
 #define REWRITE_ABORTED(reason) ((void)(reason))
 #endif
-
-struct GetattrRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* obj;
-    Location destination;
-
-    bool out_success;
-    RewriterVar* out_rtn;
-
-    bool obj_hcls_guarded;
-
-    GetattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
-        : rewriter(rewriter), obj(obj), destination(destination), out_success(false), out_rtn(NULL),
-          obj_hcls_guarded(false) {}
-};
-
-struct SetattrRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* obj;
-    RewriterVar* attrval;
-
-    bool out_success;
-
-    SetattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj, RewriterVar* attrval)
-        : rewriter(rewriter), obj(obj), attrval(attrval), out_success(false) {}
-};
-
-struct DelattrRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* obj;
-
-    bool out_success;
-
-    DelattrRewriteArgs(Rewriter* rewriter, RewriterVar* obj) : rewriter(rewriter), obj(obj), out_success(false) {}
-};
-
-struct LenRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* obj;
-    Location destination;
-
-    bool out_success;
-    RewriterVar* out_rtn;
-
-    LenRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
-        : rewriter(rewriter), obj(obj), destination(destination), out_success(false), out_rtn(NULL) {}
-};
-
-struct CallRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* obj;
-    RewriterVar* arg1, *arg2, *arg3, *args;
-    bool func_guarded;
-    bool args_guarded;
-    Location destination;
-
-    bool out_success;
-    RewriterVar* out_rtn;
-
-    CallRewriteArgs(Rewriter* rewriter, RewriterVar* obj, Location destination)
-        : rewriter(rewriter), obj(obj), arg1(NULL), arg2(NULL), arg3(NULL), args(NULL), func_guarded(false),
-          args_guarded(false), destination(destination), out_success(false), out_rtn(NULL) {}
-};
-
-struct BinopRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* lhs;
-    RewriterVar* rhs;
-    Location destination;
-
-    bool out_success;
-    RewriterVar* out_rtn;
-
-    BinopRewriteArgs(Rewriter* rewriter, RewriterVar* lhs, RewriterVar* rhs, Location destination)
-        : rewriter(rewriter), lhs(lhs), rhs(rhs), destination(destination), out_success(false), out_rtn(NULL) {}
-};
-
-struct CompareRewriteArgs {
-    Rewriter* rewriter;
-    RewriterVar* lhs;
-    RewriterVar* rhs;
-    Location destination;
-
-    bool out_success;
-    RewriterVar* out_rtn;
-
-    CompareRewriteArgs(Rewriter* rewriter, RewriterVar* lhs, RewriterVar* rhs, Location destination)
-        : rewriter(rewriter), lhs(lhs), rhs(rhs), destination(destination), out_success(false), out_rtn(NULL) {}
-};
 
 Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
                          Box** args, const std::vector<const std::string*>* keyword_names);
