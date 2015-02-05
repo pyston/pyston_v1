@@ -575,7 +575,7 @@ Value ASTInterpreter::visit_yield(AST_Yield* node) {
     return yield(generator, value.o);
 }
 
-Value __attribute__((flatten)) ASTInterpreter::visit_stmt(AST_stmt* node) {
+Value ASTInterpreter::visit_stmt(AST_stmt* node) {
     if (0) {
         printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
         print_ast(node);
@@ -833,7 +833,7 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     return doBinOp(visit_expr(node->left).o, visit_expr(node->comparators[0]).o, node->ops[0], BinExpType::Compare);
 }
 
-Value __attribute__((flatten)) ASTInterpreter::visit_expr(AST_expr* node) {
+Value ASTInterpreter::visit_expr(AST_expr* node) {
     switch (node->type) {
         case AST_TYPE::Attribute:
             return visit_attribute((AST_Attribute*)node);

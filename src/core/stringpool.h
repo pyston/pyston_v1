@@ -132,7 +132,8 @@ template <> struct less<pyston::InternedString> {
 };
 }
 
-template <> struct llvm::DenseMapInfo<pyston::InternedString> {
+namespace llvm {
+template <> struct DenseMapInfo<pyston::InternedString> {
     static inline pyston::InternedString getEmptyKey() { return pyston::InternedString(); }
     static inline pyston::InternedString getTombstoneKey() {
         pyston::InternedString str;
@@ -145,5 +146,6 @@ template <> struct llvm::DenseMapInfo<pyston::InternedString> {
         return lhs._str == rhs._str;
     }
 };
+}
 
 #endif
