@@ -1442,8 +1442,8 @@ BoxedModule* importTestExtension(const std::string& name) {
     return m;
 }
 
-Box* BoxedCApiFunction::callInternal(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
-                                     Box* arg2, Box* arg3, Box** args,
+Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
+                                     Box* arg1, Box* arg2, Box* arg3, Box** args,
                                      const std::vector<const std::string*>* keyword_names) {
     if (argspec != ArgPassSpec(2))
         return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);

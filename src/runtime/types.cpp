@@ -265,7 +265,7 @@ void BoxIterator::gcHandler(GCVisitor* v) {
 
 std::string builtinStr("__builtin__");
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
+extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
@@ -278,8 +278,8 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f)
     assert(f->num_defaults == ndefaults);
 }
 
-extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                        bool isGenerator)
+extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
+                                                BoxedClosure* closure, bool isGenerator)
     : f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
@@ -304,13 +304,13 @@ extern "C" BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
-    BoxedFunction* f = (BoxedFunction*)b;
+    BoxedFunctionBase* f = (BoxedFunctionBase*)b;
 
     if (f->closure)
         v->visit(f->closure);
 
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
-    // since we could be collecting from inside a BoxedFunction constructor
+    // since we could be collecting from inside a BoxedFunctionBase constructor
     if (f->ndefaults) {
         assert(f->defaults);
         v->visit(f->defaults);
@@ -495,8 +495,7 @@ extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
       *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls,
-      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *getset_cls;
-
+      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *getset_cls, *builtin_function_or_method_cls;
 
 BoxedTuple* EmptyTuple;
 }
@@ -575,7 +574,7 @@ extern "C" Box* noneNonzero(Box* v) {
     return False;
 }
 
-extern "C" BoxedString* functionRepr(BoxedFunction* v) {
+extern "C" BoxedString* builtinFunctionOrMethodRepr(BoxedBuiltinFunctionOrMethod* v) {
     // TODO there has to be a better way
     if (v == repr_obj)
         return boxStrConstant("<built-in function repr>");
@@ -599,6 +598,10 @@ extern "C" BoxedString* functionRepr(BoxedFunction* v) {
         return boxStrConstant("<built-in function chr>");
     if (v == ord_obj)
         return boxStrConstant("<built-in function ord>");
+    RELEASE_ASSERT(false, "builtinFunctionOrMethodRepr not properly implemented");
+}
+
+extern "C" BoxedString* functionRepr(BoxedFunction* v) {
     return new BoxedString("function");
 }
 
@@ -1075,6 +1078,9 @@ void setupRuntime() {
     float_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFloat), false, "float");
     function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
                                       sizeof(BoxedFunction), false, "function");
+    builtin_function_or_method_cls
+        = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedBuiltinFunctionOrMethod, attrs),
+                             sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
     instancemethod_cls = new BoxedHeapClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false,
                                             "instancemethod");
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false, "list");
@@ -1165,6 +1171,13 @@ void setupRuntime() {
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
     function_cls->freeze();
+
+    builtin_function_or_method_cls->giveAttr(
+        "__module__",
+        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, modname)));
+    builtin_function_or_method_cls->giveAttr(
+        "__repr__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodRepr, STR, 1)));
+    builtin_function_or_method_cls->freeze();
 
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));

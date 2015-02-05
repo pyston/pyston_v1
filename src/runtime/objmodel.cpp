@@ -101,12 +101,13 @@ static Box* (*runtimeCallInternal2)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, B
 static Box* (*runtimeCallInternal3)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))runtimeCallInternal;
 
-static Box* (*typeCallInternal1)(BoxedFunction*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*)
-    = (Box * (*)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*))typeCallInternal;
-static Box* (*typeCallInternal2)(BoxedFunction*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*, Box*)
-    = (Box * (*)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*))typeCallInternal;
-static Box* (*typeCallInternal3)(BoxedFunction*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*, Box*, Box*)
-    = (Box * (*)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))typeCallInternal;
+static Box* (*typeCallInternal1)(BoxedFunctionBase*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*)
+    = (Box * (*)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*))typeCallInternal;
+static Box* (*typeCallInternal2)(BoxedFunctionBase*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*, Box*)
+    = (Box * (*)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*))typeCallInternal;
+static Box* (*typeCallInternal3)(BoxedFunctionBase*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*, Box*,
+                                 Box*)
+    = (Box * (*)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))typeCallInternal;
 
 bool checkClass(LookupScope scope) {
     return (scope & CLASS_ONLY) != 0;
@@ -2096,7 +2097,8 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         Box* rtn;
         // I *think* this check is here to limit the recursion nesting for rewriting, and originates
         // from a time when we didn't have silent-abort-when-patchpoint-full.
-        if (val->cls != function_cls && val->cls != instancemethod_cls && val->cls != capifunc_cls) {
+        if (val->cls != function_cls && val->cls != builtin_function_or_method_cls && val->cls != instancemethod_cls
+            && val->cls != capifunc_cls) {
             rewrite_args = NULL;
             REWRITE_ABORTED("");
         }
@@ -2306,8 +2308,8 @@ static void placeKeyword(const std::vector<AST_expr*>& arg_names, std::vector<bo
     }
 }
 
-Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-              Box** args, const std::vector<const std::string*>* keyword_names) {
+Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+              Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
 
     /*
      * Procedure:
@@ -2339,8 +2341,8 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         REWRITE_ABORTED("");
     }
 
-    // TODO Should we guard on the CLFunction or the BoxedFunction?
-    // A single CLFunction could end up forming multiple BoxedFunctions, and we
+    // TODO Should we guard on the CLFunction or the BoxedFunctionBase?
+    // A single CLFunction could end up forming multiple BoxedFunctionBases, and we
     // could emit assembly that handles any of them.  But doing this involves some
     // extra indirection, and it's not clear if that's worth it, since it seems like
     // the common case will be functions only ever getting a single set of default arguments.
@@ -2352,7 +2354,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
         if (!rewrite_args->func_guarded) {
             if (guard_clfunc) {
-                rewrite_args->obj->addAttrGuard(offsetof(BoxedFunction, f), (intptr_t)f);
+                rewrite_args->obj->addAttrGuard(offsetof(BoxedFunctionBase, f), (intptr_t)f);
             } else {
                 rewrite_args->obj->addGuard((intptr_t)func);
             }
@@ -2530,7 +2532,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     RewriterVar* r_defaults_array = NULL;
     if (guard_clfunc) {
-        r_defaults_array = rewrite_args->obj->getAttr(offsetof(BoxedFunction, defaults), Location::any());
+        r_defaults_array = rewrite_args->obj->getAttr(offsetof(BoxedFunctionBase, defaults), Location::any());
     }
 
     for (int i = f->num_args - f->num_defaults; i < f->num_args; i++) {
@@ -2541,7 +2543,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         Box* default_obj = func->defaults->elts[default_idx];
 
         if (rewrite_args) {
-            int offset = offsetof(std::remove_pointer<decltype(BoxedFunction::defaults)>::type, elts)
+            int offset = offsetof(std::remove_pointer<decltype(BoxedFunctionBase::defaults)>::type, elts)
                          + sizeof(Box*) * default_idx;
             if (guard_clfunc) {
                 // If we just guarded on the CLFunction, then we have to emit assembly
@@ -2559,7 +2561,7 @@ Box* callFunc(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                     rewrite_args->args->setAttr((i - 3) * sizeof(Box*), r_default);
                 }
             } else {
-                // If we guarded on the BoxedFunction, which has a constant set of defaults,
+                // If we guarded on the BoxedFunctionBase, which has a constant set of defaults,
                 // we can embed the default arguments directly into the instructions.
                 if (i < 3) {
                     RewriterVar* r_default = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::any());
@@ -2636,7 +2638,7 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                          Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 
-    if (obj->cls != function_cls && obj->cls != instancemethod_cls) {
+    if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
         Box* rtn;
         if (rewrite_args) {
             // TODO is this ok?
@@ -2670,11 +2672,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->args_guarded = true;
         }
 
-        rewrite_args->rewriter->addDecision(obj->cls == function_cls ? 1 : 0);
+        rewrite_args->rewriter->addDecision(obj->cls == function_cls || obj->cls == builtin_function_or_method_cls ? 1
+                                                                                                                   : 0);
     }
 
-    if (obj->cls == function_cls) {
-        BoxedFunction* f = static_cast<BoxedFunction*>(obj);
+    if (obj->cls == function_cls || obj->cls == builtin_function_or_method_cls) {
+        BoxedFunctionBase* f = static_cast<BoxedFunctionBase*>(obj);
 
         // Some functions are sufficiently important that we want them to be able to patchpoint themselves;
         // they can do this by setting the "internal_callable" field:
@@ -3462,7 +3465,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     return made;
 }
 
-Box* typeCallInternal(BoxedFunction* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 

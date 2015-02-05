@@ -139,10 +139,14 @@ Box* stackSize() {
 void setupThread() {
     thread_module = createModule("thread", "__builtin__");
 
-    thread_module->giveAttr("start_new_thread", new BoxedFunction(boxRTFunction((void*)startNewThread, BOXED_INT, 2)));
-    thread_module->giveAttr("allocate_lock", new BoxedFunction(boxRTFunction((void*)allocateLock, UNKNOWN, 0)));
-    thread_module->giveAttr("get_ident", new BoxedFunction(boxRTFunction((void*)getIdent, BOXED_INT, 0)));
-    thread_module->giveAttr("stack_size", new BoxedFunction(boxRTFunction((void*)stackSize, BOXED_INT, 0)));
+    thread_module->giveAttr("start_new_thread",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)startNewThread, BOXED_INT, 2)));
+    thread_module->giveAttr("allocate_lock",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)allocateLock, UNKNOWN, 0)));
+    thread_module->giveAttr("get_ident",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getIdent, BOXED_INT, 0)));
+    thread_module->giveAttr("stack_size",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)stackSize, BOXED_INT, 0)));
 
     thread_lock_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLock), false, "lock");
     thread_lock_cls->giveAttr("__module__", boxStrConstant("thread"));
