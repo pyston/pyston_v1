@@ -94,6 +94,8 @@ ScopeInfo* SourceInfo::getScopeInfo() {
 }
 
 EffortLevel::EffortLevel initialEffort() {
+    if (FORCE_INTERPRETER)
+        return EffortLevel::INTERPRETED;
     if (FORCE_OPTIMIZE)
         return EffortLevel::MAXIMAL;
     if (ENABLE_INTERPRETER)
