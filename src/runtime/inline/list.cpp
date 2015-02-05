@@ -20,9 +20,8 @@
 
 namespace pyston {
 
-BoxedListIterator::BoxedListIterator(BoxedList* l) : l(l), pos(0) {
+BoxedListIterator::BoxedListIterator(BoxedList* l, int start) : l(l), pos(start) {
 }
-
 
 Box* listIterIter(Box* s) {
     return s;
@@ -31,7 +30,7 @@ Box* listIterIter(Box* s) {
 Box* listIter(Box* s) {
     assert(s->cls == list_cls);
     BoxedList* self = static_cast<BoxedList*>(s);
-    return new BoxedListIterator(self);
+    return new BoxedListIterator(self, 0);
 }
 
 Box* listiterHasnext(Box* s) {
@@ -60,6 +59,41 @@ Box* listiterNext(Box* s) {
     self->pos++;
     return rtn;
 }
+
+
+Box* listReversed(Box* s) {
+    assert(s->cls == list_cls);
+    BoxedList* self = static_cast<BoxedList*>(s);
+    return new (list_reverse_iterator_cls) BoxedListIterator(self, self->size - 1);
+}
+
+Box* listreviterHasnext(Box* s) {
+    assert(s->cls == list_reverse_iterator_cls);
+    BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
+
+    return boxBool(self->pos >= 0);
+}
+
+i1 listreviterHasnextUnboxed(Box* s) {
+    assert(s->cls == list_reverse_iterator_cls);
+    BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
+
+    return self->pos >= 0;
+}
+
+Box* listreviterNext(Box* s) {
+    assert(s->cls == list_reverse_iterator_cls);
+    BoxedListIterator* self = static_cast<BoxedListIterator*>(s);
+
+    if (!(self->pos >= 0 && self->pos < self->l->size)) {
+        raiseExcHelper(StopIteration, "");
+    }
+
+    Box* rtn = self->l->elts->elts[self->pos];
+    self->pos--;
+    return rtn;
+}
+
 
 const int BoxedList::INITIAL_CAPACITY = 8;
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?

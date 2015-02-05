@@ -24,9 +24,40 @@ class BoxedXrangeIterator;
 class BoxedXrange : public Box {
 private:
     const int64_t start, stop, step;
+    int64_t len;
+
+    // from cpython
+    /* Return number of items in range (lo, hi, step).  step != 0
+     * required.  The result always fits in an unsigned long.
+     */
+    static int64_t get_len_of_range(int64_t lo, int64_t hi, int64_t step) {
+        /* -------------------------------------------------------------
+        If step > 0 and lo >= hi, or step < 0 and lo <= hi, the range is empty.
+        Else for step > 0, if n values are in the range, the last one is
+        lo + (n-1)*step, which must be <= hi-1.  Rearranging,
+        n <= (hi - lo - 1)/step + 1, so taking the floor of the RHS gives
+        the proper value.  Since lo < hi in this case, hi-lo-1 >= 0, so
+        the RHS is non-negative and so truncation is the same as the
+        floor.  Letting M be the largest positive long, the worst case
+        for the RHS numerator is hi=M, lo=-M-1, and then
+        hi-lo-1 = M-(-M-1)-1 = 2*M.  Therefore unsigned long has enough
+        precision to compute the RHS exactly.  The analysis for step < 0
+        is similar.
+        ---------------------------------------------------------------*/
+        assert(step != 0LL);
+        if (step > 0LL && lo < hi)
+            return 1LL + (hi - 1LL - lo) / step;
+        else if (step < 0 && lo > hi)
+            return 1LL + (lo - 1LL - hi) / (0LL - step);
+        else
+            return 0LL;
+    }
+
 
 public:
-    BoxedXrange(i64 start, i64 stop, i64 step) : start(start), stop(stop), step(step) {}
+    BoxedXrange(int64_t start, int64_t stop, int64_t step) : start(start), stop(stop), step(step) {
+        len = get_len_of_range(start, stop, step);
+    }
 
     friend class BoxedXrangeIterator;
 
@@ -37,9 +68,24 @@ class BoxedXrangeIterator : public Box {
 private:
     BoxedXrange* const xrange;
     int64_t cur;
+    int64_t stop, step;
 
 public:
-    BoxedXrangeIterator(BoxedXrange* xrange) : xrange(xrange), cur(xrange->start) {}
+    BoxedXrangeIterator(BoxedXrange* xrange, bool reversed) : xrange(xrange) {
+        int64_t start = xrange->start;
+        int64_t len = xrange->len;
+
+        stop = xrange->stop;
+        step = xrange->step;
+
+        if (reversed) {
+            stop = xrange->start - step;
+            start = xrange->start + (len - 1) * step;
+            step = -step;
+        }
+
+        cur = start;
+    }
 
     DEFAULT_CLASS(xrange_iterator_cls);
 
@@ -47,10 +93,10 @@ public:
         assert(s->cls == xrange_iterator_cls);
         BoxedXrangeIterator* self = static_cast<BoxedXrangeIterator*>(s);
 
-        if (self->xrange->step > 0) {
-            return self->cur < self->xrange->stop;
+        if (self->step > 0) {
+            return self->cur < self->stop;
         } else {
-            return self->cur > self->xrange->stop;
+            return self->cur > self->stop;
         }
     }
 
@@ -66,7 +112,7 @@ public:
             raiseExcHelper(StopIteration, "");
 
         i64 rtn = self->cur;
-        self->cur += self->xrange->step;
+        self->cur += self->step;
         return rtn;
     }
 
@@ -112,10 +158,22 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
     }
 }
 
+Box* xrangeIterIter(Box* self) {
+    assert(self->cls == xrange_iterator_cls);
+    return self;
+}
+
 Box* xrangeIter(Box* self) {
     assert(self->cls == xrange_cls);
 
-    Box* rtn = new BoxedXrangeIterator(static_cast<BoxedXrange*>(self));
+    Box* rtn = new BoxedXrangeIterator(static_cast<BoxedXrange*>(self), false);
+    return rtn;
+}
+
+Box* xrangeReversed(Box* self) {
+    assert(self->cls == xrange_cls);
+
+    Box* rtn = new BoxedXrangeIterator(static_cast<BoxedXrange*>(self), true);
     return rtn;
 }
 
@@ -129,9 +187,13 @@ void setupXrange() {
         new BoxedFunction(boxRTFunction((void*)xrange, typeFromClass(xrange_cls), 4, 2, false, false), { NULL, NULL }));
     xrange_cls->giveAttr("__iter__",
                          new BoxedFunction(boxRTFunction((void*)xrangeIter, typeFromClass(xrange_iterator_cls), 1)));
+    xrange_cls->giveAttr(
+        "__reversed__", new BoxedFunction(boxRTFunction((void*)xrangeReversed, typeFromClass(xrange_iterator_cls), 1)));
 
     CLFunction* hasnext = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)BoxedXrangeIterator::xrangeIteratorHasnext, BOXED_BOOL);
+    xrange_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)xrangeIterIter, typeFromClass(xrange_iterator_cls), 1)));
     xrange_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
 
     CLFunction* next = boxRTFunction((void*)BoxedXrangeIterator::xrangeIteratorNextUnboxed, INT, 1);

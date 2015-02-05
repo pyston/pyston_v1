@@ -1116,6 +1116,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr(
         "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
+    builtins_module->giveAttr(
+        "reversed", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false)));
 
     builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2)));
 

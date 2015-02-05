@@ -21,11 +21,12 @@
 namespace pyston {
 
 extern BoxedClass* list_iterator_cls;
+extern BoxedClass* list_reverse_iterator_cls;
 class BoxedListIterator : public Box {
 public:
     BoxedList* l;
     int pos;
-    BoxedListIterator(BoxedList* l);
+    BoxedListIterator(BoxedList* l, int start);
 
     DEFAULT_CLASS(list_iterator_cls);
 };
@@ -35,6 +36,10 @@ Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);
 Box* listiterNext(Box* self);
+Box* listReversed(Box* self);
+Box* listreviterHasnext(Box* self);
+i1 listreviterHasnextUnboxed(Box* self);
+Box* listreviterNext(Box* self);
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse);
 extern "C" Box* listAppend(Box* self, Box* v);
 }
