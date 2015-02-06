@@ -157,9 +157,7 @@ int main(int argc, char** argv) {
                 printf("Warning: ignoring SystemExit code\n");
                 return 1;
             } else {
-                std::string msg = formatException(e.value);
-                printLastTraceback();
-                fprintf(stderr, "%s\n", msg.c_str());
+                e.printExcAndTraceback();
                 return 1;
             }
         }
@@ -226,9 +224,7 @@ int main(int argc, char** argv) {
                         printf("Warning: ignoring SystemExit code\n");
                         return 1;
                     } else {
-                        std::string msg = formatException(e.value);
-                        printLastTraceback();
-                        fprintf(stderr, "%s\n", msg.c_str());
+                        e.printExcAndTraceback();
                     }
                 }
             }

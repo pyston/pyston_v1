@@ -21,10 +21,11 @@
 
 namespace pyston {
 
-std::vector<const LineInfo*> getTracebackEntries();
-const LineInfo* getMostRecentLineInfo();
 class BoxedModule;
 BoxedModule* getCurrentModule();
+
+class BoxedTraceback;
+BoxedTraceback* getTraceback();
 
 class BoxedDict;
 BoxedDict* getLocals(bool only_user_visible);

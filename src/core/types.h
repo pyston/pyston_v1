@@ -463,7 +463,6 @@ void prependToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);
-void printLastTraceback();
 
 // Raise a SyntaxError that occurs at a specific location.
 // The traceback given to the user will include this,
@@ -488,6 +487,7 @@ struct ExcInfo {
     ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
 #endif
     bool matches(BoxedClass* cls) const;
+    void printExcAndTraceback() const;
 };
 
 struct FrameInfo {

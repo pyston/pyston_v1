@@ -25,9 +25,11 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
+#include "runtime/file.h"
 #include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/rewrite_args.h"
+#include "runtime/traceback.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -691,8 +693,6 @@ void checkAndThrowCAPIException() {
         assert(!cur_thread_state.curexc_value);
 
     if (_type) {
-        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL || cur_thread_state.curexc_traceback == None,
-                       "unsupported");
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
@@ -700,6 +700,10 @@ void checkAndThrowCAPIException() {
         Box* value = cur_thread_state.curexc_value;
         if (!value)
             value = None;
+
+        Box* tb = cur_thread_state.curexc_traceback;
+        if (!tb)
+            tb = None;
 
         // This is similar to PyErr_NormalizeException:
         if (!isInstance(value, type)) {
@@ -716,6 +720,8 @@ void checkAndThrowCAPIException() {
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
         PyErr_Clear();
+        if (tb != None)
+            raiseRaw(ExcInfo(value->cls, value, tb));
         raiseExc(value);
     }
 }
@@ -770,7 +776,10 @@ extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) noexcept {
 }
 
 extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(f->cls == file_cls && static_cast<BoxedFile*>(f)->f_fp == stderr,
+                   "sorry will only print tracebacks to stderr right now");
+    printTraceback(v);
+    return 0;
 }
 
 #define Py_DEFAULT_RECURSION_LIMIT 1000

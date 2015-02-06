@@ -35,6 +35,7 @@
 #include "runtime/objmodel.h"
 #include "runtime/set.h"
 #include "runtime/super.h"
+#include "runtime/traceback.h"
 #include "runtime/util.h"
 
 extern "C" void initerrno();
@@ -1176,6 +1177,7 @@ void setupRuntime() {
     setupSuper();
     setupUnicode();
     setupDescr();
+    setupTraceback();
 
     function_cls->giveAttr("__name__", new BoxedGetsetDescriptor(func_name, func_set_name, NULL));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
