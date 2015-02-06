@@ -1851,7 +1851,7 @@ extern "C" void PyString_Concat(register PyObject** pv, register PyObject* w) no
 }
 
 extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject* w) noexcept {
-    Py_FatalError("unimplemented");
+    PyString_Concat(pv, w);
 }
 
 
