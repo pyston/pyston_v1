@@ -543,6 +543,9 @@ extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
 }
 
 extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
+    if (o->cls == tuple_cls)
+        return o;
+
     Py_FatalError("unimplemented");
 }
 
