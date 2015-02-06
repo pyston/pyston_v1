@@ -66,6 +66,70 @@ namespace pyston {
 #define SMALLCHUNK BUFSIZ
 #endif
 
+static size_t new_buffersize(BoxedFile* f, size_t currentsize) {
+#ifdef HAVE_FSTAT
+    off_t pos, end;
+    struct stat st;
+    if (fstat(fileno(f->f_fp), &st) == 0) {
+        end = st.st_size;
+        /* The following is not a bug: we really need to call lseek()
+           *and* ftell().  The reason is that some stdio libraries
+           mistakenly flush their buffer when ftell() is called and
+           the lseek() call it makes fails, thereby throwing away
+           data that cannot be recovered in any way.  To avoid this,
+           we first test lseek(), and only call ftell() if lseek()
+           works.  We can't use the lseek() value either, because we
+           need to take the amount of buffered data into account.
+           (Yet another reason why stdio stinks. :-) */
+        pos = lseek(fileno(f->f_fp), 0L, SEEK_CUR);
+        if (pos >= 0) {
+            pos = ftell(f->f_fp);
+        }
+        if (pos < 0)
+            clearerr(f->f_fp);
+        if (end > pos && pos >= 0)
+            return currentsize + end - pos + 1;
+        /* Add 1 so if the file were to grow we'd notice. */
+    }
+#endif
+    /* Expand the buffer by an amount proportional to the current size,
+       giving us amortized linear-time behavior. Use a less-than-double
+       growth factor to avoid excessive allocation. */
+    return currentsize + (currentsize >> 3) + 6;
+}
+
+#if defined(EWOULDBLOCK) && defined(EAGAIN) && EWOULDBLOCK != EAGAIN
+#define BLOCKED_ERRNO(x) ((x) == EWOULDBLOCK || (x) == EAGAIN)
+#else
+#ifdef EWOULDBLOCK
+#define BLOCKED_ERRNO(x) ((x) == EWOULDBLOCK)
+#else
+#ifdef EAGAIN
+#define BLOCKED_ERRNO(x) ((x) == EAGAIN)
+#else
+#define BLOCKED_ERRNO(x) 0
+#endif
+#endif
+#endif
+
+static PyObject* err_closed(void) noexcept {
+    PyErr_SetString(PyExc_ValueError, "I/O operation on closed file");
+    return NULL;
+}
+
+static PyObject* err_mode(const char* action) noexcept {
+    PyErr_Format(PyExc_IOError, "File not open for %s", action);
+    return NULL;
+}
+
+/* Refuse regular file I/O if there's data in the iteration-buffer.
+ * Mixing them would cause data to arrive out of order, as the read*
+ * methods don't use the iteration buffer. */
+static PyObject* err_iterbuffered(void) noexcept {
+    PyErr_SetString(PyExc_ValueError, "Mixing iteration and read methods would lose data");
+    return NULL;
+}
+
 static BoxedFile* dircheck(BoxedFile* f) {
 #if defined(HAVE_FSTAT) && defined(S_IFDIR) && defined(EISDIR)
     struct stat buf;
@@ -165,196 +229,77 @@ static void checkWritable(BoxedFile* self) {
         raiseExcHelper(IOError, "File not open for writing");
 }
 
-Box* fileRead(BoxedFile* self, Box* _size) {
-    assert(self->cls == file_cls);
-    if (_size->cls != int_cls) {
-        fprintf(stderr, "TypeError: an integer is required\n");
-        raiseExcHelper(TypeError, "");
+static PyObject* file_read(BoxedFile* f, long bytesrequested) noexcept {
+    size_t bytesread, buffersize, chunksize;
+    PyObject* v;
+
+    if (f->f_fp == NULL)
+        return err_closed();
+    if (!f->readable)
+        return err_mode("reading");
+    /* refuse to mix with f.next() */
+    if (f->f_buf != NULL && (f->f_bufend - f->f_bufptr) > 0 && f->f_buf[0] != '\0')
+        return err_iterbuffered();
+
+    if (bytesrequested < 0)
+        buffersize = new_buffersize(f, (size_t)0);
+    else
+        buffersize = bytesrequested;
+    if (buffersize > PY_SSIZE_T_MAX) {
+        PyErr_SetString(PyExc_OverflowError, "requested number of bytes is more than a Python string can hold");
+        return NULL;
     }
-    int64_t size = static_cast<BoxedInt*>(_size)->n;
-
-    checkReadable(self);
-
-    std::ostringstream os("");
-
-    if (size < 0)
-        size = 1L << 60;
-
-    i64 read = 0;
-    while (read < size) {
-        const int BUF_SIZE = 1024;
-        char buf[BUF_SIZE];
-        size_t more_read = fread(buf, 1, std::min((i64)BUF_SIZE, size - read), self->f_fp);
-        if (more_read == 0) {
-            ASSERT(!ferror(self->f_fp), "%d", ferror(self->f_fp));
-            break;
-        }
-
-        read += more_read;
-        // this is probably inefficient:
-        os << std::string(buf, more_read);
-    }
-    return boxString(os.str());
-}
-
-Box* fileReadline1(BoxedFile* self) {
-    assert(self->cls == file_cls);
-
-    checkReadable(self);
-
-    std::ostringstream os("");
-
-    while (true) {
-        char c;
-        int nread = fread(&c, 1, 1, self->f_fp);
-        if (nread == 0)
-            break;
-        os << c;
-
-        if (c == '\n')
-            break;
-    }
-    return boxString(os.str());
-}
-
-Box* fileWrite(BoxedFile* self, Box* val) {
-    assert(self->cls == file_cls);
-
-    checkWritable(self);
-
-    if (val->cls == str_cls) {
-        const std::string& s = static_cast<BoxedString*>(val)->s;
-
-        size_t size = s.size();
-        size_t written = 0;
-        while (written < size) {
-            // const int BUF_SIZE = 1024;
-            // char buf[BUF_SIZE];
-            // int to_write = std::min(BUF_SIZE, size - written);
-            // memcpy(buf, s.c_str() + written, to_write);
-            // size_t new_written = fwrite(buf, 1, to_write, self->f_fp);
-
-            size_t new_written = fwrite(s.c_str() + written, 1, size - written, self->f_fp);
-
-            if (!new_written) {
-                int error = ferror(self->f_fp);
-                fprintf(stderr, "IOError %d\n", error);
-                raiseExcHelper(IOError, "");
+    v = PyString_FromStringAndSize((char*)NULL, buffersize);
+    if (v == NULL)
+        return NULL;
+    bytesread = 0;
+    for (;;) {
+        int interrupted;
+        FILE_BEGIN_ALLOW_THREADS(f)
+        errno = 0;
+        chunksize = Py_UniversalNewlineFread(BUF(v) + bytesread, buffersize - bytesread, f->f_fp, (PyObject*)f);
+        interrupted = ferror(f->f_fp) && errno == EINTR;
+        FILE_END_ALLOW_THREADS(f)
+        if (interrupted) {
+            clearerr(f->f_fp);
+            if (PyErr_CheckSignals()) {
+                Py_DECREF(v);
+                return NULL;
             }
-
-            written += new_written;
         }
-
-        return None;
-    } else {
-        fprintf(stderr, "TypeError: expected a character buffer object\n");
-        raiseExcHelper(TypeError, "");
-    }
-}
-
-Box* fileFlush(BoxedFile* self) {
-    RELEASE_ASSERT(self->cls == file_cls, "");
-
-    checkOpen(self);
-    int res;
-
-    FILE_BEGIN_ALLOW_THREADS(self);
-    errno = 0;
-    res = fflush(self->f_fp);
-    FILE_END_ALLOW_THREADS(self);
-
-    if (res != 0) {
-        PyErr_SetFromErrno(IOError);
-        clearerr(self->f_fp);
-        throwCAPIException();
-    }
-    return None;
-}
-
-static PyObject* close_the_file(BoxedFile* f) {
-    int sts = 0;
-    int (*local_close)(FILE*);
-    FILE* local_fp = f->f_fp;
-    char* local_setbuf = f->f_setbuf;
-    if (local_fp != NULL) {
-        local_close = f->f_close;
-        if (local_close != NULL && f->unlocked_count > 0) {
-            PyErr_SetString(PyExc_IOError, "close() called during concurrent "
-                                           "operation on the same file object.");
+        if (chunksize == 0) {
+            if (interrupted)
+                continue;
+            if (!ferror(f->f_fp))
+                break;
+            clearerr(f->f_fp);
+            /* When in non-blocking mode, data shouldn't
+             * be discarded if a blocking signal was
+             * received. That will also happen if
+             * chunksize != 0, but bytesread < buffersize. */
+            if (bytesread > 0 && BLOCKED_ERRNO(errno))
+                break;
+            PyErr_SetFromErrno(PyExc_IOError);
+            Py_DECREF(v);
             return NULL;
         }
-        /* NULL out the FILE pointer before releasing the GIL, because
-         * it will not be valid anymore after the close() function is
-         * called. */
-        f->f_fp = NULL;
-        if (local_close != NULL) {
-            /* Issue #9295: must temporarily reset f_setbuf so that another
-               thread doesn't free it when running file_close() concurrently.
-               Otherwise this close() will crash when flushing the buffer. */
-            f->f_setbuf = NULL;
-            Py_BEGIN_ALLOW_THREADS errno = 0;
-            sts = (*local_close)(local_fp);
-            Py_END_ALLOW_THREADS f->f_setbuf = local_setbuf;
-            if (sts == EOF)
-                return PyErr_SetFromErrno(PyExc_IOError);
-            if (sts != 0)
-                return PyInt_FromLong((long)sts);
+        bytesread += chunksize;
+        if (bytesread < buffersize && !interrupted) {
+            clearerr(f->f_fp);
+            break;
+        }
+        if (bytesrequested < 0) {
+            buffersize = new_buffersize(f, buffersize);
+            if (_PyString_Resize(&v, buffersize) < 0)
+                return NULL;
+        } else {
+            /* Got what was requested. */
+            break;
         }
     }
-    Py_RETURN_NONE;
-}
-
-Box* fileClose(BoxedFile* self) {
-    assert(self->cls == file_cls);
-
-    PyObject* sts = close_the_file(self);
-    if (sts) {
-        PyMem_Free(self->f_setbuf);
-        self->f_setbuf = NULL;
-    } else {
-        throwCAPIException();
-    }
-    return sts;
-}
-
-Box* fileEnter(BoxedFile* self) {
-    assert(self->cls == file_cls);
-    return self;
-}
-
-Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
-    Box* exc_tb = args[0];
-    assert(self->cls == file_cls);
-    assert(exc_type == None);
-    assert(exc_val == None);
-    assert(exc_tb == None);
-
-    return fileClose(self);
-}
-
-Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
-    assert(cls == file_cls);
-
-    if (s->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(s));
-        raiseExcHelper(TypeError, "");
-    }
-    if (m->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(m));
-        raiseExcHelper(TypeError, "");
-    }
-
-    const std::string& fn = static_cast<BoxedString*>(s)->s;
-    const std::string& mode = static_cast<BoxedString*>(m)->s;
-
-    FILE* f = fopen(fn.c_str(), mode.c_str());
-    if (!f) {
-        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
-        throwCAPIException();
-        abort(); // unreachable;
-    }
-
-    return new BoxedFile(f, fn, PyString_AsString(m));
+    if (bytesread != buffersize && _PyString_Resize(&v, bytesread))
+        return NULL;
+    return v;
 }
 
 static PyObject* get_line(BoxedFile* f, int n) noexcept {
@@ -485,22 +430,235 @@ static PyObject* get_line(BoxedFile* f, int n) noexcept {
     return v;
 }
 
-static PyObject* err_closed(void) noexcept {
-    PyErr_SetString(PyExc_ValueError, "I/O operation on closed file");
-    return NULL;
+Box* fileRead(BoxedFile* self, Box* _size) {
+    assert(self->cls == file_cls);
+    if (_size->cls != int_cls) {
+        fprintf(stderr, "TypeError: an integer is required\n");
+        raiseExcHelper(TypeError, "");
+    }
+    int64_t size = static_cast<BoxedInt*>(_size)->n;
+
+    Box* r = file_read(self, size);
+    if (!r)
+        throwCAPIException();
+    return r;
 }
 
-static PyObject* err_mode(const char* action) noexcept {
-    PyErr_Format(PyExc_IOError, "File not open for %s", action);
-    return NULL;
+static PyObject* file_readline(BoxedFile* f, int n = -1) noexcept {
+    if (f->f_fp == NULL)
+        return err_closed();
+    if (!f->readable)
+        return err_mode("reading");
+    /* refuse to mix with f.next() */
+    if (f->f_buf != NULL && (f->f_bufend - f->f_bufptr) > 0 && f->f_buf[0] != '\0')
+        return err_iterbuffered();
+    if (n == 0)
+        return PyString_FromString("");
+    if (n < 0)
+        n = 0;
+    return get_line(f, n);
 }
 
-/* Refuse regular file I/O if there's data in the iteration-buffer.
- * Mixing them would cause data to arrive out of order, as the read*
- * methods don't use the iteration buffer. */
-static PyObject* err_iterbuffered(void) noexcept {
-    PyErr_SetString(PyExc_ValueError, "Mixing iteration and read methods would lose data");
-    return NULL;
+Box* fileReadline1(BoxedFile* self) {
+    assert(self->cls == file_cls);
+
+    Box* r = file_readline(self);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
+    Py_buffer pbuf;
+    const char* s;
+    Py_ssize_t n, n2;
+    PyObject* encoded = NULL;
+    int err_flag = 0, err;
+
+    if (f->f_fp == NULL)
+        return err_closed();
+    if (!f->writable)
+        return err_mode("writing");
+    if (f->f_binary) {
+        if (PyObject_GetBuffer(arg, &pbuf, 0))
+            return NULL;
+
+        s = (const char*)pbuf.buf;
+        n = pbuf.len;
+    } else {
+        PyObject* text = arg;
+
+        if (PyString_Check(text)) {
+            s = PyString_AS_STRING(text);
+            n = PyString_GET_SIZE(text);
+#ifdef Py_USING_UNICODE
+        } else if (PyUnicode_Check(text)) {
+            const char* encoding, *errors;
+            if (f->f_encoding != Py_None)
+                encoding = PyString_AS_STRING(f->f_encoding);
+            else
+                encoding = PyUnicode_GetDefaultEncoding();
+            if (f->f_errors != Py_None)
+                errors = PyString_AS_STRING(f->f_errors);
+            else
+                errors = "strict";
+            encoded = PyUnicode_AsEncodedString(text, encoding, errors);
+            if (encoded == NULL)
+                return NULL;
+            s = PyString_AS_STRING(encoded);
+            n = PyString_GET_SIZE(encoded);
+#endif
+        } else {
+            if (PyObject_AsCharBuffer(text, &s, &n))
+                return NULL;
+        }
+    }
+    // TODO: this doesn't seem like it should be a necessary Pyston change:
+    // f->f_softspace = 0;
+
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    n2 = fwrite(s, 1, n, f->f_fp);
+    if (n2 != n || ferror(f->f_fp)) {
+        err_flag = 1;
+        err = errno;
+    }
+    FILE_END_ALLOW_THREADS(f)
+    Py_XDECREF(encoded);
+    if (f->f_binary)
+        PyBuffer_Release(&pbuf);
+    if (err_flag) {
+        errno = err;
+        PyErr_SetFromErrno(PyExc_IOError);
+        clearerr(f->f_fp);
+        return NULL;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+Box* fileWrite(BoxedFile* self, Box* val) {
+    assert(self->cls == file_cls);
+
+    Box* r = file_write(self, val);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+static PyObject* file_flush(BoxedFile* f) noexcept {
+    int res;
+
+    if (f->f_fp == NULL)
+        return err_closed();
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    res = fflush(f->f_fp);
+    FILE_END_ALLOW_THREADS(f)
+    if (res != 0) {
+        PyErr_SetFromErrno(PyExc_IOError);
+        clearerr(f->f_fp);
+        return NULL;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+Box* fileFlush(BoxedFile* self) {
+    RELEASE_ASSERT(self->cls == file_cls, "");
+
+    Box* r = file_flush(self);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+static PyObject* close_the_file(BoxedFile* f) {
+    int sts = 0;
+    int (*local_close)(FILE*);
+    FILE* local_fp = f->f_fp;
+    char* local_setbuf = f->f_setbuf;
+    if (local_fp != NULL) {
+        local_close = f->f_close;
+        if (local_close != NULL && f->unlocked_count > 0) {
+            PyErr_SetString(PyExc_IOError, "close() called during concurrent "
+                                           "operation on the same file object.");
+            return NULL;
+        }
+        /* NULL out the FILE pointer before releasing the GIL, because
+         * it will not be valid anymore after the close() function is
+         * called. */
+        f->f_fp = NULL;
+        if (local_close != NULL) {
+            /* Issue #9295: must temporarily reset f_setbuf so that another
+               thread doesn't free it when running file_close() concurrently.
+               Otherwise this close() will crash when flushing the buffer. */
+            f->f_setbuf = NULL;
+            Py_BEGIN_ALLOW_THREADS errno = 0;
+            sts = (*local_close)(local_fp);
+            Py_END_ALLOW_THREADS f->f_setbuf = local_setbuf;
+            if (sts == EOF)
+                return PyErr_SetFromErrno(PyExc_IOError);
+            if (sts != 0)
+                return PyInt_FromLong((long)sts);
+        }
+    }
+    Py_RETURN_NONE;
+}
+
+Box* fileClose(BoxedFile* self) {
+    assert(self->cls == file_cls);
+
+    PyObject* sts = close_the_file(self);
+    if (sts) {
+        PyMem_Free(self->f_setbuf);
+        self->f_setbuf = NULL;
+    } else {
+        throwCAPIException();
+    }
+    return sts;
+}
+
+Box* fileEnter(BoxedFile* self) {
+    assert(self->cls == file_cls);
+    return self;
+}
+
+Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
+    Box* exc_tb = args[0];
+    assert(self->cls == file_cls);
+    assert(exc_type == None);
+    assert(exc_val == None);
+    assert(exc_tb == None);
+
+    fileClose(self);
+    return None;
+}
+
+// This differs very significantly from CPython:
+Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
+    assert(cls == file_cls);
+
+    if (s->cls != str_cls) {
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(s));
+        raiseExcHelper(TypeError, "");
+    }
+    if (m->cls != str_cls) {
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(m));
+        raiseExcHelper(TypeError, "");
+    }
+
+    const std::string& fn = static_cast<BoxedString*>(s)->s;
+    const std::string& mode = static_cast<BoxedString*>(m)->s;
+
+    FILE* f = fopen(fn.c_str(), mode.c_str());
+    if (!f) {
+        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
+        throwCAPIException();
+        abort(); // unreachable;
+    }
+
+    return new BoxedFile(f, fn, PyString_AsString(m));
 }
 
 static PyObject* file_readlines(BoxedFile* f, PyObject* args) noexcept {
