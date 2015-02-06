@@ -640,7 +640,7 @@ static Box* func_name(Box* b, void*) {
     return boxString(func->f->source->getName());
 }
 
-static int func_set_name(Box*, Box*, void*) {
+static void func_set_name(Box*, Box*, void*) {
     RELEASE_ASSERT(0, "not implemented");
 }
 
@@ -989,8 +989,34 @@ static Box* type_name(Box* b, void*) {
     }
 }
 
-static int type_set_name(Box* b, Box* v, void*) {
-    RELEASE_ASSERT(false, "not implemented");
+static void type_set_name(Box* b, Box* v, void*) {
+    assert(b->cls == type_cls);
+    BoxedClass* type = static_cast<BoxedClass*>(b);
+
+    // Awkward... in CPython you can only set __name__ for heaptype classes
+    // (those with ht_name) but in Pyston right now we have some heaptype classes that
+    // aren't heaptype in CPython, and we have to restrict those too.
+
+    // TODO is this predicate right?
+    bool is_heaptype = (type->tp_flags & Py_TPFLAGS_HEAPTYPE);
+    if (!(is_heaptype && type->is_user_defined)) {
+        raiseExcHelper(TypeError, "can't set %s.__name__", type->tp_name);
+    }
+    if (!v) {
+        raiseExcHelper(TypeError, "can't delete %s.__name__", type->tp_name);
+    }
+    if (!PyString_Check(v)) {
+        raiseExcHelper(TypeError, "can only assign string to %s.__name__, not '%s'", type->tp_name, getTypeName(v));
+    }
+
+    BoxedString* s = static_cast<BoxedString*>(v);
+    if (strlen(s->s.c_str()) != s->s.size()) {
+        raiseExcHelper(ValueError, "__name__ must not contain null bytes");
+    }
+
+    BoxedHeapClass* ht = static_cast<BoxedHeapClass*>(type);
+    ht->ht_name = s;
+    ht->tp_name = s->s.c_str();
 }
 
 // cls should be obj->cls.

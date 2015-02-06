@@ -529,10 +529,10 @@ public:
 class BoxedGetsetDescriptor : public Box {
 public:
     Box* (*get)(Box*, void*);
-    int (*set)(Box*, Box*, void*);
+    void (*set)(Box*, Box*, void*);
     void* closure;
 
-    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*), void* closure)
+    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
         : get(get), set(set), closure(closure) {}
 
     DEFAULT_CLASS(getset_cls);
