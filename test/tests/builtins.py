@@ -78,3 +78,9 @@ class Iterable(object):
 i = Iterable()
 it = iter(i)
 print it is i
+
+# check that builtins don't bind
+class C(object):
+    s = sorted
+c = C()
+print c.s([3,2,1])

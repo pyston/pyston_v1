@@ -971,7 +971,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("__debug__", False);
 
-    builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
+    builtins_module->giveAttr("print",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
     notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
@@ -982,8 +983,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("NotImplemented", NotImplemented);
     builtins_module->giveAttr("NotImplementedType", notimplemented_cls);
 
-    builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1)));
-    builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1)));
+    builtins_module->giveAttr("all", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)all, BOXED_BOOL, 1)));
+    builtins_module->giveAttr("any", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)any, BOXED_BOOL, 1)));
 
     BaseException = makeBuiltinException(object_cls, "BaseException", sizeof(BoxedException));
     Exception = makeBuiltinException(BaseException, "Exception");
@@ -1034,53 +1035,54 @@ void setupBuiltins() {
     EnvironmentError->giveAttr("__str__",
                                new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__str__, UNKNOWN, 1)));
 
-    repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
+    repr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
-    len_obj = new BoxedFunction(boxRTFunction((void*)len, UNKNOWN, 1));
+    len_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)len, UNKNOWN, 1));
     builtins_module->giveAttr("len", len_obj);
-    hash_obj = new BoxedFunction(boxRTFunction((void*)hash, UNKNOWN, 1));
+    hash_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hash, UNKNOWN, 1));
     builtins_module->giveAttr("hash", hash_obj);
-    abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, UNKNOWN, 1));
+    abs_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)abs_, UNKNOWN, 1));
     builtins_module->giveAttr("abs", abs_obj);
-    builtins_module->giveAttr("hex", new BoxedFunction(boxRTFunction((void*)hexFunc, UNKNOWN, 1)));
-    builtins_module->giveAttr("oct", new BoxedFunction(boxRTFunction((void*)octFunc, UNKNOWN, 1)));
+    builtins_module->giveAttr("hex", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hexFunc, UNKNOWN, 1)));
+    builtins_module->giveAttr("oct", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)octFunc, UNKNOWN, 1)));
 
-    min_obj = new BoxedFunction(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false));
+    min_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("min", min_obj);
 
-    max_obj = new BoxedFunction(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false));
+    max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("max", max_obj);
 
-    builtins_module->giveAttr("sum",
-                              new BoxedFunction(boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
+    builtins_module->giveAttr(
+        "sum", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
 
-    id_obj = new BoxedFunction(boxRTFunction((void*)id, BOXED_INT, 1));
+    id_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)id, BOXED_INT, 1));
     builtins_module->giveAttr("id", id_obj);
-    chr_obj = new BoxedFunction(boxRTFunction((void*)chr, STR, 1));
+    chr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)chr, STR, 1));
     builtins_module->giveAttr("chr", chr_obj);
-    ord_obj = new BoxedFunction(boxRTFunction((void*)ord, BOXED_INT, 1));
+    ord_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)ord, BOXED_INT, 1));
     builtins_module->giveAttr("ord", ord_obj);
-    trap_obj = new BoxedFunction(boxRTFunction((void*)trap, UNKNOWN, 0));
+    trap_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)trap, UNKNOWN, 0));
     builtins_module->giveAttr("trap", trap_obj);
-    builtins_module->giveAttr("dump", new BoxedFunction(boxRTFunction((void*)pydump, UNKNOWN, 1)));
+    builtins_module->giveAttr("dump", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 1)));
+
+    builtins_module->giveAttr("getattr", new BoxedBuiltinFunctionOrMethod(
+                                             boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
 
     builtins_module->giveAttr(
-        "getattr", new BoxedFunction(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
+        "setattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, 0, false, false)));
 
-    builtins_module->giveAttr("setattr",
-                              new BoxedFunction(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, 0, false, false)));
-
-    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, BOXED_BOOL, 2));
+    Box* hasattr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hasattr, BOXED_BOOL, 2));
     builtins_module->giveAttr("hasattr", hasattr_obj);
 
 
-    Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2));
+    Box* isinstance_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
-    Box* issubclass_obj = new BoxedFunction(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
+    Box* issubclass_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
-    builtins_module->giveAttr("__import__", new BoxedFunction(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
+    builtins_module->giveAttr("__import__",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
 
     enumerate_cls
         = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false, "enumerate");
@@ -1100,38 +1102,42 @@ void setupBuiltins() {
     CLFunction* sorted_func = createRTFunction(1, 0, false, false);
     addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST });
     addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN });
-    builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func));
+    builtins_module->giveAttr("sorted", new BoxedBuiltinFunctionOrMethod(sorted_func));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);
 
-    range_obj = new BoxedFunction(boxRTFunction((void*)range, LIST, 3, 2, false, false), { NULL, NULL });
+    range_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)range, LIST, 3, 2, false, false), { NULL, NULL });
     builtins_module->giveAttr("range", range_obj);
 
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    open_obj = new BoxedFunction(boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false),
-                                 { boxStrConstant("r") });
+    open_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false),
+                                                { boxStrConstant("r") });
     builtins_module->giveAttr("open", open_obj);
 
-    builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
-    builtins_module->giveAttr("locals", new BoxedFunction(boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false)));
+    builtins_module->giveAttr(
+        "globals", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
+    builtins_module->giveAttr(
+        "locals", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false)));
 
-    builtins_module->giveAttr("iter", new BoxedFunction(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
+    builtins_module->giveAttr(
+        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
 
-    builtins_module->giveAttr("divmod", new BoxedFunction(boxRTFunction((void*)divmod, UNKNOWN, 2)));
+    builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2)));
 
-    builtins_module->giveAttr("execfile", new BoxedFunction(boxRTFunction((void*)execfile, UNKNOWN, 1)));
+    builtins_module->giveAttr("execfile", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1)));
 
-    builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
-    builtins_module->giveAttr("reduce",
-                              new BoxedFunction(boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), { NULL }));
-    builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
-    builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
-    builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
-    builtins_module->giveAttr("vars",
-                              new BoxedFunction(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
+    builtins_module->giveAttr("map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map2, LIST, 2)));
+    builtins_module->giveAttr("reduce", new BoxedBuiltinFunctionOrMethod(
+                                            boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), { NULL }));
+    builtins_module->giveAttr("filter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)filter2, LIST, 2)));
+    builtins_module->giveAttr("zip", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)zip2, LIST, 2)));
+    builtins_module->giveAttr(
+        "dir", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
+    builtins_module->giveAttr(
+        "vars", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);

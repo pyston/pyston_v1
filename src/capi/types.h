@@ -83,7 +83,7 @@ public:
         return rtn;
     }
 
-    static Box* callInternal(BoxedFunction* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
+    static Box* callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1,
                              Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names);
 };
 

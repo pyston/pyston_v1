@@ -49,7 +49,7 @@ static void generatorEntry(BoxedGenerator* g) {
 
     try {
         // call body of the generator
-        BoxedFunction* func = g->function;
+        BoxedFunctionBase* func = g->function;
 
         Box** args = g->args ? &g->args->elts[0] : nullptr;
         callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, g->arg1, g->arg2, g->arg3, args);
@@ -138,14 +138,14 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
 }
 
 
-extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args) {
+extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args) {
     assert(function);
     assert(function->cls == function_cls);
     return new BoxedGenerator(function, arg1, arg2, arg3, args);
 }
 
 
-extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
+extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
     : function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false), running(false),
       returnValue(nullptr), exception(nullptr, nullptr, nullptr) {
 

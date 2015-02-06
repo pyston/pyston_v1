@@ -121,7 +121,7 @@ typedef ValuedCompilerVariable<llvm::Value*> ConcreteCompilerVariable;
 class Box;
 class BoxedClass;
 class BoxedModule;
-class BoxedFunction;
+class BoxedFunctionBase;
 
 class ICGetattr;
 struct ICSlotInfo;
@@ -277,7 +277,7 @@ public:
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
-    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+    typedef Box* (*InternalCallable)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
                                      const std::vector<const std::string*>*);
     InternalCallable internal_callable = NULL;
 

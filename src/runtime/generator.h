@@ -25,7 +25,7 @@ extern BoxedClass* generator_cls;
 void setupGenerator();
 
 extern "C" Box* yield(BoxedGenerator* obj, Box* value);
-extern "C" BoxedGenerator* createGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
+extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 }
 
 #endif
