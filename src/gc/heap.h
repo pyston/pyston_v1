@@ -17,12 +17,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <sys/mman.h>
 
 #include "core/common.h"
 #include "core/threading.h"
 
 namespace pyston {
 namespace gc {
+
+class Heap;
+struct HeapStatistics;
 
 typedef uint8_t kindid_t;
 struct GCAllocation {
@@ -59,173 +63,401 @@ inline void clearMark(GCAllocation* header) {
 
 #undef MARK_BIT
 
+#define PAGE_SIZE 4096
 
-template <int N> class Bitmap {
-    static_assert(N % 64 == 0, "");
-
+template <uintptr_t start> class Arena {
 private:
-    uint64_t data[N / 64];
+    void* cur;
+
+protected:
+    Arena() : cur((void*)start) {}
 
 public:
-    void setAllZero() { memset(data, 0, sizeof(data)); }
+    void* doMmap(size_t size) {
+        assert(size % PAGE_SIZE == 0);
 
-    struct Scanner {
-    private:
-        int next_to_check;
-        friend class Bitmap<N>;
-
-    public:
-        void reset() { next_to_check = 0; }
-    };
-
-    bool isSet(int idx) { return (data[idx / 64] >> (idx % 64)) & 1; }
-
-    void set(int idx) { data[idx / 64] |= 1UL << (idx % 64); }
-
-    void toggle(int idx) { data[idx / 64] ^= 1UL << (idx % 64); }
-
-    void clear(int idx) { data[idx / 64] &= ~(1UL << (idx % 64)); }
-
-    int scanForNext(Scanner& sc) {
-        uint64_t mask = data[sc.next_to_check];
-
-        if (unlikely(mask == 0L)) {
-            while (true) {
-                sc.next_to_check++;
-                if (sc.next_to_check == N / 64) {
-                    sc.next_to_check = 0;
-                    return -1;
-                }
-                mask = data[sc.next_to_check];
-                if (likely(mask != 0L)) {
-                    break;
-                }
-            }
-        }
-
-        int i = sc.next_to_check;
-
-        int first = __builtin_ctzll(mask);
-        assert(first < 64);
-        assert(data[i] & (1L << first));
-        data[i] ^= (1L << first);
-
-        int idx = first + i * 64;
-        return idx;
+        void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
+        ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
+        cur = (uint8_t*)cur + size;
+        return mrtn;
     }
+
+    bool contains(void* addr) { return (void*)start <= addr && addr < cur; }
 };
 
+constexpr uintptr_t SMALL_ARENA_START = 0x1270000000L;
+constexpr uintptr_t LARGE_ARENA_START = 0x2270000000L;
+constexpr uintptr_t HUGE_ARENA_START = 0x3270000000L;
 
-#define BLOCK_SIZE (4 * 4096)
+
+//
+// The SmallArena allocates objects <= 3584 bytes.
+//
+// it uses segregated-fit allocation, and each block contains free
+// bitmap for objects of a given size (assigned to the block)
+//
+static const size_t sizes[] = {
+    16,  32,  48,  64,  80,  96,   112,  128,  160,  192,  224,  256,  320,  384,
+    448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, // 4096,
+};
+static constexpr size_t NUM_BUCKETS = sizeof(sizes) / sizeof(sizes[0]);
+
+class SmallArena : public Arena<SMALL_ARENA_START> {
+public:
+
+private:
+    template <int N> class Bitmap {
+        static_assert(N % 64 == 0, "");
+
+    private:
+        uint64_t data[N / 64];
+
+    public:
+        void setAllZero() { memset(data, 0, sizeof(data)); }
+
+        struct Scanner {
+        private:
+            int next_to_check;
+            friend class Bitmap<N>;
+
+        public:
+            void reset() { next_to_check = 0; }
+        };
+
+        bool isSet(int idx) { return (data[idx / 64] >> (idx % 64)) & 1; }
+
+        void set(int idx) { data[idx / 64] |= 1UL << (idx % 64); }
+
+        void toggle(int idx) { data[idx / 64] ^= 1UL << (idx % 64); }
+
+        void clear(int idx) { data[idx / 64] &= ~(1UL << (idx % 64)); }
+
+        int scanForNext(Scanner& sc) {
+            uint64_t mask = data[sc.next_to_check];
+
+            if (unlikely(mask == 0L)) {
+                while (true) {
+                    sc.next_to_check++;
+                    if (sc.next_to_check == N / 64) {
+                        sc.next_to_check = 0;
+                        return -1;
+                    }
+                    mask = data[sc.next_to_check];
+                    if (likely(mask != 0L)) {
+                        break;
+                    }
+                }
+            }
+
+            int i = sc.next_to_check;
+
+            int first = __builtin_ctzll(mask);
+            assert(first < 64);
+            assert(data[i] & (1L << first));
+            data[i] ^= (1L << first);
+
+            int idx = first + i * 64;
+            return idx;
+        }
+    };
+
+
+    static constexpr size_t BLOCK_SIZE = 4 * 4096;
+
 #define ATOM_SIZE 16
-static_assert(BLOCK_SIZE % ATOM_SIZE == 0, "");
+    static_assert(BLOCK_SIZE % ATOM_SIZE == 0, "");
 #define ATOMS_PER_BLOCK (BLOCK_SIZE / ATOM_SIZE)
-static_assert(ATOMS_PER_BLOCK % 64 == 0, "");
+    static_assert(ATOMS_PER_BLOCK % 64 == 0, "");
 #define BITFIELD_SIZE (ATOMS_PER_BLOCK / 8)
 #define BITFIELD_ELTS (BITFIELD_SIZE / 8)
 
 #define BLOCK_HEADER_SIZE (BITFIELD_SIZE + 4 * sizeof(void*))
 #define BLOCK_HEADER_ATOMS ((BLOCK_HEADER_SIZE + ATOM_SIZE - 1) / ATOM_SIZE)
 
-struct Atoms {
-    char _data[ATOM_SIZE];
-};
-
-struct Block {
-    union {
-        struct {
-            Block* next, **prev;
-            uint32_t size;
-            uint16_t num_obj;
-            uint8_t min_obj_index;
-            uint8_t atoms_per_obj;
-            Bitmap<ATOMS_PER_BLOCK> isfree;
-            Bitmap<ATOMS_PER_BLOCK>::Scanner next_to_check;
-            void* _header_end[0];
-        };
-        Atoms atoms[ATOMS_PER_BLOCK];
+    struct Atoms {
+        char _data[ATOM_SIZE];
     };
 
-    inline int minObjIndex() const { return min_obj_index; }
+    struct Block {
+        union {
+            struct {
+                Block* next, **prev;
+                uint32_t size;
+                uint16_t num_obj;
+                uint8_t min_obj_index;
+                uint8_t atoms_per_obj;
+                Bitmap<ATOMS_PER_BLOCK> isfree;
+                Bitmap<ATOMS_PER_BLOCK>::Scanner next_to_check;
+                void* _header_end[0];
+            };
+            Atoms atoms[ATOMS_PER_BLOCK];
+        };
 
-    inline int numObjects() const { return num_obj; }
+        inline int minObjIndex() const { return min_obj_index; }
 
-    inline int atomsPerObj() const { return atoms_per_obj; }
+        inline int numObjects() const { return num_obj; }
 
-    static Block* forPointer(void* ptr) { return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE - 1)); }
-};
-static_assert(sizeof(Block) == BLOCK_SIZE, "bad size");
-static_assert(offsetof(Block, _header_end) >= BLOCK_HEADER_SIZE, "bad header size");
-static_assert(offsetof(Block, _header_end) <= BLOCK_HEADER_SIZE, "bad header size");
+        inline int atomsPerObj() const { return atoms_per_obj; }
 
-constexpr const size_t sizes[] = {
-    16,  32,  48,  64,  80,  96,  112, 128,  160,  192,  224,  256,
-    320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048,
-    // 2560, 3072, 3584, // 4096,
-};
-#define NUM_BUCKETS (sizeof(sizes) / sizeof(sizes[0]))
+        static Block* forPointer(void* ptr) { return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE - 1)); }
+    };
+    static_assert(sizeof(Block) == BLOCK_SIZE, "bad size");
+    static_assert(offsetof(Block, _header_end) >= BLOCK_HEADER_SIZE, "bad header size");
+    static_assert(offsetof(Block, _header_end) <= BLOCK_HEADER_SIZE, "bad header size");
 
-struct LargeObj;
-class Heap {
-private:
-    Block* heads[NUM_BUCKETS];
-    Block* full_heads[NUM_BUCKETS];
-    LargeObj* large_head = NULL;
-
-    GCAllocation* __attribute__((__malloc__)) allocSmall(size_t rounded_size, int bucket_idx);
-    GCAllocation* __attribute__((__malloc__)) allocLarge(size_t bytes);
-
-    // DS_DEFINE_MUTEX(lock);
-    DS_DEFINE_SPINLOCK(lock);
-
+    // forward (public) definition of ThreadBlockCache so we can reference it both in this class (privately) and in Heap
+    // (for a friend ref).
     struct ThreadBlockCache {
         Heap* heap;
+        SmallArena* small;
         Block* cache_free_heads[NUM_BUCKETS];
         Block* cache_full_heads[NUM_BUCKETS];
 
-        ThreadBlockCache(Heap* heap) : heap(heap) {
+        ThreadBlockCache(Heap* heap, SmallArena* small) : heap(heap), small(small) {
             memset(cache_free_heads, 0, sizeof(cache_free_heads));
             memset(cache_full_heads, 0, sizeof(cache_full_heads));
         }
         ~ThreadBlockCache();
     };
+
+
+
+    Block* heads[NUM_BUCKETS];
+    Block* full_heads[NUM_BUCKETS];
+
     friend struct ThreadBlockCache;
+
+    Heap* heap;
     // TODO only use thread caches if we're in GRWL mode?
-    threading::PerThreadSet<ThreadBlockCache, Heap*> thread_caches;
+    threading::PerThreadSet<ThreadBlockCache, Heap*, SmallArena*> thread_caches;
+
+
+    Block* alloc_block(uint64_t size, Block** prev);
+    GCAllocation* allocFromBlock(Block* b);
+    Block* claimBlock(size_t rounded_size, Block** free_head);
+    void insertIntoLL(Block** next_pointer, Block* next);
+    void removeFromLL(Block* b);
+    Block** freeChain(Block** head);
+    void getChainStatistics(HeapStatistics* stats, Block** head);
+
+    GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
+    void _free(GCAllocation* al, Block* b);
 
 public:
-    Heap() : thread_caches(this) {}
-
-    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+    SmallArena(Heap* heap) : Arena(), heap(heap), thread_caches(heap, this) {}
 
     GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
-        GCAllocation* rtn;
-        // assert(bytes >= 16);
         if (bytes <= 16)
-            rtn = allocSmall(16, 0);
+            return _alloc(16, 0);
         else if (bytes <= 32)
-            rtn = allocSmall(32, 1);
-        else if (bytes > sizes[NUM_BUCKETS - 1])
-            rtn = allocLarge(bytes);
+            return _alloc(32, 1);
         else {
-            rtn = NULL;
             for (int i = 2; i < NUM_BUCKETS; i++) {
                 if (sizes[i] >= bytes) {
-                    rtn = allocSmall(sizes[i], i);
-                    break;
+                    return _alloc(sizes[i], i);
                 }
             }
+            return NULL;
         }
+    }
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
 
-        return rtn;
+    void free(GCAllocation* al) {
+        Block* b = Block::forPointer(al);
+        _free(al, b);
     }
 
+    void getStatistics(HeapStatistics* stats);
+
+    GCAllocation* allocationFrom(void* ptr);
+    void freeUnmarked();
+};
+
+//
+// The LargeArena allocates objects where 3584 < size <1024*1024 bytes.
+//
+// it maintains a set of size-segregated free lists, and a special
+// free list for larger objects.  If the free list specific to a given
+// size has no entries, we search the large free list.
+//
+class LargeArena : public Arena<LARGE_ARENA_START> {
+    struct LargeFreeChunk {
+        LargeFreeChunk* next_size;
+        size_t size;
+    };
+
+    struct LargeBlock {
+        LargeBlock* next;
+        size_t num_free_chunks;
+        unsigned char* free_chunk_map;
+    };
+
+    struct LargeObj {
+        LargeObj* next, **prev;
+        size_t size;
+        GCAllocation data[0];
+    };
+
+    /*
+     * This shouldn't be much smaller or larger than the largest small size bucket.
+     * Must be at least sizeof (LargeBlock).
+     */
+    static constexpr size_t CHUNK_SIZE = 4096;
+    static constexpr int CHUNK_BITS = 12;
+
+    static_assert(CHUNK_SIZE > sizeof(LargeBlock), "bad large block size");
+
+    static constexpr int BLOCK_SIZE = 1024 * 1024;
+
+    static constexpr int NUM_FREE_LISTS = 32;
+
+    void add_free_chunk(LargeFreeChunk* free_chunks, size_t size);
+    LargeFreeChunk* get_from_size_list(LargeFreeChunk** list, size_t size);
+    LargeObj* _allocInternal(size_t size);
+    void _freeInternal(LargeObj* obj, size_t size);
+    void _free(LargeObj* obj);
+
+    LargeObj* head;
+    LargeBlock* blocks;
+    LargeFreeChunk* free_lists[NUM_FREE_LISTS]; /* 0 is for larger sizes */
+
+    Heap* heap;
+
+public:
+    LargeArena(Heap* heap) : head(NULL), blocks(NULL), heap(heap) {}
+
+    /* Largest object that can be allocated in a large block. */
+    static constexpr size_t ALLOC_SIZE_LIMIT = BLOCK_SIZE - CHUNK_SIZE - sizeof(LargeObj);
+
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* alloc);
 
-    // not thread safe:
-    GCAllocation* getAllocationFromInteriorPointer(void* ptr);
-    // not thread safe:
     void freeUnmarked();
+
+    GCAllocation* allocationFrom(void* ptr);
+    void getStatistics(HeapStatistics* stats);
+};
+
+// The HugeArena allocates objects where size > 1024*1024 bytes.
+//
+// Objects are allocated with individual mmap() calls, and kept in a
+// linked list.  They are not reused.
+class HugeArena : public Arena<HUGE_ARENA_START> {
+    struct HugeObj {
+        HugeObj* next, **prev;
+        size_t obj_size;
+        GCAllocation data[0];
+
+        int mmap_size() {
+            size_t total_size = obj_size + sizeof(HugeObj);
+            total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+            return total_size;
+        }
+
+        int capacity() { return mmap_size() - sizeof(HugeObj); }
+
+        static HugeObj* fromAllocation(GCAllocation* alloc) {
+            char* rtn = (char*)alloc - offsetof(HugeObj, data);
+            assert((uintptr_t)rtn % PAGE_SIZE == 0);
+            return reinterpret_cast<HugeObj*>(rtn);
+        }
+    };
+
+    void _freeHugeObj(HugeObj* lobj);
+
+    HugeObj* head;
+
+    Heap* heap;
+
+public:
+    HugeArena(Heap* heap) : heap(heap) {}
+
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+    void free(GCAllocation* alloc);
+
+    void freeUnmarked();
+
+    GCAllocation* allocationFrom(void* ptr);
+    void getStatistics(HeapStatistics* stats);
+};
+
+
+class Heap {
+private:
+    SmallArena small_arena;
+    LargeArena large_arena;
+    HugeArena huge_arena;
+
+    friend class SmallArena;
+    friend class LargeArena;
+    friend class HugeArena;
+
+    // DS_DEFINE_MUTEX(lock);
+    DS_DEFINE_SPINLOCK(lock);
+
+public:
+    Heap() : small_arena(this), large_arena(this), huge_arena(this) {}
+
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes) {
+        if (large_arena.contains(alloc)) {
+            return large_arena.realloc(alloc, bytes);
+        } else if (huge_arena.contains(alloc)) {
+            return huge_arena.realloc(alloc, bytes);
+        }
+
+        assert(small_arena.contains(alloc));
+        return small_arena.realloc(alloc, bytes);
+    }
+
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
+        if (bytes > LargeArena::ALLOC_SIZE_LIMIT)
+            return huge_arena.alloc(bytes);
+        else if (bytes > sizes[NUM_BUCKETS - 1])
+            return large_arena.alloc(bytes);
+        else
+            return small_arena.alloc(bytes);
+    }
+
+    void destroyContents(GCAllocation* alloc);
+
+    void free(GCAllocation* alloc) {
+        destroyContents(alloc);
+
+        if (large_arena.contains(alloc)) {
+            large_arena.free(alloc);
+            return;
+        }
+
+        if (huge_arena.contains(alloc)) {
+            huge_arena.free(alloc);
+            return;
+        }
+
+        assert(small_arena.contains(alloc));
+        small_arena.free(alloc);
+    }
+
+    // not thread safe:
+    GCAllocation* getAllocationFromInteriorPointer(void* ptr) {
+        if (large_arena.contains(ptr)) {
+            return large_arena.allocationFrom(ptr);
+        } else if (huge_arena.contains(ptr)) {
+            return huge_arena.allocationFrom(ptr);
+        } else if (small_arena.contains(ptr)) {
+            return small_arena.allocationFrom(ptr);
+        }
+
+        return NULL;
+    }
+    // not thread safe:
+    void freeUnmarked() {
+        small_arena.freeUnmarked();
+        large_arena.freeUnmarked();
+        huge_arena.freeUnmarked();
+    }
 
     void dumpHeapStatistics();
 };
