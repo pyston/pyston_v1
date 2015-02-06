@@ -154,57 +154,6 @@ extern "C" void PyObject_Free(void* p) noexcept {
     ASSERT(0, "I think this is good enough but I'm not sure; should test");
 }
 
-extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {
-    RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
-    RELEASE_ASSERT(args->cls == tuple_cls, "");
-
-    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
-    // won't end up doing a GIL check?
-    // threading::GLDemoteRegion _gil_demote;
-
-    try {
-        Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
-        return r;
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
-    try {
-        return len(o)->n;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return -1;
-    }
-}
-
-extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
-    try {
-        return getiter(o);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
-    try {
-        return repr(obj);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
     PyObject* empty = NULL;
     PyObject* result = NULL;

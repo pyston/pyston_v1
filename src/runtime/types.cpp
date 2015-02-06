@@ -687,6 +687,11 @@ extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
     return createSlice(start, stop, step);
 }
 
+static Box* instancemethodCall(BoxedInstanceMethod* self, Box* args, Box* kwargs) {
+    RELEASE_ASSERT(self->cls == instancemethod_cls, "");
+    Py_FatalError("unimplemented");
+}
+
 Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
     RELEASE_ASSERT(self->cls == instancemethod_cls, "");
 
@@ -1200,6 +1205,8 @@ void setupRuntime() {
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
     instancemethod_cls->giveAttr(
         "__get__", new BoxedFunction(boxRTFunction((void*)instancemethodGet, UNKNOWN, 3, 0, false, false)));
+    instancemethod_cls->giveAttr(
+        "__call__", new BoxedFunction(boxRTFunction((void*)instancemethodCall, UNKNOWN, 1, 0, true, true)));
     instancemethod_cls->giveAttr(
         "im_func", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedInstanceMethod, func)));
     instancemethod_cls->giveAttr(

@@ -606,6 +606,13 @@ class BoxedException : public Box {
 public:
     HCAttrs attrs;
     BoxedException() {}
+
+    static Box* __reduce__(Box* self) {
+        RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
+        BoxedException* exc = static_cast<BoxedException*>(self);
+
+        return new BoxedTuple({ self->cls, EmptyTuple, makeAttrWrapper(self) });
+    }
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
@@ -864,6 +871,8 @@ public:
         self->filename = filename;
         return None;
     }
+
+    static Box* __reduce__(Box* self) { Py_FatalError("unimplemented"); }
 
     static PyObject* __str__(BoxedEnvironmentError* self) noexcept {
         PyObject* rtnval = NULL;
