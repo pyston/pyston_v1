@@ -1578,9 +1578,16 @@ public:
 
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
         static const std::string attr("__nonzero__");
+
+        bool no_attribute = false;
         ConcreteCompilerVariable* called_constant
-            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
-        if (called_constant)
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, &no_attribute);
+
+        // TODO: if no_attribute, we could optimize by continuing the dispatch process and trying
+        // to call __len__ (and if that doesn't exist, returning a static true).
+        // For now, I'd rather not duplicate the dispatch behavior between here and objmodel.cpp::nonzero.
+
+        if (called_constant && !no_attribute)
             return called_constant;
 
         if (cls == bool_cls) {
