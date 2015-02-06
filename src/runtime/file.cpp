@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/file.h"
+
 #include <cstdio>
 #include <cstring>
 #include <sstream>
@@ -26,16 +28,120 @@
 
 namespace pyston {
 
+/* Bits in f_newlinetypes */
+#define NEWLINE_UNKNOWN 0 /* No newline seen, yet */
+#define NEWLINE_CR 1      /* \r newline seen */
+#define NEWLINE_LF 2      /* \n newline seen */
+#define NEWLINE_CRLF 4    /* \r\n newline seen */
+
+#define FILE_BEGIN_ALLOW_THREADS(fobj)                                                                                 \
+    {                                                                                                                  \
+    /*fobj->unlocked_count++;*/                                                                                        \
+    Py_BEGIN_ALLOW_THREADS
+
+#define FILE_END_ALLOW_THREADS(fobj)                                                                                   \
+    Py_END_ALLOW_THREADS                                                                                               \
+    /*fobj->unlocked_count--;*/                                                                                        \
+    /*assert(fobj->unlocked_count >= 0);*/                                                                             \
+    }
+
+static BoxedFile* dircheck(BoxedFile* f) {
+#if defined(HAVE_FSTAT) && defined(S_IFDIR) && defined(EISDIR)
+    struct stat buf;
+    if (f->f_fp == NULL)
+        return f;
+    if (fstat(fileno(f->f_fp), &buf) == 0 && S_ISDIR(buf.st_mode)) {
+        char* msg = strerror(EISDIR);
+        PyObject* exc = PyObject_CallFunction(PyExc_IOError, "(isO)", EISDIR, msg, f->f_name);
+        PyErr_SetObject(PyExc_IOError, exc);
+        Py_XDECREF(exc);
+        return NULL;
+    }
+#endif
+    return f;
+}
+
+static PyObject* fill_file_fields(BoxedFile* f, FILE* fp, PyObject* name, const char* mode, int (*close)(FILE*)) {
+    assert(name != NULL);
+    assert(f != NULL);
+    assert(PyFile_Check(f));
+    assert(f->f_fp == NULL);
+
+    Py_DECREF(f->f_name);
+    Py_DECREF(f->f_mode);
+    Py_DECREF(f->f_encoding);
+    Py_DECREF(f->f_errors);
+
+    Py_INCREF(name);
+    f->f_name = name;
+
+    f->f_mode = PyString_FromString(mode);
+
+    f->f_close = close;
+    f->f_softspace = 0;
+    f->f_binary = strchr(mode, 'b') != NULL;
+    f->f_buf = NULL;
+    f->f_univ_newline = (strchr(mode, 'U') != NULL);
+    f->f_newlinetypes = NEWLINE_UNKNOWN;
+    f->f_skipnextlf = 0;
+    Py_INCREF(Py_None);
+    f->f_encoding = Py_None;
+    Py_INCREF(Py_None);
+    f->f_errors = Py_None;
+    f->readable = f->writable = 0;
+    if (strchr(mode, 'r') != NULL || f->f_univ_newline)
+        f->readable = 1;
+    if (strchr(mode, 'w') != NULL || strchr(mode, 'a') != NULL)
+        f->writable = 1;
+    if (strchr(mode, '+') != NULL)
+        f->readable = f->writable = 1;
+
+    if (f->f_mode == NULL)
+        return NULL;
+    f->f_fp = fp;
+    f = dircheck(f);
+    return (PyObject*)f;
+}
+
+BoxedFile::BoxedFile(FILE* f, std::string fname, const char* fmode, int (*close)(FILE*))
+    // Zero out fields not set by fill_file_fields:
+    : f_fp(NULL),
+      f_bufend(NULL),
+      f_bufptr(0),
+      f_setbuf(0),
+      unlocked_count(0) {
+    Box* r = fill_file_fields(this, f, new BoxedString(fname), fmode, close);
+    checkAndThrowCAPIException();
+    assert(r == this);
+}
+
 Box* fileRepr(BoxedFile* self) {
     assert(self->cls == file_cls);
 
-    void* addr = static_cast<void*>(self->f);
+    void* addr = static_cast<void*>(self->f_fp);
     std::ostringstream repr;
 
-    repr << "<" << (self->closed ? "closed" : "open") << " file '" << self->fname << "', ";
-    repr << "mode '" << self->fmode << "' at " << addr << ">";
+    repr << "<" << (self->f_fp ? "open" : "closed") << " file '" << PyString_AsString(self->f_name) << "', ";
+    repr << "mode '" << PyString_AsString(self->f_mode) << "' at " << addr << ">";
 
     return boxString(repr.str());
+}
+
+static void checkOpen(BoxedFile* self) {
+    if (!self->f_fp)
+        raiseExcHelper(IOError, "I/O operation on closed file");
+}
+
+static void checkReadable(BoxedFile* self) {
+    checkOpen(self);
+    if (!self->readable)
+        raiseExcHelper(IOError, "File not open for reading");
+}
+
+static void checkWritable(BoxedFile* self) {
+    checkOpen(self);
+    if (!self->writable)
+        raiseExcHelper(IOError, "File not open for writing");
 }
 
 Box* fileRead(BoxedFile* self, Box* _size) {
@@ -46,10 +152,7 @@ Box* fileRead(BoxedFile* self, Box* _size) {
     }
     int64_t size = static_cast<BoxedInt*>(_size)->n;
 
-    if (self->closed) {
-        fprintf(stderr, "IOError: file not open for reading\n");
-        raiseExcHelper(IOError, "");
-    }
+    checkReadable(self);
 
     std::ostringstream os("");
 
@@ -60,9 +163,9 @@ Box* fileRead(BoxedFile* self, Box* _size) {
     while (read < size) {
         const int BUF_SIZE = 1024;
         char buf[BUF_SIZE];
-        size_t more_read = fread(buf, 1, std::min((i64)BUF_SIZE, size - read), self->f);
+        size_t more_read = fread(buf, 1, std::min((i64)BUF_SIZE, size - read), self->f_fp);
         if (more_read == 0) {
-            ASSERT(!ferror(self->f), "%d", ferror(self->f));
+            ASSERT(!ferror(self->f_fp), "%d", ferror(self->f_fp));
             break;
         }
 
@@ -76,11 +179,13 @@ Box* fileRead(BoxedFile* self, Box* _size) {
 Box* fileReadline1(BoxedFile* self) {
     assert(self->cls == file_cls);
 
+    checkReadable(self);
+
     std::ostringstream os("");
 
     while (true) {
         char c;
-        int nread = fread(&c, 1, 1, self->f);
+        int nread = fread(&c, 1, 1, self->f_fp);
         if (nread == 0)
             break;
         os << c;
@@ -94,10 +199,7 @@ Box* fileReadline1(BoxedFile* self) {
 Box* fileWrite(BoxedFile* self, Box* val) {
     assert(self->cls == file_cls);
 
-    if (self->closed) {
-        raiseExcHelper(IOError, "file is closed");
-    }
-
+    checkWritable(self);
 
     if (val->cls == str_cls) {
         const std::string& s = static_cast<BoxedString*>(val)->s;
@@ -109,12 +211,12 @@ Box* fileWrite(BoxedFile* self, Box* val) {
             // char buf[BUF_SIZE];
             // int to_write = std::min(BUF_SIZE, size - written);
             // memcpy(buf, s.c_str() + written, to_write);
-            // size_t new_written = fwrite(buf, 1, to_write, self->f);
+            // size_t new_written = fwrite(buf, 1, to_write, self->f_fp);
 
-            size_t new_written = fwrite(s.c_str() + written, 1, size - written, self->f);
+            size_t new_written = fwrite(s.c_str() + written, 1, size - written, self->f_fp);
 
             if (!new_written) {
-                int error = ferror(self->f);
+                int error = ferror(self->f_fp);
                 fprintf(stderr, "IOError %d\n", error);
                 raiseExcHelper(IOError, "");
             }
@@ -132,24 +234,66 @@ Box* fileWrite(BoxedFile* self, Box* val) {
 Box* fileFlush(BoxedFile* self) {
     RELEASE_ASSERT(self->cls == file_cls, "");
 
-    if (self->closed)
-        raiseExcHelper(IOError, "file is closed");
+    checkOpen(self);
+    int res;
 
-    fflush(self->f);
+    FILE_BEGIN_ALLOW_THREADS(self);
+    errno = 0;
+    res = fflush(self->f_fp);
+    FILE_END_ALLOW_THREADS(self);
+
+    if (res != 0) {
+        PyErr_SetFromErrno(IOError);
+        clearerr(self->f_fp);
+        throwCAPIException();
+    }
     return None;
+}
+
+static PyObject* close_the_file(BoxedFile* f) {
+    int sts = 0;
+    int (*local_close)(FILE*);
+    FILE* local_fp = f->f_fp;
+    char* local_setbuf = f->f_setbuf;
+    if (local_fp != NULL) {
+        local_close = f->f_close;
+        if (local_close != NULL && f->unlocked_count > 0) {
+            PyErr_SetString(PyExc_IOError, "close() called during concurrent "
+                                           "operation on the same file object.");
+            return NULL;
+        }
+        /* NULL out the FILE pointer before releasing the GIL, because
+         * it will not be valid anymore after the close() function is
+         * called. */
+        f->f_fp = NULL;
+        if (local_close != NULL) {
+            /* Issue #9295: must temporarily reset f_setbuf so that another
+               thread doesn't free it when running file_close() concurrently.
+               Otherwise this close() will crash when flushing the buffer. */
+            f->f_setbuf = NULL;
+            Py_BEGIN_ALLOW_THREADS errno = 0;
+            sts = (*local_close)(local_fp);
+            Py_END_ALLOW_THREADS f->f_setbuf = local_setbuf;
+            if (sts == EOF)
+                return PyErr_SetFromErrno(PyExc_IOError);
+            if (sts != 0)
+                return PyInt_FromLong((long)sts);
+        }
+    }
+    Py_RETURN_NONE;
 }
 
 Box* fileClose(BoxedFile* self) {
     assert(self->cls == file_cls);
-    if (self->closed) {
-        fprintf(stderr, "IOError: file is closed\n");
-        raiseExcHelper(IOError, "");
+
+    PyObject* sts = close_the_file(self);
+    if (sts) {
+        PyMem_Free(self->f_setbuf);
+        self->f_setbuf = NULL;
+    } else {
+        throwCAPIException();
     }
-
-    fclose(self->f);
-    self->closed = true;
-
-    return None;
+    return sts;
 }
 
 Box* fileEnter(BoxedFile* self) {
@@ -169,7 +313,27 @@ Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
 
 Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
     assert(cls == file_cls);
-    return open(s, m);
+
+    if (s->cls != str_cls) {
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(s));
+        raiseExcHelper(TypeError, "");
+    }
+    if (m->cls != str_cls) {
+        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(m));
+        raiseExcHelper(TypeError, "");
+    }
+
+    const std::string& fn = static_cast<BoxedString*>(s)->s;
+    const std::string& mode = static_cast<BoxedString*>(m)->s;
+
+    FILE* f = fopen(fn.c_str(), mode.c_str());
+    if (!f) {
+        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
+        throwCAPIException();
+        abort(); // unreachable;
+    }
+
+    return new BoxedFile(f, fn, PyString_AsString(m));
 }
 
 Box* fileIterNext(BoxedFile* s) {
@@ -177,9 +341,9 @@ Box* fileIterNext(BoxedFile* s) {
 }
 
 bool fileEof(BoxedFile* self) {
-    char ch = fgetc(self->f);
-    ungetc(ch, self->f);
-    return feof(self->f);
+    char ch = fgetc(self->f_fp);
+    ungetc(ch, self->f_fp);
+    return feof(self->f_fp);
 }
 
 Box* fileIterHasNext(Box* s) {
@@ -191,8 +355,8 @@ Box* fileIterHasNext(Box* s) {
 extern "C" void PyFile_SetFP(PyObject* _f, FILE* fp) noexcept {
     assert(_f->cls == file_cls);
     BoxedFile* f = static_cast<BoxedFile*>(_f);
-    assert(f->f == NULL);
-    f->f = fp;
+    assert(f->f_fp == NULL);
+    f->f_fp = fp;
 }
 
 extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) noexcept {
@@ -204,7 +368,7 @@ extern "C" FILE* PyFile_AsFile(PyObject* f) noexcept {
     if (!f || !PyFile_Check(f))
         return NULL;
 
-    return static_cast<BoxedFile*>(f)->f;
+    return static_cast<BoxedFile*>(f)->f_fp;
 }
 
 extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) noexcept {
@@ -219,17 +383,6 @@ extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) noexcept 
         return -1;
     }
 }
-
-#define FILE_BEGIN_ALLOW_THREADS(fobj)                                                                                 \
-    {                                                                                                                  \
-    /*fobj->unlocked_count++;*/                                                                                        \
-    Py_BEGIN_ALLOW_THREADS
-
-#define FILE_END_ALLOW_THREADS(fobj)                                                                                   \
-    Py_END_ALLOW_THREADS                                                                                               \
-    /*fobj->unlocked_count--;*/                                                                                        \
-    /*assert(fobj->unlocked_count >= 0);*/                                                                             \
-    }
 
 static PyObject* err_closed(void) noexcept {
     PyErr_SetString(PyExc_ValueError, "I/O operation on closed file");
@@ -269,7 +422,7 @@ extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) noexcept {
     assert(f->cls == file_cls);
     if (bufsize >= 0) {
         if (bufsize == 0) {
-            setvbuf(static_cast<BoxedFile*>(f)->f, NULL, _IONBF, 0);
+            setvbuf(static_cast<BoxedFile*>(f)->f_fp, NULL, _IONBF, 0);
         } else {
             Py_FatalError("unimplemented");
         }
@@ -387,7 +540,7 @@ void setupFile() {
     file_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)fileIterNext, STR, 1)));
 
     file_cls->giveAttr("softspace",
-                       new BoxedMemberDescriptor(BoxedMemberDescriptor::BYTE, offsetof(BoxedFile, softspace)));
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::INT, offsetof(BoxedFile, f_softspace)));
 
     file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 3, 1, false, false),
                                                     { boxStrConstant("r") }));

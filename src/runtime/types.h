@@ -404,19 +404,6 @@ public:
 };
 extern "C" BoxedTuple* EmptyTuple;
 
-class BoxedFile : public Box {
-public:
-    FILE* f;
-    std::string fname;
-    std::string fmode;
-    bool closed;
-    bool softspace;
-    BoxedFile(FILE* f, std::string fname, std::string fmode) __attribute__((visibility("default")))
-    : f(f), fname(fname), fmode(fmode), closed(false), softspace(false) {}
-
-    DEFAULT_CLASS(file_cls);
-};
-
 struct PyHasher {
     size_t operator()(Box*) const;
 };

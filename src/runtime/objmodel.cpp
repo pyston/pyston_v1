@@ -41,6 +41,7 @@
 #include "gc/heap.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/file.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
 #include "runtime/ics.h"
@@ -173,10 +174,11 @@ extern "C" bool softspace(Box* b, bool newval) {
     assert(b);
 
     if (isSubclass(b->cls, file_cls)) {
-        bool& ss = static_cast<BoxedFile*>(b)->softspace;
-        bool r = ss;
+        int& ss = static_cast<BoxedFile*>(b)->f_softspace;
+        int r = ss;
         ss = newval;
-        return r;
+        assert(r == 0 || r == 1);
+        return (bool)r;
     }
 
     bool r;

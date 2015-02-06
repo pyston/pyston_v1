@@ -22,6 +22,7 @@
 #include "codegen/unwinding.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/file.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/int.h"
 #include "runtime/types.h"

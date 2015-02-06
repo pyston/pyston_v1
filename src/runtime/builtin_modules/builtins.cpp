@@ -28,6 +28,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
 #include "runtime/inline/xrange.h"
@@ -329,27 +330,8 @@ extern "C" Box* id(Box* arg) {
 
 Box* open(Box* arg1, Box* arg2) {
     assert(arg2);
-
-    if (arg1->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg1));
-        raiseExcHelper(TypeError, "");
-    }
-    if (arg2->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(arg2));
-        raiseExcHelper(TypeError, "");
-    }
-
-    const std::string& fn = static_cast<BoxedString*>(arg1)->s;
-    const std::string& mode = static_cast<BoxedString*>(arg2)->s;
-
-    FILE* f = fopen(fn.c_str(), mode.c_str());
-    if (!f) {
-        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
-        checkAndThrowCAPIException();
-        abort(); // unreachable;
-    }
-
-    return new BoxedFile(f, fn, mode);
+    // This could be optimized quite a bit if it ends up being important:
+    return runtimeCall(file_cls, ArgPassSpec(2), arg1, arg2, NULL, NULL, NULL);
 }
 
 extern "C" Box* chr(Box* arg) {
@@ -872,6 +854,9 @@ public:
     static Box* __init__(BoxedEnvironmentError* self, Box* errno_, Box* strerror, Box** _args) {
         Box* filename = _args[0];
 
+        if (!errno_)
+            return None;
+
         RELEASE_ASSERT(isSubclass(self->cls, EnvironmentError), "");
 
         self->myerrno = errno_;
@@ -1038,8 +1023,8 @@ void setupBuiltins() {
 
     EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
     EnvironmentError->giveAttr(
-        "__init__",
-        new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 1, false, false), { NULL }));
+        "__init__", new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 3, false, false),
+                                      { NULL, NULL, NULL }));
     EnvironmentError->giveAttr(
         "errno", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedEnvironmentError, myerrno)));
     EnvironmentError->giveAttr("strerror", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
