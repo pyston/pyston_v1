@@ -1139,6 +1139,8 @@ void setupRuntime() {
 
     closure_cls->freeze();
 
+    setupCAPI();
+
     setupBool();
     setupInt();
     setupLong();
@@ -1205,8 +1207,6 @@ void setupRuntime() {
     setupBuiltins();
     setupThread();
     setupGC();
-
-    setupCAPI();
 
     PyType_Ready(&PyCapsule_Type);
 
