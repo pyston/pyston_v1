@@ -39,6 +39,9 @@ with open('README.md') as f:
     print lines[:5]
     print lines[-5:]
 
+with open('README.md') as f:
+    print len(f.readlines())
+
 # Check that opening a non-existent file results in an IOError.
 try:
    f = open('this-should-definitely-not-exist.txt')
@@ -46,6 +49,6 @@ except IOError as e:
    print str(e)
 
 f = open("/dev/null", "w")
-f.write("hello world")
+print f.write("hello world")
 print f.flush()
-f.close()
+print f.close()

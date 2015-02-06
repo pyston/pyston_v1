@@ -27,6 +27,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/iterobject.h"
 #include "runtime/list.h"
@@ -1138,6 +1139,8 @@ void setupRuntime() {
 
     closure_cls->freeze();
 
+    setupCAPI();
+
     setupBool();
     setupInt();
     setupLong();
@@ -1204,8 +1207,6 @@ void setupRuntime() {
     setupBuiltins();
     setupThread();
     setupGC();
-
-    setupCAPI();
 
     PyType_Ready(&PyCapsule_Type);
 

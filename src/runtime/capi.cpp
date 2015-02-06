@@ -79,6 +79,10 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     return new BoxedWrapperObject(self, inst);
 }
 
+extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssize_t* buffer_len) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 // copied from CPython's getargs.c:
 extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_ssize_t len, int readonly,
                                  int flags) noexcept {
