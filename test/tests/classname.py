@@ -23,7 +23,7 @@ def del_name(cls):
         del cls.__name__
     except Exception as e:
         print type(e), e
-    print cls
+    print cls.__name__
 
 set_name(int, "bob")
 #TODO implement __del__ for getset descriptors
