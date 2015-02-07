@@ -68,6 +68,7 @@ void teardownDescr();
 
 void setupSys();
 void setupBuiltins();
+void setupPyston();
 void setupThread();
 void setupSysEnd();
 
