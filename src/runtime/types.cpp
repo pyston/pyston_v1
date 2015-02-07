@@ -1241,6 +1241,7 @@ void setupRuntime() {
     setupBuiltins();
     setupThread();
     setupGC();
+    setupPyston();
 
     PyType_Ready(&PyCapsule_Type);
 
