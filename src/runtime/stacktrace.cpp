@@ -213,10 +213,15 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
         BoxedClass* c = static_cast<BoxedClass*>(arg0);
         if (isSubclass(c, BaseException)) {
             Box* exc_obj;
-            if (arg1 != None)
-                exc_obj = exceptionNew2(c, arg1);
-            else
-                exc_obj = exceptionNew1(c);
+
+            if (isSubclass(arg1->cls, BaseException)) {
+                exc_obj = arg1;
+                c = exc_obj->cls;
+            } else if (arg1 != None) {
+                exc_obj = runtimeCall(c, ArgPassSpec(1), arg1, NULL, NULL, NULL, NULL);
+            } else {
+                exc_obj = runtimeCall(c, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            }
 
             raiseRaw(ExcInfo(c, exc_obj, arg2));
         }

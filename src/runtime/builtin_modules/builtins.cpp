@@ -861,9 +861,6 @@ public:
     static Box* __init__(BoxedEnvironmentError* self, Box* errno_, Box* strerror, Box** _args) {
         Box* filename = _args[0];
 
-        if (!errno_)
-            return None;
-
         RELEASE_ASSERT(isSubclass(self->cls, EnvironmentError), "");
 
         self->myerrno = errno_;
