@@ -1028,6 +1028,11 @@ void setupBuiltins() {
     PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
     EOFError = makeBuiltinException(StandardError, "EOFError");
 
+    BaseException->giveAttr("__reduce__",
+                            new BoxedFunction(boxRTFunction((void*)BoxedException::__reduce__, UNKNOWN, 1)));
+    EnvironmentError->giveAttr("__reduce__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__reduce__, UNKNOWN, 1)));
+
     EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
     EnvironmentError->giveAttr(
         "__init__", new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 3, false, false),

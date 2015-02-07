@@ -233,3 +233,17 @@ def f13():
         print sys.exc_info()[0]
 f13()
 
+def f14():
+    try:
+        1/0
+    except Exception:
+        a, b, c = sys.exc_info()
+
+        for i in xrange(5):
+            try:
+                (i)[0]
+            except Exception:
+                pass
+
+        raise a, b, c
+f14()
