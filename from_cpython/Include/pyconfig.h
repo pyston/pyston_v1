@@ -46,6 +46,7 @@
 #define HAVE_EPOLL 1
 #define HAVE_POLL 1
 #define HAVE_SELECT 1
+#define HAVE_ALARM 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"

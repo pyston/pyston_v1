@@ -109,6 +109,18 @@ static uint64_t asUnsignedLong(BoxedLong* self) {
 }
 
 extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) noexcept {
+    assert(vv);
+
+    if (vv->cls == int_cls) {
+        long val = PyInt_AsLong(vv);
+        if (val < 0) {
+            PyErr_SetString(PyExc_OverflowError, "can't convert negative value "
+                                                 "to unsigned long");
+            return (unsigned long)-1;
+        }
+        return val;
+    }
+
     RELEASE_ASSERT(PyLong_Check(vv), "");
     BoxedLong* l = static_cast<BoxedLong*>(vv);
 

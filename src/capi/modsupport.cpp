@@ -218,6 +218,10 @@ extern "C" PyObject* Py_VaBuildValue(const char* format, va_list va) noexcept {
     return va_build_value(format, va, 0);
 }
 
+extern "C" PyObject* _Py_VaBuildValue_SizeT(const char* format, va_list va) noexcept {
+    return va_build_value(format, va, FLAG_SIZE_T);
+}
+
 extern "C" PyObject* _Py_BuildValue_SizeT(const char* fmt, ...) noexcept {
     va_list ap;
     va_start(ap, fmt);

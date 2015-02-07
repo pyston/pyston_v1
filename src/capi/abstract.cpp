@@ -284,6 +284,116 @@ extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) noexc
     return tmp;
 }
 
+extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {
+    RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
+    RELEASE_ASSERT(args->cls == tuple_cls, "");
+
+    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
+    // won't end up doing a GIL check?
+    // threading::GLDemoteRegion _gil_demote;
+
+    try {
+        Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
+        return r;
+    } catch (ExcInfo e) {
+        Py_FatalError("unimplemented");
+    }
+}
+
+static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
+    PyObject* retval;
+
+    if (args == NULL)
+        return NULL;
+
+    if (!PyTuple_Check(args)) {
+        PyObject* a;
+
+        a = PyTuple_New(1);
+        if (a == NULL) {
+            Py_DECREF(args);
+            return NULL;
+        }
+        PyTuple_SET_ITEM(a, 0, args);
+        args = a;
+    }
+    retval = PyObject_Call(callable, args, NULL);
+
+    Py_DECREF(args);
+
+    return retval;
+}
+
+extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) noexcept {
+    // TODO it looks like this could be made much more efficient by calling our callattr(), but
+    // I haven't taken the time to verify that that has the same behavior
+
+    va_list va;
+    PyObject* args;
+    PyObject* func = NULL;
+    PyObject* retval = NULL;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = PyObject_GetAttrString(o, name);
+    if (func == NULL) {
+        PyErr_SetString(PyExc_AttributeError, name);
+        return 0;
+    }
+
+    if (!PyCallable_Check(func)) {
+        type_error("attribute of type '%.200s' is not callable", func);
+        goto exit;
+    }
+
+    if (format && *format) {
+        va_start(va, format);
+        args = _Py_VaBuildValue_SizeT(format, va);
+        va_end(va);
+    } else
+        args = PyTuple_New(0);
+
+    retval = call_function_tail(func, args);
+
+exit:
+    /* args gets consumed in call_function_tail */
+    Py_XDECREF(func);
+
+    return retval;
+}
+
+extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
+    try {
+        return len(o)->n;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+}
+
+extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
+    try {
+        return getiter(o);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
+    try {
+        return repr(obj);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 static int recursive_issubclass(PyObject* derived, PyObject* cls) noexcept {
     int retval;
 
@@ -506,6 +616,46 @@ extern "C" PyObject* PySequence_List(PyObject* v) noexcept {
 }
 
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, char* format, ...) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyMapping_Check(PyObject* o) noexcept {
+    if (o && PyInstance_Check(o))
+        return PyObject_HasAttrString(o, "__getitem__");
+
+    return o && o->cls->tp_as_mapping && o->cls->tp_as_mapping->mp_subscript
+           && !(o->cls->tp_as_sequence && o->cls->tp_as_sequence->sq_slice);
+}
+
+extern "C" Py_ssize_t PyMapping_Size(PyObject* o) noexcept {
+    PyMappingMethods* m;
+
+    if (o == NULL) {
+        null_error();
+        return -1;
+    }
+
+    m = o->cls->tp_as_mapping;
+    if (m && m->mp_length)
+        return m->mp_length(o);
+
+    type_error("object of type '%.200s' has no len()", o);
+    return -1;
+}
+
+extern "C" int PyMapping_HasKeyString(PyObject* o, char* key) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }
 }

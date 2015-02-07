@@ -606,6 +606,13 @@ class BoxedException : public Box {
 public:
     HCAttrs attrs;
     BoxedException() {}
+
+    static Box* __reduce__(Box* self) {
+        RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
+        BoxedException* exc = static_cast<BoxedException*>(self);
+
+        return new BoxedTuple({ self->cls, EmptyTuple, makeAttrWrapper(self) });
+    }
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
@@ -854,9 +861,6 @@ public:
     static Box* __init__(BoxedEnvironmentError* self, Box* errno_, Box* strerror, Box** _args) {
         Box* filename = _args[0];
 
-        if (!errno_)
-            return None;
-
         RELEASE_ASSERT(isSubclass(self->cls, EnvironmentError), "");
 
         self->myerrno = errno_;
@@ -864,6 +868,8 @@ public:
         self->filename = filename;
         return None;
     }
+
+    static Box* __reduce__(Box* self) { Py_FatalError("unimplemented"); }
 
     static PyObject* __str__(BoxedEnvironmentError* self) noexcept {
         PyObject* rtnval = NULL;
@@ -1021,6 +1027,11 @@ void setupBuiltins() {
     NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
     PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
     EOFError = makeBuiltinException(StandardError, "EOFError");
+
+    BaseException->giveAttr("__reduce__",
+                            new BoxedFunction(boxRTFunction((void*)BoxedException::__reduce__, UNKNOWN, 1)));
+    EnvironmentError->giveAttr("__reduce__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__reduce__, UNKNOWN, 1)));
 
     EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
     EnvironmentError->giveAttr(
