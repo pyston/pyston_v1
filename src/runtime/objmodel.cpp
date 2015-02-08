@@ -1523,6 +1523,38 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     raiseAttributeError(obj, attr);
 }
 
+bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewriteArgs* rewrite_args,
+                                   RewriterVar* r_descr, const std::string& attr_name) {
+
+    // Special case: getset descriptor
+    if (descr->cls == getset_cls) {
+        BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
+
+        // TODO type checking goes here
+        if (getset_descr->set == NULL) {
+            raiseExcHelper(AttributeError, "attribute '%s' of '%s' object is not writable", attr_name.c_str(),
+                           getTypeName(getset_descr));
+        }
+
+        if (rewrite_args) {
+            RewriterVar* r_obj = rewrite_args->obj;
+            RewriterVar* r_val = rewrite_args->attrval;
+
+            r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, set), (intptr_t)getset_descr->set);
+            RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
+            rewrite_args->rewriter->call(
+                /* can_call_into_python */ true, (void*)getset_descr->set, { r_obj, r_val, r_closure });
+            rewrite_args->out_success = true;
+        }
+
+        getset_descr->set(obj, val, getset_descr->closure);
+
+        return true;
+    }
+
+    return false;
+}
+
 void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
 
@@ -1549,6 +1581,12 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
     Box* _set_ = NULL;
     RewriterVar* r_set = NULL;
     if (descr) {
+        bool special_case_worked = dataDescriptorSetSpecialCases(obj, val, descr, rewrite_args, r_descr, attr);
+        if (special_case_worked) {
+            // We don't need to to the invalidation stuff in this case.
+            return;
+        }
+
         if (rewrite_args) {
             RewriterVar* r_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
             GetattrRewriteArgs trewrite_args(rewrite_args->rewriter, r_cls, Location::any());
@@ -1578,6 +1616,9 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         } else {
             runtimeCallInternal(_set_, NULL, ArgPassSpec(3), descr, obj, val, NULL, NULL);
         }
+
+        // We don't need to to the invalidation stuff in this case.
+        return;
     } else {
         obj->setattr(attr, val, rewrite_args);
     }
