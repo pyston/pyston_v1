@@ -36,6 +36,8 @@ extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 
+extern "C" Box* deopt(AST_expr* expr, Box* value);
+
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
 
@@ -70,8 +72,8 @@ extern "C" BoxedInt* len(Box* obj);
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
-extern "C" Box* getGlobal(BoxedModule* m, std::string* name);
-extern "C" void delGlobal(BoxedModule* m, std::string* name);
+extern "C" Box* getGlobal(BoxedModule* m, const std::string* name);
+extern "C" void delGlobal(BoxedModule* m, const std::string* name);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);

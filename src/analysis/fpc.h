@@ -25,7 +25,7 @@ namespace pyston {
 
 template <typename T> class BBAnalyzer {
 public:
-    typedef std::unordered_map<std::string, T> Map;
+    typedef std::unordered_map<InternedString, T> Map;
     typedef std::unordered_map<CFGBlock*, Map> AllMap;
 
     virtual ~BBAnalyzer() {}

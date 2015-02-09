@@ -1,5 +1,5 @@
 # expected: fail
-# - inheritance
+# - exception printing
 
 class BadException(Exception):
     def __str__(self):

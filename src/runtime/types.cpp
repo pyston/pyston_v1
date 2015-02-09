@@ -508,7 +508,7 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *
 BoxedTuple* EmptyTuple;
 }
 
-extern "C" Box* createUserClass(std::string* name, Box* _bases, Box* _attr_dict) {
+extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr_dict) {
     ASSERT(_attr_dict->cls == dict_cls, "%s", getTypeName(_attr_dict)->c_str());
     BoxedDict* attr_dict = static_cast<BoxedDict*>(_attr_dict);
 
@@ -1029,7 +1029,6 @@ void setupRuntime() {
     int_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedInt), false);
     bool_cls = new BoxedHeapClass(int_cls, NULL, 0, sizeof(BoxedBool), false);
     complex_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedComplex), false);
-    // TODO we're leaking long memory!
     long_cls = new BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, sizeof(BoxedLong), false);
     float_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFloat), false);
     function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),

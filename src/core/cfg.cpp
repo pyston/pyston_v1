@@ -92,15 +92,19 @@ private:
         CFGBlock* continue_dest, *break_dest, *return_dest;
         bool say_why;
         int did_why;
-        std::string why_name;
+        InternedString why_name;
 
         RegionInfo(CFGBlock* continue_dest, CFGBlock* break_dest, CFGBlock* return_dest, bool say_why,
-                   const std::string& why_name)
+                   InternedString why_name)
             : continue_dest(continue_dest), break_dest(break_dest), return_dest(return_dest), say_why(say_why),
               did_why(0), why_name(why_name) {}
     };
 
-    AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
+    template <typename T> InternedString internString(T&& s) {
+        return source->getInternedStrings().get(std::forward<T>(s));
+    }
+
+    AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
         AST_Name* name = new AST_Name(id, ctx_type, lineno, col_offset);
         return name;
     }
@@ -109,24 +113,26 @@ private:
 
     struct ExcBlockInfo {
         CFGBlock* exc_dest;
-        std::string exc_type_name, exc_value_name, exc_traceback_name;
+        InternedString exc_type_name, exc_value_name, exc_traceback_name;
     };
     std::vector<ExcBlockInfo> exc_handlers;
 
     void pushLoopRegion(CFGBlock* continue_dest, CFGBlock* break_dest) {
         assert(continue_dest
                != break_dest); // I guess this doesn't have to be true, but validates passing say_why=false
-        regions.emplace_back(continue_dest, break_dest, nullptr, false, "");
+        regions.emplace_back(continue_dest, break_dest, nullptr, false, internString(""));
     }
 
-    void pushFinallyRegion(CFGBlock* finally_block, const std::string& why_name) {
+    void pushFinallyRegion(CFGBlock* finally_block, InternedString why_name) {
         regions.emplace_back(finally_block, finally_block, finally_block, true, why_name);
     }
 
     void popRegion() { regions.pop_back(); }
 
     // XXX get rid of this
-    void pushReturnRegion(CFGBlock* return_dest) { regions.emplace_back(nullptr, nullptr, return_dest, false, ""); }
+    void pushReturnRegion(CFGBlock* return_dest) {
+        regions.emplace_back(nullptr, nullptr, return_dest, false, internString(""));
+    }
 
     void doReturn(AST_expr* value) {
         assert(value);
@@ -138,7 +144,7 @@ private:
                     region.did_why |= (1 << Why::RETURN);
                 }
 
-                pushAssign(RETURN_NAME, value);
+                pushAssign(internString(RETURN_NAME), value);
 
                 AST_Jump* j = makeJump();
                 j->target = region.return_dest;
@@ -218,16 +224,16 @@ private:
     AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
         AST_expr* key = remapExpr(node->key);
         AST_expr* value = remapExpr(node->value);
-        return makeCall(makeLoadAttribute(name, "__setitem__", true), key, value);
+        return makeCall(makeLoadAttribute(name, internString("__setitem__"), true), key, value);
     }
 
     AST_expr* applyComprehensionCall(AST_ListComp* node, AST_Name* name) {
         AST_expr* elt = remapExpr(node->elt);
-        return makeCall(makeLoadAttribute(name, "append", true), elt);
+        return makeCall(makeLoadAttribute(name, internString("append"), true), elt);
     }
 
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
-        std::string rtn_name = nodeName(node);
+        InternedString rtn_name = nodeName(node);
         pushAssign(rtn_name, new ResultASTType());
         std::vector<CFGBlock*> exit_blocks;
 
@@ -244,13 +250,14 @@ private:
             AST_expr* remapped_iter = remapExpr(c->iter);
             AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
             iter_call->args.push_back(remapped_iter);
-            std::string iter_name = nodeName(node, "lc_iter", i);
+            InternedString iter_name = nodeName(node, "lc_iter", i);
             pushAssign(iter_name, iter_call);
 
             // TODO bad to save these like this?
-            AST_expr* hasnext_attr
-                = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno), "__hasnext__", true);
-            AST_expr* next_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno), "next", true);
+            AST_expr* hasnext_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno),
+                                                       internString("__hasnext__"), true);
+            AST_expr* next_attr
+                = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno), internString("next"), true);
 
             AST_Jump* j;
 
@@ -284,7 +291,7 @@ private:
             push_back(br);
 
             curblock = body_block;
-            std::string next_name(nodeName(next_attr));
+            InternedString next_name(nodeName(next_attr));
             pushAssign(next_name, makeCall(next_attr));
             pushAssign(c->target, makeName(next_name, AST_TYPE::Load, node->lineno));
 
@@ -375,7 +382,7 @@ private:
         return rtn;
     }
 
-    AST_expr* makeLoadAttribute(AST_expr* base, const std::string& name, bool clsonly) {
+    AST_expr* makeLoadAttribute(AST_expr* base, InternedString name, bool clsonly) {
         AST_expr* rtn;
         if (clsonly) {
             AST_ClsAttribute* attr = new AST_ClsAttribute();
@@ -485,7 +492,7 @@ private:
             push_back(assign);
 
             for (int i = 0; i < elts->size(); i++) {
-                std::string tmp_name = nodeName(target, "", i);
+                InternedString tmp_name = nodeName(target, "", i);
                 new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store, target->lineno));
 
                 pushAssign((*elts)[i], makeName(tmp_name, AST_TYPE::Load, target->lineno));
@@ -495,7 +502,7 @@ private:
         }
     }
 
-    void pushAssign(const std::string& id, AST_expr* val) {
+    void pushAssign(InternedString id, AST_expr* val) {
         assert(val);
         AST_expr* name = makeName(id, AST_TYPE::Store, val->lineno, 0);
         pushAssign(name, val);
@@ -511,7 +518,7 @@ private:
 
 
 
-    std::string nodeName(AST* node) {
+    InternedString nodeName(AST* node) {
         char buf[40];
         snprintf(buf, 40, "#%p", node);
 // Uncomment this line to check to make sure we never reuse the same nodeName() accidentally.
@@ -522,22 +529,22 @@ private:
         static std::unordered_set<std::string> made;
         assert(made.count(r) == 0);
         made.insert(r);
-        return std::move(r);
+        return internString(std::move(r));
 #else
-        return std::string(buf);
+        return internString(buf);
 #endif
     }
 
-    std::string nodeName(AST* node, const std::string& suffix) {
+    InternedString nodeName(AST* node, const std::string& suffix) {
         char buf[50];
         snprintf(buf, 50, "#%p_%s", node, suffix.c_str());
-        return std::string(buf);
+        return internString(std::string(buf));
     }
 
-    std::string nodeName(AST* node, const std::string& suffix, int idx) {
+    InternedString nodeName(AST* node, const std::string& suffix, int idx) {
         char buf[50];
         snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
-        return std::string(buf);
+        return internString(std::string(buf));
     }
 
     AST_expr* remapAttribute(AST_Attribute* node) {
@@ -604,7 +611,7 @@ private:
     }
 
     AST_expr* remapBoolOp(AST_BoolOp* node) {
-        std::string name = nodeName(node);
+        InternedString name = nodeName(node);
 
         CFGBlock* starting_block = curblock;
         CFGBlock* exit_block = cfg->addDeferredBlock();
@@ -713,7 +720,7 @@ private:
             }
             return rtn;
         } else {
-            std::string name = nodeName(node);
+            InternedString name = nodeName(node);
 
             CFGBlock* exit_block = cfg->addDeferredBlock();
             AST_expr* left = remapExpr(node->left);
@@ -789,16 +796,16 @@ private:
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
-        std::string func_name(nodeName(func));
+        InternedString func_name(nodeName(func));
         func->name = func_name;
 
         scoping_analysis->registerScopeReplacement(node, func);
 
         func->args = new AST_arguments();
-        func->args->vararg = "";
-        func->args->kwarg = "";
+        func->args->vararg = internString("");
+        func->args->kwarg = internString("");
 
-        std::string first_generator_name = nodeName(node->generators[0]);
+        InternedString first_generator_name = nodeName(node->generators[0]);
         func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
 
         std::vector<AST_stmt*>* insert_point = &func->body;
@@ -846,7 +853,7 @@ private:
     };
 
     AST_expr* remapIfExp(AST_IfExp* node) {
-        std::string rtn_name = nodeName(node);
+        InternedString rtn_name = nodeName(node);
 
         AST_Branch* br = new AST_Branch();
         br->col_offset = node->col_offset;
@@ -1087,8 +1094,8 @@ private:
                 RELEASE_ASSERT(0, "%d", node->type);
         }
 
-        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id[0] != '#')) {
-            std::string name = nodeName(node);
+        if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.str()[0] != '#')) {
+            InternedString name = nodeName(node);
             pushAssign(name, rtn);
             return makeName(name, AST_TYPE::Load, node->lineno);
         } else {
@@ -1131,9 +1138,9 @@ public:
             assert(asgn->targets.size() == 1);
             if (asgn->targets[0]->type == AST_TYPE::Name) {
                 AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
-                if (target->id[0] != '#') {
+                if (target->id.str()[0] != '#') {
 #ifndef NDEBUG
-                    if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id[0] == '#')
+                    if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.str()[0] == '#')
                         && asgn->value->type != AST_TYPE::Str && asgn->value->type != AST_TYPE::Num) {
                         fprintf(stdout, "\nError: doing a non-trivial assignment in an invoke is not allowed:\n");
                         print_ast(node);
@@ -1143,7 +1150,7 @@ public:
 #endif
                     curblock->push_back(node);
                     return;
-                } else if (asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id[0] == '#') {
+                } else if (asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.str()[0] == '#') {
                     // Assigning from one temporary name to another:
                     curblock->push_back(node);
                     return;
@@ -1268,32 +1275,32 @@ public:
             static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
             static_cast<AST_Num*>(import->args[0])->n_int = -1;
             import->args.push_back(new AST_LangPrimitive(AST_LangPrimitive::NONE));
-            import->args.push_back(new AST_Str(a->name));
+            import->args.push_back(new AST_Str(a->name.str()));
 
-            std::string tmpname = nodeName(a);
+            InternedString tmpname = nodeName(a);
             pushAssign(tmpname, import);
 
-            if (a->asname.size() == 0) {
+            if (a->asname.str().size() == 0) {
                 // No asname, so load the top-level module into the name
                 // (e.g., for `import os.path`, loads the os module into `os`)
-                pushAssign(getTopModule(a->name), makeName(tmpname, AST_TYPE::Load, node->lineno));
+                pushAssign(internString(getTopModule(a->name.str())), makeName(tmpname, AST_TYPE::Load, node->lineno));
             } else {
                 // If there is an asname, get the bottom-level module by
                 // getting the attributes and load it into asname.
                 int l = 0;
                 do {
-                    int r = a->name.find('.', l);
+                    int r = a->name.str().find('.', l);
                     if (r == std::string::npos) {
-                        r = a->name.size();
+                        r = a->name.str().size();
                     }
                     if (l == 0) {
                         l = r + 1;
                         continue;
                     }
                     pushAssign(tmpname, new AST_Attribute(makeName(tmpname, AST_TYPE::Load, node->lineno),
-                                                          AST_TYPE::Load, a->name.substr(l, r)));
+                                                          AST_TYPE::Load, internString(a->name.str().substr(l, r))));
                     l = r + 1;
-                } while (l < a->name.size());
+                } while (l < a->name.str().size());
                 pushAssign(a->asname, makeName(tmpname, AST_TYPE::Load, node->lineno));
             }
         }
@@ -1322,15 +1329,15 @@ public:
         import->args.push_back(new AST_Tuple());
         static_cast<AST_Tuple*>(import->args[1])->ctx_type = AST_TYPE::Load;
         for (int i = 0; i < node->names.size(); i++) {
-            static_cast<AST_Tuple*>(import->args[1])->elts.push_back(new AST_Str(node->names[i]->name));
+            static_cast<AST_Tuple*>(import->args[1])->elts.push_back(new AST_Str(node->names[i]->name.str()));
         }
-        import->args.push_back(new AST_Str(node->module));
+        import->args.push_back(new AST_Str(node->module.str()));
 
-        std::string tmp_module_name = nodeName(node);
+        InternedString tmp_module_name = nodeName(node);
         pushAssign(tmp_module_name, import);
 
         for (AST_alias* a : node->names) {
-            if (a->name == "*") {
+            if (a->name.str() == "*") {
 
                 AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
@@ -1346,11 +1353,11 @@ public:
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
                 import_from->args.push_back(makeName(tmp_module_name, AST_TYPE::Load, node->lineno));
-                import_from->args.push_back(new AST_Str(a->name));
+                import_from->args.push_back(new AST_Str(a->name.str()));
 
-                std::string tmp_import_name = nodeName(a);
+                InternedString tmp_import_name = nodeName(a);
                 pushAssign(tmp_import_name, import_from);
-                pushAssign(a->asname.size() ? a->asname : a->name,
+                pushAssign(a->asname.str().size() ? a->asname : a->name,
                            makeName(tmp_import_name, AST_TYPE::Load, node->lineno));
             }
         }
@@ -1446,7 +1453,7 @@ public:
             case AST_TYPE::Name: {
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
-                std::string n_name(nodeName(n));
+                InternedString n_name(nodeName(n));
                 pushAssign(n_name, makeName(n->id, AST_TYPE::Load, node->lineno));
                 remapped_target = n;
                 remapped_lhs = makeName(n_name, AST_TYPE::Load, node->lineno);
@@ -1507,7 +1514,7 @@ public:
         binop->col_offset = node->col_offset;
         binop->lineno = node->lineno;
 
-        std::string node_name(nodeName(node));
+        InternedString node_name(nodeName(node));
         pushAssign(node_name, binop);
         pushAssign(remapped_target, makeName(node_name, AST_TYPE::Load, node->lineno));
         return true;
@@ -1605,7 +1612,7 @@ public:
 
         AST_expr* value = remapExpr(node->value);
         if (value == NULL)
-            value = makeName("None", AST_TYPE::Load, node->lineno);
+            value = makeName(internString("None"), AST_TYPE::Load, node->lineno);
         doReturn(value);
         return true;
     }
@@ -1760,12 +1767,15 @@ public:
 
         char itername_buf[80];
         snprintf(itername_buf, 80, "#iter_%p", node);
-        pushAssign(itername_buf, iter_call);
+        InternedString itername = internString(itername_buf);
+        pushAssign(itername, iter_call);
 
         auto hasnext_attr = [&]() {
-            return makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load, node->lineno), "__hasnext__", true);
+            return makeLoadAttribute(makeName(itername, AST_TYPE::Load, node->lineno), internString("__hasnext__"),
+                                     true);
         };
-        AST_expr* next_attr = makeLoadAttribute(makeName(itername_buf, AST_TYPE::Load, node->lineno), "next", true);
+        AST_expr* next_attr
+            = makeLoadAttribute(makeName(itername, AST_TYPE::Load, node->lineno), internString("next"), true);
 
         CFGBlock* test_block = cfg->addBlock();
         AST_Jump* jump_to_test = makeJump();
@@ -1806,7 +1816,7 @@ public:
         pushLoopRegion(test_block, end_block);
 
         curblock = loop_block;
-        std::string next_name(nodeName(next_attr));
+        InternedString next_name(nodeName(next_attr));
         pushAssign(next_name, makeCall(next_attr));
         pushAssign(node->target, makeName(next_name, AST_TYPE::Load, node->lineno));
 
@@ -1896,9 +1906,9 @@ public:
         assert(node->handlers.size() > 0);
 
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
-        std::string exc_type_name = nodeName(node, "type");
-        std::string exc_value_name = nodeName(node, "value");
-        std::string exc_traceback_name = nodeName(node, "traceback");
+        InternedString exc_type_name = nodeName(node, "type");
+        InternedString exc_value_name = nodeName(node, "value");
+        InternedString exc_traceback_name = nodeName(node, "traceback");
         exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         for (AST_stmt* subnode : node->body) {
@@ -2010,10 +2020,10 @@ public:
 
     bool visit_tryfinally(AST_TryFinally* node) override {
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
-        std::string exc_type_name = nodeName(node, "type");
-        std::string exc_value_name = nodeName(node, "value");
-        std::string exc_traceback_name = nodeName(node, "traceback");
-        std::string exc_why_name = nodeName(node, "why");
+        InternedString exc_type_name = nodeName(node, "type");
+        InternedString exc_value_name = nodeName(node, "value");
+        InternedString exc_traceback_name = nodeName(node, "traceback");
+        InternedString exc_why_name = nodeName(node, "why");
         exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         CFGBlock* finally_block = cfg->addDeferredBlock();
@@ -2079,7 +2089,7 @@ public:
                 push_back(br);
 
                 curblock = doreturn;
-                doReturn(makeName(RETURN_NAME, AST_TYPE::Load, node->lineno));
+                doReturn(makeName(internString(RETURN_NAME), AST_TYPE::Load, node->lineno));
 
                 curblock = otherwise;
             }
@@ -2163,14 +2173,19 @@ public:
     bool visit_with(AST_With* node) override {
         char ctxmgrname_buf[80];
         snprintf(ctxmgrname_buf, 80, "#ctxmgr_%p", node);
+        InternedString ctxmgrname = internString(ctxmgrname_buf);
         char exitname_buf[80];
         snprintf(exitname_buf, 80, "#exit_%p", node);
+        InternedString exitname = internString(exitname_buf);
+        InternedString nonename = internString("None");
 
-        pushAssign(ctxmgrname_buf, remapExpr(node->context_expr));
+        pushAssign(ctxmgrname, remapExpr(node->context_expr));
 
-        AST_expr* enter = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load, node->lineno), "__enter__", true);
-        AST_expr* exit = makeLoadAttribute(makeName(ctxmgrname_buf, AST_TYPE::Load, node->lineno), "__exit__", true);
-        pushAssign(exitname_buf, exit);
+        AST_expr* enter
+            = makeLoadAttribute(makeName(ctxmgrname, AST_TYPE::Load, node->lineno), internString("__enter__"), true);
+        AST_expr* exit
+            = makeLoadAttribute(makeName(ctxmgrname, AST_TYPE::Load, node->lineno), internString("__exit__"), true);
+        pushAssign(exitname, exit);
         enter = remapExpr(makeCall(enter));
 
         if (node->optional_vars) {
@@ -2199,10 +2214,10 @@ public:
 
         popRegion(); // for the retrun
 
-        AST_Call* exit_call = makeCall(makeName(exitname_buf, AST_TYPE::Load, node->lineno));
-        exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-        exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-        exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
+        AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
+        exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+        exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+        exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
         push_back(makeExpr(exit_call));
 
         CFGBlock* orig_ending_block = curblock;
@@ -2214,10 +2229,10 @@ public:
             } else {
                 curblock = continue_dest;
 
-                AST_Call* exit_call = makeCall(makeName(exitname_buf, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
+                AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
+                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
                 push_back(makeExpr(exit_call));
 
                 cfg->placeBlock(continue_dest);
@@ -2229,10 +2244,10 @@ public:
             } else {
                 curblock = break_dest;
 
-                AST_Call* exit_call = makeCall(makeName(exitname_buf, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
+                AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
+                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
                 push_back(makeExpr(exit_call));
 
                 cfg->placeBlock(break_dest);
@@ -2247,13 +2262,13 @@ public:
             cfg->placeBlock(return_dest);
             curblock = return_dest;
 
-            AST_Call* exit_call = makeCall(makeName(exitname_buf, AST_TYPE::Load, node->lineno));
-            exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-            exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
-            exit_call->args.push_back(makeName("None", AST_TYPE::Load, node->lineno));
+            AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
+            exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+            exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
+            exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
             push_back(makeExpr(exit_call));
 
-            doReturn(makeName(RETURN_NAME, AST_TYPE::Load, node->lineno));
+            doReturn(makeName(internString(RETURN_NAME), AST_TYPE::Load, node->lineno));
             curblock = orig_ending_block;
         }
 
@@ -2304,7 +2319,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         Box* module_name = source->parent_module->getattr("__name__", NULL);
         assert(module_name->cls == str_cls);
         AST_Assign* module_assign = new AST_Assign();
-        module_assign->targets.push_back(new AST_Name("__module__", AST_TYPE::Store, source->ast->lineno));
+        module_assign->targets.push_back(
+            new AST_Name(source->getInternedStrings().get("__module__"), AST_TYPE::Store, source->ast->lineno));
         module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
         module_assign->lineno = 0;
         visitor.push_back(module_assign);
@@ -2314,7 +2330,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
             if (first_expr->value->type == AST_TYPE::Str) {
                 AST_Assign* doc_assign = new AST_Assign();
-                doc_assign->targets.push_back(new AST_Name("__doc__", AST_TYPE::Store, source->ast->lineno));
+                doc_assign->targets.push_back(
+                    new AST_Name(source->getInternedStrings().get("__doc__"), AST_TYPE::Store, source->ast->lineno));
                 doc_assign->value = first_expr->value;
                 doc_assign->lineno = 0;
                 visitor.push_back(doc_assign);

@@ -91,7 +91,7 @@ extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
 extern const std::string PASSED_GENERATOR_NAME;
 
-std::string getIsDefinedName(const std::string& name);
+InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings);
 bool isIsDefinedName(const std::string& name);
 
 CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,

@@ -28,6 +28,7 @@
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/stackmaps.h"
+#include "core/util.h"
 #include "runtime/types.h"
 
 
@@ -526,8 +527,38 @@ BoxedDict* getLocals(bool only_user_visible) {
             unsigned offset = ip - cf->code_start;
 
             assert(cf->location_map);
+
+            // We have to detect + ignore any entries for variables that
+            // could have been defined (so they have entries) but aren't (so the
+            // entries point to uninitialized memory).
+            std::unordered_set<std::string> is_undefined;
+
             for (const auto& p : cf->location_map->names) {
-                if (only_user_visible && (p.first[0] == '#' || p.first[0] == '!'))
+                if (!startswith(p.first, "!is_defined_"))
+                    continue;
+
+                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
+                    if (e.offset < offset && offset <= e.offset + e.length) {
+                        const auto& locs = e.locations;
+
+                        assert(locs.size() == 1);
+                        uint64_t v = frame_info.readLocation(locs[0]);
+                        if ((v & 1) == 0)
+                            is_undefined.insert(p.first.substr(12));
+
+                        break;
+                    }
+                }
+            }
+
+            for (const auto& p : cf->location_map->names) {
+                if (p.first[0] == '!')
+                    continue;
+
+                if (only_user_visible && p.first[0] == '#')
+                    continue;
+
+                if (is_undefined.count(p.first))
                     continue;
 
                 for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
@@ -552,13 +583,18 @@ BoxedDict* getLocals(bool only_user_visible) {
             return d;
         } else if (frame_info.getId().type == PythonFrameId::INTERPRETED) {
             return localsForInterpretedFrame((void*)frame_info.getId().bp, only_user_visible);
-        } else {
-            abort();
         }
+        abort();
     }
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }
 
+ExecutionPoint getExecutionPoint() {
+    auto frame = getTopPythonFrame();
+    auto cf = frame->getCF();
+    auto current_stmt = frame->getCurrentStatement();
+    return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
+}
 
 llvm::JITEventListener* makeTracebacksListener() {
     return new TracebacksEventListener();

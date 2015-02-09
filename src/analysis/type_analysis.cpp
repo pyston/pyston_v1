@@ -36,17 +36,17 @@ namespace pyston {
 
 class NullTypeAnalysis : public TypeAnalysis {
 public:
-    ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) override;
-    ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) override;
+    ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) override;
+    ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) override;
 
     BoxedClass* speculatedExprClass(AST_expr*) override { return NULL; }
 };
 
-ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(const std::string& name, CFGBlock* block) {
+ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockStart(InternedString name, CFGBlock* block) {
     return UNKNOWN;
 }
 
-ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(const std::string& name, CFGBlock* block) {
+ConcreteCompilerType* NullTypeAnalysis::getTypeAtBlockEnd(InternedString name, CFGBlock* block) {
     assert(block->successors.size() > 0);
     return getTypeAtBlockStart(name, block->successors[0]);
 }
@@ -68,7 +68,7 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
         return NULL;
     }
 
-    if (node->func->type == AST_TYPE::Name && ast_cast<AST_Name>(node->func)->id == "xrange")
+    if (node->func->type == AST_TYPE::Name && ast_cast<AST_Name>(node->func)->id.str() == "xrange")
         return xrange_cls;
 
     // if (node->func->type == AST_TYPE::Attribute && ast_cast<AST_Attribute>(node->func)->attr == "dot")
@@ -77,7 +77,7 @@ static BoxedClass* simpleCallSpeculation(AST_Call* node, CompilerType* rtn_type,
     return NULL;
 }
 
-typedef std::unordered_map<std::string, CompilerType*> TypeMap;
+typedef std::unordered_map<InternedString, CompilerType*> TypeMap;
 typedef std::unordered_map<CFGBlock*, TypeMap> AllTypeMap;
 typedef std::unordered_map<AST_expr*, CompilerType*> ExprTypeMap;
 typedef std::unordered_map<AST_expr*, BoxedClass*> TypeSpeculations;
@@ -140,7 +140,7 @@ private:
         return rtn;
     }
 
-    void _doSet(std::string target, CompilerType* t) {
+    void _doSet(InternedString target, CompilerType* t) {
         if (t)
             sym_table[target] = t;
     }
@@ -170,7 +170,7 @@ private:
 
     void* visit_attribute(AST_Attribute* node) override {
         CompilerType* t = getType(node->value);
-        CompilerType* rtn = t->getattrType(&node->attr, false);
+        CompilerType* rtn = t->getattrType(&node->attr.str(), false);
 
         // if (speculation != TypeAnalysis::NONE && (node->attr == "x" || node->attr == "y" || node->attr == "z")) {
         // rtn = processSpeculation(float_cls, node, rtn);
@@ -192,7 +192,7 @@ private:
 
     void* visit_clsattribute(AST_ClsAttribute* node) override {
         CompilerType* t = getType(node->value);
-        CompilerType* rtn = t->getattrType(&node->attr, true);
+        CompilerType* rtn = t->getattrType(&node->attr.str(), true);
         if (VERBOSITY() >= 2 && rtn == UNDEF) {
             printf("Think %s.%s is undefined, at %d:%d\n", t->debugName().c_str(), node->attr.c_str(), node->lineno,
                    node->col_offset);
@@ -288,9 +288,9 @@ private:
             arg_types.push_back(getType(node->args[i]));
         }
 
-        std::vector<std::pair<const std::string&, CompilerType*>> kw_types;
+        std::vector<std::pair<InternedString, CompilerType*>> kw_types;
         for (AST_keyword* kw : node->keywords) {
-            kw_types.push_back(std::make_pair<const std::string&, CompilerType*>(kw->arg, getType(kw->value)));
+            kw_types.push_back(std::make_pair(kw->arg, getType(kw->value)));
         }
 
         CompilerType* starargs = node->starargs ? getType(node->starargs) : NULL;
@@ -393,7 +393,7 @@ private:
 
     void* visit_name(AST_Name* node) override {
         if (scope_info->refersToGlobal(node->id)) {
-            if (node->id == "xrange") {
+            if (node->id.str() == "xrange") {
                 // printf("TODO guard here and return the classobj\n");
                 // return typeOfClassobj(xrange_cls);
             }
@@ -543,11 +543,11 @@ private:
 
     // not part of the visitor api:
     void _visit_alias(AST_alias* node) {
-        const std::string* name = &node->name;
-        if (node->asname.size())
-            name = &node->asname;
+        InternedString name = node->name;
+        if (node->asname.str().size())
+            name = node->asname;
 
-        _doSet(*name, UNKNOWN);
+        _doSet(name, UNKNOWN);
     }
 
     void visit_import(AST_Import* node) override {
@@ -616,11 +616,11 @@ private:
           speculation(speculation) {}
 
 public:
-    ConcreteCompilerType* getTypeAtBlockEnd(const std::string& name, CFGBlock* block) override {
+    ConcreteCompilerType* getTypeAtBlockEnd(InternedString name, CFGBlock* block) override {
         assert(block->successors.size() > 0);
         return getTypeAtBlockStart(name, block->successors[0]);
     }
-    ConcreteCompilerType* getTypeAtBlockStart(const std::string& name, CFGBlock* block) override {
+    ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) override {
         CompilerType* base = starting_types[block][name];
         ASSERT(base != NULL, "%s %d", name.c_str(), block->idx);
 
@@ -685,16 +685,16 @@ public:
         int i = 0;
 
         for (; i < arg_names.args.size(); i++) {
-            initial_types[arg_names.args[i]] = unboxedType(arg_types[i]);
+            initial_types[scope_info->internString(arg_names.args[i])] = unboxedType(arg_types[i]);
         }
 
         if (arg_names.vararg.size()) {
-            initial_types[arg_names.vararg] = unboxedType(arg_types[i]);
+            initial_types[scope_info->internString(arg_names.vararg)] = unboxedType(arg_types[i]);
             i++;
         }
 
         if (arg_names.kwarg.size()) {
-            initial_types[arg_names.kwarg] = unboxedType(arg_types[i]);
+            initial_types[scope_info->internString(arg_names.kwarg)] = unboxedType(arg_types[i]);
             i++;
         }
 

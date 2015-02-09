@@ -28,6 +28,7 @@
 
 #include "core/common.h"
 #include "core/stats.h"
+#include "core/stringpool.h"
 
 namespace llvm {
 class Function;
@@ -192,7 +193,7 @@ public:
 
     EffortLevel::EffortLevel effort;
 
-    int64_t times_called;
+    int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
 
     LocationMap* location_map; // only meaningful if this is a compiled frame
@@ -203,25 +204,31 @@ public:
                      llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
                      const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), llvm_code(llvm_code), effort(effort), times_called(0), location_map(nullptr) {}
+          code(code), llvm_code(llvm_code), effort(effort), times_called(0), times_speculation_failed(0),
+          location_map(nullptr) {}
 
     // TODO this will need to be implemented eventually; things to delete:
     // - line_table if it exists
     // - location_map if it exists
     // - all entries in ics (after deregistering them)
     ~CompiledFunction();
+
+    // Call this when a speculation inside this version failed
+    void speculationFailed();
 };
 
 struct ParamNames {
     bool takes_param_names;
-    std::vector<std::string> args;
-    std::string vararg, kwarg;
+    std::vector<llvm::StringRef> args;
+    llvm::StringRef vararg, kwarg;
 
     explicit ParamNames(AST* ast);
-    ParamNames(const std::vector<std::string>& args, const std::string& vararg, const std::string& kwarg);
+    ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
     static ParamNames empty() { return ParamNames(); }
 
-    int totalParameters() const { return args.size() + (vararg.size() == 0 ? 0 : 1) + (kwarg.size() == 0 ? 0 : 1); }
+    int totalParameters() const {
+        return args.size() + (vararg.str().size() == 0 ? 0 : 1) + (kwarg.str().size() == 0 ? 0 : 1);
+    }
 
 private:
     ParamNames() : takes_param_names(false) {}
@@ -229,6 +236,7 @@ private:
 
 class BoxedModule;
 class ScopeInfo;
+class InternedStringPool;
 class SourceInfo {
 public:
     BoxedModule* parent_module;
@@ -239,6 +247,8 @@ public:
     PhiAnalysis* phis;
     bool is_generator;
 
+    InternedStringPool& getInternedStrings();
+
     ScopeInfo* getScopeInfo();
 
     // TODO we're currently copying the body of the AST into here, since lambdas don't really have a statement-based
@@ -246,7 +256,7 @@ public:
     const std::vector<AST_stmt*> body;
 
     const std::string getName();
-    std::string mangleName(const std::string& id);
+    InternedString mangleName(InternedString id);
 
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
 };
@@ -357,17 +367,17 @@ namespace gc {
 enum class GCKind : uint8_t {
     PYTHON = 1,
     CONSERVATIVE = 2,
-    UNTRACKED = 3,
+    PRECISE = 3,
+    UNTRACKED = 4,
+    HIDDEN_CLASS = 5,
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
 }
 
-class ConservativeGCObject {
+template <gc::GCKind gc_kind> class GCAllocated {
 public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) {
-        return gc_alloc(size, gc::GCKind::CONSERVATIVE);
-    }
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc_alloc(size, gc_kind); }
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 };
 
@@ -380,7 +390,7 @@ struct DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
-    struct AttrList : ConservativeGCObject {
+    struct AttrList : public GCAllocated<gc::GCKind::PRECISE> {
         Box* attrs[0];
     };
 

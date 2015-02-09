@@ -78,9 +78,9 @@ extern "C" Box* getSysStdout();
 
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
-    *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
-    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls,
-    *staticmethod_cls, *classmethod_cls, *attrwrapper_cls;
+    *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
+    *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
+    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls;
 }
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;
@@ -118,7 +118,7 @@ extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
                               std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
-extern "C" Box* createUserClass(std::string* name, Box* base, Box* attr_dict);
+extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
 extern "C" double unboxFloat(Box* b);
 extern "C" Box* createDict();
 extern "C" Box* createList();
@@ -255,7 +255,7 @@ static_assert(offsetof(pyston::BoxedHeapClass, as_buffer) == offsetof(PyHeapType
 static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 
 
-class HiddenClass : public ConservativeGCObject {
+class HiddenClass : public GCAllocated<gc::GCKind::HIDDEN_CLASS> {
 private:
     HiddenClass() {}
     HiddenClass(const HiddenClass* parent) : attr_offsets(parent->attr_offsets) {}
@@ -270,8 +270,8 @@ public:
         return new HiddenClass();
     }
 
-    conservative_unordered_map<std::string, int> attr_offsets;
-    conservative_unordered_map<std::string, HiddenClass*> children;
+    std::unordered_map<std::string, int> attr_offsets;
+    std::unordered_map<std::string, HiddenClass*> children;
 
     HiddenClass* getOrMakeChild(const std::string& attr);
 
@@ -282,6 +282,12 @@ public:
         return it->second;
     }
     HiddenClass* delAttrToMakeHC(const std::string& attr);
+
+    void gc_visit(GCVisitor* visitor) {
+        for (const auto& p : children) {
+            visitor->visit(p.second);
+        }
+    }
 };
 
 class BoxedInt : public Box {

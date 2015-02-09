@@ -1,5 +1,5 @@
 # expected: fail
-# - metaclasses
+# - object.__getattribute__ doesn't exist
 
 # attr-getting resolution.
 

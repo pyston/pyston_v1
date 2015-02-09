@@ -237,7 +237,44 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
 }
 
 extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) noexcept {
-    Py_FatalError("unimplemented");
+    assert(op->cls == dict_cls);
+    BoxedDict* self = static_cast<BoxedDict*>(op);
+
+    // Callers of PyDict_New() provide a pointer to some storage for this function to use, in
+    // the form of a Py_ssize_t* -- ie they allocate a Py_ssize_t on their stack, and let us use
+    // it.
+    //
+    // We want to store an unordered_map::iterator in that.  In my glibc it would fit, but to keep
+    // things a little bit more portable, allocate separate storage for the iterator, and store the
+    // pointer to this storage in the Py_ssize_t slot.
+    //
+    // Results in lots of indirection unfortunately.  If it becomes an issue we can try to switch
+    // to storing the iterator directly in the stack slot.
+
+    typedef BoxedDict::DictMap::iterator iterator;
+
+    static_assert(sizeof(Py_ssize_t) == sizeof(iterator*), "");
+    iterator** it_ptr = reinterpret_cast<iterator**>(ppos);
+
+    // Clients are supposed to zero-initialize *ppos:
+    if (*it_ptr == NULL) {
+        *it_ptr = (iterator*)malloc(sizeof(iterator));
+        ** it_ptr = self->d.begin();
+    }
+
+    iterator* it = *it_ptr;
+
+    if (*it == self->d.end()) {
+        free(it);
+        return 0;
+    }
+
+    *pkey = (*it)->first;
+    *pvalue = (*it)->second;
+
+    ++(*it);
+
+    return 1;
 }
 
 extern "C" PyObject* PyDict_GetItemString(PyObject* dict, const char* key) noexcept {

@@ -1068,6 +1068,13 @@ public:
         return boolFromI1(emitter, cmp);
     }
 
+    CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
+        CompilerVariable* rtn = converted->getitem(emitter, info, slice);
+        converted->decvref(emitter);
+        return rtn;
+    }
+
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
         if (rhs->getType() != INT && rhs->getType() != FLOAT) {
@@ -1366,21 +1373,21 @@ public:
                                                   const std::string* attr, bool clsonly, ArgPassSpec argspec,
                                                   const std::vector<CompilerVariable*>& args,
                                                   const std::vector<const std::string*>* keyword_names,
-                                                  bool raise_on_missing = true) {
+                                                  bool* no_attribute = NULL) {
         if (!canStaticallyResolveGetattrs())
             return NULL;
 
         Box* rtattr = cls->getattr(*attr);
         if (rtattr == NULL) {
-            if (raise_on_missing) {
+            if (no_attribute) {
+                *no_attribute = true;
+            } else {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(*getNameOfClass(cls) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
-                return undefVariable();
-            } else {
-                return NULL;
             }
+            return undefVariable();
         }
 
         if (rtattr->cls != function_cls)
@@ -1459,6 +1466,7 @@ public:
         ConcreteCompilerVariable* rtn = _call(emitter, info, linked_function, cf->code, other_args, argspec, new_args,
                                               keyword_names, cf->spec->rtn_type);
         assert(rtn->getType() == cf->spec->rtn_type);
+        assert(rtn->getType() != UNDEF);
 
         // We should provide unboxed versions of these rather than boxing then unboxing:
         // TODO is it more efficient to unbox here, or should we leave it boxed?
@@ -1509,8 +1517,21 @@ public:
 
                 const std::string& left_side_name = getOpName(op_type);
 
-                ConcreteCompilerVariable* called_constant = tryCallattrConstant(
-                    emitter, info, var, &left_side_name, true, ArgPassSpec(1, 0, 0, 0), { converted_rhs }, NULL, false);
+                bool no_attribute = false;
+                ConcreteCompilerVariable* called_constant
+                    = tryCallattrConstant(emitter, info, var, &left_side_name, true, ArgPassSpec(1, 0, 0, 0),
+                                          { converted_rhs }, NULL, &no_attribute);
+
+                if (no_attribute) {
+                    assert(called_constant->getType() == UNDEF);
+
+                    // Kind of hacky, but just call into getitem like normal.  except...
+                    auto r = UNKNOWN->binexp(emitter, info, var, converted_rhs, op_type, exp_type);
+                    r->decvref(emitter);
+                    // ... return the undef value, since that matches what the type analyzer thought we would do.
+                    return called_constant;
+                }
+
                 if (called_constant) {
                     converted_rhs->decvref(emitter);
                     return called_constant;
@@ -1525,8 +1546,20 @@ public:
 
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* slice) override {
         static const std::string attr("__getitem__");
-        ConcreteCompilerVariable* called_constant
-            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, false);
+        bool no_attribute = false;
+        ConcreteCompilerVariable* called_constant = tryCallattrConstant(
+            emitter, info, var, &attr, true, ArgPassSpec(1, 0, 0, 0), { slice }, NULL, &no_attribute);
+
+        if (no_attribute) {
+            assert(called_constant->getType() == UNDEF);
+
+            // Kind of hacky, but just call into getitem like normal.  except...
+            auto r = UNKNOWN->getitem(emitter, info, var, slice);
+            r->decvref(emitter);
+            // ... return the undef value, since that matches what the type analyzer thought we would do.
+            return called_constant;
+        }
+
         if (called_constant)
             return called_constant;
 

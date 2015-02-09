@@ -20,6 +20,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Instructions.h"
 
+#include "core/stringpool.h"
 #include "core/types.h"
 
 namespace llvm {
@@ -38,9 +39,9 @@ struct PatchpointInfo;
 class ScopeInfo;
 class TypeAnalysis;
 
-typedef std::unordered_map<std::string, CompilerVariable*> SymbolTable;
-typedef std::map<std::string, CompilerVariable*> SortedSymbolTable;
-typedef std::unordered_map<std::string, ConcreteCompilerVariable*> ConcreteSymbolTable;
+typedef std::unordered_map<InternedString, CompilerVariable*> SymbolTable;
+typedef std::map<InternedString, CompilerVariable*> SortedSymbolTable;
+typedef std::unordered_map<InternedString, ConcreteCompilerVariable*> ConcreteSymbolTable;
 
 extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
@@ -162,6 +163,7 @@ public:
 
     void addExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val,
                           const SymbolTable& st) {
+        abort();
         ExprTypeGuard*& g = expr_type_guards[ast_node];
         assert(g == NULL);
         g = new ExprTypeGuard(cfg_block, branch, ast_node, val, st);
@@ -200,7 +202,7 @@ public:
     virtual void doFunctionEntry(const ParamNames& param_names, const std::vector<ConcreteCompilerType*>& arg_types)
         = 0;
 
-    virtual void giveLocalSymbol(const std::string& name, CompilerVariable* var) = 0;
+    virtual void giveLocalSymbol(InternedString name, CompilerVariable* var) = 0;
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
     virtual void run(const CFGBlock* block) = 0;
     virtual EndingState getEndingSymbolTable() = 0;

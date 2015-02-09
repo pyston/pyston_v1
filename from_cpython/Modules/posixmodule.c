@@ -6916,7 +6916,7 @@ posix_fdopen(PyObject *self, PyObject *args)
     /* We now know we will succeed, so initialize the file object. */
 
     // Pyston change:
-    Py_FatalError("Pyston TODO: implement this");
+    PyFile_SetFP(f, fp);
     //((PyFileObject *)f)->f_fp = fp;
 
     PyFile_SetBufSize(f, bufsize);

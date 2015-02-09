@@ -39,11 +39,44 @@ namespace gc {
 
 class TraceStack {
 private:
-    std::vector<void*> v;
+    const int CHUNK_SIZE = 256;
+    const int MAX_FREE_CHUNKS = 50;
+
+    std::vector<void**> chunks;
+    static std::vector<void**> free_chunks;
+
+    void** cur;
+    void** start;
+    void** end;
+
+    void get_chunk() {
+        if (free_chunks.size()) {
+            start = free_chunks.back();
+            free_chunks.pop_back();
+        } else {
+            start = (void**)malloc(sizeof(void*) * CHUNK_SIZE);
+        }
+
+        cur = start;
+        end = start + CHUNK_SIZE;
+    }
+    void release_chunk(void** chunk) {
+        if (free_chunks.size() == MAX_FREE_CHUNKS)
+            free(chunk);
+        else
+            free_chunks.push_back(chunk);
+    }
+    void pop_chunk() {
+        start = chunks.back();
+        chunks.pop_back();
+        end = start + CHUNK_SIZE;
+        cur = end;
+    }
 
 public:
-    TraceStack() {}
+    TraceStack() { get_chunk(); }
     TraceStack(const std::vector<void*>& rhs) {
+        get_chunk();
         for (void* p : rhs) {
             assert(!isMarked(GCAllocation::fromUserData(p)));
             push(p);
@@ -52,27 +85,38 @@ public:
 
     void push(void* p) {
         GCAllocation* al = GCAllocation::fromUserData(p);
+        if (isMarked(al))
+            return;
 
-        if (!isMarked(al)) {
-            setMark(al);
+        setMark(al);
 
-            v.push_back(p);
+        *cur++ = p;
+        if (cur == end) {
+            chunks.push_back(start);
+            get_chunk();
         }
     }
 
-    int size() { return v.size(); }
-
-    void reserve(int num) { v.reserve(num + v.size()); }
-
-    void* pop() {
-        if (v.size()) {
-            void* r = v.back();
-            v.pop_back();
-            return r;
+    void* pop_chunk_and_item() {
+        release_chunk(start);
+        if (chunks.size()) {
+            pop_chunk();
+            assert(cur == end);
+            return *--cur; // no need for any bounds checks here since we're guaranteed we're CHUNK_SIZE from the start
         }
         return NULL;
     }
+
+
+    void* pop() {
+        if (cur > start)
+            return *--cur;
+
+        return pop_chunk_and_item();
+    }
 };
+std::vector<void**> TraceStack::free_chunks;
+
 
 static std::vector<void*> roots;
 void registerPermanentRoot(void* obj) {
@@ -212,6 +256,9 @@ static void markPhase() {
         } else if (kind_id == GCKind::CONSERVATIVE) {
             uint32_t bytes = al->kind_data;
             visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+        } else if (kind_id == GCKind::PRECISE) {
+            uint32_t bytes = al->kind_data;
+            visitor.visitRange((void**)p, (void**)((char*)p + bytes));
         } else if (kind_id == GCKind::PYTHON) {
             Box* b = reinterpret_cast<Box*>(p);
             BoxedClass* cls = b->cls;
@@ -224,6 +271,9 @@ static void markPhase() {
                 ASSERT(cls->gc_visit, "%s", getTypeName(b)->c_str());
                 cls->gc_visit(&visitor, b);
             }
+        } else if (kind_id == GCKind::HIDDEN_CLASS) {
+            HiddenClass* hcls = reinterpret_cast<HiddenClass*>(p);
+            hcls->gc_visit(&visitor);
         } else {
             RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
         }
@@ -236,6 +286,17 @@ static void markPhase() {
 
 static void sweepPhase() {
     global_heap.freeUnmarked();
+}
+
+static bool gc_enabled = true;
+bool gcIsEnabled() {
+    return gc_enabled;
+}
+void enableGC() {
+    gc_enabled = true;
+}
+void disableGC() {
+    gc_enabled = false;
 }
 
 static int ncollections = 0;

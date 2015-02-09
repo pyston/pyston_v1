@@ -31,6 +31,7 @@
 
 #include "core/ast.h"
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 

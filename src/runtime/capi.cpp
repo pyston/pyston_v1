@@ -34,12 +34,10 @@ namespace pyston {
 BoxedClass* method_cls;
 
 #define MAKE_CHECK(NAME, cls_name)                                                                                     \
-    extern "C" bool Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
-#define MAKE_CHECK2(NAME, cls_name)                                                                                    \
     extern "C" bool _Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
 
-MAKE_CHECK2(Int, int_cls)
-MAKE_CHECK2(String, str_cls)
+MAKE_CHECK(Int, int_cls)
+MAKE_CHECK(String, str_cls)
 MAKE_CHECK(Long, long_cls)
 MAKE_CHECK(List, list_cls)
 MAKE_CHECK(Tuple, tuple_cls)
@@ -688,7 +686,8 @@ void checkAndThrowCAPIException() {
         assert(!cur_thread_state.curexc_value);
 
     if (_type) {
-        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL, "unsupported");
+        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL || cur_thread_state.curexc_traceback == None,
+                       "unsupported");
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
@@ -902,7 +901,8 @@ extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Add);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return NULL;
     }
 }
 

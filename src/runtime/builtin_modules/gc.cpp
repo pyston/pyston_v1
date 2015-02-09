@@ -18,8 +18,22 @@
 
 namespace pyston {
 
-Box* gcCollect() {
+static Box* gcCollect() {
     gc::runCollection();
+    return None;
+}
+
+static Box* isEnabled() {
+    return boxBool(gc::gcIsEnabled());
+}
+
+static Box* disable() {
+    gc::disableGC();
+    return None;
+}
+
+static Box* enable() {
+    gc::enableGC();
     return None;
 }
 
@@ -27,5 +41,8 @@ void setupGC() {
     BoxedModule* gc_module = createModule("gc", "__builtin__");
 
     gc_module->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)gcCollect, NONE, 0)));
+    gc_module->giveAttr("isenabled", new BoxedFunction(boxRTFunction((void*)isEnabled, BOXED_BOOL, 0)));
+    gc_module->giveAttr("disable", new BoxedFunction(boxRTFunction((void*)disable, NONE, 0)));
+    gc_module->giveAttr("enable", new BoxedFunction(boxRTFunction((void*)enable, NONE, 0)));
 }
 }

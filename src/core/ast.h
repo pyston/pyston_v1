@@ -24,6 +24,7 @@
 #include "llvm/ADT/StringRef.h"
 
 #include "core/common.h"
+#include "core/stringpool.h"
 
 namespace pyston {
 
@@ -181,11 +182,11 @@ public:
 
 class AST_alias : public AST {
 public:
-    std::string name, asname;
+    InternedString name, asname;
 
     virtual void accept(ASTVisitor* v);
 
-    AST_alias(const std::string& name, const std::string& asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
+    AST_alias(InternedString name, InternedString asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::alias;
 };
@@ -197,7 +198,7 @@ public:
 
     // These are represented as strings, not names; not sure why.
     // If they don't exist, the string is empty.
-    std::string kwarg, vararg;
+    InternedString kwarg, vararg;
 
     virtual void accept(ASTVisitor* v);
 
@@ -262,14 +263,14 @@ class AST_Attribute : public AST_expr {
 public:
     AST_expr* value;
     AST_TYPE::AST_TYPE ctx_type;
-    std::string attr;
+    InternedString attr;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
 
-    AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, const std::string& attr)
+    AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, InternedString attr)
         : AST_expr(AST_TYPE::Attribute), value(value), ctx_type(ctx_type), attr(attr) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Attribute;
@@ -359,7 +360,7 @@ public:
 
     std::vector<AST_expr*> bases, decorator_list;
     std::vector<AST_stmt*> body;
-    std::string name;
+    InternedString name;
 
     AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
 
@@ -490,7 +491,7 @@ class AST_FunctionDef : public AST_stmt {
 public:
     std::vector<AST_stmt*> body;
     std::vector<AST_expr*> decorator_list;
-    std::string name;
+    InternedString name;
     AST_arguments* args;
 
     virtual void accept(ASTVisitor* v);
@@ -516,7 +517,7 @@ public:
 
 class AST_Global : public AST_stmt {
 public:
-    std::vector<std::string> names;
+    std::vector<InternedString> names;
 
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
@@ -565,7 +566,7 @@ public:
 
 class AST_ImportFrom : public AST_stmt {
 public:
-    std::string module;
+    InternedString module;
     std::vector<AST_alias*> names;
     int level;
 
@@ -593,7 +594,7 @@ class AST_keyword : public AST {
 public:
     // no lineno, col_offset attributes
     AST_expr* value;
-    std::string arg;
+    InternedString arg;
 
     virtual void accept(ASTVisitor* v);
 
@@ -643,12 +644,15 @@ public:
 
 class AST_Module : public AST {
 public:
+    std::unique_ptr<InternedStringPool> interned_strings;
+
     // no lineno, col_offset attributes
     std::vector<AST_stmt*> body;
 
     virtual void accept(ASTVisitor* v);
 
-    AST_Module() : AST(AST_TYPE::Module) {}
+    AST_Module(std::unique_ptr<InternedStringPool> interned_strings)
+        : AST(AST_TYPE::Module), interned_strings(std::move(interned_strings)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
 };
@@ -656,12 +660,12 @@ public:
 class AST_Name : public AST_expr {
 public:
     AST_TYPE::AST_TYPE ctx_type;
-    std::string id;
+    InternedString id;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Name(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
+    AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
         : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
@@ -939,7 +943,7 @@ public:
 class AST_ClsAttribute : public AST_expr {
 public:
     AST_expr* value;
-    std::string attr;
+    InternedString attr;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);

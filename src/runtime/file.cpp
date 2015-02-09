@@ -188,8 +188,16 @@ Box* fileIterHasNext(Box* s) {
     return boxBool(!fileEof(self));
 }
 
+extern "C" void PyFile_SetFP(PyObject* _f, FILE* fp) noexcept {
+    assert(_f->cls == file_cls);
+    BoxedFile* f = static_cast<BoxedFile*>(_f);
+    assert(f->f == NULL);
+    f->f = fp;
+}
+
 extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(close == fclose, "unsupported");
+    return new BoxedFile(fp, name, mode);
 }
 
 extern "C" FILE* PyFile_AsFile(PyObject* f) noexcept {
@@ -258,11 +266,59 @@ extern "C" int PyFile_WriteString(const char* s, PyObject* f) noexcept {
 }
 
 extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) noexcept {
-    Py_FatalError("unimplemented");
+    assert(f->cls == file_cls);
+    if (bufsize >= 0) {
+        if (bufsize == 0) {
+            setvbuf(static_cast<BoxedFile*>(f)->f, NULL, _IONBF, 0);
+        } else {
+            Py_FatalError("unimplemented");
+        }
+    }
 }
 
 extern "C" int _PyFile_SanitizeMode(char* mode) noexcept {
-    Py_FatalError("unimplemented");
+    char* upos;
+    size_t len = strlen(mode);
+
+    if (!len) {
+        PyErr_SetString(PyExc_ValueError, "empty mode string");
+        return -1;
+    }
+
+    upos = strchr(mode, 'U');
+    if (upos) {
+        memmove(upos, upos + 1, len - (upos - mode)); /* incl null char */
+
+        if (mode[0] == 'w' || mode[0] == 'a') {
+            PyErr_Format(PyExc_ValueError, "universal newline "
+                                           "mode can only be used with modes "
+                                           "starting with 'r'");
+            return -1;
+        }
+
+        if (mode[0] != 'r') {
+            memmove(mode + 1, mode, strlen(mode) + 1);
+            mode[0] = 'r';
+        }
+
+        if (!strchr(mode, 'b')) {
+            memmove(mode + 2, mode + 1, strlen(mode));
+            mode[1] = 'b';
+        }
+    } else if (mode[0] != 'r' && mode[0] != 'w' && mode[0] != 'a') {
+        PyErr_Format(PyExc_ValueError, "mode string must begin with "
+                                       "one of 'r', 'w', 'a' or 'U', not '%.200s'",
+                     mode);
+        return -1;
+    }
+#ifdef Py_VERIFY_WINNT
+    /* additional checks on NT with visual studio 2005 and higher */
+    if (!_PyVerify_Mode_WINNT(mode)) {
+        PyErr_Format(PyExc_ValueError, "Invalid mode ('%.50s')", mode);
+        return -1;
+    }
+#endif
+    return 0;
 }
 
 extern "C" int PyObject_AsFileDescriptor(PyObject* o) noexcept {

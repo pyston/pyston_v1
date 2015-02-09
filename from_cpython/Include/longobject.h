@@ -21,7 +21,8 @@ PyAPI_DATA(PyTypeObject*) long_cls;
 #define PyLong_Type (*long_cls)
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) PyLong_Check(PyObject*) PYSTON_NOEXCEPT;
+PyAPI_FUNC(bool) _PyLong_Check(PyObject*) PYSTON_NOEXCEPT;
+#define PyLong_Check(op) _PyLong_Check((PyObject*)(op))
 #if 0
 #define PyLong_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LONG_SUBCLASS)

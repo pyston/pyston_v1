@@ -17,6 +17,8 @@
 
 #include <vector>
 
+#include "core/stringpool.h"
+
 namespace llvm {
 class Function;
 }
@@ -33,7 +35,7 @@ private:
 public:
     CompiledFunction* const cf;
     AST_Jump* const backedge;
-    typedef std::map<std::string, ConcreteCompilerType*> ArgMap;
+    typedef std::map<InternedString, ConcreteCompilerType*> ArgMap;
     ArgMap args;
 
     static OSREntryDescriptor* create(CompiledFunction* from_cf, AST_Jump* backedge) {

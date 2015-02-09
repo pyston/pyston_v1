@@ -37,6 +37,9 @@ typedef struct {
 #endif
 typedef struct _PyFileObject PyFileObject;
 
+// Pyston change: use this to access the fp instead of ->f_fp
+PyAPI_FUNC(void) PyFile_SetFP(PyObject*, FILE*) PYSTON_NOEXCEPT;
+
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) file_cls;
 #define PyFile_Type (*file_cls)

@@ -615,7 +615,7 @@ BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *Attribu
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
     *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
-    *SystemError, *NotImplementedError, *PendingDeprecationWarning;
+    *SystemError, *NotImplementedError, *PendingDeprecationWarning, *EOFError;
 
 Box* PyExc_RecursionErrorInst;
 Box* PyExc_MemoryErrorInst;
@@ -1040,6 +1040,7 @@ void setupBuiltins() {
     SystemError = makeBuiltinException(StandardError, "SystemError");
     NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
     PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
+    EOFError = makeBuiltinException(StandardError, "EOFError");
 
     EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
     EnvironmentError->giveAttr(

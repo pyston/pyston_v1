@@ -52,40 +52,44 @@ ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
         for (int i = 0; i < arguments->args.size(); i++) {
             AST_expr* arg = arguments->args[i];
             if (arg->type == AST_TYPE::Name) {
-                args.push_back(ast_cast<AST_Name>(arg)->id);
+                args.push_back(ast_cast<AST_Name>(arg)->id.str());
             } else {
                 args.push_back("." + std::to_string(i + 1));
             }
         }
 
-        vararg = arguments->vararg;
-        kwarg = arguments->kwarg;
+        vararg = arguments->vararg.str();
+        kwarg = arguments->kwarg.str();
     } else {
         RELEASE_ASSERT(0, "%d", ast->type);
     }
 }
 
-ParamNames::ParamNames(const std::vector<std::string>& args, const std::string& vararg, const std::string& kwarg)
+ParamNames::ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg)
     : takes_param_names(true) {
     this->args = args;
     this->vararg = vararg;
     this->kwarg = kwarg;
 }
 
-std::string SourceInfo::mangleName(const std::string& id) {
+InternedString SourceInfo::mangleName(InternedString id) {
     assert(ast);
     if (ast->type == AST_TYPE::Module)
         return id;
     return getScopeInfo()->mangleName(id);
 }
 
+InternedStringPool& SourceInfo::getInternedStrings() {
+    return scoping->getInternedStrings();
+}
+
 const std::string SourceInfo::getName() {
     assert(ast);
     switch (ast->type) {
         case AST_TYPE::ClassDef:
-            return ast_cast<AST_ClassDef>(ast)->name;
+            return ast_cast<AST_ClassDef>(ast)->name.str();
         case AST_TYPE::FunctionDef:
-            return ast_cast<AST_FunctionDef>(ast)->name;
+            return ast_cast<AST_FunctionDef>(ast)->name.str();
         case AST_TYPE::Lambda:
             return "<lambda>";
         case AST_TYPE::Module:
@@ -290,6 +294,42 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
+// If a function version keeps failing its speculations, kill it (remove it
+// from the list of valid function versions).  The next time we go to call
+// the function, we will have to pick a different version, potentially recompiling.
+//
+// TODO we should have logic like this at the CLFunc level that detects that we keep
+// on creating functions with failing speculations, and then stop speculating.
+void CompiledFunction::speculationFailed() {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
+    this->times_speculation_failed++;
+
+    if (this->times_speculation_failed >= 4) {
+        // printf("Killing %p because it failed too many speculations\n", this);
+
+        CLFunction* cl = this->clfunc;
+        assert(cl);
+
+        bool found = false;
+        for (int i = 0; i < clfunc->versions.size(); i++) {
+            if (clfunc->versions[i] == this) {
+                clfunc->versions.erase(clfunc->versions.begin() + i);
+                this->dependent_callsites.invalidateAll();
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            for (int i = 0; i < clfunc->versions.size(); i++) {
+                printf("%p\n", clfunc->versions[i]);
+            }
+        }
+        assert(found);
+    }
+}
+
 /// Reoptimizes the given function version at the new effort level.
 /// The cf must be an active version in its parents CLFunction; the given
 /// version will be replaced by the new version, which will be returned.
@@ -387,8 +427,8 @@ CLFunction* createRTFunction(int num_args, int num_defaults, bool takes_varargs,
 
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, const ParamNames& param_names) {
     assert(!param_names.takes_param_names || num_args == param_names.args.size());
-    assert(param_names.vararg == "");
-    assert(param_names.kwarg == "");
+    assert(param_names.vararg.str() == "");
+    assert(param_names.kwarg.str() == "");
 
     return boxRTFunction(f, rtn_type, num_args, 0, false, false, param_names);
 }
@@ -396,8 +436,8 @@ CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args,
 CLFunction* boxRTFunction(void* f, ConcreteCompilerType* rtn_type, int num_args, int num_defaults, bool takes_varargs,
                           bool takes_kwargs, const ParamNames& param_names) {
     assert(!param_names.takes_param_names || num_args == param_names.args.size());
-    assert(takes_varargs || param_names.vararg == "");
-    assert(takes_kwargs || param_names.kwarg == "");
+    assert(takes_varargs || param_names.vararg.str() == "");
+    assert(takes_kwargs || param_names.kwarg.str() == "");
 
     CLFunction* cl_f = createRTFunction(num_args, num_defaults, takes_varargs, takes_kwargs, param_names);
 
