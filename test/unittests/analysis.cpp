@@ -48,6 +48,6 @@ TEST_F(AnalysisTest, augassign) {
             ASSERT_TRUE(liveness->isLiveAtEnd(module->interned_strings->get("a"), block));
     }
 
-    PhiAnalysis* phis = computeRequiredPhis(SourceInfo::ArgNames(func, scoping), cfg, liveness, scope_info);
+    PhiAnalysis* phis = computeRequiredPhis(ParamNames(func), cfg, liveness, scope_info);
 }
 
