@@ -413,27 +413,7 @@ Box* sorted(Box* obj, Box* key, Box* cmp, Box** args) {
         listAppendInternal(rtn, e);
     }
 
-    std::sort<Box**, PyLt>(rtn->elts->elts, rtn->elts->elts + rtn->size, PyLt());
-
-    return rtn;
-}
-
-Box* sortedList(Box* obj) {
-    RELEASE_ASSERT(obj->cls == list_cls, "");
-
-    BoxedList* lobj = static_cast<BoxedList*>(obj);
-    BoxedList* rtn = new BoxedList();
-
-    int size = lobj->size;
-    rtn->elts = new (size) GCdArray();
-    rtn->size = size;
-    rtn->capacity = size;
-    for (int i = 0; i < size; i++) {
-        Box* t = rtn->elts->elts[i] = lobj->elts->elts[i];
-    }
-
-    std::sort<Box**, PyLt>(rtn->elts->elts, rtn->elts->elts + size, PyLt());
-
+    listSort(rtn, key, cmp, reverse);
     return rtn;
 }
 
@@ -1113,7 +1093,6 @@ void setupBuiltins() {
 
 
     CLFunction* sorted_func = createRTFunction(4, 3, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
-    addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST, UNKNOWN, UNKNOWN, UNKNOWN });
     addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
     builtins_module->giveAttr("sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, { None, None, False }));
 

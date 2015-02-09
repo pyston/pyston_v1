@@ -84,3 +84,7 @@ class C(object):
     s = sorted
 c = C()
 print c.s([3,2,1])
+
+l = range(5)
+print sorted(l, key=lambda x:-x)
+print l

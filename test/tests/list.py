@@ -113,3 +113,19 @@ for i in xrange(3):
             l = range(i)
             l[j:k] = ["added"]
             print i, j, k, l
+
+
+
+l = [1, 3, 5, 7, 2, 4]
+print l.sort(key=lambda x:x%3)
+print l
+print l.sort(reverse=True)
+print l
+
+# If the keyfunc throws an exception, we shouldn't see any modifications:
+l = range(9)
+try:
+    print sorted(l, key=lambda i:1.0/(5-i))
+except ZeroDivisionError:
+    pass
+print l

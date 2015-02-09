@@ -35,6 +35,7 @@ Box* listIterIter(Box* self);
 Box* listiterHasnext(Box* self);
 i1 listiterHasnextUnboxed(Box* self);
 Box* listiterNext(Box* self);
+void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse);
 extern "C" Box* listAppend(Box* self, Box* v);
 }
 

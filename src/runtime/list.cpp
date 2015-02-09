@@ -433,13 +433,74 @@ Box* listAdd(BoxedList* self, Box* _rhs) {
     return rtn;
 }
 
-Box* listSort1(BoxedList* self) {
+Box* listReverse(BoxedList* self) {
     LOCK_REGION(self->lock.asWrite());
 
     assert(self->cls == list_cls);
+    for (int i = 0, j = self->size - 1; i < j; i++, j--) {
+        Box* e = self->elts->elts[i];
+        self->elts->elts[i] = self->elts->elts[j];
+        self->elts->elts[j] = e;
+    }
 
-    std::sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
+    return None;
+}
 
+void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
+    LOCK_REGION(self->lock.asWrite());
+    assert(self->cls == list_cls);
+
+    RELEASE_ASSERT(cmp == None, "The 'cmp' keyword is currently not supported");
+
+    if (key == None)
+        key = NULL;
+
+    int num_keys_added = 0;
+    auto remove_keys = [&]() {
+        for (int i = 0; i < num_keys_added; i++) {
+            Box** obj_loc = &self->elts->elts[i];
+            assert((*obj_loc)->cls == tuple_cls);
+            *obj_loc = static_cast<BoxedTuple*>(*obj_loc)->elts[2];
+        }
+    };
+
+    try {
+        if (key) {
+            for (int i = 0; i < self->size; i++) {
+                Box** obj_loc = &self->elts->elts[i];
+
+                Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
+                // Add the index as part of the new tuple so that the comparison never hits the
+                // original object.
+                // TODO we could potentially make this faster by copying the CPython approach of
+                // creating special sortwrapper objects that compare only based on the key.
+                Box* new_obj = new BoxedTuple({ key_val, boxInt(i), *obj_loc });
+
+                *obj_loc = new_obj;
+                num_keys_added++;
+            }
+        }
+
+        // We don't need to do a stable sort if there's a keyfunc, since we explicitly added the index
+        // as part of the sort key.
+        // But we might want to get rid of that approach?  CPython doesn't do that (they create special
+        // wrapper objects that compare only based on the key).
+        std::stable_sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
+    } catch (ExcInfo e) {
+        remove_keys();
+        throw e;
+    }
+
+    remove_keys();
+
+    if (nonzero(reverse)) {
+        listReverse(self);
+    }
+}
+
+Box* listSortFunc(BoxedList* self, Box* cmp, Box* key, Box** _args) {
+    Box* reverse = _args[0];
+    listSort(self, cmp, key, reverse);
     return None;
 }
 
@@ -450,7 +511,7 @@ extern "C" int PyList_Sort(PyObject* v) noexcept {
     }
 
     try {
-        listSort1((BoxedList*)v);
+        listSort((BoxedList*)v, None, None, False);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
@@ -529,19 +590,6 @@ Box* listRemove(BoxedList* self, Box* elt) {
     }
 
     raiseExcHelper(ValueError, "list.remove(x): x not in list");
-}
-
-Box* listReverse(BoxedList* self) {
-    LOCK_REGION(self->lock.asWrite());
-
-    assert(self->cls == list_cls);
-    for (int i = 0, j = self->size - 1; i < j; i++, j--) {
-        Box* e = self->elts->elts[i];
-        self->elts->elts[i] = self->elts->elts[j];
-        self->elts->elts[j] = e;
-    }
-
-    return None;
 }
 
 BoxedClass* list_iterator_cls = NULL;
@@ -735,7 +783,9 @@ void setupList() {
     list_cls->giveAttr("__iadd__", new BoxedFunction(boxRTFunction((void*)listIAdd, UNKNOWN, 2)));
     list_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)listAdd, UNKNOWN, 2)));
 
-    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSort1, NONE, 1)));
+    list_cls->giveAttr("sort", new BoxedFunction(boxRTFunction((void*)listSortFunc, NONE, 4, 3, false, false,
+                                                               ParamNames({ "", "cmp", "key", "reverse" }, "", "")),
+                                                 { None, None, False }));
     list_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)listContains, BOXED_BOOL, 2)));
 
     list_cls->giveAttr("__new__",
