@@ -328,6 +328,24 @@ public:
         return rtn;
     }
 
+    bool isMainInterpreterFunc(unw_word_t ip) {
+        // Remember the addr of the end of the interpreter function because unw_get_proc_info is slow and if we know
+        // the bounds we can replace it with pointer comparisons.
+        static intptr_t interpreter_instr_end = 0; // first ip NOT covered by interpreter func
+        if (interpreter_instr_end == 0) {
+            unw_proc_info_t pip;
+            int code = unw_get_proc_info(&this->cursor, &pip);
+            RELEASE_ASSERT(code == 0, "%d", code);
+            if (pip.start_ip == (intptr_t)interpreter_instr_addr) {
+                interpreter_instr_end = pip.end_ip;
+                return true;
+            }
+        } else if (ip >= (intptr_t)interpreter_instr_addr && ip < interpreter_instr_end) {
+            return true;
+        }
+        return false;
+    }
+
     bool incr() {
         bool was_osr = cur_is_osr;
 
@@ -359,13 +377,7 @@ public:
                 return true;
             }
 
-            // TODO shouldn't need to do this expensive-looking query, if we
-            // knew the bounds of the interpretFunction() function:
-            unw_proc_info_t pip;
-            int code = unw_get_proc_info(&this->cursor, &pip);
-            RELEASE_ASSERT(code == 0, "%d", code);
-
-            if (pip.start_ip == (intptr_t)interpreter_instr_addr) {
+            if (isMainInterpreterFunc(ip)) {
                 unw_word_t bp;
                 unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
 
