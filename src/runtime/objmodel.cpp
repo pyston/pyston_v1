@@ -77,7 +77,6 @@ static const std::string get_str("__get__");
 static const std::string hasnext_str("__hasnext__");
 static const std::string init_str("__init__");
 static const std::string iter_str("__iter__");
-static const std::string reversed_str("__reversed__");
 static const std::string new_str("__new__");
 static const std::string none_str("None");
 static const std::string repr_str("__repr__");
@@ -3442,20 +3441,6 @@ Box* getiter(Box* o) {
     }
 
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
-}
-
-Box* getreversed(Box* o) {
-    // TODO add rewriting to this?  probably want to try to avoid this path though
-    Box* r = callattrInternal0(o, &reversed_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
-    if (r)
-        return r;
-
-    if (!typeLookup(o->cls, getitem_str, NULL)) {
-        raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
-    }
-    int64_t len = unboxedLen(o); // this will throw an exception if __len__ isn't there
-
-    return new (seqreviter_cls) BoxedSeqIter(o, len - 1);
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {

@@ -89,7 +89,6 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 
 Box* getiter(Box* o);
-Box* getreversed(Box* o);
 extern "C" Box* getPystonIter(Box* o);
 
 extern "C" void dump(void* p);
