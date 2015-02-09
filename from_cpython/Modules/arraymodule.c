@@ -2249,6 +2249,13 @@ initarray(void)
 
     Arraytype.ob_type = &PyType_Type;
     PyArrayIter_Type.ob_type = &PyType_Type;
+
+    // Pyston change: let the GC know about our type
+    if (PyType_Ready(&Arraytype))
+        return;
+    if (PyType_Ready(&PyArrayIter_Type))
+        return;
+
     m = Py_InitModule3("array", a_methods, module_doc);
     if (m == NULL)
         return;

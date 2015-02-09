@@ -25,8 +25,11 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
+#include "runtime/file.h"
 #include "runtime/import.h"
 #include "runtime/objmodel.h"
+#include "runtime/rewrite_args.h"
+#include "runtime/traceback.h"
 #include "runtime/types.h"
 
 namespace pyston {
@@ -76,6 +79,10 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
                        getFullNameOfClass(self->type).c_str(), getFullTypeName(inst).c_str());
 
     return new BoxedWrapperObject(self, inst);
+}
+
+extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssize_t* buffer_len) noexcept {
+    Py_FatalError("unimplemented");
 }
 
 // copied from CPython's getargs.c:
@@ -145,57 +152,6 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
 extern "C" void PyObject_Free(void* p) noexcept {
     gc::gc_free(p);
     ASSERT(0, "I think this is good enough but I'm not sure; should test");
-}
-
-extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {
-    RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
-    RELEASE_ASSERT(args->cls == tuple_cls, "");
-
-    // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
-    // won't end up doing a GIL check?
-    // threading::GLDemoteRegion _gil_demote;
-
-    try {
-        Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
-        return r;
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" Py_ssize_t PyObject_Size(PyObject* o) noexcept {
-    try {
-        return len(o)->n;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return -1;
-    }
-}
-
-extern "C" PyObject* PyObject_GetIter(PyObject* o) noexcept {
-    try {
-        return getiter(o);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" PyObject* PyObject_Repr(PyObject* obj) noexcept {
-    try {
-        return repr(obj);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
 }
 
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
@@ -536,6 +492,9 @@ extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
 }
 
 extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
+    if (o->cls == tuple_cls)
+        return o;
+
     Py_FatalError("unimplemented");
 }
 
@@ -686,8 +645,6 @@ void checkAndThrowCAPIException() {
         assert(!cur_thread_state.curexc_value);
 
     if (_type) {
-        RELEASE_ASSERT(cur_thread_state.curexc_traceback == NULL || cur_thread_state.curexc_traceback == None,
-                       "unsupported");
         BoxedClass* type = static_cast<BoxedClass*>(_type);
         assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
@@ -695,6 +652,10 @@ void checkAndThrowCAPIException() {
         Box* value = cur_thread_state.curexc_value;
         if (!value)
             value = None;
+
+        Box* tb = cur_thread_state.curexc_traceback;
+        if (!tb)
+            tb = None;
 
         // This is similar to PyErr_NormalizeException:
         if (!isInstance(value, type)) {
@@ -711,6 +672,8 @@ void checkAndThrowCAPIException() {
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
         PyErr_Clear();
+        if (tb != None)
+            raiseRaw(ExcInfo(value->cls, value, tb));
         raiseExc(value);
     }
 }
@@ -737,6 +700,12 @@ extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) 
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyErr_BadArgument() noexcept {
+    // TODO this is untested
+    PyErr_SetString(PyExc_TypeError, "bad argument type for built-in operation");
+    return 0;
+}
+
 extern "C" PyObject* PyErr_NoMemory() noexcept {
     Py_FatalError("unimplemented");
 }
@@ -759,7 +728,10 @@ extern "C" PyObject* PyExceptionInstance_Class(PyObject* o) noexcept {
 }
 
 extern "C" int PyTraceBack_Print(PyObject* v, PyObject* f) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(f->cls == file_cls && static_cast<BoxedFile*>(f)->f_fp == stderr,
+                   "sorry will only print tracebacks to stderr right now");
+    printTraceback(v);
+    return 0;
 }
 
 #define Py_DEFAULT_RECURSION_LIMIT 1000
@@ -1441,34 +1413,56 @@ BoxedModule* importTestExtension(const std::string& name) {
     return m;
 }
 
+Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec,
+                                     Box* arg1, Box* arg2, Box* arg3, Box** args,
+                                     const std::vector<const std::string*>* keyword_names) {
+    if (argspec != ArgPassSpec(2))
+        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+    assert(arg1->cls == capifunc_cls);
+    BoxedCApiFunction* capifunc = static_cast<BoxedCApiFunction*>(arg1);
+    if (capifunc->ml_flags != METH_O)
+        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+    if (rewrite_args) {
+        rewrite_args->arg1->addGuard((intptr_t)arg1);
+        rewrite_args->out_rtn
+            = rewrite_args->rewriter->call(true, (void*)capifunc->func, rewrite_args->arg1, rewrite_args->arg2);
+        rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+        rewrite_args->out_success = true;
+    }
+    Box* r = capifunc->func(arg1, arg2);
+    checkAndThrowCAPIException();
+    assert(r);
+    return r;
+}
+
 void setupCAPI() {
-    capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
-    capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
+    capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false, "capifunc");
 
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
 
-    capifunc_cls->giveAttr(
-        "__call__", new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true)));
+    auto capi_call = new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__call__, UNKNOWN, 1, 0, true, true));
+    capi_call->f->internal_callable = BoxedCApiFunction::callInternal;
+    capifunc_cls->giveAttr("__call__", capi_call);
 
     capifunc_cls->freeze();
 
-    method_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
-    method_cls->giveAttr("__name__", boxStrConstant("method"));
+    method_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false, "method");
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
                                                                      0, true, true)));
     method_cls->freeze();
 
-    wrapperdescr_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
-    wrapperdescr_cls->giveAttr("__name__", boxStrConstant("wrapper_descriptor"));
+    wrapperdescr_cls
+        = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor");
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->freeze();
 
-    wrapperobject_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
-    wrapperobject_cls->giveAttr("__name__", boxStrConstant("method-wrapper"));
+    wrapperobject_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperObject), false, "method-wrapper");
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->freeze();

@@ -42,7 +42,8 @@ extern "C" void* gc_compat_realloc(void* ptr, size_t sz) noexcept {
 }
 
 extern "C" void gc_compat_free(void* ptr) noexcept {
-    gc_free(ptr);
+    if (ptr)
+        gc_free(ptr);
 }
 
 // We may need to hook malloc as well.  For now, these definitions serve

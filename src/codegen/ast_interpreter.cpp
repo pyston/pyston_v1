@@ -14,6 +14,7 @@
 
 #include "codegen/ast_interpreter.h"
 
+#include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/StringMap.h>
 #include <unordered_map>
 
@@ -42,8 +43,10 @@
 
 namespace pyston {
 
-#define OSR_THRESHOLD 100
-#define REOPT_THRESHOLD 10
+namespace {
+
+#define OSR_THRESHOLD 200
+#define REOPT_THRESHOLD 100
 
 union Value {
     bool b;
@@ -59,7 +62,7 @@ union Value {
 
 class ASTInterpreter {
 public:
-    typedef std::unordered_map<InternedString, Box*> SymMap;
+    typedef llvm::DenseMap<InternedString, Box*> SymMap;
 
     ASTInterpreter(CompiledFunction* compiled_function);
 
@@ -142,139 +145,11 @@ public:
     void gcVisit(GCVisitor* visitor);
 };
 
-const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
-
-static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
-static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
-
-Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args) {
-    if (unlikely(cf->times_called > REOPT_THRESHOLD)) {
-        CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
-        if (closure && generator)
-            return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
-                                                     arg3, args);
-        else if (closure)
-            return optimized->closure_call((BoxedClosure*)closure, arg1, arg2, arg3, args);
-        else if (generator)
-            return optimized->generator_call((BoxedGenerator*)generator, arg1, arg2, arg3, args);
-        return optimized->call(arg1, arg2, arg3, args);
-    }
-
-    ++cf->times_called;
-    ASTInterpreter interpreter(cf);
-
-    interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
-    Value v = ASTInterpreter::execute(interpreter);
-
-    return v.o ? v.o : None;
-}
 
 void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
     if (!allow_duplicates)
         assert(sym_table.count(name) == 0);
     sym_table[name] = value;
-}
-
-Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      BoxedDict* locals) {
-    assert(cf);
-    assert(enclosing_stmt);
-    assert(locals);
-    assert(after_expr);
-    assert(expr_val);
-
-    ASTInterpreter interpreter(cf);
-
-    for (const auto& p : locals->d) {
-        assert(p.first->cls == str_cls);
-        auto name = static_cast<BoxedString*>(p.first)->s;
-        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
-        interpreter.addSymbol(interned, p.second, false);
-    }
-
-    CFGBlock* start_block = NULL;
-    AST_stmt* starting_statement = NULL;
-    while (true) {
-        if (enclosing_stmt->type == AST_TYPE::Assign) {
-            auto asgn = ast_cast<AST_Assign>(enclosing_stmt);
-            assert(asgn->value == after_expr);
-            assert(asgn->targets.size() == 1);
-            assert(asgn->targets[0]->type == AST_TYPE::Name);
-            auto name = ast_cast<AST_Name>(asgn->targets[0]);
-            assert(name->id.str()[0] == '#');
-            interpreter.addSymbol(name->id, expr_val, true);
-            break;
-        } else if (enclosing_stmt->type == AST_TYPE::Expr) {
-            auto expr = ast_cast<AST_Expr>(enclosing_stmt);
-            assert(expr->value == after_expr);
-            break;
-        } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
-            auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);
-            start_block = invoke->normal_dest;
-            starting_statement = start_block->body[0];
-            enclosing_stmt = invoke->stmt;
-        } else {
-            RELEASE_ASSERT(0, "should not be able to reach here with anything other than an Assign (got %d)",
-                           enclosing_stmt->type);
-        }
-    }
-
-    if (start_block == NULL) {
-        // TODO innefficient
-        for (auto block : cf->clfunc->source->cfg->blocks) {
-            int n = block->body.size();
-            for (int i = 0; i < n; i++) {
-                if (block->body[i] == enclosing_stmt) {
-                    ASSERT(i + 1 < n, "how could we deopt from a non-invoke terminator?");
-                    start_block = block;
-                    starting_statement = block->body[i + 1];
-                    break;
-                }
-            }
-
-            if (start_block)
-                break;
-        }
-
-        ASSERT(start_block, "was unable to find the starting block??");
-        assert(starting_statement);
-    }
-
-    Value v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
-
-    return v.o ? v.o : None;
-}
-
-AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
-    assert(interpreter);
-    return interpreter->getCurrentStatement();
-}
-
-CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
-    assert(interpreter);
-    return interpreter->getCF();
-}
-
-FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
-    assert(interpreter);
-    return interpreter->getFrameInfo();
-}
-
-BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
-    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
-    assert(interpreter);
-    BoxedDict* rtn = new BoxedDict();
-    for (auto&& l : interpreter->getSymbolTable()) {
-        if (only_user_visible && (l.first.str()[0] == '!' || l.first.str()[0] == '#'))
-            continue;
-
-        rtn->d[new BoxedString(l.first.str())] = l.second;
-    }
-    return rtn;
 }
 
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
@@ -289,13 +164,6 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
     if (generator)
         visitor->visit(generator);
 }
-
-void gatherInterpreterRoots(GCVisitor* visitor) {
-    for (const auto& p : s_interpreterMap) {
-        p.second->gcVisit(visitor);
-    }
-}
-
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
     : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), current_block(0),
@@ -337,7 +205,9 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     }
 }
 
-namespace {
+static std::unordered_map<void*, ASTInterpreter*> s_interpreterMap;
+static_assert(THREADING_USE_GIL, "have to make the interpreter map thread safe!");
+
 class RegisterHelper {
 private:
     void* frame_addr;
@@ -351,7 +221,6 @@ public:
         s_interpreterMap.erase(frame_addr);
     }
 };
-}
 
 Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block, AST_stmt* start_at) {
     threading::allowGLReadPreemption();
@@ -510,7 +379,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
     if (ENABLE_OSR && backedge) {
         ++edgecount;
-        if (edgecount > OSR_THRESHOLD) {
+        if (edgecount > OSR_THRESHOLD && !FORCE_INTERPRETER) {
             eraseDeadSymbols();
 
             const OSREntryDescriptor* found_entry = nullptr;
@@ -704,7 +573,7 @@ Value ASTInterpreter::visit_yield(AST_Yield* node) {
     return yield(generator, value.o);
 }
 
-Value __attribute__((flatten)) ASTInterpreter::visit_stmt(AST_stmt* node) {
+Value ASTInterpreter::visit_stmt(AST_stmt* node) {
     if (0) {
         printf("%20s % 2d ", source_info->getName().c_str(), current_block->idx);
         print_ast(node);
@@ -921,6 +790,8 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
 }
 
 Value ASTInterpreter::visit_assign(AST_Assign* node) {
+    assert(node->targets.size() == 1 && "cfg should have lowered it to a single target");
+
     Value v = visit_expr(node->value);
     for (AST_expr* e : node->targets)
         doStore(e, v);
@@ -934,6 +805,7 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
 
     Box* dest = node->dest ? visit_expr(node->dest).o : getSysStdout();
     int nvals = node->values.size();
+    assert(nvals <= 1 && "cfg should have lowered it to 0 or 1 values");
     for (int i = 0; i < nvals; i++) {
         Box* var = visit_expr(node->values[i]).o;
 
@@ -959,7 +831,7 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     return doBinOp(visit_expr(node->left).o, visit_expr(node->comparators[0]).o, node->ops[0], BinExpType::Compare);
 }
 
-Value __attribute__((flatten)) ASTInterpreter::visit_expr(AST_expr* node) {
+Value ASTInterpreter::visit_expr(AST_expr* node) {
     switch (node->type) {
         case AST_TYPE::Attribute:
             return visit_attribute((AST_Attribute*)node);
@@ -1124,23 +996,55 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
 }
 
 Value ASTInterpreter::visit_name(AST_Name* node) {
-    if (scope_info->refersToGlobal(node->id))
-        return getGlobal(source_info->parent_module, &node->id.str());
-    else if (scope_info->refersToClosure(node->id)) {
-        return getattr(passed_closure, node->id.c_str());
-    } else {
-        SymMap::iterator it = sym_table.find(node->id);
-        if (it != sym_table.end()) {
-            Box* value = it->second;
-            return value;
+    switch (node->lookup_type) {
+        case AST_Name::UNKNOWN: {
+            if (scope_info->refersToGlobal(node->id)) {
+                node->lookup_type = AST_Name::GLOBAL;
+                return getGlobal(source_info->parent_module, &node->id.str());
+            } else if (scope_info->refersToClosure(node->id)) {
+                node->lookup_type = AST_Name::CLOSURE;
+                return getattr(passed_closure, node->id.c_str());
+            } else {
+                bool is_old_local = (source_info->ast->type == AST_TYPE::ClassDef);
+                node->lookup_type = is_old_local ? AST_Name::LOCAL : AST_Name::FAST_LOCAL;
+
+                SymMap::iterator it = sym_table.find(node->id);
+                if (it != sym_table.end()) {
+                    Box* value = it->second;
+                    return value;
+                }
+
+                // classdefs have different scoping rules than functions:
+                if (source_info->ast->type == AST_TYPE::ClassDef)
+                    return getGlobal(source_info->parent_module, &node->id.str());
+
+                assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+                return Value();
+            }
         }
-
-        // classdefs have different scoping rules than functions:
-        if (source_info->ast->type == AST_TYPE::ClassDef)
+        case AST_Name::GLOBAL:
             return getGlobal(source_info->parent_module, &node->id.str());
+        case AST_Name::CLOSURE:
+            return getattr(passed_closure, node->id.c_str());
+        case AST_Name::FAST_LOCAL: {
+            SymMap::iterator it = sym_table.find(node->id);
+            if (it != sym_table.end())
+                return it->second;
 
-        assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
-        return Value();
+            assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
+            return Value();
+        }
+        case AST_Name::LOCAL: {
+            SymMap::iterator it = sym_table.find(node->id);
+            if (it != sym_table.end()) {
+                Box* value = it->second;
+                return value;
+            }
+
+            return getGlobal(source_info->parent_module, &node->id.str());
+        }
+        default:
+            abort();
     }
 }
 
@@ -1168,5 +1072,139 @@ Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
 
 Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
     return getattr(visit_expr(node->value).o, node->attr.c_str());
+}
+}
+
+const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
+
+Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
+                          Box* arg3, Box** args) {
+    if (unlikely(cf->times_called > REOPT_THRESHOLD && ENABLE_REOPT && !FORCE_INTERPRETER)) {
+        CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
+        if (closure && generator)
+            return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
+                                                     arg3, args);
+        else if (closure)
+            return optimized->closure_call((BoxedClosure*)closure, arg1, arg2, arg3, args);
+        else if (generator)
+            return optimized->generator_call((BoxedGenerator*)generator, arg1, arg2, arg3, args);
+        return optimized->call(arg1, arg2, arg3, args);
+    }
+
+    ++cf->times_called;
+    ASTInterpreter interpreter(cf);
+
+    interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
+    Value v = ASTInterpreter::execute(interpreter);
+
+    return v.o ? v.o : None;
+}
+
+
+Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
+                      BoxedDict* locals) {
+    assert(cf);
+    assert(enclosing_stmt);
+    assert(locals);
+    assert(after_expr);
+    assert(expr_val);
+
+    ASTInterpreter interpreter(cf);
+
+    for (const auto& p : locals->d) {
+        assert(p.first->cls == str_cls);
+        auto name = static_cast<BoxedString*>(p.first)->s;
+        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
+        interpreter.addSymbol(interned, p.second, false);
+    }
+
+    CFGBlock* start_block = NULL;
+    AST_stmt* starting_statement = NULL;
+    while (true) {
+        if (enclosing_stmt->type == AST_TYPE::Assign) {
+            auto asgn = ast_cast<AST_Assign>(enclosing_stmt);
+            assert(asgn->value == after_expr);
+            assert(asgn->targets.size() == 1);
+            assert(asgn->targets[0]->type == AST_TYPE::Name);
+            auto name = ast_cast<AST_Name>(asgn->targets[0]);
+            assert(name->id.str()[0] == '#');
+            interpreter.addSymbol(name->id, expr_val, true);
+            break;
+        } else if (enclosing_stmt->type == AST_TYPE::Expr) {
+            auto expr = ast_cast<AST_Expr>(enclosing_stmt);
+            assert(expr->value == after_expr);
+            break;
+        } else if (enclosing_stmt->type == AST_TYPE::Invoke) {
+            auto invoke = ast_cast<AST_Invoke>(enclosing_stmt);
+            start_block = invoke->normal_dest;
+            starting_statement = start_block->body[0];
+            enclosing_stmt = invoke->stmt;
+        } else {
+            RELEASE_ASSERT(0, "should not be able to reach here with anything other than an Assign (got %d)",
+                           enclosing_stmt->type);
+        }
+    }
+
+    if (start_block == NULL) {
+        // TODO innefficient
+        for (auto block : cf->clfunc->source->cfg->blocks) {
+            int n = block->body.size();
+            for (int i = 0; i < n; i++) {
+                if (block->body[i] == enclosing_stmt) {
+                    ASSERT(i + 1 < n, "how could we deopt from a non-invoke terminator?");
+                    start_block = block;
+                    starting_statement = block->body[i + 1];
+                    break;
+                }
+            }
+
+            if (start_block)
+                break;
+        }
+
+        ASSERT(start_block, "was unable to find the starting block??");
+        assert(starting_statement);
+    }
+
+    Value v = ASTInterpreter::execute(interpreter, start_block, starting_statement);
+
+    return v.o ? v.o : None;
+}
+
+AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getCurrentStatement();
+}
+
+CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getCF();
+}
+
+FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getFrameInfo();
+}
+
+BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    BoxedDict* rtn = new BoxedDict();
+    for (auto&& l : interpreter->getSymbolTable()) {
+        if (only_user_visible && (l.first.str()[0] == '!' || l.first.str()[0] == '#'))
+            continue;
+
+        rtn->d[new BoxedString(l.first.str())] = l.second;
+    }
+    return rtn;
+}
+
+void gatherInterpreterRoots(GCVisitor* visitor) {
+    for (const auto& p : s_interpreterMap) {
+        p.second->gcVisit(visitor);
+    }
 }
 }

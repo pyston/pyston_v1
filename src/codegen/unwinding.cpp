@@ -29,6 +29,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/stackmaps.h"
 #include "core/util.h"
+#include "runtime/traceback.h"
 #include "runtime/types.h"
 
 
@@ -438,22 +439,22 @@ static const LineInfo* lineInfoForFrame(PythonFrameIterator& frame_it) {
     AST_stmt* current_stmt = frame_it.getCurrentStatement();
     auto* cf = frame_it.getCF();
     assert(cf);
-    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, cf->clfunc->source->parent_module->fn,
-                        cf->clfunc->source->getName());
+
+    auto source = cf->clfunc->source;
+    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->parent_module->fn, source->getName());
 }
 
-std::vector<const LineInfo*> getTracebackEntries() {
-    std::vector<const LineInfo*> entries;
-
+BoxedTraceback* getTraceback() {
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
         if (!printed_warning) {
             printed_warning = true;
             fprintf(stderr, "Warning: can't get traceback since ENABLE_FRAME_INTROSPECTION=0\n");
         }
-        return entries;
+        return new BoxedTraceback();
     }
 
+    std::vector<const LineInfo*> entries;
     for (auto& frame_info : unwindPythonFrames()) {
         const LineInfo* line_info = lineInfoForFrame(frame_info);
         if (line_info)
@@ -461,12 +462,7 @@ std::vector<const LineInfo*> getTracebackEntries() {
     }
 
     std::reverse(entries.begin(), entries.end());
-    return entries;
-}
-
-const LineInfo* getMostRecentLineInfo() {
-    std::unique_ptr<PythonFrameIterator> frame = getTopPythonFrame();
-    return lineInfoForFrame(*frame);
+    return new BoxedTraceback(std::move(entries));
 }
 
 ExcInfo* getFrameExcInfo() {

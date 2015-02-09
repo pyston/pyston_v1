@@ -62,6 +62,8 @@ struct ArgPassSpec {
                && num_args == rhs.num_args;
     }
 
+    bool operator!=(ArgPassSpec rhs) { return !(*this == rhs); }
+
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
     uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
@@ -119,7 +121,7 @@ typedef ValuedCompilerVariable<llvm::Value*> ConcreteCompilerVariable;
 class Box;
 class BoxedClass;
 class BoxedModule;
-class BoxedFunction;
+class BoxedFunctionBase;
 
 class ICGetattr;
 struct ICSlotInfo;
@@ -280,7 +282,7 @@ public:
     // of the normal dispatch through the functionlist.
     // This can be used to implement functions which know how to rewrite themselves,
     // such as typeCall.
-    typedef Box* (*InternalCallable)(BoxedFunction*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
+    typedef Box* (*InternalCallable)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*, Box**,
                                      const std::vector<const std::string*>*);
     InternalCallable internal_callable = NULL;
 
@@ -332,7 +334,7 @@ EffortLevel::EffortLevel initialEffort();
 typedef bool i1;
 typedef int64_t i64;
 
-extern "C" const std::string* getNameOfClass(BoxedClass* cls);
+const char* getNameOfClass(BoxedClass* cls);
 std::string getFullNameOfClass(BoxedClass* cls);
 
 class Rewriter;
@@ -454,10 +456,8 @@ public:
 };
 static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
 
-extern "C" const std::string* getTypeName(Box* o);
 std::string getFullTypeName(Box* o);
-
-
+const char* getTypeName(Box* b);
 
 class BoxedClass;
 
@@ -473,7 +473,6 @@ void prependToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
 std::string formatException(Box* e);
-void printLastTraceback();
 
 // Raise a SyntaxError that occurs at a specific location.
 // The traceback given to the user will include this,
@@ -498,6 +497,7 @@ struct ExcInfo {
     ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {}
 #endif
     bool matches(BoxedClass* cls) const;
+    void printExcAndTraceback() const;
 };
 
 struct FrameInfo {

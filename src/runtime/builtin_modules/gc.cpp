@@ -40,9 +40,9 @@ static Box* enable() {
 void setupGC() {
     BoxedModule* gc_module = createModule("gc", "__builtin__");
 
-    gc_module->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)gcCollect, NONE, 0)));
-    gc_module->giveAttr("isenabled", new BoxedFunction(boxRTFunction((void*)isEnabled, BOXED_BOOL, 0)));
-    gc_module->giveAttr("disable", new BoxedFunction(boxRTFunction((void*)disable, NONE, 0)));
-    gc_module->giveAttr("enable", new BoxedFunction(boxRTFunction((void*)enable, NONE, 0)));
+    gc_module->giveAttr("__hex__", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)gcCollect, NONE, 0)));
+    gc_module->giveAttr("isenabled", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isEnabled, BOXED_BOOL, 0)));
+    gc_module->giveAttr("disable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)disable, NONE, 0)));
+    gc_module->giveAttr("enable", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)enable, NONE, 0)));
 }
 }

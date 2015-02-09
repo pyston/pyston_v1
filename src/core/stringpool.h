@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <sys/time.h>
 
+#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -41,6 +42,8 @@ private:
     // Only for testing purposes:
     InternedStringPool* pool;
     InternedString(const std::string* str, InternedStringPool* pool) : _str(str), pool(pool) {}
+
+    static InternedStringPool* invalidPool() { return reinterpret_cast<InternedStringPool*>(-1); }
 #else
     InternedString(const std::string* str) : _str(str) {}
 #endif
@@ -64,8 +67,9 @@ public:
     }
 
     bool operator==(InternedString rhs) const {
-        assert(this->_str);
-        assert(this->pool == rhs.pool);
+        assert(this->_str || this->pool == invalidPool());
+        assert(rhs._str || rhs.pool == invalidPool());
+        assert(this->pool == rhs.pool || this->pool == invalidPool() || rhs.pool == invalidPool());
         return this->_str == rhs._str;
     }
 
@@ -78,6 +82,7 @@ public:
     friend class InternedStringPool;
     friend struct std::hash<InternedString>;
     friend struct std::less<InternedString>;
+    friend struct llvm::DenseMapInfo<pyston::InternedString>;
 };
 
 class InternedStringPool {
@@ -127,6 +132,27 @@ template <> struct less<pyston::InternedString> {
         // We could create a faster "consistent ordering but not alphabetical" comparator if it makes a difference.
         return *lhs._str < *rhs._str;
     }
+};
+}
+
+namespace llvm {
+template <> struct DenseMapInfo<pyston::InternedString> {
+    static inline pyston::InternedString getEmptyKey() {
+#ifndef NDEBUG
+        return pyston::InternedString(nullptr, pyston::InternedString::invalidPool());
+#else
+        return pyston::InternedString(nullptr);
+#endif
+    }
+    static inline pyston::InternedString getTombstoneKey() {
+#ifndef NDEBUG
+        return pyston::InternedString((const std::string*)-1, pyston::InternedString::invalidPool());
+#else
+        return pyston::InternedString((const std::string*)-1);
+#endif
+    }
+    static unsigned getHashValue(const pyston::InternedString& val) { return std::hash<pyston::InternedString>()(val); }
+    static bool isEqual(const pyston::InternedString& lhs, const pyston::InternedString& rhs) { return lhs == rhs; }
 };
 }
 

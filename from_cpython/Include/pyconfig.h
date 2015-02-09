@@ -46,6 +46,7 @@
 #define HAVE_EPOLL 1
 #define HAVE_POLL 1
 #define HAVE_SELECT 1
+#define HAVE_ALARM 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"
@@ -62,11 +63,13 @@
 
 #define HAVE_ALLOCA_H 1
 #define HAVE_ASM_TYPES_H 1
+#define HAVE_CLOCK 1
 #define HAVE_CURSES_H 1
 #define HAVE_DIRENT_H 1
 #define HAVE_DLFCN_H 1
 #define HAVE_ERRNO_H 1
 #define HAVE_FCNTL_H 1
+#define HAVE_FTIME 1
 #define HAVE_GRP_H 1
 #define HAVE_INTTYPES_H 1
 #define HAVE_LANGINFO_H 1
@@ -99,7 +102,6 @@
 #define HAVE_SYS_STATVFS_H 1
 #define HAVE_SYS_STAT_H 1
 #define HAVE_SYS_TIMES_H 1
-#define HAVE_SYS_TIME_H 1
 #define HAVE_SYS_TYPES_H 1
 #define HAVE_SYS_UN_H 1
 #define HAVE_SYS_UTSNAME_H 1

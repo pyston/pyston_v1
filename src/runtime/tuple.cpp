@@ -113,7 +113,7 @@ Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     else if (slice->cls == slice_cls)
         return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     else
-        raiseExcHelper(TypeError, "tuple indices must be integers, not %s", getTypeName(slice)->c_str());
+        raiseExcHelper(TypeError, "tuple indices must be integers, not %s", getTypeName(slice));
 }
 
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {
@@ -130,7 +130,7 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
 
 Box* tupleMul(BoxedTuple* self, Box* rhs) {
     if (rhs->cls != int_cls) {
-        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs)->c_str());
+        raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
 
     int n = static_cast<BoxedInt*>(rhs)->n;
@@ -298,12 +298,12 @@ Box* tupleHash(BoxedTuple* self) {
 
 extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
     if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "tuple.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+        raiseExcHelper(TypeError, "tuple.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, tuple_cls))
-        raiseExcHelper(TypeError, "tuple.__new__(%s): %s is not a subtype of tuple", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "tuple.__new__(%s): %s is not a subtype of tuple", getNameOfClass(cls),
+                       getNameOfClass(cls));
 
     RELEASE_ASSERT(cls == tuple_cls, "");
 
@@ -382,9 +382,7 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
 
 
 void setupTuple() {
-    tuple_iterator_cls = new BoxedHeapClass(object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false);
-
-    tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
+    tuple_iterator_cls = new BoxedHeapClass(object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false, "tuple");
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
@@ -417,8 +415,6 @@ void setupTuple() {
     tuple_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)tupleMul, BOXED_TUPLE, 2)));
 
     tuple_cls->freeze();
-
-    tuple_iterator_cls->giveAttr("__name__", boxStrConstant("tupleiterator"));
 
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL);

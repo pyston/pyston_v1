@@ -1337,15 +1337,6 @@ void fixup_slot_dispatchers(BoxedClass* self) noexcept {
     const slotdef* p = slotdefs;
     while (p->name)
         p = update_one_slot(self, p);
-
-    // TODO: CPython handles this by having the __name__ attribute wrap (via a getset object)
-    // the tp_name field, whereas we're (needlessly?) doing the opposite.
-    if (!self->tp_name) {
-        Box* b = self->getattr("__name__");
-        assert(b);
-        assert(b->cls == str_cls);
-        self->tp_name = static_cast<BoxedString*>(b)->s.c_str();
-    }
 }
 
 static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
@@ -1729,7 +1720,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
     RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
-    RELEASE_ASSERT(cls->tp_as_buffer == NULL, "");
 
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
@@ -1771,7 +1761,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     cls->tp_dict = makeAttrWrapper(cls);
 
     assert(cls->tp_name);
-    cls->giveAttr("__name__", boxStrConstant(cls->tp_name));
     // tp_name
     // tp_basicsize, tp_itemsize
     // tp_doc

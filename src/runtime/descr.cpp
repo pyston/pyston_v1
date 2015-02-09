@@ -168,11 +168,9 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
 }
 
 void setupDescr() {
-    member_cls->giveAttr("__name__", boxStrConstant("member"));
     member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_cls->freeze();
 
-    property_cls->giveAttr("__name__", boxStrConstant("property"));
     property_cls->giveAttr(
         "__init__",
         new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false), { NULL, NULL, NULL, NULL }));
@@ -192,7 +190,6 @@ void setupDescr() {
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_doc)));
     property_cls->freeze();
 
-    staticmethod_cls->giveAttr("__name__", boxStrConstant("staticmethod"));
     staticmethod_cls->giveAttr("__init__",
                                new BoxedFunction(boxRTFunction((void*)staticmethodInit, UNKNOWN, 5, 4, false, false),
                                                  { None, None, None, None }));
@@ -201,7 +198,6 @@ void setupDescr() {
     staticmethod_cls->freeze();
 
 
-    classmethod_cls->giveAttr("__name__", boxStrConstant("classmethod"));
     classmethod_cls->giveAttr("__init__",
                               new BoxedFunction(boxRTFunction((void*)classmethodInit, UNKNOWN, 5, 4, false, false),
                                                 { None, None, None, None }));

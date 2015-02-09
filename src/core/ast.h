@@ -662,11 +662,23 @@ public:
     AST_TYPE::AST_TYPE ctx_type;
     InternedString id;
 
+    // The resolved scope of this name.  Kind of hacky to be storing it in the AST node;
+    // in CPython it ends up getting "cached" by being translated into one of a number of
+    // different bytecodes.
+    // We don't have a separate bytecode representation, so just store it in here for now.
+    enum LookupType {
+        UNKNOWN,
+        GLOBAL,
+        CLOSURE,
+        FAST_LOCAL,
+        LOCAL,
+    } lookup_type;
+
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
-        : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id) {}
+        : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id), lookup_type(UNKNOWN) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };

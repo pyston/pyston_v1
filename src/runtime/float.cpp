@@ -569,8 +569,7 @@ BoxedFloat* _floatNew(Box* a) {
                           ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
         if (!r) {
-            fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n",
-                    getTypeName(a)->c_str());
+            fprintf(stderr, "TypeError: float() argument must be a string or a number, not '%s'\n", getTypeName(a));
             raiseExcHelper(TypeError, "");
         }
 
@@ -583,12 +582,12 @@ BoxedFloat* _floatNew(Box* a) {
 
 Box* floatNew(BoxedClass* _cls, Box* a) {
     if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+        raiseExcHelper(TypeError, "float.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, float_cls))
-        raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "float.__new__(%s): %s is not a subtype of float", getNameOfClass(cls),
+                       getNameOfClass(cls));
 
 
     if (cls == float_cls)
@@ -602,7 +601,7 @@ Box* floatNew(BoxedClass* _cls, Box* a) {
 Box* floatStr(BoxedFloat* self) {
     if (!isSubclass(self->cls, float_cls))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'float' object but received a '%s'",
-                       getTypeName(self)->c_str());
+                       getTypeName(self));
 
     return boxString(floatFmt(self->d, 12, 'g'));
 }
@@ -635,8 +634,6 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
 }
 
 void setupFloat() {
-    float_cls->giveAttr("__name__", boxStrConstant("float"));
-
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
 

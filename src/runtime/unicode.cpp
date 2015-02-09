@@ -396,8 +396,6 @@ extern "C" const unsigned char _Py_ascii_whitespace[]
 
 
 void setupUnicode() {
-    unicode_cls->giveAttr("__name__", boxStrConstant("unicode"));
-
     unicode_cls->freeze();
 }
 

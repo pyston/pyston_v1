@@ -28,6 +28,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/file.h"
 #include "runtime/ics.h"
 #include "runtime/import.h"
 #include "runtime/inline/xrange.h"
@@ -329,29 +330,8 @@ extern "C" Box* id(Box* arg) {
 
 Box* open(Box* arg1, Box* arg2) {
     assert(arg2);
-
-    if (arg1->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
-                getTypeName(arg1)->c_str());
-        raiseExcHelper(TypeError, "");
-    }
-    if (arg2->cls != str_cls) {
-        fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n",
-                getTypeName(arg2)->c_str());
-        raiseExcHelper(TypeError, "");
-    }
-
-    const std::string& fn = static_cast<BoxedString*>(arg1)->s;
-    const std::string& mode = static_cast<BoxedString*>(arg2)->s;
-
-    FILE* f = fopen(fn.c_str(), mode.c_str());
-    if (!f) {
-        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
-        checkAndThrowCAPIException();
-        abort(); // unreachable;
-    }
-
-    return new BoxedFile(f, fn, mode);
+    // This could be optimized quite a bit if it ends up being important:
+    return runtimeCall(file_cls, ArgPassSpec(2), arg1, arg2, NULL, NULL, NULL);
 }
 
 extern "C" Box* chr(Box* arg) {
@@ -368,7 +348,7 @@ extern "C" Box* chr(Box* arg) {
 
 extern "C" Box* ord(Box* arg) {
     if (arg->cls != str_cls) {
-        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg)->c_str());
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg));
     }
     const std::string& s = static_cast<BoxedString*>(arg)->s;
 
@@ -381,22 +361,22 @@ extern "C" Box* ord(Box* arg) {
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
 
         istart = 0;
         istop = static_cast<BoxedInt*>(start)->n;
         istep = 1;
     } else if (step == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
 
         istart = static_cast<BoxedInt*>(start)->n;
         istop = static_cast<BoxedInt*>(stop)->n;
         istep = 1;
     } else {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start)->c_str());
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop)->c_str());
-        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step)->c_str());
+        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
+        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
+        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step));
 
         istart = static_cast<BoxedInt*>(start)->n;
         istop = static_cast<BoxedInt*>(stop)->n;
@@ -483,7 +463,7 @@ Box* issubclass_func(Box* child, Box* parent) {
 
 Box* bltinImport(Box* arg) {
     if (arg->cls != str_cls) {
-        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(arg)->c_str());
+        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(arg));
     }
 
     return import(-1, new BoxedTuple({}), &static_cast<BoxedString*>(arg)->s);
@@ -508,8 +488,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         if (default_value)
             return default_value;
         else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj)->c_str(),
-                           str->s.c_str());
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.c_str());
     }
 
     return rtn;
@@ -629,6 +608,13 @@ class BoxedException : public Box {
 public:
     HCAttrs attrs;
     BoxedException() {}
+
+    static Box* __reduce__(Box* self) {
+        RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
+        BoxedException* exc = static_cast<BoxedException*>(self);
+
+        return new BoxedTuple({ self->cls, EmptyTuple, makeAttrWrapper(self) });
+    }
 };
 
 Box* exceptionNew2(BoxedClass* cls, Box* message) {
@@ -637,11 +623,11 @@ Box* exceptionNew2(BoxedClass* cls, Box* message) {
 
 Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
     if (!isSubclass(cls->cls, type_cls))
-        raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls)->c_str());
+        raiseExcHelper(TypeError, "exceptions.__new__(X): X is not a type object (%s)", getTypeName(cls));
 
     if (!isSubclass(cls, BaseException))
         raiseExcHelper(TypeError, "BaseException.__new__(%s): %s is not a subtype of BaseException",
-                       getNameOfClass(cls)->c_str(), getNameOfClass(cls)->c_str());
+                       getNameOfClass(cls), getNameOfClass(cls));
 
     BoxedException* rtn = new (cls) BoxedException();
 
@@ -671,15 +657,14 @@ Box* exceptionRepr(Box* b) {
     assert(message->cls == str_cls);
 
     BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxString(*getTypeName(b) + "(" + message_s->s + ",)");
+    return boxString(std::string(getTypeName(b)) + "(" + message_s->s + ",)");
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), size, false);
-    cls->giveAttr("__name__", boxStrConstant(name));
+    BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), size, false, name);
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {
@@ -699,15 +684,16 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
     RELEASE_ASSERT(dict == NULL, "unimplemented");
 
     try {
-        BoxedClass* base = Exception;
-        BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true);
-
         char* dot_pos = strchr(name, '.');
         RELEASE_ASSERT(dot_pos, "");
         int n = strlen(name);
+        BoxedString* boxedName = boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1);
+
+        BoxedClass* base = Exception;
+        BoxedClass* cls
+            = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true, boxedName);
 
         cls->giveAttr("__module__", boxStrConstantSize(name, dot_pos - name));
-        cls->giveAttr("__name__", boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1));
         // TODO Not sure if this should be called here
         fixup_slot_dispatchers(cls);
         return cls;
@@ -783,7 +769,7 @@ Box* divmod(Box* lhs, Box* rhs) {
 Box* execfile(Box* _fn) {
     // The "globals" and "locals" arguments aren't implemented for now
     if (!isSubclass(_fn->cls, str_cls)) {
-        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn)->c_str());
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_fn));
     }
 
     BoxedString* fn = static_cast<BoxedString*>(_fn);
@@ -884,6 +870,8 @@ public:
         self->filename = filename;
         return None;
     }
+
+    static Box* __reduce__(Box* self) { Py_FatalError("unimplemented"); }
 
     static PyObject* __str__(BoxedEnvironmentError* self) noexcept {
         PyObject* rtnval = NULL;
@@ -991,10 +979,10 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("__debug__", False);
 
-    builtins_module->giveAttr("print", new BoxedFunction(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
+    builtins_module->giveAttr("print",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)print, NONE, 0, 0, true, true)));
 
-    notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
-    notimplemented_cls->giveAttr("__name__", boxStrConstant("NotImplementedType"));
+    notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
@@ -1003,8 +991,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("NotImplemented", NotImplemented);
     builtins_module->giveAttr("NotImplementedType", notimplemented_cls);
 
-    builtins_module->giveAttr("all", new BoxedFunction(boxRTFunction((void*)all, BOXED_BOOL, 1)));
-    builtins_module->giveAttr("any", new BoxedFunction(boxRTFunction((void*)any, BOXED_BOOL, 1)));
+    builtins_module->giveAttr("all", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)all, BOXED_BOOL, 1)));
+    builtins_module->giveAttr("any", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)any, BOXED_BOOL, 1)));
 
     BaseException = makeBuiltinException(object_cls, "BaseException", sizeof(BoxedException));
     Exception = makeBuiltinException(BaseException, "Exception");
@@ -1042,10 +1030,15 @@ void setupBuiltins() {
     PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
     EOFError = makeBuiltinException(StandardError, "EOFError");
 
+    BaseException->giveAttr("__reduce__",
+                            new BoxedFunction(boxRTFunction((void*)BoxedException::__reduce__, UNKNOWN, 1)));
+    EnvironmentError->giveAttr("__reduce__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__reduce__, UNKNOWN, 1)));
+
     EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
     EnvironmentError->giveAttr(
-        "__init__",
-        new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 1, false, false), { NULL }));
+        "__init__", new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 3, false, false),
+                                      { NULL, NULL, NULL }));
     EnvironmentError->giveAttr(
         "errno", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedEnvironmentError, myerrno)));
     EnvironmentError->giveAttr("strerror", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
@@ -1055,56 +1048,57 @@ void setupBuiltins() {
     EnvironmentError->giveAttr("__str__",
                                new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__str__, UNKNOWN, 1)));
 
-    repr_obj = new BoxedFunction(boxRTFunction((void*)repr, UNKNOWN, 1));
+    repr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
-    len_obj = new BoxedFunction(boxRTFunction((void*)len, UNKNOWN, 1));
+    len_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)len, UNKNOWN, 1));
     builtins_module->giveAttr("len", len_obj);
-    hash_obj = new BoxedFunction(boxRTFunction((void*)hash, UNKNOWN, 1));
+    hash_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hash, UNKNOWN, 1));
     builtins_module->giveAttr("hash", hash_obj);
-    abs_obj = new BoxedFunction(boxRTFunction((void*)abs_, UNKNOWN, 1));
+    abs_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)abs_, UNKNOWN, 1));
     builtins_module->giveAttr("abs", abs_obj);
-    builtins_module->giveAttr("hex", new BoxedFunction(boxRTFunction((void*)hexFunc, UNKNOWN, 1)));
-    builtins_module->giveAttr("oct", new BoxedFunction(boxRTFunction((void*)octFunc, UNKNOWN, 1)));
+    builtins_module->giveAttr("hex", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hexFunc, UNKNOWN, 1)));
+    builtins_module->giveAttr("oct", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)octFunc, UNKNOWN, 1)));
 
-    min_obj = new BoxedFunction(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false));
+    min_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)min, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("min", min_obj);
 
-    max_obj = new BoxedFunction(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false));
+    max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false));
     builtins_module->giveAttr("max", max_obj);
 
-    builtins_module->giveAttr("sum",
-                              new BoxedFunction(boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
+    builtins_module->giveAttr(
+        "sum", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
 
-    id_obj = new BoxedFunction(boxRTFunction((void*)id, BOXED_INT, 1));
+    id_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)id, BOXED_INT, 1));
     builtins_module->giveAttr("id", id_obj);
-    chr_obj = new BoxedFunction(boxRTFunction((void*)chr, STR, 1));
+    chr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)chr, STR, 1));
     builtins_module->giveAttr("chr", chr_obj);
-    ord_obj = new BoxedFunction(boxRTFunction((void*)ord, BOXED_INT, 1));
+    ord_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)ord, BOXED_INT, 1));
     builtins_module->giveAttr("ord", ord_obj);
-    trap_obj = new BoxedFunction(boxRTFunction((void*)trap, UNKNOWN, 0));
+    trap_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)trap, UNKNOWN, 0));
     builtins_module->giveAttr("trap", trap_obj);
-    builtins_module->giveAttr("dump", new BoxedFunction(boxRTFunction((void*)pydump, UNKNOWN, 1)));
+    builtins_module->giveAttr("dump", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 1)));
+
+    builtins_module->giveAttr("getattr", new BoxedBuiltinFunctionOrMethod(
+                                             boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
 
     builtins_module->giveAttr(
-        "getattr", new BoxedFunction(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false), { NULL }));
+        "setattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, 0, false, false)));
 
-    builtins_module->giveAttr("setattr",
-                              new BoxedFunction(boxRTFunction((void*)setattrFunc, UNKNOWN, 3, 0, false, false)));
-
-    Box* hasattr_obj = new BoxedFunction(boxRTFunction((void*)hasattr, BOXED_BOOL, 2));
+    Box* hasattr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hasattr, BOXED_BOOL, 2));
     builtins_module->giveAttr("hasattr", hasattr_obj);
 
 
-    Box* isinstance_obj = new BoxedFunction(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2));
+    Box* isinstance_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("isinstance", isinstance_obj);
 
-    Box* issubclass_obj = new BoxedFunction(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
+    Box* issubclass_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
-    builtins_module->giveAttr("__import__", new BoxedFunction(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
+    builtins_module->giveAttr("__import__",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
 
-    enumerate_cls = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false);
-    enumerate_cls->giveAttr("__name__", boxStrConstant("enumerate"));
+    enumerate_cls
+        = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false, "enumerate");
     enumerate_cls->giveAttr(
         "__new__",
         new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
@@ -1121,39 +1115,43 @@ void setupBuiltins() {
     CLFunction* sorted_func = createRTFunction(4, 3, false, false, ParamNames({ "", "cmp", "key", "reverse" }, "", ""));
     addRTFunction(sorted_func, (void*)sortedList, LIST, { LIST, UNKNOWN, UNKNOWN, UNKNOWN });
     addRTFunction(sorted_func, (void*)sorted, LIST, { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN });
-    builtins_module->giveAttr("sorted", new BoxedFunction(sorted_func, { None, None, False }));
+    builtins_module->giveAttr("sorted", new BoxedBuiltinFunctionOrMethod(sorted_func, { None, None, False }));
 
     builtins_module->giveAttr("True", True);
     builtins_module->giveAttr("False", False);
 
-    range_obj = new BoxedFunction(boxRTFunction((void*)range, LIST, 3, 2, false, false), { NULL, NULL });
+    range_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)range, LIST, 3, 2, false, false), { NULL, NULL });
     builtins_module->giveAttr("range", range_obj);
 
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    open_obj = new BoxedFunction(
+    open_obj = new BoxedBuiltinFunctionOrMethod(
         boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false, ParamNames({ "name", "mode" }, "", "")),
         { boxStrConstant("r") });
     builtins_module->giveAttr("open", open_obj);
 
-    builtins_module->giveAttr("globals", new BoxedFunction(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
-    builtins_module->giveAttr("locals", new BoxedFunction(boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false)));
+    builtins_module->giveAttr(
+        "globals", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)globals, UNKNOWN, 0, 0, false, false)));
+    builtins_module->giveAttr(
+        "locals", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false)));
 
-    builtins_module->giveAttr("iter", new BoxedFunction(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
+    builtins_module->giveAttr(
+        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
 
-    builtins_module->giveAttr("divmod", new BoxedFunction(boxRTFunction((void*)divmod, UNKNOWN, 2)));
+    builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2)));
 
-    builtins_module->giveAttr("execfile", new BoxedFunction(boxRTFunction((void*)execfile, UNKNOWN, 1)));
+    builtins_module->giveAttr("execfile", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1)));
 
-    builtins_module->giveAttr("map", new BoxedFunction(boxRTFunction((void*)map2, LIST, 2)));
-    builtins_module->giveAttr("reduce",
-                              new BoxedFunction(boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), { NULL }));
-    builtins_module->giveAttr("filter", new BoxedFunction(boxRTFunction((void*)filter2, LIST, 2)));
-    builtins_module->giveAttr("zip", new BoxedFunction(boxRTFunction((void*)zip2, LIST, 2)));
-    builtins_module->giveAttr("dir", new BoxedFunction(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
-    builtins_module->giveAttr("vars",
-                              new BoxedFunction(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
+    builtins_module->giveAttr("map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map2, LIST, 2)));
+    builtins_module->giveAttr("reduce", new BoxedBuiltinFunctionOrMethod(
+                                            boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), { NULL }));
+    builtins_module->giveAttr("filter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)filter2, LIST, 2)));
+    builtins_module->giveAttr("zip", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)zip2, LIST, 2)));
+    builtins_module->giveAttr(
+        "dir", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
+    builtins_module->giveAttr(
+        "vars", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);

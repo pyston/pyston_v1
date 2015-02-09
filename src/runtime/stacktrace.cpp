@@ -22,6 +22,7 @@
 #include "core/options.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
+#include "runtime/traceback.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
 
@@ -95,8 +96,6 @@ void unwindExc(Box* exc_obj) {
     abort();
 }
 
-static std::vector<const LineInfo*> last_tb;
-
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) {
     // Should set these to None before getting here:
@@ -112,10 +111,7 @@ void raiseRaw(const ExcInfo& e) {
 }
 
 void raiseExc(Box* exc_obj) {
-    auto entries = getTracebackEntries();
-    last_tb = std::move(entries);
-
-    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, None));
+    raiseRaw(ExcInfo(exc_obj->cls, exc_obj, getTraceback()));
 }
 
 // Have a special helper function for syntax errors, since we want to include the location
@@ -123,59 +119,16 @@ void raiseExc(Box* exc_obj) {
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func) {
     Box* exc = exceptionNew2(SyntaxError, boxStrConstant(msg));
 
-    auto entries = getTracebackEntries();
-    last_tb = std::move(entries);
-    // TODO: leaks this!
-    last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
+    auto tb = getTraceback();
+    // TODO: push the syntax error line back on it:
+    //// TODO: leaks this!
+    // last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
 
-    raiseRaw(ExcInfo(exc->cls, exc, None));
-}
-
-static void _printTraceback(const std::vector<const LineInfo*>& tb) {
-    fprintf(stderr, "Traceback (most recent call last):\n");
-
-    for (auto line : tb) {
-        fprintf(stderr, "  File \"%s\", line %d, in %s:\n", line->file.c_str(), line->line, line->func.c_str());
-
-        if (line->line < 0)
-            continue;
-
-        FILE* f = fopen(line->file.c_str(), "r");
-        if (f) {
-            assert(line->line < 10000000 && "Refusing to try to seek that many lines forward");
-            for (int i = 1; i < line->line; i++) {
-                char* buf = NULL;
-                size_t size;
-                size_t r = getline(&buf, &size, f);
-                if (r != -1)
-                    free(buf);
-            }
-            char* buf = NULL;
-            size_t size;
-            size_t r = getline(&buf, &size, f);
-            if (r != -1) {
-                while (buf[r - 1] == '\n' or buf[r - 1] == '\r')
-                    r--;
-
-                char* ptr = buf;
-                while (*ptr == ' ' || *ptr == '\t') {
-                    ptr++;
-                    r--;
-                }
-
-                fprintf(stderr, "    %.*s\n", (int)r, ptr);
-                free(buf);
-            }
-        }
-    }
-}
-
-void printLastTraceback() {
-    _printTraceback(last_tb);
+    raiseRaw(ExcInfo(exc->cls, exc, tb));
 }
 
 void _printStacktrace() {
-    _printTraceback(getTracebackEntries());
+    printTraceback(getTraceback());
 }
 
 // where should this go...
@@ -233,28 +186,42 @@ void raise0() {
 ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(value), traceback(traceback) {
     if (this->type && this->type != None)
         RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
-                       getTypeName(this->type)->c_str());
+                       getTypeName(this->type));
 }
 #endif
+
+void ExcInfo::printExcAndTraceback() const {
+    std::string msg = formatException(value);
+    printTraceback(traceback);
+    fprintf(stderr, "%s\n", msg.c_str());
+}
 
 bool ExcInfo::matches(BoxedClass* cls) const {
     assert(this->type);
     RELEASE_ASSERT(isSubclass(this->type->cls, type_cls), "throwing old-style objects not supported yet (%s)",
-                   getTypeName(this->type)->c_str());
+                   getTypeName(this->type));
     return isSubclass(static_cast<BoxedClass*>(this->type), cls);
 }
 
 void raise3(Box* arg0, Box* arg1, Box* arg2) {
     // TODO switch this to PyErr_Normalize
 
+    if (arg2 == None)
+        arg2 = getTraceback();
+
     if (isSubclass(arg0->cls, type_cls)) {
         BoxedClass* c = static_cast<BoxedClass*>(arg0);
         if (isSubclass(c, BaseException)) {
             Box* exc_obj;
-            if (arg1 != None)
-                exc_obj = exceptionNew2(c, arg1);
-            else
-                exc_obj = exceptionNew1(c);
+
+            if (isSubclass(arg1->cls, BaseException)) {
+                exc_obj = arg1;
+                c = exc_obj->cls;
+            } else if (arg1 != None) {
+                exc_obj = runtimeCall(c, ArgPassSpec(1), arg1, NULL, NULL, NULL, NULL);
+            } else {
+                exc_obj = runtimeCall(c, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+            }
 
             raiseRaw(ExcInfo(c, exc_obj, arg2));
         }
@@ -267,7 +234,7 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
     }
 
     raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
-                   getTypeName(arg0)->c_str());
+                   getTypeName(arg0));
 }
 
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
@@ -295,16 +262,16 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
 }
 
 std::string formatException(Box* b) {
-    const std::string* name = getTypeName(b);
+    std::string name = getTypeName(b);
 
     BoxedString* r = strOrNull(b);
     if (!r)
-        return *name;
+        return name;
 
     assert(r->cls == str_cls);
     const std::string* msg = &r->s;
     if (msg->size())
-        return *name + ": " + *msg;
-    return *name;
+        return name + ": " + *msg;
+    return name;
 }
 }

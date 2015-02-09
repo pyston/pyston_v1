@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
     bool force_repl = false;
     bool repl = true;
     bool stats = false;
-    while ((code = getopt(argc, argv, "+Oqcdibpjtrsvnx")) != -1) {
+    while ((code = getopt(argc, argv, "+OqcdIibpjtrsvnx")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -71,6 +71,8 @@ int main(int argc, char** argv) {
         // caching = true;
         else if (code == 'd')
             SHOW_DISASM = true;
+        else if (code == 'I')
+            FORCE_INTERPRETER = true;
         else if (code == 'i')
             force_repl = true;
         else if (code == 'n') {
@@ -155,9 +157,7 @@ int main(int argc, char** argv) {
                 printf("Warning: ignoring SystemExit code\n");
                 return 1;
             } else {
-                std::string msg = formatException(e.value);
-                printLastTraceback();
-                fprintf(stderr, "%s\n", msg.c_str());
+                e.printExcAndTraceback();
                 return 1;
             }
         }
@@ -224,9 +224,7 @@ int main(int argc, char** argv) {
                         printf("Warning: ignoring SystemExit code\n");
                         return 1;
                     } else {
-                        std::string msg = formatException(e.value);
-                        printLastTraceback();
-                        fprintf(stderr, "%s\n", msg.c_str());
+                        e.printExcAndTraceback();
                     }
                 }
             }

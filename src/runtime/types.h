@@ -68,7 +68,7 @@ void teardownDescr();
 
 void setupSys();
 void setupBuiltins();
-void setupTime();
+void setupPyston();
 void setupThread();
 void setupSysEnd();
 
@@ -80,7 +80,8 @@ extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
-    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls;
+    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *getset_cls,
+    *builtin_function_or_method_cls;
 }
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;
@@ -233,8 +234,18 @@ public:
     PyMappingMethods as_mapping;
     PySequenceMethods as_sequence;
     PyBufferProcs as_buffer;
-    PyObject* ht_name, *ht_slots;
 
+    BoxedString* ht_name;
+    PyObject** ht_slots;
+
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
+                   const std::string& name);
+
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
+                   BoxedString* name);
+
+    // This constructor is only used for bootstrapping purposes to be called for types that
+    // are initialized before str_cls.
     BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
 };
 
@@ -395,19 +406,6 @@ public:
 };
 extern "C" BoxedTuple* EmptyTuple;
 
-class BoxedFile : public Box {
-public:
-    FILE* f;
-    std::string fname;
-    std::string fmode;
-    bool closed;
-    bool softspace;
-    BoxedFile(FILE* f, std::string fname, std::string fmode) __attribute__((visibility("default")))
-    : f(f), fname(fname), fmode(fmode), closed(false), softspace(false) {}
-
-    DEFAULT_CLASS(file_cls);
-};
-
 struct PyHasher {
     size_t operator()(Box*) const;
 };
@@ -439,7 +437,7 @@ public:
 };
 static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
-class BoxedFunction : public Box {
+class BoxedFunctionBase : public Box {
 public:
     HCAttrs attrs;
     CLFunction* f;
@@ -452,11 +450,29 @@ public:
     // Accessed via member descriptor
     Box* modname; // __module__
 
-    BoxedFunction(CLFunction* f);
+    BoxedFunctionBase(CLFunction* f);
+    BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+                      bool isGenerator = false);
+};
+
+class BoxedFunction : public BoxedFunctionBase {
+public:
+    BoxedFunction(CLFunction* f) : BoxedFunctionBase(f) {}
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false);
+                  bool isGenerator = false)
+        : BoxedFunctionBase(f, defaults, closure, isGenerator) {}
 
     DEFAULT_CLASS(function_cls);
+};
+
+class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
+public:
+    BoxedBuiltinFunctionOrMethod(CLFunction* f) : BoxedFunctionBase(f) {}
+    BoxedBuiltinFunctionOrMethod(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
+                                 bool isGenerator = false)
+        : BoxedFunctionBase(f, defaults, closure, isGenerator) {}
+
+    DEFAULT_CLASS(builtin_function_or_method_cls);
 };
 
 class BoxedModule : public Box {
@@ -511,6 +527,18 @@ public:
     DEFAULT_CLASS(member_cls);
 };
 
+class BoxedGetsetDescriptor : public Box {
+public:
+    Box* (*get)(Box*, void*);
+    void (*set)(Box*, Box*, void*);
+    void* closure;
+
+    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
+        : get(get), set(set), closure(closure) {}
+
+    DEFAULT_CLASS(getset_cls);
+};
+
 class BoxedProperty : public Box {
 public:
     Box* prop_get;
@@ -556,7 +584,7 @@ public:
 class BoxedGenerator : public Box {
 public:
     HCAttrs attrs;
-    BoxedFunction* function;
+    BoxedFunctionBase* function;
     Box* arg1, *arg2, *arg3;
     GCdArray* args;
 
@@ -568,7 +596,7 @@ public:
     ucontext_t context, returnContext;
     void* stack_begin;
 
-    BoxedGenerator(BoxedFunction* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
+    BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
     DEFAULT_CLASS(generator_cls);
 };

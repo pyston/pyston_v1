@@ -1219,7 +1219,7 @@ private:
     KnownClassobjType(BoxedClass* cls) : cls(cls) { assert(cls); }
 
 public:
-    std::string debugName() override { return "class '" + *getNameOfClass(cls) + "'"; }
+    std::string debugName() override { return "class '" + std::string(getNameOfClass(cls)) + "'"; }
 
     void assertMatches(BoxedClass* cls) override { assert(cls == this->cls); }
 
@@ -1276,7 +1276,7 @@ public:
         assert(cls);
         // TODO add getTypeName
 
-        return "NormalType(" + *getNameOfClass(cls) + ")";
+        return "NormalType(" + std::string(getNameOfClass(cls)) + ")";
     }
     ConcreteCompilerVariable* makeConverted(IREmitter& emitter, ConcreteCompilerVariable* var,
                                             ConcreteCompilerType* other_type) override {
@@ -1332,7 +1332,7 @@ public:
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
-                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(std::string(getNameOfClass(cls)) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
                 return undefVariable();
@@ -1383,7 +1383,7 @@ public:
                 *no_attribute = true;
             } else {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
-                                                          getStringConstantPtr(*getNameOfClass(cls) + "\0"),
+                                                          getStringConstantPtr(std::string(getNameOfClass(cls)) + "\0"),
                                                           getStringConstantPtr(*attr + '\0'));
                 call.setDoesNotReturn();
             }
@@ -1578,9 +1578,16 @@ public:
 
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
         static const std::string attr("__nonzero__");
+
+        bool no_attribute = false;
         ConcreteCompilerVariable* called_constant
-            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL);
-        if (called_constant)
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, &no_attribute);
+
+        // TODO: if no_attribute, we could optimize by continuing the dispatch process and trying
+        // to call __len__ (and if that doesn't exist, returning a static true).
+        // For now, I'd rather not duplicate the dispatch behavior between here and objmodel.cpp::nonzero.
+
+        if (called_constant && !no_attribute)
             return called_constant;
 
         if (cls == bool_cls) {

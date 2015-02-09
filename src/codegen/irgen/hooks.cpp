@@ -93,7 +93,7 @@ const std::string SourceInfo::getName() {
         case AST_TYPE::Lambda:
             return "<lambda>";
         case AST_TYPE::Module:
-            return this->parent_module->name();
+            return "<module>";
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
     }
@@ -104,6 +104,8 @@ ScopeInfo* SourceInfo::getScopeInfo() {
 }
 
 EffortLevel::EffortLevel initialEffort() {
+    if (FORCE_INTERPRETER)
+        return EffortLevel::INTERPRETED;
     if (FORCE_OPTIMIZE)
         return EffortLevel::MAXIMAL;
     if (ENABLE_INTERPRETER)

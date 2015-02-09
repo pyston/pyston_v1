@@ -63,12 +63,12 @@ extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) noexcept {
 
 Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     if (!isSubclass(_cls->cls, type_cls))
-        raiseExcHelper(TypeError, "classobj.__new__(X): X is not a type object (%s)", getTypeName(_cls)->c_str());
+        raiseExcHelper(TypeError, "classobj.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
     BoxedClass* cls = static_cast<BoxedClass*>(_cls);
     if (!isSubclass(cls, classobj_cls))
-        raiseExcHelper(TypeError, "classobj.__new__(%s): %s is not a subtype of classobj", getNameOfClass(cls)->c_str(),
-                       getNameOfClass(cls)->c_str());
+        raiseExcHelper(TypeError, "classobj.__new__(%s): %s is not a subtype of classobj", getNameOfClass(cls),
+                       getNameOfClass(cls));
 
     if (_name->cls != str_cls)
         raiseExcHelper(TypeError, "argument 1 must be string, not %s", getTypeName(_name));
@@ -129,7 +129,7 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
 Box* classobjStr(Box* _obj) {
     if (!isSubclass(_obj->cls, classobj_cls)) {
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'classobj' object but received an '%s'",
-                       getTypeName(_obj)->c_str());
+                       getTypeName(_obj));
     }
 
     BoxedClassobj* cls = static_cast<BoxedClassobj*>(_obj);
@@ -271,11 +271,9 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
 
 void setupClassobj() {
     classobj_cls = new BoxedHeapClass(object_cls, &BoxedClassobj::gcHandler, offsetof(BoxedClassobj, attrs),
-                                      sizeof(BoxedClassobj), false);
+                                      sizeof(BoxedClassobj), false, "classobj");
     instance_cls = new BoxedHeapClass(object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
-                                      sizeof(BoxedInstance), false);
-
-    classobj_cls->giveAttr("__name__", boxStrConstant("classobj"));
+                                      sizeof(BoxedInstance), false, "instance");
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, 0, false, false)));
@@ -287,8 +285,6 @@ void setupClassobj() {
 
     classobj_cls->freeze();
 
-
-    instance_cls->giveAttr("__name__", boxStrConstant("instance"));
 
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
