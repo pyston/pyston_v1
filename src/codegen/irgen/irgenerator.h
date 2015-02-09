@@ -55,6 +55,7 @@ class IRGenState {
 private:
     CompiledFunction* cf;
     SourceInfo* source_info;
+    ParamNames* param_names;
     GCBuilder* gc;
     llvm::MDNode* func_dbg_info;
 
@@ -63,9 +64,10 @@ private:
     int scratch_size;
 
 public:
-    IRGenState(CompiledFunction* cf, SourceInfo* source_info, GCBuilder* gc, llvm::MDNode* func_dbg_info)
-        : cf(cf), source_info(source_info), gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), frame_info(NULL),
-          scratch_size(0) {
+    IRGenState(CompiledFunction* cf, SourceInfo* source_info, ParamNames* param_names, GCBuilder* gc,
+               llvm::MDNode* func_dbg_info)
+        : cf(cf), source_info(source_info), param_names(param_names), gc(gc), func_dbg_info(func_dbg_info),
+          scratch_space(NULL), frame_info(NULL), scratch_size(0) {
         assert(cf->func);
         assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
     }
@@ -92,6 +94,8 @@ public:
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
+
+    ParamNames* getParamNames() { return param_names; }
 };
 
 class GuardList {
@@ -195,8 +199,8 @@ public:
 
     virtual ~IRGenerator() {}
 
-    virtual void doFunctionEntry(const SourceInfo::ArgNames& arg_names,
-                                 const std::vector<ConcreteCompilerType*>& arg_types) = 0;
+    virtual void doFunctionEntry(const ParamNames& param_names, const std::vector<ConcreteCompilerType*>& arg_types)
+        = 0;
 
     virtual void giveLocalSymbol(InternedString name, CompilerVariable* var) = 0;
     virtual void copySymbolsFrom(SymbolTable* st) = 0;

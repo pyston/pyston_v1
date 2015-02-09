@@ -106,6 +106,7 @@ public:
     bool saveInClosure(InternedString name) override { return false; }
 
     InternedString mangleName(InternedString id) override { return id; }
+    InternedString internString(llvm::StringRef s) override { abort(); }
 };
 
 struct ScopingAnalysis::ScopeNameUsage {
@@ -221,6 +222,8 @@ public:
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());
     }
+
+    InternedString internString(llvm::StringRef s) override { return usage->scoping->getInternedStrings().get(s); }
 };
 
 class NameCollectorVisitor : public ASTVisitor {

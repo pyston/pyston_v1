@@ -670,7 +670,7 @@ public:
         return changed;
     }
 
-    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
+    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const ParamNames& arg_names,
                                                const std::vector<ConcreteCompilerType*>& arg_types,
                                                SpeculationLevel speculation, ScopeInfo* scope_info) {
         Timer _t("PropagatingTypeAnalysis::doAnalysis()");
@@ -681,29 +681,24 @@ public:
 
         assert(arg_names.totalParameters() == arg_types.size());
 
-        if (arg_names.args) {
-            TypeMap& initial_types = starting_types[cfg->getStartingBlock()];
-            int i = 0;
+        TypeMap& initial_types = starting_types[cfg->getStartingBlock()];
+        int i = 0;
 
-            for (; i < arg_names.args->size(); i++) {
-                AST_expr* arg = (*arg_names.args)[i];
-                RELEASE_ASSERT(arg->type == AST_TYPE::Name, "");
-                AST_Name* arg_name = ast_cast<AST_Name>(arg);
-                initial_types[arg_name->id] = unboxedType(arg_types[i]);
-            }
-
-            if (arg_names.vararg.str().size()) {
-                initial_types[arg_names.vararg] = unboxedType(arg_types[i]);
-                i++;
-            }
-
-            if (arg_names.kwarg.str().size()) {
-                initial_types[arg_names.kwarg] = unboxedType(arg_types[i]);
-                i++;
-            }
-
-            assert(i == arg_types.size());
+        for (; i < arg_names.args.size(); i++) {
+            initial_types[scope_info->internString(arg_names.args[i])] = unboxedType(arg_types[i]);
         }
+
+        if (arg_names.vararg.size()) {
+            initial_types[scope_info->internString(arg_names.vararg)] = unboxedType(arg_types[i]);
+            i++;
+        }
+
+        if (arg_names.kwarg.size()) {
+            initial_types[scope_info->internString(arg_names.kwarg)] = unboxedType(arg_types[i]);
+            i++;
+        }
+
+        assert(i == arg_types.size());
 
         std::unordered_set<CFGBlock*> in_queue;
         std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> queue;
@@ -785,9 +780,9 @@ public:
 
 
 // public entry point:
-TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
-                             const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel::EffortLevel effort,
-                             TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
+TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::vector<ConcreteCompilerType*>& arg_types,
+                             EffortLevel::EffortLevel effort, TypeAnalysis::SpeculationLevel speculation,
+                             ScopeInfo* scope_info) {
     // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
     //}

@@ -664,7 +664,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 emitter->getBuilder()->SetInsertPoint(llvm_entry_blocks[source->cfg->getStartingBlock()]);
             }
 
-            generator->doFunctionEntry(source->arg_names, cf->spec->arg_types);
+            generator->doFunctionEntry(*irstate->getParamNames(), cf->spec->arg_types);
 
             // Function-entry safepoint:
             // TODO might be more efficient to do post-call safepoints?
@@ -1087,7 +1087,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
     return os.str();
 }
 
-CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
                             EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix) {
     Timer _t("in doCompile");
     Timer _t2;
@@ -1109,7 +1109,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     ////
     // Initializing the llvm-level structures:
 
-    int nargs = source->arg_names.totalParameters();
+    int nargs = param_names->totalParameters();
     ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
 
 
@@ -1157,8 +1157,8 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
     if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
         speculation_level = TypeAnalysis::SOME;
-    TypeAnalysis* types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort, speculation_level,
-                                         source->getScopeInfo());
+    TypeAnalysis* types
+        = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level, source->getScopeInfo());
 
     _t2.split();
 
@@ -1174,7 +1174,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         computeBlockSetClosure(full_blocks, partial_blocks);
     }
 
-    IRGenState irstate(cf, source, getGCBuilder(), dbg_funcinfo);
+    IRGenState irstate(cf, source, param_names, getGCBuilder(), dbg_funcinfo);
 
     emitBBs(&irstate, "opt", guards, GuardList(), types, entry_descriptor, full_blocks, partial_blocks);
 
@@ -1196,7 +1196,7 @@ CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_
         assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
 
         irgen_us += _t2.split();
-        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, source->arg_names, spec->arg_types, effort,
+        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort,
                                                    TypeAnalysis::NONE, source->getScopeInfo());
         _t2.split();
 

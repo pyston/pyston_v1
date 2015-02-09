@@ -94,7 +94,7 @@ extern const std::string PASSED_GENERATOR_NAME;
 InternedString getIsDefinedName(InternedString name, InternedStringPool& interned_strings);
 bool isIsDefinedName(const std::string& name);
 
-CompiledFunction* doCompile(SourceInfo* source, const OSREntryDescriptor* entry_descriptor,
+CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
                             EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
 
 // A common pattern is to branch based off whether a variable is defined but only if it is

@@ -42,7 +42,7 @@ public:
     virtual BoxedClass* speculatedExprClass(AST_expr*) = 0;
 };
 
-TypeAnalysis* doTypeAnalysis(CFG* cfg, const SourceInfo::ArgNames& arg_names,
+TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& param_names,
                              const std::vector<ConcreteCompilerType*>& arg_types, EffortLevel::EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info);
 }

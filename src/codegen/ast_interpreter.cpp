@@ -189,21 +189,19 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     for (int i = 3; i < nargs; ++i)
         argsArray.push_back(args[i - 3]);
 
+    const ParamNames& param_names = compiled_func->clfunc->param_names;
+
     int i = 0;
-    if (source_info->arg_names.args) {
-        for (AST_expr* e : *source_info->arg_names.args) {
-            RELEASE_ASSERT(e->type == AST_TYPE::Name, "not implemented");
-            AST_Name* name = (AST_Name*)e;
-            doStore(name->id, argsArray[i++]);
-        }
+    for (auto& name : param_names.args) {
+        doStore(source_info->getInternedStrings().get(name), argsArray[i++]);
     }
 
-    if (source_info->arg_names.vararg.str().size()) {
-        doStore(source_info->arg_names.vararg, argsArray[i++]);
+    if (!param_names.vararg.str().empty()) {
+        doStore(source_info->getInternedStrings().get(param_names.vararg), argsArray[i++]);
     }
 
-    if (source_info->arg_names.kwarg.str().size()) {
-        doStore(source_info->arg_names.kwarg, argsArray[i++]);
+    if (!param_names.kwarg.str().empty()) {
+        doStore(source_info->getInternedStrings().get(param_names.kwarg), argsArray[i++]);
     }
 }
 
@@ -268,8 +266,8 @@ void ASTInterpreter::eraseDeadSymbols() {
         source_info->liveness = computeLivenessInfo(source_info->cfg);
 
     if (source_info->phis == NULL)
-        source_info->phis
-            = computeRequiredPhis(source_info->arg_names, source_info->cfg, source_info->liveness, scope_info);
+        source_info->phis = computeRequiredPhis(compiled_func->clfunc->param_names, source_info->cfg,
+                                                source_info->liveness, scope_info);
 
     std::vector<InternedString> dead_symbols;
     for (auto&& it : sym_table) {
