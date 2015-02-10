@@ -1075,6 +1075,8 @@ AST_Module* caching_parse(const char* fn) {
     assert(reader->bytesBuffered() == 0);
     delete reader;
 
+    fclose(fp);
+
     assert(rtn->type == AST_TYPE::Module);
 
     long us = _t.end();
