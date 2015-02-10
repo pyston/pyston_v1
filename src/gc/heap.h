@@ -105,7 +105,6 @@ static constexpr size_t NUM_BUCKETS = sizeof(sizes) / sizeof(sizes[0]);
 
 class SmallArena : public Arena<SMALL_ARENA_START> {
 public:
-
 private:
     template <int N> class Bitmap {
         static_assert(N % 64 == 0, "");
