@@ -614,7 +614,7 @@ void SmallArena::_free(GCAllocation* alloc, Block* b) {
     int atom_idx = offset / ATOM_SIZE;
 
     assert(!b->isfree.isSet(atom_idx));
-    b->isfree.toggle(atom_idx);
+    b->isfree.set(atom_idx);
 
 #ifndef NVALGRIND
 // VALGRIND_MEMPOOL_FREE(b, ptr);
@@ -625,8 +625,22 @@ void _doFree(GCAllocation* al) {
     if (VERBOSITY() >= 2)
         printf("Freeing %p\n", al->user_data);
 
-    if (al->kind_id == GCKind::PYTHON) {
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
+    GCKind alloc_kind = al->kind_id;
+#ifndef NVALGRIND
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#endif
+
+    if (alloc_kind == GCKind::PYTHON) {
+#ifndef NVALGRIND
+        VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
         Box* b = (Box*)al->user_data;
+#ifndef NVALGRIND
+        VALGRIND_ENABLE_ERROR_REPORTING;
+#endif
 
         ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b));
         if (b->cls->simple_destructor)
