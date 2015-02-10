@@ -945,13 +945,25 @@ Box* makeAttrWrapper(Box* b) {
     return new AttrWrapper(b);
 }
 
-Box* objectNew(BoxedClass* cls, BoxedTuple* args) {
+Box* objectNewNoArgs(BoxedClass* cls) {
+    assert(isSubclass(cls->cls, type_cls));
+    assert(typeLookup(cls, "__new__", NULL) == typeLookup(object_cls, "__new__", NULL)
+           && typeLookup(cls, "__init__", NULL) != typeLookup(object_cls, "__init__", NULL));
+    return new (cls) Box();
+}
+
+Box* objectNew(BoxedClass* cls, BoxedTuple* args, BoxedDict* kwargs) {
     assert(isSubclass(cls->cls, type_cls));
     assert(args->cls == tuple_cls);
+    assert(kwargs->cls == dict_cls);
 
-    if (args->elts.size() != 0) {
-        // TODO slow
-        if (typeLookup(cls, "__init__", NULL) == typeLookup(object_cls, "__init__", NULL))
+    // We use a different strategy from CPython: we let object.__new__ take extra
+    // arguments, but raise an error if they wouldn't be handled by the corresponding init.
+    // TODO switch to the CPython approach?
+    if (args->elts.size() != 0 || kwargs->d.size() != 0) {
+        // TODO slow (We already cache these in typeCall -- should use that here too?)
+        if (typeLookup(cls, "__new__", NULL) != typeLookup(object_cls, "__new__", NULL)
+            || typeLookup(cls, "__init__", NULL) == typeLookup(object_cls, "__init__", NULL))
             raiseExcHelper(TypeError, objectNewParameterTypeErrorMsg());
     }
 
@@ -1161,7 +1173,7 @@ void setupRuntime() {
     LONG = typeFromClass(long_cls);
     BOXED_COMPLEX = typeFromClass(complex_cls);
 
-    object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
+    object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, true)));
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));

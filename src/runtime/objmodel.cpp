@@ -2312,12 +2312,15 @@ static std::string getFunctionName(CLFunction* f) {
     return "<unknown function>";
 }
 
-static void placeKeyword(const ParamNames& param_names, std::vector<bool>& params_filled, const std::string& kw_name,
-                         Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs, BoxedDict* okwargs,
-                         CLFunction* cl) {
+enum class KeywordDest {
+    POSITIONAL,
+    KWARGS,
+};
+static KeywordDest placeKeyword(const ParamNames& param_names, std::vector<bool>& params_filled,
+                                const std::string& kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3,
+                                Box** oargs, BoxedDict* okwargs, CLFunction* cl) {
     assert(kw_val);
 
-    bool found = false;
     for (int j = 0; j < param_names.args.size(); j++) {
         if (param_names.args[j].str() == kw_name && kw_name.size() > 0) {
             if (params_filled[j]) {
@@ -2328,23 +2331,21 @@ static void placeKeyword(const ParamNames& param_names, std::vector<bool>& param
             getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
             params_filled[j] = true;
 
-            found = true;
-            break;
+            return KeywordDest::POSITIONAL;
         }
     }
 
-    if (!found) {
-        if (okwargs) {
-            Box*& v = okwargs->d[boxString(kw_name)];
-            if (v) {
-                raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
-                               getFunctionName(cl).c_str(), kw_name.c_str());
-            }
-            v = kw_val;
-        } else {
-            raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", getFunctionName(cl).c_str(),
-                           kw_name.c_str());
+    if (okwargs) {
+        Box*& v = okwargs->d[boxString(kw_name)];
+        if (v) {
+            raiseExcHelper(TypeError, "%.200s() got multiple values for keyword argument '%s'",
+                           getFunctionName(cl).c_str(), kw_name.c_str());
         }
+        v = kw_val;
+        return KeywordDest::KWARGS;
+    } else {
+        raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", getFunctionName(cl).c_str(),
+                       kw_name.c_str());
     }
 }
 
@@ -2370,7 +2371,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
     BoxedClosure* closure = func->closure;
 
-    if (argspec.has_starargs || argspec.has_kwargs || f->takes_kwargs || func->isGenerator) {
+    if (argspec.has_starargs || argspec.has_kwargs || func->isGenerator) {
         rewrite_args = NULL;
         REWRITE_ABORTED("");
     }
@@ -2502,9 +2503,23 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
     BoxedDict* okwargs = NULL;
     if (f->takes_kwargs) {
-        assert(!rewrite_args && "would need to be handled here");
+        int kwargs_idx = f->num_args + (f->takes_varargs ? 1 : 0);
+        if (rewrite_args) {
+            assert(!unused_positional.size());
+            RewriterVar* r_kwargs = rewrite_args->rewriter->call(false, (void*)createDict);
+
+            if (kwargs_idx == 0)
+                rewrite_args->arg1 = r_kwargs;
+            if (kwargs_idx == 1)
+                rewrite_args->arg2 = r_kwargs;
+            if (kwargs_idx == 2)
+                rewrite_args->arg3 = r_kwargs;
+            if (kwargs_idx >= 3)
+                rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
+        }
+
         okwargs = new BoxedDict();
-        getArg(f->num_args + (f->takes_varargs ? 1 : 0), oarg1, oarg2, oarg3, oargs) = okwargs;
+        getArg(kwargs_idx, oarg1, oarg2, oarg3, oargs) = okwargs;
     }
 
     const ParamNames& param_names = f->param_names;
@@ -2523,11 +2538,15 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
         if (!param_names.takes_param_names) {
             assert(okwargs);
+            rewrite_args = NULL; // would need to add it to r_kwargs
             okwargs->d[boxStringPtr((*keyword_names)[i])] = kw_val;
             continue;
         }
 
-        placeKeyword(param_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs, okwargs, f);
+        auto dest = placeKeyword(param_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
+                                 okwargs, f);
+        if (dest == KeywordDest::KWARGS)
+            rewrite_args = NULL;
     }
 
     if (argspec.has_kwargs) {
@@ -2545,8 +2564,10 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             BoxedString* s = static_cast<BoxedString*>(p.first);
 
             if (param_names.takes_param_names) {
+                assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
                 placeKeyword(param_names, params_filled, s->s, p.second, oarg1, oarg2, oarg3, oargs, okwargs, f);
             } else {
+                assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
                 assert(okwargs);
 
                 Box*& v = okwargs->d[p.first];
@@ -3694,29 +3715,42 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     }
 
     if (rewrite_args) {
-        CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new, rewrite_args->destination);
-        int new_npassed_args = new_argspec.totalPassed();
+        if (new_attr == object_new && init_attr != object_init) {
+            // Fast case: if we are calling object_new, we normally doesn't look at the arguments at all.
+            // (Except in the case when init_attr != object_init, in which case object_new looks at the number
+            // of arguments and throws an exception.)
+            //
+            // Another option is to rely on rewriting to make this fast, which would probably require adding
+            // a custom internal callable to object.__new__
+            made = objectNewNoArgs(cls);
+            r_made = rewrite_args->rewriter->call(false, (void*)objectNewNoArgs, r_ccls);
+        } else {
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new, rewrite_args->destination);
+            srewrite_args.args_guarded = true;
+            srewrite_args.func_guarded = true;
 
-        if (new_npassed_args >= 1)
-            srewrite_args.arg1 = r_ccls;
-        if (new_npassed_args >= 2)
-            srewrite_args.arg2 = rewrite_args->arg2;
-        if (new_npassed_args >= 3)
-            srewrite_args.arg3 = rewrite_args->arg3;
-        if (new_npassed_args >= 4)
-            srewrite_args.args = rewrite_args->args;
-        srewrite_args.args_guarded = true;
-        srewrite_args.func_guarded = true;
+            int new_npassed_args = new_argspec.totalPassed();
 
-        made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
+            if (new_npassed_args >= 1)
+                srewrite_args.arg1 = r_ccls;
+            if (new_npassed_args >= 2)
+                srewrite_args.arg2 = rewrite_args->arg2;
+            if (new_npassed_args >= 3)
+                srewrite_args.arg3 = rewrite_args->arg3;
+            if (new_npassed_args >= 4)
+                srewrite_args.args = rewrite_args->args;
+
+            made = runtimeCallInternal(new_attr, &srewrite_args, new_argspec, cls, arg2, arg3, args, keyword_names);
+
+            if (!srewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                r_made = srewrite_args.out_rtn;
+            }
+        }
+
         ASSERT(made->cls == cls, "We should only have allowed the rewrite to continue if we were guaranteed that made "
                                  "would have class cls!");
-
-        if (!srewrite_args.out_success) {
-            rewrite_args = NULL;
-        } else {
-            r_made = srewrite_args.out_rtn;
-        }
     } else {
         made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
     }

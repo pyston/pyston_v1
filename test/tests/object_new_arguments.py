@@ -12,6 +12,7 @@ class C2(object):
 
 print "Trying C1"
 object.__new__(C1, 1)
+object.__new__(C1, a=1)
 
 print "Trying C2"
 object.__new__(C2, 1)
