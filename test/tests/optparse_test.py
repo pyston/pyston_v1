@@ -1,4 +1,6 @@
 # allow-warning: converting unicode literal to str
+# expected: fail
+# - func_set_name not yet implemented
 # Simple optparse test, taken from the optparse.py docstring:
 
 from optparse import OptionParser

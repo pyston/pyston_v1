@@ -61,6 +61,7 @@ extern "C" void initselect();
 extern "C" void initfcntl();
 extern "C" void inittime();
 extern "C" void initarray();
+extern "C" void init_codecs();
 
 namespace pyston {
 
@@ -1321,6 +1322,7 @@ void setupRuntime() {
     initfcntl();
     inittime();
     initarray();
+    init_codecs();
 
     setupSysEnd();
 

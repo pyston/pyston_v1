@@ -373,6 +373,42 @@ extern "C" Py_UNICODE _PyUnicode_ToUppercase(Py_UNICODE ch) noexcept {
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyUnicodeEncodeError_GetStart(PyObject*, Py_ssize_t*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyUnicodeDecodeError_GetStart(PyObject*, Py_ssize_t*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyUnicodeTranslateError_GetStart(PyObject*, Py_ssize_t*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyUnicodeEncodeError_GetEnd(PyObject*, Py_ssize_t*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyUnicodeDecodeError_GetEnd(PyObject*, Py_ssize_t*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyUnicodeTranslateError_GetEnd(PyObject*, Py_ssize_t*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyUnicodeEncodeError_GetObject(PyObject*) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* _PyUnicode_DecodeUnicodeInternal(const char* s, Py_ssize_t size, const char* errors) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyUnicode_BuildEncodingMap(PyObject* string) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 // From CPython, unicodeobject.c
 // Used by Py_UNICODE_ISSPACE in unicodeobject.h
 /* Fast detection of the most frequent whitespace characters */
