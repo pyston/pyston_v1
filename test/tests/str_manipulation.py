@@ -143,3 +143,21 @@ try:
     print 'TypeError not raised'
 except TypeError:
     print 'TypeError raised'
+
+def f(s):
+    if s.isalnum():
+        pass
+    if s.isalpha():
+        pass
+    if s.isdigit():
+        pass
+    if s.islower():
+        pass
+    if s.isspace():
+        pass
+    if s.istitle():
+        pass
+    if s.isupper():
+        pass
+f("")
+f("1")

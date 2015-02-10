@@ -1120,7 +1120,7 @@ extern "C" Box* strHash(BoxedString* self) {
 }
 
 extern "C" Box* strNonzero(BoxedString* self) {
-    assert(self->cls == str_cls);
+    ASSERT(self->cls == str_cls, "%s", self->cls->tp_name);
 
     return boxBool(self->s.size() != 0);
 }
@@ -1898,13 +1898,13 @@ void setupStr() {
     str_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)strHash, BOXED_INT, 1)));
     str_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)strNonzero, BOXED_BOOL, 1)));
 
-    str_cls->giveAttr("isalnum", new BoxedFunction(boxRTFunction((void*)strIsAlnum, STR, 1)));
-    str_cls->giveAttr("isalpha", new BoxedFunction(boxRTFunction((void*)strIsAlpha, STR, 1)));
-    str_cls->giveAttr("isdigit", new BoxedFunction(boxRTFunction((void*)strIsDigit, STR, 1)));
-    str_cls->giveAttr("islower", new BoxedFunction(boxRTFunction((void*)strIsLower, STR, 1)));
-    str_cls->giveAttr("isspace", new BoxedFunction(boxRTFunction((void*)strIsSpace, STR, 1)));
-    str_cls->giveAttr("istitle", new BoxedFunction(boxRTFunction((void*)strIsTitle, STR, 1)));
-    str_cls->giveAttr("isupper", new BoxedFunction(boxRTFunction((void*)strIsUpper, STR, 1)));
+    str_cls->giveAttr("isalnum", new BoxedFunction(boxRTFunction((void*)strIsAlnum, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isalpha", new BoxedFunction(boxRTFunction((void*)strIsAlpha, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isdigit", new BoxedFunction(boxRTFunction((void*)strIsDigit, BOXED_BOOL, 1)));
+    str_cls->giveAttr("islower", new BoxedFunction(boxRTFunction((void*)strIsLower, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isspace", new BoxedFunction(boxRTFunction((void*)strIsSpace, BOXED_BOOL, 1)));
+    str_cls->giveAttr("istitle", new BoxedFunction(boxRTFunction((void*)strIsTitle, BOXED_BOOL, 1)));
+    str_cls->giveAttr("isupper", new BoxedFunction(boxRTFunction((void*)strIsUpper, BOXED_BOOL, 1)));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
     str_cls->giveAttr("swapcase", new BoxedFunction(boxRTFunction((void*)strSwapcase, STR, 1)));
