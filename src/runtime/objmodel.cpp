@@ -305,7 +305,6 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
     tp_basicsize = instance_size;
 
-    tp_flags |= Py_TPFLAGS_HEAPTYPE;
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
     tp_flags |= Py_TPFLAGS_BASETYPE;
     tp_flags |= Py_TPFLAGS_HAVE_CLASS;
@@ -378,6 +377,7 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     tp_as_mapping = &as_mapping;
     tp_as_sequence = &as_sequence;
     tp_as_buffer = &as_buffer;
+    tp_flags |= Py_TPFLAGS_HEAPTYPE;
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));
@@ -394,6 +394,7 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     tp_as_sequence = &as_sequence;
     tp_as_buffer = &as_buffer;
     tp_name = ht_name->s.c_str();
+    tp_flags |= Py_TPFLAGS_HEAPTYPE;
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));

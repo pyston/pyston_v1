@@ -385,6 +385,12 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
         v->visit(cls->tp_base);
     if (cls->tp_dict)
         v->visit(cls->tp_dict);
+
+    if (cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+        BoxedHeapClass* hcls = static_cast<BoxedHeapClass*>(cls);
+        assert(hcls->ht_name);
+        v->visit(hcls->ht_name);
+    }
 }
 
 extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
