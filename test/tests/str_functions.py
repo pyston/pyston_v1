@@ -116,3 +116,7 @@ test_just_funcs("abcde", 5)
 test_just_funcs("abcde", 6)
 test_just_funcs("abcde", 7)
 test_just_funcs("abcde", 8)
+
+import gc
+for c in "hello world":
+    gc.collect()

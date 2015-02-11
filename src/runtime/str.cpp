@@ -1721,7 +1721,7 @@ public:
     BoxedString* s;
     std::string::const_iterator it, end;
 
-    BoxedStringIterator(BoxedString* s) : it(s->s.begin()), end(s->s.end()) {}
+    BoxedStringIterator(BoxedString* s) : s(s), it(s->s.begin()), end(s->s.end()) {}
 
     DEFAULT_CLASS(str_iterator_cls);
 
