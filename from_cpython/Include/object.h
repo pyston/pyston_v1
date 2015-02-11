@@ -457,6 +457,7 @@ struct _typeobject {
     char _dep_getattrs[56]; // FIXME: this is hardcoding the size of this particular implementation of std::unordered_map
     char _ics[32];
     void* _gcvisit_func;
+    void* _dtor;
     int _attrs_offset;
     bool _flags[2];
 };

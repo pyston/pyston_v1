@@ -304,7 +304,6 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
     assert(f->num_defaults == ndefaults);
 }
 
-// This probably belongs in dict.cpp?
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
@@ -322,6 +321,14 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
         v->visitPotentialRange(reinterpret_cast<void* const*>(&f->defaults->elts[0]),
                                reinterpret_cast<void* const*>(&f->defaults->elts[f->ndefaults]));
     }
+}
+
+static void functionDtor(Box* b) {
+    assert(isSubclass(b->cls, function_cls) || isSubclass(b->cls, builtin_function_or_method_cls));
+
+    BoxedFunctionBase* self = static_cast<BoxedFunctionBase*>(b);
+    self->dependent_ics.invalidateAll();
+    self->dependent_ics.~ICInvalidator();
 }
 
 BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : fn(fn) {
@@ -1144,6 +1151,8 @@ void setupRuntime() {
     builtin_function_or_method_cls
         = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedBuiltinFunctionOrMethod, attrs),
                              sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
+    function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
+
     instancemethod_cls = new BoxedHeapClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false,
                                             "instancemethod");
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false, "list");
