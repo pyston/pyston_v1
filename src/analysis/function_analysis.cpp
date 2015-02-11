@@ -277,7 +277,6 @@ public:
 
     virtual bool visit_assert(AST_Assert* node) { return true; }
     virtual bool visit_branch(AST_Branch* node) { return true; }
-    virtual bool visit_delete(AST_Delete* node) { return true; }
     virtual bool visit_expr(AST_Expr* node) { return true; }
     virtual bool visit_global(AST_Global* node) { return true; }
     virtual bool visit_invoke(AST_Invoke* node) { return false; }
@@ -286,6 +285,21 @@ public:
     virtual bool visit_print(AST_Print* node) { return true; }
     virtual bool visit_raise(AST_Raise* node) { return true; }
     virtual bool visit_return(AST_Return* node) { return true; }
+
+    virtual bool visit_delete(AST_Delete* node) {
+        for (auto t : node->targets) {
+            if (t->type == AST_TYPE::Name) {
+                AST_Name* name = ast_cast<AST_Name>(t);
+                state.erase(name->id);
+            } else {
+                // The CFG pass should reduce all deletes to the "basic" deletes on names/attributes/subscripts.
+                // If not, probably the best way to do this would be to just do a full AST traversal
+                // and look for AST_Name's with a ctx of Del
+                assert(t->type == AST_TYPE::Attribute || t->type == AST_TYPE::Subscript);
+            }
+        }
+        return true;
+    }
 
     virtual bool visit_classdef(AST_ClassDef* node) {
         _doSet(node->name);

@@ -58,3 +58,11 @@ try:
     assert 0
 except NameError, e:
     print e
+
+def f3():
+    a = 1
+    del a
+    if 0:
+        pass
+    print locals()
+f3()
