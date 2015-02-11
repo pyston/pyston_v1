@@ -319,7 +319,12 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 }
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
-    Py_FatalError("unimplemented");
+    try {
+        return getattr(o, static_cast<BoxedString*>(name)->s.c_str());
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
@@ -646,7 +651,7 @@ void setCAPIException(const ExcInfo& e) {
 
 void throwCAPIException() {
     checkAndThrowCAPIException();
-    llvm_unreachable("No exception was thrown?");
+    raiseExcHelper(SystemError, "error return without exception set");
 }
 
 void checkAndThrowCAPIException() {
@@ -1045,7 +1050,64 @@ extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    PyNumberMethods* m;
+    const char* buffer;
+    Py_ssize_t buffer_len;
+
+    if (o == NULL) {
+        PyErr_SetString(PyExc_SystemError, "null argument to internal routing");
+        return NULL;
+    }
+    if (PyInt_CheckExact(o)) {
+        Py_INCREF(o);
+        return o;
+    }
+    m = o->cls->tp_as_number;
+    if (m && m->nb_int) { /* This should include subclasses of int */
+        /* Classic classes always take this branch. */
+        PyObject* res = m->nb_int(o);
+        if (res && (!PyInt_Check(res) && !PyLong_Check(res))) {
+            PyErr_Format(PyExc_TypeError, "__int__ returned non-int (type %.200s)", res->cls->tp_name);
+            Py_DECREF(res);
+            return NULL;
+        }
+        return res;
+    }
+    if (PyInt_Check(o)) { /* A int subclass without nb_int */
+        BoxedInt* io = (BoxedInt*)o;
+        return PyInt_FromLong(io->n);
+    }
+
+    Py_FatalError("unimplemented __trunc__ and string -> int conversion");
+// the remainder of PyNumber_Int deals with __trunc__ usage, and converting from unicode/string to int
+#if 0
+    PyObject* trunc_func = getattr(o, "__trunc__");
+    if (trunc_func) {
+      PyObject *truncated = PyEval_CallObject(trunc_func, NULL);
+      Py_DECREF(trunc_func);
+      /* __trunc__ is specified to return an Integral type, but
+	 int() needs to return an int. */
+      return _PyNumber_ConvertIntegralToInt(
+					  truncated,
+					  "__trunc__ returned non-Integral (type %.200s)");
+    }
+    PyErr_Clear();  /* It's not an error if  o.__trunc__ doesn't exist. */
+
+    if (PyString_Check(o))
+      return int_from_string(PyString_AS_STRING(o),
+                 PyString_GET_SIZE(o));
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(o))
+      return PyInt_FromUnicode(PyUnicode_AS_UNICODE(o),
+                   PyUnicode_GET_SIZE(o),
+                   10);
+#endif
+    if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
+      return int_from_string((char*)buffer, buffer_len);
+
+    return type_error("int() argument must be a string or a "
+              "number, not '%.200s'", o);
+#endif
 }
 
 extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
@@ -1371,7 +1433,8 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 }
 
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
-    Py_FatalError("unimplemented");
+
+    return new BoxedCApiFunction(ml->ml_flags, self, ml->ml_name, ml->ml_meth);
 }
 
 extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {

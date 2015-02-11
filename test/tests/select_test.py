@@ -12,3 +12,11 @@ for k in sorted(dir(select)):
     else:
         print k, getattr(select, k)
 
+
+p = select.poll()
+f = open('/dev/null')
+try:
+    p.register(f)
+    print p.poll(10)
+finally:
+    f.close()

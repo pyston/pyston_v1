@@ -115,3 +115,46 @@ try:
     print s.__dict__
 except AttributeError, e:
     print e
+
+
+class C5(C):
+    def __getattr__(self, attr):
+        print "getattr", attr
+
+c = C5()
+slots_test.call_funcs(c)
+c.foo
+c.bar
+c.baz
+
+
+def _getattr_(self, attr):
+    print "_getattr_", attr
+
+class C6(C):
+    pass
+
+c = C6()
+c.__getattr__ = _getattr_
+slots_test.call_funcs(c)
+
+try:
+    c.foo
+except AttributeError, e:
+    print e
+
+c.__getattro__ = _getattr_
+slots_test.call_funcs(c)
+
+try:
+    c.foo
+except AttributeError, e:
+    print e
+
+c = slots_test.SlotsTesterNullReturnGetAttr(5)
+try:
+    print c.foo
+except SystemError, e:
+    print e
+
+print c.foo()

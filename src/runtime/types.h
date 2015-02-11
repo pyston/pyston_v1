@@ -226,8 +226,7 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
-    // will need to update this once we support tp_getattr-style overriding:
-    bool hasGenericGetattr() { return true; }
+    bool hasGenericGetattr() { return tp_getattr != NULL; }
 
     void freeze();
 

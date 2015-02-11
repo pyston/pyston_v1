@@ -1830,6 +1830,9 @@ initselect(void)
     {
 #endif
         Py_TYPE(&poll_Type) = &PyType_Type;
+        if (PyType_Ready(&poll_Type) < 0)
+          return;
+
         PyModule_AddIntConstant(m, "POLLIN", POLLIN);
         PyModule_AddIntConstant(m, "POLLPRI", POLLPRI);
         PyModule_AddIntConstant(m, "POLLOUT", POLLOUT);

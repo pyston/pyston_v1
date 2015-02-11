@@ -491,6 +491,7 @@ BoxedDict* Box::getDict() {
 }
 
 Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
+
     if (rewrite_args)
         rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
 
@@ -1422,6 +1423,13 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // invalidation rather than guards
         rewrite_args = NULL;
         REWRITE_ABORTED("");
+
+        if (obj->cls->tp_getattr) {
+            Box* rtn = obj->cls->tp_getattr(obj, const_cast<char*>(attr.c_str()));
+            if (rtn == NULL)
+                throwCAPIException();
+            return rtn;
+        }
         Box* getattr = typeLookup(obj->cls, getattr_str, NULL);
         if (getattr) {
             Box* boxstr = boxString(attr);
