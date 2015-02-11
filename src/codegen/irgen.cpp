@@ -445,6 +445,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                     speculated_class = int_cls;
                 } else if (phi_type == FLOAT) {
                     speculated_class = float_cls;
+                } else if (phi_type == BOOL) {
+                    speculated_class = bool_cls;
                 } else {
                     speculated_class = phi_type->guaranteedClass();
                 }
@@ -501,6 +503,15 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                             return v;
                         },
                         [](IREmitter& emitter) { return llvm::UndefValue::get(FLOAT->llvmType()); });
+                } else if (speculated_class == bool_cls) {
+                    v = handlePotentiallyUndefined(
+                        is_defined_var, BOOL->llvmType(), osr_unbox_block_end, *unbox_emitter, true,
+                        [from_arg](IREmitter& emitter) {
+                            auto v = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, from_arg);
+                            (new ConcreteCompilerVariable(BOXED_BOOL, from_arg, true))->decvref(emitter);
+                            return boolFromI1(emitter, v)->getValue();
+                        },
+                        [](IREmitter& emitter) { return llvm::UndefValue::get(BOOL->llvmType()); });
                 } else {
                     assert(phi_type == typeFromClass(speculated_class));
                     v = from_arg;
@@ -929,6 +940,10 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                                 llvm::Value* unboxed
                                     = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, converted->getValue());
                                 v = new ConcreteCompilerVariable(INT, unboxed, true);
+                            } else if (it->second.first == BOOL) {
+                                llvm::Value* unboxed
+                                    = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, converted->getValue());
+                                v = boolFromI1(emitter, unboxed);
                             } else {
                                 printf("%s\n", it->second.first->debugName().c_str());
                                 abort();
