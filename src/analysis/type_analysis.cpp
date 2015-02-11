@@ -661,9 +661,10 @@ public:
         ASSERT(0, "dont know how to merge these types: %s, %s", lhs->debugName().c_str(), rhs->debugName().c_str());
         abort();
     }
+
     static bool merge(const TypeMap& ending, TypeMap& next) {
         bool changed = false;
-        for (TypeMap::const_iterator it = ending.begin(); it != ending.end(); it++) {
+        for (TypeMap::const_iterator it = ending.begin(); it != ending.end(); ++it) {
             CompilerType*& prev = next[it->first];
             changed = merge(it->second, prev) || changed;
         }
@@ -706,7 +707,7 @@ public:
         in_queue.insert(cfg->getStartingBlock());
 
         int num_evaluations = 0;
-        while (queue.size()) {
+        while (!queue.empty()) {
             ASSERT(queue.size() == in_queue.size(), "%ld %ld", queue.size(), in_queue.size());
             num_evaluations++;
             CFGBlock* block = queue.top();

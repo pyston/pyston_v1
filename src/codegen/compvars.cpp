@@ -433,8 +433,8 @@ CompilerVariable* UnknownType::getattr(IREmitter& emitter, const OpInfo& info, C
 }
 
 static ConcreteCompilerVariable* _call(IREmitter& emitter, const OpInfo& info, llvm::Value* func, void* func_addr,
-                                       const std::vector<llvm::Value*> other_args, ArgPassSpec argspec,
-                                       const std::vector<CompilerVariable*> args,
+                                       const std::vector<llvm::Value*>& other_args, ArgPassSpec argspec,
+                                       const std::vector<CompilerVariable*>& args,
                                        const std::vector<const std::string*>* keyword_names,
                                        ConcreteCompilerType* rtn_type) {
     bool pass_keyword_names = (keyword_names != nullptr);

@@ -393,7 +393,7 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
         // new_effort = EffortLevel::MAXIMAL;
         CompiledFunction* compiled
             = compileFunction(exit->parent_cf->clfunc, exit->parent_cf->spec, new_effort, exit->entry);
-        assert(compiled = new_cf);
+        assert(compiled == new_cf);
     }
 
     return new_cf;

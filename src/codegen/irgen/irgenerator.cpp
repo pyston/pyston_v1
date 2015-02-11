@@ -2413,7 +2413,7 @@ public:
     void copySymbolsFrom(SymbolTable* st) override {
         assert(st);
         DupCache cache;
-        for (SymbolTable::iterator it = st->begin(); it != st->end(); it++) {
+        for (SymbolTable::iterator it = st->begin(); it != st->end(); ++it) {
             // printf("Copying in %s: %p, %d\n", it->first.c_str(), it->second, it->second->getVrefs());
             symbol_table[it->first] = it->second->dup(cache);
             // printf("got: %p, %d\n", symbol_table[it->first], symbol_table[it->first]->getVrefs());

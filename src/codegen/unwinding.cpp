@@ -54,7 +54,7 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64
     u32 = (uint32_t*)start_addr;
 
     int cie_length = *u32;
-    *u32++;
+    u32++;
 
     assert(*u32 == 0); // CIE ID
 

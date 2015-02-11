@@ -786,7 +786,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
                 // And go through and add phi nodes:
                 ConcreteSymbolTable* pred_st = phi_ending_symbol_tables[pred];
-                for (ConcreteSymbolTable::iterator it = pred_st->begin(); it != pred_st->end(); it++) {
+                for (ConcreteSymbolTable::iterator it = pred_st->begin(); it != pred_st->end(); ++it) {
                     // printf("adding phi for %s\n", it->first.c_str());
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(it->second->getType()->llvmType(),
                                                                           block->predecessors.size(), it->first.str());
@@ -868,7 +868,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         // which we won't read until after all new BBs have been added.
         std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&>> phi_args;
 
-        for (PHITable::iterator it = phis->begin(); it != phis->end(); it++) {
+        for (PHITable::iterator it = phis->begin(); it != phis->end(); ++it) {
             llvm::PHINode* llvm_phi = it->second.second;
             for (int j = 0; j < b->predecessors.size(); j++) {
                 CFGBlock* b2 = b->predecessors[j];
@@ -993,11 +993,11 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         if (ending_symbol_tables[b] == NULL)
             continue;
 
-        for (SymbolTable::iterator it = ending_symbol_tables[b]->begin(); it != ending_symbol_tables[b]->end(); it++) {
+        for (SymbolTable::iterator it = ending_symbol_tables[b]->begin(); it != ending_symbol_tables[b]->end(); ++it) {
             it->second->decvrefNodrop();
         }
         for (ConcreteSymbolTable::iterator it = phi_ending_symbol_tables[b]->begin();
-             it != phi_ending_symbol_tables[b]->end(); it++) {
+             it != phi_ending_symbol_tables[b]->end(); ++it) {
             it->second->decvrefNodrop();
         }
         delete phi_ending_symbol_tables[b];
