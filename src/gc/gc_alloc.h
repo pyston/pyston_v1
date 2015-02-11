@@ -48,6 +48,13 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     alloc->gc_flags = 0;
 
     if (kind_id == GCKind::CONSERVATIVE) {
+        // Round the size up to the nearest multiple of the pointer width, so that
+        // we have an integer number of pointers to scan.
+        // TODO We can probably this better; we could round down when we scan, or even
+        // not scan this at all -- a non-pointerwidth-multiple allocation seems to mean
+        // that it won't be storing pointers (or it will be storing them non-aligned,
+        // which we don't support).
+        bytes = (bytes + sizeof(void*) - 1) & (~(sizeof(void*) - 1));
         assert(bytes < (1 << 31));
         alloc->kind_data = bytes;
     }
