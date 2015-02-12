@@ -638,6 +638,22 @@ private:
 
                 return getNone();
             }
+            case AST_LangPrimitive::UNCACHE_EXC_INFO: {
+                assert(node->args.empty());
+
+                auto* builder = emitter.getBuilder();
+
+                llvm::Value* frame_info = irstate->getFrameInfoVar();
+                llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
+                assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
+
+                llvm::Constant* v = embedConstantPtr(0, g.llvm_value_type_ptr);
+                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
+                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
+                builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
+
+                return getNone();
+            }
             default:
                 RELEASE_ASSERT(0, "%d", node->opcode);
         }

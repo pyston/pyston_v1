@@ -372,6 +372,7 @@ private:
                 return UNKNOWN;
             case AST_LangPrimitive::NONE:
             case AST_LangPrimitive::SET_EXC_INFO:
+            case AST_LangPrimitive::UNCACHE_EXC_INFO:
                 return NONE;
             case AST_LangPrimitive::NONZERO:
                 return BOOL;
