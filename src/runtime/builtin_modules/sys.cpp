@@ -55,10 +55,12 @@ Box* sysExcClear() {
 }
 
 static Box* sysExit(Box* arg) {
-    if (arg)
-        raiseExc(exceptionNew1(SystemExit));
-    else
-        raiseExc(exceptionNew2(SystemExit, arg));
+    assert(arg);
+    Box* exc = exceptionNew2(SystemExit, arg);
+    // TODO this should be handled by the SystemExit constructor
+    exc->giveAttr("code", arg);
+
+    raiseExc(exc);
 }
 
 BoxedDict* getSysModulesDict() {

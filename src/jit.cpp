@@ -154,8 +154,11 @@ int main(int argc, char** argv) {
             main_module = createAndRunModule("__main__", fn);
         } catch (ExcInfo e) {
             if (e.matches(SystemExit)) {
-                printf("Warning: ignoring SystemExit code\n");
-                return 1;
+                Box* code = e.value->getattr("code");
+                int rtncode = 1;
+                if (code && isSubclass(code->cls, pyston::int_cls))
+                    rtncode = static_cast<BoxedInt*>(code)->n;
+                return rtncode;
             } else {
                 e.printExcAndTraceback();
                 return 1;
@@ -221,8 +224,11 @@ int main(int argc, char** argv) {
                     compileAndRunModule(m, main_module);
                 } catch (ExcInfo e) {
                     if (e.matches(SystemExit)) {
-                        printf("Warning: ignoring SystemExit code\n");
-                        return 1;
+                        Box* code = e.value->getattr("code");
+                        int rtncode = 1;
+                        if (code && isSubclass(code->cls, pyston::int_cls))
+                            rtncode = static_cast<BoxedInt*>(code)->n;
+                        return rtncode;
                     } else {
                         e.printExcAndTraceback();
                     }
