@@ -481,6 +481,8 @@ extern "C" void PyEval_ReInitThreads() noexcept {
         }
     }
 
+    threading_lock.unlock();
+
     num_starting_threads = 0;
     threads_waiting_on_gil = 0;
 
