@@ -351,6 +351,7 @@ intptr_t start_thread(void* (*start_func)(Box*, Box*, Box*), Box* arg1, Box* arg
     RELEASE_ASSERT(code == 0, "");
     if (VERBOSITY() >= 2)
         printf("pthread thread_id: 0x%lx\n", thread_id);
+    pthread_detach(thread_id);
 
     static_assert(sizeof(pthread_t) <= sizeof(intptr_t), "");
     return thread_id;
