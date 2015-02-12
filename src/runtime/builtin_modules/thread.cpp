@@ -149,8 +149,8 @@ void setupThread() {
     thread_lock_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedThreadLock), false, "lock");
     thread_lock_cls->giveAttr("__module__", boxStrConstant("thread"));
     thread_lock_cls->giveAttr(
-        "acquire",
-        new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, NONE, 2, 1, false, false), { boxInt(1) }));
+        "acquire", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, BOXED_BOOL, 2, 1, false, false),
+                                     { boxInt(1) }));
     thread_lock_cls->giveAttr("release", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::release, NONE, 1)));
     thread_lock_cls->giveAttr("acquire_lock", thread_lock_cls->getattr("acquire"));
     thread_lock_cls->giveAttr("release_lock", thread_lock_cls->getattr("release"));

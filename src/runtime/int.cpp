@@ -863,13 +863,13 @@ void setupInt() {
     int_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)intNonzero, BOXED_BOOL, 1)));
     int_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)intRepr, STR, 1)));
     int_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)intHash, BOXED_INT, 1)));
-    int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, BOXED_TUPLE, 2)));
+    int_cls->giveAttr("__divmod__", new BoxedFunction(boxRTFunction((void*)intDivmod, UNKNOWN, 2)));
 
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
     int_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)intNew, BOXED_INT, 2, 1, false, false), { boxInt(0) }));
+                      new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
 
     int_cls->giveAttr("__init__",
                       new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));

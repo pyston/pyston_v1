@@ -388,7 +388,7 @@ void setupTuple() {
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
     addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN,
                   std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, BOXED_INT });
-    addRTFunction(getitem, (void*)tupleGetitemSlice, SLICE, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, SLICE });
+    addRTFunction(getitem, (void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, SLICE });
     addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, UNKNOWN });
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 

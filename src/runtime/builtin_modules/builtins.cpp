@@ -1084,10 +1084,9 @@ void setupBuiltins() {
         new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
     enumerate_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::iter, typeFromClass(enumerate_cls), 1)));
-    enumerate_cls->giveAttr(
-        "next", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::next, typeFromClass(enumerate_cls), 1)));
-    enumerate_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::hasnext,
-                                                                           typeFromClass(enumerate_cls), 1)));
+    enumerate_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::next, BOXED_TUPLE, 1)));
+    enumerate_cls->giveAttr("__hasnext__",
+                            new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::hasnext, BOXED_BOOL, 1)));
     enumerate_cls->freeze();
     builtins_module->giveAttr("enumerate", enumerate_cls);
 
@@ -1130,7 +1129,7 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "dir", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dir, LIST, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr(
-        "vars", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)vars, LIST, 1, 1, false, false), { NULL }));
+        "vars", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)vars, UNKNOWN, 1, 1, false, false), { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
     builtins_module->giveAttr("basestring", basestring_cls);

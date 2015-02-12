@@ -2684,14 +2684,20 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         rewrite_args->out_success = true;
     }
 
+    Box* r;
     if (closure && generator)
-        return chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
+        r = chosen_cf->closure_generator_call(closure, generator, oarg1, oarg2, oarg3, oargs);
     else if (closure)
-        return chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
+        r = chosen_cf->closure_call(closure, oarg1, oarg2, oarg3, oargs);
     else if (generator)
-        return chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
+        r = chosen_cf->generator_call(generator, oarg1, oarg2, oarg3, oargs);
     else
-        return chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+        r = chosen_cf->call(oarg1, oarg2, oarg3, oargs);
+
+    ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) %s %s",
+           g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
+           chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
+    return r;
 }
 
 
