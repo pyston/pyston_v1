@@ -425,22 +425,6 @@ void finishMainThread() {
     // TODO maybe this is the place to wait for non-daemon threads?
 }
 
-extern "C" void PyEval_ReInitThreads() noexcept {
-    pthread_t current_thread = pthread_self();
-    assert(current_threads.count(pthread_self()));
-
-    auto it = current_threads.begin();
-    while (it != current_threads.end()) {
-        if (it->second->pthread_id == current_thread) {
-            ++it;
-        } else {
-            it = current_threads.erase(it);
-        }
-    }
-
-    // TODO we should clean up all created PerThreadSets, such as the one used in the heap for thread-local-caches.
-}
-
 
 // For the "AllowThreads" regions, let's save the thread state at the beginning of the region.
 // This means that the thread won't get interrupted by the signals we would otherwise need to
@@ -483,6 +467,25 @@ static pthread_mutex_t gil = PTHREAD_MUTEX_INITIALIZER;
 
 static std::atomic<int> threads_waiting_on_gil(0);
 static pthread_cond_t gil_acquired = PTHREAD_COND_INITIALIZER;
+
+extern "C" void PyEval_ReInitThreads() noexcept {
+    pthread_t current_thread = pthread_self();
+    assert(current_threads.count(pthread_self()));
+
+    auto it = current_threads.begin();
+    while (it != current_threads.end()) {
+        if (it->second->pthread_id == current_thread) {
+            ++it;
+        } else {
+            it = current_threads.erase(it);
+        }
+    }
+
+    num_starting_threads = 0;
+    threads_waiting_on_gil = 0;
+
+    // TODO we should clean up all created PerThreadSets, such as the one used in the heap for thread-local-caches.
+}
 
 void acquireGLWrite() {
     threads_waiting_on_gil++;
