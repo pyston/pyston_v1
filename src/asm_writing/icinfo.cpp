@@ -256,6 +256,8 @@ void ICInfo::clear(ICSlotInfo* icentry) {
     std::unique_ptr<Assembler> writer(new Assembler(start, getSlotSize()));
     writer->nop();
     writer->jmp(JumpDestination::fromStart(getSlotSize()));
+    assert(writer->bytesWritten() <= IC_INVALDITION_HEADER_SIZE);
+
     // std::unique_ptr<MCWriter> writer(createMCWriter(start, getSlotSize(), 0));
     // writer->emitNop();
     // writer->emitGuardFalse();

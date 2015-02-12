@@ -158,6 +158,7 @@ public:
     void fillWithNopsExcept(int bytes);
     void emitAnnotation(int num);
 
+    int bytesWritten() { return addr - start_addr; }
     uint8_t* curInstPointer() { return addr; }
     bool isExactlyFull() { return addr == end_addr; }
 };

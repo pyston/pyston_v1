@@ -563,6 +563,16 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     can_call_into_python = true;
 
     if (can_call_into_python) {
+        // We need some fixed amount of space at the beginning of the IC that we can use to invalidate
+        // it by writing a jmp.
+        // FIXME this check is conservative, since actually we just have to verify that the return
+        // address is at least IC_INVALDITION_HEADER_SIZE bytes past the beginning, but we're
+        // checking based on the beginning of the call.  I think the load+call might actually
+        // always larger than the invalidation jmp.
+        assert(assembler->bytesWritten() >= IC_INVALDITION_HEADER_SIZE);
+    }
+
+    if (can_call_into_python) {
         if (!marked_inside_ic) {
             // assembler->trap();
 

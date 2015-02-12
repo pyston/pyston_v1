@@ -30,6 +30,8 @@ class TypeRecorder;
 class ICInfo;
 class ICInvalidator;
 
+#define IC_INVALDITION_HEADER_SIZE 6
+
 struct ICSlotInfo {
 public:
     ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx), num_inside(0) {}
