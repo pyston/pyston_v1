@@ -1311,19 +1311,15 @@ Box* strIsTitle(BoxedString* self) {
 Box* strJoin(BoxedString* self, Box* rhs) {
     assert(self->cls == str_cls);
 
-    if (rhs->cls == list_cls) {
-        BoxedList* list = static_cast<BoxedList*>(rhs);
-        std::ostringstream os;
-        for (int i = 0; i < list->size; i++) {
-            if (i > 0)
-                os << self->s;
-            BoxedString* elt_str = str(list->elts->elts[i]);
-            os << elt_str->s;
-        }
-        return boxString(os.str());
-    } else {
-        raiseExcHelper(TypeError, "");
+    std::ostringstream os;
+    int i = 0;
+    for (Box* e : rhs->pyElements()) {
+        if (i > 0)
+            os << self->s;
+        os << str(e)->s;
+        ++i;
     }
+    return boxString(os.str());
 }
 
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {

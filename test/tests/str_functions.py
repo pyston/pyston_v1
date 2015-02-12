@@ -1,4 +1,5 @@
 print "-".join(["hello", "world"])
+print "-".join(("hello", "world"))
 
 print repr(chr(0) + chr(180))
 print repr('"')
