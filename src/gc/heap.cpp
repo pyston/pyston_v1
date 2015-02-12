@@ -300,7 +300,10 @@ static void _doFree(GCAllocation* al) {
 
     if (al->kind_id == GCKind::PYTHON) {
         Box* b = (Box*)al->user_data;
+
         ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b));
+        if (b->cls->simple_destructor)
+            b->cls->simple_destructor(b);
     }
 }
 

@@ -125,8 +125,8 @@ public:
 
     void add(Immediate imm, Register reg);
     void sub(Immediate imm, Register reg);
-    void inc(Register reg);
-    void inc(Indirect mem);
+    void incl(Indirect mem);
+    void decl(Indirect mem);
 
     void callq(Register reg);
     void retq();
@@ -158,6 +158,7 @@ public:
     void fillWithNopsExcept(int bytes);
     void emitAnnotation(int num);
 
+    int bytesWritten() { return addr - start_addr; }
     uint8_t* curInstPointer() { return addr; }
     bool isExactlyFull() { return addr == end_addr; }
 };

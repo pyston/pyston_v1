@@ -30,12 +30,15 @@ class TypeRecorder;
 class ICInfo;
 class ICInvalidator;
 
+#define IC_INVALDITION_HEADER_SIZE 6
+
 struct ICSlotInfo {
 public:
-    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx) {}
+    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx), num_inside(0) {}
 
     ICInfo* ic;
-    int idx;
+    int idx;        // the index inside the ic
+    int num_inside; // the number of stack frames that are currently inside this slot
 
     void clear();
 };
@@ -45,7 +48,7 @@ public:
     class CommitHook {
     public:
         virtual ~CommitHook() {}
-        virtual void finishAssembly(int fastpath_offset) = 0;
+        virtual void finishAssembly(ICSlotInfo* picked_slot, int fastpath_offset) = 0;
     };
 
 private:
@@ -73,7 +76,7 @@ public:
     assembler::GenericRegister returnRegister();
 
     void addDependenceOn(ICInvalidator&);
-    void commit(uint64_t decision_path, CommitHook* hook);
+    void commit(CommitHook* hook);
     void abort();
 
     friend class ICInfo;
@@ -81,14 +84,7 @@ public:
 
 class ICInfo {
 private:
-    struct SlotInfo {
-        bool is_patched;
-        uint64_t decision_path;
-        ICSlotInfo entry;
-
-        SlotInfo(ICInfo* ic, int idx) : is_patched(false), decision_path(0), entry(ic, idx) {}
-    };
-    std::vector<SlotInfo> slots;
+    std::vector<ICSlotInfo> slots;
     // For now, just use a round-robin eviction policy.
     // This is probably a bunch worse than LRU, but it's also
     // probably a bunch better than the "always evict slot #0" policy
@@ -105,7 +101,7 @@ private:
     bool failed;
 
     // for ICSlotRewrite:
-    ICSlotInfo* pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
+    ICSlotInfo* pickEntryForRewrite(const char* debug_name);
 
 public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,

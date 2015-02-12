@@ -71,7 +71,7 @@ void ICSlotRewrite::abort() {
     ic->failed = true;
 }
 
-void ICSlotRewrite::commit(uint64_t decision_path, CommitHook* hook) {
+void ICSlotRewrite::commit(CommitHook* hook) {
     bool still_valid = true;
     for (int i = 0; i < dependencies.size(); i++) {
         int orig_version = dependencies[i].second;
@@ -87,7 +87,7 @@ void ICSlotRewrite::commit(uint64_t decision_path, CommitHook* hook) {
         return;
     }
 
-    ICSlotInfo* ic_entry = ic->pickEntryForRewrite(decision_path, debug_name);
+    ICSlotInfo* ic_entry = ic->pickEntryForRewrite(debug_name);
     if (ic_entry == NULL)
         return;
 
@@ -99,9 +99,10 @@ void ICSlotRewrite::commit(uint64_t decision_path, CommitHook* hook) {
     uint8_t* slot_start = (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
     uint8_t* continue_point = (uint8_t*)ic->continue_addr;
 
-    hook->finishAssembly(continue_point - slot_start);
+    hook->finishAssembly(ic_entry, continue_point - slot_start);
 
     assert(assembler->isExactlyFull());
+    assert(!assembler->hasFailed());
 
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
@@ -145,40 +146,25 @@ ICSlotRewrite* ICInfo::startRewrite(const char* debug_name) {
     return new ICSlotRewrite(this, debug_name);
 }
 
-ICSlotInfo* ICInfo::pickEntryForRewrite(uint64_t decision_path, const char* debug_name) {
-    for (int i = 0; i < getNumSlots(); i++) {
-        SlotInfo& sinfo = slots[i];
-        if (!sinfo.is_patched) {
-            if (VERBOSITY()) {
-                printf("committing %s icentry to unused slot %d at %p\n", debug_name, i, start_addr);
-            }
-
-            sinfo.is_patched = true;
-            sinfo.decision_path = decision_path;
-            return &sinfo.entry;
-        }
-    }
-
+ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
     int num_slots = getNumSlots();
     for (int _i = 0; _i < num_slots; _i++) {
         int i = (_i + next_slot_to_try) % num_slots;
 
-        SlotInfo& sinfo = slots[i];
-        if (sinfo.is_patched && sinfo.decision_path != decision_path) {
+        ICSlotInfo& sinfo = slots[i];
+        assert(sinfo.num_inside >= 0);
+        if (sinfo.num_inside)
             continue;
-        }
 
         if (VERBOSITY()) {
             printf("committing %s icentry to in-use slot %d at %p\n", debug_name, i, start_addr);
         }
-        next_slot_to_try++;
+        next_slot_to_try = i + 1;
 
-        sinfo.is_patched = true;
-        sinfo.decision_path = decision_path;
-        return &sinfo.entry;
+        return &sinfo;
     }
     if (VERBOSITY())
-        printf("not committing %s icentry since it is not compatible (%lx)\n", debug_name, decision_path);
+        printf("not committing %s icentry since there are no available slots\n", debug_name);
     return NULL;
 }
 
@@ -192,7 +178,7 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
       type_recorder(type_recorder), failed(false), start_addr(start_addr), slowpath_rtn_addr(slowpath_rtn_addr),
       continue_addr(continue_addr) {
     for (int i = 0; i < num_slots; i++) {
-        slots.push_back(SlotInfo(this, i));
+        slots.push_back(ICSlotInfo(this, i));
     }
 }
 
@@ -270,6 +256,8 @@ void ICInfo::clear(ICSlotInfo* icentry) {
     std::unique_ptr<Assembler> writer(new Assembler(start, getSlotSize()));
     writer->nop();
     writer->jmp(JumpDestination::fromStart(getSlotSize()));
+    assert(writer->bytesWritten() <= IC_INVALDITION_HEADER_SIZE);
+
     // std::unique_ptr<MCWriter> writer(createMCWriter(start, getSlotSize(), 0));
     // writer->emitNop();
     // writer->emitGuardFalse();

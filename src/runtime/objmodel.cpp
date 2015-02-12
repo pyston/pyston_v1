@@ -298,8 +298,8 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
                        bool is_user_defined)
-    : BoxVar(0), gc_visit(gc_visit), attrs_offset(attrs_offset), is_constant(false), is_user_defined(is_user_defined),
-      is_pyston_class(true) {
+    : BoxVar(0), gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset), is_constant(false),
+      is_user_defined(is_user_defined), is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -2400,6 +2400,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             } else {
                 rewrite_args->obj->addGuard((intptr_t)func);
             }
+            rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
         }
     }
 
@@ -2731,9 +2732,6 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             }
             rewrite_args->args_guarded = true;
         }
-
-        rewrite_args->rewriter->addDecision(obj->cls == function_cls || obj->cls == builtin_function_or_method_cls ? 1
-                                                                                                                   : 0);
     }
 
     if (obj->cls == function_cls || obj->cls == builtin_function_or_method_cls) {

@@ -196,6 +196,13 @@ public:
 
     gcvisit_func gc_visit;
 
+    // A "simple" destructor -- one that is allowed to be called at any point after the object is dead.
+    // In particular, this means that it can't touch any Python objects or other gc-managed memory,
+    // since it will be in an undefined state.
+    // (Context: in Python destructors are supposed to be called in topological order, due to reference counting.
+    // We don't support that yet, but still want some simple ability to run code when an object gets freed.)
+    void (*simple_destructor)(Box*);
+
     // Offset of the HCAttrs object or 0 if there are no hcattrs.
     // Analogous to tp_dictoffset
     const int attrs_offset;
@@ -446,6 +453,8 @@ public:
     bool isGenerator;
     int ndefaults;
     GCdArray* defaults;
+
+    ICInvalidator dependent_ics;
 
     // Accessed via member descriptor
     Box* modname; // __module__
