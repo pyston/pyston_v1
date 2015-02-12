@@ -616,12 +616,52 @@ void Assembler::sub(Immediate imm, Register reg) {
     emitArith(imm, reg, OPCODE_SUB);
 }
 
-void Assembler::inc(Register reg) {
-    UNIMPLEMENTED();
+void Assembler::incl(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = 0;
+    if (src_idx >= 8) {
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 0, src_idx);
+    } else {
+        emitModRM(0b01, 0, src_idx);
+        emitByte(mem.offset);
+    }
 }
 
-void Assembler::inc(Indirect mem) {
-    UNIMPLEMENTED();
+void Assembler::decl(Indirect mem) {
+    int src_idx = mem.base.regnum;
+
+    int rex = 0;
+    if (src_idx >= 8) {
+        rex |= REX_B;
+        src_idx -= 8;
+    }
+
+    assert(src_idx >= 0 && src_idx < 8);
+
+    if (rex)
+        emitRex(rex);
+    emitByte(0xff);
+
+    assert(-0x80 <= mem.offset && mem.offset < 0x80);
+    if (mem.offset == 0) {
+        emitModRM(0b00, 1, src_idx);
+    } else {
+        emitModRM(0b01, 1, src_idx);
+        emitByte(mem.offset);
+    }
 }
 
 

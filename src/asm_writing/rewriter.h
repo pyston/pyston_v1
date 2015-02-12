@@ -346,6 +346,9 @@ private:
         actions.emplace_back(action);
     }
     bool added_changing_action;
+    bool marked_inside_ic;
+    std::vector<void**> mark_addr_addrs;
+
     int last_guard_action;
 
     bool done_guarding;
@@ -374,7 +377,7 @@ private:
     // Do the bookkeeping to say that var is no longer in location l
     void removeLocationFromVar(RewriterVar* var, Location l);
 
-    void finishAssembly(int continue_offset) override;
+    void finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
 
     int ndecisions;
     uint64_t decision_path;

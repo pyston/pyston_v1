@@ -125,8 +125,8 @@ public:
 
     void add(Immediate imm, Register reg);
     void sub(Immediate imm, Register reg);
-    void inc(Register reg);
-    void inc(Indirect mem);
+    void incl(Indirect mem);
+    void decl(Indirect mem);
 
     void callq(Register reg);
     void retq();

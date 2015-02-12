@@ -99,9 +99,10 @@ void ICSlotRewrite::commit(uint64_t decision_path, CommitHook* hook) {
     uint8_t* slot_start = (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
     uint8_t* continue_point = (uint8_t*)ic->continue_addr;
 
-    hook->finishAssembly(continue_point - slot_start);
+    hook->finishAssembly(ic_entry, continue_point - slot_start);
 
     assert(assembler->isExactlyFull());
+    assert(!assembler->hasFailed());
 
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());

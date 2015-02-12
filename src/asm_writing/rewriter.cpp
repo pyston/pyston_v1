@@ -558,6 +558,29 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     // assert(!can_call_into_python);
     assert(done_guarding);
 
+    // we've been ignoring these annotations for long enough that I'm not sure they can be trusted,
+    // so just be pessimistic:
+    can_call_into_python = true;
+
+    if (can_call_into_python) {
+        if (!marked_inside_ic) {
+            // assembler->trap();
+
+            // TODO this is super hacky: we don't know the address that we want to inc/dec, since
+            // it depends on the slot that we end up picking, so just write out an arbitrary
+            // constant an we'll rewrite it later
+            // TODO if we can guarantee that the mark_addr will fit in 32 bits,
+            // we can use a more compact instruction encoding
+            mark_addr_addrs.push_back((void**)(assembler->curInstPointer() + 2));
+            assembler::Register reg = allocReg(Location::any());
+            assembler->mov(assembler::Immediate(0x1234567890abcdefL), reg);
+            assembler->incl(assembler::Indirect(reg, 0));
+
+            assertConsistent();
+            marked_inside_ic = true;
+        }
+    }
+
     // RewriterVarUsage scratch = createNewVar(Location::any());
     assembler::Register r = allocReg(assembler::R11);
 
@@ -731,15 +754,17 @@ void Rewriter::commit() {
     assert(!finished);
     initPhaseEmitting();
 
-    if (assembler->hasFailed()) {
-        static StatCounter rewriter_assemblyfail("rewriter_assemblyfail");
-        rewriter_assemblyfail.log();
+    static StatCounter rewriter_assemblyfail("rewriter_assemblyfail");
 
+    auto on_assemblyfail = [&]() {
+        rewriter_assemblyfail.log();
         this->abort();
+    };
+
+    if (assembler->hasFailed()) {
+        on_assemblyfail();
         return;
     }
-
-    finished = true;
 
     static StatCounter rewriter_commits("rewriter_commits");
     rewriter_commits.log();
@@ -760,7 +785,8 @@ void Rewriter::commit() {
     // at each guard in the var's `uses` list.
 
     // First: check if we're done guarding before we even begin emitting.
-    if (last_guard_action == -1) {
+
+    auto on_done_guarding = [&]() {
         done_guarding = true;
         for (RewriterVar* arg : args) {
             if (arg->next_use == arg->uses.size()) {
@@ -770,9 +796,12 @@ void Rewriter::commit() {
                 arg->locations.clear();
             }
         }
-    }
+        assertConsistent();
+    };
 
-    assertConsistent();
+    if (last_guard_action == -1) {
+        on_done_guarding();
+    }
 
     // Now, start emitting assembly; check if we're dong guarding after each.
     for (int i = 0; i < actions.size(); i++) {
@@ -780,17 +809,20 @@ void Rewriter::commit() {
 
         assertConsistent();
         if (i == last_guard_action) {
-            done_guarding = true;
-            for (RewriterVar* arg : args) {
-                if (arg->next_use == arg->uses.size()) {
-                    for (Location loc : arg->locations) {
-                        vars_by_location.erase(loc);
-                    }
-                    arg->locations.clear();
-                }
-            }
+            on_done_guarding();
         }
-        assertConsistent();
+    }
+
+    if (marked_inside_ic) {
+        // TODO this is super hacky: we don't know the address that we want to inc/dec, since
+        // it depends on the slot that we end up picking, so just write out an arbitrary
+        // constant an we'll rewrite it later
+        // TODO if we can guarantee that the mark_addr will fit in 32 bits,
+        // we can use a more compact instruction encoding
+        mark_addr_addrs.push_back((void**)(assembler->curInstPointer() + 2));
+        assembler::Register reg = allocReg(Location::any(), getReturnDestination());
+        assembler->mov(assembler::Immediate(0x1234567890abcdefL), reg);
+        assembler->decl(assembler::Indirect(reg, 0));
     }
 
 // Make sure that we have been calling bumpUse correctly.
@@ -896,10 +928,30 @@ void Rewriter::commit() {
     }
 #endif
 
+    if (assembler->hasFailed()) {
+        on_assemblyfail();
+        return;
+    }
+
+    finished = true;
+
+    // TODO: have to check that we have enough room to write the final jmp
     rewrite->commit(decision_path, this);
+
+    assert(!assembler->hasFailed());
 }
 
-void Rewriter::finishAssembly(int continue_offset) {
+void Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
+    if (marked_inside_ic) {
+        void* mark_addr = &picked_slot->num_inside;
+
+        // Go back and rewrite the faked constants to point to the correct address:
+        for (void** mark_addr_addr : mark_addr_addrs) {
+            assert(*mark_addr_addr == (void*)0x1234567890abcdefL);
+            *mark_addr_addr = mark_addr;
+        }
+    }
+
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
 
     assembler->fillWithNops();
@@ -1299,7 +1351,8 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(rewrite), assembler(rewrite->getAssembler()), return_location(rewrite->returnRegister()),
-      added_changing_action(false), last_guard_action(-1), done_guarding(false), ndecisions(0), decision_path(1) {
+      added_changing_action(false), marked_inside_ic(false), last_guard_action(-1), done_guarding(false), ndecisions(0),
+      decision_path(1) {
     initPhaseCollecting();
 
 #ifndef NDEBUG

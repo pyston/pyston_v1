@@ -32,10 +32,11 @@ class ICInvalidator;
 
 struct ICSlotInfo {
 public:
-    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx) {}
+    ICSlotInfo(ICInfo* ic, int idx) : ic(ic), idx(idx), num_inside(0) {}
 
     ICInfo* ic;
-    int idx;
+    int idx;        // the index inside the ic
+    int num_inside; // the number of stack frames that are currently inside this slot
 
     void clear();
 };
@@ -45,7 +46,7 @@ public:
     class CommitHook {
     public:
         virtual ~CommitHook() {}
-        virtual void finishAssembly(int fastpath_offset) = 0;
+        virtual void finishAssembly(ICSlotInfo* picked_slot, int fastpath_offset) = 0;
     };
 
 private:
