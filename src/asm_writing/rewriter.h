@@ -379,9 +379,6 @@ private:
 
     void finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
 
-    int ndecisions;
-    uint64_t decision_path;
-
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val, Location loc);
     void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
@@ -463,8 +460,6 @@ public:
     void addDependenceOn(ICInvalidator&);
 
     static Rewriter* createRewriter(void* rtn_addr, int num_args, const char* debug_name);
-
-    void addDecision(int way);
 
     friend class RewriterVar;
 };

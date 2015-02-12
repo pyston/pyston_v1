@@ -74,7 +74,7 @@ public:
     assembler::GenericRegister returnRegister();
 
     void addDependenceOn(ICInvalidator&);
-    void commit(uint64_t decision_path, CommitHook* hook);
+    void commit(CommitHook* hook);
     void abort();
 
     friend class ICInfo;
@@ -82,14 +82,7 @@ public:
 
 class ICInfo {
 private:
-    struct SlotInfo {
-        bool is_patched;
-        uint64_t decision_path;
-        ICSlotInfo entry;
-
-        SlotInfo(ICInfo* ic, int idx) : is_patched(false), decision_path(0), entry(ic, idx) {}
-    };
-    std::vector<SlotInfo> slots;
+    std::vector<ICSlotInfo> slots;
     // For now, just use a round-robin eviction policy.
     // This is probably a bunch worse than LRU, but it's also
     // probably a bunch better than the "always evict slot #0" policy
@@ -106,7 +99,7 @@ private:
     bool failed;
 
     // for ICSlotRewrite:
-    ICSlotInfo* pickEntryForRewrite(uint64_t decision_path, const char* debug_name);
+    ICSlotInfo* pickEntryForRewrite(const char* debug_name);
 
 public:
     ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, StackInfo stack_info, int num_slots,

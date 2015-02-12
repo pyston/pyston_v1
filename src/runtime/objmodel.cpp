@@ -2731,9 +2731,6 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             }
             rewrite_args->args_guarded = true;
         }
-
-        rewrite_args->rewriter->addDecision(obj->cls == function_cls || obj->cls == builtin_function_or_method_cls ? 1
-                                                                                                                   : 0);
     }
 
     if (obj->cls == function_cls || obj->cls == builtin_function_or_method_cls) {

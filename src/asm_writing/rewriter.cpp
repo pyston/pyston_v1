@@ -936,7 +936,7 @@ void Rewriter::commit() {
     finished = true;
 
     // TODO: have to check that we have enough room to write the final jmp
-    rewrite->commit(decision_path, this);
+    rewrite->commit(this);
 
     assert(!assembler->hasFailed());
 }
@@ -964,12 +964,6 @@ void Rewriter::commitReturning(RewriterVar* var) {
     }, { var }, ActionType::NORMAL);
 
     commit();
-}
-
-void Rewriter::addDecision(int way) {
-    assert(ndecisions < 60);
-    ndecisions++;
-    decision_path = (decision_path << 1) | way;
 }
 
 void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
@@ -1351,8 +1345,7 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
     : rewrite(rewrite), assembler(rewrite->getAssembler()), return_location(rewrite->returnRegister()),
-      added_changing_action(false), marked_inside_ic(false), last_guard_action(-1), done_guarding(false), ndecisions(0),
-      decision_path(1) {
+      added_changing_action(false), marked_inside_ic(false), last_guard_action(-1), done_guarding(false) {
     initPhaseCollecting();
 
 #ifndef NDEBUG
