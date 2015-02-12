@@ -32,6 +32,18 @@
 
 namespace pyston {
 
+BoxedString::BoxedString(const char* s, size_t n) : s(s, n) {
+    gc::registerGCManagedBytes(this->s.size());
+}
+
+BoxedString::BoxedString(std::string&& s) : s(std::move(s)) {
+    gc::registerGCManagedBytes(this->s.size());
+}
+
+BoxedString::BoxedString(const std::string& s) : s(s) {
+    gc::registerGCManagedBytes(this->s.size());
+}
+
 extern "C" PyObject* PyString_FromFormatV(const char* format, va_list vargs) noexcept {
     va_list count;
     Py_ssize_t n = 0;
@@ -1882,7 +1894,16 @@ static PyBufferProcs string_as_buffer = {
     (releasebufferproc)NULL,
 };
 
+void strDestructor(Box* b) {
+    assert(isSubclass(b->cls, str_cls));
+    BoxedString* self = static_cast<BoxedString*>(b);
+
+    self->s.~basic_string();
+}
+
 void setupStr() {
+    str_cls->simple_destructor = strDestructor;
+
     str_iterator_cls
         = new BoxedHeapClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",

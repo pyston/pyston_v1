@@ -38,7 +38,7 @@ static unsigned bytesAllocatedSinceCollection;
 static __thread unsigned thread_bytesAllocatedSinceCollection;
 #define ALLOCBYTES_PER_COLLECTION 10000000
 
-void _collectIfNeeded(size_t bytes) {
+void registerGCManagedBytes(size_t bytes) {
     thread_bytesAllocatedSinceCollection += bytes;
     if (unlikely(thread_bytesAllocatedSinceCollection > ALLOCBYTES_PER_COLLECTION / 4)) {
         bytesAllocatedSinceCollection += thread_bytesAllocatedSinceCollection;
@@ -111,7 +111,7 @@ struct LargeObj {
 };
 
 GCAllocation* Heap::allocLarge(size_t size) {
-    _collectIfNeeded(size);
+    registerGCManagedBytes(size);
 
     LOCK_REGION(lock);
 
@@ -223,7 +223,7 @@ static Block* claimBlock(size_t rounded_size, Block** free_head) {
 }
 
 GCAllocation* Heap::allocSmall(size_t rounded_size, int bucket_idx) {
-    _collectIfNeeded(rounded_size);
+    registerGCManagedBytes(rounded_size);
 
     Block** free_head = &heads[bucket_idx];
     Block** full_head = &full_heads[bucket_idx];

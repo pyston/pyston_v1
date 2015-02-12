@@ -348,9 +348,9 @@ public:
     // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
     std::string s;
 
-    BoxedString(const char* s, size_t n) __attribute__((visibility("default"))) : s(s, n) {}
-    BoxedString(const std::string&& s) __attribute__((visibility("default"))) : s(std::move(s)) {}
-    BoxedString(const std::string& s) __attribute__((visibility("default"))) : s(s) {}
+    BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
+    BoxedString(std::string&& s) __attribute__((visibility("default")));
+    BoxedString(const std::string& s) __attribute__((visibility("default")));
 
     DEFAULT_CLASS(str_cls);
 };
