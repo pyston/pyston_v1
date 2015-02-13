@@ -65,16 +65,19 @@ inline void clearMark(GCAllocation* header) {
 
 #define PAGE_SIZE 4096
 
-template <uintptr_t start> class Arena {
+template <uintptr_t arena_start, uintptr_t arena_size> class Arena {
 private:
     void* cur;
+    void* end;
 
 protected:
-    Arena() : cur((void*)start) {}
+    Arena() : cur((void*)arena_start), end((void*)(arena_start + arena_size)) {}
 
 public:
     void* doMmap(size_t size) {
         assert(size % PAGE_SIZE == 0);
+
+        assert(((uint8_t*)cur + size) < end && "arena full");
 
         void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
@@ -83,9 +86,10 @@ public:
         return mrtn;
     }
 
-    bool contains(void* addr) { return (void*)start <= addr && addr < cur; }
+    bool contains(void* addr) { return (void*)arena_start <= addr && addr < cur; }
 };
 
+constexpr uintptr_t ARENA_SIZE = 0x1000000000L;
 constexpr uintptr_t SMALL_ARENA_START = 0x1270000000L;
 constexpr uintptr_t LARGE_ARENA_START = 0x2270000000L;
 constexpr uintptr_t HUGE_ARENA_START = 0x3270000000L;
@@ -94,8 +98,8 @@ constexpr uintptr_t HUGE_ARENA_START = 0x3270000000L;
 //
 // The SmallArena allocates objects <= 3584 bytes.
 //
-// it uses segregated-fit allocation, and each block contains free
-// bitmap for objects of a given size (assigned to the block)
+// it uses segregated-fit allocation, and each block contains a free
+// bitmap for objects of a given size (constant for the block)
 //
 static const size_t sizes[] = {
     16,  32,  48,  64,  80,  96,   112,  128,  160,  192,  224,  256,  320,  384,
@@ -103,8 +107,20 @@ static const size_t sizes[] = {
 };
 static constexpr size_t NUM_BUCKETS = sizeof(sizes) / sizeof(sizes[0]);
 
-class SmallArena : public Arena<SMALL_ARENA_START> {
+
+class SmallArena : public Arena<SMALL_ARENA_START, ARENA_SIZE> {
 public:
+    SmallArena(Heap* heap) : Arena(), heap(heap), thread_caches(heap, this) {}
+
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+    void free(GCAllocation* al);
+
+    GCAllocation* allocationFrom(void* ptr);
+    void freeUnmarked();
+
+    void getStatistics(HeapStatistics* stats);
+
 private:
     template <int N> class Bitmap {
         static_assert(N % 64 == 0, "");
@@ -205,8 +221,7 @@ private:
     static_assert(offsetof(Block, _header_end) >= BLOCK_HEADER_SIZE, "bad header size");
     static_assert(offsetof(Block, _header_end) <= BLOCK_HEADER_SIZE, "bad header size");
 
-    // forward (public) definition of ThreadBlockCache so we can reference it both in this class (privately) and in Heap
-    // (for a friend ref).
+
     struct ThreadBlockCache {
         Heap* heap;
         SmallArena* small;
@@ -221,7 +236,6 @@ private:
     };
 
 
-
     Block* heads[NUM_BUCKETS];
     Block* full_heads[NUM_BUCKETS];
 
@@ -231,71 +245,46 @@ private:
     // TODO only use thread caches if we're in GRWL mode?
     threading::PerThreadSet<ThreadBlockCache, Heap*, SmallArena*> thread_caches;
 
-
-    Block* alloc_block(uint64_t size, Block** prev);
-    GCAllocation* allocFromBlock(Block* b);
-    Block* claimBlock(size_t rounded_size, Block** free_head);
-    void insertIntoLL(Block** next_pointer, Block* next);
-    void removeFromLL(Block* b);
-    Block** freeChain(Block** head);
-    void getChainStatistics(HeapStatistics* stats, Block** head);
+    Block* _allocBlock(uint64_t size, Block** prev);
+    GCAllocation* _allocFromBlock(Block* b);
+    Block* _claimBlock(size_t rounded_size, Block** free_head);
+    Block** _freeChain(Block** head);
+    void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
-    void _free(GCAllocation* al, Block* b);
-
-public:
-    SmallArena(Heap* heap) : Arena(), heap(heap), thread_caches(heap, this) {}
-
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
-        if (bytes <= 16)
-            return _alloc(16, 0);
-        else if (bytes <= 32)
-            return _alloc(32, 1);
-        else {
-            for (int i = 2; i < NUM_BUCKETS; i++) {
-                if (sizes[i] >= bytes) {
-                    return _alloc(sizes[i], i);
-                }
-            }
-            return NULL;
-        }
-    }
-    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
-
-    void free(GCAllocation* al) {
-        Block* b = Block::forPointer(al);
-        _free(al, b);
-    }
-
-    void getStatistics(HeapStatistics* stats);
-
-    GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked();
 };
 
 //
-// The LargeArena allocates objects where 3584 < size <1024*1024 bytes.
+// The LargeArena allocates objects where 3584 < size <1024*1024-CHUNK_SIZE-sizeof(LargeObject) bytes.
 //
 // it maintains a set of size-segregated free lists, and a special
 // free list for larger objects.  If the free list specific to a given
 // size has no entries, we search the large free list.
 //
-class LargeArena : public Arena<LARGE_ARENA_START> {
-    struct LargeFreeChunk {
-        LargeFreeChunk* next_size;
-        size_t size;
-    };
-
+// Blocks of 1meg are mmap'ed individually, and carved up as needed.
+//
+class LargeArena : public Arena<LARGE_ARENA_START, ARENA_SIZE> {
+private:
     struct LargeBlock {
         LargeBlock* next;
         size_t num_free_chunks;
         unsigned char* free_chunk_map;
     };
 
+    struct LargeFreeChunk {
+        LargeFreeChunk* next_size;
+        size_t size;
+    };
+
     struct LargeObj {
         LargeObj* next, **prev;
         size_t size;
         GCAllocation data[0];
+
+        static LargeObj* fromAllocation(GCAllocation* alloc) {
+            char* rtn = (char*)alloc - offsetof(LargeObj, data);
+            return reinterpret_cast<LargeObj*>(rtn);
+        }
     };
 
     /*
@@ -311,20 +300,18 @@ class LargeArena : public Arena<LARGE_ARENA_START> {
 
     static constexpr int NUM_FREE_LISTS = 32;
 
-    void add_free_chunk(LargeFreeChunk* free_chunks, size_t size);
-    LargeFreeChunk* get_from_size_list(LargeFreeChunk** list, size_t size);
-    LargeObj* _allocInternal(size_t size);
-    void _freeInternal(LargeObj* obj, size_t size);
-    void _free(LargeObj* obj);
-
+    Heap* heap;
     LargeObj* head;
     LargeBlock* blocks;
     LargeFreeChunk* free_lists[NUM_FREE_LISTS]; /* 0 is for larger sizes */
 
-    Heap* heap;
+    void add_free_chunk(LargeFreeChunk* free_chunks, size_t size);
+    LargeFreeChunk* get_from_size_list(LargeFreeChunk** list, size_t size);
+    LargeObj* _alloc(size_t size);
+    void _freeLargeObj(LargeObj* obj);
 
 public:
-    LargeArena(Heap* heap) : head(NULL), blocks(NULL), heap(heap) {}
+    LargeArena(Heap* heap) : heap(heap), head(NULL), blocks(NULL) {}
 
     /* Largest object that can be allocated in a large block. */
     static constexpr size_t ALLOC_SIZE_LIMIT = BLOCK_SIZE - CHUNK_SIZE - sizeof(LargeObj);
@@ -333,9 +320,9 @@ public:
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* alloc);
 
+    GCAllocation* allocationFrom(void* ptr);
     void freeUnmarked();
 
-    GCAllocation* allocationFrom(void* ptr);
     void getStatistics(HeapStatistics* stats);
 };
 
@@ -343,7 +330,20 @@ public:
 //
 // Objects are allocated with individual mmap() calls, and kept in a
 // linked list.  They are not reused.
-class HugeArena : public Arena<HUGE_ARENA_START> {
+class HugeArena : public Arena<HUGE_ARENA_START, ARENA_SIZE> {
+public:
+    HugeArena(Heap* heap) : heap(heap) {}
+
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+    void free(GCAllocation* alloc);
+
+    GCAllocation* allocationFrom(void* ptr);
+    void freeUnmarked();
+
+    void getStatistics(HeapStatistics* stats);
+
+private:
     struct HugeObj {
         HugeObj* next, **prev;
         size_t obj_size;
@@ -369,18 +369,6 @@ class HugeArena : public Arena<HUGE_ARENA_START> {
     HugeObj* head;
 
     Heap* heap;
-
-public:
-    HugeArena(Heap* heap) : heap(heap) {}
-
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
-    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
-    void free(GCAllocation* alloc);
-
-    void freeUnmarked();
-
-    GCAllocation* allocationFrom(void* ptr);
-    void getStatistics(HeapStatistics* stats);
 };
 
 
@@ -420,10 +408,10 @@ public:
             return small_arena.alloc(bytes);
     }
 
-    void destroyContents(GCAllocation* alloc);
+    void destructContents(GCAllocation* alloc);
 
     void free(GCAllocation* alloc) {
-        destroyContents(alloc);
+        destructContents(alloc);
 
         if (large_arena.contains(alloc)) {
             large_arena.free(alloc);

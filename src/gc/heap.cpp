@@ -35,15 +35,40 @@ namespace gc {
 
 void _doFree(GCAllocation* al);
 
-// these template functions are for both large and huge sections
-template <class ListT> inline void unlinkNode(ListT* node) {
+// lots of linked lists around here, so let's just use template functions for them all
+template <class ListT> inline void nullNextPrev(ListT* node) {
+    node->next = NULL;
+    node->prev = NULL;
+}
+
+template <class ListT> inline void removeFromLL(ListT* node) {
     *node->prev = node->next;
     if (node->next)
         node->next->prev = node->prev;
 }
 
-template <class ListT, typename Free>
-inline void sweepHeap(ListT* head, std::function<void(GCAllocation*)> __free, Free free_func) {
+template <class ListT> inline void removeFromLLAndNull(ListT* node) {
+    *node->prev = node->next;
+    if (node->next)
+        node->next->prev = node->prev;
+    nullNextPrev(node);
+}
+
+template <class ListT> inline void insertIntoLL(ListT** next_pointer, ListT* next) {
+    assert(next_pointer);
+    assert(next);
+    assert(!next->next);
+    assert(!next->prev);
+
+    next->next = *next_pointer;
+    if (next->next)
+        next->next->prev = &next->next;
+    *next_pointer = next;
+    next->prev = next_pointer;
+}
+
+
+template <class ListT, typename Free> inline void sweepList(ListT* head, Free free_func) {
     auto cur = head;
     while (cur) {
         GCAllocation* al = cur->data;
@@ -51,9 +76,9 @@ inline void sweepHeap(ListT* head, std::function<void(GCAllocation*)> __free, Fr
             clearMark(al);
             cur = cur->next;
         } else {
-            __free(al);
+            _doFree(al);
 
-            unlinkNode(cur);
+            removeFromLL(cur);
 
             auto to_free = cur;
             cur = cur->next;
@@ -92,6 +117,121 @@ void registerGCManagedBytes(size_t bytes) {
 
 Heap global_heap;
 
+void _doFree(GCAllocation* al) {
+    if (VERBOSITY() >= 2)
+        printf("Freeing %p\n", al->user_data);
+
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
+    GCKind alloc_kind = al->kind_id;
+#ifndef NVALGRIND
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#endif
+
+    if (alloc_kind == GCKind::PYTHON) {
+#ifndef NVALGRIND
+        VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
+        Box* b = (Box*)al->user_data;
+#ifndef NVALGRIND
+        VALGRIND_ENABLE_ERROR_REPORTING;
+#endif
+
+        ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b));
+        if (b->cls->simple_destructor)
+            b->cls->simple_destructor(b);
+    }
+}
+
+void Heap::destructContents(GCAllocation* al) {
+    _doFree(al);
+}
+
+struct HeapStatistics {
+    struct TypeStats {
+        int64_t nallocs;
+        int64_t nbytes;
+        TypeStats() : nallocs(0), nbytes(0) {}
+
+        void print(const char* name) const {
+            if (nbytes > (1 << 20))
+                printf("%s: %ld allocations for %.1f MB\n", name, nallocs, nbytes * 1.0 / (1 << 20));
+            else if (nbytes > (1 << 10))
+                printf("%s: %ld allocations for %.1f KB\n", name, nallocs, nbytes * 1.0 / (1 << 10));
+            else
+                printf("%s: %ld allocations for %ld bytes\n", name, nallocs, nbytes);
+        }
+    };
+    std::unordered_map<BoxedClass*, TypeStats> by_cls;
+    TypeStats conservative, untracked;
+    TypeStats total;
+};
+
+void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
+    stats->total.nallocs++;
+    stats->total.nbytes += nbytes;
+
+    if (al->kind_id == GCKind::PYTHON) {
+        Box* b = (Box*)al->user_data;
+        auto& t = stats->by_cls[b->cls];
+
+        t.nallocs++;
+        t.nbytes += nbytes;
+    } else if (al->kind_id == GCKind::CONSERVATIVE) {
+        stats->conservative.nallocs++;
+        stats->conservative.nbytes += nbytes;
+    } else if (al->kind_id == GCKind::UNTRACKED) {
+        stats->untracked.nallocs++;
+        stats->untracked.nbytes += nbytes;
+    } else {
+        RELEASE_ASSERT(0, "%d", (int)al->kind_id);
+    }
+}
+
+
+
+void Heap::dumpHeapStatistics() {
+    threading::GLPromoteRegion _lock;
+
+    HeapStatistics stats;
+
+    small_arena.getStatistics(&stats);
+    large_arena.getStatistics(&stats);
+    huge_arena.getStatistics(&stats);
+
+    stats.conservative.print("conservative");
+    stats.untracked.print("untracked");
+    for (const auto& p : stats.by_cls) {
+        p.second.print(getFullNameOfClass(p.first).c_str());
+    }
+    stats.total.print("Total");
+    printf("\n");
+}
+
+void dumpHeapStatistics() {
+    global_heap.dumpHeapStatistics();
+}
+
+//////
+/// Small Arena
+
+GCAllocation* SmallArena::alloc(size_t bytes) {
+    registerGCManagedBytes(bytes);
+    if (bytes <= 16)
+        return _alloc(16, 0);
+    else if (bytes <= 32)
+        return _alloc(32, 1);
+    else {
+        for (int i = 2; i < NUM_BUCKETS; i++) {
+            if (sizes[i] >= bytes) {
+                return _alloc(sizes[i], i);
+            }
+        }
+        return NULL;
+    }
+}
+
 GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
     Block* b = Block::forPointer(al);
 
@@ -110,8 +250,23 @@ GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
     memcpy(rtn, al, std::min(bytes, size));
 #endif
 
-    _free(al, b);
+    free(al);
     return rtn;
+}
+
+void SmallArena::free(GCAllocation* alloc) {
+    Block* b = Block::forPointer(alloc);
+    size_t size = b->size;
+    int offset = (char*)alloc - (char*)b;
+    assert(offset % size == 0);
+    int atom_idx = offset / ATOM_SIZE;
+
+    assert(!b->isfree.isSet(atom_idx));
+    b->isfree.set(atom_idx);
+
+#ifndef NVALGRIND
+// VALGRIND_MEMPOOL_FREE(b, ptr);
+#endif
 }
 
 GCAllocation* SmallArena::allocationFrom(void* ptr) {
@@ -131,7 +286,67 @@ GCAllocation* SmallArena::allocationFrom(void* ptr) {
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
 
-SmallArena::Block** SmallArena::freeChain(Block** head) {
+void SmallArena::freeUnmarked() {
+    thread_caches.forEachValue([this](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            // Try to limit the amount of unused memory a thread can hold onto;
+            // currently pretty dumb, just limit the number of blocks in the free-list
+            // to 50.  (blocks in the full list don't need to be limited, since we're sure
+            // that the thread had just actively used those.)
+            // Eventually may want to come up with some scrounging system.
+            // TODO does this thread locality even help at all?
+            for (int i = 0; i < 50; i++) {
+                if (h)
+                    h = h->next;
+                else
+                    break;
+            }
+            if (h) {
+                removeFromLLAndNull(h);
+                insertIntoLL(&heads[bidx], h);
+            }
+
+            Block** chain_end = _freeChain(&cache->cache_free_heads[bidx]);
+            _freeChain(&cache->cache_full_heads[bidx]);
+
+            while (Block* b = cache->cache_full_heads[bidx]) {
+                removeFromLLAndNull(b);
+                insertIntoLL(chain_end, b);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        Block** chain_end = _freeChain(&heads[bidx]);
+        _freeChain(&full_heads[bidx]);
+
+        while (Block* b = full_heads[bidx]) {
+            removeFromLLAndNull(b);
+            insertIntoLL(chain_end, b);
+        }
+    }
+}
+
+// TODO: copy-pasted from freeUnmarked()
+void SmallArena::getStatistics(HeapStatistics* stats) {
+    thread_caches.forEachValue([this, stats](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+
+            _getChainStatistics(stats, &cache->cache_free_heads[bidx]);
+            _getChainStatistics(stats, &cache->cache_full_heads[bidx]);
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        _getChainStatistics(stats, &heads[bidx]);
+        _getChainStatistics(stats, &full_heads[bidx]);
+    }
+}
+
+
+SmallArena::Block** SmallArena::_freeChain(Block** head) {
     while (Block* b = *head) {
         int num_objects = b->numObjects();
         int first_obj = b->minObjIndex();
@@ -162,58 +377,214 @@ SmallArena::Block** SmallArena::freeChain(Block** head) {
 }
 
 
-void SmallArena::freeUnmarked() {
-    thread_caches.forEachValue([this](ThreadBlockCache* cache) {
-        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-            Block* h = cache->cache_free_heads[bidx];
-            // Try to limit the amount of unused memory a thread can hold onto;
-            // currently pretty dumb, just limit the number of blocks in the free-list
-            // to 50.  (blocks in the full list don't need to be limited, since we're sure
-            // that the thread had just actively used those.)
-            // Eventually may want to come up with some scrounging system.
-            // TODO does this thread locality even help at all?
-            for (int i = 0; i < 50; i++) {
-                if (h)
-                    h = h->next;
-                else
-                    break;
-            }
-            if (h) {
-                removeFromLL(h);
-                insertIntoLL(&heads[bidx], h);
-            }
+SmallArena::Block* SmallArena::_allocBlock(uint64_t size, Block** prev) {
+    Block* rtn = (Block*)doMmap(sizeof(Block));
+    assert(rtn);
+    rtn->size = size;
+    rtn->num_obj = BLOCK_SIZE / size;
+    rtn->min_obj_index = (BLOCK_HEADER_SIZE + size - 1) / size;
+    rtn->atoms_per_obj = size / ATOM_SIZE;
+    rtn->prev = prev;
+    rtn->next = NULL;
 
-            Block** chain_end = freeChain(&cache->cache_free_heads[bidx]);
-            freeChain(&cache->cache_full_heads[bidx]);
+#ifndef NVALGRIND
+// Not sure if this mempool stuff is better than the malloc-like interface:
+// VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
+#endif
 
-            while (Block* b = cache->cache_full_heads[bidx]) {
-                removeFromLL(b);
-                insertIntoLL(chain_end, b);
-            }
+    // printf("Allocated new block %p\n", rtn);
+
+    // Don't think I need to do this:
+    rtn->isfree.setAllZero();
+    rtn->next_to_check.reset();
+
+    int num_objects = rtn->numObjects();
+    int num_lost = rtn->minObjIndex();
+    int atoms_per_object = rtn->atomsPerObj();
+    for (int i = num_lost * atoms_per_object; i < num_objects * atoms_per_object; i += atoms_per_object) {
+        rtn->isfree.set(i);
+        // printf("%d %d\n", idx, bit);
+    }
+
+    // printf("%d %d %d\n", num_objects, num_lost, atoms_per_object);
+    // for (int i =0; i < BITFIELD_ELTS; i++) {
+    // printf("%d: %lx\n", i, rtn->isfree[i]);
+    //}
+    return rtn;
+}
+
+SmallArena::ThreadBlockCache::~ThreadBlockCache() {
+    LOCK_REGION(heap->lock);
+
+    for (int i = 0; i < NUM_BUCKETS; i++) {
+        while (Block* b = cache_free_heads[i]) {
+            removeFromLLAndNull(b);
+            insertIntoLL(&small->heads[i], b);
         }
-    });
 
-    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        Block** chain_end = freeChain(&heads[bidx]);
-        freeChain(&full_heads[bidx]);
-
-        while (Block* b = full_heads[bidx]) {
-            removeFromLL(b);
-            insertIntoLL(chain_end, b);
+        while (Block* b = cache_full_heads[i]) {
+            removeFromLLAndNull(b);
+            insertIntoLL(&small->full_heads[i], b);
         }
     }
 }
 
+GCAllocation* SmallArena::_allocFromBlock(Block* b) {
+    int idx = b->isfree.scanForNext(b->next_to_check);
+    if (idx == -1)
+        return NULL;
+
+    void* rtn = &b->atoms[idx];
+    return reinterpret_cast<GCAllocation*>(rtn);
+}
+
+SmallArena::Block* SmallArena::_claimBlock(size_t rounded_size, Block** free_head) {
+    Block* free_block = *free_head;
+    if (free_block) {
+        removeFromLLAndNull(free_block);
+        return free_block;
+    }
+
+    return _allocBlock(rounded_size, NULL);
+}
+
+GCAllocation* SmallArena::_alloc(size_t rounded_size, int bucket_idx) {
+    Block** free_head = &heads[bucket_idx];
+    Block** full_head = &full_heads[bucket_idx];
+
+    ThreadBlockCache* cache = thread_caches.get();
+
+    Block** cache_head = &cache->cache_free_heads[bucket_idx];
+
+    // static __thread int gc_allocs = 0;
+    // if (++gc_allocs == 128) {
+    // static StatCounter sc_total("gc_allocs");
+    // sc_total.log(128);
+    // gc_allocs = 0;
+    //}
+
+    while (true) {
+        while (Block* cache_block = *cache_head) {
+            GCAllocation* rtn = _allocFromBlock(cache_block);
+            if (rtn)
+                return rtn;
+
+            removeFromLLAndNull(cache_block);
+            insertIntoLL(&cache->cache_full_heads[bucket_idx], cache_block);
+        }
+
+        // Not very useful to count the cache misses if we don't count the total attempts:
+        // static StatCounter sc_fallback("gc_allocs_cachemiss");
+        // sc_fallback.log();
+
+        LOCK_REGION(heap->lock);
+
+        assert(*cache_head == NULL);
+
+        // should probably be called allocBlock:
+        Block* myblock = _claimBlock(rounded_size, &heads[bucket_idx]);
+        assert(myblock);
+        assert(!myblock->next);
+        assert(!myblock->prev);
+
+        // printf("%d claimed new block %p with %d objects\n", threading::gettid(), myblock, myblock->numObjects());
+
+        insertIntoLL(cache_head, myblock);
+    }
+}
+
+// TODO: copy-pasted from _freeChain
+void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
+            int atom_idx = obj_idx * atoms_per_obj;
+
+            if (b->isfree.isSet(atom_idx))
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            addStatistic(stats, al, b->size);
+        }
+
+        head = &b->next;
+    }
+}
+
+//////
+/// Large Arena
 
 #define LARGE_BLOCK_NUM_CHUNKS ((BLOCK_SIZE >> CHUNK_BITS) - 1)
 
 #define LARGE_BLOCK_FOR_OBJ(obj) ((LargeBlock*)((int64_t)(obj) & ~(int64_t)(BLOCK_SIZE - 1)))
 #define LARGE_CHUNK_INDEX(obj, section) (((char*)(obj) - (char*)(section)) >> CHUNK_BITS)
 
-int64_t los_memory_usage = 0;
+GCAllocation* LargeArena::alloc(size_t size) {
+    registerGCManagedBytes(size);
 
-static int64_t large_object_count = 0;
-static int large_block_count = 0;
+    LOCK_REGION(heap->lock);
+
+    // printf ("allocLarge %zu\n", size);
+
+    LargeObj* obj = _alloc(size + sizeof(GCAllocation) + sizeof(LargeObj));
+
+    obj->size = size;
+
+    nullNextPrev(obj);
+    insertIntoLL(&head, obj);
+
+    return obj->data;
+}
+
+GCAllocation* LargeArena::realloc(GCAllocation* al, size_t bytes) {
+    LargeObj* obj = LargeObj::fromAllocation(al);
+    int size = obj->size;
+    if (size >= bytes && size < bytes * 2)
+        return al;
+
+    GCAllocation* rtn = heap->alloc(bytes);
+    memcpy(rtn, al, std::min(bytes, obj->size));
+
+    _freeLargeObj(obj);
+    return rtn;
+}
+
+void LargeArena::free(GCAllocation* al) {
+    _freeLargeObj(LargeObj::fromAllocation(al));
+}
+
+GCAllocation* LargeArena::allocationFrom(void* ptr) {
+    LargeObj* obj = NULL;
+
+    for (obj = head; obj; obj = obj->next) {
+        char* end = (char*)&obj->data + obj->size;
+
+        if (ptr >= obj->data && ptr < end) {
+            return &obj->data[0];
+        }
+    }
+    return NULL;
+}
+
+void LargeArena::freeUnmarked() {
+    sweepList(head, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
+}
+
+void LargeArena::getStatistics(HeapStatistics* stats) {
+    LargeObj* cur = head;
+    while (cur) {
+        GCAllocation* al = cur->data;
+        addStatistic(stats, al, cur->size);
+
+        cur = cur->next;
+    }
+}
+
 
 void LargeArena::add_free_chunk(LargeFreeChunk* free_chunks, size_t size) {
     size_t num_chunks = size >> CHUNK_BITS;
@@ -264,7 +635,7 @@ LargeArena::LargeFreeChunk* LargeArena::get_from_size_list(LargeFreeChunk** list
     return free_chunks;
 }
 
-LargeArena::LargeObj* LargeArena::_allocInternal(size_t size) {
+LargeArena::LargeObj* LargeArena::_alloc(size_t size) {
     LargeBlock* section;
     LargeFreeChunk* free_chunks;
     size_t num_chunks;
@@ -314,12 +685,13 @@ retry:
     section->next = blocks;
     blocks = section;
 
-    ++large_block_count;
-
     goto retry;
 }
 
-void LargeArena::_freeInternal(LargeObj* obj, size_t size) {
+void LargeArena::_freeLargeObj(LargeObj* obj) {
+    removeFromLL(obj);
+
+    size_t size = obj->size;
     LargeBlock* section = LARGE_BLOCK_FOR_OBJ(obj);
     size_t num_chunks, i, start_index;
 
@@ -349,70 +721,9 @@ void LargeArena::_freeInternal(LargeObj* obj, size_t size) {
     add_free_chunk((LargeFreeChunk*)obj, size);
 }
 
-void LargeArena::_free(LargeObj* obj) {
-    unlinkNode(obj);
-    _freeInternal(obj, obj->size);
-}
+//////
+/// Huge Arena
 
-void LargeArena::freeUnmarked() {
-    sweepHeap(head, _doFree, [this](LargeObj* ptr) { _freeInternal(ptr, ptr->size); });
-}
-
-GCAllocation* LargeArena::alloc(size_t size) {
-    registerGCManagedBytes(size);
-
-    LOCK_REGION(heap->lock);
-
-    // printf ("allocLarge %zu\n", size);
-
-    LargeObj* obj = _allocInternal(size + sizeof(GCAllocation) + sizeof(LargeObj));
-
-    obj->size = size;
-
-    obj->next = head;
-    if (obj->next)
-        obj->next->prev = &obj->next;
-    obj->prev = &head;
-    head = obj;
-    large_object_count++;
-
-    return obj->data;
-}
-
-GCAllocation* LargeArena::realloc(GCAllocation* al, size_t bytes) {
-    LargeObj* obj = (LargeObj*)((char*)al - offsetof(LargeObj, data));
-    int size = obj->size;
-    if (size >= bytes && size < bytes * 2)
-        return al;
-
-    GCAllocation* rtn = heap->alloc(bytes);
-    memcpy(rtn, al, std::min(bytes, obj->size));
-
-    _free(obj);
-    return rtn;
-}
-
-void LargeArena::free(GCAllocation* al) {
-    LargeObj* obj = (LargeObj*)((char*)al - offsetof(LargeObj, data));
-    _free(obj);
-}
-
-GCAllocation* LargeArena::allocationFrom(void* ptr) {
-    LargeObj* obj = NULL;
-
-    for (obj = head; obj; obj = obj->next) {
-        char* end = (char*)&obj->data + obj->size;
-
-        if (ptr >= obj->data && ptr < end) {
-            return &obj->data[0];
-        }
-    }
-    return NULL;
-}
-
-void HugeArena::freeUnmarked() {
-    sweepHeap(head, _doFree, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
-}
 
 GCAllocation* HugeArena::alloc(size_t size) {
     registerGCManagedBytes(size);
@@ -424,38 +735,28 @@ GCAllocation* HugeArena::alloc(size_t size) {
     HugeObj* rtn = (HugeObj*)doMmap(total_size);
     rtn->obj_size = size;
 
-    rtn->next = head;
-    if (rtn->next)
-        rtn->next->prev = &rtn->next;
-    rtn->prev = &head;
-    head = rtn;
+    nullNextPrev(rtn);
+    insertIntoLL(&head, rtn);
+
     return rtn->data;
 }
 
 GCAllocation* HugeArena::realloc(GCAllocation* al, size_t bytes) {
-    HugeObj* lobj = HugeObj::fromAllocation(al);
+    HugeObj* obj = HugeObj::fromAllocation(al);
 
-    int capacity = lobj->capacity();
+    int capacity = obj->capacity();
     if (capacity >= bytes && capacity < bytes * 2)
         return al;
 
     GCAllocation* rtn = heap->alloc(bytes);
-    memcpy(rtn, al, std::min(bytes, lobj->obj_size));
+    memcpy(rtn, al, std::min(bytes, obj->obj_size));
 
-    _freeHugeObj(lobj);
+    _freeHugeObj(obj);
     return rtn;
 }
 
-void HugeArena::_freeHugeObj(HugeObj* lobj) {
-    unlinkNode(lobj);
-    int r = munmap(lobj, lobj->mmap_size());
-    assert(r == 0);
-}
-
-
 void HugeArena::free(GCAllocation* al) {
-    HugeObj* lobj = HugeObj::fromAllocation(al);
-    _freeHugeObj(lobj);
+    _freeHugeObj(HugeObj::fromAllocation(al));
 }
 
 GCAllocation* HugeArena::allocationFrom(void* ptr) {
@@ -468,283 +769,8 @@ GCAllocation* HugeArena::allocationFrom(void* ptr) {
     return NULL;
 }
 
-SmallArena::Block* SmallArena::alloc_block(uint64_t size, Block** prev) {
-    Block* rtn = (Block*)doMmap(sizeof(Block));
-    assert(rtn);
-    rtn->size = size;
-    rtn->num_obj = BLOCK_SIZE / size;
-    rtn->min_obj_index = (BLOCK_HEADER_SIZE + size - 1) / size;
-    rtn->atoms_per_obj = size / ATOM_SIZE;
-    rtn->prev = prev;
-    rtn->next = NULL;
-
-#ifndef NVALGRIND
-// Not sure if this mempool stuff is better than the malloc-like interface:
-// VALGRIND_CREATE_MEMPOOL(rtn, 0, true);
-#endif
-
-    // printf("Allocated new block %p\n", rtn);
-
-    // Don't think I need to do this:
-    rtn->isfree.setAllZero();
-    rtn->next_to_check.reset();
-
-    int num_objects = rtn->numObjects();
-    int num_lost = rtn->minObjIndex();
-    int atoms_per_object = rtn->atomsPerObj();
-    for (int i = num_lost * atoms_per_object; i < num_objects * atoms_per_object; i += atoms_per_object) {
-        rtn->isfree.set(i);
-        // printf("%d %d\n", idx, bit);
-    }
-
-    // printf("%d %d %d\n", num_objects, num_lost, atoms_per_object);
-    // for (int i =0; i < BITFIELD_ELTS; i++) {
-    // printf("%d: %lx\n", i, rtn->isfree[i]);
-    //}
-    return rtn;
-}
-
-void SmallArena::insertIntoLL(Block** next_pointer, Block* next) {
-    assert(next_pointer);
-    assert(next);
-    assert(!next->next);
-    assert(!next->prev);
-
-    next->next = *next_pointer;
-    if (next->next)
-        next->next->prev = &next->next;
-    *next_pointer = next;
-    next->prev = next_pointer;
-}
-
-void SmallArena::removeFromLL(Block* b) {
-    unlinkNode(b);
-    b->next = NULL;
-    b->prev = NULL;
-}
-
-SmallArena::ThreadBlockCache::~ThreadBlockCache() {
-    LOCK_REGION(heap->lock);
-
-    for (int i = 0; i < NUM_BUCKETS; i++) {
-        while (Block* b = cache_free_heads[i]) {
-            small->removeFromLL(b);
-            small->insertIntoLL(&small->heads[i], b);
-        }
-
-        while (Block* b = cache_full_heads[i]) {
-            small->removeFromLL(b);
-            small->insertIntoLL(&small->full_heads[i], b);
-        }
-    }
-}
-
-GCAllocation* SmallArena::allocFromBlock(Block* b) {
-    int idx = b->isfree.scanForNext(b->next_to_check);
-    if (idx == -1)
-        return NULL;
-
-    void* rtn = &b->atoms[idx];
-    return reinterpret_cast<GCAllocation*>(rtn);
-}
-
-SmallArena::Block* SmallArena::claimBlock(size_t rounded_size, Block** free_head) {
-    Block* free_block = *free_head;
-    if (free_block) {
-        removeFromLL(free_block);
-        return free_block;
-    }
-
-    return alloc_block(rounded_size, NULL);
-}
-
-GCAllocation* SmallArena::_alloc(size_t rounded_size, int bucket_idx) {
-    registerGCManagedBytes(rounded_size);
-
-    Block** free_head = &heads[bucket_idx];
-    Block** full_head = &full_heads[bucket_idx];
-
-    ThreadBlockCache* cache = thread_caches.get();
-
-    Block** cache_head = &cache->cache_free_heads[bucket_idx];
-
-    // static __thread int gc_allocs = 0;
-    // if (++gc_allocs == 128) {
-    // static StatCounter sc_total("gc_allocs");
-    // sc_total.log(128);
-    // gc_allocs = 0;
-    //}
-
-    while (true) {
-        while (Block* cache_block = *cache_head) {
-            GCAllocation* rtn = allocFromBlock(cache_block);
-            if (rtn)
-                return rtn;
-
-            removeFromLL(cache_block);
-            insertIntoLL(&cache->cache_full_heads[bucket_idx], cache_block);
-        }
-
-        // Not very useful to count the cache misses if we don't count the total attempts:
-        // static StatCounter sc_fallback("gc_allocs_cachemiss");
-        // sc_fallback.log();
-
-        LOCK_REGION(heap->lock);
-
-        assert(*cache_head == NULL);
-
-        // should probably be called allocBlock:
-        Block* myblock = claimBlock(rounded_size, &heads[bucket_idx]);
-        assert(myblock);
-        assert(!myblock->next);
-        assert(!myblock->prev);
-
-        // printf("%d claimed new block %p with %d objects\n", threading::gettid(), myblock, myblock->numObjects());
-
-        insertIntoLL(cache_head, myblock);
-    }
-}
-
-void SmallArena::_free(GCAllocation* alloc, Block* b) {
-    assert(b == Block::forPointer(alloc));
-
-    size_t size = b->size;
-    int offset = (char*)alloc - (char*)b;
-    assert(offset % size == 0);
-    int atom_idx = offset / ATOM_SIZE;
-
-    assert(!b->isfree.isSet(atom_idx));
-    b->isfree.set(atom_idx);
-
-#ifndef NVALGRIND
-// VALGRIND_MEMPOOL_FREE(b, ptr);
-#endif
-}
-
-void _doFree(GCAllocation* al) {
-    if (VERBOSITY() >= 2)
-        printf("Freeing %p\n", al->user_data);
-
-#ifndef NVALGRIND
-    VALGRIND_DISABLE_ERROR_REPORTING;
-#endif
-    GCKind alloc_kind = al->kind_id;
-#ifndef NVALGRIND
-    VALGRIND_ENABLE_ERROR_REPORTING;
-#endif
-
-    if (alloc_kind == GCKind::PYTHON) {
-#ifndef NVALGRIND
-        VALGRIND_DISABLE_ERROR_REPORTING;
-#endif
-        Box* b = (Box*)al->user_data;
-#ifndef NVALGRIND
-        VALGRIND_ENABLE_ERROR_REPORTING;
-#endif
-
-        ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b));
-        if (b->cls->simple_destructor)
-            b->cls->simple_destructor(b);
-    }
-}
-
-void Heap::destroyContents(GCAllocation* al) {
-    _doFree(al);
-}
-
-void dumpHeapStatistics() {
-    global_heap.dumpHeapStatistics();
-}
-
-struct HeapStatistics {
-    struct TypeStats {
-        int64_t nallocs;
-        int64_t nbytes;
-        TypeStats() : nallocs(0), nbytes(0) {}
-
-        void print(const char* name) const {
-            if (nbytes > (1 << 20))
-                printf("%s: %ld allocations for %.1f MB\n", name, nallocs, nbytes * 1.0 / (1 << 20));
-            else if (nbytes > (1 << 10))
-                printf("%s: %ld allocations for %.1f KB\n", name, nallocs, nbytes * 1.0 / (1 << 10));
-            else
-                printf("%s: %ld allocations for %ld bytes\n", name, nallocs, nbytes);
-        }
-    };
-    std::unordered_map<BoxedClass*, TypeStats> by_cls;
-    TypeStats conservative, untracked;
-    TypeStats total;
-};
-
-void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
-    stats->total.nallocs++;
-    stats->total.nbytes += nbytes;
-
-    if (al->kind_id == GCKind::PYTHON) {
-        Box* b = (Box*)al->user_data;
-        auto& t = stats->by_cls[b->cls];
-
-        t.nallocs++;
-        t.nbytes += nbytes;
-    } else if (al->kind_id == GCKind::CONSERVATIVE) {
-        stats->conservative.nallocs++;
-        stats->conservative.nbytes += nbytes;
-    } else if (al->kind_id == GCKind::UNTRACKED) {
-        stats->untracked.nallocs++;
-        stats->untracked.nbytes += nbytes;
-    } else {
-        RELEASE_ASSERT(0, "%d", (int)al->kind_id);
-    }
-}
-
-// TODO: copy-pasted from freeChain
-void SmallArena::getChainStatistics(HeapStatistics* stats, Block** head) {
-    while (Block* b = *head) {
-        int num_objects = b->numObjects();
-        int first_obj = b->minObjIndex();
-        int atoms_per_obj = b->atomsPerObj();
-
-        for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
-            int atom_idx = obj_idx * atoms_per_obj;
-
-            if (b->isfree.isSet(atom_idx))
-                continue;
-
-            void* p = &b->atoms[atom_idx];
-            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
-
-            addStatistic(stats, al, b->size);
-        }
-
-        head = &b->next;
-    }
-}
-
-// TODO: copy-pasted from freeUnmarked()
-void SmallArena::getStatistics(HeapStatistics* stats) {
-    thread_caches.forEachValue([this, stats](ThreadBlockCache* cache) {
-        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-            Block* h = cache->cache_free_heads[bidx];
-
-            getChainStatistics(stats, &cache->cache_free_heads[bidx]);
-            getChainStatistics(stats, &cache->cache_full_heads[bidx]);
-        }
-    });
-
-    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        getChainStatistics(stats, &heads[bidx]);
-        getChainStatistics(stats, &full_heads[bidx]);
-    }
-}
-
-void LargeArena::getStatistics(HeapStatistics* stats) {
-    LargeObj* cur = head;
-    while (cur) {
-        GCAllocation* al = cur->data;
-        addStatistic(stats, al, cur->size);
-
-        cur = cur->next;
-    }
+void HugeArena::freeUnmarked() {
+    sweepList(head, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {
@@ -757,23 +783,12 @@ void HugeArena::getStatistics(HeapStatistics* stats) {
     }
 }
 
-void Heap::dumpHeapStatistics() {
-    threading::GLPromoteRegion _lock;
-
-    HeapStatistics stats;
-
-    small_arena.getStatistics(&stats);
-    large_arena.getStatistics(&stats);
-    huge_arena.getStatistics(&stats);
-
-    stats.conservative.print("conservative");
-    stats.untracked.print("untracked");
-    for (const auto& p : stats.by_cls) {
-        p.second.print(getFullNameOfClass(p.first).c_str());
-    }
-    stats.total.print("Total");
-    printf("\n");
+void HugeArena::_freeHugeObj(HugeObj* lobj) {
+    removeFromLL(lobj);
+    int r = munmap(lobj, lobj->mmap_size());
+    assert(r == 0);
 }
+
 
 } // namespace gc
 } // namespace pyston
