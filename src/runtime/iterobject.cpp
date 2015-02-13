@@ -63,6 +63,7 @@ static void iterwrapperGCVisit(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedIterWrapper* iw = static_cast<BoxedIterWrapper*>(b);
+    v->visit(iw->iter);
     if (iw->next)
         v->visit(iw->next);
 }
