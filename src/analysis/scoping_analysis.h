@@ -33,9 +33,39 @@ public:
     virtual bool takesClosure() = 0;
     virtual bool passesThroughClosure() = 0;
 
+    // Various ways a variable name can be resolved.
+    // These all correspond to STORE_* or LOAD_* bytecodes in CPython.
+    //
+    // By way of example:
+    //
+    //  def f():
+    //      print a # GLOBAL
+    //
+    //      b = 0
+    //      print b # FAST
+    //
+    //      c = 0 # CLOSURE
+    //      def g():
+    //          print c # DEREF
+    //
+    //  class C(object):
+    //      print d # NAME
+    //
+    //  def g():
+    //      exec "sdfasdfds()"
+    //      # existence of 'exec' statement forces this to NAME:
+    //      print e # NAME
+    //
+    //  # protip: you can figure this stuff out by doing something like this in CPython:
+    //  import dis
+    //  print dis.dis(g)
+
+    enum class VarScopeType { FAST, GLOBAL, CLOSURE, DEREF, NAME };
+
     virtual bool refersToGlobal(InternedString name) = 0;
     virtual bool refersToClosure(InternedString name) = 0;
     virtual bool saveInClosure(InternedString name) = 0;
+    virtual VarScopeType getScopeTypeOfName(InternedString name) = 0;
 
     virtual InternedString mangleName(InternedString id) = 0;
     virtual InternedString internString(llvm::StringRef) = 0;

@@ -999,14 +999,15 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
 Value ASTInterpreter::visit_name(AST_Name* node) {
     switch (node->lookup_type) {
         case AST_Name::UNKNOWN: {
-            if (scope_info->refersToGlobal(node->id)) {
+            ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
+            if (vst == ScopeInfo::VarScopeType::GLOBAL) {
                 node->lookup_type = AST_Name::GLOBAL;
                 return getGlobal(source_info->parent_module, &node->id.str());
-            } else if (scope_info->refersToClosure(node->id)) {
+            } else if (vst == ScopeInfo::VarScopeType::DEREF) {
                 node->lookup_type = AST_Name::CLOSURE;
                 return getattr(passed_closure, node->id.c_str());
             } else {
-                bool is_old_local = (source_info->ast->type == AST_TYPE::ClassDef);
+                bool is_old_local = (vst == ScopeInfo::VarScopeType::NAME);
                 node->lookup_type = is_old_local ? AST_Name::LOCAL : AST_Name::FAST_LOCAL;
 
                 SymMap::iterator it = sym_table.find(node->id);
@@ -1015,8 +1016,8 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                     return value;
                 }
 
-                // classdefs have different scoping rules than functions:
-                if (source_info->ast->type == AST_TYPE::ClassDef)
+                // classdefs (and some other cases like eval) have different scoping rules than functions:
+                if (is_old_local)
                     return getGlobal(source_info->parent_module, &node->id.str());
 
                 assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);

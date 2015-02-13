@@ -867,10 +867,11 @@ private:
         bool is_kill = irstate->getSourceInfo()->liveness->isKill(node, myblock);
         assert(!is_kill || node->id.str()[0] == '#');
 
-        if (scope_info->refersToGlobal(node->id)) {
+        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
+        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             assert(!is_kill);
             return _getGlobal(node, unw_info);
-        } else if (scope_info->refersToClosure(node->id)) {
+        } else if (vst == ScopeInfo::VarScopeType::DEREF) {
             assert(!is_kill);
             assert(scope_info->takesClosure());
 
@@ -881,7 +882,7 @@ private:
         } else {
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // classdefs have different scoping rules than functions:
-                if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
+                if (vst == ScopeInfo::VarScopeType::NAME) {
                     return _getGlobal(node, unw_info);
                 }
 
@@ -900,8 +901,7 @@ private:
                 = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
             if (is_defined_var) {
-                // classdefs have different scoping rules than functions:
-                if (irstate->getSourceInfo()->ast->type == AST_TYPE::ClassDef) {
+                if (vst == ScopeInfo::VarScopeType::NAME) {
                     llvm::Value* v = handlePotentiallyUndefined(
                         is_defined_var, g.llvm_value_type_ptr, curblock, emitter, false,
                         [=](IREmitter& emitter) {

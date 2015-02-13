@@ -104,6 +104,9 @@ public:
     }
     bool refersToClosure(InternedString name) override { return false; }
     bool saveInClosure(InternedString name) override { return false; }
+    VarScopeType getScopeTypeOfName(InternedString name) override {
+        return refersToGlobal(name) ? VarScopeType::GLOBAL : VarScopeType::FAST;
+    }
 
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
@@ -174,10 +177,11 @@ private:
     ScopeInfo* parent;
     ScopingAnalysis::ScopeNameUsage* usage;
     AST* ast;
+    bool usesNameLookup;
 
 public:
-    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast)
-        : parent(parent), usage(usage), ast(ast) {
+    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
+        : parent(parent), usage(usage), ast(ast), usesNameLookup(usesNameLookup) {
         assert(parent);
         assert(usage);
         assert(ast);
@@ -217,6 +221,18 @@ public:
         if (isCompilerCreatedName(name))
             return false;
         return usage->referenced_from_nested.count(name) != 0;
+    }
+
+    VarScopeType getScopeTypeOfName(InternedString name) override {
+        if (refersToGlobal(name))
+            return VarScopeType::GLOBAL;
+        if (refersToClosure(name))
+            return VarScopeType::DEREF;
+        if (usesNameLookup)
+            return VarScopeType::NAME;
+        if (saveInClosure(name))
+            return VarScopeType::CLOSURE;
+        return VarScopeType::FAST;
     }
 
     InternedString mangleName(const InternedString id) override {
@@ -530,15 +546,17 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
-            case AST_TYPE::ClassDef:
-            case AST_TYPE::FunctionDef:
-            case AST_TYPE::Lambda: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node);
+            case AST_TYPE::ClassDef: {
+                ScopeInfoBase* scopeInfo
+                    = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
                 break;
             }
+            case AST_TYPE::FunctionDef:
+            case AST_TYPE::Lambda:
             case AST_TYPE::GeneratorExp: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node);
+                ScopeInfoBase* scopeInfo
+                    = new ScopeInfoBase(parent_info, usage, usage->node, false /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
                 break;
             }

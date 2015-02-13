@@ -300,6 +300,20 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
+/*
+void compileAndRunExpression(AST_expr* expr, BoxedModule* bm) {
+    CompiledFunction* cf;
+    AST_stmt* stmt = new AST_Expr(expr);
+
+    { // scope for limiting the locked region:
+        LOCK_REGION(codegen_rwlock.asWrite());
+
+        Timer _t("for compileModule()");
+
+        ScopingAnalysis* scoping = runScopingAnalysis(
+}
+*/
+
 // If a function version keeps failing its speculations, kill it (remove it
 // from the list of valid function versions).  The next time we go to call
 // the function, we will have to pick a different version, potentially recompiling.
