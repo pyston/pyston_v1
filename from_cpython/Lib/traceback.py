@@ -293,13 +293,18 @@ def print_stack(f=None, limit=None, file=None):
     arguments have the same meaning as for print_exception().
     """
 
-    raise NotImplementedError("This function is currently not implemented in Pyston")
-    if f is None:
-        try:
-            raise ZeroDivisionError
-        except ZeroDivisionError:
-            f = sys.exc_info()[2].tb_frame.f_back
-    print_list(extract_stack(f, limit), file)
+    if f is not None or limit is not None:
+        raise NotImplementedError("print_stack() does not currently support the 'f' or 'limit' arguments in Pyston")
+
+    try:
+        raise ZeroDivisionError
+    except ZeroDivisionError:
+        # Make use of Pyston's incorrect behavior, that we generate exception tracebacks all the
+        # way to the top stack frame:
+        l = format_exception(*sys.exc_info())[1:-2]
+
+    for s in l:
+        _print(file, s, '')
 
 def format_stack(f=None, limit=None):
     """Shorthand for 'format_list(extract_stack(f, limit))'."""
