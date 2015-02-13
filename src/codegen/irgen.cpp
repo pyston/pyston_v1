@@ -1198,9 +1198,6 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         // Worklist guard_worklist;
 
         guards.getBlocksWithGuards(deopt_full_blocks);
-        for (const auto& p : guards.exprGuards()) {
-            deopt_partial_blocks.insert(p.second->cfg_block);
-        }
 
         computeBlockSetClosure(deopt_full_blocks, deopt_partial_blocks);
 
@@ -1218,10 +1215,6 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         delete deopt_types;
     }
     guards.assertGotPatched();
-
-    for (const auto& p : guards.exprGuards()) {
-        delete p.second;
-    }
 
     delete types;
 

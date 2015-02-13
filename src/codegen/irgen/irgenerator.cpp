@@ -105,17 +105,6 @@ ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
     return source->scoping->getScopeInfoForNode(node);
 }
 
-GuardList::ExprTypeGuard::ExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node,
-                                        CompilerVariable* val, const SymbolTable& st)
-    : cfg_block(cfg_block), branch(branch), ast_node(ast_node) {
-    DupCache cache;
-    this->val = val->dup(cache);
-
-    for (const auto& p : st) {
-        this->st[p.first] = p.second->dup(cache);
-    }
-}
-
 GuardList::BlockEntryGuard::BlockEntryGuard(CFGBlock* cfg_block, llvm::BranchInst* branch,
                                             const SymbolTable& symbol_table)
     : cfg_block(cfg_block), branch(branch) {
@@ -1274,102 +1263,6 @@ private:
                 createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
 
                 rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
-            }
-        }
-
-        // In-guarding:
-        GuardList::ExprTypeGuard* guard = in_guards.getNodeTypeGuard(node);
-        if (guard != NULL) {
-            if (VERBOSITY("irgen") >= 1) {
-                printf("merging guard after ");
-                PrintVisitor printer;
-                node->accept(&printer);
-                printf("; is_partial=%d\n", state == PARTIAL);
-            }
-
-            if (state == PARTIAL) {
-                guard->branch->setSuccessor(1, curblock);
-                symbol_table = SymbolTable(guard->st);
-                assert(guard->val);
-                state = RUNNING;
-
-                return guard->val;
-            } else {
-                assert(state == RUNNING);
-                compareKeyset(&symbol_table, &guard->st);
-
-                assert(symbol_table.size() == guard->st.size());
-                llvm::BasicBlock* ramp_block
-                    = llvm::BasicBlock::Create(g.context, "deopt_ramp", irstate->getLLVMFunction());
-                llvm::BasicBlock* join_block
-                    = llvm::BasicBlock::Create(g.context, "deopt_join", irstate->getLLVMFunction());
-                SymbolTable joined_st;
-                for (const auto& p : guard->st) {
-                    // if (VERBOSITY("irgen") >= 1) printf("merging %s\n", p.first.c_str());
-                    CompilerVariable* curval = symbol_table[p.first];
-                    // I'm not sure this is necessary or even correct:
-                    // ASSERT(curval->getVrefs() == p.second->getVrefs(), "%s %d %d", p.first.c_str(),
-                    // curval->getVrefs(), p.second->getVrefs());
-
-                    ConcreteCompilerType* merged_type = curval->getConcreteType();
-
-                    emitter.getBuilder()->SetInsertPoint(ramp_block);
-                    ConcreteCompilerVariable* converted1 = p.second->makeConverted(emitter, merged_type);
-                    p.second->decvref(emitter); // for makeconverted
-                    // guard->st[p.first] = converted;
-                    // p.second->decvref(emitter); // for the replaced version
-
-                    emitter.getBuilder()->SetInsertPoint(curblock);
-                    ConcreteCompilerVariable* converted2 = curval->makeConverted(emitter, merged_type);
-                    curval->decvref(emitter); // for makeconverted
-                    // symbol_table[p.first] = converted;
-                    // curval->decvref(emitter); // for the replaced version
-
-                    if (converted1->getValue() == converted2->getValue()) {
-                        joined_st[p.first] = new ConcreteCompilerVariable(merged_type, converted1->getValue(), true);
-                    } else {
-                        emitter.getBuilder()->SetInsertPoint(join_block);
-                        llvm::PHINode* phi = emitter.getBuilder()->CreatePHI(merged_type->llvmType(), 2, p.first.str());
-                        phi->addIncoming(converted1->getValue(), ramp_block);
-                        phi->addIncoming(converted2->getValue(), curblock);
-                        joined_st[p.first] = new ConcreteCompilerVariable(merged_type, phi, true);
-                    }
-
-                    // TODO free dead Variable objects!
-                }
-                symbol_table = joined_st;
-
-                emitter.getBuilder()->SetInsertPoint(curblock);
-                emitter.getBuilder()->CreateBr(join_block);
-
-                emitter.getBuilder()->SetInsertPoint(ramp_block);
-                emitter.getBuilder()->CreateBr(join_block);
-
-                guard->branch->setSuccessor(1, ramp_block);
-
-                {
-                    ConcreteCompilerType* this_merged_type = rtn->getConcreteType();
-
-                    emitter.getBuilder()->SetInsertPoint(ramp_block);
-                    ConcreteCompilerVariable* converted_guard_rtn
-                        = guard->val->makeConverted(emitter, this_merged_type);
-                    guard->val->decvref(emitter);
-
-                    emitter.getBuilder()->SetInsertPoint(curblock);
-                    ConcreteCompilerVariable* converted_rtn = rtn->makeConverted(emitter, this_merged_type);
-                    rtn->decvref(emitter);
-
-                    emitter.getBuilder()->SetInsertPoint(join_block);
-                    llvm::PHINode* this_phi = emitter.getBuilder()->CreatePHI(this_merged_type->llvmType(), 2);
-                    this_phi->addIncoming(converted_rtn->getValue(), curblock);
-                    this_phi->addIncoming(converted_guard_rtn->getValue(), ramp_block);
-                    rtn = new ConcreteCompilerVariable(this_merged_type, this_phi, true);
-
-                    // TODO free dead Variable objects!
-                }
-
-                curblock = join_block;
-                emitter.getBuilder()->SetInsertPoint(curblock);
             }
         }
 

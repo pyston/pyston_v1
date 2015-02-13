@@ -100,17 +100,6 @@ public:
 
 class GuardList {
 public:
-    struct ExprTypeGuard {
-        CFGBlock* cfg_block;
-        llvm::BranchInst* branch;
-        AST_expr* ast_node;
-        CompilerVariable* val;
-        SymbolTable st;
-
-        ExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val,
-                      const SymbolTable& st);
-    };
-
     struct BlockEntryGuard {
         CFGBlock* cfg_block;
         llvm::BranchInst* branch;
@@ -120,18 +109,9 @@ public:
     };
 
 private:
-    std::unordered_map<AST_expr*, ExprTypeGuard*> expr_type_guards;
     std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*>> block_begin_guards;
-    // typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::iterator expr_type_guard_iterator;
-    // typedef std::unordered_map<AST_expr*, ExprTypeGuard*>::const_iterator expr_type_guard_const_iterator;
-    typedef decltype(expr_type_guards)::iterator expr_type_guard_iterator;
-    typedef decltype(expr_type_guards)::const_iterator expr_type_guard_const_iterator;
 
 public:
-    llvm::iterator_range<expr_type_guard_iterator> exprGuards() {
-        return llvm::iterator_range<expr_type_guard_iterator>(expr_type_guards.begin(), expr_type_guards.end());
-    }
-
     void getBlocksWithGuards(std::unordered_set<CFGBlock*>& add_to) {
         for (const auto& p : block_begin_guards) {
             add_to.insert(p.first);
@@ -145,29 +125,10 @@ public:
                 assert(g->branch->getSuccessor(0) != g->branch->getSuccessor(1));
             }
         }
-
-        for (const auto& p : expr_type_guards) {
-            assert(p.second->branch->getSuccessor(0) != p.second->branch->getSuccessor(1));
-        }
 #endif
     }
 
-    ExprTypeGuard* getNodeTypeGuard(AST_expr* node) const {
-        expr_type_guard_const_iterator it = expr_type_guards.find(node);
-        if (it == expr_type_guards.end())
-            return NULL;
-        return it->second;
-    }
-
-    bool isEmpty() const { return expr_type_guards.size() == 0 && block_begin_guards.size() == 0; }
-
-    void addExprTypeGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, AST_expr* ast_node, CompilerVariable* val,
-                          const SymbolTable& st) {
-        abort();
-        ExprTypeGuard*& g = expr_type_guards[ast_node];
-        assert(g == NULL);
-        g = new ExprTypeGuard(cfg_block, branch, ast_node, val, st);
-    }
+    bool isEmpty() const { return block_begin_guards.size() == 0; }
 
     void registerGuardForBlockEntry(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& st) {
         // printf("Adding guard for block %p, in %p\n", cfg_block, this);
