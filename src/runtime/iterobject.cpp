@@ -58,6 +58,16 @@ Box* seqiterNext(Box* s) {
     return r;
 }
 
+static void seqiterGCVisit(GCVisitor* v, Box* b) {
+    assert(b->cls == seqiter_cls);
+    boxGCHandler(v, b);
+
+    BoxedSeqIter* si = static_cast<BoxedSeqIter*>(b);
+    v->visit(si->b);
+    if (si->next)
+        v->visit(si->next);
+}
+
 static void iterwrapperGCVisit(GCVisitor* v, Box* b) {
     assert(b->cls == iterwrapper_cls);
     boxGCHandler(v, b);
@@ -108,7 +118,7 @@ extern "C" PyObject* PySeqIter_New(PyObject* seq) noexcept {
 }
 
 void setupIter() {
-    seqiter_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedSeqIter), false, "iterator");
+    seqiter_cls = new BoxedHeapClass(object_cls, seqiterGCVisit, 0, sizeof(BoxedSeqIter), false, "iterator");
 
     seqiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));
