@@ -1065,7 +1065,18 @@ PyMethodDef file_methods[] = {
     { "readlines", (PyCFunction)file_readlines, METH_VARARGS, readlines_doc },
 };
 
+void fileDestructor(Box* b) {
+    assert(isSubclass(b->cls, file_cls));
+    BoxedFile* self = static_cast<BoxedFile*>(b);
+
+    if (self->f_fp)
+      fclose(self->f_fp);
+    self->f_fp = NULL;
+}
+
 void setupFile() {
+    file_cls->simple_destructor = fileDestructor;
+
     file_cls->giveAttr("read",
                        new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));
 
