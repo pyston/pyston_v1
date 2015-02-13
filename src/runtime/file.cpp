@@ -1070,7 +1070,7 @@ void fileDestructor(Box* b) {
     BoxedFile* self = static_cast<BoxedFile*>(b);
 
     if (self->f_fp)
-      fclose(self->f_fp);
+        fclose(self->f_fp);
     self->f_fp = NULL;
 }
 
