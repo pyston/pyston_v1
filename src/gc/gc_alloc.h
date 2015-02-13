@@ -51,6 +51,11 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
 #endif
 
     GCAllocation* alloc = global_heap.alloc(alloc_bytes);
+
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
+#endif
+
     alloc->kind_id = kind_id;
     alloc->gc_flags = 0;
 
@@ -67,7 +72,10 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     }
 
     void* r = alloc->user_data;
+
 #ifndef NVALGRIND
+    VALGRIND_ENABLE_ERROR_REPORTING;
+
     if (ENABLE_REDZONES) {
         r = ((char*)r) + REDZONE_SIZE;
     }

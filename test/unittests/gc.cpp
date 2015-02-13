@@ -68,6 +68,9 @@ TEST(alloc, alloc64) { testAlloc(64); }
 TEST(alloc, alloc128) { testAlloc(128); }
 TEST(alloc, alloc258) { testAlloc(258); }
 TEST(alloc, alloc3584) { testAlloc(3584); }
+TEST(alloc, alloc4096) { testAlloc(4096); }
+TEST(alloc, alloc8192) { testAlloc(8192); }
+TEST(alloc, alloc16384) { testAlloc(16384); }
 
 TEST(alloc, largeallocs) {
     int s1 = 1 << 20;
