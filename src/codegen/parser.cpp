@@ -966,10 +966,16 @@ AST_Module* parse(const char* fn) {
 #define MAGIC_STRING_LENGTH 4
 #define CHECKSUM_LENGTH 4
 
-static void _reparse(const char* fn, const std::string& cache_fn) {
-    FILE* parser = popen(getParserCommandLine(fn).c_str(), "r");
+enum class ParseResult {
+    SUCCESS,
+    PYC_UNWRITABLE,
+};
+static ParseResult _reparse(const char* fn, const std::string& cache_fn) {
     FILE* cache_fp = fopen(cache_fn.c_str(), "w");
-    assert(cache_fp);
+    if (!cache_fp)
+        return ParseResult::PYC_UNWRITABLE;
+
+    FILE* parser = popen(getParserCommandLine(fn).c_str(), "r");
 
     fwrite(MAGIC_STRING, 1, MAGIC_STRING_LENGTH, cache_fp);
 
@@ -997,6 +1003,7 @@ static void _reparse(const char* fn, const std::string& cache_fn) {
     fwrite(&bytes_written, 1, CHECKSUM_LENGTH, cache_fp);
 
     fclose(cache_fp);
+    return ParseResult::SUCCESS;
 }
 
 // Parsing the file is somewhat expensive since we have to shell out to cpython;
@@ -1058,7 +1065,12 @@ AST_Module* caching_parse(const char* fn) {
 
         if (!good) {
             fclose(fp);
-            _reparse(fn, cache_fn);
+            auto result = _reparse(fn, cache_fn);
+            if (result == ParseResult::PYC_UNWRITABLE) {
+                if (VERBOSITY())
+                    printf("Unable to write to %s, falling back to non-caching parse\n", cache_fn.c_str());
+                return parse(fn);
+            }
             code = stat(cache_fn.c_str(), &cache_stat);
             assert(code == 0);
 
