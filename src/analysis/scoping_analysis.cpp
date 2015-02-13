@@ -224,6 +224,10 @@ public:
     }
 
     VarScopeType getScopeTypeOfName(InternedString name) override {
+        // HAX
+        if (isCompilerCreatedName(name))
+            return VarScopeType::FAST;
+
         if (refersToGlobal(name))
             return VarScopeType::GLOBAL;
         if (refersToClosure(name))
