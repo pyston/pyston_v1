@@ -332,7 +332,7 @@ private:
     OpInfo getOpInfoForNode(AST* ast, UnwindInfo unw_info) {
         assert(ast);
 
-        EffortLevel::EffortLevel effort = irstate->getEffortLevel();
+        EffortLevel effort = irstate->getEffortLevel();
         bool record_types = (effort != EffortLevel::INTERPRETED && effort != EffortLevel::MAXIMAL);
 
         TypeRecorder* type_recorder;
@@ -1945,10 +1945,8 @@ private:
         llvm::Value* newcount = emitter.getBuilder()->CreateAdd(curcount, getConstantInt(1, g.i64));
         emitter.getBuilder()->CreateStore(newcount, edgecount_ptr);
 
-        int OSR_THRESHOLD = 10000;
-        if (irstate->getEffortLevel() == EffortLevel::INTERPRETED)
-            OSR_THRESHOLD = 100;
-        llvm::Value* osr_test = emitter.getBuilder()->CreateICmpSGT(newcount, getConstantInt(OSR_THRESHOLD));
+        assert(irstate->getEffortLevel() == EffortLevel::MINIMAL);
+        llvm::Value* osr_test = emitter.getBuilder()->CreateICmpSGT(newcount, getConstantInt(OSR_THRESHOLD_BASELINE));
 
         llvm::Metadata* md_vals[]
             = { llvm::MDString::get(g.context, "branch_weights"), llvm::ConstantAsMetadata::get(getConstantInt(1)),

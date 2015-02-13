@@ -783,8 +783,7 @@ public:
 
 // public entry point:
 TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::vector<ConcreteCompilerType*>& arg_types,
-                             EffortLevel::EffortLevel effort, TypeAnalysis::SpeculationLevel speculation,
-                             ScopeInfo* scope_info) {
+                             EffortLevel effort, TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
     // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
     //}

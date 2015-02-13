@@ -2,6 +2,7 @@
 # of stacks that we have:
 
 def recurse(n):
+    print n
     if n > 0:
         return recurse(n - 1)
     return n

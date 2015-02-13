@@ -2293,7 +2293,7 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         }
         FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
 
-        EffortLevel::EffortLevel new_effort = initialEffort();
+        EffortLevel new_effort = initialEffort();
 
         // this also pushes the new CompiledVersion to the back of the version list:
         chosen_cf = compileFunction(f, spec, new_effort, NULL);

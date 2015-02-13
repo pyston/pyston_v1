@@ -96,14 +96,11 @@ public:
 } // namespace gc
 using gc::GCVisitor;
 
-namespace EffortLevel {
-enum EffortLevel {
+enum class EffortLevel {
     INTERPRETED = 0,
-    MINIMAL,
-    MODERATE,
-    MAXIMAL,
+    MINIMAL = 1,
+    MAXIMAL = 3, // keep the old tier numbering for familiarity
 };
-}
 
 class CompilerType;
 template <class V> class ValuedCompilerType;
@@ -193,7 +190,7 @@ public:
     int code_size;
     llvm::Value* llvm_code; // the llvm callable.
 
-    EffortLevel::EffortLevel effort;
+    EffortLevel effort;
 
     int64_t times_called, times_speculation_failed;
     ICInvalidator dependent_callsites;
@@ -203,8 +200,7 @@ public:
     std::vector<ICInfo*> ics;
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
-                     llvm::Value* llvm_code, EffortLevel::EffortLevel effort,
-                     const OSREntryDescriptor* entry_descriptor)
+                     llvm::Value* llvm_code, EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
           code(code), llvm_code(llvm_code), effort(effort), times_called(0), times_speculation_failed(0),
           location_map(nullptr) {}
@@ -327,9 +323,9 @@ CLFunction* unboxRTFunction(Box*);
 
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
-CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
+CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry);
-EffortLevel::EffortLevel initialEffort();
+EffortLevel initialEffort();
 
 typedef bool i1;
 typedef int64_t i64;

@@ -56,7 +56,7 @@ BoxedClass* TypeRecorder::predict() {
     if (!ENABLE_TYPE_FEEDBACK)
         return NULL;
 
-    if (last_count > 100)
+    if (last_count > SPECULATION_THRESHOLD)
         return last_seen;
 
     return NULL;

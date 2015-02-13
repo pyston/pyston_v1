@@ -1,4 +1,4 @@
-# This test could really benefit from defined/settable OSR limits
+# statcheck: '-O' in EXTRA_JIT_ARGS or 1 <= stats['num_osr_exits'] <= 5
 
 def f(x):
     def inner():

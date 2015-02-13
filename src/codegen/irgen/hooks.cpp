@@ -103,7 +103,7 @@ ScopeInfo* SourceInfo::getScopeInfo() {
     return scoping->getScopeInfoForNode(ast);
 }
 
-EffortLevel::EffortLevel initialEffort() {
+EffortLevel initialEffort() {
     if (FORCE_INTERPRETER)
         return EffortLevel::INTERPRETED;
     if (FORCE_OPTIMIZE)
@@ -113,7 +113,7 @@ EffortLevel::EffortLevel initialEffort() {
     return EffortLevel::MINIMAL;
 }
 
-static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
+static void compileIR(CompiledFunction* cf, EffortLevel effort) {
     assert(cf);
     assert(cf->func);
 
@@ -165,7 +165,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel::EffortLevel effort) {
 // Compiles a new version of the function with the given signature and adds it to the list;
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
-CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel::EffortLevel effort,
+CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry) {
     Timer _t("for compileFunction()");
     assert(spec);
@@ -190,7 +190,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         ss << ") -> ";
         ss << spec->rtn_type->debugName();
         // spec->rtn_type->llvmType()->print(ss);
-        ss << " at effort level " << effort;
+        ss << " at effort level " << (int)effort;
         if (entry != NULL) {
             ss << "\nDoing OSR-entry partial compile, starting with backedge to block " << entry->backedge->target->idx
                << '\n';
@@ -250,13 +250,6 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             num_compiles.log();
             break;
         }
-        case EffortLevel::MODERATE: {
-            static StatCounter us_compiling("us_compiling_2_moderate");
-            us_compiling.log(us);
-            static StatCounter num_compiles("num_compiles_2_moderate");
-            num_compiles.log();
-            break;
-        }
         case EffortLevel::MAXIMAL: {
             static StatCounter us_compiling("us_compiling_3_maximal");
             us_compiling.log(us);
@@ -264,6 +257,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             num_compiles.log();
             break;
         }
+        default:
+            RELEASE_ASSERT(0, "%d", effort);
     }
 
     return cf;
@@ -284,7 +279,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
-        EffortLevel::EffortLevel effort = initialEffort();
+        EffortLevel effort = initialEffort();
 
         cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
         assert(cf->clfunc->versions.size());
@@ -335,7 +330,7 @@ void CompiledFunction::speculationFailed() {
 /// Reoptimizes the given function version at the new effort level.
 /// The cf must be an active version in its parents CLFunction; the given
 /// version will be replaced by the new version, which will be returned.
-static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel new_effort) {
+static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel new_effort) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     assert(cf->clfunc->versions.size());
@@ -372,7 +367,8 @@ static CompiledFunction* _doReopt(CompiledFunction* cf, EffortLevel::EffortLevel
     abort();
 }
 
-static StatCounter stat_osrexits("OSR exits");
+static StatCounter stat_osrexits("num_osr_exits");
+static StatCounter stat_osr_compiles("num_osr_compiles");
 CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
@@ -386,14 +382,14 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     assert(exit->parent_cf->clfunc);
     CompiledFunction*& new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
-        EffortLevel::EffortLevel new_effort = EffortLevel::MAXIMAL;
+        EffortLevel new_effort = EffortLevel::MAXIMAL;
         if (exit->parent_cf->effort == EffortLevel::INTERPRETED)
             new_effort = EffortLevel::MINIMAL;
-        // EffortLevel::EffortLevel new_effort = (EffortLevel::EffortLevel)(exit->parent_cf->effort + 1);
-        // new_effort = EffortLevel::MAXIMAL;
         CompiledFunction* compiled
             = compileFunction(exit->parent_cf->clfunc, exit->parent_cf->spec, new_effort, exit->entry);
         assert(compiled == new_cf);
+
+        stat_osr_compiles.log();
     }
 
     return new_cf;
@@ -412,7 +408,16 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
 
     assert(cf->effort < EffortLevel::MAXIMAL);
     assert(cf->clfunc->versions.size());
-    CompiledFunction* new_cf = _doReopt(cf, (EffortLevel::EffortLevel(cf->effort + 1)));
+
+    EffortLevel new_effort;
+    if (cf->effort == EffortLevel::INTERPRETED)
+        new_effort = EffortLevel::MINIMAL;
+    else if (cf->effort == EffortLevel::MINIMAL)
+        new_effort = EffortLevel::MAXIMAL;
+    else
+        RELEASE_ASSERT(0, "unknown effort: %d", cf->effort);
+
+    CompiledFunction* new_cf = _doReopt(cf, new_effort);
     assert(!new_cf->is_interpreted);
     return new_cf;
 }

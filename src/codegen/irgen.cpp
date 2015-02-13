@@ -63,7 +63,7 @@ void MyInserter::InsertHelper(llvm::Instruction* I, const llvm::Twine& Name, llv
     llvm::IRBuilderDefaultInserter<true>::InsertHelper(I, Name, BB, InsertPt);
 }
 
-static void optimizeIR(llvm::Function* f, EffortLevel::EffortLevel effort) {
+static void optimizeIR(llvm::Function* f, EffortLevel effort) {
     // TODO maybe should do some simple passes (ex: gvn?) if effort level isn't maximal?
     // In general, this function needs a lot of tuning.
     if (effort < EffortLevel::MAXIMAL)
@@ -334,7 +334,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                     TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor, const BlockSet& full_blocks,
                     const BlockSet& partial_blocks) {
     SourceInfo* source = irstate->getSourceInfo();
-    EffortLevel::EffortLevel effort = irstate->getEffortLevel();
+    EffortLevel effort = irstate->getEffortLevel();
     CompiledFunction* cf = irstate->getCurFunction();
     ConcreteCompilerType* rtn_type = irstate->getReturnType();
     // llvm::MDNode* func_info = irstate->getFuncDbgInfo();
@@ -614,13 +614,6 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             // pass
         } else if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
-            // number of times a function needs to be called to be reoptimized:
-            static const int REOPT_THRESHOLDS[] = {
-                10,    // INTERPRETED->MINIMAL
-                250,   // MINIMAL->MODERATE
-                10000, // MODERATE->MAXIMAL
-            };
-
             assert(strcmp("opt", bb_type) == 0);
 
             if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
@@ -636,8 +629,11 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 llvm::Value* new_call_count
                     = emitter->getBuilder()->CreateAdd(cur_call_count, getConstantInt(1, g.i64));
                 emitter->getBuilder()->CreateStore(new_call_count, call_count_ptr);
-                llvm::Value* reopt_test = emitter->getBuilder()->CreateICmpSGT(
-                    new_call_count, getConstantInt(REOPT_THRESHOLDS[effort], g.i64));
+
+                assert(effort == EffortLevel::MINIMAL);
+                int reopt_threshold = REOPT_THRESHOLD_BASELINE;
+                llvm::Value* reopt_test
+                    = emitter->getBuilder()->CreateICmpSGT(new_call_count, getConstantInt(reopt_threshold, g.i64));
 
                 llvm::Metadata* md_vals[] = { llvm::MDString::get(g.context, "branch_weights"),
                                               llvm::ConstantAsMetadata::get(getConstantInt(1)),
@@ -1085,13 +1081,12 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     return func_info;
 }
 
-static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::EffortLevel effort,
-                                         const OSREntryDescriptor* entry) {
+static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel effort, const OSREntryDescriptor* entry) {
     static int num_functions = 0;
 
     std::ostringstream os;
     os << nameprefix;
-    os << "_e" << effort;
+    os << "_e" << (int)effort;
     if (entry) {
         os << "_osr" << entry->backedge->target->idx;
         if (entry->cf->func)
@@ -1103,7 +1098,7 @@ static std::string getUniqueFunctionName(std::string nameprefix, EffortLevel::Ef
 }
 
 CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix) {
+                            EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix) {
     Timer _t("in doCompile");
     Timer _t2;
     long irgen_us = 0;
@@ -1170,7 +1165,8 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     irgen_us += _t2.split();
 
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
-    if (ENABLE_SPECULATION && effort >= EffortLevel::MODERATE)
+    EffortLevel min_speculation_level = EffortLevel::MAXIMAL;
+    if (ENABLE_SPECULATION && effort >= min_speculation_level)
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types
         = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level, source->getScopeInfo());

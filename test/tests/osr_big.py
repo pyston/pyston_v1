@@ -1,4 +1,13 @@
+# statcheck: '-O' in EXTRA_JIT_ARGS or 1 <= stats['num_osr_exits'] <= 5
+
 # "big osr" in terms of lots of live variables needing to be passed through:
+
+try:
+    import __pyston__
+    __pyston__.setOption("OSR_THRESHOLD_INTERPRETER", 5)
+    __pyston__.setOption("OSR_THRESHOLD_BASELINE", 5)
+except ImportError:
+    pass
 
 def outer(quit):
     if quit:
@@ -15,7 +24,7 @@ def outer(quit):
     i = 9
     l = []
 
-    n = 100000
+    n = 10000
     while n:
         n = n - 1
         a = a + 1

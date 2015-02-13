@@ -27,18 +27,24 @@ static Box* setOption(Box* option, Box* value) {
 
     if (value->cls != int_cls)
         raiseExcHelper(TypeError, "value must be a 'int' object but received a '%s'", getTypeName(value));
-    bool enable = ((BoxedInt*)value)->n;
+    int n = ((BoxedInt*)value)->n;
 
-    if (option_string->s == "ENABLE_INTERPRETER")
-        ENABLE_INTERPRETER = enable;
-    else if (option_string->s == "ENABLE_OSR")
-        ENABLE_OSR = enable;
-    else if (option_string->s == "ENABLE_REOPT")
-        ENABLE_REOPT = enable;
-    else if (option_string->s == "FORCE_INTERPRETER")
-        FORCE_INTERPRETER = enable;
-    else
-        raiseExcHelper(ValueError, "unknown option name '%s", option_string->s.c_str());
+#define CHECK(_s)                                                                                                      \
+    if (option_string->s == STRINGIFY(_s))                                                                             \
+    _s = n
+
+    // :)
+    CHECK(ENABLE_INTERPRETER);
+    else CHECK(ENABLE_OSR);
+    else CHECK(ENABLE_REOPT);
+    else CHECK(FORCE_INTERPRETER);
+    else CHECK(REOPT_THRESHOLD_INTERPRETER);
+    else CHECK(OSR_THRESHOLD_INTERPRETER);
+    else CHECK(REOPT_THRESHOLD_BASELINE);
+    else CHECK(OSR_THRESHOLD_BASELINE);
+    else CHECK(SPECULATION_THRESHOLD);
+    else raiseExcHelper(ValueError, "unknown option name '%s", option_string->s.c_str());
+
     return None;
 }
 

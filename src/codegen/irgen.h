@@ -95,7 +95,7 @@ InternedString getIsDefinedName(InternedString name, InternedStringPool& interne
 bool isIsDefinedName(const std::string& name);
 
 CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const OSREntryDescriptor* entry_descriptor,
-                            EffortLevel::EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
+                            EffortLevel effort, FunctionSpecialization* spec, std::string nameprefix);
 
 // A common pattern is to branch based off whether a variable is defined but only if it is
 // potentially-undefined.  If it is potentially-undefined, we have to generate control-flow
@@ -119,13 +119,13 @@ llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var
 class TypeRecorder;
 class OpInfo {
 private:
-    const EffortLevel::EffortLevel effort;
+    const EffortLevel effort;
     TypeRecorder* const type_recorder;
 
 public:
     const UnwindInfo unw_info;
 
-    OpInfo(EffortLevel::EffortLevel effort, TypeRecorder* type_recorder, UnwindInfo unw_info)
+    OpInfo(EffortLevel effort, TypeRecorder* type_recorder, UnwindInfo unw_info)
         : effort(effort), type_recorder(type_recorder), unw_info(unw_info) {}
 
     bool isInterpreted() const { return effort == EffortLevel::INTERPRETED; }

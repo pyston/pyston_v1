@@ -76,7 +76,7 @@ public:
 
     llvm::Function* getLLVMFunction() { return cf->func; }
 
-    EffortLevel::EffortLevel getEffortLevel() { return cf->effort; }
+    EffortLevel getEffortLevel() { return cf->effort; }
 
     GCBuilder* getGC() { return gc; }
 
