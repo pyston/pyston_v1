@@ -3437,7 +3437,7 @@ Box* getiter(Box* o) {
         return r;
 
     if (typeLookup(o->cls, getitem_str, NULL)) {
-        return new BoxedSeqIter(o);
+        return new BoxedSeqIter(o, 0);
     }
 
     raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));

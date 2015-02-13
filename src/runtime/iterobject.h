@@ -23,6 +23,7 @@
 namespace pyston {
 
 extern BoxedClass* seqiter_cls;
+extern BoxedClass* seqreviter_cls;
 
 // Analogue of CPython's PySeqIter: wraps an object that has a __getitem__
 // and uses that to iterate.
@@ -32,7 +33,7 @@ public:
     int64_t idx;
     Box* next;
 
-    BoxedSeqIter(Box* b) : b(b), idx(0), next(NULL) {}
+    BoxedSeqIter(Box* b, int64_t start) : b(b), idx(start), next(NULL) {}
 
     DEFAULT_CLASS(seqiter_cls);
 };

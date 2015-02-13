@@ -32,6 +32,7 @@
 #include "runtime/ics.h"
 #include "runtime/import.h"
 #include "runtime/inline/xrange.h"
+#include "runtime/iterobject.h"
 #include "runtime/list.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
@@ -830,6 +831,23 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
     return None;
 }
 
+Box* getreversed(Box* o) {
+    static const std::string reversed_str("__reversed__");
+    static const std::string getitem_str("__getitem__");
+    // TODO add rewriting to this?  probably want to try to avoid this path though
+    Box* r = callattr(o, &reversed_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }), ArgPassSpec(0),
+                      NULL, NULL, NULL, NULL, NULL);
+    if (r)
+        return r;
+
+    if (!typeLookup(o->cls, getitem_str, NULL)) {
+        raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
+    }
+    int64_t len = unboxedLen(o); // this will throw an exception if __len__ isn't there
+
+    return new (seqreviter_cls) BoxedSeqIter(o, len - 1);
+}
+
 Box* pydump(void* p) {
     dump(p);
     return None;
@@ -1116,6 +1134,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr(
         "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false)));
+    builtins_module->giveAttr(
+        "reversed", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false)));
 
     builtins_module->giveAttr("divmod", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)divmod, UNKNOWN, 2)));
 

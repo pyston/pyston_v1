@@ -593,6 +593,8 @@ Box* listRemove(BoxedList* self, Box* elt) {
 }
 
 BoxedClass* list_iterator_cls = NULL;
+BoxedClass* list_reverse_iterator_cls = NULL;
+
 extern "C" void listIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
     BoxedListIterator* it = (BoxedListIterator*)b;
@@ -741,6 +743,8 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 void setupList() {
     list_iterator_cls
         = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false, "listiterator");
+    list_reverse_iterator_cls = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedListIterator),
+                                                   false, "listreverseiterator");
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 
@@ -752,6 +756,9 @@ void setupList() {
 
     list_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)listIter, typeFromClass(list_iterator_cls), 1)));
+
+    list_cls->giveAttr("__reversed__", new BoxedFunction(boxRTFunction((void*)listReversed,
+                                                                       typeFromClass(list_reverse_iterator_cls), 1)));
 
     list_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)listEq, UNKNOWN, 2)));
     list_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)listNe, UNKNOWN, 2)));
@@ -805,10 +812,22 @@ void setupList() {
     list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1)));
 
     list_iterator_cls->freeze();
+
+    list_reverse_iterator_cls->giveAttr("__name__", boxStrConstant("listreverseiterator"));
+
+    hasnext = boxRTFunction((void*)listreviterHasnextUnboxed, BOOL, 1);
+    addRTFunction(hasnext, (void*)listreviterHasnext, BOXED_BOOL);
+    list_reverse_iterator_cls->giveAttr("__hasnext__", new BoxedFunction(hasnext));
+    list_reverse_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)listIterIter, typeFromClass(list_reverse_iterator_cls), 1)));
+    list_reverse_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listreviterNext, UNKNOWN, 1)));
+
+    list_reverse_iterator_cls->freeze();
 }
 
 void teardownList() {
     // TODO do clearattrs?
     // decref(list_iterator_cls);
+    // decref(list_reverse_iterator_cls);
 }
 }
