@@ -35,7 +35,7 @@ namespace gc {
 
 void _doFree(GCAllocation* al);
 
-// lots of linked lists around here, so let's just use template functions for them all
+// lots of linked lists around here, so let's just use template functions for operations on them.
 template <class ListT> inline void nullNextPrev(ListT* node) {
     node->next = NULL;
     node->prev = NULL;
@@ -67,6 +67,13 @@ template <class ListT> inline void insertIntoLL(ListT** next_pointer, ListT* nex
     next->prev = next_pointer;
 }
 
+template <class ListT, typename Func> inline void forEach(ListT* list, Func func) {
+    auto cur = list;
+    while (cur) {
+        func(cur);
+        cur = cur->next;
+    }
+}
 
 template <class ListT, typename Free> inline void sweepList(ListT* head, Free free_func) {
     auto cur = head;
@@ -576,13 +583,7 @@ void LargeArena::freeUnmarked() {
 }
 
 void LargeArena::getStatistics(HeapStatistics* stats) {
-    LargeObj* cur = head;
-    while (cur) {
-        GCAllocation* al = cur->data;
-        addStatistic(stats, al, cur->size);
-
-        cur = cur->next;
-    }
+    forEach(head, [stats](LargeObj* obj) { addStatistic(stats, obj->data, obj->size); });
 }
 
 
@@ -774,13 +775,7 @@ void HugeArena::freeUnmarked() {
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {
-    HugeObj* cur = head;
-    while (cur) {
-        GCAllocation* al = cur->data;
-        addStatistic(stats, al, cur->capacity());
-
-        cur = cur->next;
-    }
+    forEach(head, [stats](HugeObj* obj) { addStatistic(stats, obj->data, obj->capacity()); });
 }
 
 void HugeArena::_freeHugeObj(HugeObj* lobj) {

@@ -389,6 +389,12 @@ public:
     Heap() : small_arena(this), large_arena(this), huge_arena(this) {}
 
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes) {
+
+        // TODO(toshok): there is duplicate code in each of the
+        // ::realloc methods to test whether the allocation can be
+        // reused.  Would be nice to factor it all out here into this
+        // method.
+
         if (large_arena.contains(alloc)) {
             return large_arena.realloc(alloc, bytes);
         } else if (huge_arena.contains(alloc)) {
