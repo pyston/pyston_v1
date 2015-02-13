@@ -997,6 +997,7 @@ public:
         NONE,
         NONZERO,
         SET_EXC_INFO,
+        UNCACHE_EXC_INFO,
     } opcode;
     std::vector<AST_expr*> args;
 

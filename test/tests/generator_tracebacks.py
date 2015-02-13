@@ -1,6 +1,3 @@
-# expected: fail
-# - wip
-
 # Generators participate in the notional Python stack just like normal function calls do,
 # even if we implement them using separate C stacks.
 #
@@ -8,6 +5,7 @@
 # get inherited when we go into a generator
 
 # exc_info gets passed into generators (at both begin and send()) and cleared like normal on the way out:
+import sys
 def f12():
     print
     print "f12"
@@ -25,6 +23,7 @@ def f12():
         print "after KeyError:", sys.exc_info()[0]
         yield 2
 
+    print list(g())
     try:
         raise AttributeError()
     except:
@@ -32,6 +31,7 @@ def f12():
 
     i = g()
     i.next()
+    print list(g())
     try:
         1/0
     except:

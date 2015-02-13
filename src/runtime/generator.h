@@ -18,11 +18,15 @@
 #include "core/types.h"
 #include "runtime/types.h"
 
+struct ucontext;
+
 namespace pyston {
 
 extern BoxedClass* generator_cls;
 
 void setupGenerator();
+void generatorEntry(BoxedGenerator* g);
+ucontext* getReturnContextForGeneratorFrame(void* frame_addr);
 
 extern "C" Box* yield(BoxedGenerator* obj, Box* value);
 extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);

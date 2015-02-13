@@ -41,13 +41,38 @@ static std::vector<uint64_t> available_addrs;
 #define STACK_REDZONE_SIZE PAGE_SIZE
 #define MAX_STACK_SIZE (4 * 1024 * 1024)
 
-static void generatorEntry(BoxedGenerator* g) {
+static std::unordered_map<void*, BoxedGenerator*> s_generator_map;
+static_assert(THREADING_USE_GIL, "have to make the generator map thread safe!");
+
+class RegisterHelper {
+private:
+    void* frame_addr;
+
+public:
+    RegisterHelper(BoxedGenerator* generator, void* frame_addr) : frame_addr(frame_addr) {
+        s_generator_map[frame_addr] = generator;
+    }
+    ~RegisterHelper() {
+        assert(s_generator_map.count(frame_addr));
+        s_generator_map.erase(frame_addr);
+    }
+};
+
+ucontext* getReturnContextForGeneratorFrame(void* frame_addr) {
+    BoxedGenerator* generator = s_generator_map[frame_addr];
+    assert(generator);
+    return &generator->returnContext;
+}
+
+void generatorEntry(BoxedGenerator* g) {
     assert(g->cls == generator_cls);
     assert(g->function->cls == function_cls);
 
     threading::pushGenerator(g, g->stack_begin, (void*)g->returnContext.uc_mcontext.gregs[REG_RSP]);
 
     try {
+        RegisterHelper context_registerer(g, __builtin_frame_address(0));
+
         // call body of the generator
         BoxedFunctionBase* func = g->function;
 

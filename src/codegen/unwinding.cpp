@@ -29,6 +29,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/stackmaps.h"
 #include "core/util.h"
+#include "runtime/generator.h"
 #include "runtime/traceback.h"
 #include "runtime/types.h"
 
@@ -328,25 +329,17 @@ public:
         return rtn;
     }
 
-    bool isMainInterpreterFunc(unw_word_t ip) {
-        // Remember the addr of the end of the interpreter function because unw_get_proc_info is slow and if we know
-        // the bounds we can replace it with pointer comparisons.
-        static intptr_t interpreter_instr_end = 0; // first ip NOT covered by interpreter func
-        if (interpreter_instr_end == 0) {
-            unw_proc_info_t pip;
-            int code = unw_get_proc_info(&this->cursor, &pip);
-            RELEASE_ASSERT(code == 0, "%d", code);
-            if (pip.start_ip == (intptr_t)interpreter_instr_addr) {
-                interpreter_instr_end = pip.end_ip;
-                return true;
-            }
-        } else if (ip >= (intptr_t)interpreter_instr_addr && ip < interpreter_instr_end) {
-            return true;
-        }
-        return false;
+    unw_word_t getFunctionEnd(unw_word_t ip) {
+        unw_proc_info_t pip;
+        int ret = unw_get_proc_info_by_ip(unw_local_addr_space, ip, &pip, NULL);
+        RELEASE_ASSERT(ret == 0 && pip.end_ip, "");
+        return pip.end_ip;
     }
 
     bool incr() {
+        static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
+        static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
+
         bool was_osr = cur_is_osr;
 
         while (true) {
@@ -377,7 +370,7 @@ public:
                 return true;
             }
 
-            if (isMainInterpreterFunc(ip)) {
+            if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
                 unw_word_t bp;
                 unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
 
@@ -393,6 +386,15 @@ public:
                 }
 
                 return true;
+            }
+
+            if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
+                // for generators continue unwinding in the context in which the generator got called
+                static_assert(sizeof(ucontext_t) == sizeof(unw_context_t), "");
+                unw_word_t bp;
+                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
+                ucontext_t* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
+                unw_init_local(&cursor, remote_ctx);
             }
 
             // keep unwinding

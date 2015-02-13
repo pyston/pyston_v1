@@ -562,6 +562,10 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
         getFrameInfo()->exc = ExcInfo(type.o, value.o, traceback.o);
         v = None;
+    } else if (node->opcode == AST_LangPrimitive::UNCACHE_EXC_INFO) {
+        assert(node->args.empty());
+        getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
+        v = None;
     } else
         RELEASE_ASSERT(0, "not implemented");
     return v;

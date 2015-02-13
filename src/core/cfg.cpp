@@ -1006,7 +1006,13 @@ private:
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
-        return rtn;
+
+        InternedString node_name(nodeName(rtn));
+        pushAssign(node_name, rtn);
+
+        push_back(makeExpr(new AST_LangPrimitive(AST_LangPrimitive::UNCACHE_EXC_INFO)));
+
+        return makeName(node_name, AST_TYPE::Load, node->lineno);
     }
 
     AST_expr* remapExpr(AST_expr* node, bool wrap_with_assign = true) {
