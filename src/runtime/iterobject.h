@@ -45,7 +45,7 @@ public:
     Box* iter;
     Box* next;
 
-    BoxedIterWrapper(Box* iter) : iter(iter) {}
+    BoxedIterWrapper(Box* iter) : iter(iter), next(NULL) {}
 
     DEFAULT_CLASS(iterwrapper_cls);
 };
