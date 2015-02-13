@@ -237,37 +237,6 @@ Box* Box::nextIC() {
     return this->cls->callNextIC(this);
 }
 
-BoxIterator& BoxIterator::operator++() {
-    static std::string next_str("next");
-
-    assert(iter);
-
-    Box* hasnext = iter->hasnextOrNullIC();
-    if (hasnext) {
-        if (hasnext->nonzeroIC()) {
-            value = iter->nextIC();
-        } else {
-            iter = nullptr;
-            value = nullptr;
-        }
-    } else {
-        try {
-            value = iter->nextIC();
-        } catch (ExcInfo e) {
-            if (e.matches(StopIteration)) {
-                iter = nullptr;
-                value = nullptr;
-            } else
-                throw e;
-        }
-    }
-    return *this;
-}
-
-void BoxIterator::gcHandler(GCVisitor* v) {
-    v->visitPotential(iter);
-    v->visitPotential(value);
-}
 
 std::string builtinStr("__builtin__");
 
