@@ -880,6 +880,8 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     Timer _t2;
     long irgen_us = 0;
 
+    assert((entry_descriptor != NULL) + (spec != NULL) == 1);
+
     if (VERBOSITY("irgen") >= 1)
         source->cfg->print();
 
@@ -896,12 +898,14 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     ////
     // Initializing the llvm-level structures:
 
-    int nargs = param_names->totalParameters();
-    ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
-
 
     std::vector<llvm::Type*> llvm_arg_types;
     if (entry_descriptor == NULL) {
+        assert(spec);
+
+        int nargs = param_names->totalParameters();
+        ASSERT(nargs == spec->arg_types.size(), "%d %ld", nargs, spec->arg_types.size());
+
         if (source->getScopeInfo()->takesClosure())
             llvm_arg_types.push_back(g.llvm_closure_type_ptr);
 
@@ -929,13 +933,17 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         }
     }
 
-    llvm::FunctionType* ft = llvm::FunctionType::get(spec->rtn_type->llvmType(), llvm_arg_types, false /*vararg*/);
-
-    llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, g.cur_module);
-    // g.func_registry.registerFunction(f, g.cur_module);
 
     CompiledFunction* cf
-        = new CompiledFunction(f, spec, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
+        = new CompiledFunction(NULL, spec, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
+
+    llvm::FunctionType* ft = llvm::FunctionType::get(cf->getReturnType()->llvmType(), llvm_arg_types, false /*vararg*/);
+
+    llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, g.cur_module);
+
+    cf->func = f;
+
+    // g.func_registry.registerFunction(f, g.cur_module);
 
     llvm::MDNode* dbg_funcinfo = setupDebugInfo(source, f, nameprefix);
 

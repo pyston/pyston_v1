@@ -83,10 +83,7 @@ public:
     llvm::Value* getScratchSpace(int min_bytes);
     llvm::Value* getFrameInfoVar();
 
-    ConcreteCompilerType* getReturnType() {
-        assert(cf->spec);
-        return cf->spec->rtn_type;
-    }
+    ConcreteCompilerType* getReturnType() { return cf->getReturnType(); }
 
     SourceInfo* getSourceInfo() { return source_info; }
 
