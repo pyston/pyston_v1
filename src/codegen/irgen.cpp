@@ -522,8 +522,14 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     = emitter->getBuilder()->CreateAdd(cur_call_count, getConstantInt(1, g.i64));
                 emitter->getBuilder()->CreateStore(new_call_count, call_count_ptr);
 
-                assert(effort == EffortLevel::MINIMAL);
-                int reopt_threshold = REOPT_THRESHOLD_BASELINE;
+                int reopt_threshold;
+                if (effort == EffortLevel::MINIMAL)
+                    reopt_threshold = REOPT_THRESHOLD_BASELINE;
+                else if (effort == EffortLevel::MODERATE)
+                    reopt_threshold = REOPT_THRESHOLD_T2;
+                else
+                    RELEASE_ASSERT(0, "Unknown effort: %d", (int)effort);
+
                 llvm::Value* reopt_test
                     = emitter->getBuilder()->CreateICmpSGT(new_call_count, getConstantInt(reopt_threshold, g.i64));
 
@@ -950,7 +956,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     irgen_us += _t2.split();
 
     TypeAnalysis::SpeculationLevel speculation_level = TypeAnalysis::NONE;
-    EffortLevel min_speculation_level = EffortLevel::MAXIMAL;
+    EffortLevel min_speculation_level = EffortLevel::MODERATE;
     if (ENABLE_SPECULATION && effort >= min_speculation_level)
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types;

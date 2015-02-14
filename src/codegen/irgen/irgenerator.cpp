@@ -1751,8 +1751,15 @@ private:
         llvm::Value* newcount = emitter.getBuilder()->CreateAdd(curcount, getConstantInt(1, g.i64));
         emitter.getBuilder()->CreateStore(newcount, edgecount_ptr);
 
-        assert(irstate->getEffortLevel() == EffortLevel::MINIMAL);
-        llvm::Value* osr_test = emitter.getBuilder()->CreateICmpSGT(newcount, getConstantInt(OSR_THRESHOLD_BASELINE));
+        auto effort = irstate->getEffortLevel();
+        int osr_threshold;
+        if (effort == EffortLevel::MINIMAL)
+            osr_threshold = OSR_THRESHOLD_BASELINE;
+        else if (effort == EffortLevel::MODERATE)
+            osr_threshold = OSR_THRESHOLD_T2;
+        else
+            RELEASE_ASSERT(0, "Unknown effort: %d", (int)effort);
+        llvm::Value* osr_test = emitter.getBuilder()->CreateICmpSGT(newcount, getConstantInt(osr_threshold));
 
         llvm::Metadata* md_vals[]
             = { llvm::MDString::get(g.context, "branch_weights"), llvm::ConstantAsMetadata::get(getConstantInt(1)),

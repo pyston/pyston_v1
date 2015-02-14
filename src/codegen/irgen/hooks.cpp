@@ -192,8 +192,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\nDoing OSR-entry partial compile of " << name << ", starting with backedge to block "
-               << entry_descriptor->backedge->target->idx << '\n';
+            ss << "\033[34;1mDoing OSR-entry partial compile of " << name << ", starting with backedge to block "
+               << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort;
         ss << "\033[0m";
@@ -249,6 +249,13 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             static StatCounter us_compiling("us_compiling_1_minimal");
             us_compiling.log(us);
             static StatCounter num_compiles("num_compiles_1_minimal");
+            num_compiles.log();
+            break;
+        }
+        case EffortLevel::MODERATE: {
+            static StatCounter us_compiling("us_compiling_2_moderate");
+            us_compiling.log(us);
+            static StatCounter num_compiles("num_compiles_2_moderate");
             num_compiles.log();
             break;
         }
@@ -420,6 +427,8 @@ extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
     if (cf->effort == EffortLevel::INTERPRETED)
         new_effort = EffortLevel::MINIMAL;
     else if (cf->effort == EffortLevel::MINIMAL)
+        new_effort = EffortLevel::MODERATE;
+    else if (cf->effort == EffortLevel::MODERATE)
         new_effort = EffortLevel::MAXIMAL;
     else
         RELEASE_ASSERT(0, "unknown effort: %d", cf->effort);

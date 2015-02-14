@@ -9,10 +9,13 @@
 import subprocess
 import threading
 
+print_lock = threading.Lock()
+
 def worker(id):
     for i in xrange(100):
         subprocess.check_call(["true"])
-    print "done"
+    with print_lock:
+        print "done"
 
 threads = []
 for i in xrange(4):

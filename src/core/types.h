@@ -99,7 +99,8 @@ using gc::GCVisitor;
 enum class EffortLevel {
     INTERPRETED = 0,
     MINIMAL = 1,
-    MAXIMAL = 3, // keep the old tier numbering for familiarity
+    MODERATE = 2,
+    MAXIMAL = 3,
 };
 
 class CompilerType;
