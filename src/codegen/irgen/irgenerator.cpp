@@ -105,15 +105,6 @@ ScopeInfo* IRGenState::getScopeInfoForNode(AST* node) {
     return source->scoping->getScopeInfoForNode(node);
 }
 
-GuardList::BlockEntryGuard::BlockEntryGuard(CFGBlock* cfg_block, llvm::BranchInst* branch,
-                                            const SymbolTable& symbol_table)
-    : cfg_block(cfg_block), branch(branch) {
-    DupCache cache;
-    for (const auto& p : symbol_table) {
-        this->symbol_table[p.first] = p.second->dup(cache);
-    }
-}
-
 class IREmitterImpl : public IREmitter {
 private:
     IRGenState* irstate;
@@ -297,8 +288,6 @@ private:
     std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks;
     CFGBlock* myblock;
     TypeAnalysis* types;
-    GuardList& out_guards;
-    const GuardList& in_guards;
 
     enum State {
         PARTIAL,  // running through a partial block, waiting to hit the first in_guard
@@ -309,11 +298,9 @@ private:
 
 public:
     IRGeneratorImpl(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
-                    CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards, const GuardList& in_guards,
-                    bool is_partial)
+                    CFGBlock* myblock, TypeAnalysis* types, bool is_partial)
         : irstate(irstate), curblock(entry_blocks[myblock]), emitter(irstate, curblock, this),
-          entry_blocks(entry_blocks), myblock(myblock), types(types), out_guards(out_guards), in_guards(in_guards),
-          state(is_partial ? PARTIAL : RUNNING) {}
+          entry_blocks(entry_blocks), myblock(myblock), types(types), state(is_partial ? PARTIAL : RUNNING) {}
 
     ~IRGeneratorImpl() { delete emitter.getBuilder(); }
 
@@ -2426,9 +2413,8 @@ public:
 };
 
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
-                               CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,
-                               const GuardList& in_guards, bool is_partial) {
-    return new IRGeneratorImpl(irstate, entry_blocks, myblock, types, out_guards, in_guards, is_partial);
+                               CFGBlock* myblock, TypeAnalysis* types, bool is_partial) {
+    return new IRGeneratorImpl(irstate, entry_blocks, myblock, types, is_partial);
 }
 
 CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {

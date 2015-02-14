@@ -98,55 +98,6 @@ public:
     ParamNames* getParamNames() { return param_names; }
 };
 
-class GuardList {
-public:
-    struct BlockEntryGuard {
-        CFGBlock* cfg_block;
-        llvm::BranchInst* branch;
-        SymbolTable symbol_table;
-
-        BlockEntryGuard(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& symbol_table);
-    };
-
-private:
-    std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*>> block_begin_guards;
-
-public:
-    void getBlocksWithGuards(std::unordered_set<CFGBlock*>& add_to) {
-        for (const auto& p : block_begin_guards) {
-            add_to.insert(p.first);
-        }
-    }
-
-    void assertGotPatched() {
-#ifndef NDEBUG
-        for (const auto& p : block_begin_guards) {
-            for (const auto g : p.second) {
-                assert(g->branch->getSuccessor(0) != g->branch->getSuccessor(1));
-            }
-        }
-#endif
-    }
-
-    bool isEmpty() const { return block_begin_guards.size() == 0; }
-
-    // void registerGuardForBlockEntry(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& st) {
-    //// printf("Adding guard for block %p, in %p\n", cfg_block, this);
-    // std::vector<BlockEntryGuard*>& v = block_begin_guards[cfg_block];
-    // v.push_back(new BlockEntryGuard(cfg_block, branch, st));
-    //}
-
-    const std::vector<BlockEntryGuard*>& getGuardsForBlock(CFGBlock* block) const {
-        std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*>>::const_iterator it
-            = block_begin_guards.find(block);
-        if (it != block_begin_guards.end())
-            return it->second;
-
-        static std::vector<BlockEntryGuard*> empty_list;
-        return empty_list;
-    }
-};
-
 class IRGenerator {
 private:
 public:
@@ -175,8 +126,7 @@ public:
 class IREmitter;
 IREmitter* createIREmitter(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator = NULL);
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
-                               CFGBlock* myblock, TypeAnalysis* types, GuardList& out_guards,
-                               const GuardList& in_guards, bool is_partial);
+                               CFGBlock* myblock, TypeAnalysis* types, bool is_partial);
 
 CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source);
 }

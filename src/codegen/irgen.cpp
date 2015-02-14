@@ -330,9 +330,8 @@ llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var
     return phi;
 }
 
-static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_guards, const GuardList& in_guards,
-                    TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor, const BlockSet& full_blocks,
-                    const BlockSet& partial_blocks) {
+static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor,
+                    const BlockSet& full_blocks, const BlockSet& partial_blocks) {
     SourceInfo* source = irstate->getSourceInfo();
     EffortLevel effort = irstate->getEffortLevel();
     CompiledFunction* cf = irstate->getCurFunction();
@@ -351,11 +350,12 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         }
 
         char buf[40];
-        snprintf(buf, 40, "%s_block%d", bb_type, block->idx);
+        snprintf(buf, 40, "block%d", block->idx);
         llvm_entry_blocks[block] = llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction());
     }
 
-    llvm::BasicBlock* osr_entry_block = NULL;     // the function entry block, where we add the type guards
+    llvm::BasicBlock* osr_entry_block
+        = NULL; // the function entry block, where we add the type guards [no guards anymore]
     llvm::BasicBlock* osr_unbox_block_end = NULL; // the block after type guards where we up/down-convert things
     ConcreteSymbolTable* osr_syms = NULL;         // syms after conversion
     if (entry_descriptor != NULL) {
@@ -375,10 +375,6 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         std::unique_ptr<IREmitter> unbox_emitter(createIREmitter(irstate, osr_unbox_block_end));
 
         CFGBlock* target_block = entry_descriptor->backedge->target;
-
-        // Currently we AND all the type guards together and then do just a single jump;
-        // guard_val is the current AND'd value, or NULL if there weren't any guards
-        llvm::Value* guard_val = NULL;
 
         std::vector<llvm::Value*> func_args;
         for (llvm::Function::arg_iterator AI = irstate->getLLVMFunction()->arg_begin();
@@ -439,88 +435,8 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 v = converted->getValue();
                 delete converted;
             } else {
-                printf("OSR'd with a %s into a partial compile that expects a %s?\n", p.second->debugName().c_str(),
-                       phi_type->debugName().c_str());
-                RELEASE_ASSERT(0, "whyy");
-#if 0
-                ASSERT(p.second == UNKNOWN, "%s", p.second->debugName().c_str());
-                BoxedClass* speculated_class = NULL;
-                if (phi_type == INT) {
-                    speculated_class = int_cls;
-                } else if (phi_type == FLOAT) {
-                    speculated_class = float_cls;
-                } else if (phi_type == BOOL) {
-                    speculated_class = bool_cls;
-                } else {
-                    speculated_class = phi_type->guaranteedClass();
-                }
-                ASSERT(speculated_class, "%s", phi_type->debugName().c_str());
-
-                assert(p.first.str()[0] != '!');
-
-                // TODO cache this
-                InternedString is_defined_name = getIsDefinedName(p.first, source->getInternedStrings());
-                llvm::Value* prev_guard_val = NULL;
-
-                ConcreteCompilerVariable* is_defined_var = NULL;
-                if (entry_descriptor->args.count(is_defined_name)) {
-                    // relying on the fact that we are iterating over the names in order
-                    // and the fake names precede the real names:
-                    assert(osr_syms->count(is_defined_name));
-
-                    is_defined_var = (*osr_syms)[is_defined_name];
-                    assert(is_defined_var->getType() == BOOL);
-                }
-
-                guard_val = handlePotentiallyUndefined(
-                    is_defined_var, g.i1, osr_entry_block_end, *entry_emitter, true,
-                    [speculated_class, guard_val, &p, from_arg](IREmitter& emitter) {
-                        llvm::Value* type_check = ConcreteCompilerVariable(p.second, from_arg, true)
-                                                      .makeClassCheck(emitter, speculated_class);
-                        // printf("Making osr entry guard to make sure that %s is a %s (given as a
-                        // %s)\n", p.first.c_str(),
-                        // getNameOfClass(speculated_class)->c_str(),
-                        // p.second->debugName().c_str());
-                        if (guard_val) {
-                            return emitter.getBuilder()->CreateAnd(guard_val, type_check);
-                        } else {
-                            return type_check;
-                        }
-                    },
-                    [guard_val](IREmitter& emitter) { return guard_val ? guard_val : getConstantInt(1, g.i1); });
-
-                if (speculated_class == int_cls) {
-                    v = handlePotentiallyUndefined(
-                        is_defined_var, INT->llvmType(), osr_unbox_block_end, *unbox_emitter, true,
-                        [from_arg](IREmitter& emitter) {
-                            auto v = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
-                            (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(emitter);
-                            return v;
-                        },
-                        [](IREmitter& emitter) { return llvm::UndefValue::get(INT->llvmType()); });
-                } else if (speculated_class == float_cls) {
-                    v = handlePotentiallyUndefined(
-                        is_defined_var, FLOAT->llvmType(), osr_unbox_block_end, *unbox_emitter, true,
-                        [from_arg](IREmitter& emitter) {
-                            auto v = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
-                            (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(emitter);
-                            return v;
-                        },
-                        [](IREmitter& emitter) { return llvm::UndefValue::get(FLOAT->llvmType()); });
-                } else if (speculated_class == bool_cls) {
-                    v = handlePotentiallyUndefined(
-                        is_defined_var, BOOL->llvmType(), osr_unbox_block_end, *unbox_emitter, true,
-                        [from_arg](IREmitter& emitter) {
-                            auto v = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, from_arg);
-                            (new ConcreteCompilerVariable(BOXED_BOOL, from_arg, true))->decvref(emitter);
-                            return boolFromI1(emitter, v)->getValue();
-                        },
-                        [](IREmitter& emitter) { return llvm::UndefValue::get(BOOL->llvmType()); });
-                } else {
-                    assert(phi_type == typeFromClass(speculated_class));
-                    v = from_arg;
-                }
-#endif
+                RELEASE_ASSERT(0, "OSR'd with a %s into a partial compile that expects a %s?\n",
+                               p.second->debugName().c_str(), phi_type->debugName().c_str());
             }
 
             if (VERBOSITY("irgen"))
@@ -529,19 +445,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v, true);
         }
 
-        if (guard_val) {
-            abort();
-            // Create the guard with both branches leading to the success_bb,
-            // and let the deopt path change the failure case to point to the
-            // as-yet-unknown deopt block.
-            // TODO Not the best approach since if we fail to do that patching,
-            // the guard will just silently be ignored.
-            llvm::BranchInst* br
-                = entry_emitter->getBuilder()->CreateCondBr(guard_val, osr_unbox_block, osr_unbox_block);
-            // out_guards.registerGuardForBlockEntry(target_block, br, *initial_syms);
-        } else {
-            entry_emitter->getBuilder()->CreateBr(osr_unbox_block);
-        }
+        entry_emitter->getBuilder()->CreateBr(osr_unbox_block);
         unbox_emitter->getBuilder()->CreateBr(llvm_entry_blocks[entry_descriptor->backedge->target]);
 
         for (const auto& p : *initial_syms) {
@@ -587,7 +491,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         CFGBlock* pred = traversal_order[_i].second;
 
         if (VERBOSITY("irgen") >= 1)
-            printf("processing %s block %d\n", bb_type, block->idx);
+            printf("processing block %d\n", block->idx);
 
         bool is_partial = false;
         if (partial_blocks.count(block)) {
@@ -604,8 +508,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             continue;
         }
 
-        std::unique_ptr<IRGenerator> generator(
-            createIRGenerator(irstate, llvm_entry_blocks, block, types, out_guards, in_guards, is_partial));
+        std::unique_ptr<IRGenerator> generator(createIRGenerator(irstate, llvm_entry_blocks, block, types, is_partial));
         llvm::BasicBlock* entry_block_end = llvm_entry_blocks[block];
         std::unique_ptr<IREmitter> emitter(createIREmitter(irstate, entry_block_end));
 
@@ -620,7 +523,6 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             // pass
         } else if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
-            assert(strcmp("opt", bb_type) == 0);
 
             if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
                 && source->ast->type != AST_TYPE::Module) {
@@ -834,9 +736,6 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
         bool this_is_osr_entry = (entry_descriptor && b == entry_descriptor->backedge->target);
 
-        const std::vector<GuardList::BlockEntryGuard*>& block_guards = in_guards.getGuardsForBlock(b);
-        // printf("Found %ld guards for block %p, for %p\n", block_guards.size(), b, &in_guards);
-
         for (int j = 0; j < b->predecessors.size(); j++) {
             CFGBlock* b2 = b->predecessors[j];
             if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
@@ -849,19 +748,6 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
 
         if (this_is_osr_entry) {
             compareKeyset(osr_syms, phis);
-        }
-
-        std::vector<IREmitter*> emitters;
-        std::vector<llvm::BasicBlock*> offramps;
-        for (int i = 0; i < block_guards.size(); i++) {
-            compareKeyset(&block_guards[i]->symbol_table, phis);
-
-            llvm::BasicBlock* off_ramp = llvm::BasicBlock::Create(g.context, "deopt_ramp", irstate->getLLVMFunction());
-            offramps.push_back(off_ramp);
-            IREmitter* emitter = createIREmitter(irstate, offramps[offramps.size() - 1]);
-            emitters.push_back(emitter);
-
-            block_guards[i]->branch->setSuccessor(1, off_ramp);
         }
 
         // Can't always add the phi incoming value right away, since we may have to create more
@@ -898,96 +784,9 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             }
 
             InternedString is_defined_name = getIsDefinedName(it->first, source->getInternedStrings());
-
-            for (int i = 0; i < block_guards.size(); i++) {
-                GuardList::BlockEntryGuard* guard = block_guards[i];
-                IREmitter* emitter = emitters[i];
-
-                auto is_defined_it = guard->symbol_table.find(is_defined_name);
-                ConcreteCompilerVariable* is_defined_var = nullptr;
-                if (is_defined_it != guard->symbol_table.end()) {
-                    auto var = is_defined_it->second;
-                    assert(var->getType() == BOOL);
-                    is_defined_var = static_cast<ConcreteCompilerVariable*>(var);
-                }
-
-                CompilerVariable* unconverted = NULL;
-                llvm::Value* val = handlePotentiallyUndefined(
-                    is_defined_var, it->second.first->llvmType(), offramps[i], *emitter, true,
-                    [=, &unconverted](IREmitter& emitter) {
-                        unconverted = guard->symbol_table[it->first];
-                        ConcreteCompilerVariable* v;
-                        if (unconverted->canConvertTo(it->second.first)) {
-                            v = unconverted->makeConverted(emitter, it->second.first);
-                            assert(v);
-                            assert(v->isGrabbed());
-                        } else {
-                            // This path is for handling the case that we did no type analysis in the previous tier,
-                            // but in this tier we know that even in the deopt branch with no speculations, that
-                            // the type is more refined than what we got from the previous tier.
-                            //
-                            // We're going to blindly assume that we're right about what the type should be.
-                            assert(unconverted->getType() == UNKNOWN);
-                            assert(strcmp(bb_type, "deopt") == 0);
-
-                            ConcreteCompilerVariable* converted = unconverted->makeConverted(emitter, UNKNOWN);
-
-                            if (it->second.first->llvmType() == g.llvm_value_type_ptr) {
-                                v = new ConcreteCompilerVariable(it->second.first, converted->getValue(), true);
-                            } else if (it->second.first == FLOAT) {
-                                llvm::Value* unboxed
-                                    = emitter.getBuilder()->CreateCall(g.funcs.unboxFloat, converted->getValue());
-                                v = new ConcreteCompilerVariable(FLOAT, unboxed, true);
-                            } else if (it->second.first == INT) {
-                                llvm::Value* unboxed
-                                    = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, converted->getValue());
-                                v = new ConcreteCompilerVariable(INT, unboxed, true);
-                            } else if (it->second.first == BOOL) {
-                                llvm::Value* unboxed
-                                    = emitter.getBuilder()->CreateCall(g.funcs.unboxBool, converted->getValue());
-                                v = boolFromI1(emitter, unboxed);
-                            } else {
-                                printf("%s\n", it->second.first->debugName().c_str());
-                                abort();
-                            }
-
-                            converted->decvref(emitter);
-
-                            /*
-                        if (speculated_class == int_cls) {
-                            v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxInt, from_arg);
-                            (new ConcreteCompilerVariable(BOXED_INT, from_arg, true))->decvref(*unbox_emitter);
-                        } else if (speculated_class == float_cls) {
-                            v = unbox_emitter->getBuilder()->CreateCall(g.funcs.unboxFloat, from_arg);
-                            (new ConcreteCompilerVariable(BOXED_FLOAT, from_arg, true))->decvref(*unbox_emitter);
-                        } else {
-                            assert(phi_type == typeFromClass(speculated_class));
-                            v = from_arg;
-                        }
-                        */
-                        }
-
-
-                        ASSERT(it->second.first == v->getType(), "");
-                        assert(it->second.first->llvmType() == v->getValue()->getType());
-
-                        return v->getValue();
-                    },
-                    [=](IREmitter& emitter) { return llvm::UndefValue::get(it->second.first->llvmType()); });
-
-                phi_args.emplace_back(llvm_phi, val, offramps[i]);
-
-                // TODO not sure if this is right:
-                unconverted->decvref(*emitter);
-            }
         }
         for (auto t : phi_args) {
             std::get<0>(t)->addIncoming(std::get<1>(t), std::get<2>(t));
-        }
-
-        for (int i = 0; i < block_guards.size(); i++) {
-            emitters[i]->getBuilder()->CreateBr(llvm_entry_blocks[b]);
-            delete emitters[i];
         }
     }
 
@@ -1184,8 +983,6 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
     _t2.split();
 
-    GuardList guards;
-
     BlockSet full_blocks, partial_blocks;
     if (entry_descriptor == NULL) {
         for (CFGBlock* b : source->cfg->blocks) {
@@ -1198,35 +995,9 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
     IRGenState irstate(cf, source, param_names, getGCBuilder(), dbg_funcinfo);
 
-    emitBBs(&irstate, "opt", guards, GuardList(), types, entry_descriptor, full_blocks, partial_blocks);
+    emitBBs(&irstate, types, entry_descriptor, full_blocks, partial_blocks);
 
     // De-opt handling:
-
-    if (!guards.isEmpty()) {
-        RELEASE_ASSERT(0, "should not be any guards any more!");
-        BlockSet deopt_full_blocks, deopt_partial_blocks;
-        GuardList deopt_guards;
-        // typedef std::unordered_map<CFGBlock*, std::unordered_map<AST_expr*, GuardList::ExprTypeGuard*> > Worklist;
-        // Worklist guard_worklist;
-
-        guards.getBlocksWithGuards(deopt_full_blocks);
-
-        computeBlockSetClosure(deopt_full_blocks, deopt_partial_blocks);
-
-        assert(deopt_full_blocks.size() || deopt_partial_blocks.size());
-
-        irgen_us += _t2.split();
-        TypeAnalysis* deopt_types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort,
-                                                   TypeAnalysis::NONE, source->getScopeInfo());
-        _t2.split();
-
-        emitBBs(&irstate, "deopt", deopt_guards, guards, deopt_types, NULL, deopt_full_blocks, deopt_partial_blocks);
-        assert(deopt_guards.isEmpty());
-        deopt_guards.assertGotPatched();
-
-        delete deopt_types;
-    }
-    guards.assertGotPatched();
 
     delete types;
 
