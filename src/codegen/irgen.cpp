@@ -202,21 +202,16 @@ static bool compareBlockPairs(const std::pair<CFGBlock*, CFGBlock*>& p1, const s
     return p1.first->idx < p2.first->idx;
 }
 
-static std::vector<std::pair<CFGBlock*, CFGBlock*>>
-computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_blocks, CFGBlock* start) {
+static std::vector<std::pair<CFGBlock*, CFGBlock*>> computeBlockTraversalOrder(const BlockSet& blocks,
+                                                                               CFGBlock* start) {
 
     std::vector<std::pair<CFGBlock*, CFGBlock*>> rtn;
     std::unordered_set<CFGBlock*> in_queue;
 
     if (start) {
-        assert(full_blocks.count(start));
+        assert(blocks.count(start));
         in_queue.insert(start);
         rtn.push_back(std::make_pair(start, (CFGBlock*)NULL));
-    }
-
-    for (CFGBlock* b : partial_blocks) {
-        in_queue.insert(b);
-        rtn.push_back(std::make_pair(b, (CFGBlock*)NULL));
     }
 
     // It's important for debugging purposes that the order is deterministic, but the iteration
@@ -224,7 +219,7 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
     std::sort(rtn.begin(), rtn.end(), compareBlockPairs);
 
     int idx = 0;
-    while (rtn.size() < full_blocks.size() + partial_blocks.size()) {
+    while (rtn.size() < blocks.size()) {
         // TODO: come up with an alternative algorithm that outputs
         // the blocks in "as close to in-order as possible".
         // Do this by iterating over all blocks and picking the smallest one
@@ -234,7 +229,7 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
 
             for (int i = 0; i < cur->successors.size(); i++) {
                 CFGBlock* b = cur->successors[i];
-                assert(full_blocks.count(b) || partial_blocks.count(b));
+                assert(blocks.count(b));
                 if (in_queue.count(b))
                     continue;
 
@@ -245,11 +240,11 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
             idx++;
         }
 
-        if (rtn.size() == full_blocks.size() + partial_blocks.size())
+        if (rtn.size() == blocks.size())
             break;
 
         CFGBlock* best = NULL;
-        for (CFGBlock* b : full_blocks) {
+        for (CFGBlock* b : blocks) {
             if (in_queue.count(b))
                 continue;
 
@@ -268,7 +263,7 @@ computeBlockTraversalOrder(const BlockSet& full_blocks, const BlockSet& partial_
         rtn.push_back(std::make_pair(best, (CFGBlock*)NULL));
     }
 
-    ASSERT(rtn.size() == full_blocks.size() + partial_blocks.size(), "%ld\n", rtn.size());
+    ASSERT(rtn.size() == blocks.size(), "%ld\n", rtn.size());
     return rtn;
 }
 
@@ -331,7 +326,7 @@ llvm::Value* handlePotentiallyUndefined(ConcreteCompilerVariable* is_defined_var
 }
 
 static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDescriptor* entry_descriptor,
-                    const BlockSet& full_blocks, const BlockSet& partial_blocks) {
+                    const BlockSet& blocks) {
     SourceInfo* source = irstate->getSourceInfo();
     EffortLevel effort = irstate->getEffortLevel();
     CompiledFunction* cf = irstate->getCurFunction();
@@ -339,12 +334,12 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     // llvm::MDNode* func_info = irstate->getFuncDbgInfo();
 
     if (entry_descriptor != NULL)
-        assert(full_blocks.count(source->cfg->getStartingBlock()) == 0);
+        assert(blocks.count(source->cfg->getStartingBlock()) == 0);
 
     // We need the entry blocks pre-allocated so that we can jump forward to them.
     std::unordered_map<CFGBlock*, llvm::BasicBlock*> llvm_entry_blocks;
     for (CFGBlock* block : source->cfg->blocks) {
-        if (partial_blocks.count(block) == 0 && full_blocks.count(block) == 0) {
+        if (blocks.count(block) == 0) {
             llvm_entry_blocks[block] = NULL;
             continue;
         }
@@ -435,8 +430,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 v = converted->getValue();
                 delete converted;
             } else {
-                RELEASE_ASSERT(0, "OSR'd with a %s into a partial compile that expects a %s?\n",
-                               p.second->debugName().c_str(), phi_type->debugName().c_str());
+                RELEASE_ASSERT(0, "OSR'd with a %s into a type inference of a %s?\n", p.second->debugName().c_str(),
+                               phi_type->debugName().c_str());
             }
 
             if (VERBOSITY("irgen"))
@@ -471,7 +466,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     CFGBlock* initial_block = NULL;
     if (entry_descriptor) {
         initial_block = entry_descriptor->backedge->target;
-    } else if (full_blocks.count(source->cfg->getStartingBlock())) {
+    } else if (blocks.count(source->cfg->getStartingBlock())) {
         initial_block = source->cfg->getStartingBlock();
     }
 
@@ -482,8 +477,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     // with a lower index value, so if the entry block is 0 then we can iterate in index
     // order.
     // The entry block doesn't have to be zero, so we have to calculate an allowable order here:
-    std::vector<std::pair<CFGBlock*, CFGBlock*>> traversal_order
-        = computeBlockTraversalOrder(full_blocks, partial_blocks, initial_block);
+    std::vector<std::pair<CFGBlock*, CFGBlock*>> traversal_order = computeBlockTraversalOrder(blocks, initial_block);
 
     std::unordered_set<CFGBlock*> into_hax;
     for (int _i = 0; _i < traversal_order.size(); _i++) {
@@ -493,12 +487,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         if (VERBOSITY("irgen") >= 1)
             printf("processing block %d\n", block->idx);
 
-        bool is_partial = false;
-        if (partial_blocks.count(block)) {
-            if (VERBOSITY("irgen") >= 1)
-                printf("is partial block\n");
-            is_partial = true;
-        } else if (!full_blocks.count(block)) {
+        if (!blocks.count(block)) {
             if (VERBOSITY("irgen") >= 1)
                 printf("Skipping this block\n");
             // created_phis[block] = NULL;
@@ -508,20 +497,15 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             continue;
         }
 
-        std::unique_ptr<IRGenerator> generator(createIRGenerator(irstate, llvm_entry_blocks, block, types, is_partial));
+        std::unique_ptr<IRGenerator> generator(createIRGenerator(irstate, llvm_entry_blocks, block, types));
         llvm::BasicBlock* entry_block_end = llvm_entry_blocks[block];
         std::unique_ptr<IREmitter> emitter(createIREmitter(irstate, entry_block_end));
 
-        PHITable* phis = NULL;
-        if (!is_partial) {
-            phis = new PHITable();
-            created_phis[block] = phis;
-        }
+        PHITable* phis = new PHITable();
+        created_phis[block] = phis;
 
         // Set initial symbol table:
-        if (is_partial) {
-            // pass
-        } else if (block == source->cfg->getStartingBlock()) {
+        if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
             if (ENABLE_REOPT && effort < EffortLevel::MAXIMAL && source->ast != NULL
@@ -641,7 +625,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
         } else {
             assert(pred);
-            assert(full_blocks.count(pred) || partial_blocks.count(pred));
+            assert(blocks.count(pred));
 
             if (block->predecessors.size() == 1) {
                 // If this block has only one predecessor, it by definition doesn't need any phi nodes.
@@ -738,7 +722,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
         for (int j = 0; j < b->predecessors.size(); j++) {
             CFGBlock* b2 = b->predecessors[j];
-            if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
+            if (blocks.count(b2) == 0)
                 continue;
 
             // printf("(%d %ld) -> (%d %ld)\n", b2->idx, phi_ending_symbol_tables[b2]->size(), b->idx, phis->size());
@@ -760,7 +744,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             llvm::PHINode* llvm_phi = it->second.second;
             for (int j = 0; j < b->predecessors.size(); j++) {
                 CFGBlock* b2 = b->predecessors[j];
-                if (full_blocks.count(b2) == 0 && partial_blocks.count(b2) == 0)
+                if (blocks.count(b2) == 0)
                     continue;
 
                 ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[b2])[it->first];
@@ -814,23 +798,17 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     }
 }
 
-static void computeBlockSetClosure(BlockSet& full_blocks, BlockSet& partial_blocks) {
+static void computeBlockSetClosure(BlockSet& blocks) {
     if (VERBOSITY("irgen") >= 1) {
-        printf("Initial full:");
-        for (CFGBlock* b : full_blocks) {
-            printf(" %d", b->idx);
-        }
-        printf("\n");
-        printf("Initial partial:");
-        for (CFGBlock* b : partial_blocks) {
+        printf("Initial:");
+        for (CFGBlock* b : blocks) {
             printf(" %d", b->idx);
         }
         printf("\n");
     }
     std::vector<CFGBlock*> q;
     BlockSet expanded;
-    q.insert(q.end(), full_blocks.begin(), full_blocks.end());
-    q.insert(q.end(), partial_blocks.begin(), partial_blocks.end());
+    q.insert(q.end(), blocks.begin(), blocks.end());
 
     while (q.size()) {
         CFGBlock* b = q.back();
@@ -842,20 +820,14 @@ static void computeBlockSetClosure(BlockSet& full_blocks, BlockSet& partial_bloc
 
         for (int i = 0; i < b->successors.size(); i++) {
             CFGBlock* b2 = b->successors[i];
-            partial_blocks.erase(b2);
-            full_blocks.insert(b2);
+            blocks.insert(b2);
             q.push_back(b2);
         }
     }
 
     if (VERBOSITY("irgen") >= 1) {
-        printf("Ending full:");
-        for (CFGBlock* b : full_blocks) {
-            printf(" %d", b->idx);
-        }
-        printf("\n");
-        printf("Ending partial:");
-        for (CFGBlock* b : partial_blocks) {
+        printf("Ending:");
+        for (CFGBlock* b : blocks) {
             printf(" %d", b->idx);
         }
         printf("\n");
@@ -983,19 +955,19 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
     _t2.split();
 
-    BlockSet full_blocks, partial_blocks;
+    BlockSet blocks;
     if (entry_descriptor == NULL) {
         for (CFGBlock* b : source->cfg->blocks) {
-            full_blocks.insert(b);
+            blocks.insert(b);
         }
     } else {
-        full_blocks.insert(entry_descriptor->backedge->target);
-        computeBlockSetClosure(full_blocks, partial_blocks);
+        blocks.insert(entry_descriptor->backedge->target);
+        computeBlockSetClosure(blocks);
     }
 
     IRGenState irstate(cf, source, param_names, getGCBuilder(), dbg_funcinfo);
 
-    emitBBs(&irstate, types, entry_descriptor, full_blocks, partial_blocks);
+    emitBBs(&irstate, types, entry_descriptor, blocks);
 
     // De-opt handling:
 

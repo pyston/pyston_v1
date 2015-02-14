@@ -290,7 +290,6 @@ private:
     TypeAnalysis* types;
 
     enum State {
-        PARTIAL,  // running through a partial block, waiting to hit the first in_guard
         RUNNING,  // normal
         DEAD,     // passed a Return statement; still syntatically valid but the code should not be compiled
         FINISHED, // passed a pseudo-node such as Branch or Jump; internal error if there are any more statements
@@ -298,9 +297,9 @@ private:
 
 public:
     IRGeneratorImpl(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
-                    CFGBlock* myblock, TypeAnalysis* types, bool is_partial)
+                    CFGBlock* myblock, TypeAnalysis* types)
         : irstate(irstate), curblock(entry_blocks[myblock]), emitter(irstate, curblock, this),
-          entry_blocks(entry_blocks), myblock(myblock), types(types), state(is_partial ? PARTIAL : RUNNING) {}
+          entry_blocks(entry_blocks), myblock(myblock), types(types), state(RUNNING) {}
 
     ~IRGeneratorImpl() { delete emitter.getBuilder(); }
 
@@ -362,8 +361,6 @@ private:
     }
 
     CompilerVariable* evalAttribute(AST_Attribute* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* value = evalExpr(node->value, unw_info);
 
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), &node->attr.str(), false);
@@ -372,8 +369,6 @@ private:
     }
 
     CompilerVariable* evalClsAttribute(AST_ClsAttribute* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* rtn = value->getattr(emitter, getOpInfoForNode(node, unw_info), &node->attr.str(), true);
         value->decvref(emitter);
@@ -637,8 +632,6 @@ private:
 
     CompilerVariable* _evalBinExp(AST* node, CompilerVariable* left, CompilerVariable* right, AST_TYPE::AST_TYPE type,
                                   BinExpType exp_type, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         assert(left);
         assert(right);
 
@@ -650,8 +643,6 @@ private:
     }
 
     CompilerVariable* evalBinOp(AST_BinOp* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* left = evalExpr(node->left, unw_info);
         CompilerVariable* right = evalExpr(node->right, unw_info);
 
@@ -664,8 +655,6 @@ private:
     }
 
     CompilerVariable* evalAugBinOp(AST_AugBinOp* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* left = evalExpr(node->left, unw_info);
         CompilerVariable* right = evalExpr(node->right, unw_info);
 
@@ -678,8 +667,6 @@ private:
     }
 
     CompilerVariable* evalCompare(AST_Compare* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         RELEASE_ASSERT(node->ops.size() == 1, "");
 
         CompilerVariable* left = evalExpr(node->left, unw_info);
@@ -695,8 +682,6 @@ private:
     }
 
     CompilerVariable* evalCall(AST_Call* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         bool is_callattr;
         bool callattr_clsonly = false;
         const std::string* attr = NULL;
@@ -774,8 +759,6 @@ private:
     }
 
     CompilerVariable* evalDict(AST_Dict* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
         ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
         if (node->keys.size()) {
@@ -810,15 +793,9 @@ private:
         inst->setMetadata(message, mdnode);
     }
 
-    CompilerVariable* evalIndex(AST_Index* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
-        return evalExpr(node->value, unw_info);
-    }
+    CompilerVariable* evalIndex(AST_Index* node, UnwindInfo unw_info) { return evalExpr(node->value, unw_info); }
 
     CompilerVariable* evalLambda(AST_Lambda* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         AST_Return* expr = new AST_Return();
         expr->value = node->body;
 
@@ -832,8 +809,6 @@ private:
 
 
     CompilerVariable* evalList(AST_List* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* value = evalExpr(node->elts[i], unw_info);
@@ -887,8 +862,6 @@ private:
     }
 
     CompilerVariable* evalName(AST_Name* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         auto scope_info = irstate->getScopeInfo();
 
         bool is_kill = irstate->getSourceInfo()->liveness->isKill(node, myblock);
@@ -959,8 +932,6 @@ private:
     }
 
     CompilerVariable* evalNum(AST_Num* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         if (node->num_type == AST_Num::INT)
             return makeInt(node->n_int);
         else if (node->num_type == AST_Num::FLOAT)
@@ -972,8 +943,6 @@ private:
     }
 
     CompilerVariable* evalRepr(AST_Repr* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* var = evalExpr(node->value, unw_info);
         ConcreteCompilerVariable* cvar = var->makeConverted(emitter, var->getBoxType());
         var->decvref(emitter);
@@ -987,8 +956,6 @@ private:
     }
 
     CompilerVariable* evalSet(AST_Set* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* value = evalExpr(node->elts[i], unw_info);
@@ -1013,8 +980,6 @@ private:
     }
 
     CompilerVariable* evalSlice(AST_Slice* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* start, *stop, *step;
         start = node->lower ? evalExpr(node->lower, unw_info) : getNone();
         stop = node->upper ? evalExpr(node->upper, unw_info) : getNone();
@@ -1040,15 +1005,9 @@ private:
         return new ConcreteCompilerVariable(SLICE, rtn, true);
     }
 
-    CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
-        return makeStr(&node->s);
-    }
+    CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) { return makeStr(&node->s); }
 
     CompilerVariable* evalSubscript(AST_Subscript* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* value = evalExpr(node->value, unw_info);
         CompilerVariable* slice = evalExpr(node->slice, unw_info);
 
@@ -1059,8 +1018,6 @@ private:
     }
 
     CompilerVariable* evalTuple(AST_Tuple* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         std::vector<CompilerVariable*> elts;
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* value = evalExpr(node->elts[i], unw_info);
@@ -1076,8 +1033,6 @@ private:
     }
 
     CompilerVariable* evalUnaryOp(AST_UnaryOp* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* operand = evalExpr(node->operand, unw_info);
 
         if (node->op_type == AST_TYPE::Not) {
@@ -1105,8 +1060,6 @@ private:
     }
 
     CompilerVariable* evalYield(AST_Yield* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         CompilerVariable* generator = _getFake(internString(PASSED_GENERATOR_NAME), false);
         ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
 
@@ -1124,8 +1077,6 @@ private:
     }
 
     ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
-        assert(state != PARTIAL);
-
         if (t == BOXED_INT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v);
             ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(INT, unboxed, true);
@@ -1151,109 +1102,107 @@ private:
         }
 
         CompilerVariable* rtn = NULL;
-        if (state != PARTIAL) {
-            switch (node->type) {
-                case AST_TYPE::Attribute:
-                    rtn = evalAttribute(ast_cast<AST_Attribute>(node), unw_info);
-                    break;
-                case AST_TYPE::AugBinOp:
-                    rtn = evalAugBinOp(ast_cast<AST_AugBinOp>(node), unw_info);
-                    break;
-                case AST_TYPE::BinOp:
-                    rtn = evalBinOp(ast_cast<AST_BinOp>(node), unw_info);
-                    break;
-                case AST_TYPE::Call:
-                    rtn = evalCall(ast_cast<AST_Call>(node), unw_info);
-                    break;
-                case AST_TYPE::Compare:
-                    rtn = evalCompare(ast_cast<AST_Compare>(node), unw_info);
-                    break;
-                case AST_TYPE::Dict:
-                    rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
-                    break;
-                case AST_TYPE::Index:
-                    rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);
-                    break;
-                case AST_TYPE::Lambda:
-                    rtn = evalLambda(ast_cast<AST_Lambda>(node), unw_info);
-                    break;
-                case AST_TYPE::List:
-                    rtn = evalList(ast_cast<AST_List>(node), unw_info);
-                    break;
-                case AST_TYPE::Name:
-                    rtn = evalName(ast_cast<AST_Name>(node), unw_info);
-                    break;
-                case AST_TYPE::Num:
-                    rtn = evalNum(ast_cast<AST_Num>(node), unw_info);
-                    break;
-                case AST_TYPE::Repr:
-                    rtn = evalRepr(ast_cast<AST_Repr>(node), unw_info);
-                    break;
-                case AST_TYPE::Set:
-                    rtn = evalSet(ast_cast<AST_Set>(node), unw_info);
-                    break;
-                case AST_TYPE::Slice:
-                    rtn = evalSlice(ast_cast<AST_Slice>(node), unw_info);
-                    break;
-                case AST_TYPE::Str:
-                    rtn = evalStr(ast_cast<AST_Str>(node), unw_info);
-                    break;
-                case AST_TYPE::Subscript:
-                    rtn = evalSubscript(ast_cast<AST_Subscript>(node), unw_info);
-                    break;
-                case AST_TYPE::Tuple:
-                    rtn = evalTuple(ast_cast<AST_Tuple>(node), unw_info);
-                    break;
-                case AST_TYPE::UnaryOp:
-                    rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node), unw_info);
-                    break;
-                case AST_TYPE::Yield:
-                    rtn = evalYield(ast_cast<AST_Yield>(node), unw_info);
-                    break;
+        switch (node->type) {
+            case AST_TYPE::Attribute:
+                rtn = evalAttribute(ast_cast<AST_Attribute>(node), unw_info);
+                break;
+            case AST_TYPE::AugBinOp:
+                rtn = evalAugBinOp(ast_cast<AST_AugBinOp>(node), unw_info);
+                break;
+            case AST_TYPE::BinOp:
+                rtn = evalBinOp(ast_cast<AST_BinOp>(node), unw_info);
+                break;
+            case AST_TYPE::Call:
+                rtn = evalCall(ast_cast<AST_Call>(node), unw_info);
+                break;
+            case AST_TYPE::Compare:
+                rtn = evalCompare(ast_cast<AST_Compare>(node), unw_info);
+                break;
+            case AST_TYPE::Dict:
+                rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
+                break;
+            case AST_TYPE::Index:
+                rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);
+                break;
+            case AST_TYPE::Lambda:
+                rtn = evalLambda(ast_cast<AST_Lambda>(node), unw_info);
+                break;
+            case AST_TYPE::List:
+                rtn = evalList(ast_cast<AST_List>(node), unw_info);
+                break;
+            case AST_TYPE::Name:
+                rtn = evalName(ast_cast<AST_Name>(node), unw_info);
+                break;
+            case AST_TYPE::Num:
+                rtn = evalNum(ast_cast<AST_Num>(node), unw_info);
+                break;
+            case AST_TYPE::Repr:
+                rtn = evalRepr(ast_cast<AST_Repr>(node), unw_info);
+                break;
+            case AST_TYPE::Set:
+                rtn = evalSet(ast_cast<AST_Set>(node), unw_info);
+                break;
+            case AST_TYPE::Slice:
+                rtn = evalSlice(ast_cast<AST_Slice>(node), unw_info);
+                break;
+            case AST_TYPE::Str:
+                rtn = evalStr(ast_cast<AST_Str>(node), unw_info);
+                break;
+            case AST_TYPE::Subscript:
+                rtn = evalSubscript(ast_cast<AST_Subscript>(node), unw_info);
+                break;
+            case AST_TYPE::Tuple:
+                rtn = evalTuple(ast_cast<AST_Tuple>(node), unw_info);
+                break;
+            case AST_TYPE::UnaryOp:
+                rtn = evalUnaryOp(ast_cast<AST_UnaryOp>(node), unw_info);
+                break;
+            case AST_TYPE::Yield:
+                rtn = evalYield(ast_cast<AST_Yield>(node), unw_info);
+                break;
 
-                case AST_TYPE::ClsAttribute:
-                    rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node), unw_info);
-                    break;
-                case AST_TYPE::LangPrimitive:
-                    rtn = evalLangPrimitive(ast_cast<AST_LangPrimitive>(node), unw_info);
-                    break;
-                default:
-                    printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
-                    exit(1);
-            }
-
-            assert(rtn);
-
-            // Out-guarding:
-            BoxedClass* speculated_class = types->speculatedExprClass(node);
-            if (speculated_class != NULL) {
-                assert(rtn);
-
-                ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
-                if (VERBOSITY("irgen") >= 1) {
-                    printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
-                           speculated_type->debugName().c_str());
-                    PrintVisitor printer;
-                    node->accept(&printer);
-                    printf("\n");
-                }
-
-                // That's not really a speculation.... could potentially handle this here, but
-                // I think it's better to just not generate bad speculations:
-                assert(!rtn->canConvertTo(speculated_type));
-
-                ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
-                rtn->decvref(emitter);
-
-                llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
-                assert(guard_check->getType() == g.i1);
-                createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
-
-                rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
-            }
+            case AST_TYPE::ClsAttribute:
+                rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node), unw_info);
+                break;
+            case AST_TYPE::LangPrimitive:
+                rtn = evalLangPrimitive(ast_cast<AST_LangPrimitive>(node), unw_info);
+                break;
+            default:
+                printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
+                exit(1);
         }
 
-        assert(rtn || state == PARTIAL);
+        assert(rtn);
+
+        // Out-guarding:
+        BoxedClass* speculated_class = types->speculatedExprClass(node);
+        if (speculated_class != NULL) {
+            assert(rtn);
+
+            ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
+            if (VERBOSITY("irgen") >= 1) {
+                printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
+                       speculated_type->debugName().c_str());
+                PrintVisitor printer;
+                node->accept(&printer);
+                printf("\n");
+            }
+
+            // That's not really a speculation.... could potentially handle this here, but
+            // I think it's better to just not generate bad speculations:
+            assert(!rtn->canConvertTo(speculated_type));
+
+            ConcreteCompilerVariable* old_rtn = rtn->makeConverted(emitter, UNKNOWN);
+            rtn->decvref(emitter);
+
+            llvm::Value* guard_check = old_rtn->makeClassCheck(emitter, speculated_class);
+            assert(guard_check->getType() == g.i1);
+            createExprTypeGuard(guard_check, node, old_rtn->getValue(), unw_info.current_stmt);
+
+            rtn = unboxVar(speculated_type, old_rtn->getValue(), true);
+        }
+
+        assert(rtn);
 
         return rtn;
     }
@@ -1320,14 +1269,12 @@ private:
     }
 
     void _doSetattr(AST_Attribute* target, CompilerVariable* val, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
         CompilerVariable* t = evalExpr(target->value, unw_info);
         t->setattr(emitter, getEmptyOpInfo(unw_info), &target->attr.str(), val);
         t->decvref(emitter);
     }
 
     void _doSetitem(AST_Subscript* target, CompilerVariable* val, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
         CompilerVariable* tget = evalExpr(target->value, unw_info);
         CompilerVariable* slice = evalExpr(target->slice, unw_info);
 
@@ -1362,7 +1309,6 @@ private:
     }
 
     void _doUnpackTuple(AST_Tuple* target, CompilerVariable* val, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
         int ntargets = target->elts.size();
 
         std::vector<CompilerVariable*> unpacked = val->unpack(emitter, getOpInfoForNode(target, unw_info), ntargets);
@@ -1382,7 +1328,6 @@ private:
     }
 
     void _doSet(AST* target, CompilerVariable* val, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
         switch (target->type) {
             case AST_TYPE::Attribute:
                 _doSetattr(ast_cast<AST_Attribute>(target), val, unw_info);
@@ -1427,8 +1372,6 @@ private:
 
     void doAssign(AST_Assign* node, UnwindInfo unw_info) {
         CompilerVariable* val = evalExpr(node->value, unw_info);
-        if (state == PARTIAL)
-            return;
 
         for (int i = 0; i < node->targets.size(); i++) {
             _doSet(node->targets[i], val, unw_info);
@@ -1437,9 +1380,6 @@ private:
     }
 
     void doClassDef(AST_ClassDef* node, UnwindInfo unw_info) {
-        if (state == PARTIAL)
-            return;
-
         assert(node->type == AST_TYPE::ClassDef);
         ScopeInfo* scope_info = irstate->getScopeInfoForNode(node);
         assert(scope_info);
@@ -1503,7 +1443,6 @@ private:
     }
 
     void doDelete(AST_Delete* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
         for (AST_expr* target : node->targets) {
             switch (target->type) {
                 case AST_TYPE::Subscript:
@@ -1524,7 +1463,6 @@ private:
 
     // invoke delitem in objmodel.cpp, which will invoke the listDelitem of list
     void _doDelitem(AST_Subscript* target, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
         CompilerVariable* tget = evalExpr(target->value, unw_info);
         CompilerVariable* slice = evalExpr(target->slice, unw_info);
 
@@ -1643,9 +1581,6 @@ private:
     }
 
     void doFunctionDef(AST_FunctionDef* node, UnwindInfo unw_info) {
-        if (state == PARTIAL)
-            return;
-
         std::vector<CompilerVariable*> decorators;
         for (auto d : node->decorator_list) {
             decorators.push_back(evalExpr(d, unw_info));
@@ -1663,9 +1598,6 @@ private:
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
-        if (state == PARTIAL)
-            return;
-
         ConcreteCompilerVariable* dest = NULL;
         if (node->dest) {
             auto d = evalExpr(node->dest, unw_info);
@@ -1750,7 +1682,6 @@ private:
         } else {
             val = evalExpr(node->value, unw_info);
         }
-        assert(state != PARTIAL);
         assert(val);
 
         // If we ask the return variable to become UNKNOWN (the typical return type),
@@ -1787,7 +1718,6 @@ private:
         assert(node->iffalse->idx > myblock->idx);
 
         CompilerVariable* val = evalExpr(node->test, unw_info);
-        assert(state != PARTIAL);
         assert(val);
 
         // We could call nonzero here if there is no try-catch block?
@@ -1806,15 +1736,11 @@ private:
 
     void doExpr(AST_Expr* node, UnwindInfo unw_info) {
         CompilerVariable* var = evalExpr(node->value, unw_info);
-        if (state == PARTIAL)
-            return;
 
         var->decvref(emitter);
     }
 
     void doOSRExit(llvm::BasicBlock* normal_target, AST_Jump* osr_key) {
-        assert(state != PARTIAL);
-
         llvm::BasicBlock* starting_block = curblock;
         llvm::BasicBlock* onramp = llvm::BasicBlock::Create(g.context, "onramp", irstate->getLLVMFunction());
 
@@ -1967,8 +1893,6 @@ private:
     }
 
     void doJump(AST_Jump* node, UnwindInfo unw_info) {
-        assert(state != PARTIAL);
-
         endBlock(FINISHED);
 
         llvm::BasicBlock* target = entry_blocks[node->target];
@@ -2413,8 +2337,8 @@ public:
 };
 
 IRGenerator* createIRGenerator(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
-                               CFGBlock* myblock, TypeAnalysis* types, bool is_partial) {
-    return new IRGeneratorImpl(irstate, entry_blocks, myblock, types, is_partial);
+                               CFGBlock* myblock, TypeAnalysis* types) {
+    return new IRGeneratorImpl(irstate, entry_blocks, myblock, types);
 }
 
 CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body, SourceInfo* source) {
