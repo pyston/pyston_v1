@@ -166,9 +166,10 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
 // should only be called after checking to see if the other versions would work.
 // The codegen_lock needs to be held in W mode before calling this function:
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
-                                  const OSREntryDescriptor* entry) {
+                                  const OSREntryDescriptor* entry_descriptor) {
     Timer _t("for compileFunction()");
-    assert(spec);
+
+    assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
     ASSERT(f->versions.size() < 20, "%ld", f->versions.size());
     SourceInfo* source = f->source;
@@ -180,21 +181,21 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         std::string s;
         llvm::raw_string_ostream ss(s);
 
-        ss << "\033[34;1mJIT'ing " << name << " with signature (";
-        for (int i = 0; i < spec->arg_types.size(); i++) {
-            if (i > 0)
-                ss << ", ";
-            ss << spec->arg_types[i]->debugName();
-            // spec->arg_types[i]->llvmType()->print(ss);
+        if (spec) {
+            ss << "\033[34;1mJIT'ing " << name << " with signature (";
+            for (int i = 0; i < spec->arg_types.size(); i++) {
+                if (i > 0)
+                    ss << ", ";
+                ss << spec->arg_types[i]->debugName();
+                // spec->arg_types[i]->llvmType()->print(ss);
+            }
+            ss << ") -> ";
+            ss << spec->rtn_type->debugName();
+        } else {
+            ss << "\nDoing OSR-entry partial compile of " << name << ", starting with backedge to block "
+               << entry_descriptor->backedge->target->idx << '\n';
         }
-        ss << ") -> ";
-        ss << spec->rtn_type->debugName();
-        // spec->rtn_type->llvmType()->print(ss);
         ss << " at effort level " << (int)effort;
-        if (entry != NULL) {
-            ss << "\nDoing OSR-entry partial compile, starting with backedge to block " << entry->backedge->target->idx
-               << '\n';
-        }
         ss << "\033[0m";
         printf("%s\n", ss.str().c_str());
     }
@@ -216,9 +217,10 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     CompiledFunction* cf = 0;
     if (effort == EffortLevel::INTERPRETED) {
+        assert(!entry_descriptor);
         cf = new CompiledFunction(0, spec, true, NULL, NULL, effort, 0);
     } else {
-        cf = doCompile(source, &f->param_names, entry, effort, spec, name);
+        cf = doCompile(source, &f->param_names, entry_descriptor, effort, spec, name);
         compileIR(cf, effort);
     }
 
@@ -327,6 +329,12 @@ void CompiledFunction::speculationFailed() {
     }
 }
 
+ConcreteCompilerType* CompiledFunction::getReturnType() {
+    if (spec)
+        return spec->rtn_type;
+    return entry_descriptor->cf->getReturnType();
+}
+
 /// Reoptimizes the given function version at the new effort level.
 /// The cf must be an active version in its parents CLFunction; the given
 /// version will be replaced by the new version, which will be returned.
@@ -385,8 +393,7 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
         EffortLevel new_effort = EffortLevel::MAXIMAL;
         if (exit->parent_cf->effort == EffortLevel::INTERPRETED)
             new_effort = EffortLevel::MINIMAL;
-        CompiledFunction* compiled
-            = compileFunction(exit->parent_cf->clfunc, exit->parent_cf->spec, new_effort, exit->entry);
+        CompiledFunction* compiled = compileFunction(exit->parent_cf->clfunc, NULL, new_effort, exit->entry);
         assert(compiled == new_cf);
 
         stat_osr_compiles.log();

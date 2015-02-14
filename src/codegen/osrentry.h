@@ -15,6 +15,7 @@
 #ifndef PYSTON_CODEGEN_OSRENTRY_H
 #define PYSTON_CODEGEN_OSRENTRY_H
 
+#include <map>
 #include <vector>
 
 #include "core/stringpool.h"

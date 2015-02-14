@@ -22,6 +22,7 @@
 #include "analysis/scoping_analysis.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
+#include "codegen/osrentry.h"
 #include "codegen/type_recording.h"
 #include "core/ast.h"
 #include "core/cfg.h"
@@ -622,6 +623,7 @@ public:
         return getTypeAtBlockStart(name, block->successors[0]);
     }
     ConcreteCompilerType* getTypeAtBlockStart(InternedString name, CFGBlock* block) override {
+        assert(starting_types.count(block));
         CompilerType* base = starting_types[block][name];
         ASSERT(base != NULL, "%s %d", name.c_str(), block->idx);
 
@@ -672,40 +674,20 @@ public:
         return changed;
     }
 
-    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, const ParamNames& arg_names,
-                                               const std::vector<ConcreteCompilerType*>& arg_types,
-                                               SpeculationLevel speculation, ScopeInfo* scope_info) {
+    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, SpeculationLevel speculation, ScopeInfo* scope_info,
+                                               TypeMap&& initial_types, CFGBlock* initial_block) {
         Timer _t("PropagatingTypeAnalysis::doAnalysis()");
 
         AllTypeMap starting_types;
         ExprTypeMap expr_types;
         TypeSpeculations type_speculations;
 
-        assert(arg_names.totalParameters() == arg_types.size());
-
-        TypeMap& initial_types = starting_types[cfg->getStartingBlock()];
-        int i = 0;
-
-        for (; i < arg_names.args.size(); i++) {
-            initial_types[scope_info->internString(arg_names.args[i])] = unboxedType(arg_types[i]);
-        }
-
-        if (arg_names.vararg.size()) {
-            initial_types[scope_info->internString(arg_names.vararg)] = unboxedType(arg_types[i]);
-            i++;
-        }
-
-        if (arg_names.kwarg.size()) {
-            initial_types[scope_info->internString(arg_names.kwarg)] = unboxedType(arg_types[i]);
-            i++;
-        }
-
-        assert(i == arg_types.size());
-
         std::unordered_set<CFGBlock*> in_queue;
         std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> queue;
-        queue.push(cfg->getStartingBlock());
-        in_queue.insert(cfg->getStartingBlock());
+
+        starting_types[initial_block] = std::move(initial_types);
+        queue.push(initial_block);
+        in_queue.insert(initial_block);
 
         int num_evaluations = 0;
         while (!queue.empty()) {
@@ -787,6 +769,38 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
     // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
     //}
-    return PropagatingTypeAnalysis::doAnalysis(cfg, arg_names, arg_types, speculation, scope_info);
+    assert(arg_names.totalParameters() == arg_types.size());
+
+    TypeMap initial_types;
+    int i = 0;
+
+    for (; i < arg_names.args.size(); i++) {
+        initial_types[scope_info->internString(arg_names.args[i])] = unboxedType(arg_types[i]);
+    }
+
+    if (arg_names.vararg.size()) {
+        initial_types[scope_info->internString(arg_names.vararg)] = unboxedType(arg_types[i]);
+        i++;
+    }
+
+    if (arg_names.kwarg.size()) {
+        initial_types[scope_info->internString(arg_names.kwarg)] = unboxedType(arg_types[i]);
+        i++;
+    }
+
+    assert(i == arg_types.size());
+
+    return PropagatingTypeAnalysis::doAnalysis(cfg, speculation, scope_info, std::move(initial_types),
+                                               cfg->getStartingBlock());
+}
+
+TypeAnalysis* doTypeAnalysis(CFG* cfg, const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+                             TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
+    // if (effort == EffortLevel::INTERPRETED) {
+    // return new NullTypeAnalysis();
+    //}
+    TypeMap initial_types(entry_descriptor->args.begin(), entry_descriptor->args.end());
+    return PropagatingTypeAnalysis::doAnalysis(cfg, speculation, scope_info, std::move(initial_types),
+                                               entry_descriptor->backedge->target);
 }
 }

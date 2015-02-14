@@ -203,7 +203,11 @@ public:
                      llvm::Value* llvm_code, EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
           code(code), llvm_code(llvm_code), effort(effort), times_called(0), times_speculation_failed(0),
-          location_map(nullptr) {}
+          location_map(nullptr) {
+        assert((spec != NULL) + (entry_descriptor != NULL) == 1);
+    }
+
+    ConcreteCompilerType* getReturnType();
 
     // TODO this will need to be implemented eventually; things to delete:
     // - line_table if it exists
@@ -297,16 +301,17 @@ public:
 
     void addVersion(CompiledFunction* compiled) {
         assert(compiled);
-        assert(compiled->spec);
-        assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
+        assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
         assert(compiled->clfunc == NULL);
         assert(compiled->is_interpreted == (compiled->code == NULL));
         assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
         compiled->clfunc = this;
-        if (compiled->entry_descriptor == NULL)
+        if (compiled->entry_descriptor == NULL) {
+            assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
             versions.push_back(compiled);
-        else
+        } else {
             osr_versions[compiled->entry_descriptor] = compiled;
+        }
     }
 };
 
