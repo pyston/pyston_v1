@@ -439,6 +439,10 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                 v = converted->getValue();
                 delete converted;
             } else {
+                printf("OSR'd with a %s into a partial compile that expects a %s?\n", p.second->debugName().c_str(),
+                       phi_type->debugName().c_str());
+                RELEASE_ASSERT(0, "whyy");
+#if 0
                 ASSERT(p.second == UNKNOWN, "%s", p.second->debugName().c_str());
                 BoxedClass* speculated_class = NULL;
                 if (phi_type == INT) {
@@ -516,6 +520,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
                     assert(phi_type == typeFromClass(speculated_class));
                     v = from_arg;
                 }
+#endif
             }
 
             if (VERBOSITY("irgen"))
@@ -525,6 +530,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
         }
 
         if (guard_val) {
+            abort();
             // Create the guard with both branches leading to the success_bb,
             // and let the deopt path change the failure case to point to the
             // as-yet-unknown deopt block.
@@ -532,7 +538,7 @@ static void emitBBs(IRGenState* irstate, const char* bb_type, GuardList& out_gua
             // the guard will just silently be ignored.
             llvm::BranchInst* br
                 = entry_emitter->getBuilder()->CreateCondBr(guard_val, osr_unbox_block, osr_unbox_block);
-            out_guards.registerGuardForBlockEntry(target_block, br, *initial_syms);
+            // out_guards.registerGuardForBlockEntry(target_block, br, *initial_syms);
         } else {
             entry_emitter->getBuilder()->CreateBr(osr_unbox_block);
         }
@@ -1168,8 +1174,13 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     EffortLevel min_speculation_level = EffortLevel::MAXIMAL;
     if (ENABLE_SPECULATION && effort >= min_speculation_level)
         speculation_level = TypeAnalysis::SOME;
-    TypeAnalysis* types
-        = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level, source->getScopeInfo());
+    TypeAnalysis* types;
+    if (entry_descriptor)
+        types = doTypeAnalysis(source->cfg, entry_descriptor, effort, speculation_level, source->getScopeInfo());
+    else
+        types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level,
+                               source->getScopeInfo());
+
 
     _t2.split();
 
@@ -1192,6 +1203,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     // De-opt handling:
 
     if (!guards.isEmpty()) {
+        RELEASE_ASSERT(0, "should not be any guards any more!");
         BlockSet deopt_full_blocks, deopt_partial_blocks;
         GuardList deopt_guards;
         // typedef std::unordered_map<CFGBlock*, std::unordered_map<AST_expr*, GuardList::ExprTypeGuard*> > Worklist;

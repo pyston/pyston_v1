@@ -130,11 +130,11 @@ public:
 
     bool isEmpty() const { return block_begin_guards.size() == 0; }
 
-    void registerGuardForBlockEntry(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& st) {
-        // printf("Adding guard for block %p, in %p\n", cfg_block, this);
-        std::vector<BlockEntryGuard*>& v = block_begin_guards[cfg_block];
-        v.push_back(new BlockEntryGuard(cfg_block, branch, st));
-    }
+    // void registerGuardForBlockEntry(CFGBlock* cfg_block, llvm::BranchInst* branch, const SymbolTable& st) {
+    //// printf("Adding guard for block %p, in %p\n", cfg_block, this);
+    // std::vector<BlockEntryGuard*>& v = block_begin_guards[cfg_block];
+    // v.push_back(new BlockEntryGuard(cfg_block, branch, st));
+    //}
 
     const std::vector<BlockEntryGuard*>& getGuardsForBlock(CFGBlock* block) const {
         std::unordered_map<CFGBlock*, std::vector<BlockEntryGuard*>>::const_iterator it
