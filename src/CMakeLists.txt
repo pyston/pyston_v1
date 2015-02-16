@@ -18,7 +18,7 @@ file(GLOB CODEGEN_SRCS codegen/*.cpp)
 file(GLOB CORE_SRCS core/*.cpp)
 file(GLOB GC_SRCS gc/*.cpp)
 file(GLOB RUNTIME_BUILTIN_MODULES_SRCS runtime/builtin_modules/*.cpp)
-file(GLOB RUNTIME_SRCS runtime/*.cpp)
+file(GLOB RUNTIME_SRCS runtime/*.cpp runtime/*.S)
 
 if(ENABLE_GPERFTOOLS)
   set(OPTIONAL_SRCS ${OPTIONAL_SRCS} codegen/profiling/pprof.cpp)
