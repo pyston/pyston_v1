@@ -131,16 +131,18 @@ public:
     }
 };
 static std::unordered_map<pthread_t, ThreadStateInternal*> current_threads;
+static __thread ThreadStateInternal* current_internal_thread_state = 0;
 
-// TODO could optimize these by keeping a __thread local reference to current_threads[pthread_self()]
 void pushGenerator(BoxedGenerator* g, void* new_stack_start, void* old_stack_limit) {
     assert(new_stack_start);
     assert(old_stack_limit);
-    current_threads[pthread_self()]->pushGenerator(g, new_stack_start, old_stack_limit);
+    assert(current_internal_thread_state);
+    current_internal_thread_state->pushGenerator(g, new_stack_start, old_stack_limit);
 }
 
 void popGenerator() {
-    current_threads[pthread_self()]->popGenerator();
+    assert(current_internal_thread_state);
+    current_internal_thread_state->popGenerator();
 }
 
 // These are guarded by threading_lock
@@ -179,20 +181,19 @@ static void visitLocalStack(gc::GCVisitor* v) {
     assert(sizeof(registers) % 8 == 0);
     v->visitPotentialRange((void**)&registers, (void**)((&registers) + 1));
 
-    ThreadStateInternal* thread_state = current_threads[pthread_self()];
-
+    assert(current_internal_thread_state);
 #if STACK_GROWS_DOWN
     void* stack_low = getCurrentStackLimit();
-    void* stack_high = thread_state->stack_start;
+    void* stack_high = current_internal_thread_state->stack_start;
 #else
-    void* stack_low = thread_state->stack_start;
+    void* stack_low = current_thread_state->stack_start;
     void* stack_high = getCurrentStackLimit();
 #endif
 
     assert(stack_low < stack_high);
     v->visitPotentialRange((void**)stack_low, (void**)stack_high);
 
-    thread_state->accept(v);
+    current_internal_thread_state->accept(v);
 }
 
 void visitAllStacks(gc::GCVisitor* v) {
@@ -267,6 +268,7 @@ static void _thread_context_dump(int signum, siginfo_t* info, void* _context) {
         printf("old rip: 0x%lx\n", (intptr_t)context->uc_mcontext.gregs[REG_RIP]);
     }
 
+    assert(current_internal_thread_state == current_threads[tid]);
     pushThreadState(current_threads[tid], context);
     signals_waiting--;
 }
@@ -306,7 +308,8 @@ static void* _thread_start(void* _arg) {
 #else
         void* stack_bottom = stack_start;
 #endif
-        current_threads[current_thread] = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+        current_internal_thread_state = new ThreadStateInternal(stack_bottom, current_thread, &cur_thread_state);
+        current_threads[current_thread] = current_internal_thread_state;
 
         num_starting_threads--;
 
@@ -318,7 +321,7 @@ static void* _thread_start(void* _arg) {
     assert(!PyErr_Occurred());
 
     void* rtn = start_func(arg1, arg2, arg3);
-    current_threads[current_thread]->assertNoGenerators();
+    current_internal_thread_state->assertNoGenerators();
 
     {
         LOCK_REGION(&threading_lock);
@@ -327,6 +330,7 @@ static void* _thread_start(void* _arg) {
         if (VERBOSITY() >= 2)
             printf("thread tid=%ld exited\n", current_thread);
     }
+    current_internal_thread_state = 0;
 
     return rtn;
 }
@@ -404,7 +408,9 @@ static void* find_stack() {
 void registerMainThread() {
     LOCK_REGION(&threading_lock);
 
-    current_threads[pthread_self()] = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
+    assert(!current_internal_thread_state);
+    current_internal_thread_state = new ThreadStateInternal(find_stack(), pthread_self(), &cur_thread_state);
+    current_threads[pthread_self()] = current_internal_thread_state;
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -420,7 +426,8 @@ void registerMainThread() {
 }
 
 void finishMainThread() {
-    current_threads[pthread_self()]->assertNoGenerators();
+    assert(current_internal_thread_state);
+    current_internal_thread_state->assertNoGenerators();
 
     // TODO maybe this is the place to wait for non-daemon threads?
 }
@@ -440,18 +447,17 @@ extern "C" void beginAllowThreads() noexcept {
     {
         LOCK_REGION(&threading_lock);
 
-        ThreadStateInternal* state = current_threads[pthread_self()];
-        assert(state);
-        state->saveCurrent();
+        assert(current_internal_thread_state);
+        current_internal_thread_state->saveCurrent();
     }
 }
 
 extern "C" void endAllowThreads() noexcept {
     {
         LOCK_REGION(&threading_lock);
-        ThreadStateInternal* state = current_threads[pthread_self()];
-        assert(state);
-        state->popCurrent();
+
+        assert(current_internal_thread_state);
+        current_internal_thread_state->popCurrent();
     }
 
 
