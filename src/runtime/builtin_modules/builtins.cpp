@@ -1048,8 +1048,12 @@ void setupBuiltins() {
 
     repr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)repr, UNKNOWN, 1));
     builtins_module->giveAttr("repr", repr_obj);
-    len_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)len, UNKNOWN, 1));
+
+    auto len_func = boxRTFunction((void*)len, UNKNOWN, 1);
+    len_func->internal_callable = lenCallInternal;
+    len_obj = new BoxedBuiltinFunctionOrMethod(len_func);
     builtins_module->giveAttr("len", len_obj);
+
     hash_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hash, UNKNOWN, 1));
     builtins_module->giveAttr("hash", hash_obj);
     abs_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)abs_, UNKNOWN, 1));
