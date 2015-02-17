@@ -602,7 +602,6 @@ extern "C" void listIteratorGCHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" Box* listNew(Box* cls, Box* container) {
-    assert(cls == list_cls);
 
     if (container == None)
         return new BoxedList();
