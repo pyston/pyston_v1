@@ -17,6 +17,9 @@
 
 #include <map>
 #include <memory>
+#include <tuple>
+
+#include "llvm/ADT/SmallSet.h"
 
 #include "asm_writing/assembler.h"
 #include "asm_writing/icinfo.h"
@@ -247,6 +250,8 @@ private:
     // Indicates if this variable is an arg, and if so, what location the arg is from.
     bool is_arg;
     Location arg_loc;
+
+    llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
     // TODO have to be careful with the result since the interface doesn't guarantee
