@@ -174,6 +174,8 @@ void Rewriter::_addGuardNotEq(RewriterVar* var, uint64_t val) {
 }
 
 void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
+    if (!attr_guards.insert(std::make_tuple(offset, val, negate)).second)
+        return; // duplicate guard detected
     rewriter->addAction([=]() { rewriter->_addAttrGuard(this, offset, val, negate); }, { this }, ActionType::GUARD);
 }
 
