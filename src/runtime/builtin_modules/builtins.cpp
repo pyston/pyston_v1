@@ -576,6 +576,16 @@ Box* zip2(Box* container1, Box* container2) {
     return rtn;
 }
 
+Box* eval(Box* code) {
+    // TODO implement full functionality (args and stuff)
+    RELEASE_ASSERT(code->cls == str_cls, "eval not implemented for non-strings");
+
+    BoxedDict* locals = getLocals(true /* only_user_visible */);
+    BoxedModule* module = getCurrentModule();
+
+    return runEval(static_cast<BoxedString*>(code)->s.c_str(), locals, module);
+}
+
 BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
@@ -776,7 +786,7 @@ Box* execfile(Box* _fn) {
         raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.c_str());
 
     // Run directly inside the current module:
-    AST_Module* ast = caching_parse(fn->s.c_str());
+    AST_Module* ast = caching_parse_file(fn->s.c_str());
     compileAndRunModule(ast, getCurrentModule());
 
     return None;
@@ -1188,7 +1198,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("property", property_cls);
     builtins_module->giveAttr("staticmethod", staticmethod_cls);
     builtins_module->giveAttr("classmethod", classmethod_cls);
-
+    builtins_module->giveAttr(
+        "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false)));
 
     PyExc_RecursionErrorInst = new (RuntimeError) BoxedException();
     gc::registerPermanentRoot(PyExc_RecursionErrorInst);

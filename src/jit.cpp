@@ -179,29 +179,14 @@ int main(int argc, char** argv) {
         while (repl) {
             char* line = readline(">> ");
 
+            AST_Module* m = parse_string(line);
+
             if (!line) {
                 repl = false;
             } else {
                 add_history(line);
-                int size = strlen(line);
 
                 Timer _t("repl");
-
-                char buf[] = "pystontmp_XXXXXX";
-                char* tmpdir = mkdtemp(buf);
-                assert(tmpdir);
-                std::string tmp = std::string(tmpdir) + "/in.py";
-                if (VERBOSITY() >= 1) {
-                    printf("writing %d bytes to %s\n", size, tmp.c_str());
-                }
-
-                FILE* f = fopen(tmp.c_str(), "w");
-                fwrite(line, 1, size, f);
-                fclose(f);
-
-                AST_Module* m = parse(tmp.c_str());
-                removeDirectoryIfExists(tmpdir);
-
                 if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
                     AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
                     AST_Call* c = new AST_Call();

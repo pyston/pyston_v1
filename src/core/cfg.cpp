@@ -1609,7 +1609,7 @@ public:
     }
 
     bool visit_return(AST_Return* node) override {
-        if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda) {
+        if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda && root_type != AST_TYPE::Expression) {
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
 

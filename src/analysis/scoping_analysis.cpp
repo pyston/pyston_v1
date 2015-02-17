@@ -182,7 +182,8 @@ private:
 public:
     ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
         : parent(parent), usage(usage), ast(ast), usesNameLookup(usesNameLookup) {
-        assert(parent);
+        // not true anymore: Expression
+        // assert(parent);
         assert(usage);
         assert(ast);
     }
@@ -314,6 +315,7 @@ public:
     bool visit_keyword(AST_keyword* node) override { return false; }
     bool visit_list(AST_List* node) override { return false; }
     bool visit_listcomp(AST_ListComp* node) override { return false; }
+    bool visit_expression(AST_Expression* node) override { return false; }
     // bool visit_module(AST_Module *node) override { return false; }
     // bool visit_name(AST_Name *node) override { return false; }
     bool visit_num(AST_Num* node) override { return false; }
@@ -550,6 +552,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
+            case AST_TYPE::Expression:
             case AST_TYPE::ClassDef: {
                 ScopeInfoBase* scopeInfo
                     = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */);
@@ -572,8 +575,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 }
 
 InternedStringPool& ScopingAnalysis::getInternedStrings() {
-    assert(parent_module);
-    return *parent_module->interned_strings.get();
+    return interned_strings;
 }
 
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
@@ -623,5 +625,9 @@ ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_str
 
 ScopingAnalysis* runScopingAnalysis(AST_Module* m) {
     return new ScopingAnalysis(m);
+}
+
+ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
+    scopes[e] = getScopeInfoForNode(e);
 }
 }

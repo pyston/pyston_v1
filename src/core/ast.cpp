@@ -692,6 +692,14 @@ void AST_Module::accept(ASTVisitor* v) {
     visitVector(body, v);
 }
 
+void AST_Expression::accept(ASTVisitor* v) {
+    bool skip = v->visit_expression(this);
+    if (skip)
+        return;
+
+    body->accept(v);
+}
+
 void AST_Name::accept(ASTVisitor* v) {
     bool skip = v->visit_name(this);
 }
@@ -1504,6 +1512,12 @@ bool PrintVisitor::visit_module(AST_Module* node) {
         node->body[i]->accept(this);
         printf("\n");
     }
+    return true;
+}
+
+bool PrintVisitor::visit_expression(AST_Expression* node) {
+    node->body->accept(this);
+    printf("\n");
     return true;
 }
 

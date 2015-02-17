@@ -935,7 +935,27 @@ static std::string getParserCommandLine(const char* fn) {
     return std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
 }
 
-AST_Module* parse(const char* fn) {
+AST_Module* parse_string(const char* code) {
+    int size = strlen(code);
+    char buf[] = "pystontmp_XXXXXX";
+    char* tmpdir = mkdtemp(buf);
+    assert(tmpdir);
+    std::string tmp = std::string(tmpdir) + "/in.py";
+    if (VERBOSITY() >= 1) {
+        printf("writing %d bytes to %s\n", size, tmp.c_str());
+    }
+
+    FILE* f = fopen(tmp.c_str(), "w");
+    fwrite(code, 1, size, f);
+    fclose(f);
+
+    AST_Module* m = parse_file(tmp.c_str());
+    removeDirectoryIfExists(tmpdir);
+
+    return m;
+}
+
+AST_Module* parse_file(const char* fn) {
     Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {
@@ -1009,7 +1029,7 @@ static ParseResult _reparse(const char* fn, const std::string& cache_fn) {
 // Parsing the file is somewhat expensive since we have to shell out to cpython;
 // it's not a huge deal right now, but this caching version can significantly cut down
 // on the startup time (40ms -> 10ms).
-AST_Module* caching_parse(const char* fn) {
+AST_Module* caching_parse_file(const char* fn) {
     Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {

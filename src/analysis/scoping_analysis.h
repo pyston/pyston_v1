@@ -22,6 +22,7 @@ namespace pyston {
 
 class AST;
 class AST_Module;
+class AST_Expression;
 
 class ScopeInfo {
 public:
@@ -97,6 +98,7 @@ public:
     void registerScopeReplacement(AST* original_node, AST* new_node);
 
     ScopingAnalysis(AST_Module* m);
+    ScopingAnalysis(AST_Expression* e);
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();
