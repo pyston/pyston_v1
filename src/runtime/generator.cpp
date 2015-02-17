@@ -196,7 +196,7 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     void* initial_stack_limit = (void*)(stack_high - INITIAL_STACK_SIZE);
     void* p = mmap(initial_stack_limit, INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
-    assert(p == initial_stack_limit);
+    ASSERT(p == initial_stack_limit, "%p %s", p, strerror(errno));
 
     context.uc_stack.ss_sp = initial_stack_limit;
     context.uc_stack.ss_size = INITIAL_STACK_SIZE;

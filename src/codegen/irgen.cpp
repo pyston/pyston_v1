@@ -402,6 +402,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, BOOL->llvmType()->getPointerTo());
                 } else if (p.second == FLOAT) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
+                } else if (p.second == GENERATOR) {
+                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
                 } else {
                     assert(p.second->llvmType() == g.llvm_value_type_ptr);
                 }
