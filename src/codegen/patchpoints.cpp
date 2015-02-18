@@ -308,7 +308,7 @@ ICSetupInfo* createCallsiteIC(TypeRecorder* type_recorder, int num_args) {
     // TODO These are very large, but could probably be made much smaller with IC optimizations
     // - using rewriter2 for better code
     // - not emitting duplicate guards
-    return ICSetupInfo::initialize(true, 3, 640 + 48 * num_args, ICSetupInfo::Callsite, type_recorder);
+    return ICSetupInfo::initialize(true, 4, 640 + 48 * num_args, ICSetupInfo::Callsite, type_recorder);
 }
 
 ICSetupInfo* createGetGlobalIC(TypeRecorder* type_recorder) {
