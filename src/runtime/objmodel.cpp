@@ -1900,6 +1900,25 @@ extern "C" BoxedInt* lenInternal(Box* obj, LenRewriteArgs* rewrite_args) {
     return static_cast<BoxedInt*>(rtn);
 }
 
+Box* lenCallInternal(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
+                     Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
+    if (argspec != ArgPassSpec(1))
+        return callFunc(func, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+    if (rewrite_args) {
+        LenRewriteArgs lrewrite_args(rewrite_args->rewriter, rewrite_args->arg1, rewrite_args->destination);
+        Box* rtn = lenInternal(arg1, &lrewrite_args);
+        if (!lrewrite_args.out_success) {
+            rewrite_args = 0;
+        } else {
+            rewrite_args->out_rtn = lrewrite_args.out_rtn;
+            rewrite_args->out_success = true;
+        }
+        return rtn;
+    }
+    return lenInternal(arg1, NULL);
+}
+
 extern "C" BoxedInt* len(Box* obj) {
     static StatCounter slowpath_len("slowpath_len");
     slowpath_len.log();
