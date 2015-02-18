@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <deque>
 #include <sys/mman.h>
 #include <ucontext.h>
 
@@ -33,7 +34,7 @@
 namespace pyston {
 
 static uint64_t next_stack_addr = 0x3270000000L;
-static std::vector<uint64_t> available_addrs;
+static std::deque<uint64_t> available_addrs;
 
 // There should be a better way of getting this:
 #define PAGE_SIZE 4096
@@ -184,8 +185,13 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
         memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
     }
 
+    static StatCounter generator_stack_reused("generator_stack_reused");
+    static StatCounter generator_stack_created("generator_stack_created");
+
     void* initial_stack_limit;
     if (available_addrs.size() == 0) {
+        generator_stack_created.log();
+
         uint64_t stack_low = next_stack_addr;
         uint64_t stack_high = stack_low + MAX_STACK_SIZE;
         next_stack_addr = stack_high;
@@ -215,7 +221,11 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #else
 #error "implement me"
 #endif
+
+        gc::registerGCManagedBytes(MAX_STACK_SIZE);
     } else {
+        generator_stack_reused.log();
+
 #if STACK_GROWS_DOWN
         uint64_t stack_high = available_addrs.back();
         this->stack_begin = (void*)stack_high;
@@ -260,9 +270,13 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
         v->visitPotentialRange((void**)&g->returnContext,
                                ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
     } else {
+        // g->context is always set for a running generator, but we can trigger a GC while constructing
+        // a generator in which case we can see a NULL context
+        if (g->context) {
 #if STACK_GROWS_DOWN
-        v->visitPotentialRange((void**)g->context, (void**)g->stack_begin);
+            v->visitPotentialRange((void**)g->context, (void**)g->stack_begin);
 #endif
+        }
     }
 }
 
@@ -270,8 +284,16 @@ void generatorDestructor(Box* b) {
     assert(isSubclass(b->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
 
-    if (self->stack_begin)
+    if (self->stack_begin) {
         available_addrs.push_back((uint64_t)self->stack_begin);
+        // Limit the number of generator stacks we keep around:
+        if (available_addrs.size() > 5) {
+            uint64_t addr = available_addrs.front();
+            available_addrs.pop_front();
+            int r = munmap((void*)(addr - MAX_STACK_SIZE), MAX_STACK_SIZE);
+            assert(r == 0);
+        }
+    }
     self->stack_begin = NULL;
 }
 

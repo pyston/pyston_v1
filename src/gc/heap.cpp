@@ -171,7 +171,7 @@ struct HeapStatistics {
         }
     };
     std::unordered_map<BoxedClass*, TypeStats> by_cls;
-    TypeStats conservative, untracked;
+    TypeStats conservative, untracked, hcls;
     TypeStats total;
 };
 
@@ -191,6 +191,9 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
     } else if (al->kind_id == GCKind::UNTRACKED) {
         stats->untracked.nallocs++;
         stats->untracked.nbytes += nbytes;
+    } else if (al->kind_id == GCKind::HIDDEN_CLASS) {
+        stats->hcls.nallocs++;
+        stats->hcls.nbytes += nbytes;
     } else {
         RELEASE_ASSERT(0, "%d", (int)al->kind_id);
     }
@@ -209,6 +212,7 @@ void Heap::dumpHeapStatistics() {
 
     stats.conservative.print("conservative");
     stats.untracked.print("untracked");
+    stats.hcls.print("hcls");
     for (const auto& p : stats.by_cls) {
         p.second.print(getFullNameOfClass(p.first).c_str());
     }
