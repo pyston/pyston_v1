@@ -70,6 +70,7 @@ void setupSys();
 void setupBuiltins();
 void setupPyston();
 void setupThread();
+void setupImport();
 void setupSysEnd();
 
 BoxedDict* getSysModulesDict();

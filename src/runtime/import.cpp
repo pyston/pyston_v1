@@ -64,45 +64,53 @@ static bool pathExists(const std::string& path) {
     return exists;
 }
 
-static BoxedModule* importPackageFromDirectory(const std::string& name, const std::string& full_name,
-                                               const std::string& path) {
+struct SearchResult {
+    std::string path;
+
+    enum filetype {
+        SEARCH_ERROR,
+        PY_SOURCE,
+        PY_COMPILED,
+        C_EXTENSION,
+        PY_RESOURCE, /* Mac only */
+        PKG_DIRECTORY,
+        C_BUILTIN,
+        PY_FROZEN,
+        PY_CODERESOURCE, /* Mac only */
+        IMP_HOOK
+    } type;
+
+    SearchResult(const std::string& path, filetype type) : path(path), type(type) {}
+    SearchResult(std::string&& path, filetype type) : path(std::move(path)), type(type) {}
+};
+
+SearchResult findModule(const std::string& name, const std::string& full_name, BoxedList* path_list) {
     llvm::SmallString<128> joined_path;
+    for (int i = 0; i < path_list->size; i++) {
+        Box* _p = path_list->elts->elts[i];
+        if (_p->cls != str_cls)
+            continue;
+        BoxedString* p = static_cast<BoxedString*>(_p);
 
-    llvm::sys::path::append(joined_path, path, name);
-    std::string dn(joined_path.str());
+        joined_path.clear();
+        llvm::sys::path::append(joined_path, p->s, name);
+        std::string dn(joined_path.str());
 
-    llvm::sys::path::append(joined_path, "__init__.py");
-    std::string fn(joined_path.str());
+        llvm::sys::path::append(joined_path, "__init__.py");
+        std::string fn(joined_path.str());
 
-    if (VERBOSITY() >= 2)
-        printf("Searching for %s at %s...\n", name.c_str(), fn.c_str());
+        if (pathExists(fn))
+            return SearchResult(std::move(dn), SearchResult::PKG_DIRECTORY);
 
-    if (!pathExists(fn))
-        return NULL;
+        joined_path.clear();
+        llvm::sys::path::append(joined_path, p->s, name + ".py");
+        fn = joined_path.str();
 
-    if (VERBOSITY() >= 1)
-        printf("Importing %s from %s\n", name.c_str(), fn.c_str());
+        if (pathExists(fn))
+            return SearchResult(std::move(fn), SearchResult::PY_SOURCE);
+    }
 
-
-    return createAndRunModule(full_name, fn, dn);
-}
-
-static BoxedModule* importFile(const std::string& name, const std::string& full_name, const std::string& path) {
-    llvm::SmallString<128> joined_path;
-
-    llvm::sys::path::append(joined_path, path, name + ".py");
-    std::string fn(joined_path.str());
-
-    if (VERBOSITY() >= 2)
-        printf("Searching for %s at %s...\n", name.c_str(), fn.c_str());
-
-    if (!pathExists(fn))
-        return NULL;
-
-    if (VERBOSITY() >= 1)
-        printf("Importing %s from %s\n", name.c_str(), fn.c_str());
-
-    return createAndRunModule(full_name, fn);
+    return SearchResult("", SearchResult::SEARCH_ERROR);
 }
 
 static Box* importSub(const std::string& name, const std::string& full_name, Box* parent_module) {
@@ -124,28 +132,21 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
         }
     }
 
-    llvm::SmallString<128> joined_path;
-    for (int i = 0; i < path_list->size; i++) {
-        Box* _p = path_list->elts->elts[i];
-        if (_p->cls != str_cls)
-            continue;
-        BoxedString* p = static_cast<BoxedString*>(_p);
+    SearchResult sr = findModule(name, full_name, path_list);
 
-        joined_path.clear();
-        llvm::sys::path::append(joined_path, p->s);
-        std::string dn(joined_path.str());
-
+    if (sr.type != SearchResult::SEARCH_ERROR) {
         BoxedModule* module;
 
-        module = importPackageFromDirectory(name, full_name, dn);
-        if (!module)
-            module = importFile(name, full_name, dn);
+        if (sr.type == SearchResult::PY_SOURCE)
+            module = createAndRunModule(full_name, sr.path);
+        else if (sr.type == SearchResult::PKG_DIRECTORY)
+            module = createAndRunModule(full_name, sr.path + "/__init__.py", sr.path);
+        else
+            RELEASE_ASSERT(0, "%d", sr.type);
 
-        if (module) {
-            if (parent_module)
-                parent_module->setattr(name, module, NULL);
-            return module;
-        }
+        if (parent_module)
+            parent_module->setattr(name, module, NULL);
+        return module;
     }
 
     if (name == "basic_test")
@@ -252,5 +253,32 @@ extern "C" Box* import(int level, Box* from_imports, const std::string* module_n
     }
 
     return module;
+}
+
+Box* impFindModule(Box* _name) {
+    RELEASE_ASSERT(_name->cls == str_cls, "");
+
+    BoxedString* name = static_cast<BoxedString*>(_name);
+    BoxedList* path_list = getSysPath();
+
+    SearchResult sr = findModule(name->s, name->s, path_list);
+    if (sr.type == SearchResult::SEARCH_ERROR)
+        raiseExcHelper(ImportError, "%s", name->s.c_str());
+
+    if (sr.type == SearchResult::PY_SOURCE) {
+        Box* path = boxString(sr.path);
+        Box* mode = boxStrConstant("r");
+        Box* f = runtimeCall(file_cls, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
+        return new BoxedTuple(
+            { f, path, new BoxedTuple({ boxStrConstant(".py"), mode, boxInt(SearchResult::PY_SOURCE) }) });
+    }
+
+    Py_FatalError("unimplemented");
+}
+
+void setupImport() {
+    BoxedModule* imp_module = createModule("imp", "__builtin__");
+    imp_module->giveAttr("find_module",
+                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impFindModule, UNKNOWN, 1)));
 }
 }
