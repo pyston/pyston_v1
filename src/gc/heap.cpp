@@ -359,8 +359,8 @@ SmallArena::Block** SmallArena::_freeChain(Block** head) {
         int first_obj = b->minObjIndex();
         int atoms_per_obj = b->atomsPerObj();
 
-        for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
-            int atom_idx = obj_idx * atoms_per_obj;
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
 
             if (b->isfree.isSet(atom_idx))
                 continue;
@@ -507,8 +507,8 @@ void SmallArena::_getChainStatistics(HeapStatistics* stats, Block** head) {
         int first_obj = b->minObjIndex();
         int atoms_per_obj = b->atomsPerObj();
 
-        for (int obj_idx = first_obj; obj_idx < num_objects; obj_idx++) {
-            int atom_idx = obj_idx * atoms_per_obj;
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
 
             if (b->isfree.isSet(atom_idx))
                 continue;
