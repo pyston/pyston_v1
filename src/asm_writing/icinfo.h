@@ -100,7 +100,7 @@ private:
     const std::vector<int> live_outs;
     const assembler::GenericRegister return_register;
     TypeRecorder* const type_recorder;
-    bool failed;
+    int retry_in, retry_backoff;
     int times_rewritten;
 
     // for ICSlotRewrite:
