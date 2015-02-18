@@ -613,10 +613,6 @@ void allowGLReadPreemption() {
 }
 #endif
 
-extern "C" long PyThread_get_thread_ident(void) noexcept {
-    return pthread_self();
-}
-
 // We don't support CPython's TLS (yet?)
 extern "C" void PyThread_ReInitTLS(void) noexcept {
     // don't have to do anything since we don't support TLS

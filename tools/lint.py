@@ -2,7 +2,13 @@ import os
 import sys
 
 def file_is_from_cpython(fn):
-    return 'from_cpython' in fn
+    if 'from_cpython' in fn:
+        return True
+
+    if fn.endswith("/thread_pthread.h"):
+        return True
+
+    return False
 
 def verify_include_guard(_, dir, files):
     for bn in files:
