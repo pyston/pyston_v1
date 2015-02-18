@@ -19,6 +19,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "core/common.h"
 #include "core/types.h"
@@ -1311,7 +1312,8 @@ Box* strIsTitle(BoxedString* self) {
 Box* strJoin(BoxedString* self, Box* rhs) {
     assert(self->cls == str_cls);
 
-    std::ostringstream os;
+    std::string output_str;
+    llvm::raw_string_ostream os(output_str);
     int i = 0;
     for (Box* e : rhs->pyElements()) {
         if (i > 0)
@@ -1319,7 +1321,8 @@ Box* strJoin(BoxedString* self, Box* rhs) {
         os << str(e)->s;
         ++i;
     }
-    return boxString(os.str());
+    os.flush();
+    return boxString(std::move(output_str));
 }
 
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
