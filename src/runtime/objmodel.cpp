@@ -1904,6 +1904,19 @@ extern "C" BoxedInt* len(Box* obj) {
     static StatCounter slowpath_len("slowpath_len");
     slowpath_len.log();
 
+    // performance optimization: handle a few known types explicit
+    // TODO: make len rewrite it self and remove this code
+    if (obj->cls == list_cls) {
+        BoxedList* list = (BoxedList*)obj;
+        return (BoxedInt*)boxInt(list->size);
+    } else if (obj->cls == str_cls) {
+        BoxedString* str = (BoxedString*)obj;
+        return (BoxedInt*)boxInt(str->s.size());
+    } else if (obj->cls == tuple_cls) {
+        BoxedTuple* tuple = (BoxedTuple*)obj;
+        return (BoxedInt*)boxInt(tuple->elts.size());
+    }
+
     return lenInternal(obj, NULL);
 }
 
