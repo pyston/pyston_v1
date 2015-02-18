@@ -283,6 +283,16 @@ extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* valu
     return 0;
 }
 
+extern "C" int PyModule_AddStringConstant(PyObject* m, const char* name, const char* value) noexcept {
+    PyObject* o = PyString_FromString(value);
+    if (!o)
+        return -1;
+    if (PyModule_AddObject(m, name, o) == 0)
+        return 0;
+    Py_DECREF(o);
+    return -1;
+}
+
 extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) noexcept {
     return PyModule_AddObject(_m, name, boxInt(value));
 }
