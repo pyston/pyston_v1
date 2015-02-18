@@ -71,7 +71,7 @@ ICSlotRewrite::~ICSlotRewrite() {
 }
 
 void ICSlotRewrite::abort() {
-    ic->retry_backoff = std::max(MAX_RETRY_BACKOFF, 2 * ic->retry_backoff);
+    ic->retry_backoff = std::min(MAX_RETRY_BACKOFF, 2 * ic->retry_backoff);
     ic->retry_in = ic->retry_backoff;
 }
 
