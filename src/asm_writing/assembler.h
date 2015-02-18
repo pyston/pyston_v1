@@ -136,6 +136,8 @@ public:
     void cmp(Indirect mem, Immediate imm);
     void cmp(Indirect mem, Register reg);
 
+    void lea(Indirect mem, Register reg);
+
     void test(Register reg1, Register reg2);
 
     void jmp_cond(JumpDestination dest, ConditionCode condition);
