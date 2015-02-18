@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <pthread.h>
 #include <stddef.h>
+
+#include "Python.h"
+#include "pythread.h"
 
 #include "core/threading.h"
 #include "core/types.h"
@@ -20,6 +24,34 @@
 #include "runtime/types.h"
 
 using namespace pyston::threading;
+
+
+static int initialized;
+static void PyThread__init_thread(void); /* Forward */
+
+extern "C" void PyThread_init_thread(void) noexcept {
+#ifdef Py_DEBUG
+    char* p = Py_GETENV("PYTHONTHREADDEBUG");
+
+    if (p) {
+        if (*p)
+            thread_debug = atoi(p);
+        else
+            thread_debug = 1;
+    }
+#endif /* Py_DEBUG */
+    if (initialized)
+        return;
+    initialized = 1;
+    PyThread__init_thread();
+}
+
+/* Support for runtime thread stack size tuning.
+   A value of 0 means using the platform's default stack size
+   or the size specified by the THREAD_STACK_SIZE macro. */
+static size_t _pythread_stacksize = 0;
+
+#include "thread_pthread.h"
 
 namespace pyston {
 
