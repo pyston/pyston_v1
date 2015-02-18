@@ -184,35 +184,47 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
         memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
     }
 
-    uint64_t stack_low = next_stack_addr;
-    uint64_t stack_high = stack_low + MAX_STACK_SIZE;
-    next_stack_addr = stack_high;
+    void* initial_stack_limit;
+    if (available_addrs.size() == 0) {
+        uint64_t stack_low = next_stack_addr;
+        uint64_t stack_high = stack_low + MAX_STACK_SIZE;
+        next_stack_addr = stack_high;
 
 #if STACK_GROWS_DOWN
-    this->stack_begin = (void*)stack_high;
+        this->stack_begin = (void*)stack_high;
 
-    void* initial_stack_limit = (void*)(stack_high - INITIAL_STACK_SIZE);
-    void* p = mmap(initial_stack_limit, INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
-    ASSERT(p == initial_stack_limit, "%p %s", p, strerror(errno));
+        initial_stack_limit = (void*)(stack_high - INITIAL_STACK_SIZE);
+        void* p = mmap(initial_stack_limit, INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
+        ASSERT(p == initial_stack_limit, "%p %s", p, strerror(errno));
 
-    // Create an inaccessible redzone so that the generator stack won't grow indefinitely.
-    // Looks like it throws a SIGBUS if we reach the redzone; it's unclear if that's better
-    // or worse than being able to consume all available memory.
-    void* p2 = mmap((void*)stack_low, STACK_REDZONE_SIZE, PROT_NONE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-    assert(p2 == (void*)stack_low);
-    // Interestingly, it seems like MAP_GROWSDOWN will leave a page-size gap between the redzone and the growable
-    // region.
+        // Create an inaccessible redzone so that the generator stack won't grow indefinitely.
+        // Looks like it throws a SIGBUS if we reach the redzone; it's unclear if that's better
+        // or worse than being able to consume all available memory.
+        void* p2
+            = mmap((void*)stack_low, STACK_REDZONE_SIZE, PROT_NONE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+        assert(p2 == (void*)stack_low);
+        // Interestingly, it seems like MAP_GROWSDOWN will leave a page-size gap between the redzone and the growable
+        // region.
 
-    if (VERBOSITY() >= 1) {
-        printf("Created new generator stack, starts at %p, currently extends to %p\n", (void*)stack_high,
-               initial_stack_limit);
-        printf("Created a redzone from %p-%p\n", (void*)stack_low, (void*)(stack_low + STACK_REDZONE_SIZE));
-    }
-
+        if (VERBOSITY() >= 1) {
+            printf("Created new generator stack, starts at %p, currently extends to %p\n", (void*)stack_high,
+                   initial_stack_limit);
+            printf("Created a redzone from %p-%p\n", (void*)stack_low, (void*)(stack_low + STACK_REDZONE_SIZE));
+        }
 #else
 #error "implement me"
 #endif
+    } else {
+#if STACK_GROWS_DOWN
+        uint64_t stack_high = available_addrs.back();
+        this->stack_begin = (void*)stack_high;
+        initial_stack_limit = (void*)(stack_high - INITIAL_STACK_SIZE);
+        available_addrs.pop_back();
+#else
+#error "implement me"
+#endif
+    }
 
     assert(((intptr_t)stack_begin & (~(intptr_t)(0xF))) == (intptr_t)stack_begin && "stack must be aligned");
 
@@ -254,10 +266,19 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     }
 }
 
+void generatorDestructor(Box* b) {
+    assert(isSubclass(b->cls, generator_cls));
+    BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
+
+    if (self->stack_begin)
+        available_addrs.push_back((uint64_t)self->stack_begin);
+    self->stack_begin = NULL;
+}
 
 void setupGenerator() {
     generator_cls = new BoxedHeapClass(object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
                                        sizeof(BoxedGenerator), false, "generator");
+    generator_cls->simple_destructor = generatorDestructor;
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
