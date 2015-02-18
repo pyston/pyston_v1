@@ -269,8 +269,13 @@ Box* impFindModule(Box* _name) {
         Box* path = boxString(sr.path);
         Box* mode = boxStrConstant("r");
         Box* f = runtimeCall(file_cls, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
-        return new BoxedTuple(
-            { f, path, new BoxedTuple({ boxStrConstant(".py"), mode, boxInt(SearchResult::PY_SOURCE) }) });
+        return new BoxedTuple({ f, path, new BoxedTuple({ boxStrConstant(".py"), mode, boxInt(sr.type) }) });
+    }
+
+    if (sr.type == SearchResult::PKG_DIRECTORY) {
+        Box* path = boxString(sr.path);
+        Box* mode = boxStrConstant("");
+        return new BoxedTuple({ None, path, new BoxedTuple({ mode, mode, boxInt(sr.type) }) });
     }
 
     Py_FatalError("unimplemented");
