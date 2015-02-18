@@ -29,6 +29,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/stackmaps.h"
 #include "core/util.h"
+#include "runtime/ctxswitching.h"
 #include "runtime/generator.h"
 #include "runtime/traceback.h"
 #include "runtime/types.h"
@@ -390,11 +391,21 @@ public:
 
             if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
                 // for generators continue unwinding in the context in which the generator got called
-                static_assert(sizeof(ucontext_t) == sizeof(unw_context_t), "");
                 unw_word_t bp;
                 unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-                ucontext_t* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
-                unw_init_local(&cursor, remote_ctx);
+
+                Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
+                // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
+                memset(&ctx, 0, sizeof(ctx));
+                ctx.uc_mcontext.gregs[REG_R12] = remote_ctx->r12;
+                ctx.uc_mcontext.gregs[REG_R13] = remote_ctx->r13;
+                ctx.uc_mcontext.gregs[REG_R14] = remote_ctx->r14;
+                ctx.uc_mcontext.gregs[REG_R15] = remote_ctx->r15;
+                ctx.uc_mcontext.gregs[REG_RBX] = remote_ctx->rbx;
+                ctx.uc_mcontext.gregs[REG_RBP] = remote_ctx->rbp;
+                ctx.uc_mcontext.gregs[REG_RIP] = remote_ctx->rip;
+                ctx.uc_mcontext.gregs[REG_RSP] = (greg_t)remote_ctx;
+                unw_init_local(&cursor, &ctx);
             }
 
             // keep unwinding

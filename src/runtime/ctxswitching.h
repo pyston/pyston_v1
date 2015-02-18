@@ -12,25 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_RUNTIME_GENERATOR_H
-#define PYSTON_RUNTIME_GENERATOR_H
+#ifndef PYSTON_RUNTIME_CTXSWITCHING_H
+#define PYSTON_RUNTIME_CTXSWITCHING_H
 
-#include "core/types.h"
-#include "runtime/types.h"
-
+#include <cstdint>
 
 namespace pyston {
 
-struct Context;
+struct Context {
+    int64_t r12, r13, r14, r15, rbx, rbp, rip;
+};
 
-extern BoxedClass* generator_cls;
+static_assert(sizeof(Context) == 8 * 7, "");
 
-void setupGenerator();
-void generatorEntry(BoxedGenerator* g);
-Context* getReturnContextForGeneratorFrame(void* frame_addr);
-
-extern "C" Box* yield(BoxedGenerator* obj, Box* value);
-extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
+extern "C" Context* makeContext(void* stack_top, void (*start_func)(intptr_t));
+extern "C" void swapContext(Context** old_context, Context* new_context, intptr_t arg);
 }
 
 #endif

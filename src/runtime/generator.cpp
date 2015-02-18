@@ -25,6 +25,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/ctxswitching.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -58,17 +59,17 @@ public:
     }
 };
 
-ucontext* getReturnContextForGeneratorFrame(void* frame_addr) {
+Context* getReturnContextForGeneratorFrame(void* frame_addr) {
     BoxedGenerator* generator = s_generator_map[frame_addr];
     assert(generator);
-    return &generator->returnContext;
+    return generator->returnContext;
 }
 
 void generatorEntry(BoxedGenerator* g) {
     assert(g->cls == generator_cls);
     assert(g->function->cls == function_cls);
 
-    threading::pushGenerator(g, g->stack_begin, (void*)g->returnContext.uc_mcontext.gregs[REG_RSP]);
+    threading::pushGenerator(g, g->stack_begin, g->returnContext);
 
     try {
         RegisterHelper context_registerer(g, __builtin_frame_address(0));
@@ -86,7 +87,7 @@ void generatorEntry(BoxedGenerator* g) {
     // we returned from the body of the generator. next/send/throw will notify the caller
     g->entryExited = true;
     threading::popGenerator();
-    swapcontext(&g->context, &g->returnContext);
+    swapContext(&g->context, g->returnContext, 0);
 }
 
 Box* generatorIter(Box* s) {
@@ -106,7 +107,7 @@ Box* generatorSend(Box* s, Box* v) {
 
     self->returnValue = v;
     self->running = true;
-    swapcontext(&self->returnContext, &self->context);
+    swapContext(&self->returnContext, self->context, (intptr_t)self);
     self->running = false;
 
     // propagate exception to the caller
@@ -150,8 +151,8 @@ extern "C" Box* yield(BoxedGenerator* obj, Box* value) {
     self->returnValue = value;
 
     threading::popGenerator();
-    swapcontext(&self->context, &self->returnContext);
-    threading::pushGenerator(obj, obj->stack_begin, (void*)obj->returnContext.uc_mcontext.gregs[REG_RSP]);
+    swapContext(&self->context, self->returnContext, 0);
+    threading::pushGenerator(obj, obj->stack_begin, obj->returnContext);
 
     // if the generator receives a exception from the caller we have to throw it
     if (self->exception.type) {
@@ -172,7 +173,7 @@ extern "C" BoxedGenerator* createGenerator(BoxedFunctionBase* function, Box* arg
 
 extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args)
     : function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false), running(false),
-      returnValue(nullptr), exception(nullptr, nullptr, nullptr) {
+      returnValue(nullptr), exception(nullptr, nullptr, nullptr), context(nullptr), returnContext(nullptr) {
 
     giveAttr("__name__", boxString(function->f->source->getName()));
 
@@ -182,9 +183,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
         this->args = new (numArgs) GCdArray();
         memcpy(&this->args->elts[0], args, numArgs * sizeof(Box*));
     }
-
-    getcontext(&context);
-    context.uc_link = 0;
 
     uint64_t stack_low = next_stack_addr;
     uint64_t stack_high = stack_low + MAX_STACK_SIZE;
@@ -197,9 +195,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     void* p = mmap(initial_stack_limit, INITIAL_STACK_SIZE, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
     ASSERT(p == initial_stack_limit, "%p %s", p, strerror(errno));
-
-    context.uc_stack.ss_sp = initial_stack_limit;
-    context.uc_stack.ss_size = INITIAL_STACK_SIZE;
 
     // Create an inaccessible redzone so that the generator stack won't grow indefinitely.
     // Looks like it throws a SIGBUS if we reach the redzone; it's unclear if that's better
@@ -219,7 +214,9 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #error "implement me"
 #endif
 
-    makecontext(&context, (void (*)(void))generatorEntry, 1, this);
+    assert(((intptr_t)stack_begin & (~(intptr_t)(0xF))) == (intptr_t)stack_begin && "stack must be aligned");
+
+    context = makeContext(stack_begin, (void (*)(intptr_t))generatorEntry);
 }
 
 extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
@@ -251,10 +248,8 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
         v->visitPotentialRange((void**)&g->returnContext,
                                ((void**)&g->returnContext) + sizeof(g->returnContext) / sizeof(void*));
     } else {
-        v->visitPotentialRange((void**)&g->context, ((void**)&g->context) + sizeof(g->context) / sizeof(void*));
-
 #if STACK_GROWS_DOWN
-        v->visitPotentialRange((void**)g->context.uc_mcontext.gregs[REG_RSP], (void**)g->stack_begin);
+        v->visitPotentialRange((void**)g->context, (void**)g->stack_begin);
 #endif
     }
 }

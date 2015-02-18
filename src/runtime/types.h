@@ -603,7 +603,7 @@ public:
     Box* returnValue;
     ExcInfo exception;
 
-    ucontext_t context, returnContext;
+    struct Context* context, *returnContext;
     void* stack_begin;
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
