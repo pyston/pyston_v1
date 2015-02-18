@@ -281,7 +281,7 @@ ICSetupInfo* createGenericIC(TypeRecorder* type_recorder, bool has_return_value,
 }
 
 ICSetupInfo* createGetattrIC(TypeRecorder* type_recorder) {
-    return ICSetupInfo::initialize(true, 1, 512, ICSetupInfo::Getattr, type_recorder);
+    return ICSetupInfo::initialize(true, 2, 512, ICSetupInfo::Getattr, type_recorder);
 }
 
 ICSetupInfo* createGetitemIC(TypeRecorder* type_recorder) {

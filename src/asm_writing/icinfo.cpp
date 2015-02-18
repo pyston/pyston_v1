@@ -107,6 +107,8 @@ void ICSlotRewrite::commit(CommitHook* hook) {
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
 
+    ic->times_rewritten++;
+
     llvm::sys::Memory::InvalidateInstructionCache(slot_start, ic->getSlotSize());
 }
 
@@ -175,8 +177,8 @@ ICInfo::ICInfo(void* start_addr, void* slowpath_rtn_addr, void* continue_addr, S
                assembler::GenericRegister return_register, TypeRecorder* type_recorder)
     : next_slot_to_try(0), stack_info(stack_info), num_slots(num_slots), slot_size(slot_size),
       calling_conv(calling_conv), live_outs(live_outs.begin(), live_outs.end()), return_register(return_register),
-      type_recorder(type_recorder), failed(false), start_addr(start_addr), slowpath_rtn_addr(slowpath_rtn_addr),
-      continue_addr(continue_addr) {
+      type_recorder(type_recorder), failed(false), times_rewritten(0), start_addr(start_addr),
+      slowpath_rtn_addr(slowpath_rtn_addr), continue_addr(continue_addr) {
     for (int i = 0; i < num_slots; i++) {
         slots.push_back(ICSlotInfo(this, i));
     }
@@ -267,6 +269,6 @@ void ICInfo::clear(ICSlotInfo* icentry) {
 }
 
 bool ICInfo::shouldAttempt() {
-    return !failed;
+    return !failed && times_rewritten < 100;
 }
 }

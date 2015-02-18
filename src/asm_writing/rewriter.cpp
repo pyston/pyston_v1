@@ -778,9 +778,6 @@ void Rewriter::commit() {
         return;
     }
 
-    static StatCounter rewriter_commits("rewriter_commits");
-    rewriter_commits.log();
-
     // Add uses for the live_outs
     for (int i = 0; i < live_outs.size(); i++) {
         live_outs[i]->uses.push_back(actions.size());
@@ -946,6 +943,9 @@ void Rewriter::commit() {
     }
 
     finished = true;
+
+    static StatCounter rewriter_commits("rewriter_commits");
+    rewriter_commits.log();
 
     // TODO: have to check that we have enough room to write the final jmp
     rewrite->commit(this);

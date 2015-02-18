@@ -79,6 +79,8 @@ public:
     void commit(CommitHook* hook);
     void abort();
 
+    const ICInfo* getICInfo() { return ic; }
+
     friend class ICInfo;
 };
 
@@ -99,6 +101,7 @@ private:
     const assembler::GenericRegister return_register;
     TypeRecorder* const type_recorder;
     bool failed;
+    int times_rewritten;
 
     // for ICSlotRewrite:
     ICSlotInfo* pickEntryForRewrite(const char* debug_name);
