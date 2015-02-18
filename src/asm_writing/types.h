@@ -47,6 +47,8 @@ struct Register {
     void dump() const;
 
     static Register fromDwarf(int dwarf_regnum);
+
+    static constexpr int numRegs() { return 16; }
 };
 
 const Register RAX(0);
@@ -88,6 +90,8 @@ struct XMMRegister {
     bool operator!=(const XMMRegister& rhs) const { return !(*this == rhs); }
 
     void dump() const { printf("XMM%d\n", regnum); }
+
+    static constexpr int numRegs() { return 16; }
 };
 
 const XMMRegister XMM0(0);

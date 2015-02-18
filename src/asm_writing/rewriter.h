@@ -121,8 +121,8 @@ namespace pyston {
 // Replacement for unordered_map<Location, T>
 template <class T> class LocMap {
 private:
-    static const int N_REGS = 16;
-    static const int N_XMM = 16;
+    static const int N_REGS = assembler::Register::numRegs();
+    static const int N_XMM = assembler::XMMRegister::numRegs();
     static const int N_SCRATCH = 32;
     static const int N_STACK = 16;
 
@@ -306,9 +306,44 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 
 class Rewriter : public ICSlotRewrite::CommitHook {
 private:
+    // Helps generating the best code for loading a const integer value.
+    // By keeping track of the last known value of every register and reusing it.
+    class ConstLoader {
+    private:
+        uint64_t last_known_value[assembler::Register::numRegs()];
+        const uint64_t unknown_value = 0;
+        Rewriter* rewriter;
+
+        bool tryRegRegMove(uint64_t val, assembler::Register dst_reg);
+        bool tryLea(uint64_t val, assembler::Register dst_reg);
+        void moveImmediate(uint64_t val, assembler::Register dst_reg);
+
+    public:
+        ConstLoader(Rewriter* rewriter);
+
+        bool hasKnownValue(assembler::Register reg) const { return last_known_value[reg.regnum] != unknown_value; }
+        uint64_t getKnownValue(assembler::Register reg) const { return last_known_value[reg.regnum]; }
+        void setKnownValue(assembler::Register reg, uint64_t val) { last_known_value[reg.regnum] = val; }
+        void invalidate(assembler::Register reg) { setKnownValue(reg, unknown_value); }
+        void invalidateAll();
+        void copy(assembler::Register src_reg, assembler::Register dst_reg) {
+            setKnownValue(dst_reg, getKnownValue(src_reg));
+        }
+
+        // Searches if the specified value is already loaded into a register and if so it return the register
+        assembler::Register findConst(uint64_t val, bool& found_value);
+
+        // Loads the constant into the specified register
+        void loadConstIntoReg(uint64_t val, assembler::Register reg);
+
+        // Loads the constant into any register or if already in a register just return it
+        assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
+    };
+
+
     std::unique_ptr<ICSlotRewrite> rewrite;
     assembler::Assembler* assembler;
-
+    ConstLoader const_loader;
     std::vector<RewriterVar*> vars;
 
     const Location return_location;
