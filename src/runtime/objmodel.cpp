@@ -3665,6 +3665,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
         }
     }
 
+    bool type_new_special_case;
     if (rewrite_args) {
         bool ok = false;
         for (auto b : allowable_news) {
@@ -3681,7 +3682,9 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
                 ok = true;
         }
 
-        if (!ok) {
+        type_new_special_case = (cls == type_cls && argspec == ArgPassSpec(2));
+
+        if (!ok && !type_new_special_case) {
             // Uncomment this to try to find __new__ functions that we could either white- or blacklist:
             // ASSERT(cls->is_user_defined || cls == type_cls, "Does '%s' have a well-behaved __new__?  if so, add to
             // allowable_news, otherwise add to the blacklist in this assert", cls->tp_name);
@@ -3754,8 +3757,9 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
             }
         }
 
-        ASSERT(made->cls == cls, "We should only have allowed the rewrite to continue if we were guaranteed that made "
-                                 "would have class cls!");
+        ASSERT(made->cls == cls || type_new_special_case,
+               "We should only have allowed the rewrite to continue if we were guaranteed that made "
+               "would have class cls!");
     } else {
         made = runtimeCallInternal(new_attr, NULL, new_argspec, cls, arg2, arg3, args, keyword_names);
     }
@@ -3763,8 +3767,13 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     assert(made);
 
     // Special-case (also a special case in CPython): if we just called type.__new__(arg), don't call __init__
-    if (cls == type_cls && argspec == ArgPassSpec(2))
+    if (cls == type_cls && argspec == ArgPassSpec(2)) {
+        if (rewrite_args) {
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_made;
+        }
         return made;
+    }
 
     // If __new__ returns a subclass, supposed to call that subclass's __init__.
     // If __new__ returns a non-subclass, not supposed to call __init__.
