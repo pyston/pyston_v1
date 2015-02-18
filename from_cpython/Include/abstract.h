@@ -533,10 +533,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
     /* new buffer API */
 
-#define PyObject_CheckBuffer(obj) \
-    (((obj)->ob_type->tp_as_buffer != NULL) &&                          \
-     (PyType_HasFeature((obj)->ob_type, Py_TPFLAGS_HAVE_NEWBUFFER)) && \
-     ((obj)->ob_type->tp_as_buffer->bf_getbuffer != NULL))
+     // Pyston change: made this a function
+    bool _PyObject_CheckBuffer(PyObject* obj) PYSTON_NOEXCEPT;
+#define PyObject_CheckBuffer(obj) _PyObject_CheckBuffer((PyObject*)(obj))
 
     /* Return 1 if the getbuffer function is available, otherwise
        return 0 */

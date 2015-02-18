@@ -60,6 +60,11 @@ extern "C" bool _PyIndex_Check(PyObject* op) noexcept {
     return PyInt_Check(op);
 }
 
+extern "C" bool _PyObject_CheckBuffer(PyObject* obj) noexcept {
+    return ((Py_TYPE(obj)->tp_as_buffer != NULL) && (PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_NEWBUFFER))
+            && (Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL));
+}
+
 extern "C" {
 int Py_Py3kWarningFlag;
 }
@@ -424,8 +429,13 @@ extern "C" void PyObject_ClearWeakRefs(PyObject* object) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PyObject_GetBuffer(PyObject* exporter, Py_buffer* view, int flags) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" int PyObject_GetBuffer(PyObject* obj, Py_buffer* view, int flags) noexcept {
+    if (!PyObject_CheckBuffer(obj)) {
+        printf("%s\n", obj->cls->tp_name);
+        PyErr_Format(PyExc_TypeError, "'%100s' does not have the buffer interface", Py_TYPE(obj)->tp_name);
+        return -1;
+    }
+    return (*(obj->cls->tp_as_buffer->bf_getbuffer))(obj, view, flags);
 }
 
 extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
@@ -1039,6 +1049,14 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
+    // This method should do quite a bit more, including checking tp_as_number->nb_long or calling __trunc__
+
+    if (o->cls == long_cls)
+        return o;
+
+    if (o->cls == float_cls)
+        return PyLong_FromDouble(PyFloat_AsDouble(o));
+
     Py_FatalError("unimplemented");
 }
 

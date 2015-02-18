@@ -22,6 +22,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/float.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/long.h"
@@ -36,8 +37,15 @@ extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
 }
 
 extern "C" long PyInt_AsLong(PyObject* op) noexcept {
-    RELEASE_ASSERT(isSubclass(op->cls, int_cls), "");
-    return static_cast<BoxedInt*>(op)->n;
+    // This method should do quite a bit more, including checking tp_as_number->nb_int (or calling __int__?)
+
+    if (op->cls == int_cls)
+        return static_cast<BoxedInt*>(op)->n;
+
+    if (op->cls == long_cls)
+        return PyLong_AsLong(op);
+
+    Py_FatalError("unimplemented");
 }
 
 extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) noexcept {

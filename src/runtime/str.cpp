@@ -1881,12 +1881,17 @@ static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) noexc
     return 1;
 }
 
+static int string_buffer_getbuffer(BoxedString* self, Py_buffer* view, int flags) noexcept {
+    assert(self->cls == str_cls);
+    return PyBuffer_FillInfo(view, (PyObject*)self, &self->s[0], self->s.size(), 1, flags);
+}
+
 static PyBufferProcs string_as_buffer = {
     (readbufferproc)string_buffer_getreadbuf, // comments are the only way I've found of
     (writebufferproc)NULL,                    // forcing clang-format to break these onto multiple lines
     (segcountproc)string_buffer_getsegcount,  //
     (charbufferproc)NULL,                     //
-    (getbufferproc)NULL,                      //
+    (getbufferproc)string_buffer_getbuffer,   //
     (releasebufferproc)NULL,
 };
 
@@ -1899,6 +1904,7 @@ void strDestructor(Box* b) {
 
 void setupStr() {
     str_cls->simple_destructor = strDestructor;
+    str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
     str_iterator_cls
         = new BoxedHeapClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedStringIterator), false, "striterator");
