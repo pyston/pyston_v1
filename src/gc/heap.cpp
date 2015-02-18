@@ -463,7 +463,9 @@ GCAllocation* SmallArena::_alloc(size_t rounded_size, int bucket_idx) {
     Block** free_head = &heads[bucket_idx];
     Block** full_head = &full_heads[bucket_idx];
 
-    ThreadBlockCache* cache = thread_caches.get();
+    static __thread ThreadBlockCache* cache = NULL;
+    if (!cache)
+        cache = thread_caches.get();
 
     Block** cache_head = &cache->cache_free_heads[bucket_idx];
 

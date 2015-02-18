@@ -110,7 +110,14 @@ static constexpr size_t NUM_BUCKETS = sizeof(sizes) / sizeof(sizes[0]);
 
 class SmallArena : public Arena<SMALL_ARENA_START, ARENA_SIZE> {
 public:
-    SmallArena(Heap* heap) : Arena(), heap(heap), thread_caches(heap, this) {}
+    SmallArena(Heap* heap) : Arena(), heap(heap), thread_caches(heap, this) {
+#ifndef NDEBUG
+        // Various things will crash if we instantiate multiple Heaps/Arenas
+        static bool already_created = false;
+        assert(!already_created);
+        already_created = true;
+#endif
+    }
 
     GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
