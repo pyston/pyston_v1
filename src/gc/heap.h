@@ -25,6 +25,13 @@
 namespace pyston {
 namespace gc {
 
+// Notify the gc of n bytes as being under GC management.
+// This is called internally for anything allocated through gc_alloc,
+// but it can also be called by clients to say that they have memory that
+// is ultimately GC managed but did not get allocated through gc_alloc,
+// such as memory that will get freed by a gc destructor.
+void registerGCManagedBytes(size_t bytes);
+
 class Heap;
 struct HeapStatistics;
 
@@ -119,7 +126,22 @@ public:
 #endif
     }
 
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
+        registerGCManagedBytes(bytes);
+        if (bytes <= 16)
+            return _alloc(16, 0);
+        else if (bytes <= 32)
+            return _alloc(32, 1);
+        else {
+            for (int i = 2; i < NUM_BUCKETS; i++) {
+                if (sizes[i] >= bytes) {
+                    return _alloc(sizes[i], i);
+                }
+            }
+            return NULL;
+        }
+    }
+
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* al);
 

@@ -441,12 +441,45 @@ public:
 };
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
+// Our default for tp_alloc:
+PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
+
 #define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
         return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
         return Box::operator new(size, default_cls);                                                                   \
+    }
+
+// The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
+// asserts in the 1-arg operator new function:
+#define DEFAULT_CLASS_SIMPLE(default_cls)                                                                              \
+    void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        return Box::operator new(size, cls);                                                                           \
+    }                                                                                                                  \
+    void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
+        /* In the simple cases, we can inline the following methods and simplify things a lot:                         \
+         * - Box::operator new                                                                                         \
+         * - cls->tp_alloc                                                                                             \
+         * - PystonType_GenericAlloc                                                                                   \
+         * - PyObject_Init                                                                                             \
+         */                                                                                                            \
+        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_itemsize == 0);                                                                         \
+        assert(default_cls->tp_basicsize == size);                                                                     \
+        assert(default_cls->is_pyston_class);                                                                          \
+        assert(default_cls->attrs_offset == 0);                                                                        \
+                                                                                                                       \
+        /* note: we want to use size instead of tp_basicsize, since size is a compile-time constant */                 \
+        void* mem = gc_alloc(size, gc::GCKind::PYTHON);                                                                \
+        assert(mem);                                                                                                   \
+                                                                                                                       \
+        Box* rtn = static_cast<Box*>(mem);                                                                             \
+                                                                                                                       \
+        rtn->cls = default_cls;                                                                                        \
+        return rtn;                                                                                                    \
+        /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
     }
 
 // CPython C API compatibility class:

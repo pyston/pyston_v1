@@ -315,7 +315,7 @@ public:
 
     BoxedInt(int64_t n) __attribute__((visibility("default"))) : n(n) {}
 
-    DEFAULT_CLASS(int_cls);
+    DEFAULT_CLASS_SIMPLE(int_cls);
 };
 
 class BoxedFloat : public Box {
@@ -324,7 +324,7 @@ public:
 
     BoxedFloat(double d) __attribute__((visibility("default"))) : d(d) {}
 
-    DEFAULT_CLASS(float_cls);
+    DEFAULT_CLASS_SIMPLE(float_cls);
 };
 
 class BoxedComplex : public Box {
@@ -334,14 +334,14 @@ public:
 
     BoxedComplex(double r, double i) __attribute__((visibility("default"))) : real(r), imag(i) {}
 
-    DEFAULT_CLASS(complex_cls);
+    DEFAULT_CLASS_SIMPLE(complex_cls);
 };
 
 class BoxedBool : public BoxedInt {
 public:
     BoxedBool(bool b) __attribute__((visibility("default"))) : BoxedInt(b ? 1 : 0) {}
 
-    DEFAULT_CLASS(bool_cls);
+    DEFAULT_CLASS_SIMPLE(bool_cls);
 };
 
 class BoxedString : public Box {
@@ -353,7 +353,7 @@ public:
     BoxedString(std::string&& s) __attribute__((visibility("default")));
     BoxedString(const std::string& s) __attribute__((visibility("default")));
 
-    DEFAULT_CLASS(str_cls);
+    DEFAULT_CLASS_SIMPLE(str_cls);
 };
 
 class BoxedUnicode : public Box {
@@ -367,7 +367,7 @@ public:
 
     BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default"))) : obj(obj), func(func) {}
 
-    DEFAULT_CLASS(instancemethod_cls);
+    DEFAULT_CLASS_SIMPLE(instancemethod_cls);
 };
 
 class GCdArray {
@@ -399,7 +399,7 @@ public:
     void shrink();
     static const int INITIAL_CAPACITY;
 
-    DEFAULT_CLASS(list_cls);
+    DEFAULT_CLASS_SIMPLE(list_cls);
 };
 
 class BoxedTuple : public Box {
@@ -410,7 +410,7 @@ public:
     BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : elts(elts) {}
     BoxedTuple(GCVector&& elts) __attribute__((visibility("default"))) : elts(std::move(elts)) {}
 
-    DEFAULT_CLASS(tuple_cls);
+    DEFAULT_CLASS_SIMPLE(tuple_cls);
 };
 extern "C" BoxedTuple* EmptyTuple;
 
@@ -434,7 +434,7 @@ public:
 
     BoxedDict() __attribute__((visibility("default"))) {}
 
-    DEFAULT_CLASS(dict_cls);
+    DEFAULT_CLASS_SIMPLE(dict_cls);
 
     Box* getOrNull(Box* k) {
         const auto& p = d.find(k);
@@ -502,7 +502,7 @@ public:
     Box* start, *stop, *step;
     BoxedSlice(Box* lower, Box* upper, Box* step) : start(lower), stop(upper), step(step) {}
 
-    DEFAULT_CLASS(slice_cls);
+    DEFAULT_CLASS_SIMPLE(slice_cls);
 };
 
 class BoxedMemberDescriptor : public Box {
@@ -534,7 +534,7 @@ public:
     BoxedMemberDescriptor(MemberType type, int offset) : type(type), offset(offset) {}
     BoxedMemberDescriptor(PyMemberDef* member) : type((MemberType)member->type), offset(member->offset) {}
 
-    DEFAULT_CLASS(member_cls);
+    DEFAULT_CLASS_SIMPLE(member_cls);
 };
 
 class BoxedGetsetDescriptor : public Box {
@@ -546,7 +546,7 @@ public:
     BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
         : get(get), set(set), closure(closure) {}
 
-    DEFAULT_CLASS(getset_cls);
+    DEFAULT_CLASS_SIMPLE(getset_cls);
 };
 
 class BoxedProperty : public Box {
@@ -559,7 +559,7 @@ public:
     BoxedProperty(Box* get, Box* set, Box* del, Box* doc)
         : prop_get(get), prop_set(set), prop_del(del), prop_doc(doc) {}
 
-    DEFAULT_CLASS(property_cls);
+    DEFAULT_CLASS_SIMPLE(property_cls);
 };
 
 class BoxedStaticmethod : public Box {
@@ -568,7 +568,7 @@ public:
 
     BoxedStaticmethod(Box* callable) : sm_callable(callable){};
 
-    DEFAULT_CLASS(staticmethod_cls);
+    DEFAULT_CLASS_SIMPLE(staticmethod_cls);
 };
 
 class BoxedClassmethod : public Box {
@@ -577,7 +577,7 @@ public:
 
     BoxedClassmethod(Box* callable) : cm_callable(callable){};
 
-    DEFAULT_CLASS(classmethod_cls);
+    DEFAULT_CLASS_SIMPLE(classmethod_cls);
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?

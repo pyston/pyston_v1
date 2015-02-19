@@ -227,22 +227,6 @@ void dumpHeapStatistics() {
 //////
 /// Small Arena
 
-GCAllocation* SmallArena::alloc(size_t bytes) {
-    registerGCManagedBytes(bytes);
-    if (bytes <= 16)
-        return _alloc(16, 0);
-    else if (bytes <= 32)
-        return _alloc(32, 1);
-    else {
-        for (int i = 2; i < NUM_BUCKETS; i++) {
-            if (sizes[i] >= bytes) {
-                return _alloc(sizes[i], i);
-            }
-        }
-        return NULL;
-    }
-}
-
 GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
     Block* b = Block::forPointer(al);
 
