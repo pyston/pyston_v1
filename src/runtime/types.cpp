@@ -1111,6 +1111,9 @@ void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
 
+    // Disable the GC while we do some manual initialization of the object hierarchy:
+    gc::disableGC();
+
     // We have to do a little dance to get object_cls and type_cls set up, since the normal
     // object-creation routines look at the class to see the allocation size.
     void* mem = gc_alloc(sizeof(BoxedClass), gc::GCKind::PYTHON);
@@ -1146,6 +1149,8 @@ void setupRuntime() {
     basestring_cls->tp_name = boxed_basestring_name->s.c_str();
     str_cls->tp_name = boxed_str_name->s.c_str();
     none_cls->tp_name = boxed_none_name->s.c_str();
+
+    gc::enableGC();
 
     unicode_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedUnicode), false, "unicode");
 
