@@ -1226,7 +1226,7 @@ void setupRuntime() {
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
     object_cls->freeze();
 
-    auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, false);
+    auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new BoxedGetsetDescriptor(type_name, type_set_name, NULL));
