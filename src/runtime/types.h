@@ -458,7 +458,8 @@ public:
     ICInvalidator dependent_ics;
 
     // Accessed via member descriptor
-    Box* modname; // __module__
+    Box* modname;      // __module__
+    BoxedString* name; // __name__ (should be here or in one of the derived classes?)
 
     BoxedFunctionBase(CLFunction* f);
     BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
@@ -467,10 +468,9 @@ public:
 
 class BoxedFunction : public BoxedFunctionBase {
 public:
-    BoxedFunction(CLFunction* f) : BoxedFunctionBase(f) {}
+    BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false)
-        : BoxedFunctionBase(f, defaults, closure, isGenerator) {}
+                  bool isGenerator = false);
 
     DEFAULT_CLASS(function_cls);
 };
