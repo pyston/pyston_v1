@@ -21,7 +21,7 @@ clang requires a fairly modern [host compiler](http://llvm.org/docs/GettingStart
 ```
 sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev make build-essential libtool zip gcc-multilib autogen
 cd ~/pyston_deps
-wget 'http://www.netgull.com/gcc/releases/gcc-4.8.2/gcc-4.8.2.tar.bz2'
+wget http://ftpmirror.gnu.org/gcc/gcc-4.8.2/gcc-4.8.2.tar.bz2
 tar xvf gcc-4.8.2.tar.bz2
 mkdir gcc-4.8.2-{build,install}
 cd gcc-4.8.2-build
