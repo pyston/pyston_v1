@@ -797,6 +797,24 @@ public:
         }
         */
 
+        static std::vector<AbstractFunctionType::Sig*> sigs;
+        if (sigs.size() == 0) {
+            AbstractFunctionType::Sig* int__float_sig = new AbstractFunctionType::Sig();
+            int__float_sig->rtn_type = FLOAT;
+            int__float_sig->arg_types.push_back(FLOAT);
+            sigs.push_back(int__float_sig);
+
+            AbstractFunctionType::Sig* unknown_sig = new AbstractFunctionType::Sig();
+            unknown_sig->rtn_type = UNKNOWN;
+            unknown_sig->arg_types.push_back(UNKNOWN);
+            sigs.push_back(unknown_sig);
+        }
+
+        // we can handle those operations when the rhs is a float
+        if (*attr == "__add__" || *attr == "__sub__" || *attr == "__mul__" || *attr == "__div__" || *attr == "__pow__"
+            || *attr == "__floordiv__" || *attr == "__mod__" || *attr == "__pow__") {
+            return AbstractFunctionType::get(sigs);
+        }
         return BOXED_INT->getattrType(attr, cls_only);
     }
 
@@ -868,6 +886,15 @@ public:
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
         bool can_lower = (rhs->getType() == INT && exp_type == Compare);
         if (!can_lower) {
+            // if the rhs is a float convert the lhs to a float and do the operation on it.
+            if (rhs->getType() == FLOAT) {
+                ConcreteCompilerVariable* converted_left = var->makeConverted(emitter, INT);
+                llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(converted_left->getValue(), g.double_);
+                converted_left->decvref(emitter);
+                converted_left = new ConcreteCompilerVariable(FLOAT, conv, true);
+                return converted_left->binexp(emitter, info, rhs, op_type, exp_type);
+            }
+
             ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
             CompilerVariable* rtn = converted->binexp(emitter, info, rhs, op_type, exp_type);
             converted->decvref(emitter);
