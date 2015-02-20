@@ -1523,12 +1523,13 @@ Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* r
 
     if (rewrite_args) {
         rewrite_args->arg1->addGuard((intptr_t)arg1);
+        RewriterVar* r_passthrough = rewrite_args->arg1->getAttr(offsetof(BoxedCApiFunction, passthrough));
         rewrite_args->out_rtn
-            = rewrite_args->rewriter->call(true, (void*)capifunc->func, rewrite_args->arg1, rewrite_args->arg2);
+            = rewrite_args->rewriter->call(true, (void*)capifunc->func, r_passthrough, rewrite_args->arg2);
         rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
         rewrite_args->out_success = true;
     }
-    Box* r = capifunc->func(arg1, arg2);
+    Box* r = capifunc->func(capifunc->passthrough, arg2);
     checkAndThrowCAPIException();
     assert(r);
     return r;

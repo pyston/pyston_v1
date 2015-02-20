@@ -16,8 +16,11 @@ for k in sorted(dir(select)):
 
 p = select.poll()
 f = open('/dev/null')
+p.register(f)
+gc.collect()
+p.unregister(f)
+p.register(f)
 try:
-    p.register(f)
     print p.poll(10)
 finally:
     f.close()
