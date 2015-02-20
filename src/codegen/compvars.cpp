@@ -888,6 +888,9 @@ public:
         if (!can_lower) {
             // if the rhs is a float convert the lhs to a float and do the operation on it.
             if (rhs->getType() == FLOAT) {
+                if (op_type == AST_TYPE::IsNot || op_type == AST_TYPE::Is)
+                    return makeBool(op_type == AST_TYPE::IsNot);
+
                 ConcreteCompilerVariable* converted_left = var->makeConverted(emitter, INT);
                 llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(converted_left->getValue(), g.double_);
                 converted_left->decvref(emitter);
@@ -1115,6 +1118,9 @@ public:
         if (rhs->getType() == FLOAT) {
             converted_right = rhs->makeConverted(emitter, FLOAT);
         } else {
+            if (op_type == AST_TYPE::IsNot || op_type == AST_TYPE::Is)
+                return makeBool(op_type == AST_TYPE::IsNot);
+
             converted_right = rhs->makeConverted(emitter, INT);
             llvm::Value* conv = emitter.getBuilder()->CreateSIToFP(converted_right->getValue(), g.double_);
             converted_right->decvref(emitter);
