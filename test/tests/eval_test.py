@@ -21,6 +21,9 @@ d = 19
 e = 20
 i = 21
 def func():
+    loc = 231
+    print 'loc', eval("loc")
+
     print eval("d")
 
     e = 20
@@ -100,6 +103,25 @@ func2()
 print 'shadow1', shadow2
 print 'shadow2', shadow2
 print 'shadow3', shadow3
+
+def func3():
+    loc = 1234
+    print eval("(lambda arg : arg + loc)(12)")
+func3()
+
+changing_global = -1
+def print_changing_global():
+    print 'changing_global is', changing_global
+    return 0
+eval("[print_changing_global() for changing_global in range(5)]")
+
+def do_changing_local():
+    changing_local = -1
+    def print_changing_local():
+        print 'changing_local is', changing_local
+        return 0
+    eval("[print_changing_local() for changing_local in range(5)]")
+do_changing_local()
 
 x = 2
 def wrap():

@@ -32,6 +32,7 @@ extern const void* interpreter_instr_addr;
 
 Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                           Box** args);
+Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* locals);
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                       BoxedDict* locals);
 

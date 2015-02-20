@@ -1102,6 +1102,22 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
+Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* locals) {
+    ++cf->times_called;
+
+    ASTInterpreter interpreter(cf);
+    for (const auto& p : locals->d) {
+        assert(p.first->cls == str_cls);
+        auto name = static_cast<BoxedString*>(p.first)->s;
+        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
+        interpreter.addSymbol(interned, p.second, false);
+    }
+
+    interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
+    Value v = ASTInterpreter::execute(interpreter);
+
+    return v.o ? v.o : None;
+}
 
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                       BoxedDict* locals) {

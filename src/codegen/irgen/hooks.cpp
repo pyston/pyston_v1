@@ -302,7 +302,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
-static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm) {
+static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm, BoxedDict* locals) {
     CompiledFunction* cf;
 
     { // scope for limiting the locked region:
@@ -317,16 +317,13 @@ static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm) {
         SourceInfo* si = new SourceInfo(bm, scoping, expr, { stmt });
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
-        EffortLevel effort = initialEffort();
+        EffortLevel effort = EffortLevel::INTERPRETED;
 
         cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
         assert(cf->clfunc->versions.size());
     }
 
-    if (cf->is_interpreted)
-        return astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL);
-    else
-        return ((Box * (*)())cf->code)();
+    return astInterpretFunctionEval(cf, locals);
 }
 
 Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
@@ -335,10 +332,10 @@ Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
     // TODO this memory leaks
     AST_Module* parsedModule = parse_string(code);
     assert(parsedModule->body[0]->type == AST_TYPE::Expr);
-    AST_Expression* parsedExpr = new AST_Expression(std::unique_ptr<InternedStringPool>(new InternedStringPool()));
+    AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
     parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
 
-    return compileAndRunExpression(parsedExpr, module);
+    return compileAndRunExpression(parsedExpr, module, locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

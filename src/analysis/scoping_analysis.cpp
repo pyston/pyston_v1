@@ -207,8 +207,8 @@ public:
 
         if (usage->forced_globals.count(name))
             return true;
-        if (name.c_str() != name.c_str())
-            usage->dump();
+        if (usesNameLookup)
+            return false;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
     bool refersToClosure(InternedString name) override {
@@ -219,7 +219,7 @@ public:
     }
     bool saveInClosure(InternedString name) override {
         // HAX
-        if (isCompilerCreatedName(name))
+        if (isCompilerCreatedName(name) || usesNameLookup)
             return false;
         return usage->referenced_from_nested.count(name) != 0;
     }
@@ -228,15 +228,14 @@ public:
         // HAX
         if (isCompilerCreatedName(name))
             return VarScopeType::FAST;
-
-        if (refersToGlobal(name))
-            return VarScopeType::GLOBAL;
         if (refersToClosure(name))
             return VarScopeType::DEREF;
-        if (usesNameLookup)
-            return VarScopeType::NAME;
+        if (refersToGlobal(name))
+            return VarScopeType::GLOBAL;
         if (saveInClosure(name))
             return VarScopeType::CLOSURE;
+        if (usesNameLookup)
+            return VarScopeType::NAME;
         return VarScopeType::FAST;
     }
 

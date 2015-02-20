@@ -2082,10 +2082,12 @@ private:
                 if (myblock->successors.size()) {
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want
                     // here, but this is just for debugging so I guess let it happen for now:
+                    /*
                     ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                     ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
                            it->first.c_str(), ending_type->debugName().c_str(),
                            it->second->getType()->debugName().c_str());
+                           */
                 }
 #endif
 
