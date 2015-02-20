@@ -317,7 +317,7 @@ static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm) {
         SourceInfo* si = new SourceInfo(bm, scoping, expr, { stmt });
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
-        EffortLevel::EffortLevel effort = initialEffort();
+        EffortLevel effort = initialEffort();
 
         cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
         assert(cf->clfunc->versions.size());

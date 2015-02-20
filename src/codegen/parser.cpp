@@ -1089,7 +1089,7 @@ AST_Module* caching_parse_file(const char* fn) {
             if (result == ParseResult::PYC_UNWRITABLE) {
                 if (VERBOSITY())
                     printf("Unable to write to %s, falling back to non-caching parse\n", cache_fn.c_str());
-                return parse(fn);
+                return parse_file(fn);
             }
             code = stat(cache_fn.c_str(), &cache_stat);
             assert(code == 0);

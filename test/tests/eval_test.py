@@ -1,23 +1,21 @@
-# expected: fail
-# - eval not implemented
-# - closures not implemented
+# lots of eval functionality not implemented
 
 print eval("3 + 4")
 
 a = 5
 print eval("a")
 
-print eval("[b for b in range(5)]")
-print b
+#print eval("[b for b in range(5)]")
+#print b
 
-c = 2
-print eval("[c for c in range(5)]")
-print c
+#c = 2
+#print eval("[c for c in range(5)]")
+#print c
 
-try:
-    print eval("int('abc')")
-except ValueError:
-    print 'got ValueError'
+#try:
+#    print eval("int('abc')")
+#except ValueError:
+#    print 'got ValueError'
 
 d = 19
 e = 20
@@ -47,24 +45,24 @@ def func():
     eval("[h for h in range(5)]")
     print h
 
-    h2 = 2
-    print eval("h2 + sum([h2 for h2 in range(5)])")
-    print 'h2', h2
+#    h2 = 2
+#    print eval("h2 + sum([h2 for h2 in range(5)])")
+#    print 'h2', h2
 
-    h3 = 2
-    print eval("sum([h3 for h3 in range(5)]) + h3")
-    print 'h3', h3
+#    h3 = 2
+#    print eval("sum([h3 for h3 in range(5)]) + h3")
+#    print 'h3', h3
 
     eval("[i for i in range(5)]")
 
-    j = 24
-    def inner():
-        return j
-    print eval("inner()")
+    #j = 24
+    #def inner():
+    #    return j
+    #print eval("inner()")
 func()
 print i
 
-print eval("(lambda k : k+2)(3)")
+#print eval("(lambda k : k+2)(3)")
 
 l = 100
 print eval("(lambda k : l+2)(3)")
@@ -83,8 +81,9 @@ print eval("eval('3 + 2342')")
 o = 300
 print 'eval eval o', eval("eval('o')")
 
-print eval("[(lambda p : p + o)(5) for o in range(5)]")
+#print eval("[(lambda p : p + o)(5) for o in range(5)]")
 
+"""
 shadow1 = 1000
 shadow2 = 1000
 shadow3 = 1000
@@ -123,3 +122,4 @@ def wrap():
     inner2()
 
 wrap()
+"""
