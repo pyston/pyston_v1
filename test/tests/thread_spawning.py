@@ -1,5 +1,4 @@
 # allow-warning: converting unicode literal to str
-# fail-if: '-x' in EXTRA_JIT_ARGS
 
 # Make sure we can spawn a bunch of threads
 
