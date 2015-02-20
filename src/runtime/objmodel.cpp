@@ -3230,7 +3230,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     // embed the comparison as we do for Is/IsNot above
     if (!lrtn && !rrtn && rewrite_args) {
         assert(rewrite_args->out_success == false);
-        if (op_type == AST_TYPE::Eq || AST_TYPE::NotEq) {
+        if (op_type == AST_TYPE::Eq || op_type == AST_TYPE::NotEq) {
             rewrite_args->out_success = true;
             RewriterVar* cmpres
                 = rewrite_args->lhs->cmp((AST_TYPE::AST_TYPE)op_type, rewrite_args->rhs, rewrite_args->destination);
