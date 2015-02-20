@@ -21,6 +21,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "Python.h"
+
 #include "core/common.h"
 #include "core/types.h"
 #include "core/util.h"
@@ -1072,14 +1074,16 @@ static bool _needs_escaping[256]
         true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
         true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true };
 static char _hex[17] = "0123456789abcdef"; // really only needs to be 16 but clang will complain
-extern "C" Box* strRepr(BoxedString* self) {
+
+extern "C" PyObject* PyString_Repr(PyObject* obj, int smartquotes) noexcept {
+    BoxedString* self = (BoxedString*)obj;
     assert(self->cls == str_cls);
 
     std::ostringstream os("");
 
     const std::string& s = self->s;
     char quote = '\'';
-    if (s.find('\'', 0) != std::string::npos && s.find('\"', 0) == std::string::npos) {
+    if (smartquotes && s.find('\'', 0) != std::string::npos && s.find('\"', 0) == std::string::npos) {
         quote = '\"';
     }
     os << quote;
@@ -1123,6 +1127,187 @@ extern "C" Box* strRepr(BoxedString* self) {
     os << quote;
 
     return boxString(os.str());
+}
+
+extern "C" Box* strRepr(BoxedString* self) {
+    return PyString_Repr(self, 1 /* smartquotes */);
+}
+
+/* Unescape a backslash-escaped string. If unicode is non-zero,
+   the string is a u-literal. If recode_encoding is non-zero,
+   the string is UTF-8 encoded and should be re-encoded in the
+   specified encoding.  */
+
+extern "C" PyObject* PyString_DecodeEscape(const char* s, Py_ssize_t len, const char* errors, Py_ssize_t unicode,
+                                           const char* recode_encoding) noexcept {
+    int c;
+    char* p, *buf;
+    const char* end;
+    PyObject* v;
+    Py_ssize_t newlen = recode_encoding ? 4 * len : len;
+    v = PyString_FromStringAndSize((char*)NULL, newlen);
+    if (v == NULL)
+        return NULL;
+    p = buf = PyString_AsString(v);
+    end = s + len;
+    while (s < end) {
+        if (*s != '\\') {
+        non_esc:
+#ifdef Py_USING_UNICODE
+            if (recode_encoding && (*s & 0x80)) {
+                PyObject* u, *w;
+                char* r;
+                const char* t;
+                Py_ssize_t rn;
+                t = s;
+                /* Decode non-ASCII bytes as UTF-8. */
+                while (t < end && (*t & 0x80))
+                    t++;
+                u = PyUnicode_DecodeUTF8(s, t - s, errors);
+                if (!u)
+                    goto failed;
+
+                /* Recode them in target encoding. */
+                w = PyUnicode_AsEncodedString(u, recode_encoding, errors);
+                Py_DECREF(u);
+                if (!w)
+                    goto failed;
+
+                /* Append bytes to output buffer. */
+                assert(PyString_Check(w));
+                r = PyString_AS_STRING(w);
+                rn = PyString_GET_SIZE(w);
+                Py_MEMCPY(p, r, rn);
+                p += rn;
+                Py_DECREF(w);
+                s = t;
+            } else {
+                *p++ = *s++;
+            }
+#else
+            *p++ = *s++;
+#endif
+            continue;
+        }
+        s++;
+        if (s == end) {
+            PyErr_SetString(PyExc_ValueError, "Trailing \\ in string");
+            goto failed;
+        }
+        switch (*s++) {
+            /* XXX This assumes ASCII! */
+            case '\n':
+                break;
+            case '\\':
+                *p++ = '\\';
+                break;
+            case '\'':
+                *p++ = '\'';
+                break;
+            case '\"':
+                *p++ = '\"';
+                break;
+            case 'b':
+                *p++ = '\b';
+                break;
+            case 'f':
+                *p++ = '\014';
+                break; /* FF */
+            case 't':
+                *p++ = '\t';
+                break;
+            case 'n':
+                *p++ = '\n';
+                break;
+            case 'r':
+                *p++ = '\r';
+                break;
+            case 'v':
+                *p++ = '\013';
+                break; /* VT */
+            case 'a':
+                *p++ = '\007';
+                break; /* BEL, not classic C */
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+                c = s[-1] - '0';
+                if (s < end && '0' <= *s && *s <= '7') {
+                    c = (c << 3) + *s++ - '0';
+                    if (s < end && '0' <= *s && *s <= '7')
+                        c = (c << 3) + *s++ - '0';
+                }
+                *p++ = c;
+                break;
+            case 'x':
+                if (s + 1 < end && isxdigit(Py_CHARMASK(s[0])) && isxdigit(Py_CHARMASK(s[1]))) {
+                    unsigned int x = 0;
+                    c = Py_CHARMASK(*s);
+                    s++;
+                    if (isdigit(c))
+                        x = c - '0';
+                    else if (islower(c))
+                        x = 10 + c - 'a';
+                    else
+                        x = 10 + c - 'A';
+                    x = x << 4;
+                    c = Py_CHARMASK(*s);
+                    s++;
+                    if (isdigit(c))
+                        x += c - '0';
+                    else if (islower(c))
+                        x += 10 + c - 'a';
+                    else
+                        x += 10 + c - 'A';
+                    *p++ = x;
+                    break;
+                }
+                if (!errors || strcmp(errors, "strict") == 0) {
+                    PyErr_SetString(PyExc_ValueError, "invalid \\x escape");
+                    goto failed;
+                }
+                if (strcmp(errors, "replace") == 0) {
+                    *p++ = '?';
+                } else if (strcmp(errors, "ignore") == 0)
+                    /* do nothing */;
+                else {
+                    PyErr_Format(PyExc_ValueError, "decoding error; "
+                                                   "unknown error handling code: %.400s",
+                                 errors);
+                    goto failed;
+                }
+                /* skip \x */
+                if (s < end && isxdigit(Py_CHARMASK(s[0])))
+                    s++; /* and a hexdigit */
+                break;
+#ifndef Py_USING_UNICODE
+            case 'u':
+            case 'U':
+            case 'N':
+                if (unicode) {
+                    PyErr_SetString(PyExc_ValueError, "Unicode escapes not legal "
+                                                      "when Unicode disabled");
+                    goto failed;
+                }
+#endif
+            default:
+                *p++ = '\\';
+                s--;
+                goto non_esc; /* an arbitrary number of unescaped
+                                 UTF-8 bytes may follow. */
+        }
+    }
+    if (p - buf < newlen)
+        _PyString_Resize(&v, p - buf); /* v is cleared on error */
+    return v;
+failed:
+    Py_DECREF(v);
+    return NULL;
 }
 
 extern "C" Box* strHash(BoxedString* self) {
@@ -1650,6 +1835,44 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
     return boxBool(self->s.compare(istart, sub->s.size(), sub->s) == 0);
 }
 
+Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'decode' requires a 'str' object but received a '%s'", getTypeName(self));
+
+    BoxedString* encoding_str = (BoxedString*)encoding;
+    BoxedString* error_str = (BoxedString*)error;
+
+    if (encoding_str && encoding_str->cls != str_cls)
+        raiseExcHelper(TypeError, "decode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
+
+    if (error_str && error_str->cls != str_cls)
+        raiseExcHelper(TypeError, "decode() argument 2 must be string, not '%s'", getTypeName(error_str));
+
+    Box* result
+        = PyCodec_Decode(self, encoding_str ? encoding_str->s.c_str() : NULL, error_str ? error_str->s.c_str() : NULL);
+    checkAndThrowCAPIException();
+    return result;
+}
+
+Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'encode' requires a 'str' object but received a '%s'", getTypeName(self));
+
+    BoxedString* encoding_str = (BoxedString*)encoding;
+    BoxedString* error_str = (BoxedString*)error;
+
+    if (encoding_str && encoding_str->cls != str_cls)
+        raiseExcHelper(TypeError, "encode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
+
+    if (error_str && error_str->cls != str_cls)
+        raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
+
+    Box* result
+        = PyCodec_Encode(self, encoding_str ? encoding_str->s.c_str() : NULL, error_str ? error_str->s.c_str() : NULL);
+    checkAndThrowCAPIException();
+    return result;
+}
+
 Box* strFind(BoxedString* self, Box* elt, Box* _start) {
     if (self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'", getTypeName(self));
@@ -1931,6 +2154,11 @@ void setupStr() {
     str_cls->giveAttr("isspace", new BoxedFunction(boxRTFunction((void*)strIsSpace, BOXED_BOOL, 1)));
     str_cls->giveAttr("istitle", new BoxedFunction(boxRTFunction((void*)strIsTitle, BOXED_BOOL, 1)));
     str_cls->giveAttr("isupper", new BoxedFunction(boxRTFunction((void*)strIsUpper, BOXED_BOOL, 1)));
+
+    str_cls->giveAttr("decode",
+                      new BoxedFunction(boxRTFunction((void*)strDecode, UNKNOWN, 3, 2, false, false), { 0, 0 }));
+    str_cls->giveAttr("encode",
+                      new BoxedFunction(boxRTFunction((void*)strEncode, UNKNOWN, 3, 2, false, false), { 0, 0 }));
 
     str_cls->giveAttr("lower", new BoxedFunction(boxRTFunction((void*)strLower, STR, 1)));
     str_cls->giveAttr("swapcase", new BoxedFunction(boxRTFunction((void*)strSwapcase, STR, 1)));

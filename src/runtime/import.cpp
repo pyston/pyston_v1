@@ -159,14 +159,16 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     return NULL;
 }
 
-static Box* import(const std::string* name, bool return_first) {
+static Box* import(const std::string* name, bool return_first, int level) {
     assert(name);
     assert(name->size() > 0);
 
     static StatCounter slowpath_import("slowpath_import");
     slowpath_import.log();
 
-    BoxedDict* sys_modules = getSysModulesDict();
+    RELEASE_ASSERT(level == -1 || level == 0, "not implemented");
+    if (level == 0)
+        printf("Warning: import level 0 will be treated as -1!\n");
 
     size_t l = 0, r;
     Box* last_module = NULL;
@@ -210,6 +212,23 @@ extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) noexcept {
     Py_FatalError("unimplemented");
 }
 
+// This function has the same behaviour as __import__()
+extern "C" PyObject* PyImport_ImportModuleLevel(char* name, PyObject* globals, PyObject* locals, PyObject* fromlist,
+                                                int level) noexcept {
+    RELEASE_ASSERT(globals == NULL, "not implemented");
+    RELEASE_ASSERT(locals == NULL, "not implemented");
+    RELEASE_ASSERT(fromlist == NULL, "not implemented");
+    RELEASE_ASSERT(level == 0, "not implemented");
+
+    try {
+        std::string module_name = name;
+        return import(level, fromlist ? fromlist : None, &module_name);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 // Named the same thing as the CPython method:
 static void ensure_fromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
     if (module->getattr("__path__") == NULL) {
@@ -243,9 +262,9 @@ static void ensure_fromlist(Box* module, Box* fromlist, const std::string& modul
 }
 
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
-    RELEASE_ASSERT(level == -1, "");
+    RELEASE_ASSERT(level == -1 || level == 0, "not implemented");
 
-    Box* module = import(module_name, from_imports == None);
+    Box* module = import(module_name, from_imports == None, level);
     assert(module);
 
     if (from_imports != None) {

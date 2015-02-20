@@ -305,8 +305,6 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
         raiseExcHelper(TypeError, "tuple.__new__(%s): %s is not a subtype of tuple", getNameOfClass(cls),
                        getNameOfClass(cls));
 
-    RELEASE_ASSERT(cls == tuple_cls, "");
-
     int args_sz = args->elts.size();
     int kwargs_sz = kwargs->d.size();
 
@@ -335,7 +333,7 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             velts.push_back(e);
     }
 
-    return new BoxedTuple(std::move(velts));
+    return new (cls) BoxedTuple(std::move(velts));
 }
 
 extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {

@@ -300,6 +300,10 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept
     }
 }
 
+extern "C" int PyObject_AsReadBuffer(PyObject* obj, const void** buffer, Py_ssize_t* buffer_len) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
     PyObject* retval;
 
