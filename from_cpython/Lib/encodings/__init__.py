@@ -43,7 +43,9 @@ _norm_encoding_map = ('                                              . '
                       '                ')
 _aliases = aliases.aliases
 
-class CodecRegistryError(LookupError, SystemError):
+# Pyston change: we don't support multiple inheritance yet
+#class CodecRegistryError(LookupError, SystemError):
+class CodecRegistryError(LookupError):
     pass
 
 def normalize_encoding(encoding):

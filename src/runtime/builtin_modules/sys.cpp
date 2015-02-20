@@ -209,6 +209,12 @@ static std::string generateVersionString() {
     return oss.str();
 }
 
+static bool isLittleEndian() {
+    unsigned long number = 1;
+    char* s = (char*)&number;
+    return s[0] != 0;
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerPermanentRoot(sys_modules_dict);
@@ -235,6 +241,7 @@ void setupSys() {
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
+    sys_module->giveAttr("byteorder", new BoxedString(isLittleEndian() ? "little" : "big"));
 
     sys_module->giveAttr("platform", boxStrConstant("unknown")); // seems like a reasonable, if poor, default
 

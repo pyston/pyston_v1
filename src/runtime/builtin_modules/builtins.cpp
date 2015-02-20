@@ -442,12 +442,22 @@ Box* issubclass_func(Box* child, Box* parent) {
     return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
 }
 
-Box* bltinImport(Box* arg) {
-    if (arg->cls != str_cls) {
-        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(arg));
+Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
+    Box* fromlist = args[0];
+    Box* level = args[1];
+
+    RELEASE_ASSERT(globals == None, "not implemented");
+    RELEASE_ASSERT(locals == None, "not implemented");
+
+    if (name->cls != str_cls) {
+        raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
     }
 
-    return import(-1, new BoxedTuple({}), &static_cast<BoxedString*>(arg)->s);
+    if (level->cls != int_cls) {
+        raiseExcHelper(TypeError, "an integer is required");
+    }
+
+    return import(((BoxedInt*)level)->n, fromlist, &static_cast<BoxedString*>(name)->s);
 }
 
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
@@ -575,7 +585,8 @@ BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *Attribu
     *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
     *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
     *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
-    *SystemError, *NotImplementedError, *PendingDeprecationWarning, *EOFError;
+    *SystemError, *NotImplementedError, *PendingDeprecationWarning, *EOFError, *UnicodeError, *UnicodeEncodeError,
+    *UnicodeDecodeError, *UnicodeTranslateError;
 
 Box* PyExc_RecursionErrorInst;
 Box* PyExc_MemoryErrorInst;
@@ -1028,6 +1039,13 @@ void setupBuiltins() {
     PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
     EOFError = makeBuiltinException(StandardError, "EOFError");
 
+    // Unicode errors
+    UnicodeError = makeBuiltinException(ValueError, "UnicodeError");
+    UnicodeEncodeError = makeBuiltinException(UnicodeError, "UnicodeEncodeError");
+    UnicodeDecodeError = makeBuiltinException(UnicodeError, "UnicodeDecodeError");
+    UnicodeTranslateError = makeBuiltinException(UnicodeError, "UnicodeTranslateError");
+
+
     BaseException->giveAttr("__reduce__",
                             new BoxedFunction(boxRTFunction((void*)BoxedException::__reduce__, UNKNOWN, 1)));
     EnvironmentError->giveAttr("__reduce__",
@@ -1096,8 +1114,10 @@ void setupBuiltins() {
     Box* issubclass_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)issubclass_func, BOXED_BOOL, 2));
     builtins_module->giveAttr("issubclass", issubclass_obj);
 
+    CLFunction* import_func = boxRTFunction((void*)bltinImport, UNKNOWN, 5, 4, false, false,
+                                            ParamNames({ "name", "globals", "locals", "fromlist", "level" }, "", ""));
     builtins_module->giveAttr("__import__",
-                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)bltinImport, UNKNOWN, 1)));
+                              new BoxedBuiltinFunctionOrMethod(import_func, { None, None, None, new BoxedInt(-1) }));
 
     enumerate_cls
         = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false, "enumerate");

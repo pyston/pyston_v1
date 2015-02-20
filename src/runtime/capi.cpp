@@ -426,7 +426,8 @@ extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, Py
         else
             return runtimeCall(callable_object, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return NULL;
     }
 }
 
@@ -712,7 +713,20 @@ extern "C" void PyErr_SetObject(PyObject* exception, PyObject* value) noexcept {
 }
 
 extern "C" PyObject* PyErr_Format(PyObject* exception, const char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
+    va_list vargs;
+    PyObject* string;
+
+#ifdef HAVE_STDARG_PROTOTYPES
+    va_start(vargs, format);
+#else
+    va_start(vargs);
+#endif
+
+    string = PyString_FromFormatV(format, vargs);
+    PyErr_SetObject(exception, string);
+    Py_XDECREF(string);
+    va_end(vargs);
+    return NULL;
 }
 
 extern "C" int PyErr_BadArgument() noexcept {
@@ -1433,6 +1447,8 @@ extern "C" PyObject* Py_FindMethod(PyMethodDef* methods, PyObject* self, const c
 }
 
 extern "C" PyObject* PyCFunction_NewEx(PyMethodDef* ml, PyObject* self, PyObject* module) noexcept {
+    RELEASE_ASSERT(module == NULL, "not implemented");
+    assert((ml->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
 
     return new BoxedCApiFunction(ml->ml_flags, self, ml->ml_name, ml->ml_meth);
 }
