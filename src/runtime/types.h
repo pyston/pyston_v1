@@ -612,9 +612,6 @@ public:
 
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
-Box* exceptionNew1(BoxedClass* cls);
-Box* exceptionNew2(BoxedClass* cls, Box* message);
-Box* exceptionNew(BoxedClass* cls, BoxedTuple* args);
 Box* objectNewNoArgs(BoxedClass* cls);
 
 extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,

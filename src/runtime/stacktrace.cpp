@@ -117,7 +117,7 @@ void raiseExc(Box* exc_obj) {
 // Have a special helper function for syntax errors, since we want to include the location
 // of the syntax error in the traceback, even though it is not part of the execution:
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func) {
-    Box* exc = exceptionNew2(SyntaxError, boxStrConstant(msg));
+    Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxStrConstant(msg), NULL, NULL, NULL, NULL);
 
     auto tb = getTraceback();
     // TODO: push the syntax error line back on it:
@@ -253,10 +253,10 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         va_end(ap);
 
         BoxedString* message = boxStrConstant(buf);
-        Box* exc_obj = exceptionNew2(cls, message);
+        Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), message, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     } else {
-        Box* exc_obj = exceptionNew1(cls);
+        Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     }
 }

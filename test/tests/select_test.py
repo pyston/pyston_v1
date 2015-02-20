@@ -1,3 +1,4 @@
+import gc
 import select
 
 for k in sorted(dir(select)):
@@ -20,3 +21,9 @@ try:
     print p.poll(10)
 finally:
     f.close()
+gc.collect()
+try:
+    p.unregister(f)
+except Exception:
+    # We don't generate the write exception here, but we shouldn't abort
+    pass

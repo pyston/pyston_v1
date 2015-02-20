@@ -56,7 +56,7 @@ Box* sysExcClear() {
 
 static Box* sysExit(Box* arg) {
     assert(arg);
-    Box* exc = exceptionNew2(SystemExit, arg);
+    Box* exc = runtimeCall(SystemExit, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
     // TODO this should be handled by the SystemExit constructor
     exc->giveAttr("code", arg);
 

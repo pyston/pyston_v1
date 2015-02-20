@@ -592,10 +592,6 @@ Box* PyExc_RecursionErrorInst;
 Box* PyExc_MemoryErrorInst;
 }
 
-Box* exceptionNew1(BoxedClass* cls) {
-    return exceptionNew(cls, EmptyTuple);
-}
-
 class BoxedException : public Box {
 public:
     HCAttrs attrs;
@@ -608,10 +604,6 @@ public:
         return new BoxedTuple({ self->cls, EmptyTuple, makeAttrWrapper(self) });
     }
 };
-
-Box* exceptionNew2(BoxedClass* cls, Box* message) {
-    return exceptionNew(cls, new BoxedTuple({ message }));
-}
 
 Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
     if (!isSubclass(cls->cls, type_cls))
