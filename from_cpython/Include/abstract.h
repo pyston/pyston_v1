@@ -326,7 +326,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) PyObject_CallFunction(PyObject *callable_object,
-                                                 char *format, ...) PYSTON_NOEXCEPT;
+                                                 const char *format, ...) PYSTON_NOEXCEPT;
 
        /*
      Call a callable Python object, callable_object, with a
@@ -339,8 +339,8 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
 
-     PyAPI_FUNC(PyObject *) PyObject_CallMethod(PyObject *o, char *m,
-                                               char *format, ...) PYSTON_NOEXCEPT;
+     PyAPI_FUNC(PyObject *) PyObject_CallMethod(PyObject *o, const char *m,
+                                               const char *format, ...) PYSTON_NOEXCEPT;
 
        /*
      Call the method named m of object o with a variable number of
@@ -352,10 +352,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(PyObject *) _PyObject_CallFunction_SizeT(PyObject *callable,
-                                                         char *format, ...) PYSTON_NOEXCEPT;
+                                                         const char *format, ...) PYSTON_NOEXCEPT;
      PyAPI_FUNC(PyObject *) _PyObject_CallMethod_SizeT(PyObject *o,
-                                                       char *name,
-                                                       char *format, ...) PYSTON_NOEXCEPT;
+                                                       const char *name,
+                                                       const char *format, ...) PYSTON_NOEXCEPT;
 
      PyAPI_FUNC(PyObject *) PyObject_CallFunctionObjArgs(PyObject *callable,
                                                         ...) PYSTON_NOEXCEPT;

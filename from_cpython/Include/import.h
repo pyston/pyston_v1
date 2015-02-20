@@ -9,14 +9,14 @@ extern "C" {
 #endif
 
 PyAPI_FUNC(long) PyImport_GetMagicNumber(void) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyImport_ExecCodeModule(char *name, PyObject *co) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyImport_ExecCodeModule(const char *name, PyObject *co) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleEx(
 	char *name, PyObject *co, char *pathname) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_GetModuleDict(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_AddModule(const char *name) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_ImportModule(const char *name) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyImport_ImportModuleNoBlock(const char *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(PyObject *) PyImport_ImportModuleLevel(char *name,
+PyAPI_FUNC(PyObject *) PyImport_ImportModuleLevel(const char *name,
 	PyObject *globals, PyObject *locals, PyObject *fromlist, int level) PYSTON_NOEXCEPT;
 
 #define PyImport_ImportModuleEx(n, g, l, f) \

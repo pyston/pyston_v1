@@ -244,7 +244,7 @@ static PyObject* codec_getincrementalcodec(const char* encoding, const char* err
     if (inccodec == NULL)
         return NULL;
     if (errors)
-        ret = PyObject_CallFunction(inccodec, (char*)"s", errors);
+        ret = PyObject_CallFunction(inccodec, "s", errors);
     else
         ret = PyObject_CallFunction(inccodec, NULL);
     Py_DECREF(inccodec);
@@ -262,9 +262,9 @@ static PyObject* codec_getstreamcodec(const char* encoding, PyObject* stream, co
 
     codeccls = PyTuple_GET_ITEM(codecs, index);
     if (errors != NULL)
-        streamcodec = PyObject_CallFunction(codeccls, (char*)"Os", stream, errors);
+        streamcodec = PyObject_CallFunction(codeccls, "Os", stream, errors);
     else
-        streamcodec = PyObject_CallFunction(codeccls, (char*)"O", stream);
+        streamcodec = PyObject_CallFunction(codeccls, "O", stream);
     Py_DECREF(codecs);
     return streamcodec;
 }
@@ -396,7 +396,7 @@ int PyCodec_RegisterError(const char* name, PyObject* error) noexcept {
         PyErr_SetString(PyExc_TypeError, "handler must be callable");
         return -1;
     }
-    return PyDict_SetItemString(interp->codec_error_registry, (char*)name, error);
+    return PyDict_SetItemString(interp->codec_error_registry, name, error);
 }
 
 /* Lookup the error handling callback function registered under the
@@ -412,7 +412,7 @@ PyObject* PyCodec_LookupError(const char* name) noexcept {
 
     if (name == NULL)
         name = "strict";
-    handler = PyDict_GetItemString(interp->codec_error_registry, (char*)name);
+    handler = PyDict_GetItemString(interp->codec_error_registry, name);
     if (!handler)
         PyErr_Format(PyExc_LookupError, "unknown error handler name '%.400s'", name);
     else
@@ -769,7 +769,7 @@ static int _PyCodecRegistry_Init(void) {
     if (interp->codec_search_path == NULL || interp->codec_search_cache == NULL || interp->codec_error_registry == NULL)
         Py_FatalError("can't initialize codec registry");
 
-    mod = PyImport_ImportModuleLevel((char*)"encodings", NULL, NULL, NULL, 0);
+    mod = PyImport_ImportModuleLevel("encodings", NULL, NULL, NULL, 0);
     if (mod == NULL) {
         if (PyErr_ExceptionMatches(PyExc_ImportError)) {
             /* Ignore ImportErrors... this is done so that

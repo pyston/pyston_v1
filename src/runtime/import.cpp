@@ -213,8 +213,8 @@ extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) noexcept {
 }
 
 // This function has the same behaviour as __import__()
-extern "C" PyObject* PyImport_ImportModuleLevel(char* name, PyObject* globals, PyObject* locals, PyObject* fromlist,
-                                                int level) noexcept {
+extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* globals, PyObject* locals,
+                                                PyObject* fromlist, int level) noexcept {
     RELEASE_ASSERT(globals == NULL, "not implemented");
     RELEASE_ASSERT(locals == NULL, "not implemented");
     RELEASE_ASSERT(fromlist == NULL, "not implemented");

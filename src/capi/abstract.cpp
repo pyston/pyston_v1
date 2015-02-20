@@ -328,11 +328,11 @@ static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
     return retval;
 }
 
-extern "C" PyObject* PyObject_CallMethod(PyObject* o, char* name, char* format, ...) noexcept {
+extern "C" PyObject* PyObject_CallMethod(PyObject* o, const char* name, const char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, char* name, char* format, ...) noexcept {
+extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, const char* name, const char* format, ...) noexcept {
     // TODO it looks like this could be made much more efficient by calling our callattr(), but
     // I haven't taken the time to verify that that has the same behavior
 
@@ -468,7 +468,7 @@ extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
     return recursive_issubclass(derived, cls);
 }
 
-extern "C" PyObject* _PyObject_CallFunction_SizeT(PyObject* callable, char* format, ...) noexcept {
+extern "C" PyObject* _PyObject_CallFunction_SizeT(PyObject* callable, const char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -619,7 +619,7 @@ extern "C" PyObject* PySequence_List(PyObject* v) noexcept {
     return result;
 }
 
-extern "C" PyObject* PyObject_CallFunction(PyObject* callable, char* format, ...) noexcept {
+extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {
     Py_FatalError("unimplemented");
 }
 
