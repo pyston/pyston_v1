@@ -459,7 +459,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattrInternal(obj, str->s, NULL);
+        rtn = getattr(obj, str->s.c_str());
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
