@@ -3197,6 +3197,10 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             }
             return lrtn;
         }
+
+        // if the function returned anything, we have to abort the rewrite
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     const std::string& rop_name = getReverseOpName(op_type);
@@ -3224,6 +3228,10 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             }
             return rrtn;
         }
+
+        // if the function returned anything, we have to abort the rewrite
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
     }
 
     // for cases where we don't have a __eq__/__neq__ method, just
