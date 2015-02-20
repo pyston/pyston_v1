@@ -559,6 +559,11 @@ struct FrameInfo {
 
     FrameInfo(ExcInfo exc) : exc(exc) {}
 };
+
+struct CallattrFlags {
+    bool cls_only : 1;
+    bool null_on_nonexistent : 1;
+};
 }
 
 #endif

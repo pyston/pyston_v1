@@ -457,8 +457,9 @@ private:
                         ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
 
                         // TODO super dumb that it reallocates the name again
+                        CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
                         CompilerVariable* _r
-                            = rtn->callattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, true, ArgPassSpec(2),
+                            = rtn->callattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, flags, ArgPassSpec(2),
                                             { makeStr(new std::string(p.first.str())), converted }, NULL);
                         converted->decvref(emitter);
                         _r->decvref(emitter);
@@ -474,8 +475,9 @@ private:
                         emitter.getBuilder()->SetInsertPoint(was_defined);
                         ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
                         // TODO super dumb that it reallocates the name again
+                        CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
                         CompilerVariable* _r
-                            = rtn->callattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, true, ArgPassSpec(2),
+                            = rtn->callattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, flags, ArgPassSpec(2),
                                             { makeStr(new std::string(p.first.str())), converted }, NULL);
                         converted->decvref(emitter);
                         _r->decvref(emitter);
@@ -744,8 +746,8 @@ private:
 
         CompilerVariable* rtn;
         if (is_callattr) {
-            rtn = func->callattr(emitter, getOpInfoForNode(node, unw_info), attr, callattr_clsonly, argspec, args,
-                                 keyword_names);
+            CallattrFlags flags = {.cls_only = callattr_clsonly, .null_on_nonexistent = false };
+            rtn = func->callattr(emitter, getOpInfoForNode(node, unw_info), attr, flags, argspec, args, keyword_names);
         } else {
             rtn = func->call(emitter, getOpInfoForNode(node, unw_info), argspec, args, keyword_names);
         }
@@ -972,8 +974,8 @@ private:
 
         for (int i = 0; i < node->elts.size(); i++) {
             CompilerVariable* elt = elts[i];
-
-            CompilerVariable* r = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), &add_str, true,
+            CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
+            CompilerVariable* r = rtn->callattr(emitter, getOpInfoForNode(node, unw_info), &add_str, flags,
                                                 ArgPassSpec(1), { elt }, NULL);
             r->decvref(emitter);
             elt->decvref(emitter);
@@ -1636,8 +1638,8 @@ private:
 
             curblock = ss_block;
             emitter.getBuilder()->SetInsertPoint(ss_block);
-
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, false, ArgPassSpec(1),
+            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false };
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1),
                                     { makeStr(&space_str) }, NULL);
             r->decvref(emitter);
 
@@ -1650,7 +1652,7 @@ private:
             llvm::Value* v = emitter.createCall(unw_info, g.funcs.str, converted->getValue());
             v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
             auto s = new ConcreteCompilerVariable(STR, v, true);
-            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, false, ArgPassSpec(1), { s },
+            r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1), { s },
                                NULL);
             s->decvref(emitter);
             r->decvref(emitter);
@@ -1658,7 +1660,8 @@ private:
         }
 
         if (node->nl) {
-            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, false, ArgPassSpec(1),
+            CallattrFlags flags = {.cls_only = false, .null_on_nonexistent = false };
+            auto r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1),
                                     { makeStr(&newline_str) }, NULL);
             r->decvref(emitter);
 
