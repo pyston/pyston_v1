@@ -142,6 +142,13 @@ extern "C" void abort() {
 
         fprintf(stderr, "Someone called abort!\n");
 
+        // If we call abort(), things may be seriously wrong.  Set an alarm() to
+        // try to handle cases that we would just hang.
+        // (Ex if we abort() from a static constructor, and _printStackTrace uses
+        // that object, _printStackTrace will hang waiting for the first construction
+        // to finish.)
+        alarm(1);
+
         _printStacktrace();
     }
 
