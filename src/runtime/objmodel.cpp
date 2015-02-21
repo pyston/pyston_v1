@@ -58,6 +58,7 @@
 #define ATTRLIST_KIND_OFFSET ((char*)&(((HCAttrs::AttrList*)0x01)->gc_header.kind_id) - (char*)0x1)
 #define INSTANCEMETHOD_FUNC_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->func) - (char*)0x1)
 #define INSTANCEMETHOD_OBJ_OFFSET ((char*)&(((BoxedInstanceMethod*)0x01)->obj) - (char*)0x1)
+#define CLASSMETHOD_CALLABLE_OFFSET ((char*)&(((BoxedClassmethod*)0x01)->cm_callable) - (char*)0x1)
 #define BOOL_B_OFFSET ((char*)&(((BoxedBool*)0x01)->n) - (char*)0x1)
 #define INT_N_OFFSET ((char*)&(((BoxedInt*)0x01)->n) - (char*)0x1)
 
@@ -705,7 +706,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
 
             if (rewrite_args) {
                 r_im_self = rewrite_args->obj->getAttr(BOX_CLS_OFFSET);
-                r_im_func = r_descr->getAttr(offsetof(BoxedClassmethod, cm_callable));
+                r_im_func = r_descr->getAttr(CLASSMETHOD_CALLABLE_OFFSET);
                 r_im_func->addGuardNotEq(0);
             }
         } else if (descr->cls == instancemethod_cls) {
@@ -792,6 +793,40 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
             rewrite_args->out_success = true;
             rewrite_args->out_rtn = r_descr;
         }
+        return descr;
+    }
+
+    // Special case: classmethod descriptor
+    if (descr->cls == classmethod_cls) {
+        if (rewrite_args)
+            r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
+
+        BoxedClassmethod* cm = static_cast<BoxedClassmethod*>(descr);
+        Box* im_func = cm->cm_callable;
+
+        RewriterVar* r_im_self = NULL;
+
+        if (rewrite_args)
+            r_im_self = rewrite_args->obj;
+
+        if (!for_call) {
+            if (rewrite_args) {
+                RewriterVar* r_im_func = r_descr->getAttr(CLASSMETHOD_CALLABLE_OFFSET);
+                r_im_func->addGuardNotEq(0);
+
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func);
+                rewrite_args->out_success = true;
+            }
+            return boxInstanceMethod(cls, im_func);
+        }
+
+        if (rewrite_args) {
+            *r_bind_obj_out = r_im_self;
+            rewrite_args->out_success = true;
+            rewrite_args->out_rtn = r_descr;
+        }
+        *bind_obj_out = cls;
         return descr;
     }
 
@@ -1753,7 +1788,7 @@ extern "C" bool nonzero(Box* obj) {
     if (func == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
-                   || obj->cls == instancemethod_cls || obj->cls == module_cls,
+                   || obj->cls == instancemethod_cls || obj->cls == classmethod_cls || obj->cls == module_cls,
                "%s.__nonzero__", getTypeName(obj)); // TODO
 
         // TODO should rewrite these?
@@ -2163,7 +2198,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         // I *think* this check is here to limit the recursion nesting for rewriting, and originates
         // from a time when we didn't have silent-abort-when-patchpoint-full.
         if (val->cls != function_cls && val->cls != builtin_function_or_method_cls && val->cls != instancemethod_cls
-            && val->cls != capifunc_cls) {
+            && val->cls != classmethod_cls && val->cls != capifunc_cls) {
             rewrite_args = NULL;
             REWRITE_ABORTED("");
         }
@@ -2724,7 +2759,8 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
                          Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 
-    if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
+    if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls
+        && obj->cls != classmethod_cls) {
         Box* rtn;
         if (rewrite_args) {
             // TODO is this ok?
@@ -2770,6 +2806,43 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         }
         Box* res = callable(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
         return res;
+    } else if (obj->cls == classmethod_cls) {
+        // TODO it's dumb but I should implement patchpoints here as well
+        // duplicated with callattr
+        BoxedClassmethod* cm = static_cast<BoxedClassmethod*>(obj);
+
+        if (rewrite_args && !rewrite_args->func_guarded) {
+            rewrite_args->obj->addAttrGuard(CLASSMETHOD_CALLABLE_OFFSET, (intptr_t)cm->cm_callable);
+        }
+
+        Box* rtn;
+        if (rewrite_args) {
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+
+            srewrite_args.func_guarded = true;
+            srewrite_args.args_guarded = true;
+            if (npassed_args >= 1)
+                srewrite_args.arg1 = rewrite_args->arg1;
+            if (npassed_args >= 2)
+                srewrite_args.arg2 = rewrite_args->arg2;
+            if (npassed_args >= 3)
+                srewrite_args.arg3 = rewrite_args->arg3;
+            if (npassed_args >= 4)
+                srewrite_args.args = rewrite_args->args;
+
+            rtn = runtimeCallInternal(cm->cm_callable, &srewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+            if (!srewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                rewrite_args->out_rtn = srewrite_args.out_rtn;
+            }
+        } else {
+            rtn = runtimeCallInternal(cm->cm_callable, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        }
+        if (rewrite_args)
+            rewrite_args->out_success = true;
+        return rtn;
     } else if (obj->cls == instancemethod_cls) {
         // TODO it's dumb but I should implement patchpoints here as well
         // duplicated with callattr
@@ -3126,7 +3199,6 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
     }
 
     const std::string& op_name = getOpName(op_type);
-
     Box* lrtn;
     if (rewrite_args) {
         CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->lhs, rewrite_args->destination);
@@ -3151,20 +3223,58 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
             }
             return lrtn;
         }
-    }
 
-    // TODO patch these cases
-    if (rewrite_args) {
-        assert(rewrite_args->out_success == false);
+        // if the function returned anything, we have to abort the rewrite
         rewrite_args = NULL;
         REWRITE_ABORTED("");
     }
 
-    std::string rop_name = getReverseOpName(op_type);
-    Box* rrtn = callattrInternal1(rhs, &rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
-    if (rrtn != NULL && rrtn != NotImplemented)
-        return rrtn;
+    const std::string& rop_name = getReverseOpName(op_type);
+    Box* rrtn;
+    if (rewrite_args) {
+        CallRewriteArgs crewrite_args(rewrite_args->rewriter, rewrite_args->rhs, rewrite_args->destination);
+        crewrite_args.arg1 = rewrite_args->lhs;
+        rrtn = callattrInternal1(rhs, &rop_name, CLASS_ONLY, &crewrite_args, ArgPassSpec(1), lhs);
 
+        if (!crewrite_args.out_success)
+            rewrite_args = NULL;
+        else if (rrtn)
+            rewrite_args->out_rtn = crewrite_args.out_rtn;
+    } else {
+        rrtn = callattrInternal1(rhs, &rop_name, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
+    }
+
+    if (rrtn != NULL) {
+        if (rrtn != NotImplemented) {
+            bool can_patchpoint = !isUserDefined(lhs->cls) && !isUserDefined(rhs->cls);
+            if (rewrite_args) {
+                if (can_patchpoint) {
+                    rewrite_args->out_success = true;
+                }
+            }
+            return rrtn;
+        }
+
+        // if the function returned anything, we have to abort the rewrite
+        rewrite_args = NULL;
+        REWRITE_ABORTED("");
+    }
+
+    // for cases where we don't have a __eq__/__neq__ method, just
+    // embed the comparison as we do for Is/IsNot above
+    if (!lrtn && !rrtn && rewrite_args) {
+        assert(rewrite_args->out_success == false);
+        if (op_type == AST_TYPE::Eq || op_type == AST_TYPE::NotEq) {
+            rewrite_args->out_success = true;
+            RewriterVar* cmpres
+                = rewrite_args->lhs->cmp((AST_TYPE::AST_TYPE)op_type, rewrite_args->rhs, rewrite_args->destination);
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxBool, cmpres);
+        } else {
+            // TODO rewrite other compare ops
+            rewrite_args = NULL;
+            REWRITE_ABORTED("");
+        }
+    }
 
     if (op_type == AST_TYPE::Eq)
         return boxBool(lhs == rhs);
@@ -3450,6 +3560,9 @@ extern "C" Box* getPystonIter(Box* o) {
 }
 
 Box* getiter(Box* o) {
+    static StatCounter slowpath_delattr("slowpath_getiter");
+    slowpath_delattr.log();
+
     // TODO add rewriting to this?  probably want to try to avoid this path though
     Box* r = callattrInternal0(o, &iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
     if (r)
