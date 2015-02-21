@@ -1570,7 +1570,7 @@ public:
                     temp_ast_del->lineno = node->lineno;
                     temp_ast_del->col_offset = node->col_offset;
 
-                    for (auto elt: tuple->elts) {
+                    for (auto elt : tuple->elts) {
                         temp_ast_del->targets.push_back(elt);
                     }
                     visit_delete(temp_ast_del);
