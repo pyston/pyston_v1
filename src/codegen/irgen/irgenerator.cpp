@@ -127,9 +127,6 @@ private:
         }
     }
 
-    llvm::BasicBlock* createBasicBlock(const char* name) override {
-        return llvm::BasicBlock::Create(g.context, name, irstate->getLLVMFunction());
-    }
 
     llvm::CallSite emitPatchpoint(llvm::Type* return_type, const ICSetupInfo* pp, llvm::Value* func,
                                   const std::vector<llvm::Value*>& args,
@@ -194,6 +191,16 @@ public:
     void releaseScratch(llvm::Value* scratch) override { assert(0); }
 
     CompiledFunction* currentFunction() override { return irstate->getCurFunction(); }
+    llvm::BasicBlock* currentBasicBlock() override { return curblock; }
+
+    void setCurrentBasicBlock(llvm::BasicBlock* bb) override {
+        curblock = bb;
+        getBuilder()->SetInsertPoint(curblock);
+    }
+
+    llvm::BasicBlock* createBasicBlock(const char* name) override {
+        return llvm::BasicBlock::Create(g.context, name, irstate->getLLVMFunction());
+    }
 
     llvm::Value* createCall(UnwindInfo unw_info, llvm::Value* callee, const std::vector<llvm::Value*>& args) override {
         if (ENABLE_FRAME_INTROSPECTION) {
@@ -489,24 +496,11 @@ private:
                 return rtn;
             }
             case AST_LangPrimitive::GET_ITER: {
-                // TODO if this is a type that has an __iter__, we could do way better than this, both in terms of
-                // function call overhead and resulting type information, if we went with that instead of the generic
-                // version.
-                // (ie we can inline getPystonIter here, whether mechanically with LLVM [would require adding more
-                // optimization passes to make it fast] or by-hand)
-                //
-                // TODO Move this behavior into to the type-specific section (compvars.cpp)?
-                emitter.getBuilder();
                 assert(node->args.size() == 1);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
-
-                ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
+                auto rtn = obj->getPystonIter(emitter, getOpInfoForNode(node, unw_info));
                 obj->decvref(emitter);
-
-                llvm::Value* v = emitter.createCall(unw_info, g.funcs.getPystonIter, converted_obj->getValue());
-                assert(v->getType() == g.llvm_value_type_ptr);
-
-                return new ConcreteCompilerVariable(UNKNOWN, v, true);
+                return rtn;
             }
             case AST_LangPrimitive::IMPORT_FROM: {
                 assert(node->args.size() == 2);

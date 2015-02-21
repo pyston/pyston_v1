@@ -87,6 +87,8 @@ extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 
 Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
+extern "C" Box* getiterHelper(Box* o);
+extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
 
 extern "C" void dump(void* p);
 

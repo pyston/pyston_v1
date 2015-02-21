@@ -34,6 +34,29 @@
 
 namespace pyston {
 
+static const std::string& iter_str = "__iter__";
+static const std::string& hasnext_str = "__hasnext__";
+
+CompilerType* CompilerType::getPystonIterType() {
+    if (hasattr(&iter_str) == Yes) {
+        CompilerType* iter_type = getattrType(&iter_str, true)->callType(ArgPassSpec(0), {}, NULL);
+        if (iter_type->hasattr(&hasnext_str) == Yes)
+            return iter_type;
+        // if iter_type->hasattr(&hasnext_str) == No we know this is going to be a BoxedIterWrapper
+        // we could optimize this case but it looks like this is very uncommon
+    }
+    return UNKNOWN;
+}
+
+CompilerType::Result CompilerType::hasattr(const std::string* attr) {
+    CompilerType* type = getattrType(attr, true);
+    if (type == UNKNOWN)
+        return Result::Maybe;
+    else if (type == UNDEF)
+        return Result::No;
+    return Result::Yes;
+}
+
 void ConcreteCompilerType::serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) {
 #ifndef NDEBUG
     if (llvmType() == g.i1) {
@@ -328,6 +351,57 @@ public:
 
         converted_slice->decvref(emitter);
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+    }
+
+    CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
+        CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = true };
+        CompilerVariable* iter_call = var->callattr(emitter, info, &iter_str, flags, ArgPassSpec(0), {}, 0);
+        ConcreteCompilerVariable* converted_iter_call = iter_call->makeConverted(emitter, iter_call->getBoxType());
+
+        // If the type analysis could determine the iter type is a valid pyston iter (has 'hasnext') we are finished.
+        CompilerType* iter_type = var->getType()->getPystonIterType();
+        if (iter_type != UNKNOWN) {
+            iter_call->decvref(emitter);
+            return converted_iter_call;
+        }
+
+        // We don't know the type so we have to check at runtime if __iter__ is implemented
+        llvm::Value* cmp = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(),
+                                                              embedConstantPtr(0, g.llvm_value_type_ptr));
+
+        llvm::BasicBlock* bb_has_iter = emitter.createBasicBlock("has_iter");
+        bb_has_iter->moveAfter(emitter.currentBasicBlock());
+        llvm::BasicBlock* bb_no_iter = emitter.createBasicBlock("no_iter");
+        bb_no_iter->moveAfter(bb_has_iter);
+        llvm::BasicBlock* bb_join = emitter.createBasicBlock("join_after_getiter");
+        emitter.getBuilder()->CreateCondBr(cmp, bb_has_iter, bb_no_iter);
+
+        // var has __iter__()
+        emitter.setCurrentBasicBlock(bb_has_iter);
+        ICSetupInfo* pp = createGenericIC(info.getTypeRecorder(), true, 128);
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::createBoxedIterWrapperIfNeeded,
+                                                 { converted_iter_call->getValue() }, info.unw_info);
+        llvm::Value* value_has_iter = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        llvm::BasicBlock* value_has_iter_bb = emitter.currentBasicBlock();
+        emitter.getBuilder()->CreateBr(bb_join);
+
+        // var has no __iter__()
+        // TODO: we could create a patchpoint if this turns out to be hot
+        emitter.setCurrentBasicBlock(bb_no_iter);
+        llvm::Value* value_no_iter = emitter.createCall(info.unw_info, g.funcs.getiterHelper, var->getValue());
+        llvm::BasicBlock* value_no_iter_bb = emitter.currentBasicBlock();
+        emitter.getBuilder()->CreateBr(bb_join);
+
+        // join
+        emitter.setCurrentBasicBlock(bb_join);
+        auto phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2, "iter");
+        phi->addIncoming(value_has_iter, value_has_iter_bb);
+        phi->addIncoming(value_no_iter, value_no_iter_bb);
+
+        converted_iter_call->decvref(emitter);
+        iter_call->decvref(emitter);
+
+        return new ConcreteCompilerVariable(UNKNOWN, phi, true);
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -1605,6 +1679,10 @@ public:
             return called_constant;
 
         return UNKNOWN->getitem(emitter, info, var, slice);
+    }
+
+    CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var) override {
+        return UNKNOWN->getPystonIter(emitter, info, var);
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {

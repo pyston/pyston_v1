@@ -68,7 +68,10 @@ public:
     virtual IRBuilder* getBuilder() = 0;
     virtual GCBuilder* getGC() = 0;
     virtual CompiledFunction* currentFunction() = 0;
+    virtual llvm::BasicBlock* currentBasicBlock() = 0;
     virtual llvm::BasicBlock* createBasicBlock(const char* name = "") = 0;
+
+    virtual void setCurrentBasicBlock(llvm::BasicBlock*) = 0;
 
     virtual llvm::Value* getScratch(int num_bytes) = 0;
     virtual void releaseScratch(llvm::Value*) = 0;

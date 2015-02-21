@@ -36,14 +36,19 @@ typedef llvm::SmallVector<uint64_t, 1> FrameVals;
 
 class CompilerType {
 public:
+    enum Result { Yes, No, Maybe };
+
     virtual ~CompilerType() {}
     virtual std::string debugName() = 0;
     virtual ConcreteCompilerType* getConcreteType() = 0;
     virtual ConcreteCompilerType* getBoxType() = 0;
     virtual bool canConvertTo(ConcreteCompilerType* other_type) = 0;
     virtual CompilerType* getattrType(const std::string* attr, bool cls_only) = 0;
+    virtual CompilerType* getPystonIterType();
+    virtual Result hasattr(const std::string* attr);
     virtual CompilerType* callType(ArgPassSpec argspec, const std::vector<CompilerType*>& arg_types,
                                    const std::vector<const std::string*>* keyword_names) = 0;
+
     virtual BoxedClass* guaranteedClass() = 0;
     virtual Box* deserializeFromFrame(const FrameVals& vals) = 0;
     virtual int numFrameArgs() = 0;
@@ -135,6 +140,7 @@ public:
         printf("getitem not defined for %s\n", debugName().c_str());
         abort();
     }
+    virtual CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var);
     virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                                      AST_TYPE::AST_TYPE op_type, BinExpType exp_type) {
         printf("binexp not defined for %s\n", debugName().c_str());
@@ -263,6 +269,7 @@ public:
                                    const std::vector<const std::string*>* keyword_names) = 0;
     virtual ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable*) = 0;
+    virtual CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs,
                                      AST_TYPE::AST_TYPE op_type, BinExpType exp_type) = 0;
 
@@ -347,7 +354,9 @@ public:
     CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, CompilerVariable* slice) override {
         return type->getitem(emitter, info, this, slice);
     }
-
+    CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info) override {
+        return type->getPystonIter(emitter, info, this);
+    }
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, CompilerVariable* rhs, AST_TYPE::AST_TYPE op_type,
                              BinExpType exp_type) override {
         return type->binexp(emitter, info, this, rhs, op_type, exp_type);
@@ -391,6 +400,14 @@ CompilerType* makeFuncType(ConcreteCompilerType* rtn_type, const std::vector<Con
 
 ConcreteCompilerVariable* boolFromI1(IREmitter&, llvm::Value*);
 llvm::Value* i1FromBool(IREmitter&, ConcreteCompilerVariable*);
+
+template <typename V>
+CompilerVariable* _ValuedCompilerType<V>::getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var) {
+    ConcreteCompilerVariable* converted = makeConverted(emitter, var, getBoxType());
+    auto r = UNKNOWN->getPystonIter(emitter, info, converted);
+    converted->decvref(emitter);
+    return r;
+}
 
 template <typename V>
 std::vector<CompilerVariable*> _ValuedCompilerType<V>::unpack(IREmitter& emitter, const OpInfo& info, VAR* var,

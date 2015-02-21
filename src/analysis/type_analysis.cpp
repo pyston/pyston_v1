@@ -365,8 +365,9 @@ private:
                 return BOOL;
             case AST_LangPrimitive::LOCALS:
                 return DICT;
-            case AST_LangPrimitive::LANDINGPAD:
             case AST_LangPrimitive::GET_ITER:
+                return getType(node->args[0])->getPystonIterType();
+            case AST_LangPrimitive::LANDINGPAD:
             case AST_LangPrimitive::IMPORT_FROM:
             case AST_LangPrimitive::IMPORT_STAR:
             case AST_LangPrimitive::IMPORT_NAME:
