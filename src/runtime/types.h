@@ -226,8 +226,7 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
-    // will need to update this once we support tp_getattr-style overriding:
-    bool hasGenericGetattr() { return true; }
+    bool hasGenericGetattr() { return tp_getattr != NULL; }
 
     void freeze();
 
@@ -458,7 +457,8 @@ public:
     ICInvalidator dependent_ics;
 
     // Accessed via member descriptor
-    Box* modname; // __module__
+    Box* modname;      // __module__
+    BoxedString* name; // __name__ (should be here or in one of the derived classes?)
 
     BoxedFunctionBase(CLFunction* f);
     BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
@@ -467,10 +467,9 @@ public:
 
 class BoxedFunction : public BoxedFunctionBase {
 public:
-    BoxedFunction(CLFunction* f) : BoxedFunctionBase(f) {}
+    BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false)
-        : BoxedFunctionBase(f, defaults, closure, isGenerator) {}
+                  bool isGenerator = false);
 
     DEFAULT_CLASS(function_cls);
 };
@@ -613,9 +612,6 @@ public:
 
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
-Box* exceptionNew1(BoxedClass* cls);
-Box* exceptionNew2(BoxedClass* cls, Box* message);
-Box* exceptionNew(BoxedClass* cls, BoxedTuple* args);
 Box* objectNewNoArgs(BoxedClass* cls);
 
 extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,

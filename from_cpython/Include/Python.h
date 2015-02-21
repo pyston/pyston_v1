@@ -72,6 +72,7 @@
 #include "descrobject.h"
 #include "warnings.h"
 
+#include "codecs.h"
 #include "pyerrors.h"
 
 #include "pystate.h"

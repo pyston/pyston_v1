@@ -29,6 +29,7 @@ class BoxedInt;
 class BoxedList;
 class BoxedString;
 class BoxedGenerator;
+class BoxedTuple;
 
 // user-level raise functions that implement python-level semantics
 extern "C" void raise0() __attribute__((__noreturn__));
@@ -130,7 +131,7 @@ extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) _
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
 
-Box* typeCall(Box*, BoxedList*);
+Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
 bool isUserDefined(BoxedClass* cls);
 

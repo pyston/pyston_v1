@@ -11,19 +11,19 @@ print C
 C.__module__ = 1
 print C
 
-def set_name(cls, name):
+def set_name(obj, name):
     try:
-        cls.__name__ = name
+        obj.__name__ = name
     except Exception as e:
         print type(e), e
-    print cls
+    print obj.__name__
 
-def del_name(cls):
+def del_name(obj):
     try:
-        del cls.__name__
+        del obj.__name__
     except Exception as e:
         print type(e), e
-    print cls.__name__
+    print obj.__name__
 
 set_name(int, "bob")
 #TODO implement __del__ for getset descriptors
@@ -32,3 +32,17 @@ set_name(int, "bob")
 set_name(C, 5)
 set_name(C, "b\0b")
 set_name(C, "car")
+
+def g():
+    pass
+print g.__name__
+set_name(g, "bob")
+set_name(g, 5)
+set_name(g, "b\0b")
+
+f = lambda x : 5
+print f.__name__
+set_name(f, "bob")
+set_name(f, 5)
+set_name(f, "b\0b")
+#del_name(f)

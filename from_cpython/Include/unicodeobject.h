@@ -986,7 +986,7 @@ PyObject *_PyUnicode_DecodeUnicodeInternal(
     const char *string,
     Py_ssize_t length,
     const char *errors
-    );
+    ) PYSTON_NOEXCEPT;
 
 /* --- Latin-1 Codecs -----------------------------------------------------
 

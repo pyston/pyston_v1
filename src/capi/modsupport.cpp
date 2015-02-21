@@ -97,6 +97,14 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'H':
                 return PyInt_FromLong((long)va_arg(*p_va, unsigned int));
 
+            case 'n':
+#if SIZEOF_SIZE_T != SIZEOF_LONG
+                return PyInt_FromSsize_t(va_arg(*p_va, Py_ssize_t));
+#endif
+            /* Fall through from 'n' to 'l' if Py_ssize_t is long */
+            case 'l':
+                return PyInt_FromLong(va_arg(*p_va, long));
+
             case 'N':
             case 'S':
             case 'O':

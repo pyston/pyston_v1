@@ -102,14 +102,6 @@ static Box* (*runtimeCallInternal2)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, B
 static Box* (*runtimeCallInternal3)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))runtimeCallInternal;
 
-static Box* (*typeCallInternal1)(BoxedFunctionBase*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*)
-    = (Box * (*)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*))typeCallInternal;
-static Box* (*typeCallInternal2)(BoxedFunctionBase*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*, Box*)
-    = (Box * (*)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*))typeCallInternal;
-static Box* (*typeCallInternal3)(BoxedFunctionBase*, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box*, Box*,
-                                 Box*)
-    = (Box * (*)(BoxedFunctionBase*, CallRewriteArgs*, ArgPassSpec, Box*, Box*, Box*))typeCallInternal;
-
 bool checkClass(LookupScope scope) {
     return (scope & CLASS_ONLY) != 0;
 }
@@ -491,6 +483,7 @@ BoxedDict* Box::getDict() {
 }
 
 Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
+
     if (rewrite_args)
         rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
 
@@ -1422,6 +1415,13 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         // invalidation rather than guards
         rewrite_args = NULL;
         REWRITE_ABORTED("");
+
+        if (obj->cls->tp_getattr) {
+            Box* rtn = obj->cls->tp_getattr(obj, const_cast<char*>(attr.c_str()));
+            if (rtn == NULL)
+                throwCAPIException();
+            return rtn;
+        }
         Box* getattr = typeLookup(obj->cls, getattr_str, NULL);
         if (getattr) {
             Box* boxstr = boxString(attr);
@@ -3555,47 +3555,10 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
 
-    // TODO shouldn't have to redo this argument handling here...
-    if (argspec.has_starargs) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
+    if (argspec.has_starargs)
+        return callFunc(f, rewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
 
-        Box* starargs;
-        if (argspec.num_args == 0)
-            starargs = arg1;
-        else if (argspec.num_args == 1)
-            starargs = arg2;
-        else
-            abort();
-
-        assert(starargs->cls == tuple_cls);
-        BoxedTuple* targs = static_cast<BoxedTuple*>(starargs);
-
-        int n = targs->elts.size();
-
-        if (argspec.num_args == 0) {
-            if (n >= 1)
-                arg1 = targs->elts[0];
-            if (n >= 2)
-                arg2 = targs->elts[1];
-            if (n >= 3)
-                arg3 = targs->elts[2];
-            if (n >= 4)
-                args = &targs->elts[3];
-        } else if (argspec.num_args == 1) {
-            if (n >= 1)
-                arg2 = targs->elts[0];
-            if (n >= 2)
-                arg3 = targs->elts[1];
-            if (n >= 3)
-                args = &targs->elts[2];
-        } else {
-            abort(); // unhandled
-        }
-
-        argspec = ArgPassSpec(n + argspec.num_args);
-    }
-
+    assert(argspec.num_args >= 1);
     Box* _cls = arg1;
 
     if (!isSubclass(_cls->cls, type_cls)) {
@@ -3867,16 +3830,24 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
     return made;
 }
 
-Box* typeCall(Box* obj, BoxedList* vararg) {
-    assert(vararg->cls == list_cls);
-    if (vararg->size == 0)
-        return typeCallInternal1(NULL, NULL, ArgPassSpec(1), obj);
-    else if (vararg->size == 1)
-        return typeCallInternal2(NULL, NULL, ArgPassSpec(2), obj, vararg->elts->elts[0]);
-    else if (vararg->size == 2)
-        return typeCallInternal3(NULL, NULL, ArgPassSpec(3), obj, vararg->elts->elts[0], vararg->elts->elts[1]);
-    else
-        abort();
+Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
+    assert(vararg->cls == tuple_cls);
+
+    int n = vararg->elts.size();
+    int args_to_pass = n + 2; // 1 for obj, 1 for kwargs
+
+    Box** args = NULL;
+    if (args_to_pass > 3)
+        args = (Box**)alloca(sizeof(Box*) * (args_to_pass - 3));
+
+    Box* arg1, *arg2, *arg3;
+    arg1 = obj;
+    for (int i = 0; i < n; i++) {
+        getArg(i + 1, arg1, arg2, arg3, args) = vararg->elts[i];
+    }
+    getArg(n + 1, arg1, arg2, arg3, args) = kwargs;
+
+    return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, true), arg1, arg2, arg3, args, NULL);
 }
 
 extern "C" void delGlobal(BoxedModule* m, const std::string* name) {

@@ -1,3 +1,6 @@
+# allow-warning: converting unicode literal to str
+# allow-warning: import level 0 will be treated as -1
+
 import pickle
 
 l = [[], (123,)]
@@ -9,5 +12,4 @@ l2 = pickle.loads(s)
 l3 = l2.pop()
 print l2, l3, l2 is l3
 
-# This doesn't work yet; we need str.decode("string-escape")
-# print pickle.loads(pickle.dumps("hello world"))
+print pickle.loads(pickle.dumps("hello world"))

@@ -62,6 +62,7 @@ extern "C" void initfcntl();
 extern "C" void inittime();
 extern "C" void initarray();
 extern "C" void initzlib();
+extern "C" void init_codecs();
 
 namespace pyston {
 
@@ -271,7 +272,7 @@ void BoxIterator::gcHandler(GCVisitor* v) {
 std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
-    : f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL) {
+    : f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL), name(NULL) {
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
     } else {
@@ -285,7 +286,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, bool isGenerator)
-    : f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL) {
+    : f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL), modname(NULL), name(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -305,10 +306,32 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
     assert(f->num_defaults == ndefaults);
 }
 
+BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
+}
+
+BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
+                             bool isGenerator)
+    : BoxedFunctionBase(f, defaults, closure, isGenerator) {
+
+    // TODO eventually we want this to assert(f->source), I think, but there are still
+    // some builtin functions that are BoxedFunctions but really ought to be a type that
+    // we don't have yet.
+    if (f->source) {
+        this->name = static_cast<BoxedString*>(boxString(f->source->getName()));
+    }
+}
+
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
-    BoxedFunctionBase* f = (BoxedFunctionBase*)b;
+    BoxedFunction* f = (BoxedFunction*)b;
+
+    // TODO eventually f->name should always be non-NULL, then there'd be no need for this check
+    if (f->name)
+        v->visit(f->name);
+
+    if (f->modname)
+        v->visit(f->modname);
 
     if (f->closure)
         v->visit(f->closure);
@@ -647,15 +670,19 @@ static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
 static Box* func_name(Box* b, void*) {
     assert(b->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(b);
-
-    // TODO this isn't right
-    // (For one thing, we need to able to *set* the __name__ of a function, but that probably
-    // should not involve setting the name in the source.)
-    return boxString(func->f->source->getName());
+    RELEASE_ASSERT(func->name != NULL, "func->name is not set");
+    return func->name;
 }
 
-static void func_set_name(Box*, Box*, void*) {
-    RELEASE_ASSERT(0, "not implemented");
+static void func_set_name(Box* b, Box* v, void*) {
+    assert(b->cls == function_cls);
+    BoxedFunction* func = static_cast<BoxedFunction*>(b);
+
+    if (v == NULL || !PyString_Check(v)) {
+        raiseExcHelper(TypeError, "__name__ must be set to a string object");
+    }
+
+    func->name = static_cast<BoxedString*>(v);
 }
 
 static Box* functionNonzero(BoxedFunction* self) {
@@ -952,6 +979,23 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         return boxInt(attrs->hcls->attr_offsets.size());
     }
+
+    static Box* update(Box* _self, Box* _container) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        if (_container->cls == attrwrapper_cls) {
+            AttrWrapper* container = static_cast<AttrWrapper*>(_container);
+            HCAttrs* attrs = container->b->getHCAttrsPtr();
+
+            for (const auto& p : attrs->hcls->attr_offsets) {
+                self->b->setattr(p.first, attrs->attr_list->attrs[p.second], NULL);
+            }
+        } else {
+            RELEASE_ASSERT(0, "not implemented");
+        }
+        return None;
+    }
 };
 
 Box* makeAttrWrapper(Box* b) {
@@ -1085,6 +1129,9 @@ void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
 
+    // Disable the GC while we do some manual initialization of the object hierarchy:
+    gc::disableGC();
+
     // We have to do a little dance to get object_cls and type_cls set up, since the normal
     // object-creation routines look at the class to see the allocation size.
     void* mem = gc_alloc(sizeof(BoxedClass), gc::GCKind::PYTHON);
@@ -1120,6 +1167,8 @@ void setupRuntime() {
     basestring_cls->tp_name = boxed_basestring_name->s.c_str();
     str_cls->tp_name = boxed_str_name->s.c_str();
     none_cls->tp_name = boxed_none_name->s.c_str();
+
+    gc::enableGC();
 
     unicode_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedUnicode), false, "unicode");
 
@@ -1195,7 +1244,7 @@ void setupRuntime() {
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
     object_cls->freeze();
 
-    auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, false);
+    auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new BoxedGetsetDescriptor(type_name, type_set_name, NULL));
@@ -1286,6 +1335,7 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
+    attrwrapper_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 2)));
     attrwrapper_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules
@@ -1324,6 +1374,7 @@ void setupRuntime() {
     inittime();
     initarray();
     initzlib();
+    init_codecs();
 
     setupSysEnd();
 

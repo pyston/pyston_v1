@@ -22,6 +22,8 @@ namespace pyston {
 
 // FIXME duplicated with objmodel.cpp
 static const std::string _new_str("__new__");
+static const std::string _getattr_str("__getattr__");
+static const std::string _getattribute_str("__getattribute__");
 
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
@@ -623,6 +625,73 @@ static PyObject* slot_tp_iternext(PyObject* self) noexcept {
     return call_method(self, "next", &next_str, "()");
 }
 
+static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
+    static PyObject* getattribute_str = NULL;
+    return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
+}
+
+static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) noexcept {
+    PyObject* res, * descr = NULL;
+    descrgetfunc f = Py_TYPE(attr)->tp_descr_get;
+
+    if (f != NULL) {
+        descr = f(attr, self, (PyObject*)(Py_TYPE(self)));
+        if (descr == NULL)
+            return NULL;
+        else
+            attr = descr;
+    }
+    try {
+        res = runtimeCall(attr, ArgPassSpec(1, 0, true, true), name, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        Py_XDECREF(descr);
+        return NULL;
+    }
+    Py_XDECREF(descr);
+    return res;
+}
+
+static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
+    PyObject* getattr, *getattribute, * res = NULL;
+    static PyObject* getattribute_str = NULL;
+    static PyObject* getattr_str = NULL;
+
+    /* speed hack: we could use lookup_maybe, but that would resolve the
+         method fully for each attribute lookup for classes with
+         __getattr__, even when the attribute is present. So we use
+         _PyType_Lookup and create the method only when needed, with
+         call_attribute. */
+    getattr = typeLookup(self->cls, _getattr_str, NULL);
+    if (getattr == NULL) {
+        /* No __getattr__ hook: use a simpler dispatcher */
+        self->cls->tp_getattro = slot_tp_getattro;
+        return slot_tp_getattro(self, name);
+    }
+    /* speed hack: we could use lookup_maybe, but that would resolve the
+         method fully for each attribute lookup for classes with
+         __getattr__, even when self has the default __getattribute__
+         method. So we use _PyType_Lookup and create the method only when
+         needed, with call_attribute. */
+    getattribute = typeLookup(self->cls, _getattribute_str, NULL);
+    if (getattribute == NULL
+        || (Py_TYPE(getattribute) == wrapperdescr_cls
+            && ((BoxedWrapperDescriptor*)getattribute)->wrapped == (void*)PyObject_GenericGetAttr)) {
+        res = PyObject_GenericGetAttr(self, name);
+    } else {
+        res = call_attribute(self, getattribute, name);
+    }
+    if (res == NULL) {
+        try {
+            res = runtimeCall(getattr, ArgPassSpec(2, 0, true, true), self, name, NULL, NULL, NULL);
+        } catch (ExcInfo e) {
+            setCAPIException(e);
+            return NULL;
+        }
+    }
+    return res;
+}
+
 static PyObject* slot_tp_new(PyTypeObject* self, PyObject* args, PyObject* kwds) noexcept {
     try {
         // TODO: runtime ICs?
@@ -1063,11 +1132,16 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
     ETSLOT(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, "x." NAME "(y) <==> " DOC)
 
 static slotdef slotdefs[]
-    = { TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
+    = { TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
+
+        TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
         TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
         FLSLOT("__call__", tp_call, slot_tp_call, (wrapperfunc)wrap_call, "x.__call__(...) <==> x(...)",
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
+
+        TPSLOT("__getattr__", tp_getattro, slot_tp_getattr_hook, NULL, ""),
+
         TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
         TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
         TPSLOT("__eq__", tp_richcompare, slot_tp_richcompare, richcmp_eq, "x.__eq__(y) <==> x==y"),
@@ -1714,7 +1788,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     gc::registerNonheapRootObject(cls);
 
     // unhandled fields:
-    RELEASE_ASSERT(cls->tp_getattr == NULL, "");
     RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
 
