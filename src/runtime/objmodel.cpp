@@ -807,7 +807,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         RewriterVar* r_im_self = NULL;
 
         if (rewrite_args)
-            r_im_self = rewrite_args->obj->getAttr(BOX_CLS_OFFSET);
+            r_im_self = rewrite_args->obj;
 
         if (!for_call) {
             if (rewrite_args) {
@@ -2815,7 +2815,33 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
             rewrite_args->obj->addAttrGuard(CLASSMETHOD_CALLABLE_OFFSET, (intptr_t)cm->cm_callable);
         }
 
-        Box* rtn = runtimeCall(cm->cm_callable, argspec, arg1, arg2, arg3, args, keyword_names);
+        Box* rtn;
+        if (rewrite_args) {
+            CallRewriteArgs srewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
+
+            srewrite_args.func_guarded = true;
+            srewrite_args.args_guarded = true;
+            if (npassed_args >= 1)
+                srewrite_args.arg1 = rewrite_args->arg1;
+            if (npassed_args >= 2)
+                srewrite_args.arg2 = rewrite_args->arg2;
+            if (npassed_args >= 3)
+                srewrite_args.arg3 = rewrite_args->arg3;
+            if (npassed_args >= 4)
+                srewrite_args.args = rewrite_args->args;
+
+            rtn = runtimeCallInternal(cm->cm_callable, &srewrite_args, argspec, arg1, arg2, arg3, args, keyword_names);
+
+            if (!srewrite_args.out_success) {
+                rewrite_args = NULL;
+            } else {
+                rewrite_args->out_rtn = srewrite_args.out_rtn;
+            }
+        } else {
+            rtn = runtimeCallInternal(cm->cm_callable, NULL, argspec, arg1, arg2, arg3, args, keyword_names);
+        }
+        if (rewrite_args)
+            rewrite_args->out_success = true;
         return rtn;
     } else if (obj->cls == instancemethod_cls) {
         // TODO it's dumb but I should implement patchpoints here as well
