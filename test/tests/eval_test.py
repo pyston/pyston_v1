@@ -58,14 +58,14 @@ def func():
 
     eval("[i for i in range(5)]")
 
-    #j = 24
-    #def inner():
-    #    return j
-    #print eval("inner()")
+    j = 24
+    def inner():
+        return j
+    print 'j', eval("inner()")
 func()
 print i
 
-#print eval("(lambda k : k+2)(3)")
+print eval("(lambda k : k+2)(3)")
 
 l = 100
 print eval("(lambda k : l+2)(3)")
