@@ -302,7 +302,7 @@ Box* impFindModule(Box* _name) {
 
 void setupImport() {
     BoxedModule* imp_module = createModule("imp", "__builtin__");
-    imp_module->giveAttr("find_module",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)impFindModule, UNKNOWN, 1)));
+    imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(
+                                            boxRTFunction((void*)impFindModule, UNKNOWN, 1), "find_module"));
 }
 }

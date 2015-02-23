@@ -476,10 +476,9 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(CLFunction* f) : BoxedFunctionBase(f) {}
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                                 bool isGenerator = false)
-        : BoxedFunctionBase(f, defaults, closure, isGenerator) {}
+    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name);
+    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
+                                 BoxedClosure* closure = NULL, bool isGenerator = false);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
 };

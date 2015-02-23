@@ -32,6 +32,7 @@ set_name(int, "bob")
 set_name(C, 5)
 set_name(C, "b\0b")
 set_name(C, "car")
+set_name(C, "")
 
 def g():
     pass
@@ -39,6 +40,7 @@ print g.__name__
 set_name(g, "bob")
 set_name(g, 5)
 set_name(g, "b\0b")
+set_name(g, "")
 
 f = lambda x : 5
 print f.__name__
@@ -46,3 +48,9 @@ set_name(f, "bob")
 set_name(f, 5)
 set_name(f, "b\0b")
 #del_name(f)
+set_name(f, "")
+
+print sorted.__name__
+# should all fail:
+set_name(sorted, "blah")
+set_name(sorted, 5)

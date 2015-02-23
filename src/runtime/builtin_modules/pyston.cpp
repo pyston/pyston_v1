@@ -51,6 +51,7 @@ static Box* setOption(Box* option, Box* value) {
 void setupPyston() {
     pyston_module = createModule("__pyston__", "__builtin__");
 
-    pyston_module->giveAttr("setOption", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setOption, UNKNOWN, 2)));
+    pyston_module->giveAttr("setOption",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setOption, UNKNOWN, 2), "setOption"));
 }
 }
