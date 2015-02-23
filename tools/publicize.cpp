@@ -89,7 +89,23 @@ bool makeVisible(llvm::GlobalValue* gv) {
     if (visibility == llvm::GlobalValue::HiddenVisibility) {
         gv->setVisibility(llvm::GlobalValue::ProtectedVisibility);
         //gv->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
-        gv->setName(gv->getName() + "_protected");
+        std::string old_name = gv->getName();
+        std::string new_name = (gv->getName() + "_protected").str();
+        gv->setName(new_name);
+
+#if LLVMREV >= 225705
+        // If this symbol has comdat set we have to remove the comdat for the old name
+        // and create a new comdat with the new name
+        if (gv->hasComdat() && isa<llvm::GlobalObject>(gv)) {
+            llvm::Module* mod = gv->getParent();
+            llvm::GlobalObject* go = cast<llvm::GlobalObject>(gv);
+            llvm::Comdat* new_com = mod->getOrInsertComdat(new_name);
+            new_com->setSelectionKind(go->getComdat()->getSelectionKind());
+            go->setComdat(new_com);
+            auto& Comdats = mod->getComdatSymbolTable();
+            Comdats.erase(Comdats.find(old_name));
+        }
+#endif
 
         changed = true;
     }

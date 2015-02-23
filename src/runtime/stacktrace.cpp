@@ -16,8 +16,6 @@
 #include <cstdarg>
 #include <dlfcn.h>
 
-#include "llvm/DebugInfo/DIContext.h"
-
 #include "codegen/unwinding.h"
 #include "core/options.h"
 #include "gc/collector.h"

@@ -501,7 +501,7 @@ private:
                 ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
                 obj->decvref(emitter);
 
-                llvm::Value* v = emitter.createCall(unw_info, g.funcs.getPystonIter, { converted_obj->getValue() });
+                llvm::Value* v = emitter.createCall(unw_info, g.funcs.getPystonIter, converted_obj->getValue());
                 assert(v->getType() == g.llvm_value_type_ptr);
 
                 return new ConcreteCompilerVariable(UNKNOWN, v, true);
@@ -1647,7 +1647,7 @@ private:
             // end code for handling of softspace
 
 
-            llvm::Value* v = emitter.createCall(unw_info, g.funcs.str, { converted->getValue() });
+            llvm::Value* v = emitter.createCall(unw_info, g.funcs.str, converted->getValue());
             v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
             auto s = new ConcreteCompilerVariable(STR, v, true);
             r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, false, ArgPassSpec(1), { s },

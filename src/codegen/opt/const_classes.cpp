@@ -99,8 +99,10 @@ private:
             APInt ap_offset(64, 0, true);
 #if LLVMREV < 214781
             bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
-#else
+#elif LLVMREV < 227113
             bool success = gep->accumulateConstantOffset(*g.tm->getSubtargetImpl()->getDataLayout(), ap_offset);
+#else
+            bool success = gep->accumulateConstantOffset(*g.tm->getDataLayout(), ap_offset);
 #endif
             assert(success);
             int64_t offset = ap_offset.getSExtValue();
