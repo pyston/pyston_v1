@@ -74,6 +74,13 @@ add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.
 add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 
+set(LIBUNWIND_GITHEAD "${CMAKE_SOURCE_DIR}/.git/modules/libunwind/HEAD")
+set(LIBPYPA_GITHEAD "${CMAKE_SOURCE_DIR}/.git/modules/libpypa/HEAD")
+add_custom_command(OUTPUT ${LIBUNWIND_GITHEAD} ${LIBPYPA_GITHEAD}
+                   COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                   DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
+add_custom_target(gitsubmodules DEPENDS ${LIBUNWIND_GITHEAD} ${LIBPYPA_GITHEAD})
+
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
 #set(LLVM_EXTERNAL_CLANG_SOURCE_DIR "${CMAKE_SOURCE_DIR}/clang" CACHE String "Clang directory")
@@ -96,6 +103,7 @@ endif()
 ExternalProject_Add(libunwind
                     PREFIX libunwind
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
+                    DEPENDS gitsubmodules
                     UPDATE_COMMAND autoreconf -i
                     CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure CFLAGS=${LIBUNWIND_FLAGS} CXXFLAGS=${LIBUNWIND_FLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
                     LOG_UPDATE ON
@@ -105,6 +113,7 @@ ExternalProject_Add(libunwind
 
 # libpypa
 add_subdirectory(libpypa)
+add_dependencies(pypa gitsubmodules)
 
 # valgrind
 if(ENABLE_VALGRIND)
