@@ -1679,7 +1679,7 @@ public:
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == 1);
-        abort();
+        return reinterpret_cast<Box*>(vals[0]);
     }
 } _CLOSURE;
 ConcreteCompilerType* CLOSURE = &_CLOSURE;

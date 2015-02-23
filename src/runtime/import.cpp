@@ -27,7 +27,7 @@ namespace pyston {
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn);
 
-    AST_Module* ast = caching_parse(fn.c_str());
+    AST_Module* ast = caching_parse_file(fn.c_str());
     compileAndRunModule(ast, module);
     return module;
 }
@@ -42,7 +42,7 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
 
     module->setattr("__path__", path_list, NULL);
 
-    AST_Module* ast = caching_parse(fn.c_str());
+    AST_Module* ast = caching_parse_file(fn.c_str());
     compileAndRunModule(ast, module);
     return module;
 }

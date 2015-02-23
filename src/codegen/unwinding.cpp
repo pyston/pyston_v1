@@ -23,10 +23,12 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/Object/ObjectFile.h"
 
+#include "analysis/scoping_analysis.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
 #include "codegen/compvars.h"
 #include "codegen/irgen/hooks.h"
+#include "codegen/irgen/irgenerator.h"
 #include "codegen/stackmaps.h"
 #include "core/util.h"
 #include "runtime/ctxswitching.h"
@@ -536,12 +538,15 @@ BoxedModule* getCurrentModule() {
     return compiledFunction->clfunc->source->parent_module;
 }
 
-BoxedDict* getLocals(bool only_user_visible) {
+BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
     for (PythonFrameIterator& frame_info : unwindPythonFrames()) {
+        BoxedDict* d;
+        BoxedClosure* closure;
+        CompiledFunction* cf;
         if (frame_info.getId().type == PythonFrameId::COMPILED) {
-            BoxedDict* d = new BoxedDict();
+            d = new BoxedDict();
 
-            CompiledFunction* cf = frame_info.getCF();
+            cf = frame_info.getCF();
             uint64_t ip = frame_info.getId().ip;
 
             assert(ip > cf->code_start);
@@ -601,11 +606,52 @@ BoxedDict* getLocals(bool only_user_visible) {
                 }
             }
 
-            return d;
+            closure = NULL;
+            if (includeClosure && cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
+                for (const LocationMap::LocationTable::LocationEntry& e :
+                     cf->location_map->names[PASSED_CLOSURE_NAME].locations) {
+                    if (e.offset < offset && offset <= e.offset + e.length) {
+                        const auto& locs = e.locations;
+
+                        llvm::SmallVector<uint64_t, 1> vals;
+
+                        for (auto& loc : locs) {
+                            vals.push_back(frame_info.readLocation(loc));
+                        }
+
+                        Box* v = e.type->deserializeFromFrame(vals);
+                        assert(gc::isValidGCObject(v));
+                        closure = static_cast<BoxedClosure*>(v);
+                    }
+                }
+            }
         } else if (frame_info.getId().type == PythonFrameId::INTERPRETED) {
-            return localsForInterpretedFrame((void*)frame_info.getId().bp, only_user_visible);
+            d = localsForInterpretedFrame((void*)frame_info.getId().bp, only_user_visible);
+            if (includeClosure) {
+                closure = passedClosureForInterpretedFrame((void*)frame_info.getId().bp);
+                cf = getCFForInterpretedFrame((void*)frame_info.getId().bp);
+            }
+        } else {
+            abort();
         }
-        abort();
+
+        if (includeClosure) {
+            // Add the locals from the closure
+            for (; closure != NULL; closure = closure->parent) {
+                assert(closure->cls == closure_cls);
+                for (auto& attr_offset : closure->attrs.hcls->attr_offsets) {
+                    const std::string& name = attr_offset.first;
+                    int offset = attr_offset.second;
+                    Box* val = closure->attrs.attr_list->attrs[offset];
+                    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+                    if (val != NULL && scope_info->refersToClosure(scope_info->internString(name))) {
+                        d->d[boxString(name)] = val;
+                    }
+                }
+            }
+        }
+
+        return d;
     }
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }

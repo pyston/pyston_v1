@@ -19,8 +19,10 @@ namespace pyston {
 
 class AST_Module;
 
-AST_Module* parse(const char* fn);
-AST_Module* caching_parse(const char* fn);
+AST_Module* parse_string(const char* code);
+
+AST_Module* parse_file(const char* fn);
+AST_Module* caching_parse_file(const char* fn);
 }
 
 #endif

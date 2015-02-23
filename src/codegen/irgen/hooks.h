@@ -22,6 +22,8 @@ namespace pyston {
 struct CompiledFunction;
 class CLFunction;
 class OSRExit;
+class Box;
+class BoxedDict;
 
 CompiledFunction* compilePartialFuncInternal(OSRExit* exit);
 void* compilePartialFunc(OSRExit*);
@@ -34,6 +36,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm);
 
 // will we always want to generate unique function names? (ie will this function always be reasonable?)
 CompiledFunction* cfForMachineFunctionName(const std::string&);
+
+Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module);
 }
 
 #endif

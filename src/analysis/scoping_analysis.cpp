@@ -104,6 +104,9 @@ public:
     }
     bool refersToClosure(InternedString name) override { return false; }
     bool saveInClosure(InternedString name) override { return false; }
+    VarScopeType getScopeTypeOfName(InternedString name) override {
+        return refersToGlobal(name) ? VarScopeType::GLOBAL : VarScopeType::FAST;
+    }
 
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
@@ -174,11 +177,13 @@ private:
     ScopeInfo* parent;
     ScopingAnalysis::ScopeNameUsage* usage;
     AST* ast;
+    bool usesNameLookup;
 
 public:
-    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast)
-        : parent(parent), usage(usage), ast(ast) {
-        assert(parent);
+    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
+        : parent(parent), usage(usage), ast(ast), usesNameLookup(usesNameLookup) {
+        // not true anymore: Expression
+        // assert(parent);
         assert(usage);
         assert(ast);
     }
@@ -202,8 +207,8 @@ public:
 
         if (usage->forced_globals.count(name))
             return true;
-        if (name.c_str() != name.c_str())
-            usage->dump();
+        if (usesNameLookup)
+            return false;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
     bool refersToClosure(InternedString name) override {
@@ -214,9 +219,24 @@ public:
     }
     bool saveInClosure(InternedString name) override {
         // HAX
-        if (isCompilerCreatedName(name))
+        if (isCompilerCreatedName(name) || usesNameLookup)
             return false;
         return usage->referenced_from_nested.count(name) != 0;
+    }
+
+    VarScopeType getScopeTypeOfName(InternedString name) override {
+        // HAX
+        if (isCompilerCreatedName(name))
+            return VarScopeType::FAST;
+        if (refersToClosure(name))
+            return VarScopeType::DEREF;
+        if (refersToGlobal(name))
+            return VarScopeType::GLOBAL;
+        if (saveInClosure(name))
+            return VarScopeType::CLOSURE;
+        if (usesNameLookup)
+            return VarScopeType::NAME;
+        return VarScopeType::FAST;
     }
 
     InternedString mangleName(const InternedString id) override {
@@ -294,6 +314,7 @@ public:
     bool visit_keyword(AST_keyword* node) override { return false; }
     bool visit_list(AST_List* node) override { return false; }
     bool visit_listcomp(AST_ListComp* node) override { return false; }
+    bool visit_expression(AST_Expression* node) override { return false; }
     // bool visit_module(AST_Module *node) override { return false; }
     // bool visit_name(AST_Name *node) override { return false; }
     bool visit_num(AST_Num* node) override { return false; }
@@ -530,15 +551,18 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
-            case AST_TYPE::ClassDef:
-            case AST_TYPE::FunctionDef:
-            case AST_TYPE::Lambda: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node);
+            case AST_TYPE::Expression:
+            case AST_TYPE::ClassDef: {
+                ScopeInfoBase* scopeInfo
+                    = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
                 break;
             }
+            case AST_TYPE::FunctionDef:
+            case AST_TYPE::Lambda:
             case AST_TYPE::GeneratorExp: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node);
+                ScopeInfoBase* scopeInfo
+                    = new ScopeInfoBase(parent_info, usage, usage->node, false /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
                 break;
             }
@@ -550,8 +574,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 }
 
 InternedStringPool& ScopingAnalysis::getInternedStrings() {
-    assert(parent_module);
-    return *parent_module->interned_strings.get();
+    return interned_strings;
 }
 
 ScopeInfo* ScopingAnalysis::analyzeSubtree(AST* node) {
@@ -601,5 +624,9 @@ ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_str
 
 ScopingAnalysis* runScopingAnalysis(AST_Module* m) {
     return new ScopingAnalysis(m);
+}
+
+ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
+    scopes[e] = getScopeInfoForNode(e);
 }
 }

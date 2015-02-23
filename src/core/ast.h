@@ -118,6 +118,7 @@ enum AST_TYPE {
     DictComp = 15,
     Set = 43,
     Ellipsis = 87,
+    Expression = 88,
 
     // Pseudo-nodes that are specific to this compiler:
     Branch = 200,
@@ -657,6 +658,21 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
 };
 
+// (Alternative to AST_Module, used for, e.g., eval)
+class AST_Expression : public AST {
+public:
+    std::unique_ptr<InternedStringPool> interned_strings;
+
+    AST_expr* body;
+
+    virtual void accept(ASTVisitor* v);
+
+    AST_Expression(std::unique_ptr<InternedStringPool> interned_strings)
+        : AST(AST_TYPE::Expression), interned_strings(std::move(interned_strings)) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expression;
+};
+
 class AST_Name : public AST_expr {
 public:
     AST_TYPE::AST_TYPE ctx_type;
@@ -1044,6 +1060,7 @@ public:
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_exec(AST_Exec* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_expression(AST_Expression* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
@@ -1112,6 +1129,7 @@ public:
     virtual bool visit_excepthandler(AST_ExceptHandler* node) { return false; }
     virtual bool visit_exec(AST_Exec* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
+    virtual bool visit_expr(AST_Expression* node) { return false; }
     virtual bool visit_extslice(AST_ExtSlice* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
     virtual bool visit_functiondef(AST_FunctionDef* node) { return false; }
@@ -1254,6 +1272,7 @@ public:
     virtual bool visit_excepthandler(AST_ExceptHandler* node);
     virtual bool visit_exec(AST_Exec* node);
     virtual bool visit_expr(AST_Expr* node);
+    virtual bool visit_expression(AST_Expression* node);
     virtual bool visit_extslice(AST_ExtSlice* node);
     virtual bool visit_for(AST_For* node);
     virtual bool visit_functiondef(AST_FunctionDef* node);

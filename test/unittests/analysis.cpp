@@ -23,7 +23,7 @@ protected:
 
 TEST_F(AnalysisTest, augassign) {
     const std::string fn("test/unittests/analysis_listcomp.py");
-    AST_Module* module = caching_parse(fn.c_str());
+    AST_Module* module = caching_parse_file(fn.c_str());
     assert(module);
 
     ScopingAnalysis *scoping = runScopingAnalysis(module);

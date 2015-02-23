@@ -27,6 +27,7 @@
 #include "codegen/irgen/future.h"
 #include "codegen/irgen/util.h"
 #include "codegen/osrentry.h"
+#include "codegen/parser.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
 #include "core/ast.h"
@@ -43,7 +44,7 @@ namespace pyston {
 
 // TODO terrible place for these!
 ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
-    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef) {
+    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression) {
         kwarg = "";
         vararg = "";
     } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
@@ -93,6 +94,7 @@ const std::string SourceInfo::getName() {
         case AST_TYPE::Lambda:
             return "<lambda>";
         case AST_TYPE::Module:
+        case AST_TYPE::Expression:
             return "<module>";
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
@@ -298,6 +300,42 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL);
     else
         ((void (*)())cf->code)();
+}
+
+static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm, BoxedDict* locals) {
+    CompiledFunction* cf;
+
+    { // scope for limiting the locked region:
+        LOCK_REGION(codegen_rwlock.asWrite());
+
+        Timer _t("for compileEval()");
+
+        ScopingAnalysis* scoping = new ScopingAnalysis(expr);
+
+        AST_Return* stmt = new AST_Return();
+        stmt->value = expr->body;
+        SourceInfo* si = new SourceInfo(bm, scoping, expr, { stmt });
+        CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+
+        EffortLevel effort = EffortLevel::INTERPRETED;
+
+        cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
+        assert(cf->clfunc->versions.size());
+    }
+
+    return astInterpretFunctionEval(cf, locals);
+}
+
+Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
+    // TODO error message if parse fails or if it isn't an expr
+    // TODO should have a cleaner interface that can parse the Expression directly
+    // TODO this memory leaks
+    AST_Module* parsedModule = parse_string(code);
+    assert(parsedModule->body[0]->type == AST_TYPE::Expr);
+    AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
+    parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
+
+    return compileAndRunExpression(parsedExpr, module, locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

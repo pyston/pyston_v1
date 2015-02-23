@@ -24,6 +24,7 @@ class GCVisitor;
 class AST_expr;
 class AST_stmt;
 class Box;
+class BoxedClosure;
 class BoxedDict;
 struct CompiledFunction;
 struct LineInfo;
@@ -32,6 +33,7 @@ extern const void* interpreter_instr_addr;
 
 Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2, Box* arg3,
                           Box** args);
+Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* locals);
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                       BoxedDict* locals);
 
@@ -39,6 +41,7 @@ AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
 CompiledFunction* getCFForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);
+BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr);
 
 void gatherInterpreterRoots(gc::GCVisitor* visitor);
 BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible);

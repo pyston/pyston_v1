@@ -394,7 +394,9 @@ private:
     }
 
     void* visit_name(AST_Name* node) override {
-        if (scope_info->refersToGlobal(node->id)) {
+        auto name_scope = scope_info->getScopeTypeOfName(node->id);
+
+        if (name_scope == ScopeInfo::VarScopeType::GLOBAL) {
             if (node->id.str() == "xrange") {
                 // printf("TODO guard here and return the classobj\n");
                 // return typeOfClassobj(xrange_cls);
@@ -402,19 +404,31 @@ private:
             return UNKNOWN;
         }
 
-        if (scope_info->refersToClosure(node->id)) {
+        if (name_scope == ScopeInfo::VarScopeType::CLOSURE) {
             return UNKNOWN;
         }
 
-        CompilerType*& t = sym_table[node->id];
-        if (t == NULL) {
-            // if (VERBOSITY() >= 2) {
-            // printf("%s is undefined!\n", node->id.c_str());
-            // raise(SIGTRAP);
-            //}
-            t = UNDEF;
+        if (name_scope == ScopeInfo::VarScopeType::NAME) {
+            return UNKNOWN;
         }
-        return t;
+
+        if (name_scope == ScopeInfo::VarScopeType::DEREF) {
+            return UNKNOWN;
+        }
+
+        if (name_scope == ScopeInfo::VarScopeType::FAST) {
+            CompilerType*& t = sym_table[node->id];
+            if (t == NULL) {
+                // if (VERBOSITY() >= 2) {
+                // printf("%s is undefined!\n", node->id.c_str());
+                // raise(SIGTRAP);
+                //}
+                t = UNDEF;
+            }
+            return t;
+        }
+
+        RELEASE_ASSERT(0, "Unknown scope type: %d", (int)name_scope);
     }
 
     void* visit_num(AST_Num* node) override {

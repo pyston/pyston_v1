@@ -137,7 +137,10 @@ public:
 
     CompiledFunction* getCF() { return compiled_func; }
     FrameInfo* getFrameInfo() { return &frame_info; }
+    BoxedClosure* getPassedClosure() { return passed_closure; }
     const SymMap& getSymbolTable() { return sym_table; }
+    const ScopeInfo* getScopeInfo() { return scope_info; }
+
     void addSymbol(InternedString name, Box* value, bool allow_duplicates);
     void gcVisit(GCVisitor* visitor);
 };
@@ -999,14 +1002,15 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
 Value ASTInterpreter::visit_name(AST_Name* node) {
     switch (node->lookup_type) {
         case AST_Name::UNKNOWN: {
-            if (scope_info->refersToGlobal(node->id)) {
+            ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
+            if (vst == ScopeInfo::VarScopeType::GLOBAL) {
                 node->lookup_type = AST_Name::GLOBAL;
                 return getGlobal(source_info->parent_module, &node->id.str());
-            } else if (scope_info->refersToClosure(node->id)) {
+            } else if (vst == ScopeInfo::VarScopeType::DEREF) {
                 node->lookup_type = AST_Name::CLOSURE;
                 return getattr(passed_closure, node->id.c_str());
             } else {
-                bool is_old_local = (source_info->ast->type == AST_TYPE::ClassDef);
+                bool is_old_local = (vst == ScopeInfo::VarScopeType::NAME);
                 node->lookup_type = is_old_local ? AST_Name::LOCAL : AST_Name::FAST_LOCAL;
 
                 SymMap::iterator it = sym_table.find(node->id);
@@ -1015,8 +1019,8 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
                     return value;
                 }
 
-                // classdefs have different scoping rules than functions:
-                if (source_info->ast->type == AST_TYPE::ClassDef)
+                // classdefs (and some other cases like eval) have different scoping rules than functions:
+                if (is_old_local)
                     return getGlobal(source_info->parent_module, &node->id.str());
 
                 assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
@@ -1101,6 +1105,22 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
+Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* locals) {
+    ++cf->times_called;
+
+    ASTInterpreter interpreter(cf);
+    for (const auto& p : locals->d) {
+        assert(p.first->cls == str_cls);
+        auto name = static_cast<BoxedString*>(p.first)->s;
+        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
+        interpreter.addSymbol(interned, p.second, false);
+    }
+
+    interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
+    Value v = ASTInterpreter::execute(interpreter);
+
+    return v.o ? v.o : None;
+}
 
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
                       BoxedDict* locals) {
@@ -1200,7 +1220,14 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
 
         rtn->d[new BoxedString(l.first.str())] = l.second;
     }
+
     return rtn;
+}
+
+BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getPassedClosure();
 }
 
 void gatherInterpreterRoots(GCVisitor* visitor) {
