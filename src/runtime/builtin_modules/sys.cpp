@@ -233,11 +233,12 @@ void setupSys() {
     sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
 
-    sys_module->giveAttr("exc_info",
-                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0)));
-    sys_module->giveAttr("exc_clear", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcClear, NONE, 0)));
     sys_module->giveAttr(
-        "exit", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExit, NONE, 1, 1, false, false), { None }));
+        "exc_info", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0), "exc_info"));
+    sys_module->giveAttr("exc_clear",
+                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcClear, NONE, 0), "exc_clear"));
+    sys_module->giveAttr("exit", new BoxedBuiltinFunctionOrMethod(
+                                     boxRTFunction((void*)sysExit, NONE, 1, 1, false, false), "exit", { None }));
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);

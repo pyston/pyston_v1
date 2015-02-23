@@ -321,6 +321,19 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     }
 }
 
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name)
+    : BoxedBuiltinFunctionOrMethod(f, name, {}) {
+}
+
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
+                                                           std::initializer_list<Box*> defaults, BoxedClosure* closure,
+                                                           bool isGenerator)
+    : BoxedFunctionBase(f, defaults, closure, isGenerator) {
+
+    assert(name);
+    this->name = static_cast<BoxedString*>(boxString(name));
+}
+
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
@@ -683,6 +696,18 @@ static void func_set_name(Box* b, Box* v, void*) {
     }
 
     func->name = static_cast<BoxedString*>(v);
+}
+
+static Box* builtin_function_or_method_name(Box* b, void*) {
+    // In CPython, these guys just store char*, and it gets wrapped here
+    // But we already share the BoxedString* field with BoxedFunctions...
+    // so it's more convenient to just use that, which is what we do here.
+    // Is there any advantage to using the char* way, here?
+
+    assert(b->cls == builtin_function_or_method_cls);
+    BoxedBuiltinFunctionOrMethod* func = static_cast<BoxedBuiltinFunctionOrMethod*>(b);
+    assert(func->name);
+    return func->name;
 }
 
 static Box* functionNonzero(BoxedFunction* self) {
@@ -1302,6 +1327,8 @@ void setupRuntime() {
         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, modname)));
     builtin_function_or_method_cls->giveAttr(
         "__repr__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodRepr, STR, 1)));
+    builtin_function_or_method_cls->giveAttr("__name__",
+                                             new BoxedGetsetDescriptor(builtin_function_or_method_name, NULL, NULL));
     builtin_function_or_method_cls->freeze();
 
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));

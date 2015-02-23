@@ -1533,8 +1533,8 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 
         // TODO type checking goes here
         if (getset_descr->set == NULL) {
-            raiseExcHelper(AttributeError, "attribute '%s' of '%s' object is not writable", attr_name.c_str(),
-                           getTypeName(getset_descr));
+            raiseExcHelper(AttributeError, "attribute '%s' of '%s' objects is not writable", attr_name.c_str(),
+                           getTypeName(obj));
         }
 
         if (rewrite_args) {
