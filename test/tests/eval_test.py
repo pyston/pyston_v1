@@ -123,6 +123,8 @@ def do_changing_local():
     eval("[print_changing_local() for changing_local in range(5)]")
 do_changing_local()
 
+"""
+
 x = 2
 def wrap():
     x = 1
@@ -144,4 +146,3 @@ def wrap():
     inner2()
 
 wrap()
-"""

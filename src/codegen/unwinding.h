@@ -28,7 +28,7 @@ class BoxedTraceback;
 BoxedTraceback* getTraceback();
 
 class BoxedDict;
-BoxedDict* getLocals(bool only_user_visible);
+BoxedDict* getLocals(bool only_user_visible, bool includeClosure);
 
 // Fetches a writeable pointer to the frame-local excinfo object,
 // calculating it if necessary (from previous frames).

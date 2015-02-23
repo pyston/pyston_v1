@@ -580,7 +580,7 @@ Box* eval(Box* code) {
     // TODO implement full functionality (args and stuff)
     RELEASE_ASSERT(code->cls == str_cls, "eval not implemented for non-strings");
 
-    BoxedDict* locals = getLocals(true /* only_user_visible */);
+    BoxedDict* locals = getLocals(true /* only_user_visible */, true /* includeClosure */);
     BoxedModule* module = getCurrentModule();
 
     return runEval(static_cast<BoxedString*>(code)->s.c_str(), locals, module);
@@ -753,7 +753,7 @@ Box* globals() {
 }
 
 Box* locals() {
-    return getLocals(true /* filter */);
+    return getLocals(true /* filter */, true /* includeClosure */);
 }
 
 Box* divmod(Box* lhs, Box* rhs) {

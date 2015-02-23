@@ -137,7 +137,10 @@ public:
 
     CompiledFunction* getCF() { return compiled_func; }
     FrameInfo* getFrameInfo() { return &frame_info; }
+    BoxedClosure* getPassedClosure() { return passed_closure; }
     const SymMap& getSymbolTable() { return sym_table; }
+    const ScopeInfo* getScopeInfo() { return scope_info; }
+
     void addSymbol(InternedString name, Box* value, bool allow_duplicates);
     void gcVisit(GCVisitor* visitor);
 };
@@ -1217,7 +1220,14 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
 
         rtn->d[new BoxedString(l.first.str())] = l.second;
     }
+
     return rtn;
+}
+
+BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getPassedClosure();
 }
 
 void gatherInterpreterRoots(GCVisitor* visitor) {
