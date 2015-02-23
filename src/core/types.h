@@ -347,23 +347,37 @@ class NonzeroIC;
 class BinopIC;
 
 class Box;
-class BoxIterator {
-private:
-    Box* iter;
-    Box* value;
 
+class BoxIteratorImpl {
 public:
-    BoxIterator(Box* iter) : iter(iter), value(nullptr) {}
+    BoxIteratorImpl(Box* container) {}
+    virtual ~BoxIteratorImpl() = default;
+    virtual void next() = 0;
+    virtual Box* getValue() = 0;
+    virtual void gcHandler(GCVisitor* v) {}
+    virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+};
 
-    bool operator==(BoxIterator const& rhs) const { return (iter == rhs.iter && value == rhs.value); }
+class BoxIterator {
+public:
+    std::shared_ptr<BoxIteratorImpl> impl;
+
+    BoxIterator(std::shared_ptr<BoxIteratorImpl> impl) : impl(impl) {}
+    ~BoxIterator() = default;
+
+    static llvm::iterator_range<BoxIterator> getRange(Box* container);
+    bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl.get()); }
     bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
 
-    BoxIterator& operator++();
+    BoxIterator& operator++() {
+        impl->next();
+        return *this;
+    }
 
-    Box* operator*() const { return value; }
-    Box* operator*() { return value; }
+    Box* operator*() const { return impl->getValue(); }
+    Box* operator*() { return impl->getValue(); }
 
-    void gcHandler(GCVisitor* v);
+    void gcHandler(GCVisitor* v) { impl->gcHandler(v); }
 };
 
 namespace gc {

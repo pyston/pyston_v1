@@ -3463,10 +3463,7 @@ Box* getiter(Box* o) {
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {
-    // TODO: this should probably call getPystonIter
-    Box* iter = getiter(this);
-    assert(iter);
-    return llvm::iterator_range<BoxIterator>(++BoxIterator(iter), BoxIterator(nullptr));
+    return BoxIterator::getRange(this);
 }
 
 // For use on __init__ return values
