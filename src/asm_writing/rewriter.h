@@ -448,6 +448,10 @@ public:
 
     void trap();
     RewriterVar* loadConst(int64_t val, Location loc = Location::any());
+    // can_call_into_python: whether this call could result in arbitrary Python code being called.
+    // This causes some extra bookkeeping to prevent, ex this patchpoint to be rewritten when
+    // entered recursively.  Setting to false disables this for slightly better performance, but
+    // it's not huge so if in doubt just pass "true".
     RewriterVar* call(bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
                       const std::vector<RewriterVar*>& args_xmm = std::vector<RewriterVar*>());
     RewriterVar* call(bool can_call_into_python, void* func_addr);

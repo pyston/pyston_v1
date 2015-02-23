@@ -610,7 +610,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
                 RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
                 RewriterVar* r_kind
                     = rewrite_args->rewriter->loadConst((int)gc::GCKind::UNTRACKED, Location::forArg(1));
-                r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_alloc, r_newsize, r_kind);
+                r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_alloc, r_newsize, r_kind);
             }
         } else {
             attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
@@ -618,7 +618,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
                 RewriterVar* r_oldarray
                     = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
                 RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-                r_new_array2 = rewrite_args->rewriter->call(false, (void*)gc::gc_realloc, r_oldarray, r_newsize);
+                r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
             }
         }
         // Don't set the new hcls until after we do the allocation for the new attr_list;
@@ -735,7 +735,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         if (!for_call) {
             if (rewrite_args) {
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(false, (void*)boxInstanceMethod, r_im_self, r_im_func);
+                    = rewrite_args->rewriter->call(true, (void*)boxInstanceMethod, r_im_self, r_im_func);
                 rewrite_args->out_success = true;
             }
             return boxInstanceMethod(im_self, im_func);
@@ -782,7 +782,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         if (!for_call && descr->cls == function_cls) {
             if (rewrite_args) {
                 // return an unbound instancemethod
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxUnboundInstanceMethod, r_descr);
+                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr);
                 rewrite_args->out_success = true;
             }
             return boxUnboundInstanceMethod(descr);
@@ -893,7 +893,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                     std::vector<RewriterVar*> float_args;
                     float_args.push_back(r_unboxed_val);
                     rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
+                        = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
                     rewrite_args->out_success = true;
                 }
 
@@ -907,7 +907,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                     std::vector<RewriterVar*> float_args;
                     float_args.push_back(r_unboxed_val);
                     rewrite_args->out_rtn
-                        = rewrite_args->rewriter->call(false, (void*)boxFloat, normal_args, float_args);
+                        = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
                     rewrite_args->out_success = true;
                 }
 
@@ -919,7 +919,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
     case BoxedMemberDescriptor::TYPE: {                                                                                \
         if (rewrite_args) {                                                                                            \
             RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrCast<type, cast>(member_desc->offset);              \
-            rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxFn, r_unboxed_val);                  \
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxFn, r_unboxed_val);                   \
             rewrite_args->out_success = true;                                                                          \
         }                                                                                                              \
         type rtn = *reinterpret_cast<type*>((char*)obj + member_desc->offset);                                         \
@@ -943,7 +943,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
             case BoxedMemberDescriptor::STRING: {
                 if (rewrite_args) {
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
-                    rewrite_args->out_rtn = rewrite_args->rewriter->call(false, (void*)boxStringOrNone, r_interm);
+                    rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxStringOrNone, r_interm);
                     rewrite_args->out_success = true;
                 }
 
@@ -953,7 +953,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
             case BoxedMemberDescriptor::STRING_INPLACE: {
                 if (rewrite_args) {
                     rewrite_args->out_rtn = rewrite_args->rewriter->call(
-                        false, (void*)boxStringFromCharPtr,
+                        true, (void*)boxStringFromCharPtr,
                         rewrite_args->rewriter->add(rewrite_args->obj, member_desc->offset, rewrite_args->destination));
                     rewrite_args->out_success = true;
                 }
@@ -2527,7 +2527,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         int kwargs_idx = f->num_args + (f->takes_varargs ? 1 : 0);
         if (rewrite_args) {
             assert(!unused_positional.size());
-            RewriterVar* r_kwargs = rewrite_args->rewriter->call(false, (void*)createDict);
+            RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
 
             if (kwargs_idx == 0)
                 rewrite_args->arg1 = r_kwargs;
@@ -3710,7 +3710,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
             // Another option is to rely on rewriting to make this fast, which would probably require adding
             // a custom internal callable to object.__new__
             made = objectNewNoArgs(cls);
-            r_made = rewrite_args->rewriter->call(false, (void*)objectNewNoArgs, r_ccls);
+            r_made = rewrite_args->rewriter->call(true, (void*)objectNewNoArgs, r_ccls);
         } else {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_new, rewrite_args->destination);
             srewrite_args.args_guarded = true;
@@ -3794,7 +3794,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
             if (!srewrite_args.out_success) {
                 rewrite_args = NULL;
             } else {
-                rewrite_args->rewriter->call(false, (void*)assertInitNone, srewrite_args.out_rtn);
+                rewrite_args->rewriter->call(true, (void*)assertInitNone, srewrite_args.out_rtn);
             }
         } else {
             init_attr = processDescriptor(init_attr, made, cls);

@@ -560,10 +560,6 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
     // assert(!can_call_into_python);
     assert(done_guarding);
 
-    // we've been ignoring these annotations for long enough that I'm not sure they can be trusted,
-    // so just be pessimistic:
-    can_call_into_python = true;
-
     if (can_call_into_python) {
         // We need some fixed amount of space at the beginning of the IC that we can use to invalidate
         // it by writing a jmp.
