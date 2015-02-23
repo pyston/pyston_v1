@@ -1,4 +1,4 @@
-# lots of eval functionality not implemented
+# TODO lots of eval functionality not implemented
 
 print eval("3 + 4")
 
@@ -48,13 +48,13 @@ def func():
     eval("[h for h in range(5)]")
     print h
 
-#    h2 = 2
-#    print eval("h2 + sum([h2 for h2 in range(5)])")
-#    print 'h2', h2
+    h2 = 2
+    print eval("h2 + sum([h2 for h2 in range(5)])")
+    print 'h2', h2
 
-#    h3 = 2
-#    print eval("sum([h3 for h3 in range(5)]) + h3")
-#    print 'h3', h3
+    h3 = 2
+    print eval("sum([h3 for h3 in range(5)]) + h3")
+    print 'h3', h3
 
     eval("[i for i in range(5)]")
 
@@ -86,7 +86,6 @@ print 'eval eval o', eval("eval('o')")
 
 #print eval("[(lambda p : p + o)(5) for o in range(5)]")
 
-"""
 shadow1 = 1000
 shadow2 = 1000
 shadow3 = 1000
@@ -100,14 +99,24 @@ def func2():
 
     print 'shadow3', eval("shadow3 + sum([2 for shadow3 in range(5)]) + shadow3")
 func2()
-print 'shadow1', shadow2
-print 'shadow2', shadow2
-print 'shadow3', shadow3
+#print 'shadow1', shadow2
+#print 'shadow2', shadow2
+#print 'shadow3', shadow3
+
 
 def func3():
     loc = 1234
-    print eval("(lambda arg : arg + loc)(12)")
+    try:
+        print eval("(lambda arg : arg + loc)(12)")
+    except NameError as e:
+        print 'NameError', e.message
+    try:
+        print eval("loc + (lambda arg : arg + loc)(12)")
+    except NameError as e:
+        print 'NameError', e.message
 func3()
+
+"""
 
 changing_global = -1
 def print_changing_global():
@@ -115,15 +124,16 @@ def print_changing_global():
     return 0
 eval("[print_changing_global() for changing_global in range(5)]")
 
+"""
+
 def do_changing_local():
+    # this won't get modified:
     changing_local = -1
     def print_changing_local():
         print 'changing_local is', changing_local
         return 0
     eval("[print_changing_local() for changing_local in range(5)]")
 do_changing_local()
-
-"""
 
 x = 2
 def wrap():
