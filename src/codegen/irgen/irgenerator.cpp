@@ -834,13 +834,16 @@ private:
         return rtn;
     }
 
-    CompilerVariable* getNone() {
+    ConcreteCompilerVariable* getNone() {
         ConcreteCompilerVariable* v = new ConcreteCompilerVariable(
             typeFromClass(none_cls), embedConstantPtr(None, g.llvm_value_type_ptr), false);
         return v;
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, UnwindInfo unw_info) {
+        if (node->id.str() == "None")
+            return getNone();
+
         bool do_patchpoint = ENABLE_ICGETGLOBALS && (irstate->getEffortLevel() != EffortLevel::INTERPRETED);
         if (do_patchpoint) {
             ICSetupInfo* pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());

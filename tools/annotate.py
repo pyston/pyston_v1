@@ -1,3 +1,6 @@
+import commands
+import os
+import re
 import subprocess
 import sys
 
@@ -13,6 +16,78 @@ def get_objdump(func):
 
     raise Exception("Couldn't find function %r to objdump" % func)
 
+_symbols = None
+def lookupAsSymbol(n):
+    global _symbols
+    if _symbols is None:
+        _symbols = {}
+        nm_output = commands.getoutput("nm pyston_release")
+        for l in nm_output.split('\n'):
+            addr = l[:16]
+            if addr.isalnum():
+                _symbols[int(addr, 16)] = l[19:]
+    sym = _symbols.get(n, None)
+    if not sym:
+        return sym
+
+    demangled = None
+    if sym.startswith('_') and os.path.exists("tools/demangle"):
+        demangled = commands.getoutput("tools/demangle %s" % sym)
+        if demangled != "Error: unable to demangle":
+            return demangled
+    return sym + "()"
+
+_heap_proc = None
+heapmap_args = None
+# heapmap_args = ["./pyston_release", "-i", "minibenchmarks/fasta.py"]
+def lookupAsHeapAddr(n):
+    global _heap_proc
+    if _heap_proc is None:
+        if heapmap_args is None:
+            return None
+
+        _heap_proc = subprocess.Popen(heapmap_args, stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+
+        while True:
+            l = _heap_proc.stdout.readline()
+            if l.startswith("Pyston v0.2"):
+                break
+
+    _heap_proc.stdin.write("dumpAddr(%d)\nprint '!!!!'\n" % n)
+    lines = []
+    while True:
+        l = _heap_proc.stdout.readline()
+        if l == '!!!!\n':
+            break
+        lines.append(l)
+    s = ''.join(lines[1:-1])
+    if "Class: NoneType" in s:
+        return "None"
+    if "non-gc memory" in s:
+        return "(non-gc memory)"
+    if "Hidden class object" in s:
+        return "(hcls object)"
+    if "Class: type" in s:
+        m = re.search("Type name: ([^ \n]+)", s)
+        return "The '%s' class" % m.group(1)
+
+    if "Python object" in s:
+        m = re.search("Class: ([^ \n]+)", s)
+        return "A '%s' object" % m.group(1)
+
+    print s
+
+def lookupConstant(n):
+    sym = lookupAsSymbol(n)
+    if sym:
+        return "# " + sym
+
+    heap = lookupAsHeapAddr(n)
+    if heap:
+        return "# " + heap
+
+    return ""
+
 if __name__ == "__main__":
     # TODO: if it's not passed, maybe default to annotating the
     # first function in the profile (the one in which the plurality of
@@ -20,7 +95,7 @@ if __name__ == "__main__":
 
     func = sys.argv[1]
 
-    objdump =  get_objdump(func)
+    objdump = get_objdump(func)
 
     p = subprocess.Popen(["perf", "annotate", "-v", func], stdout=subprocess.PIPE, stderr=open("/dev/null", "w"))
     annotate = p.communicate()[0]
@@ -37,9 +112,28 @@ if __name__ == "__main__":
 
         counts[addr] = int(count)
 
+    nops = None # (count, num, start, end)
     for l in objdump.split('\n')[7:]:
         addr = l.split(':')[0]
         count = counts.pop(addr.strip(), 0)
-        print str(count).rjust(8), l
+
+        m = re.search("movabs \\$0x([0-9a-f]+),", l)
+        extra = ""
+        if m:
+            n = int(m.group(1), 16)
+
+            extra = lookupConstant(n)
+
+        if l.endswith("\tnop"):
+            addr = l.split()[0][:-1]
+            if not nops:
+                nops = (count, 1, addr, addr)
+            else:
+                nops = (nops[0] + count, nops[1] + 1, nops[2], addr)
+        else:
+            if nops:
+                print str(nops[0]).rjust(8), ("    %s-%s              nop*%d" % (nops[2], nops[3], nops[1])).ljust(70)
+                nops = None
+            print str(count).rjust(8), l.ljust(70), extra
 
     assert not counts, counts

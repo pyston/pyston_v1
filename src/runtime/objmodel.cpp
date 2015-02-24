@@ -2017,6 +2017,25 @@ extern "C" void dump(void* p) {
             printf("%ld elements\n", static_cast<BoxedList*>(b)->size);
         }
 
+        if (isSubclass(b->cls, module_cls)) {
+            printf("The '%s' module\n", static_cast<BoxedModule*>(b)->name().c_str());
+        }
+
+        /*
+        if (b->cls->instancesHaveHCAttrs()) {
+            HCAttrs* attrs = b->getHCAttrsPtr();
+            printf("Has %ld attrs\n", attrs->hcls->attr_offsets.size());
+            for (const auto& p : attrs->hcls->attr_offsets) {
+                printf("Index %d: %s: %p\n", p.second, p.first.c_str(), attrs->attr_list->attrs[p.second]);
+            }
+        }
+        */
+
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::HIDDEN_CLASS) {
+        printf("Hidden class object\n");
         return;
     }
 

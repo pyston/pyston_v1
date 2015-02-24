@@ -861,8 +861,16 @@ Box* getreversed(Box* o) {
     return new (seqreviter_cls) BoxedSeqIter(o, len - 1);
 }
 
-Box* pydump(void* p) {
+Box* pydump(Box* p) {
     dump(p);
+    return None;
+}
+
+Box* pydumpAddr(Box* p) {
+    if (p->cls != int_cls)
+        raiseExcHelper(TypeError, "Requires an int");
+
+    dump((void*)static_cast<BoxedInt*>(p)->n);
     return None;
 }
 
@@ -1102,6 +1110,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("trap", trap_obj);
     builtins_module->giveAttr("dump",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 1), "dump"));
+    builtins_module->giveAttr(
+        "dumpAddr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
 
     builtins_module->giveAttr(
         "getattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false),
