@@ -1,5 +1,4 @@
-# expected: fail
-# - we don't support this functionality yet
+# expected: pass
 
 def f4():
     a = 1
