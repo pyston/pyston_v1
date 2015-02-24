@@ -179,14 +179,15 @@ int main(int argc, char** argv) {
         while (repl) {
             char* line = readline(">> ");
 
-            AST_Module* m = parse_string(line);
-
             if (!line) {
                 repl = false;
             } else {
                 add_history(line);
 
+                AST_Module* m = parse_string(line);
+
                 Timer _t("repl");
+
                 if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
                     AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
                     AST_Call* c = new AST_Call();
