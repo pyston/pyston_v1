@@ -23,7 +23,11 @@
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#if LLVMREV < 229094
 #include "llvm/PassManager.h"
+#else
+#include "llvm/IR/LegacyPassManager.h"
+#endif
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
@@ -71,7 +75,12 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
 
     Timer _t("optimizing");
 
+#if LLVMREV < 229094
     llvm::FunctionPassManager fpm(g.cur_module);
+#else
+    llvm::legacy::FunctionPassManager fpm(g.cur_module);
+#endif
+
 
 #if LLVMREV < 217548
     fpm.add(new llvm::DataLayoutPass(*g.tm->getDataLayout()));
@@ -898,8 +907,10 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
     g.cur_module = new llvm::Module(name, g.context);
 #if LLVMREV < 217070 // not sure if this is the right rev
     g.cur_module->setDataLayout(g.tm->getDataLayout()->getStringRepresentation());
-#else
+#elif LLVMREV < 227113
     g.cur_module->setDataLayout(g.tm->getSubtargetImpl()->getDataLayout());
+#else
+    g.cur_module->setDataLayout(g.tm->getDataLayout());
 #endif
     // g.engine->addModule(g.cur_module);
 

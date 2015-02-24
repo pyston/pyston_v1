@@ -22,7 +22,11 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#if LLVMREV < 229094
 #include "llvm/PassManager.h"
+#else
+#include "llvm/IR/LegacyPassManager.h"
+#endif
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
@@ -99,8 +103,11 @@ public:
         if (!initialized) {
             llvm::initializeInlineCostAnalysisPass(*llvm::PassRegistry::getPassRegistry());
             llvm::initializeSimpleInlinerPass(*llvm::PassRegistry::getPassRegistry());
+#if LLVMREV < 227669
             llvm::initializeTargetTransformInfoAnalysisGroup(*llvm::PassRegistry::getPassRegistry());
-
+#else
+            llvm::initializeTargetTransformInfoWrapperPassPass(*llvm::PassRegistry::getPassRegistry());
+#endif
             fake_module = new llvm::Module("fake", g.context);
 
             initialized = true;
@@ -119,7 +126,11 @@ public:
 
         llvm::Module* cur_module = f.getParent();
 
+#if LLVMREV < 217548
         llvm::PassManager fake_pm;
+#else
+        llvm::legacy::PassManager fake_pm;
+#endif
         llvm::InlineCostAnalysis* cost_analysis = new llvm::InlineCostAnalysis();
         fake_pm.add(cost_analysis);
         // llvm::errs() << "doing fake run\n";

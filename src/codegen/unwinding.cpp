@@ -18,7 +18,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#if LLVMREV < 227586
 #include "llvm/DebugInfo/DIContext.h"
+#else
+#include "llvm/DebugInfo/DWARF/DIContext.h"
+#endif
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/Object/ObjectFile.h"

@@ -257,7 +257,7 @@ extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyOb
     // Clients are supposed to zero-initialize *ppos:
     if (*it_ptr == NULL) {
         *it_ptr = (iterator*)malloc(sizeof(iterator));
-        ** it_ptr = self->d.begin();
+        **it_ptr = self->d.begin();
     }
 
     iterator* it = *it_ptr;

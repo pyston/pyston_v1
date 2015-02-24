@@ -94,7 +94,7 @@ else
 	LLVM_BIN := $(LLVM_BUILD)/Release/bin
 endif
 
-LLVM_LINK_LIBS := core mcjit native bitreader ipo irreader debuginfo instrumentation
+LLVM_LINK_LIBS := core mcjit native bitreader ipo irreader debuginfodwarf instrumentation
 ifneq ($(ENABLE_INTEL_JIT_EVENTS),0)
 LLVM_LINK_LIBS += inteljitevents
 endif
