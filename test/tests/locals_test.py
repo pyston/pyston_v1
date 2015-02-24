@@ -40,3 +40,19 @@ def f4(t):
     print sorted(locals().items())
 f4(0)
 f4(1)
+
+def f5():
+    a = 0
+    b = 1
+    def g():
+        print a
+        def h():
+            a = 2
+            def i():
+                print a
+                print b
+                print sorted(locals().items())
+            i()
+        h()
+    g()
+f5()
