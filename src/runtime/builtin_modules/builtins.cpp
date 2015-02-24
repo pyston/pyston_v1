@@ -1212,7 +1212,7 @@ void setupBuiltins() {
     builtins_module->giveAttr("staticmethod", staticmethod_cls);
     builtins_module->giveAttr("classmethod", classmethod_cls);
     builtins_module->giveAttr(
-        "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false)));
+        "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
 
     PyExc_RecursionErrorInst = new (RuntimeError) BoxedException();
     gc::registerPermanentRoot(PyExc_RecursionErrorInst);
