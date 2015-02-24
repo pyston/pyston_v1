@@ -336,8 +336,8 @@ def worker_thread():
         except:
             import traceback
             # traceback.print_exc()
-            results[job[0]] = None
             quit[job[0]] = job[0] + ':\n' + traceback.format_exc()
+            results[job[0]] = None
             with cv:
                 cv.notifyAll()
             # os._exit(-1)

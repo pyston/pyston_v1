@@ -264,6 +264,10 @@ void setupSys() {
 
     sys_module->giveAttr("version", boxString(generateVersionString()));
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
+    // TODO: this should be a "sys.version_info" object, not just a tuple (ie can access fields by name)
+    sys_module->giveAttr("version_info",
+                         new BoxedTuple({ boxInt(PYTHON_VERSION_MAJOR), boxInt(PYTHON_VERSION_MINOR),
+                                          boxInt(PYTHON_VERSION_MICRO), boxStrConstant("beta"), boxInt(0) }));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
 

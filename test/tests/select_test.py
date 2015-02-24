@@ -21,7 +21,7 @@ gc.collect()
 p.unregister(f)
 p.register(f)
 try:
-    print p.poll(10)
+    print len(p.poll(10))
 finally:
     f.close()
 gc.collect()
