@@ -645,7 +645,10 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
                     Box* val = closure->attrs.attr_list->attrs[offset];
                     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
                     if (val != NULL && scope_info->refersToClosure(scope_info->internString(name))) {
-                        d->d[boxString(name)] = val;
+                        Box* boxedName = boxString(name);
+                        if (d->d.count(boxedName) == 0) {
+                            d->d[boxString(name)] = val;
+                        }
                     }
                 }
             }
