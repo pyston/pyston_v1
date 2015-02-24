@@ -74,12 +74,11 @@ add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.
 add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
 
-set(LIBUNWIND_GITHEAD "${CMAKE_SOURCE_DIR}/.git/modules/libunwind/HEAD")
-set(LIBPYPA_GITHEAD "${CMAKE_SOURCE_DIR}/.git/modules/libpypa/HEAD")
-add_custom_command(OUTPUT ${LIBUNWIND_GITHEAD} ${LIBPYPA_GITHEAD}
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
                    COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
                    DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
-add_custom_target(gitsubmodules DEPENDS ${LIBUNWIND_GITHEAD} ${LIBPYPA_GITHEAD})
+add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
 
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
