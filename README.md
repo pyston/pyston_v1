@@ -37,8 +37,13 @@ We have a [small list of starter projects](https://github.com/dropbox/pyston/wik
  - Multithreading support
 - We have allowed performance to regress, sometimes considerably, but (hopefully) in places that allow for more efficient implementations as we have time.
 
-##### v0.3: current series
-- Goal is to improve performance, informed by our behavior on real benchmarks.
+##### v0.3: [released 2/24/2015](http://blog.pyston.org/2015/02/24/pyston-0-3-self-hosting-sufficiency/)
+- Better language support
+ - Can self-host all of our internal Python scripts
+- Better performance
+ - Match CPython's performance on our small benchmark suite
+
+##### v0.4: Coming soon
 
 ### Getting started
 
