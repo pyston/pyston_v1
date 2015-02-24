@@ -1,3 +1,4 @@
+import argparse
 import commands
 import os
 import re
@@ -39,7 +40,6 @@ def lookupAsSymbol(n):
 
 _heap_proc = None
 heapmap_args = None
-# heapmap_args = ["./pyston_release", "-i", "minibenchmarks/fasta.py"]
 def lookupAsHeapAddr(n):
     global _heap_proc
     if _heap_proc is None:
@@ -93,7 +93,26 @@ if __name__ == "__main__":
     # first function in the profile (the one in which the plurality of
     # the time is spent)?
 
-    func = sys.argv[1]
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("func_name", metavar="FUNC_NAME")
+    parser.add_argument("--collapse-nops", dest="collapse_nops", action="store_true", default=True)
+    parser.add_argument("--no-collapse-nops", dest="collapse_nops", action="store_false")
+    parser.add_argument("--heap-map-args", nargs='+', help="""
+Command to run that will provide heap map information.
+This will typically look like:
+--heap-map-args ./pyston_release -i BENCHMARK
+    """.strip())
+    parser.add_argument("--heap-map-target", help="""
+Benchmark that was run.  '--heap-map-target BENCHMARK' is
+equivalent to '--heap-map-args ./pyston_release -i BENCHMARK'.
+    """.strip())
+    args = parser.parse_args()
+
+    func = args.func_name
+    if args.heap_map_args:
+        heapmap_args = args.heap_map_args
+    elif args.heap_map_target:
+        heapmap_args = ["./pyston_release", "-i", args.heap_map_target]
 
     objdump = get_objdump(func)
 
@@ -124,7 +143,7 @@ if __name__ == "__main__":
 
             extra = lookupConstant(n)
 
-        if l.endswith("\tnop"):
+        if args.collapse_nops and l.endswith("\tnop"):
             addr = l.split()[0][:-1]
             if not nops:
                 nops = (count, 1, addr, addr)
