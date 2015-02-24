@@ -67,7 +67,7 @@ public:
     }
 
     bool isSame(const BoxIteratorImpl* _rhs) override {
-        BoxIteratorGeneric* rhs = (BoxIteratorGeneric*)_rhs;
+        const BoxIteratorGeneric* rhs = (const BoxIteratorGeneric*)_rhs;
         return iterator == rhs->iterator && value == rhs->value;
     }
 
@@ -107,7 +107,7 @@ public:
     void gcHandler(GCVisitor* v) override { v->visitPotential(obj); }
 
     bool isSame(const BoxIteratorImpl* _rhs) override {
-        auto rhs = (BoxIteratorIndex*)_rhs;
+        const auto rhs = (const BoxIteratorIndex*)_rhs;
         return obj == rhs->obj && index == rhs->index;
     }
 
