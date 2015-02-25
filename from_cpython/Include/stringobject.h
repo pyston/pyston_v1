@@ -196,7 +196,7 @@ PyAPI_FUNC(int) PyString_AsStringAndSize(
     register Py_ssize_t *len	/* pointer to length variable or NULL
 				   (only possible for 0-terminated
 				   strings) */
-    );
+    ) PYSTON_NOEXCEPT;
 
 
 /* Using the current locale, insert the thousands grouping
