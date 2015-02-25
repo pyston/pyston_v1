@@ -4578,6 +4578,9 @@ init_socket(void)
     if (!os_init())
         return;
 
+    // Pyston change: we require calling PyType_Ready for now:
+    PyType_Ready(&sock_type);
+
     Py_TYPE(&sock_type) = &PyType_Type;
     m = Py_InitModule3(PySocket_MODULE_NAME,
                        socket_methods,

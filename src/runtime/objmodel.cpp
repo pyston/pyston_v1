@@ -3543,13 +3543,16 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     }
 
     made->tp_dictoffset = base->tp_dictoffset;
-    made->giveAttr("__module__", boxString(getCurrentModule()->name()));
-    made->giveAttr("__doc__", None);
 
     for (const auto& p : attr_dict->d) {
         assert(p.first->cls == str_cls);
         made->setattr(static_cast<BoxedString*>(p.first)->s, p.second, NULL);
     }
+
+    if (!made->hasattr("__module__"))
+        made->giveAttr("__module__", boxString(getCurrentModule()->name()));
+    if (!made->hasattr("__doc__"))
+        made->giveAttr("__doc__", None);
 
     made->tp_new = base->tp_new;
 

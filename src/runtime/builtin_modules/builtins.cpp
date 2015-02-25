@@ -674,8 +674,10 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
 }
 
 extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* dict) noexcept {
-    RELEASE_ASSERT(_base == NULL, "unimplemented");
-    RELEASE_ASSERT(dict == NULL, "unimplemented");
+    if (_base == NULL)
+        _base = Exception;
+    if (dict == NULL)
+        dict = new BoxedDict();
 
     try {
         char* dot_pos = strchr(name, '.');
@@ -683,13 +685,16 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         int n = strlen(name);
         BoxedString* boxedName = boxStrConstantSize(dot_pos + 1, n - (dot_pos - name) - 1);
 
-        BoxedClass* base = Exception;
-        BoxedClass* cls
-            = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), true, boxedName);
+        // It can also be a tuple of bases
+        RELEASE_ASSERT(isSubclass(_base->cls, type_cls), "");
+        BoxedClass* base = static_cast<BoxedClass*>(_base);
 
-        cls->giveAttr("__module__", boxStrConstantSize(name, dot_pos - name));
-        // TODO Not sure if this should be called here
-        fixup_slot_dispatchers(cls);
+        if (PyDict_GetItemString(dict, "__module__") == NULL) {
+            PyDict_SetItemString(dict, "__module__", boxStrConstantSize(name, dot_pos - name));
+        }
+        checkAndThrowCAPIException();
+
+        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, new BoxedTuple({ base }), dict, NULL, NULL);
         return cls;
     } catch (ExcInfo e) {
         abort();

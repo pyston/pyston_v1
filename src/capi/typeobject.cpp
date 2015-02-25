@@ -1862,6 +1862,14 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     PystonType_Ready(cls);
 
+    if (!cls->hasattr("__doc__")) {
+        if (cls->tp_doc) {
+            cls->giveAttr("__doc__", boxStrConstant(cls->tp_doc));
+        } else {
+            cls->giveAttr("__doc__", None);
+        }
+    }
+
     if (cls->tp_alloc == &PystonType_GenericAlloc)
         cls->tp_alloc = &PyType_GenericAlloc;
 
