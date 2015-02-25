@@ -1535,7 +1535,7 @@ Box* BoxedCApiFunction::callInternal(BoxedFunctionBase* func, CallRewriteArgs* r
     return r;
 }
 
-static Box* method_get_doc(Box* b, void*) {
+static Box* methodGetDoc(Box* b, void*) {
     assert(b->cls == method_cls);
     const char* s = static_cast<BoxedMethodDescriptor*>(b)->method->ml_doc;
     if (s)
@@ -1560,7 +1560,7 @@ void setupCAPI() {
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
                                                                      0, true, true)));
-    method_cls->giveAttr("__doc__", new BoxedGetsetDescriptor(method_get_doc, NULL, NULL));
+    method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
     wrapperdescr_cls

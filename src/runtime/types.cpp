@@ -519,7 +519,8 @@ extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
       *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls,
-      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *getset_cls, *builtin_function_or_method_cls;
+      *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
+      *builtin_function_or_method_cls;
 
 BoxedTuple* EmptyTuple;
 }
@@ -650,14 +651,14 @@ static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
     return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
 }
 
-static Box* func_name(Box* b, void*) {
+static Box* funcName(Box* b, void*) {
     assert(b->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(b);
     RELEASE_ASSERT(func->name != NULL, "func->name is not set");
     return func->name;
 }
 
-static void func_set_name(Box* b, Box* v, void*) {
+static void funcSetName(Box* b, Box* v, void*) {
     assert(b->cls == function_cls);
     BoxedFunction* func = static_cast<BoxedFunction*>(b);
 
@@ -668,7 +669,7 @@ static void func_set_name(Box* b, Box* v, void*) {
     func->name = static_cast<BoxedString*>(v);
 }
 
-static Box* builtin_function_or_method_name(Box* b, void*) {
+static Box* builtinFunctionOrMethodName(Box* b, void*) {
     // In CPython, these guys just store char*, and it gets wrapped here
     // But we already share the BoxedString* field with BoxedFunctions...
     // so it's more convenient to just use that, which is what we do here.
@@ -1058,7 +1059,7 @@ Box* objectStr(Box* obj) {
     return obj->reprIC();
 }
 
-static Box* type_name(Box* b, void*) {
+static Box* typeName(Box* b, void*) {
     assert(b->cls == type_cls);
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
@@ -1076,7 +1077,7 @@ static Box* type_name(Box* b, void*) {
     }
 }
 
-static void type_set_name(Box* b, Box* v, void*) {
+static void typeSetName(Box* b, Box* v, void*) {
     assert(b->cls == type_cls);
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
@@ -1224,7 +1225,8 @@ void setupRuntime() {
     set_cls = new BoxedHeapClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false, "set");
     frozenset_cls = new BoxedHeapClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false, "frozenset");
     member_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false, "member");
-    getset_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
+    pyston_getset_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
+    capi_getset_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
     closure_cls = new BoxedHeapClass(object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure),
                                      false, "closure");
     property_cls = new BoxedHeapClass(object_cls, &propertyGCHandler, 0, sizeof(BoxedProperty), false, "property");
@@ -1234,6 +1236,10 @@ void setupRuntime() {
         = new BoxedHeapClass(object_cls, &classmethodGCHandler, 0, sizeof(BoxedClassmethod), false, "classmethod");
     attrwrapper_cls
         = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false, "attrwrapper");
+
+    // TODO: add explicit __get__ and __set__ methods to these
+    pyston_getset_cls->freeze();
+    capi_getset_cls->freeze();
 
     STR = typeFromClass(str_cls);
     BOXED_INT = typeFromClass(int_cls);
@@ -1259,7 +1265,7 @@ void setupRuntime() {
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
 
-    type_cls->giveAttr("__name__", new BoxedGetsetDescriptor(type_name, type_set_name, NULL));
+    type_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeName, typeSetName, NULL));
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
     type_cls->giveAttr("__new__",
@@ -1299,7 +1305,7 @@ void setupRuntime() {
     setupDescr();
     setupTraceback();
 
-    function_cls->giveAttr("__name__", new BoxedGetsetDescriptor(func_name, func_set_name, NULL));
+    function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__module__",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, modname)));
@@ -1314,8 +1320,8 @@ void setupRuntime() {
         new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, modname)));
     builtin_function_or_method_cls->giveAttr(
         "__repr__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodRepr, STR, 1)));
-    builtin_function_or_method_cls->giveAttr("__name__",
-                                             new BoxedGetsetDescriptor(builtin_function_or_method_name, NULL, NULL));
+    builtin_function_or_method_cls->giveAttr(
+        "__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(builtinFunctionOrMethodName, NULL, NULL));
     builtin_function_or_method_cls->freeze();
 
     instancemethod_cls->giveAttr(

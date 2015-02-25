@@ -981,7 +981,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
     }
 
     // Special case: data descriptor: getset descriptor
-    else if (descr->cls == getset_cls) {
+    else if (descr->cls == pyston_getset_cls || descr->cls == capi_getset_cls) {
         BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
 
         // TODO some more checks should go here
@@ -1006,6 +1006,11 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
             RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
             rewrite_args->out_rtn = rewrite_args->rewriter->call(
                 /* can_call_into_python */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
+
+            if (descr->cls == capi_getset_cls)
+                // TODO I think we are supposed to check the return value?
+                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
             rewrite_args->out_success = true;
         }
 
@@ -1528,7 +1533,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
                                    RewriterVar* r_descr, const std::string& attr_name) {
 
     // Special case: getset descriptor
-    if (descr->cls == getset_cls) {
+    if (descr->cls == pyston_getset_cls || descr->cls == capi_getset_cls) {
         BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
 
         // TODO type checking goes here
@@ -1545,6 +1550,11 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
             RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
             rewrite_args->rewriter->call(
                 /* can_call_into_python */ true, (void*)getset_descr->set, { r_obj, r_val, r_closure });
+
+            if (descr->cls == capi_getset_cls)
+                // TODO I think we are supposed to check the return value?
+                rewrite_args->rewriter->call(true, (void*)checkAndThrowCAPIException);
+
             rewrite_args->out_success = true;
         }
 

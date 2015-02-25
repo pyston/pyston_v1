@@ -1855,9 +1855,10 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
         cls->giveAttr(member->name, new BoxedMemberDescriptor(member));
     }
 
-    if (cls->tp_getset) {
-        if (VERBOSITY())
-            printf("warning: ignoring tp_getset for now\n");
+    for (PyGetSetDef* getset = cls->tp_getset; getset && getset->name; ++getset) {
+        // TODO do something with __doc__
+        cls->giveAttr(getset->name, new (capi_getset_cls) BoxedGetsetDescriptor(
+                                        getset->get, (void (*)(Box*, Box*, void*))getset->set, getset->closure));
     }
 
     PystonType_Ready(cls);

@@ -81,8 +81,8 @@ extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
-    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *getset_cls,
-    *builtin_function_or_method_cls;
+    *unicode_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
+    *capi_getset_cls, *builtin_function_or_method_cls;
 }
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;
@@ -544,7 +544,7 @@ public:
     BoxedGetsetDescriptor(Box* (*get)(Box*, void*), void (*set)(Box*, Box*, void*), void* closure)
         : get(get), set(set), closure(closure) {}
 
-    DEFAULT_CLASS_SIMPLE(getset_cls);
+    // No DEFAULT_CLASS annotation here -- force callers to explicitly specifiy pyston_getset_cls or capi_getset_cls
 };
 
 class BoxedProperty : public Box {
