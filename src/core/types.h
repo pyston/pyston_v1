@@ -439,12 +439,13 @@ public:
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
     void giveAttr(const std::string& attr, Box* val) {
-        assert(this->getattr(attr) == NULL);
+        assert(!this->hasattr(attr));
         this->setattr(attr, val, NULL);
     }
 
     Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
+    bool hasattr(const std::string& attr) { return getattr(attr) != NULL; }
     void delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args);
 
     Box* reprIC();

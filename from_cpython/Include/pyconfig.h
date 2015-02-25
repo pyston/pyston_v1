@@ -49,6 +49,9 @@
 #define HAVE_SELECT 1
 #define HAVE_ALARM 1
 #define HAVE_SYMLINK 1
+#define HAVE_ADDRINFO 1
+#define HAVE_SOCKADDR_STORAGE 1
+#define HAVE_SOCKETPAIR 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"
