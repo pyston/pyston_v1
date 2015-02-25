@@ -65,6 +65,7 @@ void force() {
     FORCE(createLong);
     FORCE(createPureImaginary);
     FORCE(createSet);
+    FORCE(decodeUTF8StringPtr);
 
     FORCE(getattr);
     FORCE(setattr);

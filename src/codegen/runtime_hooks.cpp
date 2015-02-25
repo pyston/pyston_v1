@@ -184,6 +184,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(createLong);
     GET(createPureImaginary);
     GET(createSet);
+    GET(decodeUTF8StringPtr);
 
     GET(getattr);
     GET(setattr);

@@ -347,16 +347,40 @@ extern "C" Box* chr(Box* arg) {
     return boxString(std::string(1, (char)n));
 }
 
-extern "C" Box* ord(Box* arg) {
-    if (arg->cls != str_cls) {
-        raiseExcHelper(TypeError, "ord() expected string of length 1, but %s found", getTypeName(arg));
+extern "C" Box* ord(Box* obj) {
+    long ord;
+    Py_ssize_t size;
+
+    if (PyString_Check(obj)) {
+        size = PyString_GET_SIZE(obj);
+        if (size == 1) {
+            ord = (long)((unsigned char)*PyString_AS_STRING(obj));
+            return new BoxedInt(ord);
+        }
+    } else if (PyByteArray_Check(obj)) {
+        size = PyByteArray_GET_SIZE(obj);
+        if (size == 1) {
+            ord = (long)((unsigned char)*PyByteArray_AS_STRING(obj));
+            return new BoxedInt(ord);
+        }
+
+#ifdef Py_USING_UNICODE
+    } else if (PyUnicode_Check(obj)) {
+        size = PyUnicode_GET_SIZE(obj);
+        if (size == 1) {
+            ord = (long)*PyUnicode_AS_UNICODE(obj);
+            return new BoxedInt(ord);
+        }
+#endif
+    } else {
+        raiseExcHelper(TypeError, "ord() expected string of length 1, but "
+                                  "%.200s found",
+                       obj->cls->tp_name);
     }
-    const std::string& s = static_cast<BoxedString*>(arg)->s;
 
-    if (s.size() != 1)
-        raiseExcHelper(TypeError, "ord() expected string of length 1, but string of length %d found", s.size());
-
-    return boxInt(s[0]);
+    raiseExcHelper(TypeError, "ord() expected a character, "
+                              "but string of length %zd found",
+                   size);
 }
 
 Box* range(Box* start, Box* stop, Box* step) {

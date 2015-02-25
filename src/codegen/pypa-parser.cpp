@@ -504,7 +504,8 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstStr& s) {
         AST_Str* ptr = new AST_Str();
         location(ptr, s);
-        ptr->s = s.value;
+        ptr->str_type = AST_Str::STR;
+        ptr->str_data = s.value;
         return ptr;
     }
 
@@ -792,7 +793,7 @@ struct stmt_dispatcher {
         AST_Str* str = new AST_Str();
         ptr->value = str;
         str->str_type = AST_Str::STR;
-        str->s = d.doc;
+        str->str_data = d.doc;
         return ptr;
     }
 };

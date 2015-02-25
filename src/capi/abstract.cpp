@@ -477,7 +477,20 @@ extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
 }
 
 extern "C" PyObject* _PyObject_CallFunction_SizeT(PyObject* callable, const char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
+    va_list va;
+    PyObject* args;
+
+    if (callable == NULL)
+        return null_error();
+
+    if (format && *format) {
+        va_start(va, format);
+        args = _Py_VaBuildValue_SizeT(format, va);
+        va_end(va);
+    } else
+        args = PyTuple_New(0);
+
+    return call_function_tail(callable, args);
 }
 
 #define NEW_STYLE_NUMBER(o) PyType_HasFeature((o)->cls, Py_TPFLAGS_CHECKTYPES)

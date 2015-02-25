@@ -1172,6 +1172,13 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     return op;
 }
 
+Box* decodeUTF8StringPtr(const std::string* s) {
+    Box* rtn = PyUnicode_DecodeUTF8(s->c_str(), s->size(), "strict");
+    checkAndThrowCAPIException();
+    assert(rtn);
+    return rtn;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();

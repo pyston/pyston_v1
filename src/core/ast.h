@@ -816,18 +816,21 @@ public:
 class AST_Str : public AST_expr {
 public:
     enum StrType {
+        UNSET = 0x00,
         STR = 0x10,
         UNICODE = 0x20,
     } str_type;
 
-    std::string s;
+    // The meaning of str_data depends on str_type.  For STR, it's just the bytes value.
+    // For UNICODE, it's the utf-8 encoded value.
+    std::string str_data;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Str() : AST_expr(AST_TYPE::Str) {}
-    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(s) {}
-    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(std::move(s)) {}
+    AST_Str() : AST_expr(AST_TYPE::Str), str_type(UNSET) {}
+    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(s) {}
+    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), str_type(STR), str_data(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };

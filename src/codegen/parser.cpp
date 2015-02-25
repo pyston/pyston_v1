@@ -661,12 +661,9 @@ AST_Str* read_str(BufferedReader* reader) {
     rtn->lineno = reader->readULL();
 
     if (rtn->str_type == AST_Str::STR) {
-        rtn->s = readString(reader);
+        rtn->str_data = readString(reader);
     } else if (rtn->str_type == AST_Str::UNICODE) {
-        // Don't really support unicode for now...
-        printf("Warning: converting unicode literal to str\n");
-        rtn->str_type = AST_Str::STR;
-        rtn->s = readString(reader);
+        rtn->str_data = readString(reader);
     } else {
         RELEASE_ASSERT(0, "%d", rtn->str_type);
     }

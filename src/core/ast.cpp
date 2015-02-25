@@ -1627,7 +1627,13 @@ bool PrintVisitor::visit_slice(AST_Slice* node) {
 }
 
 bool PrintVisitor::visit_str(AST_Str* node) {
-    printf("\"%s\"", node->s.c_str());
+    if (node->str_type == AST_Str::STR) {
+        printf("\"%s\"", node->str_data.c_str());
+    } else if (node->str_type == AST_Str::UNICODE) {
+        printf("<unicode value>");
+    } else {
+        RELEASE_ASSERT(0, "%d", node->str_type);
+    }
     return false;
 }
 

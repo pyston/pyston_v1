@@ -108,6 +108,7 @@ Box* boxString(const std::string& s);
 Box* boxString(std::string&& s);
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
+extern "C" Box* decodeUTF8StringPtr(const std::string* s);
 
 // creates an uninitialized string of length n; useful for directly constructing into the string and avoiding copies:
 BoxedString* createUninitializedString(ssize_t n);

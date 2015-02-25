@@ -34,7 +34,8 @@ struct GlobalFuncs {
 
     llvm::Value* boxInt, *unboxInt, *boxFloat, *unboxFloat, *boxStringPtr, *boxCLFunction, *unboxCLFunction,
         *boxInstanceMethod, *boxBool, *unboxBool, *createTuple, *createDict, *createList, *createSlice,
-        *createUserClass, *createClosure, *createGenerator, *createLong, *createSet, *createPureImaginary;
+        *createUserClass, *createClosure, *createGenerator, *createLong, *createSet, *createPureImaginary,
+        *decodeUTF8StringPtr;
     llvm::Value* getattr, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare, *augbinop, *unboxedLen,
         *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom, *importStar, *repr, *str,
         *isinstance, *yield, *getPystonIter;
