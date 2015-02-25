@@ -171,9 +171,10 @@ void setupDescr() {
     member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_cls->freeze();
 
-    property_cls->giveAttr(
-        "__init__",
-        new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false), { NULL, NULL, NULL, NULL }));
+    property_cls->giveAttr("__init__",
+                           new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false,
+                                                           ParamNames({ "", "fget", "fset", "fdel", "doc" }, "", "")),
+                                             { NULL, NULL, NULL, NULL }));
     property_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)propertyGet, UNKNOWN, 3)));
     property_cls->giveAttr("__set__", new BoxedFunction(boxRTFunction((void*)propertySet, UNKNOWN, 3)));
     property_cls->giveAttr("__delete__", new BoxedFunction(boxRTFunction((void*)propertyDel, UNKNOWN, 2)));

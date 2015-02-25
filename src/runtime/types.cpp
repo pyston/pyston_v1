@@ -740,6 +740,23 @@ Box* instancemethodGet(BoxedInstanceMethod* self, Box* obj, Box* type) {
     return new BoxedInstanceMethod(obj, self->func);
 }
 
+Box* instancemethodNew(BoxedClass* cls, Box* func, Box* self, Box** args) {
+    Box* classObj = args[0];
+
+    if (!PyCallable_Check(func)) {
+        PyErr_SetString(PyExc_TypeError, "first argument must be callable");
+        return NULL;
+    }
+    if (self == Py_None)
+        self = NULL;
+    if (self == NULL && classObj == NULL) {
+        PyErr_SetString(PyExc_TypeError, "unbound methods must have non-NULL im_class");
+        return NULL;
+    }
+
+    return new BoxedInstanceMethod(self, func);
+}
+
 Box* instancemethodRepr(BoxedInstanceMethod* self) {
     if (self->obj)
         return boxStrConstant("<bound instancemethod object>");
@@ -1301,6 +1318,8 @@ void setupRuntime() {
                                              new BoxedGetsetDescriptor(builtin_function_or_method_name, NULL, NULL));
     builtin_function_or_method_cls->freeze();
 
+    instancemethod_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)instancemethodNew, UNKNOWN, 4, 1, false, false), { NULL }));
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
     instancemethod_cls->giveAttr(
