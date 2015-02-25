@@ -64,6 +64,7 @@ extern "C" void initarray();
 extern "C" void initzlib();
 extern "C" void init_codecs();
 extern "C" void init_socket();
+extern "C" void _PyUnicode_Init();
 
 namespace pyston {
 
@@ -518,7 +519,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
-      *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *property_cls,
+      *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
       *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
       *builtin_function_or_method_cls;
 
@@ -1171,6 +1172,13 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     return op;
 }
 
+Box* decodeUTF8StringPtr(const std::string* s) {
+    Box* rtn = PyUnicode_DecodeUTF8(s->c_str(), s->size(), "strict");
+    checkAndThrowCAPIException();
+    assert(rtn);
+    return rtn;
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
@@ -1216,8 +1224,6 @@ void setupRuntime() {
     none_cls->tp_name = boxed_none_name->s.c_str();
 
     gc::enableGC();
-
-    unicode_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedUnicode), false, "unicode");
 
     // It wasn't safe to add __base__ attributes until object+type+str are set up, so do that now:
     type_cls->giveAttr("__base__", object_cls);
@@ -1336,7 +1342,7 @@ void setupRuntime() {
     setupIter();
     setupClassobj();
     setupSuper();
-    setupUnicode();
+    _PyUnicode_Init();
     setupDescr();
     setupTraceback();
 

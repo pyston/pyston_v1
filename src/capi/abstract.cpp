@@ -27,6 +27,14 @@
 
 namespace pyston {
 
+extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyBuffer_ToContiguous(void* buf, Py_buffer* view, Py_ssize_t len, char fort) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 static PyObject* type_error(const char* msg, PyObject* obj) noexcept {
     PyErr_Format(PyExc_TypeError, msg, Py_TYPE(obj)->tp_name);
     return NULL;
@@ -469,7 +477,20 @@ extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {
 }
 
 extern "C" PyObject* _PyObject_CallFunction_SizeT(PyObject* callable, const char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
+    va_list va;
+    PyObject* args;
+
+    if (callable == NULL)
+        return null_error();
+
+    if (format && *format) {
+        va_start(va, format);
+        args = _Py_VaBuildValue_SizeT(format, va);
+        va_end(va);
+    } else
+        args = PyTuple_New(0);
+
+    return call_function_tail(callable, args);
 }
 
 #define NEW_STYLE_NUMBER(o) PyType_HasFeature((o)->cls, Py_TPFLAGS_CHECKTYPES)

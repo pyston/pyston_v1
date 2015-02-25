@@ -33,6 +33,7 @@
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
+#include "runtime/capi.h"
 #include "runtime/generator.h"
 #include "runtime/import.h"
 #include "runtime/inline/boxing.h"
@@ -497,7 +498,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args[1]->type == AST_TYPE::Str);
 
         Value module = visit_expr(node->args[0]);
-        const std::string& name = ast_cast<AST_Str>(node->args[1])->s;
+        auto ast_str = ast_cast<AST_Str>(node->args[1]);
+        assert(ast_str->str_type == AST_Str::STR);
+        const std::string& name = ast_str->str_data;
         assert(name.size());
         v = importFrom(module.o, &name);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_NAME) {
@@ -508,7 +511,9 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
 
         int level = static_cast<AST_Num*>(node->args[0])->n_int;
         Value froms = visit_expr(node->args[1]);
-        const std::string& module_name = static_cast<AST_Str*>(node->args[2])->s;
+        auto ast_str = ast_cast<AST_Str>(node->args[2]);
+        assert(ast_str->str_type == AST_Str::STR);
+        const std::string& module_name = ast_str->str_data;
         v = import(level, froms.o, &module_name);
     } else if (node->opcode == AST_LangPrimitive::IMPORT_STAR) {
         assert(node->args.size() == 1);
@@ -996,7 +1001,13 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
 }
 
 Value ASTInterpreter::visit_str(AST_Str* node) {
-    return boxString(node->s);
+    if (node->str_type == AST_Str::STR) {
+        return boxString(node->str_data);
+    } else if (node->str_type == AST_Str::UNICODE) {
+        return decodeUTF8StringPtr(&node->str_data);
+    } else {
+        RELEASE_ASSERT(0, "%d", node->str_type);
+    }
 }
 
 Value ASTInterpreter::visit_name(AST_Name* node) {

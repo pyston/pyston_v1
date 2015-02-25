@@ -70,6 +70,9 @@ PyAPI_FUNC(int) PyList_Reverse(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyList_AsTuple(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) _PyList_Extend(PyListObject *, PyObject *) PYSTON_NOEXCEPT;
 
+// Pyston addition:
+PyAPI_FUNC(PyObject **) PyList_Items(PyObject *) PYSTON_NOEXCEPT;
+
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 #define PyList_GET_ITEM(op, i) PyList_GetItem((PyObject*)(op), (i))

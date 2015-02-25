@@ -26,8 +26,83 @@
 
 namespace pyston {
 
+extern "C" {
+_Py_HashSecret_t _Py_HashSecret;
+}
+
 extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    PyObject* res;
+    PyObject* func;
+    PyObject* str;
+    int unicode_method_found = 0;
+    static PyObject* unicodestr = NULL;
+
+    if (v == NULL) {
+        res = PyString_FromString("<NULL>");
+        if (res == NULL)
+            return NULL;
+        str = PyUnicode_FromEncodedObject(res, NULL, "strict");
+        Py_DECREF(res);
+        return str;
+    } else if (PyUnicode_CheckExact(v)) {
+        Py_INCREF(v);
+        return v;
+    }
+
+    if (PyInstance_Check(v)) {
+        /* We're an instance of a classic class */
+        /* Try __unicode__ from the instance -- alas we have no type */
+        if (!unicodestr) {
+            unicodestr = boxStrConstant("__unicode__");
+            gc::registerPermanentRoot(unicodestr);
+            if (!unicodestr)
+                return NULL;
+        }
+        func = PyObject_GetAttr(v, unicodestr);
+        if (func != NULL) {
+            unicode_method_found = 1;
+            res = PyObject_CallFunctionObjArgs(func, NULL);
+            Py_DECREF(func);
+        } else {
+            PyErr_Clear();
+        }
+    } else {
+        /* Not a classic class instance, try __unicode__. */
+        func = _PyObject_LookupSpecial(v, "__unicode__", &unicodestr);
+        if (func != NULL) {
+            unicode_method_found = 1;
+            res = PyObject_CallFunctionObjArgs(func, NULL);
+            Py_DECREF(func);
+        } else if (PyErr_Occurred())
+            return NULL;
+    }
+
+    /* Didn't find __unicode__ */
+    if (!unicode_method_found) {
+        if (PyUnicode_Check(v)) {
+            /* For a Unicode subtype that's didn't overwrite __unicode__,
+               return a true Unicode object with the same data. */
+            return PyUnicode_FromUnicode(PyUnicode_AS_UNICODE(v), PyUnicode_GET_SIZE(v));
+        }
+        if (PyString_CheckExact(v)) {
+            Py_INCREF(v);
+            res = v;
+        } else {
+            if (Py_TYPE(v)->tp_str != NULL)
+                res = (*Py_TYPE(v)->tp_str)(v);
+            else
+                res = PyObject_Repr(v);
+        }
+    }
+
+    if (res == NULL)
+        return NULL;
+    if (!PyUnicode_Check(res)) {
+        str = PyUnicode_FromEncodedObject(res, NULL, "strict");
+        Py_DECREF(res);
+        res = str;
+    }
+    return res;
 }
 
 extern "C" PyObject* _PyObject_Str(PyObject* v) noexcept {

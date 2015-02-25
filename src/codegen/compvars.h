@@ -379,6 +379,7 @@ ConcreteCompilerVariable* makeBool(bool);
 ConcreteCompilerVariable* makeLong(IREmitter& emitter, std::string&);
 ConcreteCompilerVariable* makePureImaginary(IREmitter& emitter, double imag);
 CompilerVariable* makeStr(const std::string*);
+CompilerVariable* makeUnicode(IREmitter& emitter, const std::string*);
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure, bool isGenerator,
                                const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();

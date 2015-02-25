@@ -414,8 +414,6 @@ extern "C" {
 
 /* --- Unicode Type ------------------------------------------------------- */
 
-// Pyston change: this is not our object format
-#if 0
 typedef struct {
     PyObject_HEAD
     Py_ssize_t length;          /* Length of raw Unicode data in buffer */
@@ -425,14 +423,8 @@ typedef struct {
                                    string, or NULL; this is used for
                                    implementing the buffer protocol */
 } PyUnicodeObject;
-#endif
-struct _PyUnicodeObject;
-typedef struct _PyUnicodeObject PyUnicodeObject;
 
-// Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) unicode_cls;
-#define PyUnicode_Type (*unicode_cls)
-//PyAPI_DATA(PyTypeObject) PyUnicode_Type;
+PyAPI_DATA(PyTypeObject) PyUnicode_Type;
 
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 PyAPI_FUNC(bool) _PyUnicode_Check(PyObject*) PYSTON_NOEXCEPT;
@@ -443,8 +435,6 @@ PyAPI_FUNC(bool) _PyUnicode_Check(PyObject*) PYSTON_NOEXCEPT;
 #endif
 #define PyUnicode_CheckExact(op) (Py_TYPE(op) == &PyUnicode_Type)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-#if 0
 /* Fast access macros */
 #define PyUnicode_GET_SIZE(op) \
     (((PyUnicodeObject *)(op))->length)
@@ -454,11 +444,6 @@ PyAPI_FUNC(bool) _PyUnicode_Check(PyObject*) PYSTON_NOEXCEPT;
     (((PyUnicodeObject *)(op))->str)
 #define PyUnicode_AS_DATA(op) \
     ((const char *)((PyUnicodeObject *)(op))->str)
-#endif
-PyAPI_FUNC(Py_ssize_t) PyUnicode_GET_SIZE(PyObject*) PYSTON_NOEXCEPT;
-PyAPI_FUNC(Py_ssize_t) PyUnicode_GET_DATA_SIZE(PyObject*) PYSTON_NOEXCEPT;
-PyAPI_FUNC(Py_UNICODE *) PyUnicode_AS_UNICODE(PyObject*) PYSTON_NOEXCEPT;
-PyAPI_FUNC(const char *) PyUnicode_AS_DATA(PyObject*) PYSTON_NOEXCEPT;
 
 /* --- Constants ---------------------------------------------------------- */
 

@@ -47,6 +47,11 @@ BoxedString::BoxedString(const std::string& s) : s(s) {
     gc::registerGCManagedBytes(this->s.size());
 }
 
+extern "C" char PyString_GetItem(PyObject* op, ssize_t n) noexcept {
+    RELEASE_ASSERT(PyString_Check(op), "");
+    return static_cast<const BoxedString*>(op)->s[n];
+}
+
 extern "C" PyObject* PyString_FromFormatV(const char* format, va_list vargs) noexcept {
     va_list count;
     Py_ssize_t n = 0;
@@ -1552,13 +1557,13 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
                                                self->s.size() - found_idx - sep->s.size()) });
 }
 
-extern "C" PyObject* do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
+extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
 
 Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
     assert(kwargs->cls == dict_cls);
 
-    Box* rtn = do_string_format(self, args, kwargs);
+    Box* rtn = _do_string_format(self, args, kwargs);
     checkAndThrowCAPIException();
     assert(rtn);
     return rtn;
@@ -2020,6 +2025,38 @@ extern "C" PyObject* PyString_FromString(const char* s) noexcept {
     return boxStrConstant(s);
 }
 
+extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** s, register Py_ssize_t* len) noexcept {
+    if (s == NULL) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    if (!PyString_Check(obj)) {
+#ifdef Py_USING_UNICODE
+        if (PyUnicode_Check(obj)) {
+            obj = _PyUnicode_AsDefaultEncodedString(obj, NULL);
+            if (obj == NULL)
+                return -1;
+        } else
+#endif
+        {
+            PyErr_Format(PyExc_TypeError, "expected string or Unicode object, "
+                                          "%.200s found",
+                         Py_TYPE(obj)->tp_name);
+            return -1;
+        }
+    }
+
+    *s = PyString_AS_STRING(obj);
+    if (len != NULL)
+        *len = PyString_GET_SIZE(obj);
+    else if (strlen(*s) != (size_t)PyString_GET_SIZE(obj)) {
+        PyErr_SetString(PyExc_TypeError, "expected string without null bytes");
+        return -1;
+    }
+    return 0;
+}
+
 BoxedString* createUninitializedString(ssize_t n) {
     // I *think* this should avoid doing any copies, by using move constructors:
     return new BoxedString(std::string(n, '\x00'));
@@ -2052,9 +2089,15 @@ extern "C" char* PyString_AsString(PyObject* o) noexcept {
     return getWriteableStringContents(s);
 }
 
-extern "C" Py_ssize_t PyString_Size(PyObject* s) noexcept {
-    RELEASE_ASSERT(s->cls == str_cls, "");
-    return static_cast<BoxedString*>(s)->s.size();
+extern "C" Py_ssize_t PyString_Size(PyObject* op) noexcept {
+    if (op->cls == str_cls)
+        return static_cast<BoxedString*>(op)->s.size();
+
+    char* _s;
+    Py_ssize_t len;
+    if (PyString_AsStringAndSize(op, &_s, &len))
+        return -1;
+    return len;
 }
 
 extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {

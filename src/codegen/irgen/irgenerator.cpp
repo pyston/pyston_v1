@@ -515,7 +515,9 @@ private:
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
                 module->decvref(emitter);
 
-                const std::string& name = ast_cast<AST_Str>(node->args[1])->s;
+                auto ast_str = ast_cast<AST_Str>(node->args[1]);
+                assert(ast_str->str_type == AST_Str::STR);
+                const std::string& name = ast_str->str_data;
                 assert(name.size());
 
                 llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(),
@@ -558,7 +560,9 @@ private:
                 ConcreteCompilerVariable* converted_froms = froms->makeConverted(emitter, froms->getBoxType());
                 froms->decvref(emitter);
 
-                const std::string& module_name = static_cast<AST_Str*>(node->args[2])->s;
+                auto ast_str = ast_cast<AST_Str>(node->args[2]);
+                assert(ast_str->str_type == AST_Str::STR);
+                const std::string& module_name = ast_str->str_data;
 
                 llvm::Value* imported = emitter.createCall3(unw_info, g.funcs.import, getConstantInt(level, g.i32),
                                                             converted_froms->getValue(),
@@ -1008,7 +1012,15 @@ private:
         return new ConcreteCompilerVariable(SLICE, rtn, true);
     }
 
-    CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) { return makeStr(&node->s); }
+    CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
+        if (node->str_type == AST_Str::STR) {
+            return makeStr(&node->str_data);
+        } else if (node->str_type == AST_Str::UNICODE) {
+            return makeUnicode(emitter, &node->str_data);
+        } else {
+            RELEASE_ASSERT(0, "%d", node->str_type);
+        }
+    }
 
     CompilerVariable* evalSubscript(AST_Subscript* node, UnwindInfo unw_info) {
         CompilerVariable* value = evalExpr(node->value, unw_info);

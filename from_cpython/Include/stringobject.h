@@ -99,6 +99,9 @@ PyAPI_FUNC(void) PyString_InternImmortal(PyObject **) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyString_InternFromString(const char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _Py_ReleaseInternedStrings(void) PYSTON_NOEXCEPT;
 
+// Pyston addition:
+PyAPI_FUNC(char) PyString_GetItem(PyObject *, Py_ssize_t) PYSTON_NOEXCEPT;
+
 /* Use only if you know it's a string */
 #define PyString_CHECK_INTERNED(op) (((PyStringObject *)(op))->ob_sstate)
 
@@ -193,7 +196,7 @@ PyAPI_FUNC(int) PyString_AsStringAndSize(
     register Py_ssize_t *len	/* pointer to length variable or NULL
 				   (only possible for 0-terminated
 				   strings) */
-    );
+    ) PYSTON_NOEXCEPT;
 
 
 /* Using the current locale, insert the thousands grouping

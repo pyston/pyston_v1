@@ -154,11 +154,6 @@ extern "C" PyVarObject* PyObject_InitVar(PyVarObject* op, PyTypeObject* tp, Py_s
     return op;
 }
 
-extern "C" void PyObject_Free(void* p) noexcept {
-    gc::gc_free(p);
-    ASSERT(0, "I think this is good enough but I'm not sure; should test");
-}
-
 extern "C" PyObject* PyObject_Format(PyObject* obj, PyObject* format_spec) noexcept {
     PyObject* empty = NULL;
     PyObject* result = NULL;
@@ -883,6 +878,18 @@ extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) noex
     Py_FatalError("unimplemented");
 }
 
+extern "C" void* PyObject_Malloc(size_t sz) noexcept {
+    return gc_compat_malloc(sz);
+}
+
+extern "C" void* PyObject_Realloc(void* ptr, size_t sz) noexcept {
+    return gc_compat_realloc(ptr, sz);
+}
+
+extern "C" void PyObject_Free(void* ptr) noexcept {
+    gc_compat_free(ptr);
+}
+
 extern "C" void* PyMem_Malloc(size_t sz) noexcept {
     return gc_compat_malloc(sz);
 }
@@ -1163,22 +1170,6 @@ extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
     int64_t n = static_cast<BoxedInt*>(o)->n;
     static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
     return n;
-}
-
-extern "C" Py_ssize_t PyUnicode_GET_SIZE(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" Py_ssize_t PyUnicode_GET_DATA_SIZE(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" Py_UNICODE* PyUnicode_AS_UNICODE(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" const char* PyUnicode_AS_DATA(PyObject*) noexcept {
-    Py_FatalError("unimplemented");
 }
 
 extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
@@ -1482,6 +1473,10 @@ extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
         *pi = x;
     }
     return 1;
+}
+
+extern "C" PyObject* PyBuffer_FromMemory(void* ptr, Py_ssize_t size) noexcept {
+    Py_FatalError("unimplemented");
 }
 
 BoxedModule* importTestExtension(const std::string& name) {

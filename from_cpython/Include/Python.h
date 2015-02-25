@@ -58,7 +58,9 @@
 #include "complexobject.h"
 #endif
 #include "stringobject.h"
+#include "bufferobject.h"
 #include "bytesobject.h"
+#include "bytearrayobject.h"
 #include "listobject.h"
 #include "dictobject.h"
 #include "tupleobject.h"

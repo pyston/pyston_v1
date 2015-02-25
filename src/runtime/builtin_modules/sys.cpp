@@ -33,6 +33,11 @@ namespace pyston {
 BoxedModule* sys_module;
 BoxedDict* sys_modules_dict;
 
+extern "C" {
+// supposed to be exposed through sys.flags
+int Py_BytesWarningFlag = 0;
+}
+
 Box* sysExcInfo() {
     ExcInfo* exc = getFrameExcInfo();
     assert(exc->type);

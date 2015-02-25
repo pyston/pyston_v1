@@ -59,6 +59,9 @@ PyAPI_FUNC(int) _PyTuple_Resize(PyObject **, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyTuple_Pack(Py_ssize_t, ...) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) _PyTuple_MaybeUntrack(PyObject *) PYSTON_NOEXCEPT;
 
+// Pyston addition:
+PyAPI_FUNC(PyObject **) PyTuple_Items(PyObject *) PYSTON_NOEXCEPT;
+
 /* Macro, trading safety for speed */
 // Pyston changes: these aren't direct macros any more [they potentially could be though]
 #define PyTuple_GET_ITEM(op, i) PyTuple_GetItem(op, i)

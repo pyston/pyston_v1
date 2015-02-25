@@ -1798,6 +1798,12 @@ CompilerVariable* makeStr(const std::string* s) {
     return new ValuedCompilerVariable<const std::string*>(STR_CONSTANT, s, true);
 }
 
+CompilerVariable* makeUnicode(IREmitter& emitter, const std::string* s) {
+    llvm::Value* boxed
+        = emitter.getBuilder()->CreateCall(g.funcs.decodeUTF8StringPtr, embedConstantPtr(s, g.llvm_str_type_ptr));
+    return new ConcreteCompilerVariable(typeFromClass(unicode_cls), boxed, true);
+}
+
 class VoidType : public ConcreteCompilerType {
 public:
     llvm::Type* llvmType() override { return g.void_; }

@@ -594,7 +594,7 @@ private:
             AST_Str* orig = ast_cast<AST_Str>(val);
             AST_Str* made = new AST_Str();
             made->str_type = orig->str_type;
-            made->s = orig->s;
+            made->str_data = orig->str_data;
             made->col_offset = orig->col_offset;
             made->lineno = orig->lineno;
             return made;
