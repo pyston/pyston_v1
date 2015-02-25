@@ -72,6 +72,10 @@ extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* 
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyObject_SetAttr(PyObject* v, PyObject* name, PyObject* value) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
     // won't end up doing a GIL check?

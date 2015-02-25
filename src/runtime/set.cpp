@@ -200,12 +200,7 @@ Box* setRemove(BoxedSet* self, Box* v) {
 
     auto it = self->s.find(v);
     if (it == self->s.end()) {
-        BoxedString* s = reprOrNull(v);
-
-        if (s)
-            raiseExcHelper(KeyError, "%s", s->s.c_str());
-        else
-            raiseExcHelper(KeyError, "");
+        raiseExcHelper(KeyError, v);
     }
 
     self->s.erase(it);

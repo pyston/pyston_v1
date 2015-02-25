@@ -1,6 +1,3 @@
-# expected: fail
-# - exception printing
-
 class BadException(Exception):
     def __str__(self):
         print "str"

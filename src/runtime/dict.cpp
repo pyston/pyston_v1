@@ -174,12 +174,7 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
-        BoxedString* s = reprOrNull(k);
-
-        if (s)
-            raiseExcHelper(KeyError, "%s", s->s.c_str());
-        else
-            raiseExcHelper(KeyError, "");
+        raiseExcHelper(KeyError, k);
     }
 
     Box* pos = self->d[k];
@@ -306,12 +301,7 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
-        BoxedString* s = reprOrNull(k);
-
-        if (s)
-            raiseExcHelper(KeyError, "%s", s->s.c_str());
-        else
-            raiseExcHelper(KeyError, "");
+        raiseExcHelper(KeyError, k);
     }
 
     self->d.erase(it);
@@ -329,6 +319,18 @@ extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
 
     return 0;
 }
+
+extern "C" int PyDict_DelItemString(PyObject* v, const char* key) noexcept {
+    PyObject* kv;
+    int err;
+    kv = PyString_FromString(key);
+    if (kv == NULL)
+        return -1;
+    err = PyDict_DelItem(v, kv);
+    Py_DECREF(kv);
+    return err;
+}
+
 Box* dictPop(BoxedDict* self, Box* k, Box* d) {
     if (!isSubclass(self->cls, dict_cls))
         raiseExcHelper(TypeError, "descriptor 'pop' requires a 'dict' object but received a '%s'", getTypeName(self));
@@ -338,12 +340,7 @@ Box* dictPop(BoxedDict* self, Box* k, Box* d) {
         if (d)
             return d;
 
-        BoxedString* s = reprOrNull(k);
-
-        if (s)
-            raiseExcHelper(KeyError, "%s", s->s.c_str());
-        else
-            raiseExcHelper(KeyError, "");
+        raiseExcHelper(KeyError, k);
     }
 
     Box* rtn = it->second;

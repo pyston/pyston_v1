@@ -45,7 +45,8 @@ extern "C" long PyInt_AsLong(PyObject* op) noexcept {
     if (op->cls == long_cls)
         return PyLong_AsLong(op);
 
-    Py_FatalError("unimplemented");
+    PyErr_SetString(PyExc_TypeError, "an integer is required");
+    return -1;
 }
 
 extern "C" Py_ssize_t PyInt_AsSsize_t(PyObject* op) noexcept {

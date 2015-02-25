@@ -559,7 +559,7 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
 
         RELEASE_ASSERT(e.matches(BaseException), "");
 
-        Box* msg = e.value->getattr("message");
+        Box* msg = getattr(e.value, "message");
         RELEASE_ASSERT(msg, "");
         RELEASE_ASSERT(msg->cls == str_cls, "");
 
@@ -832,6 +832,40 @@ Box* typeRepr(BoxedClass* self) {
     os << "'>";
 
     return boxString(os.str());
+}
+
+static PyObject* typeModule(Box* _type, void* context) {
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+
+    PyObject* mod;
+    const char* s;
+
+    if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+        mod = type->getattr("__module__");
+        if (!mod)
+            raiseExcHelper(AttributeError, "__module__");
+        return mod;
+    } else {
+        s = strrchr(type->tp_name, '.');
+        if (s != NULL)
+            return PyString_FromStringAndSize(type->tp_name, (Py_ssize_t)(s - type->tp_name));
+        return PyString_FromString("__builtin__");
+    }
+}
+
+static void typeSetModule(Box* _type, PyObject* value, void* context) {
+    PyTypeObject* type = static_cast<PyTypeObject*>(_type);
+
+    if (!(type->tp_flags & Py_TPFLAGS_HEAPTYPE)) {
+        raiseExcHelper(TypeError, "can't set %s.__module__", type->tp_name);
+    }
+    if (!value) {
+        raiseExcHelper(TypeError, "can't delete %s.__module__", type->tp_name);
+    }
+
+    PyType_Modified(type);
+
+    type->setattr("__module__", value, NULL);
 }
 
 Box* typeHash(BoxedClass* self) {
@@ -1272,6 +1306,7 @@ void setupRuntime() {
                        new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
+    type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
@@ -1365,6 +1400,7 @@ void setupRuntime() {
     setupSys();
 
     setupBuiltins();
+    _PyExc_Init();
     setupThread();
     setupGC();
     setupImport();

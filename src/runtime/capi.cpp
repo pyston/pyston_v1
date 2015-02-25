@@ -673,21 +673,24 @@ void checkAndThrowCAPIException() {
         if (!tb)
             tb = None;
 
+        // Make sure to call PyErr_Clear() *before* normalizing the exception, since otherwise
+        // the normalization can think that it had raised an exception, resulting to a call
+        // to checkAndThrowCAPIException, and boom.
+        PyErr_Clear();
+
         // This is similar to PyErr_NormalizeException:
         if (!isInstance(value, type)) {
             if (value->cls == tuple_cls) {
-                value = runtimeCall(cur_thread_state.curexc_type, ArgPassSpec(0, 0, true, false), value, NULL, NULL,
-                                    NULL, NULL);
+                value = runtimeCall(type, ArgPassSpec(0, 0, true, false), value, NULL, NULL, NULL, NULL);
             } else if (value == None) {
-                value = runtimeCall(cur_thread_state.curexc_type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+                value = runtimeCall(type, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
             } else {
-                value = runtimeCall(cur_thread_state.curexc_type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
+                value = runtimeCall(type, ArgPassSpec(1), value, NULL, NULL, NULL, NULL);
             }
         }
 
         RELEASE_ASSERT(value->cls == type, "unsupported");
 
-        PyErr_Clear();
         if (tb != None)
             raiseRaw(ExcInfo(value->cls, value, tb));
         raiseExc(value);
@@ -856,6 +859,11 @@ extern "C" PyObject* PyErr_Occurred() noexcept {
 }
 
 extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t stacklevel) noexcept {
+    // These warnings are silenced by default:
+    // We should copy the real CPython code in here
+    if (category == PyExc_DeprecationWarning)
+        return 0;
+
     Py_FatalError("unimplemented");
 }
 

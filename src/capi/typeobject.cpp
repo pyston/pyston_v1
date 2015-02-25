@@ -1784,6 +1784,10 @@ void PystonType_Ready(BoxedClass* cls) {
     }
 }
 
+extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
+    // We don't cache anything yet that would need to be invalidated:
+}
+
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     gc::registerNonheapRootObject(cls);
 

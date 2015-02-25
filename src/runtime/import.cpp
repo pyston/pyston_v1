@@ -261,6 +261,13 @@ static void ensure_fromlist(Box* module, Box* fromlist, const std::string& modul
     }
 }
 
+extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
+    if (strcmp("__builtin__", name) == 0)
+        return builtins_module;
+
+    Py_FatalError("unimplemented");
+}
+
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
     RELEASE_ASSERT(level == -1 || level == 0, "not implemented");
 

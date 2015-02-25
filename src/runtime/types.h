@@ -613,11 +613,28 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* objectNewNoArgs(BoxedClass* cls);
 
-extern "C" BoxedClass* Exception, *AssertionError, *AttributeError, *TypeError, *NameError, *KeyError, *IndexError,
-    *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError, *RuntimeError, *ImportError,
-    *StopIteration, *GeneratorExit, *SyntaxError;
-
 Box* makeAttrWrapper(Box* b);
+
+#define SystemError ((BoxedClass*)PyExc_SystemError)
+#define StopIteration ((BoxedClass*)PyExc_StopIteration)
+#define NameError ((BoxedClass*)PyExc_NameError)
+#define UnboundLocalError ((BoxedClass*)PyExc_UnboundLocalError)
+#define BaseException ((BoxedClass*)PyExc_BaseException)
+#define TypeError ((BoxedClass*)PyExc_TypeError)
+#define AssertionError ((BoxedClass*)PyExc_AssertionError)
+#define ValueError ((BoxedClass*)PyExc_ValueError)
+#define SystemExit ((BoxedClass*)PyExc_SystemExit)
+#define SyntaxError ((BoxedClass*)PyExc_SyntaxError)
+#define Exception ((BoxedClass*)PyExc_Exception)
+#define AttributeError ((BoxedClass*)PyExc_AttributeError)
+#define RuntimeError ((BoxedClass*)PyExc_RuntimeError)
+#define ZeroDivisionError ((BoxedClass*)PyExc_ZeroDivisionError)
+#define ImportError ((BoxedClass*)PyExc_ImportError)
+#define IndexError ((BoxedClass*)PyExc_IndexError)
+#define GeneratorExit ((BoxedClass*)PyExc_GeneratorExit)
+#define IOError ((BoxedClass*)PyExc_IOError)
+#define KeyError ((BoxedClass*)PyExc_KeyError)
+#define OverflowError ((BoxedClass*)PyExc_OverflowError)
 
 // Our default for tp_alloc:
 PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;

@@ -208,7 +208,7 @@ extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
         BoxedString* tostr = str(msg);
         raiseExcHelper(AssertionError, "%s", tostr->s.c_str());
     } else {
-        raiseExcHelper(AssertionError, NULL);
+        raiseExcHelper(AssertionError, "");
     }
 }
 

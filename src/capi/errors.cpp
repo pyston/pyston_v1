@@ -188,7 +188,73 @@ extern "C" void PyErr_WriteUnraisable(PyObject* obj) noexcept {
 
 static int parse_syntax_error(PyObject* err, PyObject** message, const char** filename, int* lineno, int* offset,
                               const char** text) noexcept {
-    Py_FatalError("unimplemented");
+    long hold;
+    PyObject* v;
+
+    /* old style errors */
+    if (PyTuple_Check(err))
+        return PyArg_ParseTuple(err, "O(ziiz)", message, filename, lineno, offset, text);
+
+    *message = NULL;
+
+    /* new style errors.  `err' is an instance */
+    *message = PyObject_GetAttrString(err, "msg");
+    if (!*message)
+        goto finally;
+
+    v = PyObject_GetAttrString(err, "filename");
+    if (!v)
+        goto finally;
+    if (v == Py_None) {
+        Py_DECREF(v);
+        *filename = NULL;
+    } else {
+        *filename = PyString_AsString(v);
+        Py_DECREF(v);
+        if (!*filename)
+            goto finally;
+    }
+
+    v = PyObject_GetAttrString(err, "lineno");
+    if (!v)
+        goto finally;
+    hold = PyInt_AsLong(v);
+    Py_DECREF(v);
+    if (hold < 0 && PyErr_Occurred())
+        goto finally;
+    *lineno = (int)hold;
+
+    v = PyObject_GetAttrString(err, "offset");
+    if (!v)
+        goto finally;
+    if (v == Py_None) {
+        *offset = -1;
+        Py_DECREF(v);
+    } else {
+        hold = PyInt_AsLong(v);
+        Py_DECREF(v);
+        if (hold < 0 && PyErr_Occurred())
+            goto finally;
+        *offset = (int)hold;
+    }
+
+    v = PyObject_GetAttrString(err, "text");
+    if (!v)
+        goto finally;
+    if (v == Py_None) {
+        Py_DECREF(v);
+        *text = NULL;
+    } else {
+        *text = PyString_AsString(v);
+        Py_DECREF(v);
+        if (!*text)
+            goto finally;
+    }
+    return 1;
+
+finally:
+    Py_XDECREF(*message);
+    return 0;
 }
 
 static void print_error_text(PyObject* f, int offset, const char* text) noexcept {

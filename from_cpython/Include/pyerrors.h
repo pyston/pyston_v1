@@ -8,8 +8,6 @@ extern "C" {
 
 /* Error objects */
 
-// Pyston change: these are not our object formats
-#if 0
 typedef struct {
     PyObject_HEAD
     PyObject *dict;
@@ -74,8 +72,6 @@ typedef struct {
     PyObject *winerror;
 } PyWindowsErrorObject;
 #endif
-#endif
-// (Pyston TODO: add opaque definitions of those names)
 
 /* Error handling definitions */
 
@@ -132,119 +128,68 @@ PyAPI_FUNC(PyObject*) PyExceptionInstance_Class(PyObject*) PYSTON_NOEXCEPT;
 // as PyTypeObject's.
 // TODO not sure if this is worth it -- a fair amount of confusion (duplicating these names) for fairly
 // little gain (getting to treat them as PyTypeObject's and using our own names)
-#define PyExc_BaseException ((PyObject*)BaseException)
-PyAPI_DATA(PyTypeObject *) BaseException;
-#define PyExc_Exception ((PyObject*)Exception)
-PyAPI_DATA(PyTypeObject *) Exception;
-#define PyExc_StopIteration ((PyObject*)StopIteration)
-PyAPI_DATA(PyTypeObject *) StopIteration;
-#define PyExc_GeneratorExit ((PyObject*)GeneratorExit)
-PyAPI_DATA(PyTypeObject *) GeneratorExit;
-#define PyExc_StandardError ((PyObject*)StandardError)
-PyAPI_DATA(PyTypeObject *) StandardError;
-#define PyExc_ArithmeticError ((PyObject*)ArithmeticError)
-PyAPI_DATA(PyTypeObject *) ArithmeticError;
-#define PyExc_LookupError ((PyObject*)LookupError)
-PyAPI_DATA(PyTypeObject *) LookupError;
+PyAPI_DATA(PyObject *) PyExc_BaseException;
+PyAPI_DATA(PyObject *) PyExc_Exception;
+PyAPI_DATA(PyObject *) PyExc_StopIteration;
+PyAPI_DATA(PyObject *) PyExc_GeneratorExit;
+PyAPI_DATA(PyObject *) PyExc_StandardError;
+PyAPI_DATA(PyObject *) PyExc_ArithmeticError;
+PyAPI_DATA(PyObject *) PyExc_LookupError;
 
-#define PyExc_AssertionError ((PyObject*)AssertionError)
-PyAPI_DATA(PyTypeObject *) AssertionError;
-#define PyExc_AttributeError ((PyObject*)AttributeError)
-PyAPI_DATA(PyTypeObject *) AttributeError;
-#define PyExc_EOFError ((PyObject*)EOFError)
-PyAPI_DATA(PyTypeObject *) EOFError;
-#define PyExc_FloatingPointError ((PyObject*)FloatingPointError)
-PyAPI_DATA(PyTypeObject *) FloatingPointError;
-#define PyExc_EnvironmentError ((PyObject*)EnvironmentError)
-PyAPI_DATA(PyTypeObject *) EnvironmentError;
-#define PyExc_IOError ((PyObject*)IOError)
-PyAPI_DATA(PyTypeObject *) IOError;
-#define PyExc_OSError ((PyObject*)OSError)
-PyAPI_DATA(PyTypeObject *) OSError;
-#define PyExc_ImportError ((PyObject*)ImportError)
-PyAPI_DATA(PyTypeObject *) ImportError;
-#define PyExc_IndexError ((PyObject*)IndexError)
-PyAPI_DATA(PyTypeObject *) IndexError;
-#define PyExc_KeyError ((PyObject*)KeyError)
-PyAPI_DATA(PyTypeObject *) KeyError;
-#define PyExc_KeyboardInterrupt ((PyObject*)KeyboardInterrupt)
-PyAPI_DATA(PyTypeObject *) KeyboardInterrupt;
-#define PyExc_MemoryError ((PyObject*)MemoryError)
-PyAPI_DATA(PyTypeObject *) MemoryError;
-#define PyExc_NameError ((PyObject*)NameError)
-PyAPI_DATA(PyTypeObject *) NameError;
-#define PyExc_OverflowError ((PyObject*)OverflowError)
-PyAPI_DATA(PyTypeObject *) OverflowError;
-#define PyExc_RuntimeError ((PyObject*)RuntimeError)
-PyAPI_DATA(PyTypeObject *) RuntimeError;
-#define PyExc_NotImplementedError ((PyObject*)NotImplementedError)
-PyAPI_DATA(PyTypeObject *) NotImplementedError;
-#define PyExc_SyntaxError ((PyObject*)SyntaxError)
-PyAPI_DATA(PyTypeObject *) SyntaxError;
-#define PyExc_IndentationError ((PyObject*)IndentationError)
-PyAPI_DATA(PyTypeObject *) IndentationError;
-#define PyExc_TabError ((PyObject*)TabError)
-PyAPI_DATA(PyTypeObject *) TabError;
-#define PyExc_ReferenceError ((PyObject*)ReferenceError)
-PyAPI_DATA(PyTypeObject *) ReferenceError;
-#define PyExc_SystemError ((PyObject*)SystemError)
-PyAPI_DATA(PyTypeObject *) SystemError;
-#define PyExc_SystemExit ((PyObject*)SystemExit)
-PyAPI_DATA(PyTypeObject *) SystemExit;
-#define PyExc_TypeError ((PyObject*)TypeError)
-PyAPI_DATA(PyTypeObject *) TypeError;
-#define PyExc_UnboundLocalError ((PyObject*)UnboundLocalError)
-PyAPI_DATA(PyTypeObject *) UnboundLocalError;
-#define PyExc_UnicodeError ((PyObject*)UnicodeError)
-PyAPI_DATA(PyTypeObject *) UnicodeError;
-#define PyExc_UnicodeEncodeError ((PyObject*)UnicodeEncodeError)
-PyAPI_DATA(PyTypeObject *) UnicodeEncodeError;
-#define PyExc_UnicodeDecodeError ((PyObject*)UnicodeDecodeError)
-PyAPI_DATA(PyTypeObject *) UnicodeDecodeError;
-#define PyExc_UnicodeTranslateError ((PyObject*)UnicodeTranslateError)
-PyAPI_DATA(PyTypeObject *) UnicodeTranslateError;
-#define PyExc_ValueError ((PyObject*)ValueError)
-PyAPI_DATA(PyTypeObject *) ValueError;
-#define PyExc_ZeroDivisionError ((PyObject*)ZeroDivisionError)
-PyAPI_DATA(PyTypeObject *) ZeroDivisionError;
+PyAPI_DATA(PyObject *) PyExc_AssertionError;
+PyAPI_DATA(PyObject *) PyExc_AttributeError;
+PyAPI_DATA(PyObject *) PyExc_EOFError;
+PyAPI_DATA(PyObject *) PyExc_FloatingPointError;
+PyAPI_DATA(PyObject *) PyExc_EnvironmentError;
+PyAPI_DATA(PyObject *) PyExc_IOError;
+PyAPI_DATA(PyObject *) PyExc_OSError;
+PyAPI_DATA(PyObject *) PyExc_ImportError;
+PyAPI_DATA(PyObject *) PyExc_IndexError;
+PyAPI_DATA(PyObject *) PyExc_KeyError;
+PyAPI_DATA(PyObject *) PyExc_KeyboardInterrupt;
+PyAPI_DATA(PyObject *) PyExc_MemoryError;
+PyAPI_DATA(PyObject *) PyExc_NameError;
+PyAPI_DATA(PyObject *) PyExc_OverflowError;
+PyAPI_DATA(PyObject *) PyExc_RuntimeError;
+PyAPI_DATA(PyObject *) PyExc_NotImplementedError;
+PyAPI_DATA(PyObject *) PyExc_SyntaxError;
+PyAPI_DATA(PyObject *) PyExc_IndentationError;
+PyAPI_DATA(PyObject *) PyExc_TabError;
+PyAPI_DATA(PyObject *) PyExc_ReferenceError;
+PyAPI_DATA(PyObject *) PyExc_SystemError;
+PyAPI_DATA(PyObject *) PyExc_SystemExit;
+PyAPI_DATA(PyObject *) PyExc_TypeError;
+PyAPI_DATA(PyObject *) PyExc_UnboundLocalError;
+PyAPI_DATA(PyObject *) PyExc_UnicodeError;
+PyAPI_DATA(PyObject *) PyExc_UnicodeEncodeError;
+PyAPI_DATA(PyObject *) PyExc_UnicodeDecodeError;
+PyAPI_DATA(PyObject *) PyExc_UnicodeTranslateError;
+PyAPI_DATA(PyObject *) PyExc_ValueError;
+PyAPI_DATA(PyObject *) PyExc_ZeroDivisionError;
 #ifdef MS_WINDOWS
-#define PyExc_WindowsError ((PyObject*)WindowsError)
-PyAPI_DATA(PyTypeObject *) WindowsError;
+PyAPI_DATA(PyObject *) PyExc_WindowsError;
 #endif
 #ifdef __VMS
-#define PyExc_VMSError ((PyObject*)VMSError)
-PyAPI_DATA(PyTypeObject *) VMSError;
+PyAPI_DATA(PyObject *) PyExc_VMSError;
 #endif
 
-#define PyExc_BufferError ((PyObject*)BufferError)
-PyAPI_DATA(PyTypeObject *) BufferError;
+PyAPI_DATA(PyObject *) PyExc_BufferError;
 
 PyAPI_DATA(PyObject *) PyExc_MemoryErrorInst;
 PyAPI_DATA(PyObject *) PyExc_RecursionErrorInst;
 
 
 /* Predefined warning categories */
-#define PyExc_Warning ((PyObject*)Warning)
-PyAPI_DATA(PyTypeObject *) Warning;
-#define PyExc_UserWarning ((PyObject*)UserWarning)
-PyAPI_DATA(PyTypeObject *) UserWarning;
-#define PyExc_DeprecationWarning ((PyObject*)DeprecationWarning)
-PyAPI_DATA(PyTypeObject *) DeprecationWarning;
-#define PyExc_PendingDeprecationWarning ((PyObject*)PendingDeprecationWarning)
-PyAPI_DATA(PyTypeObject *) PendingDeprecationWarning;
-#define PyExc_SyntaxWarning ((PyObject*)SyntaxWarning)
-PyAPI_DATA(PyTypeObject *) SyntaxWarning;
-#define PyExc_RuntimeWarning ((PyObject*)RuntimeWarning)
-PyAPI_DATA(PyTypeObject *) RuntimeWarning;
-#define PyExc_FutureWarning ((PyObject*)FutureWarning)
-PyAPI_DATA(PyTypeObject *) FutureWarning;
-#define PyExc_ImportWarning ((PyObject*)ImportWarning)
-PyAPI_DATA(PyTypeObject *) ImportWarning;
-#define PyExc_UnicodeWarning ((PyObject*)UnicodeWarning)
-PyAPI_DATA(PyTypeObject *) UnicodeWarning;
-#define PyExc_BytesWarning ((PyObject*)BytesWarning)
-PyAPI_DATA(PyTypeObject *) BytesWarning;
-
+PyAPI_DATA(PyObject *) PyExc_Warning;
+PyAPI_DATA(PyObject *) PyExc_UserWarning;
+PyAPI_DATA(PyObject *) PyExc_DeprecationWarning;
+PyAPI_DATA(PyObject *) PyExc_PendingDeprecationWarning;
+PyAPI_DATA(PyObject *) PyExc_SyntaxWarning;
+PyAPI_DATA(PyObject *) PyExc_RuntimeWarning;
+PyAPI_DATA(PyObject *) PyExc_FutureWarning;
+PyAPI_DATA(PyObject *) PyExc_ImportWarning;
+PyAPI_DATA(PyObject *) PyExc_UnicodeWarning;
+PyAPI_DATA(PyObject *) PyExc_BytesWarning;
 
 /* Convenience functions */
 
