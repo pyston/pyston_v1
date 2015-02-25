@@ -47,3 +47,16 @@ x = I(D(C()))
 print type(x)
 
 print type(int(C()))
+
+print type(int(2**100))
+print type(int(2L))
+print type(int.__new__(int, 2**100))
+print type(int.__new__(int, 2L))
+try:
+    print type(int.__new__(C, 2**100))
+except OverflowError, e:
+    print e
+class L(object):
+    def __int__(self):
+        return 1L
+print type(int(L()))
