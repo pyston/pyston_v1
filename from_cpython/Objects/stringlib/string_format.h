@@ -1025,8 +1025,7 @@ done:
 /************************************************************************/
 
 /* this is the main entry point */
-// Pyston change: changed to non-static
-/* static */ PyObject *
+static PyObject *
 do_string_format(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     SubString input;

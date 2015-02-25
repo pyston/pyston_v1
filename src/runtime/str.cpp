@@ -47,6 +47,11 @@ BoxedString::BoxedString(const std::string& s) : s(s) {
     gc::registerGCManagedBytes(this->s.size());
 }
 
+extern "C" char PyString_GetItem(PyObject* op, ssize_t n) noexcept {
+    RELEASE_ASSERT(PyString_Check(op), "");
+    return static_cast<const BoxedString*>(op)->s[n];
+}
+
 extern "C" PyObject* PyString_FromFormatV(const char* format, va_list vargs) noexcept {
     va_list count;
     Py_ssize_t n = 0;
@@ -1552,13 +1557,13 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
                                                self->s.size() - found_idx - sep->s.size()) });
 }
 
-extern "C" PyObject* do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
+extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
 
 Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(args->cls == tuple_cls);
     assert(kwargs->cls == dict_cls);
 
-    Box* rtn = do_string_format(self, args, kwargs);
+    Box* rtn = _do_string_format(self, args, kwargs);
     checkAndThrowCAPIException();
     assert(rtn);
     return rtn;

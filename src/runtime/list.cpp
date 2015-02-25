@@ -39,6 +39,16 @@ extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     return 0;
 }
 
+extern "C" int PyList_Reverse(PyObject* v) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject** PyList_Items(PyObject* op) noexcept {
+    RELEASE_ASSERT(PyList_Check(op), "");
+
+    return &static_cast<BoxedList*>(op)->elts->elts[0];
+}
+
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 

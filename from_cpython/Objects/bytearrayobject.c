@@ -34,7 +34,8 @@ _getbytevalue(PyObject* arg, int *value)
             PyErr_SetString(PyExc_ValueError, "string must be of size 1");
             return 0;
         }
-        *value = Py_CHARMASK(((PyBytesObject*)arg)->ob_sval[0]);
+        // Pyston change, was: *value = Py_CHARMASK(((PyBytesObject*)arg)->ob_sval[0]);
+        *value = Py_CHARMASK(PyString_GetItem(arg, 0));
         return 1;
     }
     else if (PyInt_Check(arg) || PyLong_Check(arg)) {
@@ -2893,7 +2894,8 @@ Construct a zero-initialized bytearray of the given length.");
 static PyObject *bytearray_iter(PyObject *seq);
 
 PyTypeObject PyByteArray_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change, was &PyType_Type:
+    PyVarObject_HEAD_INIT(NULL, 0)
     "bytearray",
     sizeof(PyByteArrayObject),
     0,
@@ -3002,7 +3004,8 @@ static PyMethodDef bytearrayiter_methods[] = {
 };
 
 PyTypeObject PyByteArrayIter_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change, was &PyType_Type:
+    PyVarObject_HEAD_INIT(NULL, 0)
     "bytearray_iterator",              /* tp_name */
     sizeof(bytesiterobject),           /* tp_basicsize */
     0,                                 /* tp_itemsize */

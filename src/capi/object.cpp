@@ -26,6 +26,10 @@
 
 namespace pyston {
 
+extern "C" {
+_Py_HashSecret_t _Py_HashSecret;
+}
+
 extern "C" PyObject* PyObject_Unicode(PyObject* v) noexcept {
     Py_FatalError("unimplemented");
 }

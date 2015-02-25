@@ -1015,6 +1015,8 @@ void setupBuiltins() {
                                           boxRTFunction((void*)vars, UNKNOWN, 1, 1, false, false), "vars", { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
+    assert(unicode_cls);
+    builtins_module->giveAttr("unicode", unicode_cls);
     builtins_module->giveAttr("basestring", basestring_cls);
     // builtins_module->giveAttr("unicode", unicode_cls);
     builtins_module->giveAttr("int", int_cls);

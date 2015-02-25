@@ -27,6 +27,14 @@
 
 namespace pyston {
 
+extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int PyBuffer_ToContiguous(void* buf, Py_buffer* view, Py_ssize_t len, char fort) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 static PyObject* type_error(const char* msg, PyObject* obj) noexcept {
     PyErr_Format(PyExc_TypeError, msg, Py_TYPE(obj)->tp_name);
     return NULL;

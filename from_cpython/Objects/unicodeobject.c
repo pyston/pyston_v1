@@ -423,7 +423,7 @@ int _PyUnicode_Resize(PyUnicodeObject **unicode, Py_ssize_t length)
         return -1;
     }
     v = *unicode;
-    if (v == NULL || !PyUnicode_Check(v) || Py_REFCNT(v) != 1 || length < 0) {
+    if (v == NULL || !PyUnicode_Check(v) || /* Pyston change, can't check this: Py_REFCNT(v) != 1 || */ length < 0) {
         PyErr_BadInternalCall();
         return -1;
     }
@@ -8140,7 +8140,7 @@ formatfloat(PyObject *v, int flags, int prec, int type)
 static PyObject*
 formatlong(PyObject *val, int flags, int prec, int type)
 {
-    char *buf;
+    const char *buf;
     int i, len;
     PyObject *str; /* temporary string object. */
     PyUnicodeObject *result;
@@ -8833,6 +8833,9 @@ unicode_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)pnew;
 }
 
+// Pyston change: Leave this in as a reminder in case we want to go back to using it:
+#define Py_TPFLAGS_UNICODE_SUBCLASS     (0)
+
 PyDoc_STRVAR(unicode_doc,
              "unicode(object='') -> unicode object\n\
 unicode(string[, encoding[, errors]]) -> unicode object\n\
@@ -8842,7 +8845,8 @@ encoding defaults to the current default string encoding.\n\
 errors can be 'strict', 'replace' or 'ignore' and defaults to 'strict'.");
 
 PyTypeObject PyUnicode_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change, was &Py_Type_Type:
+    PyVarObject_HEAD_INIT(NULL, 0)
     "unicode",              /* tp_name */
     sizeof(PyUnicodeObject),        /* tp_size */
     0,                  /* tp_itemsize */
@@ -8874,7 +8878,8 @@ PyTypeObject PyUnicode_Type = {
     unicode_methods,            /* tp_methods */
     0,                  /* tp_members */
     0,                  /* tp_getset */
-    &PyBaseString_Type,         /* tp_base */
+    // Pyston change, this was &PyBaseString_Type; we set this explicitly in _PyUnicode_Init:
+    0,         /* tp_base */
     0,                  /* tp_dict */
     0,                  /* tp_descr_get */
     0,                  /* tp_descr_set */
@@ -8901,15 +8906,21 @@ void _PyUnicode_Init(void)
         0x2029, /* PARAGRAPH SEPARATOR */
     };
 
+    // Pyston change: we didn't set this above
+    assert(&PyBaseString_Type != NULL);
+    PyUnicode_Type.tp_base = &PyBaseString_Type;
+
+    // Pyston change: moved this above the initial call to _PyUnicode_New
+    // in order to register the static object with the GC:
+    if (PyType_Ready(&PyUnicode_Type) < 0)
+        Py_FatalError("Can't initialize 'unicode'");
+
     /* Init the implementation */
     if (!unicode_empty) {
         unicode_empty = _PyUnicode_New(0);
         if (!unicode_empty)
             return;
     }
-
-    if (PyType_Ready(&PyUnicode_Type) < 0)
-        Py_FatalError("Can't initialize 'unicode'");
 
     /* initialize the linebreak bloom filter */
     bloom_linebreak = make_bloom_mask(
