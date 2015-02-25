@@ -96,6 +96,14 @@ init_weakref(void)
     m = Py_InitModule3("_weakref", weakref_functions,
                        "Weak-reference support module.");
     if (m != NULL) {
+        // Pyston change: call PyType_Ready on our types
+        if (PyType_Ready(&_PyWeakref_RefType) < 0)
+            return;
+        if (PyType_Ready(&_PyWeakref_ProxyType) < 0)
+            return;
+        if (PyType_Ready(&_PyWeakref_CallableProxyType) < 0)
+            return;
+
         Py_INCREF(&_PyWeakref_RefType);
         PyModule_AddObject(m, "ref",
                            (PyObject *) &_PyWeakref_RefType);

@@ -134,46 +134,6 @@ Box* objectStr(Box*);
 Box* objectRepr(Box*);
 
 
-template <class T> class StlCompatAllocator {
-public:
-    typedef size_t size_type;
-    typedef T value_type;
-    typedef T* pointer;
-    typedef const T* const_pointer;
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef std::ptrdiff_t difference_type;
-
-    StlCompatAllocator() {}
-    template <class U> StlCompatAllocator(const StlCompatAllocator<U>& other) {}
-
-    template <class U> struct rebind { typedef StlCompatAllocator<U> other; };
-
-    pointer allocate(size_t n) {
-        size_t to_allocate = n * sizeof(value_type);
-        // assert(to_allocate < (1<<16));
-
-        return reinterpret_cast<pointer>(gc_alloc(to_allocate, gc::GCKind::CONSERVATIVE));
-    }
-
-    void deallocate(pointer p, size_t n) { gc::gc_free(p); }
-
-    // I would never be able to come up with this on my own:
-    // http://en.cppreference.com/w/cpp/memory/allocator/construct
-    template <class U, class... Args> void construct(U* p, Args&&... args) {
-        ::new ((void*)p) U(std::forward<Args>(args)...);
-    }
-
-    template <class U> void destroy(U* p) { p->~U(); }
-
-    bool operator==(const StlCompatAllocator<T>& rhs) const { return true; }
-    bool operator!=(const StlCompatAllocator<T>& rhs) const { return false; }
-};
-
-template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<K>>
-class conservative_unordered_map
-    : public std::unordered_map<K, V, Hash, KeyEqual, StlCompatAllocator<std::pair<const K, V>>> {};
-
 class BoxedClass : public BoxVar {
 public:
     typedef void (*gcvisit_func)(GCVisitor*, Box*);
@@ -363,10 +323,13 @@ class BoxedUnicode : public Box {
 
 class BoxedInstanceMethod : public Box {
 public:
+    Box** in_weakreflist;
+
     // obj is NULL for unbound instancemethod
     Box* obj, *func;
 
-    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default"))) : obj(obj), func(func) {}
+    BoxedInstanceMethod(Box* obj, Box* func) __attribute__((visibility("default")))
+    : in_weakreflist(NULL), obj(obj), func(func) {}
 
     DEFAULT_CLASS_SIMPLE(instancemethod_cls);
 };
@@ -448,6 +411,8 @@ static_assert(sizeof(BoxedDict) == sizeof(PyDictObject), "");
 
 class BoxedFunctionBase : public Box {
 public:
+    Box** in_weakreflist;
+
     HCAttrs attrs;
     CLFunction* f;
     BoxedClosure* closure;
@@ -639,6 +604,6 @@ Box* makeAttrWrapper(Box* b);
 #define OverflowError ((BoxedClass*)PyExc_OverflowError)
 
 // Our default for tp_alloc:
-PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
+extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 }
 #endif

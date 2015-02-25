@@ -66,6 +66,7 @@ extern "C" void init_codecs();
 extern "C" void init_socket();
 extern "C" void _PyUnicode_Init();
 extern "C" void initunicodedata();
+extern "C" void init_weakref();
 
 namespace pyston {
 
@@ -78,7 +79,7 @@ bool IN_SHUTDOWN = false;
 #define SLICE_STEP_OFFSET ((char*)&(((BoxedSlice*)0x01)->step) - (char*)0x1)
 
 // Analogue of PyType_GenericAlloc (default tp_alloc), but should only be used for Pyston classes!
-PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
+extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
     RELEASE_ASSERT(nitems == 0, "");
     RELEASE_ASSERT(cls->tp_itemsize == 0, "");
@@ -244,7 +245,8 @@ Box* Box::nextIC() {
 std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
-    : f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL), name(NULL) {
+    : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
+      name(NULL) {
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
     } else {
@@ -258,7 +260,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, bool isGenerator)
-    : f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL), modname(NULL), name(NULL) {
+    : in_weakreflist(NULL), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL),
+      modname(NULL), name(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -483,6 +486,23 @@ extern "C" void sliceGCHandler(GCVisitor* v, Box* b) {
     v->visit(sl->start);
     v->visit(sl->stop);
     v->visit(sl->step);
+}
+
+static int call_gc_visit(PyObject* val, void* arg) {
+    if (val) {
+        GCVisitor* v = static_cast<GCVisitor*>(arg);
+        v->visit(val);
+    }
+    return 0;
+}
+
+static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+    b->cls->tp_traverse(b, call_gc_visit, v);
+}
+
+static void proxy_to_tp_clear(Box* b) {
+    b->cls->tp_clear(b);
 }
 
 // This probably belongs in tuple.cpp?
@@ -1257,13 +1277,18 @@ void setupRuntime() {
     float_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFloat), false, "float");
     function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
                                       sizeof(BoxedFunction), false, "function");
+    function_cls->tp_weaklistoffset = offsetof(BoxedFunction, in_weakreflist);
+
     builtin_function_or_method_cls
         = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedBuiltinFunctionOrMethod, attrs),
                              sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
+    builtin_function_or_method_cls->tp_weaklistoffset = offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist);
     function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
 
     instancemethod_cls = new BoxedHeapClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false,
                                             "instancemethod");
+    instancemethod_cls->tp_weaklistoffset = offsetof(BoxedInstanceMethod, in_weakreflist);
+
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false, "list");
     slice_cls = new BoxedHeapClass(object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false, "slice");
     dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false, "dict");
@@ -1447,6 +1472,26 @@ void setupRuntime() {
     init_codecs();
     init_socket();
     initunicodedata();
+    init_weakref();
+
+    // some additional setup to ensure weakrefs participate in our GC
+    BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
+    weakref_ref_cls->tp_alloc = PystonType_GenericAlloc;
+    weakref_ref_cls->gc_visit = proxy_to_tp_traverse;
+    weakref_ref_cls->simple_destructor = proxy_to_tp_clear;
+    weakref_ref_cls->is_pyston_class = true;
+
+    BoxedClass* weakref_proxy_cls = &_PyWeakref_ProxyType;
+    weakref_proxy_cls->tp_alloc = PystonType_GenericAlloc;
+    weakref_proxy_cls->gc_visit = proxy_to_tp_traverse;
+    weakref_proxy_cls->simple_destructor = proxy_to_tp_clear;
+    weakref_proxy_cls->is_pyston_class = true;
+
+    BoxedClass* weakref_callableproxy = &_PyWeakref_CallableProxyType;
+    weakref_callableproxy->tp_alloc = PystonType_GenericAlloc;
+    weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
+    weakref_callableproxy->simple_destructor = proxy_to_tp_clear;
+    weakref_callableproxy->is_pyston_class = true;
 
     setupSysEnd();
 

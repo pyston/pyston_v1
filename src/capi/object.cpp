@@ -268,4 +268,8 @@ extern "C" void Py_ReprLeave(PyObject* obj) noexcept {
         }
     }
 }
+
+extern "C" int PyObject_Compare(PyObject* o1, PyObject* o2) noexcept {
+    Py_FatalError("unimplemented");
+}
 }

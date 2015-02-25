@@ -33,7 +33,7 @@
 namespace pyston {
 namespace gc {
 
-void _doFree(GCAllocation* al);
+bool _doFree(GCAllocation* al, std::list<Box*, StlCompatAllocator<Box*>>* weakly_referenced);
 
 // lots of linked lists around here, so let's just use template functions for operations on them.
 template <class ListT> inline void nullNextPrev(ListT* node) {
@@ -75,7 +75,8 @@ template <class ListT, typename Func> inline void forEach(ListT* list, Func func
     }
 }
 
-template <class ListT, typename Free> inline void sweepList(ListT* head, Free free_func) {
+template <class ListT, typename Free>
+inline void sweepList(ListT* head, std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced, Free free_func) {
     auto cur = head;
     while (cur) {
         GCAllocation* al = cur->data;
@@ -83,13 +84,14 @@ template <class ListT, typename Free> inline void sweepList(ListT* head, Free fr
             clearMark(al);
             cur = cur->next;
         } else {
-            _doFree(al);
+            if (_doFree(al, &weakly_referenced)) {
 
-            removeFromLL(cur);
+                removeFromLL(cur);
 
-            auto to_free = cur;
-            cur = cur->next;
-            free_func(to_free);
+                auto to_free = cur;
+                cur = cur->next;
+                free_func(to_free);
+            }
         }
     }
 }
@@ -124,7 +126,7 @@ void registerGCManagedBytes(size_t bytes) {
 
 Heap global_heap;
 
-void _doFree(GCAllocation* al) {
+bool _doFree(GCAllocation* al, std::list<Box*, StlCompatAllocator<Box*>>* weakly_referenced) {
     if (VERBOSITY() >= 2)
         printf("Freeing %p\n", al->user_data);
 
@@ -145,14 +147,24 @@ void _doFree(GCAllocation* al) {
         VALGRIND_ENABLE_ERROR_REPORTING;
 #endif
 
+        if (PyType_SUPPORTS_WEAKREFS(b->cls)) {
+            PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(b);
+            if (list && *list) {
+                assert(weakly_referenced && "attempting to free a weakly referenced object manually");
+                weakly_referenced->push_back(b);
+                return false;
+            }
+        }
+
         ASSERT(b->cls->tp_dealloc == NULL, "%s", getTypeName(b));
         if (b->cls->simple_destructor)
             b->cls->simple_destructor(b);
     }
+    return true;
 }
 
 void Heap::destructContents(GCAllocation* al) {
-    _doFree(al);
+    _doFree(al, NULL);
 }
 
 struct HeapStatistics {
@@ -281,8 +293,8 @@ GCAllocation* SmallArena::allocationFrom(void* ptr) {
     return reinterpret_cast<GCAllocation*>(&b->atoms[atom_idx]);
 }
 
-void SmallArena::freeUnmarked() {
-    thread_caches.forEachValue([this](ThreadBlockCache* cache) {
+void SmallArena::freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
+    thread_caches.forEachValue([this, &weakly_referenced](ThreadBlockCache* cache) {
         for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
             Block* h = cache->cache_free_heads[bidx];
             // Try to limit the amount of unused memory a thread can hold onto;
@@ -302,8 +314,8 @@ void SmallArena::freeUnmarked() {
                 insertIntoLL(&heads[bidx], h);
             }
 
-            Block** chain_end = _freeChain(&cache->cache_free_heads[bidx]);
-            _freeChain(&cache->cache_full_heads[bidx]);
+            Block** chain_end = _freeChain(&cache->cache_free_heads[bidx], weakly_referenced);
+            _freeChain(&cache->cache_full_heads[bidx], weakly_referenced);
 
             while (Block* b = cache->cache_full_heads[bidx]) {
                 removeFromLLAndNull(b);
@@ -313,8 +325,8 @@ void SmallArena::freeUnmarked() {
     });
 
     for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
-        Block** chain_end = _freeChain(&heads[bidx]);
-        _freeChain(&full_heads[bidx]);
+        Block** chain_end = _freeChain(&heads[bidx], weakly_referenced);
+        _freeChain(&full_heads[bidx], weakly_referenced);
 
         while (Block* b = full_heads[bidx]) {
             removeFromLLAndNull(b);
@@ -341,7 +353,7 @@ void SmallArena::getStatistics(HeapStatistics* stats) {
 }
 
 
-SmallArena::Block** SmallArena::_freeChain(Block** head) {
+SmallArena::Block** SmallArena::_freeChain(Block** head, std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
     while (Block* b = *head) {
         int num_objects = b->numObjects();
         int first_obj = b->minObjIndex();
@@ -359,10 +371,8 @@ SmallArena::Block** SmallArena::_freeChain(Block** head) {
             if (isMarked(al)) {
                 clearMark(al);
             } else {
-                _doFree(al);
-
-                // assert(p != (void*)0x127000d960); // the main module
-                b->isfree.set(atom_idx);
+                if (_doFree(al, &weakly_referenced))
+                    b->isfree.set(atom_idx);
             }
         }
 
@@ -568,8 +578,8 @@ GCAllocation* LargeArena::allocationFrom(void* ptr) {
     return NULL;
 }
 
-void LargeArena::freeUnmarked() {
-    sweepList(head, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
+void LargeArena::freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
+    sweepList(head, weakly_referenced, [this](LargeObj* ptr) { _freeLargeObj(ptr); });
 }
 
 void LargeArena::getStatistics(HeapStatistics* stats) {
@@ -760,8 +770,8 @@ GCAllocation* HugeArena::allocationFrom(void* ptr) {
     return NULL;
 }
 
-void HugeArena::freeUnmarked() {
-    sweepList(head, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
+void HugeArena::freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
+    sweepList(head, weakly_referenced, [this](HugeObj* ptr) { _freeHugeObj(ptr); });
 }
 
 void HugeArena::getStatistics(HeapStatistics* stats) {

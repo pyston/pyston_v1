@@ -73,6 +73,7 @@
 #include "iterobject.h"
 #include "descrobject.h"
 #include "warnings.h"
+#include "weakrefobject.h"
 
 #include "codecs.h"
 #include "pyerrors.h"
