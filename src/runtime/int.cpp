@@ -750,7 +750,7 @@ extern "C" Box* intOct(BoxedInt* self) {
     return new BoxedString(std::string(buf, len));
 }
 
-BoxedInt* _intNew(Box* val) {
+Box* _intNew(Box* val) {
     if (isSubclass(val->cls, int_cls)) {
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
@@ -776,10 +776,10 @@ BoxedInt* _intNew(Box* val) {
             raiseExcHelper(TypeError, "");
         }
 
-        if (!isSubclass(r->cls, int_cls)) {
+        if (!isSubclass(r->cls, int_cls) && !isSubclass(r->cls, long_cls)) {
             raiseExcHelper(TypeError, "__int__ returned non-int (type %s)", r->cls->tp_name);
         }
-        return static_cast<BoxedInt*>(r);
+        return r;
     }
 }
 
@@ -795,8 +795,13 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
     if (cls == int_cls)
         return _intNew(val);
 
-    BoxedInt* n = _intNew(val);
-
+    BoxedInt* n = (BoxedInt*)_intNew(val);
+    if (n->cls == long_cls) {
+        if (cls == int_cls)
+            return n;
+        raiseExcHelper(OverflowError, "Python int too large to convert to C long", getNameOfClass(cls),
+                       getNameOfClass(cls));
+    }
     return new (cls) BoxedInt(n->n);
 }
 

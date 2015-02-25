@@ -405,6 +405,19 @@ extern "C" Box* longNew(Box* _cls, Box* val, Box* _base) {
     return rtn;
 }
 
+Box* longInt(Box* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__int__' requires a 'long' object but received a '%s'", getTypeName(v));
+
+    int overflow = 0;
+    long n = PyLong_AsLongAndOverflow(v, &overflow);
+    static_assert(sizeof(BoxedInt::n) == sizeof(long), "");
+    if (overflow)
+        return v;
+    else
+        return new BoxedInt(n);
+}
+
 Box* longRepr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
@@ -930,6 +943,7 @@ void setupLong() {
     long_cls->giveAttr("__lshift__", new BoxedFunction(boxRTFunction((void*)longLshift, UNKNOWN, 2)));
     long_cls->giveAttr("__rshift__", new BoxedFunction(boxRTFunction((void*)longRshift, UNKNOWN, 2)));
 
+    long_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)longInt, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
 
