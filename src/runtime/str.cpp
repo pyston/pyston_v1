@@ -1690,21 +1690,31 @@ Box* strTitle(BoxedString* self) {
 }
 
 Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_chars) {
-    RELEASE_ASSERT(self->cls == str_cls, "");
-    RELEASE_ASSERT(table->cls == str_cls, "");
-    RELEASE_ASSERT(delete_chars == NULL || delete_chars->cls == str_cls, "");
+    if (self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'translate' requires a 'str' object but received a '%s'",
+                       getTypeName(self));
 
-    RELEASE_ASSERT(delete_chars == NULL || delete_chars->s.size() == 0, "delete_chars not supported yet");
-
-    std::ostringstream oss;
-
-    if (table->s.size() != 256)
-        raiseExcHelper(ValueError, "translation table must be 256 characters long");
-
-    for (unsigned char c : self->s) {
-        oss << table->s[c];
+    std::unordered_set<char> delete_set;
+    if (delete_chars) {
+        if (delete_chars->cls != str_cls)
+            raiseExcHelper(TypeError, "expected a character buffer object");
+        delete_set.insert(delete_chars->s.begin(), delete_chars->s.end());
     }
-    return boxString(oss.str());
+
+    bool have_table = table != None;
+    if (have_table) {
+        if (table->cls != str_cls)
+            raiseExcHelper(TypeError, "expected a character buffer object");
+        if (table->s.size() != 256)
+            raiseExcHelper(ValueError, "translation table must be 256 characters long");
+    }
+
+    std::string str;
+    for (const char c : self->s) {
+        if (!delete_set.count(c))
+            str.append(1, have_table ? table->s[(unsigned char)c] : c);
+    }
+    return boxString(std::move(str));
 }
 
 Box* strLower(BoxedString* self) {
