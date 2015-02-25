@@ -41,6 +41,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value);
 
 // helper function for raising from the runtime:
 void raiseExcHelper(BoxedClass*, const char* fmt, ...) __attribute__((__noreturn__));
+void raiseExcHelper(BoxedClass*, Box* arg) __attribute__((__noreturn__));
 
 BoxedModule* getCurrentModule();
 

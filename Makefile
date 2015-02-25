@@ -292,7 +292,7 @@ STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 ASM_SRCS := $(wildcard src/runtime/*.S)
 
 STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c _struct.c datetimemodule.c _functoolsmodule.c _collectionsmodule.c itertoolsmodule.c resource.c signalmodule.c selectmodule.c fcntlmodule.c timemodule.c arraymodule.c zlibmodule.c _codecsmodule.c socketmodule.c $(EXTRA_STDMODULE_SRCS)
-STDOBJECT_SRCS := structseq.c capsule.c stringobject.c $(EXTRA_STDOBJECT_SRCS)
+STDOBJECT_SRCS := structseq.c capsule.c stringobject.c exceptions.c $(EXTRA_STDOBJECT_SRCS)
 STDPYTHON_SRCS := pyctype.c getargs.c formatter_string.c pystrtod.c dtoa.c $(EXTRA_STDPYTHON_SRCS)
 FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS))
 

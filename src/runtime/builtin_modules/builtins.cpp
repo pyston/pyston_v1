@@ -589,19 +589,6 @@ Box* eval(Box* code) {
 BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
-// TODO looks like CPython and pypy put this into an "exceptions" module:
-extern "C" {
-BoxedClass* BaseException, *Exception, *StandardError, *AssertionError, *AttributeError, *GeneratorExit, *TypeError,
-    *NameError, *KeyError, *IndexError, *IOError, *OSError, *ZeroDivisionError, *ValueError, *UnboundLocalError,
-    *RuntimeError, *ImportError, *StopIteration, *Warning, *SyntaxError, *OverflowError, *DeprecationWarning,
-    *MemoryError, *LookupError, *EnvironmentError, *ArithmeticError, *BufferError, *KeyboardInterrupt, *SystemExit,
-    *SystemError, *NotImplementedError, *PendingDeprecationWarning, *EOFError, *UnicodeError, *UnicodeEncodeError,
-    *UnicodeDecodeError, *UnicodeTranslateError;
-
-Box* PyExc_RecursionErrorInst;
-Box* PyExc_MemoryErrorInst;
-}
-
 class BoxedException : public Box {
 public:
     HCAttrs attrs;
@@ -879,123 +866,6 @@ Box* pydumpAddr(Box* p) {
     return None;
 }
 
-class BoxedEnvironmentError : public BoxedException {
-public:
-    // Box* args, *message, *myerrno, *strerror, *filename;
-    Box* myerrno, *strerror, *filename;
-
-    static Box* __init__(BoxedEnvironmentError* self, Box* errno_, Box* strerror, Box** _args) {
-        Box* filename = _args[0];
-
-        RELEASE_ASSERT(isSubclass(self->cls, EnvironmentError), "");
-
-        self->myerrno = errno_;
-        self->strerror = strerror;
-        self->filename = filename;
-        return None;
-    }
-
-    static Box* __reduce__(Box* self) { Py_FatalError("unimplemented"); }
-
-    static PyObject* __str__(BoxedEnvironmentError* self) noexcept {
-        PyObject* rtnval = NULL;
-
-        if (self->filename) {
-            PyObject* fmt;
-            PyObject* repr;
-            PyObject* tuple;
-
-            fmt = PyString_FromString("[Errno %s] %s: %s");
-            if (!fmt)
-                return NULL;
-
-            repr = PyObject_Repr(self->filename);
-            if (!repr) {
-                Py_DECREF(fmt);
-                return NULL;
-            }
-            tuple = PyTuple_New(3);
-            if (!tuple) {
-                Py_DECREF(repr);
-                Py_DECREF(fmt);
-                return NULL;
-            }
-
-            if (self->myerrno) {
-                Py_INCREF(self->myerrno);
-                PyTuple_SET_ITEM(tuple, 0, self->myerrno);
-            } else {
-                Py_INCREF(Py_None);
-                PyTuple_SET_ITEM(tuple, 0, Py_None);
-            }
-            if (self->strerror) {
-                Py_INCREF(self->strerror);
-                PyTuple_SET_ITEM(tuple, 1, self->strerror);
-            } else {
-                Py_INCREF(Py_None);
-                PyTuple_SET_ITEM(tuple, 1, Py_None);
-            }
-
-            PyTuple_SET_ITEM(tuple, 2, repr);
-
-            rtnval = PyString_Format(fmt, tuple);
-
-            Py_DECREF(fmt);
-            Py_DECREF(tuple);
-        } else if (self->myerrno && self->strerror) {
-            PyObject* fmt;
-            PyObject* tuple;
-
-            fmt = PyString_FromString("[Errno %s] %s");
-            if (!fmt)
-                return NULL;
-
-            tuple = PyTuple_New(2);
-            if (!tuple) {
-                Py_DECREF(fmt);
-                return NULL;
-            }
-
-            if (self->myerrno) {
-                Py_INCREF(self->myerrno);
-                PyTuple_SET_ITEM(tuple, 0, self->myerrno);
-            } else {
-                Py_INCREF(Py_None);
-                PyTuple_SET_ITEM(tuple, 0, Py_None);
-            }
-            if (self->strerror) {
-                Py_INCREF(self->strerror);
-                PyTuple_SET_ITEM(tuple, 1, self->strerror);
-            } else {
-                Py_INCREF(Py_None);
-                PyTuple_SET_ITEM(tuple, 1, Py_None);
-            }
-
-            rtnval = PyString_Format(fmt, tuple);
-
-            Py_DECREF(fmt);
-            Py_DECREF(tuple);
-        } else
-            rtnval = exceptionStr(self);
-
-        return rtnval;
-    }
-
-    static void gcHandler(GCVisitor* v, Box* _b) {
-        assert(isSubclass(_b->cls, EnvironmentError));
-
-        boxGCHandler(v, _b);
-
-        BoxedEnvironmentError* ee = static_cast<BoxedEnvironmentError*>(_b);
-        if (ee->myerrno)
-            v->visit(ee->myerrno);
-        if (ee->strerror)
-            v->visit(ee->strerror);
-        if (ee->filename)
-            v->visit(ee->filename);
-    }
-};
-
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -1017,67 +887,6 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("all", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)all, BOXED_BOOL, 1), "all"));
     builtins_module->giveAttr("any", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)any, BOXED_BOOL, 1), "any"));
-
-    BaseException = makeBuiltinException(object_cls, "BaseException", sizeof(BoxedException));
-    Exception = makeBuiltinException(BaseException, "Exception");
-    StandardError = makeBuiltinException(Exception, "StandardError");
-    AssertionError = makeBuiltinException(StandardError, "AssertionError");
-    AttributeError = makeBuiltinException(StandardError, "AttributeError");
-    GeneratorExit = makeBuiltinException(BaseException, "GeneratorExit");
-    TypeError = makeBuiltinException(StandardError, "TypeError");
-    NameError = makeBuiltinException(StandardError, "NameError");
-    LookupError = makeBuiltinException(StandardError, "LookupError");
-    KeyError = makeBuiltinException(LookupError, "KeyError");
-    IndexError = makeBuiltinException(LookupError, "IndexError");
-    EnvironmentError = makeBuiltinException(StandardError, "EnvironmentError", sizeof(BoxedEnvironmentError));
-    IOError = makeBuiltinException(EnvironmentError, "IOError");
-    OSError = makeBuiltinException(EnvironmentError, "OSError");
-    ArithmeticError = makeBuiltinException(StandardError, "ArithmeticError");
-    ZeroDivisionError = makeBuiltinException(ArithmeticError, "ZeroDivisionError");
-    ValueError = makeBuiltinException(StandardError, "ValueError");
-    UnboundLocalError = makeBuiltinException(NameError, "UnboundLocalError");
-    RuntimeError = makeBuiltinException(StandardError, "RuntimeError");
-    ImportError = makeBuiltinException(StandardError, "ImportError");
-    StopIteration = makeBuiltinException(Exception, "StopIteration");
-    Warning = makeBuiltinException(Exception, "Warning");
-    SyntaxError = makeBuiltinException(StandardError, "SyntaxError");
-    OverflowError = makeBuiltinException(ArithmeticError, "OverflowError");
-    /*ImportWarning =*/makeBuiltinException(Warning, "ImportWarning");
-    DeprecationWarning = makeBuiltinException(Warning, "DeprecationWarning");
-    /*BytesWarning =*/makeBuiltinException(Warning, "BytesWarning");
-    MemoryError = makeBuiltinException(StandardError, "MemoryError");
-    BufferError = makeBuiltinException(StandardError, "BufferError");
-    KeyboardInterrupt = makeBuiltinException(BaseException, "KeyboardInterrupt");
-    SystemExit = makeBuiltinException(BaseException, "SystemExit");
-    SystemError = makeBuiltinException(StandardError, "SystemError");
-    NotImplementedError = makeBuiltinException(RuntimeError, "NotImplementedError");
-    PendingDeprecationWarning = makeBuiltinException(Warning, "PendingDeprecationWarning");
-    EOFError = makeBuiltinException(StandardError, "EOFError");
-
-    // Unicode errors
-    UnicodeError = makeBuiltinException(ValueError, "UnicodeError");
-    UnicodeEncodeError = makeBuiltinException(UnicodeError, "UnicodeEncodeError");
-    UnicodeDecodeError = makeBuiltinException(UnicodeError, "UnicodeDecodeError");
-    UnicodeTranslateError = makeBuiltinException(UnicodeError, "UnicodeTranslateError");
-
-
-    BaseException->giveAttr("__reduce__",
-                            new BoxedFunction(boxRTFunction((void*)BoxedException::__reduce__, UNKNOWN, 1)));
-    EnvironmentError->giveAttr("__reduce__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__reduce__, UNKNOWN, 1)));
-
-    EnvironmentError->gc_visit = BoxedEnvironmentError::gcHandler;
-    EnvironmentError->giveAttr(
-        "__init__", new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__init__, NONE, 4, 3, false, false),
-                                      { NULL, NULL, NULL }));
-    EnvironmentError->giveAttr(
-        "errno", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedEnvironmentError, myerrno)));
-    EnvironmentError->giveAttr("strerror", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
-                                                                     offsetof(BoxedEnvironmentError, strerror)));
-    EnvironmentError->giveAttr("filename", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
-                                                                     offsetof(BoxedEnvironmentError, filename)));
-    EnvironmentError->giveAttr("__str__",
-                               new BoxedFunction(boxRTFunction((void*)BoxedEnvironmentError::__str__, UNKNOWN, 1)));
 
     repr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)repr, UNKNOWN, 1), "repr");
     builtins_module->giveAttr("repr", repr_obj);
@@ -1228,10 +1037,5 @@ void setupBuiltins() {
     builtins_module->giveAttr("classmethod", classmethod_cls);
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
-
-    PyExc_RecursionErrorInst = new (RuntimeError) BoxedException();
-    gc::registerPermanentRoot(PyExc_RecursionErrorInst);
-    PyExc_MemoryErrorInst = new (MemoryError) BoxedException();
-    gc::registerPermanentRoot(PyExc_MemoryErrorInst);
 }
 }

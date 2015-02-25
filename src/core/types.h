@@ -522,8 +522,6 @@ void appendToSysPath(const std::string& path);
 void prependToSysPath(const std::string& path);
 void addToSysArgv(const char* str);
 
-std::string formatException(Box* e);
-
 // Raise a SyntaxError that occurs at a specific location.
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.

@@ -372,6 +372,9 @@ static PyGetSetDef BaseException_getset[] = {
     {NULL},
 };
 
+// Leave this in as a reminder in case we want to go back to using it:
+#define Py_TPFLAGS_BASE_EXC_SUBCLASS     (0)
+
 
 static PyTypeObject _PyExc_BaseException = {
     PyObject_HEAD_INIT(NULL)

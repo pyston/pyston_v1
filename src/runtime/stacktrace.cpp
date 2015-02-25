@@ -196,9 +196,7 @@ ExcInfo::ExcInfo(Box* type, Box* value, Box* traceback) : type(type), value(valu
 #endif
 
 void ExcInfo::printExcAndTraceback() const {
-    std::string msg = formatException(value);
-    printTraceback(traceback);
-    fprintf(stderr, "%s\n", msg.c_str());
+    PyErr_Display(type, value, traceback);
 }
 
 bool ExcInfo::matches(BoxedClass* cls) const {
@@ -242,6 +240,11 @@ void raise3(Box* arg0, Box* arg1, Box* arg2) {
                    getTypeName(arg0));
 }
 
+void raiseExcHelper(BoxedClass* cls, Box* arg) {
+    Box* exc_obj = runtimeCall(cls, ArgPassSpec(1), arg, NULL, NULL, NULL, NULL);
+    raiseExc(exc_obj);
+}
+
 void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
     if (msg != NULL) {
         va_list ap;
@@ -264,19 +267,5 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         Box* exc_obj = runtimeCall(cls, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
         raiseExc(exc_obj);
     }
-}
-
-std::string formatException(Box* b) {
-    std::string name = getTypeName(b);
-
-    BoxedString* r = strOrNull(b);
-    if (!r)
-        return name;
-
-    assert(r->cls == str_cls);
-    const std::string* msg = &r->s;
-    if (msg->size())
-        return name + ": " + *msg;
-    return name;
 }
 }
