@@ -3471,6 +3471,41 @@ extern "C" void delattr(Box* obj, const char* attr) {
     delattr_internal(obj, attr, true, NULL);
 }
 
+extern "C" Box* createBoxedIterWrapper(Box* o) {
+    return new BoxedIterWrapper(o);
+}
+
+extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
+    std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(
+        __builtin_extract_return_addr(__builtin_return_address(0)), 1, "createBoxedIterWrapperIfNeeded"));
+
+    if (rewriter.get()) {
+        RewriterVar* r_o = rewriter->getArg(0);
+        RewriterVar* r_cls = r_o->getAttr(BOX_CLS_OFFSET);
+        GetattrRewriteArgs rewrite_args(rewriter.get(), r_cls, rewriter->getReturnDestination());
+        Box* r = typeLookup(o->cls, hasnext_str, &rewrite_args);
+        if (!rewrite_args.out_success) {
+            rewriter.reset(NULL);
+        } else if (r) {
+            rewrite_args.out_rtn->addGuard((uint64_t)r);
+            if (rewrite_args.out_success) {
+                rewriter->commitReturning(r_o);
+                return o;
+            }
+        } else if (!r) {
+            RewriterVar* var = rewriter.get()->call(true, (void*)createBoxedIterWrapper, rewriter->getArg(0));
+            if (rewrite_args.out_success) {
+                rewriter->commitReturning(var);
+                return createBoxedIterWrapper(o);
+            }
+        }
+    }
+
+    if (typeLookup(o->cls, hasnext_str, NULL) == NULL)
+        return new BoxedIterWrapper(o);
+    return o;
+}
+
 extern "C" Box* getPystonIter(Box* o) {
     Box* r = getiter(o);
     if (typeLookup(r->cls, hasnext_str, NULL) == NULL)
@@ -3478,17 +3513,18 @@ extern "C" Box* getPystonIter(Box* o) {
     return r;
 }
 
+extern "C" Box* getiterHelper(Box* o) {
+    if (typeLookup(o->cls, getitem_str, NULL))
+        return new BoxedSeqIter(o, 0);
+    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
+}
+
 Box* getiter(Box* o) {
     // TODO add rewriting to this?  probably want to try to avoid this path though
     Box* r = callattrInternal0(o, &iter_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(0));
     if (r)
         return r;
-
-    if (typeLookup(o->cls, getitem_str, NULL)) {
-        return new BoxedSeqIter(o, 0);
-    }
-
-    raiseExcHelper(TypeError, "'%s' object is not iterable", getTypeName(o));
+    return getiterHelper(o);
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {

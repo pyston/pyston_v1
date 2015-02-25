@@ -228,7 +228,7 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
-    bool hasGenericGetattr() { return tp_getattr != NULL; }
+    bool hasGenericGetattr() { return tp_getattr == NULL; }
 
     void freeze();
 

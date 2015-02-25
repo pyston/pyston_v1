@@ -53,10 +53,6 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" void delattr(Box* obj, const char* attr);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
-struct CallattrFlags {
-    bool cls_only : 1;
-    bool null_on_nonexistent : 1;
-};
 extern "C" Box* callattr(Box*, const std::string*, CallattrFlags, ArgPassSpec, Box*, Box*, Box*, Box**,
                          const std::vector<const std::string*>*);
 extern "C" BoxedString* str(Box* obj);
@@ -92,6 +88,8 @@ extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 
 Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
+extern "C" Box* getiterHelper(Box* o);
+extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
 
 extern "C" void dump(void* p);
 

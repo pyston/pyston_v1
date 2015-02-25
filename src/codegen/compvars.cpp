@@ -34,6 +34,29 @@
 
 namespace pyston {
 
+static const std::string& iter_str = "__iter__";
+static const std::string& hasnext_str = "__hasnext__";
+
+CompilerType* CompilerType::getPystonIterType() {
+    if (hasattr(&iter_str) == Yes) {
+        CompilerType* iter_type = getattrType(&iter_str, true)->callType(ArgPassSpec(0), {}, NULL);
+        if (iter_type->hasattr(&hasnext_str) == Yes)
+            return iter_type;
+        // if iter_type->hasattr(&hasnext_str) == No we know this is going to be a BoxedIterWrapper
+        // we could optimize this case but it looks like this is very uncommon
+    }
+    return UNKNOWN;
+}
+
+CompilerType::Result CompilerType::hasattr(const std::string* attr) {
+    CompilerType* type = getattrType(attr, true);
+    if (type == UNKNOWN)
+        return Result::Maybe;
+    else if (type == UNDEF)
+        return Result::No;
+    return Result::Yes;
+}
+
 void ConcreteCompilerType::serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) {
 #ifndef NDEBUG
     if (llvmType() == g.i1) {
@@ -210,7 +233,7 @@ public:
                            const std::vector<CompilerVariable*>& args,
                            const std::vector<const std::string*>* keyword_names) override;
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                               const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                               const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override;
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
@@ -328,6 +351,57 @@ public:
 
         converted_slice->decvref(emitter);
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
+    }
+
+    CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
+        CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = true };
+        CompilerVariable* iter_call = var->callattr(emitter, info, &iter_str, flags, ArgPassSpec(0), {}, 0);
+        ConcreteCompilerVariable* converted_iter_call = iter_call->makeConverted(emitter, iter_call->getBoxType());
+
+        // If the type analysis could determine the iter type is a valid pyston iter (has 'hasnext') we are finished.
+        CompilerType* iter_type = var->getType()->getPystonIterType();
+        if (iter_type != UNKNOWN) {
+            iter_call->decvref(emitter);
+            return converted_iter_call;
+        }
+
+        // We don't know the type so we have to check at runtime if __iter__ is implemented
+        llvm::Value* cmp = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(),
+                                                              embedConstantPtr(0, g.llvm_value_type_ptr));
+
+        llvm::BasicBlock* bb_has_iter = emitter.createBasicBlock("has_iter");
+        bb_has_iter->moveAfter(emitter.currentBasicBlock());
+        llvm::BasicBlock* bb_no_iter = emitter.createBasicBlock("no_iter");
+        bb_no_iter->moveAfter(bb_has_iter);
+        llvm::BasicBlock* bb_join = emitter.createBasicBlock("join_after_getiter");
+        emitter.getBuilder()->CreateCondBr(cmp, bb_has_iter, bb_no_iter);
+
+        // var has __iter__()
+        emitter.setCurrentBasicBlock(bb_has_iter);
+        ICSetupInfo* pp = createGenericIC(info.getTypeRecorder(), true, 128);
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::createBoxedIterWrapperIfNeeded,
+                                                 { converted_iter_call->getValue() }, info.unw_info);
+        llvm::Value* value_has_iter = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
+        llvm::BasicBlock* value_has_iter_bb = emitter.currentBasicBlock();
+        emitter.getBuilder()->CreateBr(bb_join);
+
+        // var has no __iter__()
+        // TODO: we could create a patchpoint if this turns out to be hot
+        emitter.setCurrentBasicBlock(bb_no_iter);
+        llvm::Value* value_no_iter = emitter.createCall(info.unw_info, g.funcs.getiterHelper, var->getValue());
+        llvm::BasicBlock* value_no_iter_bb = emitter.currentBasicBlock();
+        emitter.getBuilder()->CreateBr(bb_join);
+
+        // join
+        emitter.setCurrentBasicBlock(bb_join);
+        auto phi = emitter.getBuilder()->CreatePHI(g.llvm_value_type_ptr, 2, "iter");
+        phi->addIncoming(value_has_iter, value_has_iter_bb);
+        phi->addIncoming(value_no_iter, value_no_iter_bb);
+
+        converted_iter_call->decvref(emitter);
+        iter_call->decvref(emitter);
+
+        return new ConcreteCompilerVariable(UNKNOWN, phi, true);
     }
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
@@ -579,7 +653,7 @@ CompilerVariable* UnknownType::call(IREmitter& emitter, const OpInfo& info, Conc
 }
 
 CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                                        const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                                        const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                         const std::vector<CompilerVariable*>& args,
                                         const std::vector<const std::string*>* keyword_names) {
     bool pass_keywords = (argspec.num_keywords != 0);
@@ -599,10 +673,17 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     else
         func = g.funcs.callattrN;
 
+    union {
+        CallattrFlags flags;
+        char value;
+    } flags_to_int;
+    static_assert(sizeof(CallattrFlags) == sizeof(char), "");
+    flags_to_int.flags = flags;
+
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
     other_args.push_back(embedConstantPtr(attr, g.llvm_str_type_ptr));
-    other_args.push_back(getConstantInt(clsonly, g.i1));
+    other_args.push_back(getConstantInt(flags_to_int.value, g.i8));
 
     llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
     other_args.push_back(llvm_argspec);
@@ -819,11 +900,11 @@ public:
     }
 
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                               const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                               const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_INT);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1057,11 +1138,11 @@ public:
     }
 
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                               const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                               const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_FLOAT);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1523,16 +1604,16 @@ public:
     }
 
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                               const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                               const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         ConcreteCompilerVariable* called_constant
-            = tryCallattrConstant(emitter, info, var, attr, clsonly, argspec, args, keyword_names);
+            = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, argspec, args, keyword_names);
         if (called_constant)
             return called_constant;
 
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, UNKNOWN);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1551,6 +1632,7 @@ public:
                 const std::string& left_side_name = getOpName(op_type);
 
                 bool no_attribute = false;
+
                 ConcreteCompilerVariable* called_constant
                     = tryCallattrConstant(emitter, info, var, &left_side_name, true, ArgPassSpec(1, 0, 0, 0),
                                           { converted_rhs }, NULL, &no_attribute);
@@ -1597,6 +1679,10 @@ public:
             return called_constant;
 
         return UNKNOWN->getitem(emitter, info, var, slice);
+    }
+
+    CompilerVariable* getPystonIter(IREmitter& emitter, const OpInfo& info, VAR* var) override {
+        return UNKNOWN->getPystonIter(emitter, info, var);
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
@@ -1741,11 +1827,11 @@ public:
         return rtn;
     }
 
-    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr, bool clsonly,
-                               ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                               CallattrFlags flags, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, STR);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -1870,11 +1956,11 @@ public:
     }
 
     CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
-                               const std::string* attr, bool clsonly, ArgPassSpec argspec,
+                               const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_BOOL);
-        CompilerVariable* rtn = converted->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+        CompilerVariable* rtn = converted->callattr(emitter, info, attr, flags, argspec, args, keyword_names);
         converted->decvref(emitter);
         return rtn;
     }
@@ -2043,11 +2129,11 @@ public:
         return rtn;
     }
 
-    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr, bool clsonly,
-                               ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                               CallattrFlags flags, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         return makeConverted(emitter, var, getConcreteType())
-            ->callattr(emitter, info, attr, clsonly, argspec, args, keyword_names);
+            ->callattr(emitter, info, attr, flags, argspec, args, keyword_names);
     }
 
     void serializeToFrame(VAR* var, std::vector<llvm::Value*>& stackmap_args) override {
@@ -2147,8 +2233,8 @@ public:
         return undefVariable();
     }
 
-    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr, bool clsonly,
-                               ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
+    CompilerVariable* callattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
+                               CallattrFlags flags, ArgPassSpec argspec, const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
         return undefVariable();
     }
