@@ -32,3 +32,12 @@ try:
     hasattr(object(), u"\u0180")
 except UnicodeEncodeError as e:
     print e
+
+def p(x):
+    return [hex(ord(i)) for i in x]
+s = u"\u20AC" # euro sign
+print p(s) 
+print p(s.encode("utf8"))
+print p(s.encode("utf16"))
+print p(s.encode("utf32"))
+print p(s.encode("iso_8859_15"))
