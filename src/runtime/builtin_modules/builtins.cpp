@@ -50,7 +50,7 @@ const char* Py_FileSystemDefaultEncoding = "mbcs";
 #elif defined(__APPLE__)
 const char* Py_FileSystemDefaultEncoding = "utf-8";
 #else
-const char* Py_FileSystemDefaultEncoding = NULL; /* use default */
+const char* Py_FileSystemDefaultEncoding = "UTF-8"; // Pyston change: modified to UTF-8
 #endif
 }
 

@@ -99,6 +99,16 @@ Box* getSysStdout() {
     return sys_stdout;
 }
 
+Box* sysGetDefaultEncoding() {
+    return boxStrConstant(PyUnicode_GetDefaultEncoding());
+}
+
+Box* sysGetFilesystemEncoding() {
+    if (Py_FileSystemDefaultEncoding)
+        return boxStrConstant(Py_FileSystemDefaultEncoding);
+    return None;
+}
+
 extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     try {
         if (!v) {
@@ -255,6 +265,14 @@ void setupSys() {
     // TODO supposed to pass argv0, main_addr to this function:
     main_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
     sys_module->giveAttr("executable", boxString(main_fn.str()));
+
+    sys_module->giveAttr(
+        "getdefaultencoding",
+        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetDefaultEncoding, STR, 0), "getdefaultencoding"));
+
+    sys_module->giveAttr("getfilesystemencoding",
+                         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetFilesystemEncoding, STR, 0),
+                                                          "getfilesystemencoding"));
 
     // TODO: should configure this in a better way
     sys_module->giveAttr("prefix", boxStrConstant("/usr"));
