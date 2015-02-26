@@ -164,3 +164,11 @@ try:
     print "f(c) error"
 except AttributeError, e:
     print e
+
+c.a = 2
+c.b = 3
+print hasattr(c, "a"), hasattr(c, "b")
+delattr(c, "a");
+print hasattr(c, "a"), hasattr(c, "b")
+delattr(c, "b");
+print hasattr(c, "a"), hasattr(c, "b")

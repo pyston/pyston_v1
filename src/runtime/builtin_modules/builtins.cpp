@@ -484,6 +484,14 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     return import(((BoxedInt*)level)->n, fromlist, &static_cast<BoxedString*>(name)->s);
 }
 
+Box* delattrFunc(Box* obj, Box* _str) {
+    if (_str->cls != str_cls)
+        raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
+    BoxedString* str = static_cast<BoxedString*>(_str);
+    delattr(obj, str->s.c_str());
+    return None;
+}
+
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
@@ -955,6 +963,9 @@ void setupBuiltins() {
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydump, UNKNOWN, 1), "dump"));
     builtins_module->giveAttr(
         "dumpAddr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)pydumpAddr, UNKNOWN, 1), "dumpAddr"));
+
+    builtins_module->giveAttr("delattr",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)delattrFunc, NONE, 2), "delattr"));
 
     builtins_module->giveAttr(
         "getattr", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getattrFunc, UNKNOWN, 3, 1, false, false),
