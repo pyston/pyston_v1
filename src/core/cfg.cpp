@@ -1552,11 +1552,39 @@ public:
                     target = remapName(ast_cast<AST_Name>(t));
                     break;
                 }
+                case AST_TYPE::List: {
+                    AST_List* list = static_cast<AST_List*>(t);
+                    AST_Delete* temp_ast_del = new AST_Delete();
+                    temp_ast_del->lineno = node->lineno;
+                    temp_ast_del->col_offset = node->col_offset;
+
+                    for (auto elt : list->elts) {
+                        temp_ast_del->targets.push_back(elt);
+                    }
+                    visit_delete(temp_ast_del);
+                    break;
+                }
+                case AST_TYPE::Tuple: {
+                    AST_Tuple* tuple = static_cast<AST_Tuple*>(t);
+                    AST_Delete* temp_ast_del = new AST_Delete();
+                    temp_ast_del->lineno = node->lineno;
+                    temp_ast_del->col_offset = node->col_offset;
+
+                    for (auto elt : tuple->elts) {
+                        temp_ast_del->targets.push_back(elt);
+                    }
+                    visit_delete(temp_ast_del);
+                    break;
+                }
                 default:
                     RELEASE_ASSERT(0, "Unsupported del target: %d", t->type);
             }
-            astdel->targets.push_back(target);
-            push_back(astdel);
+
+            if (target != NULL)
+                astdel->targets.push_back(target);
+
+            if (astdel->targets.size() > 0)
+                push_back(astdel);
         }
 
         return true;

@@ -1,6 +1,3 @@
-# expected: fail
-# - we don't support this functionality yet
-
 def f4():
     a = 1
     b = 2
