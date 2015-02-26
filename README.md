@@ -8,16 +8,14 @@ We have a small website [pyston.org](http://pyston.org/), which for now just hos
 
 Pyston should be considered in early alpha: it "works" in that it can successfully run Python code, but it is still quite far from being useful for end-users.
 
-Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is planned for the future, but this is the initial target due to prioritization constraints.
+Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is desired but currently not on the roadmap.
 
-> Note: Pyston does not currently work on Mac OSX, but that is being worked on.
+> Note: Pyston does not currently work on Mac OSX, and it is not clear when it will.
 
 ##### Contributing
 
 Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://github.com/dropbox/pyston/blob/master/CONTRIBUTING.md) for details.
 > tl;dr: You will need to sign the [Dropbox CLA](https://opensource.dropbox.com/cla/) and run the tests.
-
-We have a [small list of starter projects](https://github.com/dropbox/pyston/wiki/Starter-projects), but it is often not up to date.  If you are interested in contributing but would like to chat about where to start, please feel free to email pyston-dev.
 
 ### Roadmap
 
@@ -54,8 +52,9 @@ To simply build and run Pyston, a smaller set of dependencies is required; see d
 $ make check -j4
 ```
 
-And see that hopefully all of the tests pass.
-> If you see that the tests do not pass, please email pyston-dev.
+And see that hopefully all of the tests pass.  (If they don't, please email pyston-dev.)
+
+We also have a new CMake-based build system which is easier and faster to get running; see the end of INSTALLING.md for information.
 
 All pull requests are built and tested by travis-ci.org running Ubuntu 12.04.
 See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/builds).
@@ -73,21 +72,30 @@ You can get a simple REPL by simply typing `make run`; it is not very robust rig
 - `make check`: run the tests
 - `make run`: run the REPL
 - `make format`: run clang-format over the codebase
-- `make run_TESTNAME`: searches for a test or benchmark called TESTNAME.py and runs it under pyston
-- `make dbg_TESTNAME`: same as above, but runs pyston under gdb
-- `make watch_cmd`: uses inotifywait to run `make cmd` every time a source file changes.
- - For example, `make watch` is an alias for `make watch_pyston_dbg`, and will recompile every time you save a source file.
- - `make wdbg_TESTNAME` is mostly an alias for `make watch_dbg_TESTNAME`, but will automatically quit GDB for you.
+- We have a number of helpers of the form `make VERB_TESTNAME`, where `TESTNAME` can be any of the tests/benchmarks, and `VERB` can be one of:
+ - `make run_TESTNAME`: runs the file under pyston_dbg.
+ - `make run_release_TESTNAME`: runs the file under pyston_release.
+ - `make dbg_TESTNAME`: same as `run`, but runs pyston under gdb.
+ - `make check_TESTNAME`: checks that the script has the same behavior under pyston_dbg as it does under CPython.  See tools/tester.py for information about test annotations.
+ - `make perf_TESTNAME`: runs the script in pyston_release, and uses perf to record and display performance statistics.
+ - A few lesser used ones; see the Makefile for details.
+- `make watch_cmd`: meta-command which uses inotifywait to run `make cmd` every time a source file changes.
+ - For example, `make watch_pyston_dbg` will rebuild pyston_dbg every time you save a source file.  This is handy enough to have the alias `make watch`.
+ - `make watch_run_TESTNAME` will rebuild pyston_dbg and run TESTNAME every time you change a file.
+ - `make wdbg_TESTNAME` is mostly an alias for `make watch_dbg_TESTNAME`, but will automatically quit GDB for you.  This is handy if pyston is crashing and you want to get a C-level stacktrace.
 
 There are a number of common flags you can pass to your make invocations:
 - `V=1` or `VERBOSE=1`: display the full commands being executed
-- `ARGS=-q`: pass the given args (in this example, `-q`) to the executable.
- - Note: these will usually end up before the script name, and so apply to the pyston runtime as opposed to appearing in sys.argv.  For example, `make run_test ARGS=-q` will execute `./pyston_dbg -q test.py`.
+- `ARGS=-v`: pass the given args (in this example, `-v`) to the executable.
+ - Note: these will usually end up before the script name, and so apply to the pyston runtime as opposed to appearing in sys.argv.  For example, `make run_test ARGS=-v` will execute `./pyston_dbg -v test.py`.
 - `BR=breakpoint`: when running under gdb, automatically set a breakpoint at the given location.
+- `SELF_HOST=1`: run all of our Python scripts using pyston_dbg.
 
 For a full list, please check out the (Makefile)[https://github.com/dropbox/pyston/blob/master/src/Makefile].
 
 #### Pyston command-line options:
+
+Pyston-specific flags:
 <dl>
 <dt>-q</dt>
   <dd>Set verbosity to 0</dd>
@@ -103,17 +111,19 @@ For a full list, please check out the (Makefile)[https://github.com/dropbox/pyst
 <dt>-O</dt>
   <dd>Force Pyston to always run at the highest compilation tier.  This doesn't always produce the fastest running time due to the lack of type recording from lower compilation tiers, but similar to -n can help test the code generator.</dd>
   
-<dt>-i</dt>
-  <dd>Go into the repl after executing the given script.</dd>
+<dt>-I</dt>
+  <dd>Force always using the Pyston interpreter.  This is mostly used for debugging / testing. (Takes precedence over -n and -O)</dd>
 
 <dt>-r</dt>
   <dd>Use a stripped stdlib.  When running pyston_dbg, the default is to use a stdlib with full debugging symbols enabled.  Passing -r changes this behavior to load a slimmer, stripped stdlib.</dd>
 
-<dt>-b</dt>
-  <dd>Use the default LLVM register allocator instead of the "basic" register allocator.</dd>
-
 <dt>-x</dt>
   <dd>Experimental: use the pypa parser.</dd>
+
+Standard Python flags:
+<dt>-i</dt>
+  <dd>Go into the repl after executing the given script.</dd>
+</dl>
 
 There are also some lesser-used flags; see src/jit.cpp for more details.
 
@@ -124,18 +134,22 @@ There are also some lesser-used flags; see src/jit.cpp for more details.
 
 Pyston currently features four compilation tiers.  In increasing order of speed, but also compilation time:
 
-1. An LLVM-IR interpreter.  LLVM IR is not designed for interpretation, and isn't very well suited for the task -- it is too low level, and the interpreter spends too much time dispatching for each instruction.  The interpreter is currently used for the first three times that a function is called, or the first ten iterations of a loop, before switching to the next level.
-2. Baseline LLVM compilation.  Runs no LLVM optimizations, and no type speculation, and simply hands off the generated code to the LLVM code generator.  This tier does type recording for the final tier.
-3. Improved LLVM compilation.  Behaves very similarly to baseline LLVM compilation, so this tier will probably be removed in the near future.
-4. Full LLVM optimization + compilation.  This tier runs full LLVM optimizations, and uses type feedback from lower tiers.  This tier kicks in after 10000 loop iterations, or 10000 calls to a function. (exact numbers subject to change).
+0. An AST interpreter.  We do some basic transformations on the AST beforehand, to make it easier and faster to interpret.
+1. Baseline LLVM compilation.  Runs no LLVM optimizations, and no type speculation, and simply hands off the generated code to the LLVM code generator.  This tier does type recording for the final tier.  We are thinking of replacing this with a simple non-LLVM JIT tier at some point.
+2. Improved LLVM compilation.  Behaves very similarly to baseline LLVM compilation, so this tier will probably be removed in the near future.
+3. Full LLVM optimization + compilation.  This tier runs full LLVM optimizations, and uses type feedback from lower tiers.  This tier currently kicks in after 10000 loop iterations, or 10000 calls to a function.
 
 There are two main ways that Pyston can move up to higher tiers:
 - If a function gets called often, it will get recompiled at a higher tier and the new version will be called instead.
 - If a loop gets iterated enough times, Pyston will OSR to a higher tier within the same function.
 
-Currently Pyston only moves to higher tiers, and doesn't move back down to lower tiers.  This will be important to add, in order to support doing additional type recording if types change.
+Pyston can move back down to the AST interpreter by using our frame introspection machinery to do a deoptimization.
 
-The current plan is to replace the LLVM interpreter with a quick code generator that doesn't use LLVM's machinery; in theory it should be possible to build a simple code generator that just uses the LLVM IR as an input.  We may or may not need to add an AST/bytecode-interpreter tier.
+#### Frame introspection
+
+Pyston uses LLVM's [patchpoint](http://llvm.org/docs/StackMaps.html) functionality to convey information from the LLVM code generator to the runtime.  By attaching all local variables as stackmap arguments, at any callsite we can access all of the frame's local variables.  We use this to implement user-level features such as eval() and locals(), and also to implement internal features such as deoptimization.
+
+We have a [blog post](http://blog.pyston.org/2014/11/06/frame-introspection-in-pyston/) that goes into more detail.
 
 #### OSR
 
@@ -180,7 +194,7 @@ int square_osrentry(int n, int i, int r) {
 }
 ```
 
-The pseudo-C shown above doesn't look that different; the benefit of this approach is that the square() function can be compiled at a low compilation tier, but the square_osrentry can be compiled at a higher one since the compilation time is much more likely to pay off.
+The pseudo-C shown above doesn't look that different; the benefit of this approach is that the square() function can be compiled at a low (cheap) compilation tier or even interpreted, but the square_osrentry can be compiled at a higher one since the compilation time is much more likely to pay off.
 
 This approach seems to work, but has a couple drawbacks:
 - It's currently tracked per backedge rather than per backedge-target, which can lead to more OSR compilations than necessary.
@@ -220,4 +234,6 @@ We have a basic implementation of this that is able to run a number of the CPyth
 
 ### Parallelism support
 
-Pyston currently uses a GIL to protect threaded code.  We have an experimental "GRWL" version that replaces the GIL with a read-write-lock variant, which has the effect of allowing multiple Python threads run in parallel.  For pure Python code, this seems to be successful to the limits of our thread-unaware garbage collector and memory allocator.  Unfortunately, the goal of true parallelism in Python is at odds with the goal of providing extensive C API support: the C API makes strong guarantees about the existance of a GIL, much more so than you get for Python code.  You can test this method out by running `make pyston_grwl`.
+Pyston currently uses a GIL to protect threaded code.  The codebase still contains an experimental "GRWL" configuration, which replaces the GIL with a read-write lock.  This allows Python code to execute in parallel but still allow for critical sections (recompilation, C API calls, etc), and seems to work ok.  It doesn't provide the same memory-ordering guarantees that CPython provides.
+
+This approach has mostly been abandoned as infeasible, but you can test it by doing `make pyston_grwl`.
