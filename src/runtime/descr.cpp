@@ -35,7 +35,7 @@ static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
 }
 
 static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
-    RELEASE_ASSERT(_self->cls == property_cls, "");
+    RELEASE_ASSERT(isSubclass(_self->cls, property_cls), "");
     Box* fdel = args[0];
     Box* doc = args[1];
 
@@ -49,7 +49,7 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
 }
 
 static Box* propertyGet(Box* self, Box* obj, Box* type) {
-    RELEASE_ASSERT(self->cls == property_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, property_cls), "");
 
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     if (obj == NULL || obj == None) {
@@ -64,7 +64,7 @@ static Box* propertyGet(Box* self, Box* obj, Box* type) {
 }
 
 static Box* propertySet(Box* self, Box* obj, Box* val) {
-    RELEASE_ASSERT(self->cls == property_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, property_cls), "");
 
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     Box* func;
@@ -106,19 +106,19 @@ static Box* property_copy(BoxedProperty* old, Box* get, Box* set, Box* del) {
 }
 
 static Box* propertyGetter(Box* self, Box* obj) {
-    RELEASE_ASSERT(self->cls == property_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, property_cls), "");
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     return property_copy(prop, obj, NULL, NULL);
 }
 
 static Box* propertySetter(Box* self, Box* obj) {
-    RELEASE_ASSERT(self->cls == property_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, property_cls), "");
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     return property_copy(prop, NULL, obj, NULL);
 }
 
 static Box* propertyDeleter(Box* self, Box* obj) {
-    RELEASE_ASSERT(self->cls == property_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, property_cls), "");
     BoxedProperty* prop = static_cast<BoxedProperty*>(self);
     return property_copy(prop, NULL, NULL, obj);
 }

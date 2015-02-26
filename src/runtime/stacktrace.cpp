@@ -146,8 +146,12 @@ extern "C" void abort() {
         // that object, _printStackTrace will hang waiting for the first construction
         // to finish.)
         alarm(1);
-
         _printStacktrace();
+
+        // Cancel the alarm.
+        // This is helpful for when running in a debugger, since the debugger will catch the
+        // abort and let you investigate, but the alarm will still come back to kill the program.
+        alarm(0);
     }
 
     libc_abort();

@@ -447,7 +447,7 @@ Box* isinstance_func(Box* obj, Box* cls) {
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
-    if (child->cls != type_cls && child->cls != classobj_cls)
+    if (!isSubclass(child->cls, type_cls) && child->cls != classobj_cls)
         raiseExcHelper(TypeError, "issubclass() arg 1 must be a class");
 
     RELEASE_ASSERT(parent->cls != tuple_cls, "unsupported");
@@ -459,7 +459,7 @@ Box* issubclass_func(Box* child, Box* parent) {
         return boxBool(classobjIssubclass(static_cast<BoxedClassobj*>(child), static_cast<BoxedClassobj*>(parent)));
     }
 
-    assert(child->cls == type_cls);
+    assert(isSubclass(child->cls, type_cls));
     if (parent->cls != type_cls)
         return False;
 

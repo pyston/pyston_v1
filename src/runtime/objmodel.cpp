@@ -2001,14 +2001,28 @@ extern "C" void dump(void* p) {
     if (al->kind_id == gc::GCKind::PYTHON) {
         printf("Python object\n");
         Box* b = (Box*)p;
-        printf("Class: %s\n", getFullTypeName(b).c_str());
+
+        printf("Class: %s", getFullTypeName(b).c_str());
+        if (b->cls->cls != type_cls) {
+            printf(" (metaclass: %s)\n", getFullTypeName(b->cls).c_str());
+        } else {
+            printf("\n");
+        }
 
         if (b->cls == bool_cls) {
             printf("The %s object\n", b == True ? "True" : "False");
         }
 
         if (isSubclass(b->cls, type_cls)) {
-            printf("Type name: %s\n", getFullNameOfClass(static_cast<BoxedClass*>(b)).c_str());
+            auto cls = static_cast<BoxedClass*>(b);
+            printf("Type name: %s\n", getFullNameOfClass(cls).c_str());
+
+            printf("MRO: %s", getFullNameOfClass(cls).c_str());
+            while (cls->tp_base) {
+                printf(" -> %s", getFullNameOfClass(cls->tp_base).c_str());
+                cls = cls->tp_base;
+            }
+            printf("\n");
         }
 
         if (isSubclass(b->cls, str_cls)) {
@@ -3571,7 +3585,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     RELEASE_ASSERT(bases->elts.size() == 1, "");
     Box* _base = bases->elts[0];
-    RELEASE_ASSERT(_base->cls == type_cls, "");
+    RELEASE_ASSERT(isSubclass(_base->cls, type_cls), "");
     base = static_cast<BoxedClass*>(_base);
 
     if ((base->tp_flags & Py_TPFLAGS_BASETYPE) == 0)
