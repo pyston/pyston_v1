@@ -14,3 +14,6 @@ for i in d:
 
 while d:
     print d.popleft()
+
+d = _collections.defaultdict()
+print str(d), repr(d)

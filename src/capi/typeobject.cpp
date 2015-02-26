@@ -395,7 +395,9 @@ static PyObject* wrap_init(PyObject* self, PyObject* args, void* wrapped, PyObje
 static PyObject* lookup_maybe(PyObject* self, const char* attrstr, PyObject** attrobj) noexcept {
     PyObject* res;
 
-    // TODO: CPython uses the attrobj as a cache
+    // TODO: CPython uses the attrobj as a cache.  If we want to use it, we'd have to make sure that
+    // they get registered as GC roots since they are usually placed into static variables.
+
     Box* obj = typeLookup(self->cls, attrstr, NULL);
     if (obj)
         return processDescriptor(obj, self, self->cls);
@@ -1841,9 +1843,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     // tp_name
     // tp_basicsize, tp_itemsize
     // tp_doc
-
-    if (!cls->tp_new && base != object_cls)
-        cls->tp_new = base->tp_new;
 
     try {
         add_operators(cls);

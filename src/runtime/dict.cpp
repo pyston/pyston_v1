@@ -550,6 +550,27 @@ extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
     v->visit(view->d);
 }
 
+static int dict_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {
+    assert(isSubclass(self->cls, dict_cls));
+    try {
+        dictInit(static_cast<BoxedDict*>(self), static_cast<BoxedTuple*>(args), static_cast<BoxedDict*>(kwds));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+    return 0;
+}
+
+static Box* dict_repr(PyObject* self) noexcept {
+    assert(isSubclass(self->cls, dict_cls));
+    try {
+        return dictRepr(static_cast<BoxedDict*>(self));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 void setupDict() {
     dict_iterator_cls = new BoxedHeapClass(object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict), false,
                                            "dictionary-itemiterator");
@@ -616,6 +637,20 @@ void setupDict() {
     dict_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)dictIterNext, UNKNOWN, 1)));
 
     dict_iterator_cls->freeze();
+
+    // Manually set some tp_* slots *after* calling freeze() -> fixup_slot_dispatchers().
+    // fixup_slot_dispatchers will insert a wrapper like slot_tp_init into tp_init, which calls the python-level
+    // __init__ function.  This is all well and good, until a C extension tries to subclass from dict and then
+    // creates a new tp_init function which calls Py_DictType.tp_init().  That tp_init is slot_tp_init, which calls
+    // self.__init__, which is the *subclasses* init function not dict's.
+    //
+    // This seems to happen pretty rarely, and only with dict, so for now let's just work around it by manually
+    // setting the couple functions that get used.
+    //
+    // I'm not sure if CPython has a better mechanism for this, since I assume they allow having extension classes
+    // subclass Python classes.
+    dict_cls->tp_init = dict_init;
+    dict_cls->tp_repr = dict_repr;
 
     dict_keys_cls->giveAttr(
         "__iter__", new BoxedFunction(boxRTFunction((void*)dictViewKeysIter, typeFromClass(dict_iterator_cls), 1)));
