@@ -520,6 +520,11 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
 }
 
 Box* hasattr(Box* obj, Box* _str) {
+    if (PyUnicode_Check(_str)) {
+        _str = _PyUnicode_AsDefaultEncodedString(_str, NULL);
+        checkAndThrowCAPIException();
+    }
+
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
     }

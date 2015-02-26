@@ -974,6 +974,11 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        if (PyUnicode_Check(_key)) {
+            _key = _PyUnicode_AsDefaultEncodedString(_key, NULL);
+            checkAndThrowCAPIException();
+        }
+
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         Box* r = self->b->getattr(key->s);

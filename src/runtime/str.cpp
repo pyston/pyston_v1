@@ -980,7 +980,7 @@ extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
     assert(lhs->cls == str_cls);
 
     if (rhs->cls != str_cls)
-        return boxBool(false);
+        return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
     return boxBool(lhs->s == srhs->s);
@@ -990,7 +990,7 @@ extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
     assert(lhs->cls == str_cls);
 
     if (rhs->cls != str_cls)
-        return boxBool(true);
+        return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
     return boxBool(lhs->s != srhs->s);

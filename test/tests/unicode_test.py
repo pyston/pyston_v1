@@ -12,3 +12,23 @@ print repr(u.encode("utf8"))
 
 # This is tricky, since we need to support file encodings, and then set stdout to UTF8:
 # print u
+
+d = {}
+d["hello world"] = "hi"
+print d[u"hello world"]
+
+class C(object):
+    pass
+c = C()
+c.a = 1
+print hasattr(c, 'a')
+print hasattr(c, u'a')
+print u'a' in c.__dict__
+print u'' == ''
+print '' == u''
+print hash(u'') == hash('')
+
+try:
+    hasattr(object(), u"\u0180")
+except UnicodeEncodeError as e:
+    print e

@@ -6599,6 +6599,12 @@ unicode_getitem(PyUnicodeObject *self, Py_ssize_t index)
 static long
 unicode_hash(PyUnicodeObject *self)
 {
+    // Pyston change: just convert to a str and hash, since we use std::hash and not
+    // CPython's hashing algorithm they duplicated here:
+    PyObject* str = PyUnicode_AsEncodedString((PyObject*)self, "utf8", "replace");
+    return str->ob_type->tp_hash(str);
+
+#if 0
     /* Since Unicode objects compare equal to their ASCII string
        counterparts, they should use the individual character values
        as basis for their hash value.  This is needed to assure that
@@ -6634,6 +6640,7 @@ unicode_hash(PyUnicodeObject *self)
         x = -2;
     self->hash = x;
     return x;
+#endif
 }
 
 PyDoc_STRVAR(index__doc__,
