@@ -127,3 +127,10 @@ test_just_funcs("abcde", 8)
 import gc
 for c in "hello world":
     gc.collect()
+
+print "hello world".index("world")
+try:
+    print "hello world".index("goodbye")
+except:
+    print "threw exception"
+
