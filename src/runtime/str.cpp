@@ -2035,6 +2035,22 @@ Box* strCount2(BoxedString* self, Box* elt) {
     return boxInt(strCount2Unboxed(self, elt));
 }
 
+Box* strIndex(BoxedString* self, Box* elt) {
+    assert(self->cls == str_cls);
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
+
+    const std::string& s = self->s;
+    const std::string& pattern = static_cast<BoxedString*>(elt)->s;
+
+    size_t idx = s.find(pattern, 0);
+    if (idx == std::string::npos)
+        raiseExcHelper(ValueError, "substring not found");
+
+    return boxInt(idx);
+}
+
 extern "C" PyObject* PyString_FromString(const char* s) noexcept {
     return boxStrConstant(s);
 }
@@ -2284,6 +2300,7 @@ void setupStr() {
     CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
     addRTFunction(count, (void*)strCount2, BOXED_INT);
     str_cls->giveAttr("count", new BoxedFunction(count));
+    str_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)strIndex, BOXED_INT, 2)));
 
     str_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false),
                                                    { boxStrConstant("") }));
