@@ -34,12 +34,12 @@ f = open('/dev/null')
 print iter(f) is f
 f.close()
 
-with open('README.md') as f:
+with open(__file__) as f:
     lines = list(f)
     print lines[:5]
     print lines[-5:]
 
-with open('README.md') as f:
+with open(__file__) as f:
     print len(f.readlines())
 
 # Check that opening a non-existent file results in an IOError.
