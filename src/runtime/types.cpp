@@ -65,6 +65,7 @@ extern "C" void initzlib();
 extern "C" void init_codecs();
 extern "C" void init_socket();
 extern "C" void _PyUnicode_Init();
+extern "C" void initunicodedata();
 
 namespace pyston {
 
@@ -1445,6 +1446,7 @@ void setupRuntime() {
     initzlib();
     init_codecs();
     init_socket();
+    initunicodedata();
 
     setupSysEnd();
 
