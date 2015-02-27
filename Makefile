@@ -292,7 +292,7 @@ STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 ASM_SRCS := $(wildcard src/runtime/*.S)
 
-STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c _struct.c datetimemodule.c _functoolsmodule.c _collectionsmodule.c itertoolsmodule.c resource.c signalmodule.c selectmodule.c fcntlmodule.c timemodule.c arraymodule.c zlibmodule.c _codecsmodule.c socketmodule.c unicodedata.c _weakref.c cStringIO.c _io/bufferedio.c _io/bytesio.c _io/fileio.c _io/iobase.c _io/_iomodule.c _io/stringio.c _io/textio.c $(EXTRA_STDMODULE_SRCS)
+STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c _struct.c datetimemodule.c _functoolsmodule.c _collectionsmodule.c itertoolsmodule.c resource.c signalmodule.c selectmodule.c fcntlmodule.c timemodule.c arraymodule.c zlibmodule.c _codecsmodule.c socketmodule.c unicodedata.c _weakref.c cStringIO.c _io/bufferedio.c _io/bytesio.c _io/fileio.c _io/iobase.c _io/_iomodule.c _io/stringio.c _io/textio.c getpath.c $(EXTRA_STDMODULE_SRCS)
 STDOBJECT_SRCS := structseq.c capsule.c stringobject.c exceptions.c unicodeobject.c unicodectype.c bytearrayobject.c bytes_methods.c weakrefobject.c memoryobject.c iterobject.c $(EXTRA_STDOBJECT_SRCS)
 STDPYTHON_SRCS := pyctype.c getargs.c formatter_string.c pystrtod.c dtoa.c formatter_unicode.c structmember.c $(EXTRA_STDPYTHON_SRCS)
 FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS))
@@ -403,7 +403,7 @@ check:
 	$(MAKE) run_unittests
 
 	$(MAKE) pyston_gcc
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 
 	@# It can be useful to test release mode, since it actually exposes different functionality
 	@# since we can make different decisions about which internal functions to inline or not.
@@ -834,9 +834,9 @@ define make_target
 $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)

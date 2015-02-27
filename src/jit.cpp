@@ -27,6 +27,8 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
 
+#include "osdefs.h"
+
 #include "codegen/entry.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
@@ -37,6 +39,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -76,7 +79,7 @@ static int main(int argc, char** argv) {
     bool force_repl = false;
     bool stats = false;
     const char* command = NULL;
-    while ((code = getopt(argc, argv, "+OqdIibpjtrsvnxc:")) != -1) {
+    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -99,6 +102,8 @@ static int main(int argc, char** argv) {
             DUMPJIT = true;
         } else if (code == 's') {
             stats = true;
+        } else if (code == 'S') {
+            Py_NoSiteFlag = 1;
         } else if (code == 'r') {
             USE_STRIPPED_STDLIB = true;
         } else if (code == 'b') {
@@ -117,6 +122,8 @@ static int main(int argc, char** argv) {
 
     threading::registerMainThread();
     threading::acquireGLRead();
+
+    Py_SetProgramName(argv[0]);
 
     {
         Timer _t("for initCodegen");
@@ -142,20 +149,24 @@ static int main(int argc, char** argv) {
         addToSysArgv(argv[i]);
     }
 
-    std::string self_path = llvm::sys::fs::getMainExecutable(argv[0], (void*)main);
-    assert(self_path.size());
+    llvm::StringRef module_search_path = Py_GetPath();
+    while (true) {
+        std::pair<llvm::StringRef, llvm::StringRef> split_str = module_search_path.split(DELIM);
+        if (split_str.first == module_search_path)
+            break; // could not find the delimiter
+        appendToSysPath(split_str.first);
+        module_search_path = split_str.second;
+    }
 
-    llvm::SmallString<128> stdlib_dir(self_path);
-    llvm::sys::path::remove_filename(stdlib_dir); // executable name
-    llvm::sys::path::append(stdlib_dir, "from_cpython");
-    llvm::sys::path::append(stdlib_dir, "Lib");
-    appendToSysPath(stdlib_dir.c_str());
-
-    // go from ./from_cpython/Lib to ./lib_pyston
-    llvm::sys::path::remove_filename(stdlib_dir);
-    llvm::sys::path::remove_filename(stdlib_dir);
-    llvm::sys::path::append(stdlib_dir, "lib_pyston");
-    appendToSysPath(stdlib_dir.c_str());
+    if (!Py_NoSiteFlag) {
+        try {
+            std::string module_name = "site";
+            importModuleLevel(&module_name, None, None, 0);
+        } catch (ExcInfo e) {
+            e.printExcAndTraceback();
+            return 1;
+        }
+    }
 
     // end of argument parsing
 
