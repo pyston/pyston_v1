@@ -214,6 +214,8 @@ class RewriterAction;
 // you can't forward-declare that :/
 class RewriterVar {
 public:
+    typedef llvm::SmallVector<RewriterVar*, 8> SmallVector;
+
     void addGuard(uint64_t val);
     void addGuardNotEq(uint64_t val);
     void addAttrGuard(int offset, uint64_t val, bool negate = false);
@@ -386,8 +388,8 @@ private:
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val, Location loc);
-    void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
-               const std::vector<RewriterVar*>& args_xmm);
+    void _call(RewriterVar* result, bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
+               const RewriterVar::SmallVector& args_xmm);
     void _add(RewriterVar* result, RewriterVar* a, int64_t b, Location dest);
     int _allocate(RewriterVar* result, int n);
     void _allocateAndCopy(RewriterVar* result, RewriterVar* array, int n);
@@ -452,8 +454,8 @@ public:
     // This causes some extra bookkeeping to prevent, ex this patchpoint to be rewritten when
     // entered recursively.  Setting to false disables this for slightly better performance, but
     // it's not huge so if in doubt just pass "true".
-    RewriterVar* call(bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
-                      const std::vector<RewriterVar*>& args_xmm = std::vector<RewriterVar*>());
+    RewriterVar* call(bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
+                      const RewriterVar::SmallVector& args_xmm = RewriterVar::SmallVector());
     RewriterVar* call(bool can_call_into_python, void* func_addr);
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0);
     RewriterVar* call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1);

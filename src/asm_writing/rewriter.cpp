@@ -511,20 +511,23 @@ void Rewriter::_loadConst(RewriterVar* result, int64_t val, Location dest) {
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr) {
-    std::vector<RewriterVar*> args = {};
-    std::vector<RewriterVar*> args_xmm = {};
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
     return call(can_call_into_python, func_addr, args, args_xmm);
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0) {
-    std::vector<RewriterVar*> args = { arg0 };
-    std::vector<RewriterVar*> args_xmm = {};
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
+    args.push_back(arg0);
     return call(can_call_into_python, func_addr, args, args_xmm);
 }
 
 RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1) {
-    std::vector<RewriterVar*> args = { arg0, arg1 };
-    std::vector<RewriterVar*> args_xmm = {};
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
+    args.push_back(arg0);
+    args.push_back(arg1);
     return call(can_call_into_python, func_addr, args, args_xmm);
 }
 
@@ -536,8 +539,8 @@ static const Location caller_save_registers[]{
     assembler::XMM11, assembler::XMM12, assembler::XMM13, assembler::XMM14, assembler::XMM15,
 };
 
-RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, const std::vector<RewriterVar*>& args,
-                            const std::vector<RewriterVar*>& args_xmm) {
+RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, const RewriterVar::SmallVector& args,
+                            const RewriterVar::SmallVector& args_xmm) {
     RewriterVar* result = createNewVar();
     std::vector<RewriterVar*> uses;
     for (RewriterVar* v : args) {
@@ -554,7 +557,7 @@ RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, const st
 }
 
 void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_addr,
-                     const std::vector<RewriterVar*>& args, const std::vector<RewriterVar*>& args_xmm) {
+                     const RewriterVar::SmallVector& args, const RewriterVar::SmallVector& args_xmm) {
     // TODO figure out why this is here -- what needs to be done differently
     // if can_call_into_python is true?
     // assert(!can_call_into_python);

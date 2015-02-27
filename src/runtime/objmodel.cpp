@@ -889,8 +889,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
             case BoxedMemberDescriptor::DOUBLE: {
                 if (rewrite_args) {
                     RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrDouble(member_desc->offset, assembler::XMM0);
-                    std::vector<RewriterVar*> normal_args;
-                    std::vector<RewriterVar*> float_args;
+                    RewriterVar::SmallVector normal_args;
+                    RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
                     rewrite_args->out_rtn
                         = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
@@ -903,8 +903,8 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
             case BoxedMemberDescriptor::FLOAT: {
                 if (rewrite_args) {
                     RewriterVar* r_unboxed_val = rewrite_args->obj->getAttrFloat(member_desc->offset, assembler::XMM0);
-                    std::vector<RewriterVar*> normal_args;
-                    std::vector<RewriterVar*> float_args;
+                    RewriterVar::SmallVector normal_args;
+                    RewriterVar::SmallVector float_args;
                     float_args.push_back(r_unboxed_val);
                     rewrite_args->out_rtn
                         = rewrite_args->rewriter->call(true, (void*)boxFloat, normal_args, float_args);
@@ -1548,8 +1548,12 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 
             r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, set), (intptr_t)getset_descr->set);
             RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
+            RewriterVar::SmallVector args;
+            args.push_back(r_obj);
+            args.push_back(r_val);
+            args.push_back(r_closure);
             rewrite_args->rewriter->call(
-                /* can_call_into_python */ true, (void*)getset_descr->set, { r_obj, r_val, r_closure });
+                /* can_call_into_python */ true, (void*)getset_descr->set, args);
 
             if (descr->cls == capi_getset_cls)
                 // TODO I think we are supposed to check the return value?
@@ -2379,7 +2383,7 @@ enum class KeywordDest {
     POSITIONAL,
     KWARGS,
 };
-static KeywordDest placeKeyword(const ParamNames& param_names, std::vector<bool>& params_filled,
+static KeywordDest placeKeyword(const ParamNames& param_names, llvm::SmallVector<bool, 8>& params_filled,
                                 const std::string& kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3,
                                 Box** oargs, BoxedDict* okwargs, CLFunction* cl) {
     assert(kw_val);
@@ -2484,7 +2488,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         }
     }
 
-    std::vector<Box*> varargs;
+    std::vector<Box*, StlCompatAllocator<Box*>> varargs;
     if (argspec.has_starargs) {
         Box* given_varargs = getArg(argspec.num_args + argspec.num_keywords, arg1, arg2, arg3, args);
         for (Box* e : given_varargs->pyElements()) {
@@ -2520,7 +2524,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         getArg(i + positional_to_positional, oarg1, oarg2, oarg3, oargs) = varargs[i];
     }
 
-    std::vector<bool> params_filled(num_output_args, false);
+    llvm::SmallVector<bool, 8> params_filled(num_output_args);
     for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {
         params_filled[i] = true;
     }
@@ -2554,7 +2558,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), emptyTupleConst);
         }
 
-        Box* ovarargs = new BoxedTuple(unused_positional);
+        Box* ovarargs = new BoxedTuple(BoxedTuple::GCVector(unused_positional.begin(), unused_positional.end()));
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", getFunctionName(f).c_str(),
@@ -2728,7 +2732,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
 
-        std::vector<RewriterVar*> arg_vec;
+        RewriterVar::SmallVector arg_vec;
         // TODO this kind of embedded reference needs to be tracked by the GC somehow?
         // Or maybe it's ok, since we've guarded on the function object?
         if (closure)
