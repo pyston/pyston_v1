@@ -63,6 +63,10 @@ for i in ["", "a", "ab", "aa"]:
         print i, j, i.startswith(j), j.startswith(i), i.endswith(j), j.endswith(i), i.find(j), j.find(i), i.rfind(j), j.rfind(i)
 
 print "bananananananas".replace("anan", "an")
+print "bananananananas".replace("anan", "An", 0)
+print "bananananananas".replace("anan", "An", -1)
+print "bananananananas".replace("anan", "An", 1)
+print "bananananananas".replace("anan", "An", 5)
 
 translation_map = [chr(c) for c in xrange(256)]
 for c in "aeiou":
