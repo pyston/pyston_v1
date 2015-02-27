@@ -289,9 +289,8 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
                                     int apiver) noexcept {
     BoxedModule* module = createModule(name, "__builtin__");
 
+    // Pass self as is, even if NULL we are not allowed to change it to None
     Box* passthrough = static_cast<Box*>(self);
-    if (!passthrough)
-        passthrough = None;
 
     while (methods && methods->ml_name) {
         if (VERBOSITY())

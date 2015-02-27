@@ -1252,6 +1252,10 @@ initunicodedata(void)
 
     Py_TYPE(&UCD_Type) = &PyType_Type;
 
+    // Pyston change: let the GC know about our type
+    if (PyType_Ready(&UCD_Type))
+        return;
+
     m = Py_InitModule3(
         "unicodedata", unicodedata_functions, unicodedata_docstring);
     if (!m)
