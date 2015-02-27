@@ -1516,30 +1516,34 @@ Box* strJoin(BoxedString* self, Box* rhs) {
 }
 
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
-    RELEASE_ASSERT(_self->cls == str_cls, "");
+    if (_self->cls != str_cls)
+        raiseExcHelper(TypeError, "descriptor 'replace' requires a 'str' object but received a '%s'",
+                       getTypeName(_self));
     BoxedString* self = static_cast<BoxedString*>(_self);
 
-    RELEASE_ASSERT(_old->cls == str_cls, "");
+    if (_old->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* old = static_cast<BoxedString*>(_old);
 
-    RELEASE_ASSERT(_new->cls == str_cls, "");
+    if (_new->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* new_ = static_cast<BoxedString*>(_new);
 
-    Box* _count = _args[0];
+    Box* _maxreplace = _args[0];
+    if (!isSubclass(_maxreplace->cls, int_cls))
+        raiseExcHelper(TypeError, "an integer is required");
 
-    RELEASE_ASSERT(isSubclass(_count->cls, int_cls), "an integer is required");
-    BoxedInt* count = static_cast<BoxedInt*>(_count);
-
-    RELEASE_ASSERT(count->n < 0, "'count' argument unsupported");
-
-    BoxedString* rtn = new BoxedString(self->s);
-    // From http://stackoverflow.com/questions/2896600/how-to-replace-all-occurrences-of-a-character-in-string
+    int max_replaces = static_cast<BoxedInt*>(_maxreplace)->n;
     size_t start_pos = 0;
-    while ((start_pos = rtn->s.find(old->s, start_pos)) != std::string::npos) {
-        rtn->s.replace(start_pos, old->s.length(), new_->s);
+    std::string s = self->s;
+    for (int num_replaced = 0; num_replaced < max_replaces || max_replaces < 0; ++num_replaced) {
+        start_pos = s.find(old->s, start_pos);
+        if (start_pos == std::string::npos)
+            break;
+        s.replace(start_pos, old->s.length(), new_->s);
         start_pos += new_->s.length(); // Handles case where 'to' is a substring of 'from'
     }
-    return rtn;
+    return new BoxedString(std::move(s));
 }
 
 Box* strPartition(BoxedString* self, BoxedString* sep) {

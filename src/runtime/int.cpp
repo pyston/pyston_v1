@@ -39,7 +39,7 @@ extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
 extern "C" long PyInt_AsLong(PyObject* op) noexcept {
     // This method should do quite a bit more, including checking tp_as_number->nb_int (or calling __int__?)
 
-    if (op->cls == int_cls)
+    if (isSubclass(op->cls, int_cls))
         return static_cast<BoxedInt*>(op)->n;
 
     if (op->cls == long_cls)
