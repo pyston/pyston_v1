@@ -509,10 +509,6 @@ extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PySequence_Fast(PyObject* o, const char* m) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
     static const std::string next_str("next");
     try {

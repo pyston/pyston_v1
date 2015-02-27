@@ -53,7 +53,8 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 /* Limit for the Unicode object free list */
 
-#define PyUnicode_MAXFREELIST       1024
+// Pyston change: set this to 0 (was 1024) to disable the free list since we can't track that through our GC.
+#define PyUnicode_MAXFREELIST       0
 
 /* Limit for the Unicode object free list stay alive optimization.
 
@@ -108,8 +109,10 @@ static PyUnicodeObject *unicode_empty = NULL;
             Py_INCREF(unicode_empty);                   \
         else {                                          \
             unicode_empty = _PyUnicode_New(0);          \
-            if (unicode_empty != NULL)                  \
+            if (unicode_empty != NULL) {                \
                 Py_INCREF(unicode_empty);               \
+                PyGC_AddRoot((PyObject*)unicode_empty); \
+            }                                           \
         }                                               \
         return (PyObject *)unicode_empty;               \
     } while (0)
@@ -474,6 +477,7 @@ PyObject *PyUnicode_FromUnicode(const Py_UNICODE *u,
                 unicode = _PyUnicode_New(1);
                 if (!unicode)
                     return NULL;
+                PyGC_AddRoot((PyObject*)unicode);
                 unicode->str[0] = *u;
                 unicode_latin1[*u] = unicode;
             }
@@ -521,6 +525,7 @@ PyObject *PyUnicode_FromStringAndSize(const char *u, Py_ssize_t size)
                 unicode = _PyUnicode_New(1);
                 if (!unicode)
                     return NULL;
+                PyGC_AddRoot((PyObject*)unicode);
                 unicode->str[0] = Py_CHARMASK(*u);
                 unicode_latin1[Py_CHARMASK(*u)] = unicode;
             }
@@ -8927,6 +8932,7 @@ void _PyUnicode_Init(void)
         unicode_empty = _PyUnicode_New(0);
         if (!unicode_empty)
             return;
+        PyGC_AddRoot((PyObject*)unicode_empty);
     }
 
     /* initialize the linebreak bloom filter */

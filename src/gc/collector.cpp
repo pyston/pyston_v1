@@ -131,6 +131,10 @@ void registerPermanentRoot(void* obj) {
 #endif
 }
 
+extern "C" void PyGC_AddRoot(PyObject* obj) noexcept {
+    registerPermanentRoot(obj);
+}
+
 static std::unordered_set<void*> nonheap_roots;
 // Track the highest-addressed nonheap root; the assumption is that the nonheap roots will
 // typically all have lower addresses than the heap roots, so this can serve as a cheap

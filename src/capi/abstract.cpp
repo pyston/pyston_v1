@@ -525,6 +525,30 @@ extern "C" Py_ssize_t PySequence_Size(PyObject* s) noexcept {
     return -1;
 }
 
+extern "C" PyObject* PySequence_Fast(PyObject* v, const char* m) noexcept {
+    PyObject* it;
+
+    if (v == NULL)
+        return null_error();
+
+    if (PyList_CheckExact(v) || PyTuple_CheckExact(v)) {
+        Py_INCREF(v);
+        return v;
+    }
+
+    it = PyObject_GetIter(v);
+    if (it == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_TypeError))
+            PyErr_SetString(PyExc_TypeError, m);
+        return NULL;
+    }
+
+    v = PySequence_List(it);
+    Py_DECREF(it);
+
+    return v;
+}
+
 static PyObject* binary_op1(PyObject* v, PyObject* w, const int op_slot) {
     PyObject* x;
     binaryfunc slotv = NULL;

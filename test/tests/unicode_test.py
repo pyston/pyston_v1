@@ -41,3 +41,17 @@ print p(s.encode("utf8"))
 print p(s.encode("utf16"))
 print p(s.encode("utf32"))
 print p(s.encode("iso_8859_15"))
+
+print repr(u' '.join(["hello", "world"]))
+
+# GC test: the unicode module interns certain unicode strings (the empty string among them).
+# Make sure we don't end up GCing it.
+# Call BaseException().__unicode__() since that happens to be one of the ways to access
+# the interned empty string ("unicode_empty")
+import gc
+for i in xrange(100):
+    print repr(BaseException().__unicode__())
+    gc.collect()
+    # do some allocations:
+    for j in xrange(100):
+        [None] * j

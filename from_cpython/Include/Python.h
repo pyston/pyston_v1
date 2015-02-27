@@ -105,6 +105,11 @@ extern "C" {
 
 PyObject* PyModule_GetDict(PyObject*) PYSTON_NOEXCEPT;
 
+// Pyston addition:
+// Our goal is to not make exception modules declare their static memory.  But until we can identify
+// that in an automated way, we have to modify extension modules to call this:
+void PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
+
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)
 #define PyDoc_STR(str) str
