@@ -142,7 +142,7 @@ extern "C" PyObject* PySeqIter_New(PyObject* seq) noexcept {
 
 void setupIter() {
     seqiter_cls
-        = BoxedHeapClass::create(type_cls, object_cls, seqiterGCVisit, 0, sizeof(BoxedSeqIter), false, "iterator");
+        = BoxedHeapClass::create(type_cls, object_cls, seqiterGCVisit, 0, 0, sizeof(BoxedSeqIter), false, "iterator");
 
     seqiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));
@@ -150,7 +150,7 @@ void setupIter() {
 
     seqiter_cls->freeze();
 
-    seqreviter_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedSeqIter), false, "reversed");
+    seqreviter_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedSeqIter), false, "reversed");
 
     seqreviter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqreviter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqreviterHasnext, BOXED_BOOL, 1)));
@@ -158,7 +158,7 @@ void setupIter() {
 
     seqreviter_cls->freeze();
 
-    iterwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, iterwrapperGCVisit, 0, sizeof(BoxedIterWrapper),
+    iterwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, iterwrapperGCVisit, 0, 0, sizeof(BoxedIterWrapper),
                                              false, "iterwrapper");
 
     iterwrapper_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)iterwrapperNext, UNKNOWN, 1)));

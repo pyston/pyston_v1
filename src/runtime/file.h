@@ -38,11 +38,9 @@ public:
     int f_skipnextlf;   /* Skip next \n */
     PyObject* f_encoding;
     PyObject* f_errors;
-#if 0
     PyObject* weakreflist; /* List of weak references */
-#endif
-    int unlocked_count; /* Num. currently running sections of code
-                       using f_fp with the GIL released. */
+    int unlocked_count;    /* Num. currently running sections of code
+                          using f_fp with the GIL released. */
     int readable;
     int writable;
 

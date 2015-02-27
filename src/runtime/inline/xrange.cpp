@@ -178,9 +178,9 @@ Box* xrangeReversed(Box* self) {
 }
 
 void setupXrange() {
-    xrange_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedXrange), false, "xrange");
+    xrange_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedXrange), false, "xrange");
     xrange_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
-                                                 sizeof(BoxedXrangeIterator), false, "rangeiterator");
+                                                 0, sizeof(BoxedXrangeIterator), false, "rangeiterator");
 
     xrange_cls->giveAttr(
         "__new__",

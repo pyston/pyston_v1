@@ -271,9 +271,9 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
 
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
-                                          offsetof(BoxedClassobj, attrs), sizeof(BoxedClassobj), false, "classobj");
+                                          offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
     instance_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedInstance::gcHandler,
-                                          offsetof(BoxedInstance, attrs), sizeof(BoxedInstance), false, "instance");
+                                          offsetof(BoxedInstance, attrs), 0, sizeof(BoxedInstance), false, "instance");
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, 0, false, false)));

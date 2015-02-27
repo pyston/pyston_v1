@@ -33,7 +33,7 @@
 
 namespace pyston {
 
-static uint64_t next_stack_addr = 0x3270000000L;
+static uint64_t next_stack_addr = 0x4270000000L;
 static std::deque<uint64_t> available_addrs;
 
 // There should be a better way of getting this:
@@ -298,8 +298,9 @@ void generatorDestructor(Box* b) {
 }
 
 void setupGenerator() {
-    generator_cls = BoxedHeapClass::create(type_cls, object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
-                                           sizeof(BoxedGenerator), false, "generator");
+    generator_cls
+        = BoxedHeapClass::create(type_cls, object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
+                                 offsetof(BoxedGenerator, weakreflist), sizeof(BoxedGenerator), false, "generator");
     generator_cls->simple_destructor = generatorDestructor;
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));

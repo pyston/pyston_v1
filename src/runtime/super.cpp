@@ -186,8 +186,8 @@ Box* superInit(Box* _self, Box* _type, Box* obj) {
 }
 
 void setupSuper() {
-    super_cls
-        = BoxedHeapClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false, "super");
+    super_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedSuper::gcHandler, 0, 0, sizeof(BoxedSuper), false,
+                                       "super");
 
     super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
     super_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)superRepr, STR, 1)));
