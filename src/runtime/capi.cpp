@@ -1275,6 +1275,28 @@ static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
 }
 }
 
+static const char* progname = "pyston";
+extern "C" void Py_SetProgramName(char* pn) noexcept {
+    if (pn && *pn)
+        progname = pn;
+}
+
+extern "C" const char* Py_GetProgramName(void) noexcept {
+    return progname;
+}
+
+static char* default_home = NULL;
+extern "C" void Py_SetPythonHome(char* home) noexcept {
+    default_home = home;
+}
+
+extern "C" char* Py_GetPythonHome(void) noexcept {
+    char* home = default_home;
+    if (home == NULL && !Py_IgnoreEnvironmentFlag)
+        home = Py_GETENV("PYTHONHOME");
+    return home;
+}
+
 extern "C" PyObject* PyThreadState_GetDict(void) noexcept {
     Box* dict = cur_thread_state.dict;
     if (!dict) {
