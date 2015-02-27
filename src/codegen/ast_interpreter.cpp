@@ -450,11 +450,9 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             }
 
             CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
-            Box* arg1 = arg_array.size() >= 1 ? arg_array[0] : 0;
-            Box* arg2 = arg_array.size() >= 2 ? arg_array[1] : 0;
-            Box* arg3 = arg_array.size() >= 3 ? arg_array[2] : 0;
-            Box** args = arg_array.size() >= 4 ? &arg_array[3] : 0;
-            return partial_func->call(arg1, arg2, arg3, args);
+            auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
+            return partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
+                                      std::get<3>(arg_tuple));
         }
     }
 

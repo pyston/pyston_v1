@@ -559,6 +559,54 @@ Box* map2(Box* f, Box* container) {
     return rtn;
 }
 
+Box* map(Box* f, BoxedTuple* args) {
+    assert(args->cls == tuple_cls);
+    auto num_iterable = args->elts.size();
+    if (num_iterable < 1)
+        raiseExcHelper(TypeError, "map() requires at least two args");
+
+    // performance optimization for the case where we only have one iterable
+    if (num_iterable == 1)
+        return map2(f, args->elts[0]);
+
+    std::vector<BoxIterator> args_it;
+    std::vector<BoxIterator> args_end;
+    for (auto& e : args->elts) {
+        auto range = e->pyElements();
+        args_it.emplace_back(range.begin());
+        args_end.emplace_back(range.end());
+    }
+    assert(args_it.size() == num_iterable);
+    assert(args_end.size() == num_iterable);
+
+    Box* rtn = new BoxedList();
+    std::vector<Box*> current_val(num_iterable);
+    while (true) {
+        int num_done = 0;
+        for (int i = 0; i < num_iterable; ++i) {
+            if (args_it[i] == args_end[i]) {
+                ++num_done;
+                current_val[i] = None;
+            } else {
+                current_val[i] = *args_it[i];
+            }
+        }
+
+        if (num_done == num_iterable)
+            break;
+
+        auto v = getTupleFromArgsArray(&current_val[0], num_iterable);
+        listAppendInternal(rtn, runtimeCall(f, ArgPassSpec(num_iterable), std::get<0>(v), std::get<1>(v),
+                                            std::get<2>(v), std::get<3>(v), NULL));
+
+        for (int i = 0; i < num_iterable; ++i) {
+            if (args_it[i] != args_end[i])
+                ++args_it[i];
+        }
+    }
+    return rtn;
+}
+
 Box* reduce(Box* f, Box* container, Box* initial) {
     Box* current = initial;
 
@@ -1042,7 +1090,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("execfile",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1), "execfile"));
 
-    builtins_module->giveAttr("map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map2, LIST, 2), "map"));
+    builtins_module->giveAttr(
+        "map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map, LIST, 1, 0, true, false), "map"));
     builtins_module->giveAttr(
         "reduce", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), "reduce",
                                                    { NULL }));
