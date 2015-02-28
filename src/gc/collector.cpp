@@ -25,6 +25,7 @@
 #include "core/types.h"
 #include "core/util.h"
 #include "gc/heap.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 #ifndef NVALGRIND
@@ -288,8 +289,10 @@ static void markPhase() {
 #endif
 }
 
-static void sweepPhase() {
-    global_heap.freeUnmarked();
+static void sweepPhase(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
+    // we need to use the allocator here because these objects are referenced only here, and calling the weakref
+    // callbacks could start another gc
+    global_heap.freeUnmarked(weakly_referenced);
 }
 
 static bool gc_enabled = true;
@@ -316,7 +319,24 @@ void runCollection() {
     Timer _t("collecting", /*min_usec=*/10000);
 
     markPhase();
-    sweepPhase();
+    std::list<Box*, StlCompatAllocator<Box*>> weakly_referenced;
+    sweepPhase(weakly_referenced);
+
+    for (auto o : weakly_referenced) {
+        PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(o);
+        while (PyWeakReference* head = *list) {
+            if (head->wr_object != Py_None) {
+                _PyWeakref_ClearRef(head);
+                if (head->wr_callback) {
+
+                    runtimeCall(head->wr_callback, ArgPassSpec(1), reinterpret_cast<Box*>(head), NULL, NULL, NULL,
+                                NULL);
+                    head->wr_callback = NULL;
+                }
+            }
+        }
+    }
+
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
 

@@ -426,10 +426,6 @@ extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, Py
     }
 }
 
-extern "C" void PyObject_ClearWeakRefs(PyObject* object) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PyObject_GetBuffer(PyObject* obj, Py_buffer* view, int flags) noexcept {
     if (!PyObject_CheckBuffer(obj)) {
         printf("%s\n", obj->cls->tp_name);

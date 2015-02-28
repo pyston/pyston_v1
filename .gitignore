@@ -54,3 +54,5 @@ compile.log
 *.swo
 
 *.out
+
+*~

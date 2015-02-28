@@ -906,6 +906,12 @@ Box* pydumpAddr(Box* p) {
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
+    BoxedHeapClass* ellipsis_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, "ellipsis");
+    Box* Ellipsis = new (ellipsis_cls) Box();
+    assert(Ellipsis->cls);
+    gc::registerPermanentRoot(Ellipsis);
+
+    builtins_module->giveAttr("Ellipsis", Ellipsis);
     builtins_module->giveAttr("None", None);
 
     builtins_module->giveAttr("__debug__", False);

@@ -25,9 +25,9 @@
 #endif
 
 namespace pyston {
+
 namespace gc {
 
-extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
 
@@ -95,7 +95,6 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     return r;
 }
 
-extern "C" inline void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
 extern "C" inline void* gc_realloc(void* ptr, size_t bytes) {
     // Normal realloc() supports receiving a NULL pointer, but we need to know what the GCKind is:
     assert(ptr);
@@ -120,7 +119,6 @@ extern "C" inline void* gc_realloc(void* ptr, size_t bytes) {
 #endif
 }
 
-extern "C" inline void gc_free(void* ptr) __attribute__((visibility("default")));
 extern "C" inline void gc_free(void* ptr) {
     assert(ptr);
 #ifndef NVALGRIND

@@ -457,7 +457,7 @@ public:
 static_assert(offsetof(Box, cls) == offsetof(struct _object, ob_type), "");
 
 // Our default for tp_alloc:
-PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
+extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
 
 #define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \

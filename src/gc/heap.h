@@ -17,12 +17,61 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <list>
 #include <sys/mman.h>
 
 #include "core/common.h"
 #include "core/threading.h"
 
 namespace pyston {
+
+namespace gc {
+extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) __attribute__((visibility("default")));
+extern "C" inline void* gc_realloc(void* ptr, size_t bytes) __attribute__((visibility("default")));
+extern "C" inline void gc_free(void* ptr) __attribute__((visibility("default")));
+}
+
+template <class T> class StlCompatAllocator {
+public:
+    typedef size_t size_type;
+    typedef T value_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef std::ptrdiff_t difference_type;
+
+    StlCompatAllocator() {}
+    template <class U> StlCompatAllocator(const StlCompatAllocator<U>& other) {}
+
+    template <class U> struct rebind { typedef StlCompatAllocator<U> other; };
+
+    pointer allocate(size_t n) {
+        size_t to_allocate = n * sizeof(value_type);
+        // assert(to_allocate < (1<<16));
+
+        return reinterpret_cast<pointer>(gc_alloc(to_allocate, gc::GCKind::CONSERVATIVE));
+    }
+
+    void deallocate(pointer p, size_t n) { gc::gc_free(p); }
+
+    // I would never be able to come up with this on my own:
+    // http://en.cppreference.com/w/cpp/memory/allocator/construct
+    template <class U, class... Args> void construct(U* p, Args&&... args) {
+        ::new ((void*)p) U(std::forward<Args>(args)...);
+    }
+
+    template <class U> void destroy(U* p) { p->~U(); }
+
+    bool operator==(const StlCompatAllocator<T>& rhs) const { return true; }
+    bool operator!=(const StlCompatAllocator<T>& rhs) const { return false; }
+};
+
+template <typename K, typename V, typename Hash = std::hash<K>, typename KeyEqual = std::equal_to<K>>
+class conservative_unordered_map
+    : public std::unordered_map<K, V, Hash, KeyEqual, StlCompatAllocator<std::pair<const K, V>>> {};
+
+
 namespace gc {
 
 // Notify the gc of n bytes as being under GC management.
@@ -146,7 +195,7 @@ public:
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked();
+    void freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -277,7 +326,7 @@ private:
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
-    Block** _freeChain(Block** head);
+    Block** _freeChain(Block** head, std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced);
     void _getChainStatistics(HeapStatistics* stats, Block** head);
 
     GCAllocation* __attribute__((__malloc__)) _alloc(size_t bytes, int bucket_idx);
@@ -350,7 +399,7 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked();
+    void freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced);
 
     void getStatistics(HeapStatistics* stats);
 };
@@ -368,7 +417,7 @@ public:
     void free(GCAllocation* alloc);
 
     GCAllocation* allocationFrom(void* ptr);
-    void freeUnmarked();
+    void freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced);
 
     void getStatistics(HeapStatistics* stats);
 
@@ -475,10 +524,10 @@ public:
         return NULL;
     }
     // not thread safe:
-    void freeUnmarked() {
-        small_arena.freeUnmarked();
-        large_arena.freeUnmarked();
-        huge_arena.freeUnmarked();
+    void freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
+        small_arena.freeUnmarked(weakly_referenced);
+        large_arena.freeUnmarked(weakly_referenced);
+        huge_arena.freeUnmarked(weakly_referenced);
     }
 
     void dumpHeapStatistics();
