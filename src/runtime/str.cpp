@@ -2093,9 +2093,6 @@ BoxedString* createUninitializedString(ssize_t n) {
 }
 
 char* getWriteableStringContents(BoxedString* s) {
-    if (s->s.size() == 0)
-        return NULL;
-
     // After doing some reading, I think this is ok:
     // http://stackoverflow.com/questions/14290795/why-is-modifying-a-string-through-a-retrieved-pointer-to-its-data-not-allowed
     // In C++11, std::string is required to store its data contiguously.
