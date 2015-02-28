@@ -766,11 +766,29 @@ $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
 $(call link,_release,$(OPT_OBJS),$(LDFLAGS_RELEASE),$(LLVM_RELEASE_DEPS))
 
 else
+CMAKE_DIR_DBG := $(HOME)/pyston-build-dbg
+CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
+CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
+CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
+.PHONY: cmake_check
+cmake_check:
+	@clang --version >/dev/null || (echo "clang not available"; false)
+	@cmake --version >/dev/null || (echo "cmake not available"; false)
+	@ninja --version >/dev/null || (echo "ninja not available"; false)
+$(CMAKE_SETUP_DBG):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_DBG)
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+$(CMAKE_SETUP_RELEASE):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_RELEASE)
+	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
+
 .PHONY: pyston_dbg pyston_release
-pyston_dbg:
+pyston_dbg: $(CMAKE_SETUP_DBG)
 	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
-pyston_release:
+pyston_release: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
