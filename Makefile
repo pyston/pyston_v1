@@ -782,7 +782,7 @@ $(CMAKE_SETUP_DBG):
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_RELEASE)
-	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
+	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
