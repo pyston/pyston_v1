@@ -148,5 +148,13 @@ static const char* objectNewParameterTypeErrorMsg() {
 }
 
 bool exceptionMatches(const ExcInfo& e, BoxedClass* cls);
+
+inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int num_args) {
+    Box* arg1 = num_args >= 1 ? args[0] : nullptr;
+    Box* arg2 = num_args >= 2 ? args[1] : nullptr;
+    Box* arg3 = num_args >= 3 ? args[2] : nullptr;
+    Box** argtuple = num_args >= 4 ? &args[3] : nullptr;
+    return std::make_tuple(arg1, arg2, arg3, argtuple);
+}
 }
 #endif
