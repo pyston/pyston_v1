@@ -40,6 +40,8 @@ struct Register {
     bool operator!=(const Register& rhs) const { return !(*this == rhs); }
 
     void dump() const;
+
+    static constexpr int numRegs() { return 16; }
 };
 
 const Register RAX(0);
@@ -81,6 +83,8 @@ struct XMMRegister {
     bool operator!=(const XMMRegister& rhs) const { return !(*this == rhs); }
 
     void dump() const { printf("XMM%d\n", regnum); }
+
+    static constexpr int numRegs() { return 16; }
 };
 
 const XMMRegister XMM0(0);

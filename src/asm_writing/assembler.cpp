@@ -780,6 +780,38 @@ void Assembler::cmp(Indirect mem, Register reg) {
     }
 }
 
+void Assembler::lea(Indirect mem, Register reg) {
+    int mem_idx = mem.base.regnum;
+    int reg_idx = reg.regnum;
+
+    int rex = REX_W;
+    if (mem_idx >= 8) {
+        rex |= REX_B;
+        mem_idx -= 8;
+    }
+    if (reg_idx >= 8) {
+        rex |= REX_R;
+        reg_idx -= 8;
+    }
+
+    assert(mem_idx >= 0 && mem_idx < 8);
+    assert(reg_idx >= 0 && reg_idx < 8);
+
+    emitRex(rex);
+    emitByte(0x8D);
+
+    if (mem.offset == 0) {
+        emitModRM(0b00, reg_idx, mem_idx);
+    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
+        emitModRM(0b01, reg_idx, mem_idx);
+        emitByte(mem.offset);
+    } else {
+        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        emitModRM(0b10, reg_idx, mem_idx);
+        emitInt(mem.offset, 4);
+    }
+}
+
 void Assembler::test(Register reg1, Register reg2) {
     int reg1_idx = reg1.regnum;
     int reg2_idx = reg2.regnum;
