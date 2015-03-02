@@ -290,8 +290,14 @@ extern "C" PyObject* PyString_FromFormat(const char* format, ...) noexcept {
     return ret;
 }
 
-extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
+extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
+
+    if (_rhs->cls == unicode_cls) {
+        Box* rtn = PyUnicode_Concat(lhs, _rhs);
+        checkAndThrowCAPIException();
+        return rtn;
+    }
 
     if (_rhs->cls != str_cls) {
         raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));

@@ -27,6 +27,8 @@ print u'a' in c.__dict__
 print u'' == ''
 print '' == u''
 print hash(u'') == hash('')
+print "Hello " + u" World"
+print u"Hello " + " World"
 
 try:
     hasattr(object(), u"\u0180")
