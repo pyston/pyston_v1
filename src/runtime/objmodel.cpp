@@ -175,13 +175,13 @@ extern "C" bool softspace(Box* b, bool newval) {
     }
 
     bool r;
-    Box* gotten = b->getattr("softspace");
+    Box* gotten = getattrInternal(b, "softspace", NULL);
     if (!gotten) {
         r = 0;
     } else {
         r = nonzero(gotten);
     }
-    b->setattr("softspace", boxInt(newval), NULL);
+    setattrInternal(b, "softspace", boxInt(newval), NULL);
     return r;
 }
 
