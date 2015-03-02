@@ -495,9 +495,12 @@ public:
     } type;
 
     int offset;
+    bool readonly;
 
-    BoxedMemberDescriptor(MemberType type, int offset) : type(type), offset(offset) {}
-    BoxedMemberDescriptor(PyMemberDef* member) : type((MemberType)member->type), offset(member->offset) {}
+    BoxedMemberDescriptor(MemberType type, int offset, bool readonly = true)
+        : type(type), offset(offset), readonly(readonly) {}
+    BoxedMemberDescriptor(PyMemberDef* member)
+        : type((MemberType)member->type), offset(member->offset), readonly(member->flags & READONLY) {}
 
     DEFAULT_CLASS_SIMPLE(member_cls);
 };

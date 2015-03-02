@@ -175,13 +175,13 @@ extern "C" bool softspace(Box* b, bool newval) {
     }
 
     bool r;
-    Box* gotten = b->getattr("softspace");
+    Box* gotten = getattrInternal(b, "softspace", NULL);
     if (!gotten) {
         r = 0;
     } else {
         r = nonzero(gotten);
     }
-    b->setattr("softspace", boxInt(newval), NULL);
+    setattrInternal(b, "softspace", boxInt(newval), NULL);
     return r;
 }
 
@@ -853,9 +853,12 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
         if (rewrite_args) {
             // TODO we could use offset as the index in the assembly lookup rather than hardcoding
             // the value in the assembly and guarding on it be the same.
-            r_descr->addAttrGuard(offsetof(BoxedMemberDescriptor, offset), member_desc->offset);
 
             // This could be optimized if addAttrGuard supported things < 64 bits
+            static_assert(sizeof(member_desc->offset) == 4, "assumed by assembly instruction below");
+            r_descr->getAttr(offsetof(BoxedMemberDescriptor, offset), Location::any(), assembler::MovType::ZLQ)
+                ->addGuard(member_desc->offset);
+
             static_assert(sizeof(member_desc->type) == 4, "assumed by assembly instruction below");
             r_descr->getAttr(offsetof(BoxedMemberDescriptor, type), Location::any(), assembler::MovType::ZLQ)
                 ->addGuard(member_desc->type);
@@ -940,7 +943,6 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                 CASE_INTEGER_TYPE(LONGLONG, long long, PyLong_FromLongLong, long long)
                 CASE_INTEGER_TYPE(ULONGLONG, unsigned long long, PyLong_FromUnsignedLongLong, unsigned long long)
                 CASE_INTEGER_TYPE(PYSSIZET, Py_ssize_t, boxInt, Py_ssize_t)
-
             case BoxedMemberDescriptor::STRING: {
                 if (rewrite_args) {
                     RewriterVar* r_interm = rewrite_args->obj->getAttr(member_desc->offset, rewrite_args->destination);
@@ -1566,6 +1568,17 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
         getset_descr->set(obj, val, getset_descr->closure);
 
         return true;
+    } else if (descr->cls == member_cls) {
+        BoxedMemberDescriptor* member_desc = static_cast<BoxedMemberDescriptor*>(descr);
+        PyMemberDef member_def;
+        memset(&member_def, 0, sizeof(member_def));
+        member_def.offset = member_desc->offset;
+        member_def.type = member_desc->type;
+        if (member_desc->readonly)
+            member_def.flags |= READONLY;
+        PyMember_SetOne((char*)obj, &member_def, val);
+        checkAndThrowCAPIException();
+        return true;
     }
 
     return false;
@@ -1636,6 +1649,8 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         // We don't need to to the invalidation stuff in this case.
         return;
     } else {
+        if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs())
+            raiseAttributeError(obj, attr.c_str());
         obj->setattr(attr, val, rewrite_args);
     }
 
@@ -1669,10 +1684,6 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
 
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
-
-    if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs()) {
-        raiseAttributeError(obj, attr);
-    }
 
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);

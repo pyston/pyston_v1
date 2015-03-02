@@ -67,6 +67,7 @@ extern "C" void init_socket();
 extern "C" void _PyUnicode_Init();
 extern "C" void initunicodedata();
 extern "C" void init_weakref();
+extern "C" void initcStringIO();
 
 namespace pyston {
 
@@ -1379,8 +1380,8 @@ void setupRuntime() {
 
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
-    function_cls->giveAttr("__module__",
-                           new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, modname)));
+    function_cls->giveAttr("__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
+                                                                   offsetof(BoxedFunction, modname), false));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
@@ -1473,6 +1474,7 @@ void setupRuntime() {
     init_socket();
     initunicodedata();
     init_weakref();
+    initcStringIO();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
