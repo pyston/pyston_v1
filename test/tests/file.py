@@ -50,5 +50,6 @@ except IOError as e:
 
 f = open("/dev/null", "w")
 print f.write("hello world")
+f.softspace = 0
 print f.flush()
 print f.close()

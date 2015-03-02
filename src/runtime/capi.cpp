@@ -1471,6 +1471,10 @@ extern "C" PyObject* PyBuffer_FromMemory(void* ptr, Py_ssize_t size) noexcept {
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyEval_GetRestricted(void) noexcept {
+    return 0; // We don't support restricted mode
+}
+
 BoxedModule* importTestExtension(const std::string& name) {
     std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
     const char* pathname = pathname_name.c_str();

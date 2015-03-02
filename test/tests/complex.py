@@ -17,3 +17,8 @@ print (0.5j + 1.5).real
 print (0.5j + 1.5).imag
 
 print complex(1, 1.0) / 2.0
+
+try:
+    complex(1, 1.0).real = 1
+except TypeError, e:
+    print e

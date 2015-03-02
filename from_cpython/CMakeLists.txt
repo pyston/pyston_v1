@@ -21,7 +21,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules errnomodule.c shamodule.c sha256module.
 file(GLOB_RECURSE STDOBJECT_SRCS Objects structseq.c capsule.c stringobject.c exceptions.c unicodeobject.c unicodectype.c bytearrayobject.c bytes_methods.c weakrefobject.c)
 
 # compile specified files in from_cpython/Python
-file(GLOB_RECURSE STDPYTHON_SRCS Python getargs.c pyctype.c formatter_string.c pystrtod.c dtoa.c formatter_unicode.c)
+file(GLOB_RECURSE STDPYTHON_SRCS Python getargs.c pyctype.c formatter_string.c pystrtod.c dtoa.c formatter_unicode.c structmember.c)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautological-compare -Wno-type-limits")
 add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS})
