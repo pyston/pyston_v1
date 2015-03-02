@@ -47,6 +47,20 @@
 
 using namespace pyston;
 
+// returns true iff we got a request to exit, i.e. SystemExit, placing the
+// return code in `*retcode`. does not touch `*retcode* if it returns false.
+static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
+    if (e.matches(SystemExit)) {
+        Box* code = e.value->getattr("code");
+        *retcode = 1;
+        if (code && isSubclass(code->cls, pyston::int_cls))
+            *retcode = static_cast<BoxedInt*>(code)->n;
+        return true;
+    }
+    e.printExcAndTraceback();
+    return false;
+}
+
 int main(int argc, char** argv) {
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
@@ -54,11 +68,10 @@ int main(int argc, char** argv) {
     llvm::llvm_shutdown_obj Y;
 
     int code;
-    bool caching = true;
     bool force_repl = false;
-    bool repl = true;
     bool stats = false;
-    while ((code = getopt(argc, argv, "+OqcdIibpjtrsvnx")) != -1) {
+    const char* command = NULL;
+    while ((code = getopt(argc, argv, "+OqdIibpjtrsvnxc:")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -67,8 +80,6 @@ int main(int argc, char** argv) {
             GLOBAL_VERBOSITY = 0;
         else if (code == 'v')
             GLOBAL_VERBOSITY++;
-        // else if (code == 'c') // now always enabled
-        // caching = true;
         else if (code == 'd')
             SHOW_DISASM = true;
         else if (code == 'I')
@@ -89,7 +100,11 @@ int main(int argc, char** argv) {
             USE_REGALLOC_BASIC = false;
         } else if (code == 'x') {
             ENABLE_PYPA_PARSER = true;
-        } else if (code == '?')
+        } else if (code == 'c') {
+            command = optarg;
+            // no more option parsing; the rest of our arguments go into sys.argv.
+            break;
+        } else
             abort();
     }
 
@@ -103,18 +118,23 @@ int main(int argc, char** argv) {
         initCodegen();
     }
 
-    if (optind != argc) {
-        fn = argv[optind];
-        if (strcmp("-", fn) == 0)
-            fn = NULL;
-        else if (!force_repl)
-            repl = false;
-
-        for (int i = optind; i < argc; i++) {
-            addToSysArgv(argv[i]);
-        }
-    } else {
+    // Arguments left over after option parsing are of the form:
+    //     [ script | - ] [ arguments... ]
+    // unless we've been already parsed a `-c command` option, in which case only:
+    //     [ arguments...]
+    // are parsed.
+    if (command)
+        addToSysArgv("-c");
+    else if (optind != argc) {
+        addToSysArgv(argv[optind]);
+        if (strcmp("-", argv[optind]) != 0)
+            fn = argv[optind];
+        ++optind;
+    } else
         addToSysArgv("");
+
+    for (int i = optind; i < argc; i++) {
+        addToSysArgv(argv[i]);
     }
 
     std::string self_path = llvm::sys::fs::getMainExecutable(argv[0], (void*)main);
@@ -136,6 +156,20 @@ int main(int argc, char** argv) {
 
     _t.split("to run");
     BoxedModule* main_module = NULL;
+
+    // if the user invoked `pyston -c command`
+    if (command != NULL) {
+        main_module = createModule("__main__", "<string>");
+        AST_Module* m = parse_string(command);
+        try {
+            compileAndRunModule(m, main_module);
+        } catch (ExcInfo e) {
+            int retcode = 1;
+            (void)handle_toplevel_exn(e, &retcode);
+            return retcode;
+        }
+    }
+
     if (fn != NULL) {
         llvm::SmallString<128> path;
 
@@ -153,20 +187,13 @@ int main(int argc, char** argv) {
         try {
             main_module = createAndRunModule("__main__", fn);
         } catch (ExcInfo e) {
-            if (e.matches(SystemExit)) {
-                Box* code = e.value->getattr("code");
-                int rtncode = 1;
-                if (code && isSubclass(code->cls, pyston::int_cls))
-                    rtncode = static_cast<BoxedInt*>(code)->n;
-                return rtncode;
-            } else {
-                e.printExcAndTraceback();
-                return 1;
-            }
+            int retcode = 1;
+            (void)handle_toplevel_exn(e, &retcode);
+            return retcode;
         }
     }
 
-    if (repl) {
+    if (force_repl || !(command || fn)) {
         printf("Pyston v%d.%d (rev " STRINGIFY(GITREV) ")", PYSTON_VERSION_MAJOR, PYSTON_VERSION_MINOR);
         printf(", targeting Python %d.%d.%d\n", PYTHON_VERSION_MAJOR, PYTHON_VERSION_MINOR, PYTHON_VERSION_MICRO);
 
@@ -176,49 +203,41 @@ int main(int argc, char** argv) {
             main_module->fn = "<stdin>";
         }
 
-        while (repl) {
+        for (;;) {
             char* line = readline(">> ");
+            if (!line)
+                break;
 
-            if (!line) {
-                repl = false;
-            } else {
-                add_history(line);
+            add_history(line);
 
-                AST_Module* m = parse_string(line);
+            AST_Module* m = parse_string(line);
 
-                Timer _t("repl");
+            Timer _t("repl");
 
-                if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                    AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
-                    AST_Call* c = new AST_Call();
-                    AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
-                    c->func = r;
-                    c->starargs = NULL;
-                    c->kwargs = NULL;
-                    c->args.push_back(e->value);
-                    c->lineno = 0;
+            if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
+                AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
+                AST_Call* c = new AST_Call();
+                AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
+                c->func = r;
+                c->starargs = NULL;
+                c->kwargs = NULL;
+                c->args.push_back(e->value);
+                c->lineno = 0;
 
-                    AST_Print* p = new AST_Print();
-                    p->dest = NULL;
-                    p->nl = true;
-                    p->values.push_back(c);
-                    p->lineno = 0;
-                    m->body[0] = p;
-                }
+                AST_Print* p = new AST_Print();
+                p->dest = NULL;
+                p->nl = true;
+                p->values.push_back(c);
+                p->lineno = 0;
+                m->body[0] = p;
+            }
 
-                try {
-                    compileAndRunModule(m, main_module);
-                } catch (ExcInfo e) {
-                    if (e.matches(SystemExit)) {
-                        Box* code = e.value->getattr("code");
-                        int rtncode = 1;
-                        if (code && isSubclass(code->cls, pyston::int_cls))
-                            rtncode = static_cast<BoxedInt*>(code)->n;
-                        return rtncode;
-                    } else {
-                        e.printExcAndTraceback();
-                    }
-                }
+            try {
+                compileAndRunModule(m, main_module);
+            } catch (ExcInfo e) {
+                int retcode = 0xdeadbeef; // should never be seen
+                if (handle_toplevel_exn(e, &retcode))
+                    return retcode;
             }
         }
     }
