@@ -54,7 +54,6 @@ int main(int argc, char** argv) {
     llvm::llvm_shutdown_obj Y;
 
     int code;
-    bool caching = true;
     bool force_repl = false;
     bool repl = true;
     bool stats = false;
@@ -67,8 +66,6 @@ int main(int argc, char** argv) {
             GLOBAL_VERBOSITY = 0;
         else if (code == 'v')
             GLOBAL_VERBOSITY++;
-        // else if (code == 'c') // now always enabled
-        // caching = true;
         else if (code == 'd')
             SHOW_DISASM = true;
         else if (code == 'I')

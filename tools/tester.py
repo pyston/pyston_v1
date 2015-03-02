@@ -123,7 +123,7 @@ def run_test(fn, check_stats, run_memcheck):
     r = fn.rjust(FN_JUST_SIZE)
 
     statchecks = []
-    jit_args = ["-crq"] + EXTRA_JIT_ARGS
+    jit_args = ["-rq"] + EXTRA_JIT_ARGS
     collect_stats = True
     expected = "success"
     allow_warnings = []
