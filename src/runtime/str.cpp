@@ -290,8 +290,14 @@ extern "C" PyObject* PyString_FromFormat(const char* format, ...) noexcept {
     return ret;
 }
 
-extern "C" BoxedString* strAdd(BoxedString* lhs, Box* _rhs) {
+extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(lhs->cls == str_cls);
+
+    if (_rhs->cls == unicode_cls) {
+        Box* rtn = PyUnicode_Concat(lhs, _rhs);
+        checkAndThrowCAPIException();
+        return rtn;
+    }
 
     if (_rhs->cls != str_cls) {
         raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));
@@ -2093,9 +2099,6 @@ BoxedString* createUninitializedString(ssize_t n) {
 }
 
 char* getWriteableStringContents(BoxedString* s) {
-    if (s->s.size() == 0)
-        return NULL;
-
     // After doing some reading, I think this is ok:
     // http://stackoverflow.com/questions/14290795/why-is-modifying-a-string-through-a-retrieved-pointer-to-its-data-not-allowed
     // In C++11, std::string is required to store its data contiguously.

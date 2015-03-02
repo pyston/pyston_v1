@@ -1247,7 +1247,7 @@ PyObject *PyUnicode_Decode(const char *s,
         encoding = PyUnicode_GetDefaultEncoding();
 
     /* Shortcuts for common default encodings */
-    if (strcmp(encoding, "utf-8") == 0)
+    if (strcmp(encoding, "utf-8") == 0 || strcmp(encoding, "UTF-8") == 0) // Pyston change: added "UTF-8"
         return PyUnicode_DecodeUTF8(s, size, errors);
     else if (strcmp(encoding, "latin-1") == 0)
         return PyUnicode_DecodeLatin1(s, size, errors);
@@ -1359,7 +1359,7 @@ PyObject *PyUnicode_AsEncodedString(PyObject *unicode,
 
     /* Shortcuts for common default encodings */
     if (errors == NULL) {
-        if (strcmp(encoding, "utf-8") == 0)
+        if (strcmp(encoding, "utf-8") == 0 || strcmp(encoding, "UTF-8") == 0) // Pyston change: added "UTF-8"
             return PyUnicode_AsUTF8String(unicode);
         else if (strcmp(encoding, "latin-1") == 0)
             return PyUnicode_AsLatin1String(unicode);
