@@ -4,7 +4,10 @@ def f():
     print True # builtin, redefined
     print False # builtin, not redefined
     print z # local
-    print y # non-builtin, not defined
+    try:
+        print y # non-builtin, not defined
+    except NameError, e:
+        print e
 
 x = 2
 z = 2

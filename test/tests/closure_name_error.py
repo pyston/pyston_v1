@@ -6,5 +6,7 @@ def bad_addr3(_x):
     def g(y3):
         return x3 + y3
     return g
-print bad_addr3(1)(2)
-
+try:
+    print bad_addr3(1)(2)
+except NameError, e:
+    print e

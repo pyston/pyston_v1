@@ -4,4 +4,7 @@ def f():
         # the del marks 'x' as a name written to in this scope
         del x
     print x
-f()
+try:
+    f()
+except NameError, e:
+    print e

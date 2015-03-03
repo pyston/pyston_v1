@@ -1,3 +1,5 @@
+# should_error
+
 "docstring"
 
 "not a docstring"

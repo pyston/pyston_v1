@@ -149,6 +149,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
         return module;
     }
 
+    // TODO: these are a crude hack to help our tests, find a better way
     if (name == "basic_test")
         return importTestExtension("basic_test");
     if (name == "descr_test")

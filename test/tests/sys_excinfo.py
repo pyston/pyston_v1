@@ -1,3 +1,4 @@
+# should_error
 # Different ways of nesting exceptions
 
 import sys

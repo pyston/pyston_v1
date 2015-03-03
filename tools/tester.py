@@ -126,6 +126,7 @@ def run_test(fn, check_stats, run_memcheck):
     jit_args = ["-rq"] + EXTRA_JIT_ARGS
     collect_stats = True
     expected = "success"
+    should_error = False
     allow_warnings = []
     for l in open(fn):
         l = l.strip()
@@ -141,6 +142,8 @@ def run_test(fn, check_stats, run_memcheck):
             jit_args += l
         elif l.startswith("# expected:"):
             expected = l[len("# expected:"):].strip()
+        elif l.startswith("# should_error"):
+            should_error = True
         elif l.startswith("# fail-if:"):
             condition = l.split(':', 1)[1].strip()
             if eval(condition):
@@ -216,13 +219,29 @@ def run_test(fn, check_stats, run_memcheck):
         if expected == "fail":
             r += "    Expected failure (got code %d, should be %d)" % (code, expected_code)
             return r
+        elif KEEP_GOING:
+            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
+            failed.append(fn)
+            return r
         else:
-            if KEEP_GOING:
-                r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
-                failed.append(fn)
-                return r
-            else:
-                raise Exception("%s\n%s\n%s" % (msg, err, stderr))
+            raise Exception("%s\n%s\n%s" % (msg, err, stderr))
+
+    elif should_error == (code == 0):
+        color = 31              # red
+        if code == 0:
+            msg = "Exited successfully; remove '# should_error' if this is expected"
+        else:
+            msg = "Exited with code %d; add '# should_error' if this is expected" % code
+
+        if KEEP_GOING:
+            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
+            failed.append(fn)
+            return r
+        else:
+            # show last line of stderr so we have some idea went wrong
+            print "Last line of stderr: " + last_stderr_line
+            raise Exception(msg)
+
     elif out != expected_out:
         if expected == "fail":
             r += "    Expected failure (bad output)"
