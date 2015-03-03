@@ -49,6 +49,19 @@ extern "C" PyObject** PyList_Items(PyObject* op) noexcept {
     return &static_cast<BoxedList*>(op)->elts->elts[0];
 }
 
+extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
+    PyObject* w;
+    PyObject** p, **q;
+    Py_ssize_t n;
+    if (v == NULL || !PyList_Check(v)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    auto l = static_cast<BoxedList*>(v);
+    return new BoxedTuple(BoxedTuple::GCVector(l->elts->elts, l->elts->elts + l->size));
+}
+
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 

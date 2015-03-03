@@ -5,6 +5,9 @@ class B(object):
         o.arg1 = arg1
         return o
 
+    def f(self):
+        print "B.f()"
+
 class C(B):
     def __new__(cls, arg1, arg2):
         print "C.__new__", arg2
@@ -13,9 +16,14 @@ class C(B):
         print super(C, cls), super(C, o)
         return o
 
+    def f(self):
+        print "C.f()"
+        super(C, self).f()
+
 c = C(1, 2)
 print c.arg1
 print c.arg2
+c.f()
 
 try:
     super(1)

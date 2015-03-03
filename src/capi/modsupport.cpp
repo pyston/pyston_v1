@@ -82,7 +82,7 @@ static int _ustrlen(Py_UNICODE* u) {
 #endif
 
 static PyObject* do_mktuple(const char**, va_list*, int, int, int) noexcept;
-// static PyObject *do_mklist(const char**, va_list *, int, int, int) noexcept;
+static PyObject* do_mklist(const char**, va_list*, int, int, int) noexcept;
 // static PyObject *do_mkdict(const char**, va_list *, int, int, int) noexcept;
 static PyObject* do_mkvalue(const char**, va_list*, int) noexcept;
 
@@ -92,10 +92,10 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case '(':
                 return do_mktuple(p_format, p_va, ')', countformat(*p_format, ')'), flags);
 
-#if 0
             case '[':
                 return do_mklist(p_format, p_va, ']', countformat(*p_format, ']'), flags);
 
+#if 0
             case '{':
                 return do_mkdict(p_format, p_va, '}', countformat(*p_format, '}'), flags);
 #endif
@@ -238,6 +238,43 @@ static PyObject* do_mktuple(const char** p_format, va_list* p_va, int endchar, i
         ++*p_format;
     return v;
 }
+
+static PyObject* do_mklist(const char** p_format, va_list* p_va, int endchar, int n, int flags) noexcept {
+    PyObject* v;
+    int i;
+    int itemfailed = 0;
+    if (n < 0)
+        return NULL;
+    v = PyList_New(n);
+    if (v == NULL)
+        return NULL;
+    /* Note that we can't bail immediately on error as this will leak
+       refcounts on any 'N' arguments. */
+    for (i = 0; i < n; i++) {
+        PyObject* w = do_mkvalue(p_format, p_va, flags);
+        if (w == NULL) {
+            itemfailed = 1;
+            Py_INCREF(Py_None);
+            w = Py_None;
+        }
+        PyList_SET_ITEM(v, i, w);
+    }
+
+    if (itemfailed) {
+        /* do_mkvalue() should have already set an error */
+        Py_DECREF(v);
+        return NULL;
+    }
+    if (**p_format != endchar) {
+        Py_DECREF(v);
+        PyErr_SetString(PyExc_SystemError, "Unmatched paren in format");
+        return NULL;
+    }
+    if (endchar)
+        ++*p_format;
+    return v;
+}
+
 
 static PyObject* va_build_value(const char* fmt, va_list va, int flags) noexcept {
     int n = countformat(fmt, '\0');

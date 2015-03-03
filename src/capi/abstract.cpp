@@ -293,15 +293,16 @@ extern "C" PyObject* PyObject_CallFunctionObjArgs(PyObject* callable, ...) noexc
 }
 
 extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept {
-    RELEASE_ASSERT(args, ""); // actually it looks like this is allowed to be NULL
-    RELEASE_ASSERT(args->cls == tuple_cls, "");
-
     // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
     // won't end up doing a GIL check?
     // threading::GLDemoteRegion _gil_demote;
 
     try {
-        Box* r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
+        Box* r;
+        if (args)
+            r = runtimeCall(obj, ArgPassSpec(0, 0, true, false), args, NULL, NULL, NULL, NULL);
+        else
+            r = runtimeCall(obj, ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
         return r;
     } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
