@@ -1757,6 +1757,14 @@ Box* strSwapcase(BoxedString* self) {
 
 Box* strContains(BoxedString* self, Box* elt) {
     assert(self->cls == str_cls);
+
+    if (PyUnicode_Check(elt)) {
+        int r = PyUnicode_Contains(self, elt);
+        if (r < 0)
+            throwCAPIException();
+        return boxBool(r);
+    }
+
     if (elt->cls != str_cls)
         raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
 

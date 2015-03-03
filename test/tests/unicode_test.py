@@ -57,3 +57,11 @@ for i in xrange(100):
     # do some allocations:
     for j in xrange(100):
         [None] * j
+
+print u'' in ''
+print '' in u''
+print u'aoeu' in ''
+print u'\u0180' in 'hello world'
+print 'hello world' in u'\u0180'
+print u''.__contains__('')
+print ''.__contains__(u'')
