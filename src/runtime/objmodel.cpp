@@ -254,8 +254,6 @@ static void _checkUnpackingLength(i64 expected, i64 given) {
 }
 
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
-    assert(expected_size > 0);
-
     if (obj->cls == tuple_cls) {
         BoxedTuple* t = static_cast<BoxedTuple*>(obj);
         _checkUnpackingLength(expected_size, t->elts.size());
