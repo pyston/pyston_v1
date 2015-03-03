@@ -15,4 +15,7 @@ print C.b
 print C.a
 print o.c
 print o.b
-print o.a # this should error
+try:
+    print o.a
+except AttributeError, e:
+    print e

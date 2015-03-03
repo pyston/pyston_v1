@@ -5,4 +5,7 @@ def _escape():
     if code:
         return code
 
-_escape()
+try:
+    _escape()
+except NameError, e:
+    print e

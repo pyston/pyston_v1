@@ -1,3 +1,4 @@
+# should_error
 class C(object):
     pass
 

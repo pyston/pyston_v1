@@ -157,4 +157,7 @@ try:
 except SystemError, e:
     print e
 
-print c.foo()
+try:
+    print c.foo()
+except SystemError, e:
+    print e

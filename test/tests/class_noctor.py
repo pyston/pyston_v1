@@ -1,3 +1,4 @@
+# should_error
 # skip-if: sys.version_info < (2, 7, 4)
 # - Error message changed in 2.7.4
 
