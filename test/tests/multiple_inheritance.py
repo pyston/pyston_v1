@@ -1,6 +1,3 @@
-# expected: fail
-# - wip
-
 # Testing the basic multiple-inheritance rules and functionality:
 
 class C(object):
@@ -92,3 +89,6 @@ s = S()
 s.c()
 s.d()
 s.f()
+
+for cls in [object, tuple, list, type, int, bool]:
+    print cls.__mro__

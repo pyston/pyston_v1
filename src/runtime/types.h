@@ -213,9 +213,9 @@ public:
     BoxedString* ht_name;
     PyObject** ht_slots;
 
-    // This is the preferred way to construct new types:
+    // These functions are the preferred way to construct new types:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int instance_size, bool is_user_defined, BoxedString* name);
+                                  int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases);
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                   int instance_size, bool is_user_defined, const std::string& name);
 
@@ -227,6 +227,8 @@ private:
                    BoxedString* name);
 
     friend void setupRuntime();
+
+    DEFAULT_CLASS(type_cls);
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");

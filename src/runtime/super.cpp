@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "capi/types.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
@@ -66,15 +67,68 @@ Box* superGetattribute(Box* _s, Box* _attr) {
     }
 
     if (!skip) {
-        // We don't support multiple inheritance yet, so the lookup order is simple:
-        Box* r = typeLookup(s->type->tp_base, attr->s, NULL);
+        PyObject* mro, *res, *tmp, *dict;
+        PyTypeObject* starttype;
+        descrgetfunc f;
+        Py_ssize_t i, n;
 
-        if (r) {
-            return processDescriptor(r, (s->obj == s->obj_type ? None : s->obj), s->obj_type);
+        starttype = s->obj_type;
+        mro = starttype->tp_mro;
+
+        if (mro == NULL)
+            n = 0;
+        else {
+            assert(PyTuple_Check(mro));
+            n = PyTuple_GET_SIZE(mro);
+        }
+        for (i = 0; i < n; i++) {
+            if ((PyObject*)(s->type) == PyTuple_GET_ITEM(mro, i))
+                break;
+        }
+        i++;
+        res = NULL;
+        for (; i < n; i++) {
+            tmp = PyTuple_GET_ITEM(mro, i);
+
+// Pyston change:
+#if 0
+            if (PyType_Check(tmp))
+                dict = ((PyTypeObject *)tmp)->tp_dict;
+            else if (PyClass_Check(tmp))
+                dict = ((PyClassObject *)tmp)->cl_dict;
+            else
+                continue;
+            res = PyDict_GetItem(dict, name);
+#endif
+            res = tmp->getattr(attr->s);
+
+            if (res != NULL) {
+// Pyston change:
+#if 0
+                Py_INCREF(res);
+                f = Py_TYPE(res)->tp_descr_get;
+                if (f != NULL) {
+                    tmp = f(res,
+                        /* Only pass 'obj' param if
+                           this is instance-mode sper
+                           (See SF ID #743627)
+                        */
+                        (s->obj == (PyObject *)
+                                    s->obj_type
+                            ? (PyObject *)NULL
+                            : s->obj),
+                        (PyObject *)starttype);
+                    Py_DECREF(res);
+                    res = tmp;
+                }
+#endif
+                return processDescriptor(res, (s->obj == s->obj_type ? None : s->obj), s->obj_type);
+            }
         }
     }
 
     Box* r = typeLookup(s->cls, attr->s, NULL);
+    // TODO implement this
     RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
     return processDescriptor(r, s, s->cls);
 }

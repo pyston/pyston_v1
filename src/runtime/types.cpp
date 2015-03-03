@@ -97,10 +97,16 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         assert(static_cast<BoxedClass*>(e)->is_pyston_class);
     }
 #endif
-    BoxedClass* b = cls;
-    while (b) {
-        ASSERT(b->is_pyston_class, "%s (%s)", cls->tp_name, b->tp_name);
-        b = b->tp_base;
+    if (!cls->tp_mro) {
+        assert(!list_cls);
+    } else {
+        assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
+        assert(cls->tp_mro->cls == tuple_cls);
+        for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+            assert(isSubclass(b->cls, type_cls));
+            ASSERT(static_cast<BoxedClass*>(b)->is_pyston_class, "%s (%s)", cls->tp_name,
+                   static_cast<BoxedClass*>(b)->tp_name);
+        }
     }
 #endif
 
@@ -903,6 +909,15 @@ Box* typeHash(BoxedClass* self) {
     return boxInt(reinterpret_cast<intptr_t>(self) >> 4);
 }
 
+Box* typeMro(BoxedClass* self) {
+    assert(isSubclass(self->cls, type_cls));
+
+    Box* r = mro_external(self);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
 Box* moduleRepr(BoxedModule* m) {
     assert(m->cls == module_cls);
 
@@ -1229,19 +1244,15 @@ void setupRuntime() {
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
 
-    object_cls->finishInitialization();
-    type_cls->finishInitialization();
-
-    none_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(Box), false, NULL);
+    none_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, NULL);
     None = new (none_cls) Box();
     assert(None->cls);
     gc::registerPermanentRoot(None);
 
     // You can't actually have an instance of basestring
-    basestring_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(Box), false, NULL);
+    basestring_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, NULL);
 
-    // TODO we leak all the string data!
-    str_cls = BoxedHeapClass::create(type_cls, basestring_cls, NULL, 0, sizeof(BoxedString), false, NULL);
+    str_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedString), false, NULL);
 
     // Hold off on assigning names until str_cls is ready
     object_cls->tp_name = "object";
@@ -1268,9 +1279,26 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
-    tuple_cls = BoxedHeapClass::create(type_cls, object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false, "tuple");
+    tuple_cls = new BoxedHeapClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false, boxStrConstant("tuple"));
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
+    list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+
+    // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
+    // than try to make the MRO construction code be safe against say, tuple_cls not having
+    // an mro (since the mro is stored as a tuple).
+    tuple_cls->tp_mro = new BoxedTuple({ tuple_cls, object_cls });
+    list_cls->tp_mro = new BoxedTuple({ list_cls, object_cls });
+    type_cls->tp_mro = new BoxedTuple({ type_cls, object_cls });
+
+    object_cls->finishInitialization();
+    type_cls->finishInitialization();
+    basestring_cls->finishInitialization();
+    str_cls->finishInitialization();
+    none_cls->finishInitialization();
+    tuple_cls->finishInitialization();
+    list_cls->finishInitialization();
+
 
 
     module_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule),
@@ -1357,6 +1385,9 @@ void setupRuntime() {
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
+    type_cls->giveAttr("__mro__",
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
+    type_cls->giveAttr("mro", new BoxedFunction(boxRTFunction((void*)typeMro, UNKNOWN, 1)));
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));

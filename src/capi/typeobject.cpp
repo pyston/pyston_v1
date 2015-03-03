@@ -1466,6 +1466,508 @@ static void add_operators(BoxedClass* cls) noexcept {
         add_tp_new_wrapper(cls);
 }
 
+static void type_mro_modified(PyTypeObject* type, PyObject* bases) {
+    /*
+       Check that all base classes or elements of the mro of type are
+       able to be cached.  This function is called after the base
+       classes or mro of the type are altered.
+
+       Unset HAVE_VERSION_TAG and VALID_VERSION_TAG if the type
+       inherits from an old-style class, either directly or if it
+       appears in the MRO of a new-style class.  No support either for
+       custom MROs that include types that are not officially super
+       types.
+
+       Called from mro_internal, which will subsequently be called on
+       each subclass when their mro is recursively updated.
+     */
+    Py_ssize_t i, n;
+    int clear = 0;
+
+    if (!PyType_HasFeature(type, Py_TPFLAGS_HAVE_VERSION_TAG))
+        return;
+
+    n = PyTuple_GET_SIZE(bases);
+    for (i = 0; i < n; i++) {
+        PyObject* b = PyTuple_GET_ITEM(bases, i);
+        PyTypeObject* cls;
+
+        if (!PyType_Check(b)) {
+            clear = 1;
+            break;
+        }
+
+        cls = (PyTypeObject*)b;
+
+        if (!PyType_HasFeature(cls, Py_TPFLAGS_HAVE_VERSION_TAG) || !PyType_IsSubtype(type, cls)) {
+            clear = 1;
+            break;
+        }
+    }
+
+    if (clear)
+        type->tp_flags &= ~(Py_TPFLAGS_HAVE_VERSION_TAG | Py_TPFLAGS_VALID_VERSION_TAG);
+}
+
+static int extra_ivars(PyTypeObject* type, PyTypeObject* base) noexcept {
+    size_t t_size = type->tp_basicsize;
+    size_t b_size = base->tp_basicsize;
+
+    assert(t_size >= b_size); /* Else type smaller than base! */
+    if (type->tp_itemsize || base->tp_itemsize) {
+        /* If itemsize is involved, stricter rules */
+        return t_size != b_size || type->tp_itemsize != base->tp_itemsize;
+    }
+    if (type->tp_weaklistoffset && base->tp_weaklistoffset == 0 && type->tp_weaklistoffset + sizeof(PyObject*) == t_size
+        && type->tp_flags & Py_TPFLAGS_HEAPTYPE)
+        t_size -= sizeof(PyObject*);
+    if (type->tp_dictoffset && base->tp_dictoffset == 0 && type->tp_dictoffset + sizeof(PyObject*) == t_size
+        && type->tp_flags & Py_TPFLAGS_HEAPTYPE)
+        t_size -= sizeof(PyObject*);
+
+    // Pyston change:
+    if (type->instancesHaveHCAttrs() && !base->instancesHaveHCAttrs())
+        t_size -= sizeof(HCAttrs);
+
+    return t_size != b_size;
+}
+
+static PyTypeObject* solid_base(PyTypeObject* type) noexcept {
+    PyTypeObject* base;
+
+    if (type->tp_base)
+        base = solid_base(type->tp_base);
+    else
+        base = object_cls;
+    if (extra_ivars(type, base))
+        return type;
+    else
+        return base;
+}
+
+PyTypeObject* best_base(PyObject* bases) noexcept {
+    Py_ssize_t i, n;
+    PyTypeObject* base, *winner, *candidate, *base_i;
+    PyObject* base_proto;
+
+    assert(PyTuple_Check(bases));
+    n = PyTuple_GET_SIZE(bases);
+    assert(n > 0);
+    base = NULL;
+    winner = NULL;
+    for (i = 0; i < n; i++) {
+        base_proto = PyTuple_GET_ITEM(bases, i);
+        if (PyClass_Check(base_proto))
+            continue;
+        if (!PyType_Check(base_proto)) {
+            PyErr_SetString(PyExc_TypeError, "bases must be types");
+            return NULL;
+        }
+        base_i = (PyTypeObject*)base_proto;
+
+        // Pyston change: we require things are already ready
+        if (base_i->tp_dict == NULL) {
+            assert(base_i->is_pyston_class);
+#if 0
+            if (PyType_Ready(base_i) < 0)
+                return NULL;
+#endif
+        }
+
+        candidate = solid_base(base_i);
+        if (winner == NULL) {
+            winner = candidate;
+            base = base_i;
+        } else if (PyType_IsSubtype(winner, candidate))
+            ;
+        else if (PyType_IsSubtype(candidate, winner)) {
+            winner = candidate;
+            base = base_i;
+        } else {
+            PyErr_SetString(PyExc_TypeError, "multiple bases have "
+                                             "instance lay-out conflict");
+            return NULL;
+        }
+    }
+    if (base == NULL)
+        PyErr_SetString(PyExc_TypeError, "a new-style class can't have only classic bases");
+    return base;
+}
+
+static int fill_classic_mro(PyObject* mro, PyObject* cls) {
+    PyObject* bases, *base;
+    Py_ssize_t i, n;
+
+    assert(PyList_Check(mro));
+    assert(PyClass_Check(cls));
+    i = PySequence_Contains(mro, cls);
+    if (i < 0)
+        return -1;
+    if (!i) {
+        if (PyList_Append(mro, cls) < 0)
+            return -1;
+    }
+    Py_FatalError("unimplemented");
+
+// We should add multiple inheritance for old-style classes
+#if 0
+    bases = ((PyClassObject*)cls)->cl_bases;
+    assert(bases && PyTuple_Check(bases));
+    n = PyTuple_GET_SIZE(bases);
+    for (i = 0; i < n; i++) {
+        base = PyTuple_GET_ITEM(bases, i);
+        if (fill_classic_mro(mro, base) < 0)
+            return -1;
+    }
+    return 0;
+#endif
+}
+
+static PyObject* classic_mro(PyObject* cls) {
+    PyObject* mro;
+
+    assert(PyClass_Check(cls));
+    mro = PyList_New(0);
+    if (mro != NULL) {
+        if (fill_classic_mro(mro, cls) == 0)
+            return mro;
+        Py_DECREF(mro);
+    }
+    return NULL;
+}
+
+/*
+    Method resolution order algorithm C3 described in
+    "A Monotonic Superclass Linearization for Dylan",
+    by Kim Barrett, Bob Cassel, Paul Haahr,
+    David A. Moon, Keith Playford, and P. Tucker Withington.
+    (OOPSLA 1996)
+
+    Some notes about the rules implied by C3:
+
+    No duplicate bases.
+    It isn't legal to repeat a class in a list of base classes.
+
+    The next three properties are the 3 constraints in "C3".
+
+    Local precendece order.
+    If A precedes B in C's MRO, then A will precede B in the MRO of all
+    subclasses of C.
+
+    Monotonicity.
+    The MRO of a class must be an extension without reordering of the
+    MRO of each of its superclasses.
+
+    Extended Precedence Graph (EPG).
+    Linearization is consistent if there is a path in the EPG from
+    each class to all its successors in the linearization.  See
+    the paper for definition of EPG.
+ */
+
+static int tail_contains(PyObject* list, int whence, PyObject* o) {
+    Py_ssize_t j, size;
+    size = PyList_GET_SIZE(list);
+
+    for (j = whence + 1; j < size; j++) {
+        if (PyList_GET_ITEM(list, j) == o)
+            return 1;
+    }
+    return 0;
+}
+
+static PyObject* class_name(PyObject* cls) {
+    PyObject* name = PyObject_GetAttrString(cls, "__name__");
+    if (name == NULL) {
+        PyErr_Clear();
+        Py_XDECREF(name);
+        name = PyObject_Repr(cls);
+    }
+    if (name == NULL)
+        return NULL;
+    if (!PyString_Check(name)) {
+        Py_DECREF(name);
+        return NULL;
+    }
+    return name;
+}
+
+static int check_duplicates(PyObject* list) {
+    Py_ssize_t i, j, n;
+    /* Let's use a quadratic time algorithm,
+       assuming that the bases lists is short.
+    */
+    n = PyList_GET_SIZE(list);
+    for (i = 0; i < n; i++) {
+        PyObject* o = PyList_GET_ITEM(list, i);
+        for (j = i + 1; j < n; j++) {
+            if (PyList_GET_ITEM(list, j) == o) {
+                o = class_name(o);
+                PyErr_Format(PyExc_TypeError, "duplicate base class %s", o ? PyString_AS_STRING(o) : "?");
+                Py_XDECREF(o);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Raise a TypeError for an MRO order disagreement.
+
+   It's hard to produce a good error message.  In the absence of better
+   insight into error reporting, report the classes that were candidates
+   to be put next into the MRO.  There is some conflict between the
+   order in which they should be put in the MRO, but it's hard to
+   diagnose what constraint can't be satisfied.
+*/
+
+static void set_mro_error(PyObject* to_merge, int* remain) noexcept {
+    Py_ssize_t i, n, off, to_merge_size;
+    char buf[1000];
+    PyObject* k, *v;
+    PyObject* set = PyDict_New();
+    if (!set)
+        return;
+
+    to_merge_size = PyList_GET_SIZE(to_merge);
+    for (i = 0; i < to_merge_size; i++) {
+        PyObject* L = PyList_GET_ITEM(to_merge, i);
+        if (remain[i] < PyList_GET_SIZE(L)) {
+            PyObject* c = PyList_GET_ITEM(L, remain[i]);
+            if (PyDict_SetItem(set, c, Py_None) < 0) {
+                Py_DECREF(set);
+                return;
+            }
+        }
+    }
+    n = PyDict_Size(set);
+
+    off = PyOS_snprintf(buf, sizeof(buf), "Cannot create a \
+consistent method resolution\norder (MRO) for bases");
+    i = 0;
+    while (PyDict_Next(set, &i, &k, &v) && (size_t)off < sizeof(buf)) {
+        PyObject* name = class_name(k);
+        off += PyOS_snprintf(buf + off, sizeof(buf) - off, " %s", name ? PyString_AS_STRING(name) : "?");
+        Py_XDECREF(name);
+        if (--n && (size_t)(off + 1) < sizeof(buf)) {
+            buf[off++] = ',';
+            buf[off] = '\0';
+        }
+    }
+    PyErr_SetString(PyExc_TypeError, buf);
+    Py_DECREF(set);
+}
+
+static int pmerge(PyObject* acc, PyObject* to_merge) noexcept {
+    Py_ssize_t i, j, to_merge_size, empty_cnt;
+    int* remain;
+    int ok;
+
+    to_merge_size = PyList_GET_SIZE(to_merge);
+
+    /* remain stores an index into each sublist of to_merge.
+       remain[i] is the index of the next base in to_merge[i]
+       that is not included in acc.
+    */
+    remain = (int*)PyMem_MALLOC(SIZEOF_INT * to_merge_size);
+    if (remain == NULL)
+        return -1;
+    for (i = 0; i < to_merge_size; i++)
+        remain[i] = 0;
+
+again:
+    empty_cnt = 0;
+    for (i = 0; i < to_merge_size; i++) {
+        PyObject* candidate;
+
+        PyObject* cur_list = PyList_GET_ITEM(to_merge, i);
+
+        if (remain[i] >= PyList_GET_SIZE(cur_list)) {
+            empty_cnt++;
+            continue;
+        }
+
+        /* Choose next candidate for MRO.
+
+           The input sequences alone can determine the choice.
+           If not, choose the class which appears in the MRO
+           of the earliest direct superclass of the new class.
+        */
+
+        candidate = PyList_GET_ITEM(cur_list, remain[i]);
+        for (j = 0; j < to_merge_size; j++) {
+            PyObject* j_lst = PyList_GET_ITEM(to_merge, j);
+            if (tail_contains(j_lst, remain[j], candidate)) {
+                goto skip; /* continue outer loop */
+            }
+        }
+        ok = PyList_Append(acc, candidate);
+        if (ok < 0) {
+            PyMem_Free(remain);
+            return -1;
+        }
+        for (j = 0; j < to_merge_size; j++) {
+            PyObject* j_lst = PyList_GET_ITEM(to_merge, j);
+            if (remain[j] < PyList_GET_SIZE(j_lst) && PyList_GET_ITEM(j_lst, remain[j]) == candidate) {
+                remain[j]++;
+            }
+        }
+        goto again;
+    skip:
+        ;
+    }
+
+    if (empty_cnt == to_merge_size) {
+        PyMem_FREE(remain);
+        return 0;
+    }
+    set_mro_error(to_merge, remain);
+    PyMem_FREE(remain);
+    return -1;
+}
+
+static PyObject* mro_implementation(PyTypeObject* type) noexcept {
+    Py_ssize_t i, n;
+    int ok;
+    PyObject* bases, *result;
+    PyObject* to_merge, *bases_aslist;
+
+    // Pyston change: we require things are already ready
+    if (type->tp_dict == NULL) {
+        assert(type->is_pyston_class);
+#if 0
+        if (PyType_Ready(type) < 0)
+            return NULL;
+#endif
+    }
+
+    /* Find a superclass linearization that honors the constraints
+       of the explicit lists of bases and the constraints implied by
+       each base class.
+
+       to_merge is a list of lists, where each list is a superclass
+       linearization implied by a base class.  The last element of
+       to_merge is the declared list of bases.
+    */
+
+    bases = type->tp_bases;
+    assert(type->tp_bases);
+    assert(type->tp_bases->cls == tuple_cls);
+    n = PyTuple_GET_SIZE(bases);
+
+    to_merge = PyList_New(n + 1);
+    if (to_merge == NULL)
+        return NULL;
+
+    for (i = 0; i < n; i++) {
+        PyObject* base = PyTuple_GET_ITEM(bases, i);
+        PyObject* parentMRO;
+        if (PyType_Check(base))
+            parentMRO = PySequence_List(((PyTypeObject*)base)->tp_mro);
+        else
+            parentMRO = classic_mro(base);
+        if (parentMRO == NULL) {
+            Py_DECREF(to_merge);
+            return NULL;
+        }
+
+        PyList_SET_ITEM(to_merge, i, parentMRO);
+    }
+
+    bases_aslist = PySequence_List(bases);
+    if (bases_aslist == NULL) {
+        Py_DECREF(to_merge);
+        return NULL;
+    }
+    /* This is just a basic sanity check. */
+    if (check_duplicates(bases_aslist) < 0) {
+        Py_DECREF(to_merge);
+        Py_DECREF(bases_aslist);
+        return NULL;
+    }
+    PyList_SET_ITEM(to_merge, n, bases_aslist);
+
+    result = Py_BuildValue("[O]", (PyObject*)type);
+    if (result == NULL) {
+        Py_DECREF(to_merge);
+        return NULL;
+    }
+
+    ok = pmerge(result, to_merge);
+    Py_DECREF(to_merge);
+    if (ok < 0) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    return result;
+}
+
+// Pyston change: made this non-static
+PyObject* mro_external(PyObject* self) noexcept {
+    PyTypeObject* type = (PyTypeObject*)self;
+
+    return mro_implementation(type);
+}
+
+static int mro_internal(PyTypeObject* type) noexcept {
+    PyObject* mro, *result, *tuple;
+    int checkit = 0;
+
+    if (Py_TYPE(type) == &PyType_Type) {
+        result = mro_implementation(type);
+    } else {
+        static PyObject* mro_str;
+        checkit = 1;
+        mro = lookup_method((PyObject*)type, "mro", &mro_str);
+        if (mro == NULL)
+            return -1;
+        result = PyObject_CallObject(mro, NULL);
+        Py_DECREF(mro);
+    }
+    if (result == NULL)
+        return -1;
+    tuple = PySequence_Tuple(result);
+    Py_DECREF(result);
+    if (tuple == NULL)
+        return -1;
+    if (checkit) {
+        Py_ssize_t i, len;
+        PyObject* cls;
+        PyTypeObject* solid;
+
+        solid = solid_base(type);
+
+        len = PyTuple_GET_SIZE(tuple);
+
+        for (i = 0; i < len; i++) {
+            PyTypeObject* t;
+            cls = PyTuple_GET_ITEM(tuple, i);
+            if (PyClass_Check(cls))
+                continue;
+            else if (!PyType_Check(cls)) {
+                PyErr_Format(PyExc_TypeError, "mro() returned a non-class ('%.500s')", Py_TYPE(cls)->tp_name);
+                Py_DECREF(tuple);
+                return -1;
+            }
+            t = (PyTypeObject*)cls;
+            if (!PyType_IsSubtype(solid, solid_base(t))) {
+                PyErr_Format(PyExc_TypeError, "mro() returned base with unsuitable layout ('%.500s')", t->tp_name);
+                Py_DECREF(tuple);
+                return -1;
+            }
+        }
+    }
+    type->tp_mro = tuple;
+
+    type_mro_modified(type, type->tp_mro);
+    /* corner case: the old-style super class might have been hidden
+       from the custom MRO */
+    type_mro_modified(type, type->tp_bases);
+
+    PyType_Modified(type);
+
+    return 0;
+}
 extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
     return isSubclass(a, b);
 }
@@ -1773,21 +2275,27 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
 // and our internal type-creation endpoints (BoxedClass::BoxedClass()).
 // TODO: Move more of the duplicated logic into here.
 void commonClassSetup(BoxedClass* cls) {
-    if (!cls->tp_base) {
-        assert(cls == object_cls);
-        return;
+    if (cls->tp_bases == NULL) {
+        if (cls->tp_base)
+            cls->tp_bases = new BoxedTuple({ cls->tp_base });
+        else
+            cls->tp_bases = new BoxedTuple({});
     }
 
-    inherit_special(cls, cls->tp_base);
+    /* Calculate method resolution order */
+    if (mro_internal(cls) < 0)
+        throwCAPIException();
 
-    // This is supposed to be over the MRO but we don't support multiple inheritance yet:
-    BoxedClass* b = cls->tp_base;
-    while (b) {
-        // Not sure when this could fail; maybe not in Pyston right now but apparently it can in CPython:
+    if (cls->tp_base)
+        inherit_special(cls, cls->tp_base);
+
+    assert(cls->tp_mro);
+    assert(cls->tp_mro->cls == tuple_cls);
+    for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+        if (b == cls)
+            continue;
         if (PyType_Check(b))
-            inherit_slots(cls, b);
-
-        b = b->tp_base;
+            inherit_slots(cls, static_cast<BoxedClass*>(b));
     }
 }
 
@@ -1796,6 +2304,8 @@ extern "C" void PyType_Modified(PyTypeObject* type) noexcept {
 }
 
 extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
+    ASSERT(!cls->is_pyston_class, "should not call this on Pyston classes");
+
     gc::registerNonheapRootObject(cls);
 
     // unhandled fields:
