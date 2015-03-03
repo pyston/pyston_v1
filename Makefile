@@ -404,26 +404,26 @@ check:
 	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
 	$(MAKE) pyston_prof
 	@# and run some basic tests to make sure it works:
-	$(call checksha,./pyston_prof -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
 	$(MAKE) check_release
 	echo "All tests passed"
 
 quick_check:
 	$(MAKE) pyston_dbg
-	$(call checksha,./pyston_dbg -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_dbg -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_dbg -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_dbg -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_dbg -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_dbg -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(MAKE) pyston
-	$(call checksha,./pyston -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 	$(MAKE) pyston_prof
-	$(call checksha,./pyston_prof -cq  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -cqn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -cqO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(call checksha,./pyston_prof -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
 
 Makefile.local:
 	echo "Creating default Makefile.local"
