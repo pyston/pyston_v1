@@ -1,5 +1,3 @@
-# allow-warning: converting unicode literal to str
-
 import subprocess
 
 subprocess.check_call(["true"])

@@ -1,5 +1,3 @@
-# allow-warning: converting unicode literal to str
-
 # Make sure we can spawn a bunch of threads
 
 import threading

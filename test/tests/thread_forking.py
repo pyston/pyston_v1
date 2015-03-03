@@ -1,5 +1,4 @@
 # skip-if: '-n' in EXTRA_JIT_ARGS or '-O' in EXTRA_JIT_ARGS
-# allow-warning: converting unicode literal to str
 
 # Make sure that we can fork from a threaded environment
 #

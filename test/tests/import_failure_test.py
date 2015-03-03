@@ -1,5 +1,3 @@
-# allow-warning: converting unicode literal to str
-
 try:
     import non_existent_module
     assert 0, "shouldn't get here"
