@@ -246,7 +246,8 @@ Box* setNonzero(BoxedSet* self) {
 using namespace pyston::set;
 
 void setupSet() {
-    set_iterator_cls = new BoxedHeapClass(object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false, "setiterator");
+    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false,
+                                              "setiterator");
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));

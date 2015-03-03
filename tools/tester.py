@@ -413,16 +413,16 @@ if __name__ == "__main__":
             ]
     tests += big_tests
 
+    LIB_DIR = os.path.join(sys.prefix, "lib/python2.7")
     for t in tests:
         bn = os.path.basename(t)
         assert bn.endswith(".py")
         module_name = bn[:-3]
-        try:
-            __import__(module_name)
+
+        if os.path.exists(os.path.join(LIB_DIR, module_name)) or \
+           os.path.exists(os.path.join(LIB_DIR, module_name + ".py")) or \
+           module_name in sys.builtin_module_names:
             raise Exception("Error: %s hides builtin module '%s'" % (t, module_name))
-        except ImportError:
-            pass
-            # good
 
     for t in TOSKIP:
         assert t in ("%s/t.py" % TEST_DIR, "%s/t2.py" % TEST_DIR) or t in tests, t

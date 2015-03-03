@@ -49,6 +49,19 @@ extern "C" PyObject** PyList_Items(PyObject* op) noexcept {
     return &static_cast<BoxedList*>(op)->elts->elts[0];
 }
 
+extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
+    PyObject* w;
+    PyObject** p, **q;
+    Py_ssize_t n;
+    if (v == NULL || !PyList_Check(v)) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    auto l = static_cast<BoxedList*>(v);
+    return new BoxedTuple(BoxedTuple::GCVector(l->elts->elts, l->elts->elts + l->size));
+}
+
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 
@@ -751,10 +764,10 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 }
 
 void setupList() {
-    list_iterator_cls
-        = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false, "listiterator");
-    list_reverse_iterator_cls = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedListIterator),
-                                                   false, "listreverseiterator");
+    list_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList),
+                                               false, "listiterator");
+    list_reverse_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &listIteratorGCHandler, 0,
+                                                       sizeof(BoxedListIterator), false, "listreverseiterator");
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 

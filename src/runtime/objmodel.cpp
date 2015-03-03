@@ -195,10 +195,11 @@ bool isInstance(Box* obj, BoxedClass* cls) {
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
     // TODO the class is allowed to override this using __subclasscheck__
-    while (child) {
-        if (child == parent)
+    assert(child->tp_mro);
+    assert(child->tp_mro->cls == tuple_cls);
+    for (auto b : static_cast<BoxedTuple*>(child->tp_mro)->elts) {
+        if (b == parent)
             return true;
-        child = child->tp_base;
     }
     return false;
 }
@@ -314,7 +315,10 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     if (cls == NULL) {
         assert(type_cls == NULL);
     } else {
-        assert(isSubclass(cls, type_cls));
+        // The (cls == type_cls) part of the check is important because during bootstrapping
+        // we might not have set up enough stuff in order to do proper subclass checking,
+        // but those clases will either have cls == NULL or cls == type_cls
+        assert(cls == type_cls || isSubclass(cls, type_cls));
     }
 
     assert(tp_dealloc == NULL);
@@ -349,31 +353,8 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         gc::registerPermanentRoot(this);
 }
 
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                               bool is_user_defined, const std::string& name)
-    : BoxedHeapClass(base, gc_visit, attrs_offset, instance_size, is_user_defined, new BoxedString(name)) {
-}
-
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                               bool is_user_defined)
-    : BoxedClass(base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(NULL), ht_slots(NULL) {
-
-    // This constructor is only used for bootstrapping purposes to be called for types that
-    // are initialized before str_cls.
-    // Therefore, we assert that str_cls is uninitialized to make sure this isn't called at
-    // an inappropriate time.
-    assert(str_cls == NULL);
-
-    tp_as_number = &as_number;
-    tp_as_mapping = &as_mapping;
-    tp_as_sequence = &as_sequence;
-    tp_as_buffer = &as_buffer;
-    tp_flags |= Py_TPFLAGS_HEAPTYPE;
-
-    memset(&as_number, 0, sizeof(as_number));
-    memset(&as_mapping, 0, sizeof(as_mapping));
-    memset(&as_sequence, 0, sizeof(as_sequence));
-    memset(&as_buffer, 0, sizeof(as_buffer));
+void BoxedClass::finishInitialization() {
+    commonClassSetup(this);
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
@@ -384,13 +365,38 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     tp_as_mapping = &as_mapping;
     tp_as_sequence = &as_sequence;
     tp_as_buffer = &as_buffer;
-    tp_name = ht_name->s.c_str();
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
+    if (!ht_name)
+        assert(str_cls == NULL);
+    else
+        tp_name = ht_name->s.c_str();
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));
     memset(&as_sequence, 0, sizeof(as_sequence));
     memset(&as_buffer, 0, sizeof(as_buffer));
+}
+
+BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                                       int instance_size, bool is_user_defined, const std::string& name) {
+    return create(metaclass, base, gc_visit, attrs_offset, instance_size, is_user_defined, new BoxedString(name), NULL);
+}
+
+BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                                       int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases) {
+    BoxedHeapClass* made = new (metaclass)
+        BoxedHeapClass(base, gc_visit, attrs_offset, instance_size, is_user_defined, name);
+
+    // While it might be ok if these were set, it'd indicate a difference in
+    // expectations as to who was going to calculate them:
+    assert(!made->tp_mro);
+    assert(!made->tp_bases);
+    made->tp_bases = bases;
+
+    made->finishInitialization();
+    assert(made->tp_mro);
+
+    return made;
 }
 
 std::string getFullNameOfClass(BoxedClass* cls) {
@@ -656,19 +662,45 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
 
         RewriterVar* obj_saved = rewrite_args->obj;
 
-        val = cls->getattr(attr, rewrite_args);
-        assert(rewrite_args->out_success);
-        if (!val and cls->tp_base) {
+        auto _mro = cls->tp_mro;
+        assert(_mro->cls == tuple_cls);
+        BoxedTuple* mro = static_cast<BoxedTuple*>(_mro);
+
+        // Guarding approach:
+        // Guard on the value of the tp_mro slot, which should be a tuple and thus be
+        // immutable.  Then we don't have to figure out the guards to emit that check
+        // the individual mro entries.
+        // We can probably move this guard to after we call getattr() on the given cls.
+        //
+        // TODO this can fail if we replace the mro with another mro that lives in the same
+        // address.
+        obj_saved->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)mro);
+
+        for (auto base : mro->elts) {
             rewrite_args->out_success = false;
-            rewrite_args->obj = obj_saved->getAttr(offsetof(BoxedClass, tp_base));
-            val = typeLookup(cls->tp_base, attr, rewrite_args);
+            if (base == cls) {
+                // Small optimization: don't have to load the class again since it was given to us in
+                // a register.
+                assert(rewrite_args->obj == obj_saved);
+            } else {
+                rewrite_args->obj = rewrite_args->rewriter->loadConst((intptr_t)base, Location::any());
+            }
+            val = base->getattr(attr, rewrite_args);
+            assert(rewrite_args->out_success);
+            if (val)
+                return val;
         }
-        return val;
+
+        return NULL;
     } else {
-        val = cls->getattr(attr, NULL);
-        if (!val and cls->tp_base)
-            return typeLookup(cls->tp_base, attr, NULL);
-        return val;
+        assert(cls->tp_mro);
+        assert(cls->tp_mro->cls == tuple_cls);
+        for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+            val = b->getattr(attr, NULL);
+            if (val)
+                return val;
+        }
+        return NULL;
     }
 }
 
@@ -1521,9 +1553,8 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
         // This doesn't belong here either:
         if (strcmp(attr, "__bases__") == 0 && isSubclass(obj->cls, type_cls)) {
             BoxedClass* cls = static_cast<BoxedClass*>(obj);
-            if (cls->tp_base)
-                return new BoxedTuple({ static_cast<BoxedClass*>(obj)->tp_base });
-            return EmptyTuple;
+            assert(cls->tp_bases);
+            return cls->tp_bases;
         }
     }
 
@@ -2031,10 +2062,16 @@ extern "C" void dump(void* p) {
             auto cls = static_cast<BoxedClass*>(b);
             printf("Type name: %s\n", getFullNameOfClass(cls).c_str());
 
-            printf("MRO: %s", getFullNameOfClass(cls).c_str());
-            while (cls->tp_base) {
-                printf(" -> %s", getFullNameOfClass(cls->tp_base).c_str());
-                cls = cls->tp_base;
+            printf("MRO:");
+
+            if (cls->tp_mro && cls->tp_mro->cls == tuple_cls) {
+                bool first = true;
+                for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+                    if (!first)
+                        printf(" ->");
+                    first = false;
+                    printf(" %s", getFullNameOfClass(static_cast<BoxedClass*>(b)).c_str());
+                }
             }
             printf("\n");
         }
@@ -3572,10 +3609,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "type.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
-    BoxedClass* cls = static_cast<BoxedClass*>(_cls);
-    if (!isSubclass(cls, type_cls))
-        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(cls),
-                       getNameOfClass(cls));
+    BoxedClass* metatype = static_cast<BoxedClass*>(_cls);
+    if (!isSubclass(metatype, type_cls))
+        raiseExcHelper(TypeError, "type.__new__(%s): %s is not a subtype of type", getNameOfClass(metatype),
+                       getNameOfClass(metatype));
 
     if (arg2 == NULL) {
         assert(arg3 == NULL);
@@ -3592,30 +3629,65 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     RELEASE_ASSERT(arg1->cls == str_cls, "");
     BoxedString* name = static_cast<BoxedString*>(arg1);
 
-    BoxedClass* base;
     if (bases->elts.size() == 0) {
         bases = new BoxedTuple({ object_cls });
     }
 
-    RELEASE_ASSERT(bases->elts.size() == 1, "");
-    Box* _base = bases->elts[0];
-    RELEASE_ASSERT(isSubclass(_base->cls, type_cls), "");
-    base = static_cast<BoxedClass*>(_base);
+    // Ported from CPython:
+    int nbases = bases->elts.size();
+    BoxedClass* winner = metatype;
+    for (auto tmp : bases->elts) {
+        auto tmptype = tmp->cls;
+        if (tmptype == classobj_cls)
+            continue;
+        if (isSubclass(winner, tmptype))
+            continue;
+        if (isSubclass(tmptype, winner)) {
+            winner = tmptype;
+            continue;
+        }
+        raiseExcHelper(TypeError, "metaclass conflict: "
+                                  "the metaclass of a derived class "
+                                  "must be a (non-strict) subclass "
+                                  "of the metaclasses of all its bases");
+    }
 
-    if ((base->tp_flags & Py_TPFLAGS_BASETYPE) == 0)
+    if (winner != metatype) {
+        if (getattr(winner, "__new__") != getattr(type_cls, "__new__")) {
+            RELEASE_ASSERT(0, "untested");
+            return callattr(winner, &new_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                            ArgPassSpec(3), arg1, arg2, arg3, _args + 1, NULL);
+        }
+        metatype = winner;
+    }
+
+    BoxedClass* base = best_base(bases);
+    checkAndThrowCAPIException();
+    assert(base);
+    if (!PyType_HasFeature(base, Py_TPFLAGS_BASETYPE))
         raiseExcHelper(TypeError, "type '%.100s' is not an acceptable base type", base->tp_name);
+    assert(isSubclass(base->cls, type_cls));
+
+
+    // TODO I don't think we have to implement the __slots__ memory savings behavior
+    // (we get almost all of that automatically with hidden classes), but adding a __slots__
+    // adds other restrictions (ex for multiple inheritance) that we won't end up enforcing.
+    // I guess it should be ok if we're more permissive?
+    // auto slots = PyDict_GetItemString(attr_dict, "__slots__");
+    // RELEASE_ASSERT(!slots, "__slots__ unsupported");
 
 
     BoxedClass* made;
 
     if (base->instancesHaveDictAttrs() || base->instancesHaveHCAttrs()) {
-        made = new (cls) BoxedHeapClass(base, NULL, base->attrs_offset, base->tp_basicsize, true, name);
+        made = BoxedHeapClass::create(metatype, base, NULL, base->attrs_offset, base->tp_basicsize, true, name, bases);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = new (cls)
-            BoxedHeapClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true, name);
+        made = BoxedHeapClass::create(metatype, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs),
+                                      true, name, bases);
     }
 
+    // TODO: how much of these should be in BoxedClass::finishInitialization()?
     made->tp_dictoffset = base->tp_dictoffset;
 
     for (const auto& p : attr_dict->d) {
@@ -3630,7 +3702,6 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     made->tp_new = base->tp_new;
 
-    PystonType_Ready(made);
     fixup_slot_dispatchers(made);
 
     if (base->tp_alloc == &PystonType_GenericAlloc)

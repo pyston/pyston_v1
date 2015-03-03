@@ -21,6 +21,7 @@
 #include <sstream>
 #include <stdint.h>
 
+#include "capi/typeobject.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -96,10 +97,16 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         assert(static_cast<BoxedClass*>(e)->is_pyston_class);
     }
 #endif
-    BoxedClass* b = cls;
-    while (b) {
-        ASSERT(b->is_pyston_class, "%s (%s)", cls->tp_name, b->tp_name);
-        b = b->tp_base;
+    if (!cls->tp_mro) {
+        assert(!list_cls);
+    } else {
+        assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
+        assert(cls->tp_mro->cls == tuple_cls);
+        for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+            assert(isSubclass(b->cls, type_cls));
+            ASSERT(static_cast<BoxedClass*>(b)->is_pyston_class, "%s (%s)", cls->tp_name,
+                   static_cast<BoxedClass*>(b)->tp_name);
+        }
     }
 #endif
 
@@ -405,6 +412,10 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
         v->visit(cls->tp_base);
     if (cls->tp_dict)
         v->visit(cls->tp_dict);
+    if (cls->tp_mro)
+        v->visit(cls->tp_mro);
+    if (cls->tp_bases)
+        v->visit(cls->tp_bases);
 
     if (cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* hcls = static_cast<BoxedHeapClass*>(cls);
@@ -898,6 +909,15 @@ Box* typeHash(BoxedClass* self) {
     return boxInt(reinterpret_cast<intptr_t>(self) >> 4);
 }
 
+Box* typeMro(BoxedClass* self) {
+    assert(isSubclass(self->cls, type_cls));
+
+    Box* r = mro_external(self);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
 Box* moduleRepr(BoxedModule* m) {
     assert(m->cls == module_cls);
 
@@ -1220,20 +1240,19 @@ void setupRuntime() {
     object_cls = ::new (mem) BoxedClass(NULL, &boxGCHandler, 0, sizeof(Box), false);
     mem = gc_alloc(sizeof(BoxedHeapClass), gc::GCKind::PYTHON);
     type_cls = ::new (mem)
-        BoxedHeapClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedHeapClass), false);
+        BoxedHeapClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs), sizeof(BoxedHeapClass), false, NULL);
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
 
-    none_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
+    none_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, NULL);
     None = new (none_cls) Box();
     assert(None->cls);
     gc::registerPermanentRoot(None);
 
     // You can't actually have an instance of basestring
-    basestring_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false);
+    basestring_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, NULL);
 
-    // TODO we leak all the string data!
-    str_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedString), false);
+    str_cls = new BoxedHeapClass(basestring_cls, NULL, 0, sizeof(BoxedString), false, NULL);
 
     // Hold off on assigning names until str_cls is ready
     object_cls->tp_name = "object";
@@ -1260,54 +1279,75 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
-    tuple_cls = new BoxedHeapClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false, "tuple");
+    tuple_cls = new BoxedHeapClass(object_cls, &tupleGCHandler, 0, sizeof(BoxedTuple), false, boxStrConstant("tuple"));
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
+    list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+
+    // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
+    // than try to make the MRO construction code be safe against say, tuple_cls not having
+    // an mro (since the mro is stored as a tuple).
+    tuple_cls->tp_mro = new BoxedTuple({ tuple_cls, object_cls });
+    list_cls->tp_mro = new BoxedTuple({ list_cls, object_cls });
+    type_cls->tp_mro = new BoxedTuple({ type_cls, object_cls });
+
+    object_cls->finishInitialization();
+    type_cls->finishInitialization();
+    basestring_cls->finishInitialization();
+    str_cls->finishInitialization();
+    none_cls->finishInitialization();
+    tuple_cls->finishInitialization();
+    list_cls->finishInitialization();
 
 
-    module_cls
-        = new BoxedHeapClass(object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule), false, "module");
+
+    module_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), sizeof(BoxedModule),
+                                        false, "module");
 
     // TODO it'd be nice to be able to do these in the respective setupType methods,
     // but those setup methods probably want access to these objects.
     // We could have a multi-stage setup process, but that seems overkill for now.
-    int_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedInt), false, "int");
-    bool_cls = new BoxedHeapClass(int_cls, NULL, 0, sizeof(BoxedBool), false, "bool");
-    complex_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedComplex), false, "complex");
-    long_cls = new BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, sizeof(BoxedLong), false, "long");
-    float_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFloat), false, "float");
-    function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
-                                      sizeof(BoxedFunction), false, "function");
+    int_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedInt), false, "int");
+    bool_cls = BoxedHeapClass::create(type_cls, int_cls, NULL, 0, sizeof(BoxedBool), false, "bool");
+    complex_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedComplex), false, "complex");
+    long_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedLong::gchandler, 0, sizeof(BoxedLong), false, "long");
+    float_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedFloat), false, "float");
+    function_cls = BoxedHeapClass::create(type_cls, object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
+                                          sizeof(BoxedFunction), false, "function");
     function_cls->tp_weaklistoffset = offsetof(BoxedFunction, in_weakreflist);
 
-    builtin_function_or_method_cls
-        = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedBuiltinFunctionOrMethod, attrs),
-                             sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
+    builtin_function_or_method_cls = BoxedHeapClass::create(
+        type_cls, object_cls, &functionGCHandler, offsetof(BoxedBuiltinFunctionOrMethod, attrs),
+        sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
     builtin_function_or_method_cls->tp_weaklistoffset = offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist);
     function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
 
-    instancemethod_cls = new BoxedHeapClass(object_cls, &instancemethodGCHandler, 0, sizeof(BoxedInstanceMethod), false,
-                                            "instancemethod");
+    instancemethod_cls = BoxedHeapClass::create(type_cls, object_cls, &instancemethodGCHandler, 0,
+                                                sizeof(BoxedInstanceMethod), false, "instancemethod");
     instancemethod_cls->tp_weaklistoffset = offsetof(BoxedInstanceMethod, in_weakreflist);
 
-    list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, sizeof(BoxedList), false, "list");
-    slice_cls = new BoxedHeapClass(object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false, "slice");
-    dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false, "dict");
-    file_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedFile), false, "file");
-    set_cls = new BoxedHeapClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false, "set");
-    frozenset_cls = new BoxedHeapClass(object_cls, &setGCHandler, 0, sizeof(BoxedSet), false, "frozenset");
-    member_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false, "member");
-    pyston_getset_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
-    capi_getset_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
-    closure_cls = new BoxedHeapClass(object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), sizeof(BoxedClosure),
-                                     false, "closure");
-    property_cls = new BoxedHeapClass(object_cls, &propertyGCHandler, 0, sizeof(BoxedProperty), false, "property");
-    staticmethod_cls
-        = new BoxedHeapClass(object_cls, &staticmethodGCHandler, 0, sizeof(BoxedStaticmethod), false, "staticmethod");
-    classmethod_cls
-        = new BoxedHeapClass(object_cls, &classmethodGCHandler, 0, sizeof(BoxedClassmethod), false, "classmethod");
-    attrwrapper_cls
-        = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false, "attrwrapper");
+    list_cls = BoxedHeapClass::create(type_cls, object_cls, &listGCHandler, 0, sizeof(BoxedList), false, "list");
+    slice_cls = BoxedHeapClass::create(type_cls, object_cls, &sliceGCHandler, 0, sizeof(BoxedSlice), false, "slice");
+    dict_cls = BoxedHeapClass::create(type_cls, object_cls, &dictGCHandler, 0, sizeof(BoxedDict), false, "dict");
+    file_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedFile), false, "file");
+    set_cls = BoxedHeapClass::create(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false, "set");
+    frozenset_cls
+        = BoxedHeapClass::create(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false, "frozenset");
+    member_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false, "member");
+    pyston_getset_cls
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
+    capi_getset_cls
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
+    closure_cls = BoxedHeapClass::create(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
+                                         sizeof(BoxedClosure), false, "closure");
+    property_cls
+        = BoxedHeapClass::create(type_cls, object_cls, &propertyGCHandler, 0, sizeof(BoxedProperty), false, "property");
+    staticmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &staticmethodGCHandler, 0,
+                                              sizeof(BoxedStaticmethod), false, "staticmethod");
+    classmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &classmethodGCHandler, 0, sizeof(BoxedClassmethod),
+                                             false, "classmethod");
+    attrwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper),
+                                             false, "attrwrapper");
 
     // TODO: add explicit __get__ and __set__ methods to these
     pyston_getset_cls->freeze();
@@ -1345,6 +1385,9 @@ void setupRuntime() {
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
     type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
+    type_cls->giveAttr("__mro__",
+                       new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
+    type_cls->giveAttr("mro", new BoxedFunction(boxRTFunction((void*)typeMro, UNKNOWN, 1)));
     type_cls->freeze();
 
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));

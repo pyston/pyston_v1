@@ -501,6 +501,8 @@ extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
 extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
     if (o->cls == tuple_cls)
         return o;
+    if (PyList_Check(o))
+        return PyList_AsTuple(o);
 
     Py_FatalError("unimplemented");
 }
@@ -1543,7 +1545,7 @@ static Box* methodGetDoc(Box* b, void*) {
 }
 
 void setupCAPI() {
-    capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedCApiFunction), false, "capifunc");
+    capifunc_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false, "capifunc");
 
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
@@ -1554,7 +1556,7 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 
-    method_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false, "method");
+    method_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false, "method");
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
@@ -1562,13 +1564,14 @@ void setupCAPI() {
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
-    wrapperdescr_cls
-        = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false, "wrapper_descriptor");
+    wrapperdescr_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false,
+                                              "wrapper_descriptor");
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->freeze();
 
-    wrapperobject_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(BoxedWrapperObject), false, "method-wrapper");
+    wrapperobject_cls
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false, "method-wrapper");
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->freeze();

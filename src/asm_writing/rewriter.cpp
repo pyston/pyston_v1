@@ -180,7 +180,13 @@ void RewriterVar::addAttrGuard(int offset, uint64_t val, bool negate) {
 }
 
 void Rewriter::_addAttrGuard(RewriterVar* var, int offset, uint64_t val, bool negate) {
-    assembler::Register var_reg = var->getInReg();
+    // TODO if var is a constant, we will end up emitting something like
+    //   mov $0x123, %rax
+    //   cmp $0x10(%rax), %rdi
+    // when we could just do
+    //   cmp ($0x133), %rdi
+    assembler::Register var_reg = var->getInReg(Location::any(), /* allow_constant_in_reg */ true);
+
     if (isLargeConstant(val)) {
         assembler::Register reg = allocReg(Location::any(), /* otherThan */ var_reg);
         assert(reg != var_reg);
@@ -206,7 +212,12 @@ RewriterVar* RewriterVar::getAttr(int offset, Location dest, assembler::MovType 
 }
 
 void Rewriter::_getAttr(RewriterVar* result, RewriterVar* ptr, int offset, Location dest, assembler::MovType type) {
-    assembler::Register ptr_reg = ptr->getInReg();
+    // TODO if var is a constant, we will end up emitting something like
+    //   mov $0x123, %rax
+    //   mov $0x10(%rax), %rdi
+    // when we could just do
+    //   mov ($0x133), %rdi
+    assembler::Register ptr_reg = ptr->getInReg(Location::any(), /* allow_constant_in_reg */ true);
 
     // It's okay to bump the use now, since it's fine to allocate the result
     // in the same register as ptr

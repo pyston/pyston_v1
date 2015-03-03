@@ -23,7 +23,14 @@ namespace pyston {
 bool update_slot(BoxedClass* self, const std::string& attr) noexcept;
 
 void fixup_slot_dispatchers(BoxedClass* self) noexcept;
-void PystonType_Ready(BoxedClass* cls);
+void commonClassSetup(BoxedClass* cls);
+
+// We need to expose these due to our different file organization (they
+// are defined as part of the CPython copied into typeobject.c, but used
+// from Pyston code).
+// We could probably unify things more but that's for later.
+PyTypeObject* best_base(PyObject* bases) noexcept;
+PyObject* mro_external(PyObject* self) noexcept;
 }
 
 #endif

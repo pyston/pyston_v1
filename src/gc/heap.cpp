@@ -630,8 +630,8 @@ LargeArena::LargeFreeChunk* LargeArena::get_from_size_list(LargeFreeChunk** list
         section->free_chunk_map[i] = 0;
     }
 
+    assert(section->num_free_chunks >= size >> CHUNK_BITS);
     section->num_free_chunks -= size >> CHUNK_BITS;
-    assert(section->num_free_chunks >= 0);
 
     return free_chunks;
 }

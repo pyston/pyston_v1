@@ -730,7 +730,7 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls = new BoxedHeapClass(base, NULL, offsetof(BoxedException, attrs), size, false, name);
+    BoxedClass* cls = BoxedHeapClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), size, false, name);
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {
@@ -954,7 +954,8 @@ Box* pydumpAddr(Box* p) {
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
-    BoxedHeapClass* ellipsis_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, "ellipsis");
+    BoxedHeapClass* ellipsis_cls
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(Box), false, "ellipsis");
     Box* Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
     gc::registerPermanentRoot(Ellipsis);
@@ -967,7 +968,8 @@ void setupBuiltins() {
     builtins_module->giveAttr(
         "print", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)print, NONE, 0, 0, true, true), "print"));
 
-    notimplemented_cls = new BoxedHeapClass(object_cls, NULL, 0, sizeof(Box), false, "NotImplementedType");
+    notimplemented_cls
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
@@ -1046,8 +1048,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                                              { None, None, None, new BoxedInt(-1) }));
 
-    enumerate_cls
-        = new BoxedHeapClass(object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate), false, "enumerate");
+    enumerate_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate),
+                                           false, "enumerate");
     enumerate_cls->giveAttr(
         "__new__",
         new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
