@@ -751,10 +751,10 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
 }
 
 void setupList() {
-    list_iterator_cls
-        = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false, "listiterator");
-    list_reverse_iterator_cls = new BoxedHeapClass(object_cls, &listIteratorGCHandler, 0, sizeof(BoxedListIterator),
-                                                   false, "listreverseiterator");
+    list_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList),
+                                               false, "listiterator");
+    list_reverse_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &listIteratorGCHandler, 0,
+                                                       sizeof(BoxedListIterator), false, "listreverseiterator");
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 

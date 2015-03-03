@@ -23,7 +23,7 @@ namespace pyston {
 bool update_slot(BoxedClass* self, const std::string& attr) noexcept;
 
 void fixup_slot_dispatchers(BoxedClass* self) noexcept;
-void PystonType_Ready(BoxedClass* cls);
+void commonClassSetup(BoxedClass* cls);
 }
 
 #endif

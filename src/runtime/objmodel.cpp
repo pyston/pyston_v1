@@ -349,31 +349,8 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         gc::registerPermanentRoot(this);
 }
 
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                               bool is_user_defined, const std::string& name)
-    : BoxedHeapClass(base, gc_visit, attrs_offset, instance_size, is_user_defined, new BoxedString(name)) {
-}
-
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                               bool is_user_defined)
-    : BoxedClass(base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(NULL), ht_slots(NULL) {
-
-    // This constructor is only used for bootstrapping purposes to be called for types that
-    // are initialized before str_cls.
-    // Therefore, we assert that str_cls is uninitialized to make sure this isn't called at
-    // an inappropriate time.
-    assert(str_cls == NULL);
-
-    tp_as_number = &as_number;
-    tp_as_mapping = &as_mapping;
-    tp_as_sequence = &as_sequence;
-    tp_as_buffer = &as_buffer;
-    tp_flags |= Py_TPFLAGS_HEAPTYPE;
-
-    memset(&as_number, 0, sizeof(as_number));
-    memset(&as_mapping, 0, sizeof(as_mapping));
-    memset(&as_sequence, 0, sizeof(as_sequence));
-    memset(&as_buffer, 0, sizeof(as_buffer));
+void BoxedClass::finishInitialization() {
+    commonClassSetup(this);
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
@@ -384,13 +361,31 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     tp_as_mapping = &as_mapping;
     tp_as_sequence = &as_sequence;
     tp_as_buffer = &as_buffer;
-    tp_name = ht_name->s.c_str();
     tp_flags |= Py_TPFLAGS_HEAPTYPE;
+    if (!ht_name)
+        assert(str_cls == NULL);
+    else
+        tp_name = ht_name->s.c_str();
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));
     memset(&as_sequence, 0, sizeof(as_sequence));
     memset(&as_buffer, 0, sizeof(as_buffer));
+}
+
+BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                                       int instance_size, bool is_user_defined, const std::string& name) {
+    return create(metaclass, base, gc_visit, attrs_offset, instance_size, is_user_defined, new BoxedString(name));
+}
+
+BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                                       int instance_size, bool is_user_defined, BoxedString* name) {
+    BoxedHeapClass* made = new (metaclass)
+        BoxedHeapClass(base, gc_visit, attrs_offset, instance_size, is_user_defined, name);
+
+    made->finishInitialization();
+
+    return made;
 }
 
 std::string getFullNameOfClass(BoxedClass* cls) {
@@ -3609,13 +3604,14 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     BoxedClass* made;
 
     if (base->instancesHaveDictAttrs() || base->instancesHaveHCAttrs()) {
-        made = new (cls) BoxedHeapClass(base, NULL, base->attrs_offset, base->tp_basicsize, true, name);
+        made = BoxedHeapClass::create(cls, base, NULL, base->attrs_offset, base->tp_basicsize, true, name);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = new (cls)
-            BoxedHeapClass(base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true, name);
+        made = BoxedHeapClass::create(cls, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs), true,
+                                      name);
     }
 
+    // TODO: how much of these should be in BoxedClass::finishInitialization()?
     made->tp_dictoffset = base->tp_dictoffset;
 
     for (const auto& p : attr_dict->d) {
@@ -3630,7 +3626,6 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     made->tp_new = base->tp_new;
 
-    PystonType_Ready(made);
     fixup_slot_dispatchers(made);
 
     if (base->tp_alloc == &PystonType_GenericAlloc)

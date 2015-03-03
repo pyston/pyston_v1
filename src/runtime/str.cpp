@@ -2208,8 +2208,8 @@ void setupStr() {
     str_cls->simple_destructor = strDestructor;
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
-    str_iterator_cls
-        = new BoxedHeapClass(object_cls, &strIteratorGCHandler, 0, sizeof(BoxedStringIterator), false, "striterator");
+    str_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &strIteratorGCHandler, 0,
+                                              sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));

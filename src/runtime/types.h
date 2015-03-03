@@ -192,9 +192,15 @@ public:
 
     void freeze();
 
+protected:
+    // These functions are not meant for external callers and will mostly just be called
+    // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
+    // creation due to bootstrapping issues.
+    void finishInitialization();
+
     BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
 
-    DEFAULT_CLASS(type_cls);
+    friend void setupRuntime();
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -207,15 +213,20 @@ public:
     BoxedString* ht_name;
     PyObject** ht_slots;
 
-    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
-                   const std::string& name);
+    // This is the preferred way to construct new types:
+    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                                  int instance_size, bool is_user_defined, BoxedString* name);
+    static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
+                                  int instance_size, bool is_user_defined, const std::string& name);
 
+private:
+    // These functions are not meant for external callers and will mostly just be called
+    // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
+    // creation due to bootstrapping issues.
     BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
                    BoxedString* name);
 
-    // This constructor is only used for bootstrapping purposes to be called for types that
-    // are initialized before str_cls.
-    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
+    friend void setupRuntime();
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");

@@ -1769,10 +1769,15 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
     }
 }
 
-// PystonType_Ready is for the common code between PyType_Ready (which is just for extension classes)
+// commonClassSetup is for the common code between PyType_Ready (which is just for extension classes)
 // and our internal type-creation endpoints (BoxedClass::BoxedClass()).
 // TODO: Move more of the duplicated logic into here.
-void PystonType_Ready(BoxedClass* cls) {
+void commonClassSetup(BoxedClass* cls) {
+    if (!cls->tp_base) {
+        assert(cls == object_cls);
+        return;
+    }
+
     inherit_special(cls, cls->tp_base);
 
     // This is supposed to be over the MRO but we don't support multiple inheritance yet:
@@ -1864,7 +1869,12 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
                                         getset->get, (void (*)(Box*, Box*, void*))getset->set, getset->closure));
     }
 
-    PystonType_Ready(cls);
+    try {
+        commonClassSetup(cls);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 
     if (!cls->hasattr("__doc__")) {
         if (cls->tp_doc) {

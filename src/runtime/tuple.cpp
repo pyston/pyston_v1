@@ -386,7 +386,8 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
 
 
 void setupTuple() {
-    tuple_iterator_cls = new BoxedHeapClass(object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false, "tuple");
+    tuple_iterator_cls
+        = BoxedHeapClass::create(type_cls, object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false, "tuple");
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
