@@ -238,6 +238,8 @@ def run_test(fn, check_stats, run_memcheck):
             failed.append(fn)
             return r
         else:
+            # show last line of stderr so we have some idea went wrong
+            print "Last line of stderr: " + last_stderr_line
             raise Exception(msg)
 
     elif out != expected_out:
