@@ -1,0 +1,1 @@
+print "B.name2"

@@ -14,6 +14,8 @@
 
 #include "runtime/import.h"
 
+#include <limits.h>
+
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
@@ -23,6 +25,11 @@
 #include "runtime/objmodel.h"
 
 namespace pyston {
+
+static const std::string all_str("__all__");
+static const std::string name_str("__name__");
+static const std::string path_str("__path__");
+static const std::string package_str("__package__");
 
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn);
@@ -40,7 +47,7 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
     BoxedList* path_list = new BoxedList();
     listAppendInternal(path_list, b_path);
 
-    module->setattr("__path__", path_list, NULL);
+    module->setattr(path_str, path_list, NULL);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
     compileAndRunModule(ast, module);
@@ -140,19 +147,119 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
     return SearchResult("", SearchResult::SEARCH_ERROR);
 }
 
+/* Return the package that an import is being performed in.  If globals comes
+   from the module foo.bar.bat (not itself a package), this returns the
+   sys.modules entry for foo.bar.  If globals is from a package's __init__.py,
+   the package's entry in sys.modules is returned, as a borrowed reference.
+
+   The *name* of the returned package is returned in buf.
+
+   If globals doesn't come from a package or a module in a package, or a
+   corresponding entry is not found in sys.modules, Py_None is returned.
+*/
+static Box* getParent(Box* globals, int level, std::string& buf) {
+    int orig_level = level;
+
+    if (globals == NULL || globals == None || level == 0)
+        return None;
+
+    BoxedString* pkgname = static_cast<BoxedString*>(getattrInternal(globals, package_str, NULL));
+    if (pkgname != NULL && pkgname != None) {
+        /* __package__ is set, so use it */
+        if (pkgname->cls != str_cls) {
+            raiseExcHelper(ValueError, "__package__ set to non-string");
+        }
+        size_t len = pkgname->s.size();
+        if (len == 0) {
+            if (level > 0) {
+                raiseExcHelper(ValueError, "Attempted relative import in non-package");
+            }
+            return None;
+        }
+        if (len > PATH_MAX) {
+            raiseExcHelper(ValueError, "Package name too long");
+        }
+        buf += pkgname->s;
+    } else {
+        /* __package__ not set, so figure it out and set it */
+        BoxedString* modname = static_cast<BoxedString*>(getattrInternal(globals, name_str, NULL));
+        if (modname == NULL || modname->cls != str_cls)
+            return None;
+
+        Box* modpath = getattrInternal(globals, path_str, NULL);
+        if (modpath != NULL) {
+            /* __path__ is set, so modname is already the package name */
+            if (modname->s.size() > PATH_MAX) {
+                raiseExcHelper(ValueError, "Module name too long");
+            }
+            buf += modname->s;
+            globals->setattr(package_str, modname, NULL);
+        } else {
+            /* Normal module, so work out the package name if any */
+            size_t lastdot = modname->s.rfind('.');
+            if (lastdot == std::string::npos && level > 0) {
+                raiseExcHelper(ValueError, "Attempted relative import in non-package");
+            }
+            if (lastdot == std::string::npos) {
+                globals->setattr(package_str, None, NULL);
+                return None;
+            }
+            if (lastdot >= PATH_MAX) {
+                raiseExcHelper(ValueError, "Module name too long");
+            }
+
+            buf = std::string(modname->s, 0, lastdot);
+            globals->setattr(package_str, boxStringPtr(&buf), NULL);
+        }
+    }
+
+    size_t dot = buf.size() - 1;
+    while (--level > 0) {
+        dot = buf.rfind('.', dot);
+        if (dot == std::string::npos) {
+            raiseExcHelper(ValueError, "Attempted relative import beyond toplevel package");
+        }
+        dot--;
+    }
+
+    buf = std::string(buf, 0, dot + 1);
+
+    BoxedDict* sys_modules = getSysModulesDict();
+    Box* boxed_name = boxStringPtr(&buf);
+    Box* parent = sys_modules->d.find(boxed_name) != sys_modules->d.end() ? sys_modules->d[boxed_name] : NULL;
+    if (parent == NULL) {
+        if (orig_level < 1) {
+            printf("Warning: Parent module '%.200s' not found "
+                   "while handling absolute import\n",
+                   buf.c_str());
+        } else {
+            raiseExcHelper(SystemError, "Parent module '%.200s' not loaded, "
+                                        "cannot perform relative import",
+                           buf.c_str());
+        }
+    }
+    return parent;
+    /* We expect, but can't guarantee, if parent != None, that:
+       - parent.__name__ == buf
+       - parent.__dict__ is globals
+       If this is violated...  Who cares? */
+}
+
+
 static Box* importSub(const std::string& name, const std::string& full_name, Box* parent_module) {
     Box* boxed_name = boxStringPtr(&full_name);
     BoxedDict* sys_modules = getSysModulesDict();
-    if (sys_modules->d.find(boxed_name) != sys_modules->d.end())
+    if (sys_modules->d.find(boxed_name) != sys_modules->d.end()) {
         return sys_modules->d[boxed_name];
+    }
 
     BoxedList* path_list;
-    if (parent_module == NULL) {
+    if (parent_module == NULL || parent_module == None) {
         path_list = NULL;
     } else {
-        path_list = static_cast<BoxedList*>(getattrInternal(parent_module, "__path__", NULL));
+        path_list = static_cast<BoxedList*>(getattrInternal(parent_module, path_str, NULL));
         if (path_list == NULL || path_list->cls != list_cls) {
-            return NULL;
+            return None;
         }
     }
 
@@ -173,7 +280,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
         } else
             RELEASE_ASSERT(0, "%d", sr.type);
 
-        if (parent_module)
+        if (parent_module && parent_module != None)
             parent_module->setattr(name, module, NULL);
         return module;
     }
@@ -186,43 +293,113 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     if (name == "slots_test")
         return importTestExtension("slots_test");
 
-    return NULL;
+    return None;
 }
 
-static Box* import(const std::string* name, bool return_first, int level) {
+static void markMiss(std::string& name) {
+    BoxedDict* modules = getSysModulesDict();
+    Box* b_name = boxStringPtr(&name);
+    modules->d[b_name] = None;
+}
+
+/* altmod is either None or same as mod */
+static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf, Box** rtn) {
+    size_t dot = name.find('.');
+    size_t len;
+    Box* result;
+    bool call_again = true;
+
+    if (name.size() == 0) {
+        /* completely empty module name should only happen in
+           'from . import' (or '__import__("")')*/
+        *rtn = mod;
+        return false;
+    }
+
+    std::string local_name(name);
+    if (dot == std::string::npos) {
+        len = name.size();
+        call_again = false;
+    } else {
+        name = name.substr(dot + 1);
+        len = dot;
+    }
+    if (len == 0) {
+        raiseExcHelper(ValueError, "Empty module name");
+    }
+
+    if (buf.size() != 0)
+        buf += ".";
+    if (buf.size() >= PATH_MAX) {
+        raiseExcHelper(ValueError, "Module name too long");
+    }
+
+    std::string subname(local_name.substr(0, len));
+    buf += subname;
+
+    result = importSub(subname, buf, mod);
+    if (result == None && altmod != mod) {
+        /* Here, altmod must be None and mod must not be None */
+        result = importSub(subname, subname, altmod);
+        if (result != NULL && result != None) {
+            markMiss(buf);
+
+            buf = subname;
+        }
+    }
+    if (result == NULL) {
+        *rtn = NULL;
+        return false;
+    }
+
+    if (result == None)
+        raiseExcHelper(ImportError, "No module named %.200s", local_name.c_str());
+
+    *rtn = result;
+    return call_again;
+}
+
+static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive);
+Box* importModuleLevel(std::string* name, Box* globals, Box* from_imports, int level) {
+    bool return_first = from_imports == None;
     assert(name);
-    assert(name->size() > 0);
 
     static StatCounter slowpath_import("slowpath_import");
     slowpath_import.log();
 
-    RELEASE_ASSERT(level == -1 || level == 0, "not implemented");
-    if (level == 0)
-        printf("Warning: import level 0 will be treated as -1!\n");
+    std::string buf;
+    Box* parent = getParent(globals, level, buf);
+    if (!parent)
+        return NULL;
 
-    size_t l = 0, r;
-    Box* last_module = NULL;
-    Box* first_module = NULL;
-    while (l < name->size()) {
-        size_t r = name->find('.', l);
-        if (r == std::string::npos) {
-            r = name->size();
+    std::string _name = *name;
+
+    Box* head;
+    bool again = loadNext(parent, level < 0 ? NULL : parent, _name, buf, &head);
+    if (head == NULL)
+        return NULL;
+
+    Box* tail = head;
+    while (again) {
+        Box* next;
+        again = loadNext(tail, tail, _name, buf, &next);
+        if (next == NULL) {
+            return NULL;
         }
-
-        std::string prefix_name = std::string(*name, 0, r);
-        std::string small_name = std::string(*name, l, r - l);
-        last_module = importSub(small_name, prefix_name, last_module);
-        if (!last_module)
-            raiseExcHelper(ImportError, "No module named %s", small_name.c_str());
-
-        if (l == 0) {
-            first_module = last_module;
-        }
-
-        l = r + 1;
+        tail = next;
+    }
+    if (tail == None) {
+        /* If tail is Py_None, both get_parent and load_next found
+           an empty module name: someone called __import__("") or
+           doctored faulty bytecode */
+        raiseExcHelper(ValueError, "Empty module name");
     }
 
-    return return_first ? first_module : last_module;
+    Box* module = return_first ? head : tail;
+    if (from_imports != None) {
+        ensureFromlist(module, from_imports, buf, false);
+    }
+    return module;
 }
 
 extern "C" void _PyImport_AcquireLock() noexcept {
@@ -245,22 +422,17 @@ extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) noexcept {
 // This function has the same behaviour as __import__()
 extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* globals, PyObject* locals,
                                                 PyObject* fromlist, int level) noexcept {
-    RELEASE_ASSERT(globals == NULL, "not implemented");
-    RELEASE_ASSERT(locals == NULL, "not implemented");
-    RELEASE_ASSERT(fromlist == NULL, "not implemented");
-    RELEASE_ASSERT(level == 0, "not implemented");
-
     try {
         std::string module_name = name;
-        return import(level, fromlist ? fromlist : None, &module_name);
+        return importModuleLevel(&module_name, globals, fromlist ? fromlist : None, level);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 }
 
-static void ensureFromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
-    if (getattrInternal(module, "__path__", NULL) == NULL) {
+static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive) {
+    if (getattrInternal(module, path_str, NULL) == NULL) {
         // If it's not a package, then there's no sub-importing to do
         return;
     }
@@ -274,9 +446,9 @@ static void ensureFromlist(Box* module, Box* fromlist, const std::string& module
             if (recursive)
                 continue;
 
-            Box* all = getattrInternal(module, "__all__", NULL);
+            Box* all = getattrInternal(module, all_str, NULL);
             if (all) {
-                ensureFromlist(module, all, module_name, true);
+                ensureFromlist(module, all, buf, true);
             }
             continue;
         }
@@ -286,7 +458,7 @@ static void ensureFromlist(Box* module, Box* fromlist, const std::string& module
             continue;
 
         // Just want to import it and add it to the modules list for now:
-        importSub(s->s, module_name + '.' + s->s, module);
+        importSub(s->s, buf + '.' + s->s, module);
     }
 }
 
@@ -305,23 +477,15 @@ extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
 }
 
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
-    RELEASE_ASSERT(level == -1 || level == 0, "not implemented");
-
-    Box* module = import(module_name, from_imports == None, level);
-    assert(module);
-
-    if (from_imports != None) {
-        ensureFromlist(module, from_imports, *module_name, false);
-    }
-
-    return module;
+    std::string _module_name(*module_name);
+    return importModuleLevel(&_module_name, getCurrentModule(), from_imports, level);
 }
 
-Box* impFindModule(Box* _name) {
+Box* impFindModule(Box* _name, BoxedList* path) {
     RELEASE_ASSERT(_name->cls == str_cls, "");
 
     BoxedString* name = static_cast<BoxedString*>(_name);
-    BoxedList* path_list = getSysPath();
+    BoxedList* path_list = path && path != None ? path : getSysPath();
 
     SearchResult sr = findModule(name->s, name->s, path_list);
     if (sr.type == SearchResult::SEARCH_ERROR)
@@ -345,7 +509,10 @@ Box* impFindModule(Box* _name) {
 
 void setupImport() {
     BoxedModule* imp_module = createModule("imp", "__builtin__");
-    imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(
-                                            boxRTFunction((void*)impFindModule, UNKNOWN, 1), "find_module"));
+
+    CLFunction* find_module_func
+        = boxRTFunction((void*)impFindModule, UNKNOWN, 2, 1, false, false, ParamNames({ "name", "path" }, "", ""));
+
+    imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(find_module_func, "find_module", { None }));
 }
 }
