@@ -274,6 +274,8 @@ void setupSys() {
                          new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetFilesystemEncoding, STR, 0),
                                                           "getfilesystemencoding"));
 
+    sys_module->giveAttr("meta_path", new BoxedList());
+
     // TODO: should configure this in a better way
     sys_module->giveAttr("prefix", boxStrConstant("/usr"));
     sys_module->giveAttr("exec_prefix", boxStrConstant("/usr"));

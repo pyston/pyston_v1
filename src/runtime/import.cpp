@@ -65,7 +65,9 @@ static bool pathExists(const std::string& path) {
 }
 
 struct SearchResult {
+    // Each of these fields are only valid/used for certain filetypes:
     std::string path;
+    Box* loader;
 
     enum filetype {
         SEARCH_ERROR,
@@ -82,9 +84,34 @@ struct SearchResult {
 
     SearchResult(const std::string& path, filetype type) : path(path), type(type) {}
     SearchResult(std::string&& path, filetype type) : path(std::move(path)), type(type) {}
+    SearchResult(Box* loader) : loader(loader), type(IMP_HOOK) {}
 };
 
 SearchResult findModule(const std::string& name, const std::string& full_name, BoxedList* path_list) {
+    BoxedList* meta_path = static_cast<BoxedList*>(sys_module->getattr("meta_path"));
+    if (!meta_path || meta_path->cls != list_cls)
+        raiseExcHelper(RuntimeError, "sys.meta_path must be a list of import hooks");
+
+    const static std::string find_module_str("find_module");
+    for (int i = 0; i < meta_path->size; i++) {
+        Box* finder = meta_path->elts->elts[i];
+
+        auto path_pass = path_list ? path_list : None;
+        Box* loader
+            = callattr(finder, &find_module_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+                       ArgPassSpec(2), new BoxedString(full_name), path_pass, NULL, NULL, NULL);
+
+        if (loader != None)
+            return SearchResult(loader);
+    }
+
+    if (!path_list)
+        path_list = getSysPath();
+
+    if (path_list == NULL || path_list->cls != list_cls) {
+        raiseExcHelper(RuntimeError, "sys.path must be a list of directory names");
+    }
+
     llvm::SmallString<128> joined_path;
     for (int i = 0; i < path_list->size; i++) {
         Box* _p = path_list->elts->elts[i];
@@ -121,10 +148,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
 
     BoxedList* path_list;
     if (parent_module == NULL) {
-        path_list = getSysPath();
-        if (path_list == NULL || path_list->cls != list_cls) {
-            raiseExcHelper(RuntimeError, "sys.path must be a list of directory names");
-        }
+        path_list = NULL;
     } else {
         path_list = static_cast<BoxedList*>(parent_module->getattr("__path__", NULL));
         if (path_list == NULL || path_list->cls != list_cls) {
@@ -135,13 +159,18 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     SearchResult sr = findModule(name, full_name, path_list);
 
     if (sr.type != SearchResult::SEARCH_ERROR) {
-        BoxedModule* module;
+        Box* module;
 
         if (sr.type == SearchResult::PY_SOURCE)
             module = createAndRunModule(full_name, sr.path);
         else if (sr.type == SearchResult::PKG_DIRECTORY)
             module = createAndRunModule(full_name, sr.path + "/__init__.py", sr.path);
-        else
+        else if (sr.type == SearchResult::IMP_HOOK) {
+            const static std::string load_module_str("load_module");
+            module = callattr(sr.loader, &load_module_str,
+                              CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(1),
+                              new BoxedString(full_name), NULL, NULL, NULL, NULL);
+        } else
             RELEASE_ASSERT(0, "%d", sr.type);
 
         if (parent_module)
