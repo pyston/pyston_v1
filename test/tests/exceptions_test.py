@@ -1,6 +1,5 @@
-# expected: fail
-# - with statements
-
+# fail-if: '-n' in EXTRA_JIT_ARGS or '-O' in EXTRA_JIT_ARGS
+# we have an llvm codegen bug that this file triggers when we JIT
 class TestException(Exception):
     pass
 
@@ -361,7 +360,11 @@ def f12():
         except Exception as l[0]:
             print "shouldnt get here"
     except Exception as e2:
-        print e2
+        # print it to stderr, so that our tester's error message substituter can
+        # deal with differences between error messages between different Python
+        # versions.
+        import traceback
+        traceback.print_exc()
 
     l = []
     try:
