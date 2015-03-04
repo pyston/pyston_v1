@@ -37,6 +37,9 @@ VERBOSE := 0
 
 ENABLE_INTEL_JIT_EVENTS := 0
 
+CTAGS := ctags
+ETAGS := ctags-exuberant -e
+
 # Setting this to 1 will set the Makefile to use binaries from the trunk
 # directory, even if USE_TEST_LLVM is set to 1.
 # This is useful if clang isn't installed into the test directory, ex due
@@ -325,7 +328,11 @@ all: pyston_dbg pyston_release pyston_prof ext_python ext_pyston unittests
 ALL_HEADERS := $(wildcard src/*/*.h) $(wildcard src/*/*/*.h) $(wildcard from_cpython/Include/*.h)
 tags: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
 	$(ECHO) Calculating tags...
-	$(VERB) ctags $^
+	$(VERB) $(CTAGS) $^
+
+TAGS: $(SRCS) $(OPTIONAL_SRCS) $(FROM_CPYTHON_SRCS) $(ALL_HEADERS)
+	$(ECHO) Calculating TAGS...
+	$(VERB) $(ETAGS) $^
 
 NON_ENTRY_OBJS := $(filter-out src/jit.o,$(OBJS))
 
