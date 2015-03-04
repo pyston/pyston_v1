@@ -1303,8 +1303,9 @@ public:
                         l = r + 1;
                         continue;
                     }
-                    pushAssign(tmpname, new AST_Attribute(makeName(tmpname, AST_TYPE::Load, node->lineno),
-                                                          AST_TYPE::Load, internString(a->name.str().substr(l, r))));
+                    pushAssign(tmpname,
+                               new AST_Attribute(makeName(tmpname, AST_TYPE::Load, node->lineno), AST_TYPE::Load,
+                                                 internString(a->name.str().substr(l, r - l))));
                     l = r + 1;
                 } while (l < a->name.str().size());
                 pushAssign(a->asname, makeName(tmpname, AST_TYPE::Load, node->lineno));

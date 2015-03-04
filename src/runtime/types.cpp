@@ -918,8 +918,19 @@ Box* typeMro(BoxedClass* self) {
     return r;
 }
 
+Box* moduleNew(BoxedClass* cls, BoxedString* name, BoxedString* fn) {
+    RELEASE_ASSERT(isSubclass(cls, module_cls), "");
+    RELEASE_ASSERT(name->cls == str_cls, "");
+    RELEASE_ASSERT(!fn || fn->cls == str_cls, "");
+
+    if (fn)
+        return new (cls) BoxedModule(name->s, fn->s);
+    else
+        return new (cls) BoxedModule(name->s, "__builtin__");
+}
+
 Box* moduleRepr(BoxedModule* m) {
-    assert(m->cls == module_cls);
+    RELEASE_ASSERT(isSubclass(m->cls, module_cls), "");
 
     std::ostringstream os;
     os << "<module '" << m->name() << "' ";
@@ -1395,6 +1406,8 @@ void setupRuntime() {
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->freeze();
 
+    module_cls->giveAttr("__new__",
+                         new BoxedFunction(boxRTFunction((void*)moduleNew, UNKNOWN, 3, 1, false, false), { NULL }));
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
     module_cls->freeze();
 

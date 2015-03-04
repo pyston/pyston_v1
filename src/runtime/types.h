@@ -466,7 +466,9 @@ public:
 class BoxedModule : public Box {
 public:
     HCAttrs attrs;
-    std::string fn; // for traceback purposes; not the same as __file__
+
+    // for traceback purposes; not the same as __file__.  This corresponds to co_filename
+    std::string fn;
     FutureFlags future_flags;
 
     BoxedModule(const std::string& name, const std::string& fn);
