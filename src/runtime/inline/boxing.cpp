@@ -15,6 +15,7 @@
 #include "runtime/inline/boxing.h"
 
 #include "runtime/int.h"
+#include "runtime/float.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -45,6 +46,26 @@ Box* boxString(const std::string& s) {
 }
 Box* boxString(std::string&& s) {
     return new BoxedString(std::move(s));
+}
+
+extern "C" Box* boxFloat(double d) {
+    if (d == 0.0)
+        return floatZero;
+    if (d == -0.0)
+        return floatNegZero;
+    if (d == 1.0)
+        return floatOne;
+    if (d == -1.0)
+        return floatNegOne;
+    if (isnan(d))
+      return floatNaN;
+    if (isinf(d)) {
+      if (d > 0)
+	return floatInf;
+      return floatNegInf;
+    }
+
+    return new BoxedFloat(d);
 }
 
 extern "C" double unboxFloat(Box* b) {

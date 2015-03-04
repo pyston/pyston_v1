@@ -25,6 +25,16 @@ extern "C" double pow_float_float(double lhs, double rhs);
 class BoxedFloat;
 bool floatNonzeroUnboxed(BoxedFloat* self);
 
+extern BoxedFloat* floatZero;
+extern BoxedFloat* floatNegZero;
+extern BoxedFloat* floatOne;
+extern BoxedFloat* floatNegOne;
+extern BoxedFloat* floatTwo;
+extern BoxedFloat* floatNegTwo;
+extern BoxedFloat* floatNaN;
+extern BoxedFloat* floatInf;
+extern BoxedFloat* floatNegInf;
+
 std::string floatFmt(double x, int precision, char code);
 }
 
