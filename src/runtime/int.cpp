@@ -33,6 +33,10 @@
 namespace pyston {
 
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
+    if (op && PyInt_Check(op))
+        return PyInt_AS_LONG((PyIntObject*)op);
+    if (op && PyLong_Check(op))
+        return PyLong_AsUnsignedLongMask(op);
     Py_FatalError("unimplemented");
 }
 

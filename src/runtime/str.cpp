@@ -307,6 +307,10 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     return new BoxedString(lhs->s + rhs->s);
 }
 
+extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
+    return new BoxedString(s);
+}
+
 /* Format codes
  * F_LJUST      '-'
  * F_SIGN       '+'
@@ -1523,6 +1527,16 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     return boxString(std::move(output_str));
 }
 
+extern "C" PyObject* _PyString_Join(PyObject* sep, PyObject* x) noexcept {
+    try {
+        RELEASE_ASSERT(sep->cls == str_cls, "");
+        return strJoin((BoxedString*)sep, x);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
     if (_self->cls != str_cls)
         raiseExcHelper(TypeError, "descriptor 'replace' requires a 'str' object but received a '%s'",
@@ -2193,6 +2207,14 @@ static Py_ssize_t string_buffer_getsegcount(PyObject* o, Py_ssize_t* lenp) noexc
     return 1;
 }
 
+static Py_ssize_t string_buffer_getcharbuf(PyStringObject* self, Py_ssize_t index, const char** ptr) {
+    if (index != 0) {
+        PyErr_SetString(PyExc_SystemError, "accessing non-existent string segment");
+        return -1;
+    }
+    return string_buffer_getreadbuf((PyObject*)self, index, (const void**)ptr);
+}
+
 static int string_buffer_getbuffer(BoxedString* self, Py_buffer* view, int flags) noexcept {
     assert(self->cls == str_cls);
     return PyBuffer_FillInfo(view, (PyObject*)self, &self->s[0], self->s.size(), 1, flags);
@@ -2202,7 +2224,7 @@ static PyBufferProcs string_as_buffer = {
     (readbufferproc)string_buffer_getreadbuf, // comments are the only way I've found of
     (writebufferproc)NULL,                    // forcing clang-format to break these onto multiple lines
     (segcountproc)string_buffer_getsegcount,  //
-    (charbufferproc)NULL,                     //
+    (charbufferproc)string_buffer_getcharbuf, //
     (getbufferproc)string_buffer_getbuffer,   //
     (releasebufferproc)NULL,
 };

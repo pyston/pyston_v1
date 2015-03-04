@@ -20,7 +20,7 @@ PyAPI_DATA(PyTypeObject) PyMemoryView_Type;
 
 PyAPI_FUNC(PyObject *) PyMemoryView_GetContiguous(PyObject *base, 
 						  int buffertype, 
-						  char fort);
+                          char fort) PYSTON_NOEXCEPT;
 
     /* Return a contiguous chunk of memory representing the buffer
        from an object in a memory view object.  If a copy is made then the
@@ -53,9 +53,9 @@ PyAPI_FUNC(PyObject *) PyMemoryView_GetContiguous(PyObject *base,
        A new reference is returned that must be DECREF'd when finished.
     */
 
-PyAPI_FUNC(PyObject *) PyMemoryView_FromObject(PyObject *base);
+PyAPI_FUNC(PyObject *) PyMemoryView_FromObject(PyObject *base) PYSTON_NOEXCEPT;
 
-PyAPI_FUNC(PyObject *) PyMemoryView_FromBuffer(Py_buffer *info);
+PyAPI_FUNC(PyObject *) PyMemoryView_FromBuffer(Py_buffer *info) PYSTON_NOEXCEPT;
     /* create new if bufptr is NULL 
         will be a new bytesobject in base */
 

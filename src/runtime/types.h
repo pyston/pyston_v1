@@ -84,6 +84,7 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
     *builtin_function_or_method_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
+#define memoryview_cls (&PyMemoryView_Type)
 
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;

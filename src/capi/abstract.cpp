@@ -341,6 +341,33 @@ extern "C" PyObject* PyObject_CallMethod(PyObject* o, const char* name, const ch
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* name, ...) noexcept {
+    PyObject* args, *tmp;
+    va_list vargs;
+
+    if (callable == NULL || name == NULL)
+        return null_error();
+
+    callable = PyObject_GetAttr(callable, name);
+    if (callable == NULL)
+        return NULL;
+
+    /* count the args */
+    va_start(vargs, name);
+    args = objargs_mktuple(vargs);
+    va_end(vargs);
+    if (args == NULL) {
+        Py_DECREF(callable);
+        return NULL;
+    }
+    tmp = PyObject_Call(callable, args, NULL);
+    Py_DECREF(args);
+    Py_DECREF(callable);
+
+    return tmp;
+}
+
+
 extern "C" PyObject* _PyObject_CallMethod_SizeT(PyObject* o, const char* name, const char* format, ...) noexcept {
     // TODO it looks like this could be made much more efficient by calling our callattr(), but
     // I haven't taken the time to verify that that has the same behavior
@@ -550,6 +577,110 @@ extern "C" PyObject* PySequence_Fast(PyObject* v, const char* m) noexcept {
     return v;
 }
 
+extern "C" void* PyBuffer_GetPointer(Py_buffer* view, Py_ssize_t* indices) noexcept {
+    char* pointer;
+    int i;
+    pointer = (char*)view->buf;
+    for (i = 0; i < view->ndim; i++) {
+        pointer += view->strides[i] * indices[i];
+        if ((view->suboffsets != NULL) && (view->suboffsets[i] >= 0)) {
+            pointer = *((char**)pointer) + view->suboffsets[i];
+        }
+    }
+    return (void*)pointer;
+}
+
+extern "C" void _Py_add_one_to_index_F(int nd, Py_ssize_t* index, const Py_ssize_t* shape) noexcept {
+    int k;
+
+    for (k = 0; k < nd; k++) {
+        if (index[k] < shape[k] - 1) {
+            index[k]++;
+            break;
+        } else {
+            index[k] = 0;
+        }
+    }
+}
+
+extern "C" void _Py_add_one_to_index_C(int nd, Py_ssize_t* index, const Py_ssize_t* shape) noexcept {
+    int k;
+
+    for (k = nd - 1; k >= 0; k--) {
+        if (index[k] < shape[k] - 1) {
+            index[k]++;
+            break;
+        } else {
+            index[k] = 0;
+        }
+    }
+}
+
+extern "C" int PyObject_CopyData(PyObject* dest, PyObject* src) noexcept {
+    Py_buffer view_dest, view_src;
+    int k;
+    Py_ssize_t* indices, elements;
+    char* dptr, *sptr;
+
+    if (!PyObject_CheckBuffer(dest) || !PyObject_CheckBuffer(src)) {
+        PyErr_SetString(PyExc_TypeError, "both destination and source must have the "
+                                         "buffer interface");
+        return -1;
+    }
+
+    if (PyObject_GetBuffer(dest, &view_dest, PyBUF_FULL) != 0)
+        return -1;
+    if (PyObject_GetBuffer(src, &view_src, PyBUF_FULL_RO) != 0) {
+        PyBuffer_Release(&view_dest);
+        return -1;
+    }
+
+    if (view_dest.len < view_src.len) {
+        PyErr_SetString(PyExc_BufferError, "destination is too small to receive data from source");
+        PyBuffer_Release(&view_dest);
+        PyBuffer_Release(&view_src);
+        return -1;
+    }
+
+    if ((PyBuffer_IsContiguous(&view_dest, 'C') && PyBuffer_IsContiguous(&view_src, 'C'))
+        || (PyBuffer_IsContiguous(&view_dest, 'F') && PyBuffer_IsContiguous(&view_src, 'F'))) {
+        /* simplest copy is all that is needed */
+        memcpy(view_dest.buf, view_src.buf, view_src.len);
+        PyBuffer_Release(&view_dest);
+        PyBuffer_Release(&view_src);
+        return 0;
+    }
+
+    /* Otherwise a more elaborate copy scheme is needed */
+
+    /* XXX(nnorwitz): need to check for overflow! */
+    indices = (Py_ssize_t*)PyMem_Malloc(sizeof(Py_ssize_t) * view_src.ndim);
+    if (indices == NULL) {
+        PyErr_NoMemory();
+        PyBuffer_Release(&view_dest);
+        PyBuffer_Release(&view_src);
+        return -1;
+    }
+    for (k = 0; k < view_src.ndim; k++) {
+        indices[k] = 0;
+    }
+    elements = 1;
+    for (k = 0; k < view_src.ndim; k++) {
+        /* XXX(nnorwitz): can this overflow? */
+        elements *= view_src.shape[k];
+    }
+    while (elements--) {
+        _Py_add_one_to_index_C(view_src.ndim, indices, view_src.shape);
+        dptr = (char*)PyBuffer_GetPointer(&view_dest, indices);
+        sptr = (char*)PyBuffer_GetPointer(&view_src, indices);
+        memcpy(dptr, sptr, view_src.itemsize);
+    }
+    PyMem_Free(indices);
+    PyBuffer_Release(&view_dest);
+    PyBuffer_Release(&view_src);
+    return 0;
+}
+
 static PyObject* binary_op1(PyObject* v, PyObject* w, const int op_slot) {
     PyObject* x;
     binaryfunc slotv = NULL;
@@ -666,7 +797,20 @@ extern "C" PyObject* PySequence_List(PyObject* v) noexcept {
 }
 
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
+    va_list va;
+    PyObject* args;
+
+    if (callable == NULL)
+        return null_error();
+
+    if (format && *format) {
+        va_start(va, format);
+        args = Py_VaBuildValue(format, va);
+        va_end(va);
+    } else
+        args = PyTuple_New(0);
+
+    return call_function_tail(callable, args);
 }
 
 extern "C" int PyMapping_Check(PyObject* o) noexcept {

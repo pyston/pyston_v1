@@ -57,6 +57,7 @@
 #ifndef WITHOUT_COMPLEX
 #include "complexobject.h"
 #endif
+#include "memoryobject.h"
 #include "stringobject.h"
 #include "bufferobject.h"
 #include "bytesobject.h"

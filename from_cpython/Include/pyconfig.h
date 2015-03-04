@@ -27,6 +27,7 @@
 #define SIZEOF_INT 4
 #define SIZEOF_LONG 8
 #define SIZEOF_LONG_LONG 8
+#define SIZEOF_OFF_T 8
 #define SIZEOF_PTHREAD_T 8
 #define HAVE_COPYSIGN 1
 #define HAVE_ROUND 1

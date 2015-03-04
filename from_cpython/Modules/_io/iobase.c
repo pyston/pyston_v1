@@ -201,10 +201,12 @@ _PyIOBase_finalize(PyObject *self)
 
     /* If _PyIOBase_finalize() is called from a destructor, we need to
        resurrect the object as calling close() can invoke arbitrary code. */
-    is_zombie = (Py_REFCNT(self) == 0);
-    if (is_zombie) {
-        ++Py_REFCNT(self);
-    }
+    // Pyston change:
+    is_zombie = 0;
+    // is_zombie = (Py_REFCNT(self) == 0);
+    //if (is_zombie) {
+    //    ++Py_REFCNT(self);
+    //}
     PyErr_Fetch(&tp, &v, &tb);
     /* If `closed` doesn't exist or can't be evaluated as bool, then the
        object is probably in an unusable state, so ignore. */
@@ -230,6 +232,8 @@ _PyIOBase_finalize(PyObject *self)
     }
     PyErr_Restore(tp, v, tb);
     if (is_zombie) {
+// Pyston change:
+#if 0
         if (--Py_REFCNT(self) != 0) {
             /* The object lives again. The following code is taken from
                slot_tp_del in typeobject.c. */
@@ -245,12 +249,14 @@ _PyIOBase_finalize(PyObject *self)
              * _Py_NewReference bumped tp_allocs:  both of those need to be
              * undone.
              */
+
 #ifdef COUNT_ALLOCS
             --Py_TYPE(self)->tp_frees;
             --Py_TYPE(self)->tp_allocs;
 #endif
             return -1;
         }
+#endif
     }
     return 0;
 }

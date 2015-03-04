@@ -86,8 +86,36 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     return new BoxedWrapperObject(self, inst);
 }
 
+static PyObject* null_error(void) {
+    if (!PyErr_Occurred())
+        PyErr_SetString(PyExc_SystemError, "null argument to internal routine");
+    return NULL;
+}
+
 extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssize_t* buffer_len) noexcept {
-    Py_FatalError("unimplemented");
+    PyBufferProcs* pb;
+    char* pp;
+    Py_ssize_t len;
+
+    if (obj == NULL || buffer == NULL || buffer_len == NULL) {
+        null_error();
+        return -1;
+    }
+    pb = obj->cls->tp_as_buffer;
+    if (pb == NULL || pb->bf_getcharbuffer == NULL || pb->bf_getsegcount == NULL) {
+        PyErr_SetString(PyExc_TypeError, "expected a character buffer object");
+        return -1;
+    }
+    if ((*pb->bf_getsegcount)(obj, NULL) != 1) {
+        PyErr_SetString(PyExc_TypeError, "expected a single-segment buffer object");
+        return -1;
+    }
+    len = (*pb->bf_getcharbuffer)(obj, 0, &pp);
+    if (len < 0)
+        return -1;
+    *buffer = pp;
+    *buffer_len = len;
+    return 0;
 }
 
 // copied from CPython's getargs.c:
@@ -131,11 +159,14 @@ extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
     }
 
     PyObject* obj = view->obj;
-    assert(obj);
-    assert(obj->cls == str_cls);
-    if (obj && Py_TYPE(obj)->tp_as_buffer && Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer)
-        Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
-    Py_XDECREF(obj);
+    if (obj) {
+        assert(obj->cls == str_cls);
+        if (obj && Py_TYPE(obj)->tp_as_buffer && Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer)
+            Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
+        Py_XDECREF(obj);
+    }
+
+
     view->obj = NULL;
 }
 
@@ -309,7 +340,8 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
     try {
         return getattr(o, static_cast<BoxedString*>(attr_name)->s.c_str());
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        setCAPIException(e);
+        return NULL;
     }
 }
 
@@ -340,7 +372,36 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
 }
 
 extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) noexcept {
-    Py_FatalError("unimplemented");
+    int translated_op;
+    switch (opid) {
+        case Py_LT:
+            translated_op = AST_TYPE::Lt;
+            break;
+        case Py_LE:
+            translated_op = AST_TYPE::LtE;
+            break;
+        case Py_EQ:
+            translated_op = AST_TYPE::Eq;
+            break;
+        case Py_NE:
+            translated_op = AST_TYPE::NotEq;
+            break;
+        case Py_GT:
+            translated_op = AST_TYPE::Gt;
+            break;
+        case Py_GE:
+            translated_op = AST_TYPE::GtE;
+            break;
+        default:
+            Py_FatalError("unimplemented");
+    };
+
+    try {
+        return compare(o1, o2, translated_op);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 extern "C" {
@@ -1150,6 +1211,13 @@ extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
+    PyObject* result = NULL;
+    if (o == NULL)
+        return null_error();
+    if (PyInt_Check(o) || PyLong_Check(o)) {
+        return o;
+    }
+
     Py_FatalError("unimplemented");
 }
 
@@ -1158,16 +1226,75 @@ extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
 }
 
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
-    RELEASE_ASSERT(o->cls != long_cls, "unhandled");
 
-    RELEASE_ASSERT(isSubclass(o->cls, int_cls), "??");
-    int64_t n = static_cast<BoxedInt*>(o)->n;
-    static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
-    return n;
+    if (isSubclass(o->cls, int_cls)) {
+        int64_t n = static_cast<BoxedInt*>(o)->n;
+        static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
+        return n;
+    } else if (isSubclass(o->cls, long_cls)) {
+        return PyLong_AsSsize_t(o);
+    }
+
+    Py_FatalError("unimplemented");
+}
+
+static int _IsFortranContiguous(Py_buffer* view) {
+    Py_ssize_t sd, dim;
+    int i;
+
+    if (view->ndim == 0)
+        return 1;
+    if (view->strides == NULL)
+        return (view->ndim == 1);
+
+    sd = view->itemsize;
+    if (view->ndim == 1)
+        return (view->shape[0] == 1 || sd == view->strides[0]);
+    for (i = 0; i < view->ndim; i++) {
+        dim = view->shape[i];
+        if (dim == 0)
+            return 1;
+        if (view->strides[i] != sd)
+            return 0;
+        sd *= dim;
+    }
+    return 1;
+}
+
+static int _IsCContiguous(Py_buffer* view) {
+    Py_ssize_t sd, dim;
+    int i;
+
+    if (view->ndim == 0)
+        return 1;
+    if (view->strides == NULL)
+        return 1;
+
+    sd = view->itemsize;
+    if (view->ndim == 1)
+        return (view->shape[0] == 1 || sd == view->strides[0]);
+    for (i = view->ndim - 1; i >= 0; i--) {
+        dim = view->shape[i];
+        if (dim == 0)
+            return 1;
+        if (view->strides[i] != sd)
+            return 0;
+        sd *= dim;
+    }
+    return 1;
 }
 
 extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
-    Py_FatalError("unimplemented");
+    if (view->suboffsets != NULL)
+        return 0;
+
+    if (fort == 'C')
+        return _IsCContiguous(view);
+    else if (fort == 'F')
+        return _IsFortranContiguous(view);
+    else if (fort == 'A')
+        return (_IsCContiguous(view) || _IsFortranContiguous(view));
+    return 0;
 }
 
 extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) noexcept {

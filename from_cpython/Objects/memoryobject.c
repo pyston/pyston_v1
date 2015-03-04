@@ -801,7 +801,9 @@ static PyBufferProcs memory_as_buffer = {
 
 
 PyTypeObject PyMemoryView_Type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    // Pyston change
+    //PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     "memoryview",
     sizeof(PyMemoryViewObject),
     0,
