@@ -201,7 +201,6 @@ LDFLAGS := $(LLVM_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_DEBUG := $(LLVM_DEBUG_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_PROFILE = $(LLVM_PROFILE_LDFLAGS) -pg $(COMMON_LDFLAGS)
 LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
-LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 # Can't add this, because there are functions in the compiler that look unused but are hooked back from the runtime:
 # LDFLAGS_RELEASE += -Wl,--gc-sections
 
@@ -223,7 +222,8 @@ CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
 EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -Ifrom_cpython/Include
 EXT_CFLAGS += -Wno-missing-field-initializers
-EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits
+EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits -Wno-strict-aliasing
+EXT_CFLAGS_PROFILE := $(EXT_CFLAGS) -pg
 ifneq ($(USE_CLANG),0)
 	EXT_CFLAGS += $(CLANG_EXTRA_FLAGS)
 endif
@@ -242,6 +242,7 @@ CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int
 CXX := $(GPP)
 CC := $(GCC)
 CXX_PROFILE := $(GPP)
+CC_PROFILE := $(GCC)
 CLANG_CXX := $(CLANGPP_EXE)
 
 ifneq ($(USE_CLANG),0)
@@ -300,7 +301,7 @@ FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addp
 # so put them first in the list:
 OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o) $(ASM_SRCS)
 ASTPRINT_OBJS := $(STDLIB_OBJS) $(BASE_SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o) $(ASM_SRCS)
-PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o) $(ASM_SRCS)
+PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.prof.o) $(ASM_SRCS)
 OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o) $(ASM_SRCS)
 
 OPTIONAL_SRCS := src/codegen/profiling/oprofile.cpp src/codegen/profiling/pprof.cpp
@@ -401,14 +402,14 @@ check:
 
 	$(MAKE) run_unittests
 
-	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
-	$(MAKE) pyston_prof
-	@# and run some basic tests to make sure it works:
-	$(call checksha,./pyston_prof -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(MAKE) pyston_gcc
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
 
+	@# It can be useful to test release mode, since it actually exposes different functionality
+	@# since we can make different decisions about which internal functions to inline or not.
+	@# Doing the full check_release is probably overkill though.
 	$(MAKE) check_release
+
 	echo "All tests passed"
 
 quick_check:
@@ -760,6 +761,11 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
+cmake_check:
+	@clang --version >/dev/null || (echo "clang not available"; false)
+	@cmake --version >/dev/null || (echo "cmake not available"; false)
+	@ninja --version >/dev/null || (echo "ninja not available"; false)
+
 ifneq ($(USE_CMAKE),1)
 $(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
@@ -771,10 +777,6 @@ CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 .PHONY: cmake_check
-cmake_check:
-	@clang --version >/dev/null || (echo "clang not available"; false)
-	@cmake --version >/dev/null || (echo "cmake not available"; false)
-	@ninja --version >/dev/null || (echo "ninja not available"; false)
 $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_DBG)
@@ -792,6 +794,16 @@ pyston_release: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
+CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
+CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
+$(CMAKE_SETUP_GCC):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_GCC)
+	cd $(CMAKE_DIR_GCC); CC='gcc' CXX='g++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+.PHONY: pyston_gcc
+pyston_gcc: $(CMAKE_SETUP_GCC)
+	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston $(NINJAFLAGS)
+	ln -sf $(HOME)/pyston-build-gcc/pyston pyston_gcc
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 
@@ -881,9 +893,11 @@ perf_%: perf_release_%
 $(call make_target,_dbg)
 $(call make_target,_debug)
 $(call make_target,_release)
-$(call make_target,_grwl)
-$(call make_target,_grwl_dbg)
-$(call make_target,_nosync)
+# $(call make_target,_grwl)
+# $(call make_target,_grwl_dbg)
+# $(call make_target,_nosync)
+$(call make_target,_prof)
+$(call make_target,_gcc)
 
 runpy_% pyrun_%: %.py ext_python
 	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
@@ -1043,6 +1057,10 @@ $(FROM_CPYTHON_SRCS:.c=.o.ll): %.o.ll: %.c $(BUILD_SYSTEM_DEPS)
 $(FROM_CPYTHON_SRCS:.c=.release.o): %.release.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
+
+$(FROM_CPYTHON_SRCS:.c=.prof.o): %.prof.o: %.c $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling C file to $@
+	$(VERB) $(CC_PROFILE) $(EXT_CFLAGS_PROFILE) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
 # These are necessary until we support unicode:
 ../from_cpython/Modules/_sre.o: EXT_CFLAGS += -Wno-sometimes-uninitialized

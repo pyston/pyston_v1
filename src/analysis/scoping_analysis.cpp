@@ -627,6 +627,7 @@ ScopingAnalysis* runScopingAnalysis(AST_Module* m) {
 }
 
 ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
-    scopes[e] = getScopeInfoForNode(e);
+    auto scope_info = getScopeInfoForNode(e);
+    scopes[e] = scope_info;
 }
 }

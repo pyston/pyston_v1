@@ -1038,6 +1038,8 @@ static Box* pad(BoxedString* self, Box* width, Box* fillchar, int justType) {
             padLeft = nNeeded / 2 + (nNeeded & targetWidth & 1);
             padRight = nNeeded - padLeft;
             break;
+        default:
+            abort();
     }
 
     // TODO this is probably slow
