@@ -95,10 +95,14 @@ public:
     ParamNames* getParamNames() { return param_names; }
 };
 
+// turns CFGBlocks into LLVM IR
 class IRGenerator {
 private:
 public:
     struct EndingState {
+        // symbol_table records which Python variables are bound to what CompilerVariables at the end of this block.
+        // phi_symbol_table records the ones that will need to be `phi'd.
+        // both only record non-globals.
         SymbolTable* symbol_table;
         ConcreteSymbolTable* phi_symbol_table;
         llvm::BasicBlock* ending_block;
@@ -113,7 +117,7 @@ public:
 
     virtual void giveLocalSymbol(InternedString name, CompilerVariable* var) = 0;
     virtual void copySymbolsFrom(SymbolTable* st) = 0;
-    virtual void run(const CFGBlock* block) = 0;
+    virtual void run(const CFGBlock* block) = 0; // primary entry point
     virtual EndingState getEndingSymbolTable() = 0;
     virtual void doSafePoint() = 0;
     virtual void addFrameStackmapArgs(PatchpointInfo* pp, AST_stmt* current_stmt,

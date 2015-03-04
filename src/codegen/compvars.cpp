@@ -738,6 +738,8 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
 
     llvm::Value* isGenerator_v = llvm::ConstantInt::get(g.i1, isGenerator, false);
 
+    // We know this function call can't throw, so it's safe to use emitter.getBuilder()->CreateCall() rather than
+    // emitter.createCall().
     llvm::Value* boxed = emitter.getBuilder()->CreateCall(
         g.funcs.boxCLFunction,
         std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, isGenerator_v, scratch,

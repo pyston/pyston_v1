@@ -118,7 +118,7 @@ enum AST_TYPE {
     DictComp = 15,
     Set = 43,
     Ellipsis = 87,
-    Expression = 88,
+    Expression = 88, // like Module, but used for eval.
 
     // Pseudo-nodes that are specific to this compiler:
     Branch = 200,
@@ -1007,14 +1007,14 @@ class AST_LangPrimitive : public AST_expr {
 public:
     enum Opcodes {
         ISINSTANCE,
-        LANDINGPAD,
+        LANDINGPAD, // grabs the info about the last raised exception
         LOCALS,
         GET_ITER,
         IMPORT_FROM,
         IMPORT_NAME,
         IMPORT_STAR,
         NONE,
-        NONZERO,
+        NONZERO, // determines whether something is "true" for purposes of `if'
         SET_EXC_INFO,
         UNCACHE_EXC_INFO,
     } opcode;

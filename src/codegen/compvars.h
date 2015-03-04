@@ -286,7 +286,7 @@ private:
 
 protected:
     void drop(IREmitter& emitter) override { type->drop(emitter, this); }
-    void grab(IREmitter& emmitter) override { type->grab(emmitter, this); }
+    void grab(IREmitter& emitter) override { type->grab(emitter, this); }
 
 public:
     ValuedCompilerVariable(T* type, V value, bool grabbed) : CompilerVariable(grabbed), type(type), value(value) {

@@ -291,6 +291,7 @@ private:
 
     llvm::BasicBlock* curblock;
     IREmitterImpl emitter;
+    // symbol_table tracks which (non-global) python variables are bound to which CompilerVariables
     SymbolTable symbol_table;
     std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks;
     CFGBlock* myblock;
@@ -883,6 +884,7 @@ private:
 
             return closure->getattr(emitter, getEmptyOpInfo(unw_info), &node->id.str(), false);
         } else {
+            // vst is one of {FAST, CLOSURE, NAME}
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // classdefs have different scoping rules than functions:
                 if (vst == ScopeInfo::VarScopeType::NAME) {
@@ -1225,6 +1227,12 @@ private:
         cur = val;
     }
 
+    // whether a Python variable FOO might be undefined or not is determined by whether the corresponding is_defined_FOO
+    // variable is present in our symbol table. If it is, then it *might* be undefined. If it isn't, then it either is
+    // definitely defined, or definitely isn't.
+    //
+    // to check whether a variable is in our symbol table, call _getFake with allow_missing = true and check whether the
+    // result is NULL.
     CompilerVariable* _getFake(InternedString name, bool allow_missing = false) {
         assert(name.str()[0] == '!');
         auto it = symbol_table.find(name);
@@ -1243,6 +1251,7 @@ private:
         return rtn;
     }
 
+    // only updates symbol_table if we're *not* setting a global
     void _doSet(InternedString name, CompilerVariable* val, UnwindInfo unw_info) {
         assert(name.str() != "None");
 
@@ -1702,7 +1711,7 @@ private:
         // that case asking it to convert to itself ends up just being an incvref
         // and doesn't end up emitting an incref+decref pair.
         // This could also be handled by casting from the CompilerVariable to
-        // ConcreteCOmpilerVariable, but this way feels a little more robust to me.
+        // ConcreteCompilerVariable, but this way feels a little more robust to me.
         ConcreteCompilerType* opt_rtn_type = irstate->getReturnType();
         if (irstate->getReturnType()->llvmType() == val->getConcreteType()->llvmType())
             opt_rtn_type = val->getConcreteType();
@@ -2060,9 +2069,9 @@ private:
         SourceInfo* source = irstate->getSourceInfo();
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
-        // Additional names to remove; remove them after iteration is done to new mess up the iterators
+        // Additional names to remove; remove them after iteration is done to not mess up the iterators
         std::vector<InternedString> also_remove;
-        for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
+        for (auto it = symbol_table.begin(); it != symbol_table.end();) {
             if (allowableFakeEndingSymbol(it->first)) {
                 ++it;
                 continue;
@@ -2073,7 +2082,7 @@ private:
 
             if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
                 // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", it->first.c_str(), myblock->idx,
-                // it->second->isGrabbed(), it->second->getVrefs());
+                //        it->second->isGrabbed(), it->second->getVrefs());
                 also_remove.push_back(getIsDefinedName(it->first));
 
                 it->second->decvref(emitter);
@@ -2208,6 +2217,8 @@ public:
             return EndingState(st, phi_st, curblock);
         }
 
+        // We have one successor, but they have more than one predecessor.
+        // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
             if (allowableFakeEndingSymbol(it->first) || source->phis->isRequiredAfter(it->first, myblock)) {
                 ASSERT(it->second->isGrabbed(), "%s", it->first.c_str());
@@ -2344,11 +2355,23 @@ public:
     }
 
     void run(const CFGBlock* block) override {
+        if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
+            printf("  %d init:", block->idx);
+            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
+                printf(" %s", it->first.c_str());
+            printf("\n");
+        }
         for (int i = 0; i < block->body.size(); i++) {
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
+        }
+        if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
+            printf("  %d fini:", block->idx);
+            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
+                printf(" %s", it->first.c_str());
+            printf("\n");
         }
     }
 

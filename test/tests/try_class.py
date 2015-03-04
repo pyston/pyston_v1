@@ -27,5 +27,6 @@ def f2():
             print 'here'
     except:
         print 'impossible'
+        print D
         raise
 f2()

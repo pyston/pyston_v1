@@ -5,7 +5,7 @@ class Mgr(object):
     def __enter__(self):
         print 'Mgr.__enter__ accessed'
         def enterer(*args):
-            print 'Mgr.__enter__%r called' % (args,)
+            print 'Mgr.__enter__ called'
             return 23
         return enterer
 
@@ -13,7 +13,7 @@ class Mgr(object):
     def __exit__(self):
         print 'Mgr.__exit__ accessed'
         def exiter(*args):
-            print 'Mgr.__exit__%r called' % (args,)
+            print 'Mgr.__exit__ called'
             return False
         return exiter
 

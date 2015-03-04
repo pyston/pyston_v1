@@ -1,5 +1,3 @@
-# fail-if: '-n' in EXTRA_JIT_ARGS or '-O' in EXTRA_JIT_ARGS
-# we have an llvm codegen bug that this file triggers when we JIT
 class TestException(Exception):
     pass
 

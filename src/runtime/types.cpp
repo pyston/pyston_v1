@@ -366,6 +366,9 @@ std::string BoxedModule::name() {
     }
 }
 
+// This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
+// finally-blocks in scope.
+// TODO: should we use C++11 `noexcept' here?
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
                               std::initializer_list<Box*> defaults) {
     if (closure)

@@ -36,7 +36,8 @@ void CFGBlock::connectTo(CFGBlock* successor, bool allow_backedge) {
 
     if (!allow_backedge) {
         assert(this->idx >= 0);
-        ASSERT(successor->idx == -1 || successor->idx > this->idx, "edge from %d to %d", this->idx, successor->idx);
+        ASSERT(successor->idx == -1 || successor->idx > this->idx, "edge from %d (%s) to %d (%s)", this->idx,
+               this->info, successor->idx, successor->info);
     }
     // assert(successors.count(successor) == 0);
     // assert(successor->predecessors.count(this) == 0);
@@ -53,16 +54,123 @@ void CFGBlock::unconnectFrom(CFGBlock* successor) {
                                   successor->predecessors.end());
 }
 
+void CFGBlock::print() {
+    printf("Block %d", idx);
+    if (info)
+        printf(" '%s'", info);
+
+    printf("; Predecessors:");
+    for (int j = 0; j < predecessors.size(); j++) {
+        printf(" %d", predecessors[j]->idx);
+    }
+    printf(" Successors:");
+    for (int j = 0; j < successors.size(); j++) {
+        printf(" %d", successors[j]->idx);
+    }
+    printf("\n");
+
+    PrintVisitor pv(4);
+    for (int j = 0; j < body.size(); j++) {
+        printf("    ");
+        body[j]->accept(&pv);
+        printf("\n");
+    }
+}
+
 static const std::string RETURN_NAME("#rtnval");
 
+// The various reasons why a `finally' block (or similar, eg. a `with' exit block) might get entered.
+// this has to go outside CFGVisitor b/c why_values can't go inside it.
+enum Why : int8_t {
+    FALLTHROUGH, // i.e. normal control flow
+    CONTINUE,
+    BREAK,
+    RETURN,
+    EXCEPTION,
+};
+
+static const Why why_values[] = { FALLTHROUGH, CONTINUE, BREAK, RETURN, EXCEPTION };
+
 class CFGVisitor : public ASTVisitor {
+    // ---------- Types ----------
+private:
+    /* Explanation of ContInfo and ExcBlockInfo:
+     *
+     * While generating the CFG, we need to know what to do if we:
+     * 1. hit a `continue'
+     * 2. hit a `break'
+     * 3. hit a `return'
+     * 4. raise an exception
+     *
+     * We call these "continuations", because they're what we "continue on to" after these conditions occur.
+     *
+     * Various control flow constructs affect each of these:
+     * - `for' and `while' affect (1-2).
+     * - `try/except' affects (4).
+     * - `try/finally' and `with' affect all four.
+     *
+     * Each of these take effect only within some chunk of code. So, notionally, we keep a stack for each of (1-4) whose
+     * _top_ value says what to do if that condition occurs. The top of the continue-stack points to the block to jump
+     * to if we hit a `continue', etc.
+     *
+     * For example, when we enter a loop, we push a pointer to the head of the loop onto the continue-stack, and a
+     * pointer to the code after the loop onto the break-stack. When we visit a `break' in the loop body, we emit a jump
+     * to the top of the break-stack, which is the end of the loop. After we finish visiting the loop body, we pop the
+     * break- & continue-stacks, restoring our old state (maybe we were inside another loop, for example).
+     *
+     * It's more complicated in practice, because:
+     *
+     * 1. When we jump to a `finally' block, we must tell it *why* we jumped to it. After the `finally' block finishes,
+     *    it uses this info to resume what we were doing before we entered it (returning, raising an exception, etc).
+     *
+     * 2. When we jump to a `except' block, we must record three pieces of information about the exception (its type,
+     *    value, and traceback).
+     *
+     * So instead of four stacks of block pointers, instead we have two stacks:
+     * - `continuations', a stack of ContInfos, for `continue', `break', and `return'
+     * - `exc_handlers', a stack of ExcBlockInfos, for exceptions
+     *
+     * Read the comments in ContInfo & ExcBlockInfo for more information.
+     */
+    struct ContInfo {
+        // where to jump to if a continue, break, or return happens respectively
+        CFGBlock* continue_dest, *break_dest, *return_dest;
+        // true if this continuation needs to know the reason why we entered it. `finally' blocks use this info to
+        // determine how to resume execution after they finish.
+        bool say_why;
+        // bit-vector tracking all reasons Why we ever might enter this continuation. is only updated/used if `say_why'
+        // is true. when we emit a jump to this continuation for reason w, we set the bit (did_why & (1 << w)). this is
+        // used when emitting `finally' blocks to determine which continuation-cases to emit.
+        int did_why;
+        // name of the variable to store the reason Why we jumped in.
+        InternedString why_name;
+
+        ContInfo(CFGBlock* continue_dest, CFGBlock* break_dest, CFGBlock* return_dest, bool say_why,
+                 InternedString why_name)
+            : continue_dest(continue_dest), break_dest(break_dest), return_dest(return_dest), say_why(say_why),
+              did_why(0), why_name(why_name) {}
+    };
+
+    struct ExcBlockInfo {
+        // where to jump in case of an exception
+        CFGBlock* exc_dest;
+        // variable names to store the exception (type, value, traceback) in
+        InternedString exc_type_name, exc_value_name, exc_traceback_name;
+    };
+
+    // ---------- Member fields ----------
 private:
     SourceInfo* source;
+    // `root_type' is the type of the root of the AST tree that we are turning
+    // into a CFG. Used when we find a "return" to check that we're inside a
+    // function (otherwise we SyntaxError).
     AST_TYPE::AST_TYPE root_type;
     FutureFlags future_flags;
     CFG* cfg;
     CFGBlock* curblock;
     ScopingAnalysis* scoping_analysis;
+    std::vector<ContInfo> continuations;
+    std::vector<ExcBlockInfo> exc_handlers;
 
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
@@ -74,32 +182,12 @@ public:
     }
 
     ~CFGVisitor() {
-        assert(regions.size() == 0);
+        assert(continuations.size() == 0);
         assert(exc_handlers.size() == 0);
     }
 
+    // ---------- private methods ----------
 private:
-    enum Why : int8_t {
-        FALLTHROUGH,
-        CONTINUE,
-        BREAK,
-        RETURN,
-        EXCEPTION,
-    };
-
-    // My first thought is to call this BlockInfo, but this is separate from the idea of cfg blocks.
-    struct RegionInfo {
-        CFGBlock* continue_dest, *break_dest, *return_dest;
-        bool say_why;
-        int did_why;
-        InternedString why_name;
-
-        RegionInfo(CFGBlock* continue_dest, CFGBlock* break_dest, CFGBlock* return_dest, bool say_why,
-                   InternedString why_name)
-            : continue_dest(continue_dest), break_dest(break_dest), return_dest(return_dest), say_why(say_why),
-              did_why(0), why_name(why_name) {}
-    };
-
     template <typename T> InternedString internString(T&& s) {
         return source->getInternedStrings().get(std::forward<T>(s));
     }
@@ -109,48 +197,32 @@ private:
         return name;
     }
 
-    std::vector<RegionInfo> regions;
+    AST_Name* makeLoad(InternedString id, AST* node) { return makeName(id, AST_TYPE::Load, node->lineno); }
 
-    struct ExcBlockInfo {
-        CFGBlock* exc_dest;
-        InternedString exc_type_name, exc_value_name, exc_traceback_name;
-    };
-    std::vector<ExcBlockInfo> exc_handlers;
-
-    void pushLoopRegion(CFGBlock* continue_dest, CFGBlock* break_dest) {
+    void pushLoopContinuation(CFGBlock* continue_dest, CFGBlock* break_dest) {
         assert(continue_dest
                != break_dest); // I guess this doesn't have to be true, but validates passing say_why=false
-        regions.emplace_back(continue_dest, break_dest, nullptr, false, internString(""));
+        continuations.emplace_back(continue_dest, break_dest, nullptr, false, internString(""));
     }
 
-    void pushFinallyRegion(CFGBlock* finally_block, InternedString why_name) {
-        regions.emplace_back(finally_block, finally_block, finally_block, true, why_name);
+    void pushFinallyContinuation(CFGBlock* finally_block, InternedString why_name) {
+        continuations.emplace_back(finally_block, finally_block, finally_block, true, why_name);
     }
 
-    void popRegion() { regions.pop_back(); }
-
-    // XXX get rid of this
-    void pushReturnRegion(CFGBlock* return_dest) {
-        regions.emplace_back(nullptr, nullptr, return_dest, false, internString(""));
-    }
+    void popContinuation() { continuations.pop_back(); }
 
     void doReturn(AST_expr* value) {
         assert(value);
 
-        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
-            if (region.return_dest) {
-                if (region.say_why) {
-                    pushAssign(region.why_name, makeNum(Why::RETURN));
-                    region.did_why |= (1 << Why::RETURN);
+        for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
+            if (cont.return_dest) {
+                if (cont.say_why) {
+                    pushAssign(cont.why_name, makeNum(Why::RETURN));
+                    cont.did_why |= (1 << Why::RETURN);
                 }
 
                 pushAssign(internString(RETURN_NAME), value);
-
-                AST_Jump* j = makeJump();
-                j->target = region.return_dest;
-                curblock->connectTo(region.return_dest);
-                push_back(j);
-                curblock = NULL;
+                pushJump(cont.return_dest);
                 return;
             }
         }
@@ -164,18 +236,14 @@ private:
     }
 
     void doContinue() {
-        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
-            if (region.continue_dest) {
-                if (region.say_why) {
-                    pushAssign(region.why_name, makeNum(Why::CONTINUE));
-                    region.did_why |= (1 << Why::CONTINUE);
+        for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
+            if (cont.continue_dest) {
+                if (cont.say_why) {
+                    pushAssign(cont.why_name, makeNum(Why::CONTINUE));
+                    cont.did_why |= (1 << Why::CONTINUE);
                 }
 
-                AST_Jump* j = makeJump();
-                j->target = region.continue_dest;
-                curblock->connectTo(region.continue_dest, true);
-                push_back(j);
-                curblock = NULL;
+                pushJump(cont.continue_dest, true);
                 return;
             }
         }
@@ -184,18 +252,14 @@ private:
     }
 
     void doBreak() {
-        for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
-            if (region.break_dest) {
-                if (region.say_why) {
-                    pushAssign(region.why_name, makeNum(Why::BREAK));
-                    region.did_why |= (1 << Why::BREAK);
+        for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
+            if (cont.break_dest) {
+                if (cont.say_why) {
+                    pushAssign(cont.why_name, makeNum(Why::BREAK));
+                    cont.did_why |= (1 << Why::BREAK);
                 }
 
-                AST_Jump* j = makeJump();
-                j->target = region.break_dest;
-                curblock->connectTo(region.break_dest, true);
-                push_back(j);
-                curblock = NULL;
+                pushJump(cont.break_dest, true);
                 return;
             }
         }
@@ -216,7 +280,7 @@ private:
 
         auto name = nodeName(e);
         pushAssign(name, call);
-        return makeName(name, AST_TYPE::Load, e->lineno);
+        return makeLoad(name, e);
     }
 
     AST_Name* remapName(AST_Name* name) { return name; }
@@ -254,21 +318,13 @@ private:
             pushAssign(iter_name, iter_call);
 
             // TODO bad to save these like this?
-            AST_expr* hasnext_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno),
-                                                       internString("__hasnext__"), true);
-            AST_expr* next_attr
-                = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno), internString("next"), true);
-
-            AST_Jump* j;
+            AST_expr* hasnext_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("__hasnext__"), true);
+            AST_expr* next_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("next"), true);
 
             CFGBlock* test_block = cfg->addBlock();
             test_block->info = "comprehension_test";
             // printf("Test block for comp %d is %d\n", i, test_block->idx);
-
-            j = new AST_Jump();
-            j->target = test_block;
-            curblock->connectTo(test_block);
-            push_back(j);
+            pushJump(test_block);
 
             curblock = test_block;
             AST_expr* test_call = callNonzero(remapExpr(makeCall(hasnext_attr)));
@@ -293,7 +349,7 @@ private:
             curblock = body_block;
             InternedString next_name(nodeName(next_attr));
             pushAssign(next_name, makeCall(next_attr));
-            pushAssign(c->target, makeName(next_name, AST_TYPE::Load, node->lineno));
+            pushAssign(c->target, makeLoad(next_name, node));
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = callNonzero(remapExpr(if_condition));
@@ -315,10 +371,7 @@ private:
                 curblock->connectTo(body_continue);
 
                 curblock = body_tramp;
-                j = new AST_Jump();
-                j->target = test_block;
-                push_back(j);
-                curblock->connectTo(test_block, true);
+                pushJump(test_block, true);
 
                 curblock = body_continue;
             }
@@ -328,21 +381,15 @@ private:
             assert((finished_block != NULL) == (i != 0));
             if (finished_block) {
                 curblock = exit_block;
-                j = new AST_Jump();
-                j->target = finished_block;
-                curblock->connectTo(finished_block, true);
-                push_back(j);
+                pushJump(finished_block, true);
             }
             finished_block = test_block;
 
             curblock = body_end;
             if (is_innermost) {
-                push_back(makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load, node->lineno))));
+                push_back(makeExpr(applyComprehensionCall(node, makeLoad(rtn_name, node))));
 
-                j = new AST_Jump();
-                j->target = test_block;
-                curblock->connectTo(test_block, true);
-                push_back(j);
+                pushJump(test_block, true);
 
                 assert(exit_blocks.size());
                 curblock = exit_blocks[0];
@@ -359,7 +406,7 @@ private:
             // printf("Exit block for comp %d is %d\n", i, exit_blocks[i]->idx);
         }
 
-        return makeName(rtn_name, AST_TYPE::Load, node->lineno);
+        return makeLoad(rtn_name, node);
     }
 
     AST_expr* makeNum(int n) {
@@ -369,17 +416,45 @@ private:
         return node;
     }
 
-    AST_Jump* makeJump() {
+    void pushJump(CFGBlock* target, bool allow_backedge = false) {
         AST_Jump* rtn = new AST_Jump();
-        return rtn;
+        rtn->target = target;
+        push_back(rtn);
+        curblock->connectTo(target, allow_backedge);
+        curblock = nullptr;
     }
 
+    // NB. can generate blocks, because callNonzero can
     AST_Branch* makeBranch(AST_expr* test) {
         AST_Branch* rtn = new AST_Branch();
         rtn->test = callNonzero(test);
         rtn->col_offset = test->col_offset;
         rtn->lineno = test->lineno;
         return rtn;
+    }
+
+    // NB. this can (but usually doesn't) generate new blocks, which is why we require `iftrue' and `iffalse' to be
+    // deferred, to avoid heisenbugs. of course, this doesn't allow these branches to be backedges, but that hasn't yet
+    // been necessary.
+    void pushBranch(AST_expr* test, CFGBlock* iftrue, CFGBlock* iffalse) {
+        assert(iftrue->idx == -1 && iffalse->idx == -1);
+        AST_Branch* branch = makeBranch(test);
+        branch->iftrue = iftrue;
+        branch->iffalse = iffalse;
+        curblock->connectTo(iftrue);
+        curblock->connectTo(iffalse);
+        push_back(branch);
+        curblock = nullptr;
+    }
+
+    void pushReraise(AST* node, InternedString exc_type_name, InternedString exc_value_name,
+                     InternedString exc_traceback_name) {
+        auto raise = new AST_Raise();
+        raise->arg0 = makeLoad(exc_type_name, node);
+        raise->arg1 = makeLoad(exc_value_name, node);
+        raise->arg2 = makeLoad(exc_traceback_name, node);
+        push_back(raise);
+        curblock = nullptr;
     }
 
     AST_expr* makeLoadAttribute(AST_expr* base, InternedString name, bool clsonly) {
@@ -412,26 +487,32 @@ private:
     }
 
     AST_Call* makeCall(AST_expr* func, AST_expr* arg0) {
-        AST_Call* call = new AST_Call();
+        auto call = makeCall(func);
         call->args.push_back(arg0);
-        call->starargs = NULL;
-        call->kwargs = NULL;
-        call->func = func;
-        call->col_offset = func->col_offset;
-        call->lineno = func->lineno;
         return call;
     }
 
     AST_Call* makeCall(AST_expr* func, AST_expr* arg0, AST_expr* arg1) {
-        AST_Call* call = new AST_Call();
+        auto call = makeCall(func);
         call->args.push_back(arg0);
         call->args.push_back(arg1);
-        call->starargs = NULL;
-        call->kwargs = NULL;
-        call->func = func;
-        call->col_offset = func->col_offset;
-        call->lineno = func->lineno;
         return call;
+    }
+
+    AST_Call* makeCall(AST_expr* func, AST_expr* arg0, AST_expr* arg1, AST_expr* arg2) {
+        auto call = makeCall(func);
+        call->args.push_back(arg0);
+        call->args.push_back(arg1);
+        call->args.push_back(arg2);
+        return call;
+    }
+
+    AST_Compare* makeCompare(AST_TYPE::AST_TYPE oper, AST_expr* left, AST_expr* right) {
+        auto compare = new AST_Compare();
+        compare->ops.push_back(AST_TYPE::Eq);
+        compare->left = left;
+        compare->comparators.push_back(right);
+        return compare;
     }
 
     void pushAssign(AST_expr* target, AST_expr* val) {
@@ -495,7 +576,7 @@ private:
                 InternedString tmp_name = nodeName(target, "", i);
                 new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store, target->lineno));
 
-                pushAssign((*elts)[i], makeName(tmp_name, AST_TYPE::Load, target->lineno));
+                pushAssign((*elts)[i], makeLoad(tmp_name, target));
             }
         } else {
             RELEASE_ASSERT(0, "%d", target->type);
@@ -516,11 +597,10 @@ private:
         return stmt;
     }
 
-
-
     InternedString nodeName(AST* node) {
         char buf[40];
-        snprintf(buf, 40, "#%p", node);
+        int bytes = snprintf(buf, 40, "#%p", node);
+        assert(bytes < 40); // double-check
 // Uncomment this line to check to make sure we never reuse the same nodeName() accidentally.
 // This check is potentially too expensive for even debug mode, since it never frees any memory.
 // #define VALIDATE_FAKE_NAMES
@@ -537,13 +617,15 @@ private:
 
     InternedString nodeName(AST* node, const std::string& suffix) {
         char buf[50];
-        snprintf(buf, 50, "#%p_%s", node, suffix.c_str());
+        int bytes = snprintf(buf, 50, "#%p_%s", node, suffix.c_str());
+        assert(bytes < 50); // double-check
         return internString(std::string(buf));
     }
 
     InternedString nodeName(AST* node, const std::string& suffix, int idx) {
         char buf[50];
-        snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
+        int bytes = snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
+        assert(bytes < 50); // double-check
         return internString(std::string(buf));
     }
 
@@ -639,26 +721,19 @@ private:
             }
 
             curblock = crit_break_block;
-            AST_Jump* j = new AST_Jump();
-            j->target = exit_block;
-            push_back(j);
-            crit_break_block->connectTo(exit_block);
+            pushJump(exit_block);
 
             curblock = next_block;
         }
 
         AST_expr* final_val = remapExpr(node->values[node->values.size() - 1]);
         pushAssign(name, final_val);
-
-        AST_Jump* j = new AST_Jump();
-        push_back(j);
-        j->target = exit_block;
-        curblock->connectTo(exit_block);
+        pushJump(exit_block);
 
         cfg->placeBlock(exit_block);
         curblock = exit_block;
 
-        return makeName(name, AST_TYPE::Load, node->lineno);
+        return makeLoad(name, node);
     }
 
     AST_expr* remapCall(AST_Call* node) {
@@ -738,7 +813,7 @@ private:
                 pushAssign(name, val);
 
                 AST_Branch* br = new AST_Branch();
-                br->test = callNonzero(makeName(name, AST_TYPE::Load, node->lineno));
+                br->test = callNonzero(makeLoad(name, node));
                 push_back(br);
 
                 CFGBlock* was_block = curblock;
@@ -751,25 +826,18 @@ private:
                 br->iftrue = next_block;
 
                 curblock = crit_break_block;
-                AST_Jump* j = new AST_Jump();
-                j->target = exit_block;
-                push_back(j);
-                crit_break_block->connectTo(exit_block);
+                pushJump(exit_block);
 
                 curblock = next_block;
 
                 left = _dup(right);
             }
 
-            AST_Jump* j = new AST_Jump();
-            push_back(j);
-            j->target = exit_block;
-            curblock->connectTo(exit_block);
-
+            pushJump(exit_block);
             cfg->placeBlock(exit_block);
             curblock = exit_block;
 
-            return makeName(name, AST_TYPE::Load, node->lineno);
+            return makeLoad(name, node);
         }
     }
 
@@ -816,7 +884,7 @@ private:
             loop->target = c->target;
 
             if (i == 0) {
-                loop->iter = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
+                loop->iter = makeLoad(first_generator_name, node);
             } else {
                 loop->iter = c->iter;
             }
@@ -847,50 +915,38 @@ private:
 
         call->starargs = NULL;
         call->kwargs = NULL;
-        call->func = makeName(func_name, AST_TYPE::Load, node->lineno);
+        call->func = makeLoad(func_name, node);
         call->args.push_back(first);
         return call;
     };
 
     AST_expr* remapIfExp(AST_IfExp* node) {
         InternedString rtn_name = nodeName(node);
+        CFGBlock* iftrue = cfg->addDeferredBlock();
+        CFGBlock* iffalse = cfg->addDeferredBlock();
+        CFGBlock* exit_block = cfg->addDeferredBlock();
 
-        AST_Branch* br = new AST_Branch();
-        br->col_offset = node->col_offset;
-        br->lineno = node->lineno;
-        br->test = callNonzero(remapExpr(node->test));
-        push_back(br);
+        pushBranch(remapExpr(node->test), iftrue, iffalse);
 
-        CFGBlock* starting_block = curblock;
-
-        CFGBlock* iftrue = cfg->addBlock();
-        iftrue->info = "iftrue";
-        br->iftrue = iftrue;
-        starting_block->connectTo(iftrue);
+        // if true block
+        cfg->placeBlock(iftrue);
         curblock = iftrue;
+        iftrue->info = "iftrue";
         pushAssign(rtn_name, remapExpr(node->body));
-        AST_Jump* jtrue = new AST_Jump();
-        push_back(jtrue);
-        CFGBlock* endtrue = curblock;
+        pushJump(exit_block);
 
-        CFGBlock* iffalse = cfg->addBlock();
-        iffalse->info = "iffalse";
-        br->iffalse = iffalse;
-        starting_block->connectTo(iffalse);
+        // if false block
+        cfg->placeBlock(iffalse);
         curblock = iffalse;
+        iffalse->info = "iffalse";
         pushAssign(rtn_name, remapExpr(node->orelse));
-        AST_Jump* jfalse = new AST_Jump();
-        push_back(jfalse);
-        CFGBlock* endfalse = curblock;
+        pushJump(exit_block);
 
-        CFGBlock* exit_block = cfg->addBlock();
-        jtrue->target = exit_block;
-        endtrue->connectTo(exit_block);
-        jfalse->target = exit_block;
-        endfalse->connectTo(exit_block);
+        // exit block
+        cfg->placeBlock(exit_block);
         curblock = exit_block;
 
-        return makeName(rtn_name, AST_TYPE::Load, node->lineno);
+        return makeLoad(rtn_name, node);
     }
 
     AST_expr* remapIndex(AST_Index* node) {
@@ -1012,9 +1068,14 @@ private:
 
         push_back(makeExpr(new AST_LangPrimitive(AST_LangPrimitive::UNCACHE_EXC_INFO)));
 
-        return makeName(node_name, AST_TYPE::Load, node->lineno);
+        return makeLoad(node_name, node);
     }
 
+    // Flattens a nested expression into a flat one, emitting instructions &
+    // generating temporary variables as needed.
+    //
+    // If `wrap_with_assign` is true, it will always return a temporary
+    // variable.
     AST_expr* remapExpr(AST_expr* node, bool wrap_with_assign = true) {
         if (node == NULL)
             return NULL;
@@ -1100,15 +1161,65 @@ private:
                 RELEASE_ASSERT(0, "%d", node->type);
         }
 
+        // this is the part that actually generates temporaries & assigns to them.
         if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.str()[0] != '#')) {
             InternedString name = nodeName(node);
             pushAssign(name, rtn);
-            return makeName(name, AST_TYPE::Load, node->lineno);
+            return makeLoad(name, node);
         } else {
             return rtn;
         }
     }
 
+    // helper for visit_{tryfinally,with}
+    CFGBlock* makeFinallyCont(Why reason, AST_expr* whyexpr, CFGBlock* then_block) {
+        CFGBlock* otherwise = cfg->addDeferredBlock();
+        otherwise->info = "finally_otherwise";
+        pushBranch(makeCompare(AST_TYPE::Eq, whyexpr, makeNum(reason)), then_block, otherwise);
+        cfg->placeBlock(otherwise);
+        return otherwise;
+    }
+
+    // Helper for visit_with. Performs the appropriate exit from a with-block, according to the value of `why'.
+    // NB. `exit_block' is only used if `why' is FALLTHROUGH.
+    void exitFinally(AST* node, Why why, CFGBlock* exit_block = nullptr) {
+        switch (why) {
+            case Why::RETURN:
+                doReturn(makeLoad(internString(RETURN_NAME), node));
+                break;
+            case Why::BREAK:
+                doBreak();
+                break;
+            case Why::CONTINUE:
+                doContinue();
+                break;
+            case Why::FALLTHROUGH:
+                assert(exit_block);
+                pushJump(exit_block);
+                break;
+            case Why::EXCEPTION:
+                assert(why != Why::EXCEPTION); // not handled here
+                break;
+        }
+        assert(curblock == nullptr);
+    }
+
+    // helper for visit_{with,tryfinally}. Generates a branch testing the value of `whyexpr' against `why', and
+    // performing the appropriate exit from the with-block if they are equal.
+    // NB. `exit_block' is only used if `why' is FALLTHROUGH.
+    void exitFinallyIf(AST* node, Why why, InternedString whyname, CFGBlock* exit_block = nullptr) {
+        CFGBlock* do_exit = cfg->addDeferredBlock();
+        do_exit->info = "with_exit_if";
+        CFGBlock* otherwise = makeFinallyCont(why, makeLoad(whyname, node), do_exit);
+
+        cfg->placeBlock(do_exit);
+        curblock = do_exit;
+        exitFinally(node, why, exit_block);
+
+        curblock = otherwise;
+    }
+
+    // ---------- public methods ----------
 public:
     void push_back(AST_stmt* node) {
         assert(node->type != AST_TYPE::Invoke);
@@ -1145,6 +1256,7 @@ public:
             if (asgn->targets[0]->type == AST_TYPE::Name) {
                 AST_Name* target = ast_cast<AST_Name>(asgn->targets[0]);
                 if (target->id.str()[0] != '#') {
+// assigning to a non-temporary
 #ifndef NDEBUG
                     if (!(asgn->value->type == AST_TYPE::Name && ast_cast<AST_Name>(asgn->value)->id.str()[0] == '#')
                         && asgn->value->type != AST_TYPE::Str && asgn->value->type != AST_TYPE::Num) {
@@ -1160,8 +1272,12 @@ public:
                     // Assigning from one temporary name to another:
                     curblock->push_back(node);
                     return;
-                } else if (asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str) {
+                } else if (asgn->value->type == AST_TYPE::Num || asgn->value->type == AST_TYPE::Str
+                           || (asgn->value->type == AST_TYPE::Name
+                               && ast_cast<AST_Name>(asgn->value)->id.str().compare("None") == 0)) {
                     // Assigning to a temporary name from an expression that can't throw:
+                    // NB. `None' can't throw in Python, because it's hardcoded
+                    // (seriously, try reassigning "None" in CPython).
                     curblock->push_back(node);
                     return;
                 }
@@ -1206,10 +1322,7 @@ public:
         exc_asgn->value = new AST_LangPrimitive(AST_LangPrimitive::LANDINGPAD);
         curblock->push_back(exc_asgn);
 
-        AST_Jump* j = new AST_Jump();
-        j->target = exc_info.exc_dest;
-        curblock->push_back(j);
-        curblock->connectTo(exc_info.exc_dest);
+        pushJump(exc_info.exc_dest);
 
         if (is_raise)
             curblock = NULL;
@@ -1289,7 +1402,7 @@ public:
             if (a->asname.str().size() == 0) {
                 // No asname, so load the top-level module into the name
                 // (e.g., for `import os.path`, loads the os module into `os`)
-                pushAssign(internString(getTopModule(a->name.str())), makeName(tmpname, AST_TYPE::Load, node->lineno));
+                pushAssign(internString(getTopModule(a->name.str())), makeLoad(tmpname, node));
             } else {
                 // If there is an asname, get the bottom-level module by
                 // getting the attributes and load it into asname.
@@ -1303,11 +1416,11 @@ public:
                         l = r + 1;
                         continue;
                     }
-                    pushAssign(tmpname, new AST_Attribute(makeName(tmpname, AST_TYPE::Load, node->lineno),
-                                                          AST_TYPE::Load, internString(a->name.str().substr(l, r))));
+                    pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node), AST_TYPE::Load,
+                                                          internString(a->name.str().substr(l, r))));
                     l = r + 1;
                 } while (l < a->name.str().size());
-                pushAssign(a->asname, makeName(tmpname, AST_TYPE::Load, node->lineno));
+                pushAssign(a->asname, makeLoad(tmpname, node));
             }
         }
 
@@ -1348,7 +1461,7 @@ public:
                 AST_LangPrimitive* import_star = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_STAR);
                 import_star->lineno = node->lineno;
                 import_star->col_offset = node->col_offset;
-                import_star->args.push_back(makeName(tmp_module_name, AST_TYPE::Load, node->lineno));
+                import_star->args.push_back(makeLoad(tmp_module_name, node));
 
                 AST_Expr* import_star_expr = new AST_Expr();
                 import_star_expr->value = import_star;
@@ -1358,13 +1471,12 @@ public:
                 AST_LangPrimitive* import_from = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_FROM);
                 import_from->lineno = node->lineno;
                 import_from->col_offset = node->col_offset;
-                import_from->args.push_back(makeName(tmp_module_name, AST_TYPE::Load, node->lineno));
+                import_from->args.push_back(makeLoad(tmp_module_name, node));
                 import_from->args.push_back(new AST_Str(a->name.str()));
 
                 InternedString tmp_import_name = nodeName(a);
                 pushAssign(tmp_import_name, import_from);
-                pushAssign(a->asname.str().size() ? a->asname : a->name,
-                           makeName(tmp_import_name, AST_TYPE::Load, node->lineno));
+                pushAssign(a->asname.str().size() ? a->asname : a->name, makeLoad(tmp_import_name, node));
             }
         }
 
@@ -1407,17 +1519,10 @@ public:
 
         CFGBlock* unreachable = cfg->addBlock();
         unreachable->info = "unreachable";
-        curblock->connectTo(unreachable);
-
-        AST_Jump* j = new AST_Jump();
-        j->target = unreachable;
-        push_back(j);
+        pushJump(unreachable);
 
         curblock = unreachable;
-        AST_Jump* j2 = new AST_Jump();
-        j2->target = unreachable;
-        push_back(j2);
-        curblock->connectTo(unreachable, true);
+        pushJump(unreachable, true);
 
         curblock = iftrue;
 
@@ -1460,9 +1565,9 @@ public:
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
                 InternedString n_name(nodeName(n));
-                pushAssign(n_name, makeName(n->id, AST_TYPE::Load, node->lineno));
+                pushAssign(n_name, makeLoad(n->id, node));
                 remapped_target = n;
-                remapped_lhs = makeName(n_name, AST_TYPE::Load, node->lineno);
+                remapped_lhs = makeLoad(n_name, node);
                 break;
             }
             case AST_TYPE::Subscript: {
@@ -1522,7 +1627,7 @@ public:
 
         InternedString node_name(nodeName(node));
         pushAssign(node_name, binop);
-        pushAssign(remapped_target, makeName(node_name, AST_TYPE::Load, node->lineno));
+        pushAssign(remapped_target, makeLoad(node_name, node));
         return true;
     }
 
@@ -1637,6 +1742,8 @@ public:
     }
 
     bool visit_return(AST_Return* node) override {
+        // returns are allowed in functions (of course), and also in eval("...") strings - basically, eval strings get
+        // an implicit `return'. root_type is AST_TYPE::Expression when we're compiling an eval string.
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda && root_type != AST_TYPE::Expression) {
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
@@ -1644,10 +1751,7 @@ public:
         if (!curblock)
             return true;
 
-        AST_expr* value = remapExpr(node->value);
-        if (value == NULL)
-            value = makeName(internString("None"), AST_TYPE::Load, node->lineno);
-        doReturn(value);
+        doReturn(node->value ? remapExpr(node->value) : makeLoad(internString("None"), node));
         return true;
     }
 
@@ -1674,10 +1778,7 @@ public:
             node->body[i]->accept(this);
         }
         if (curblock) {
-            AST_Jump* jtrue = new AST_Jump();
-            push_back(jtrue);
-            jtrue->target = exit;
-            curblock->connectTo(exit);
+            pushJump(exit);
         }
 
         CFGBlock* iffalse = cfg->addBlock();
@@ -1690,10 +1791,7 @@ public:
             node->orelse[i]->accept(this);
         }
         if (curblock) {
-            AST_Jump* jfalse = new AST_Jump();
-            push_back(jfalse);
-            jfalse->target = exit;
-            curblock->connectTo(exit);
+            pushJump(exit);
         }
 
         if (exit->predecessors.size() == 0) {
@@ -1732,11 +1830,7 @@ public:
 
         CFGBlock* test_block = cfg->addBlock();
         test_block->info = "while_test";
-
-        AST_Jump* j = makeJump();
-        push_back(j);
-        j->target = test_block;
-        curblock->connectTo(test_block);
+        pushJump(test_block);
 
         curblock = test_block;
         AST_Branch* br = makeBranch(remapExpr(node->test));
@@ -1747,7 +1841,7 @@ public:
         // but we don't want it to be placed until after the orelse.
         CFGBlock* end = cfg->addDeferredBlock();
         end->info = "while_exit";
-        pushLoopRegion(test_block, end);
+        pushLoopContinuation(test_block, end);
 
         CFGBlock* body = cfg->addBlock();
         body->info = "while_body_start";
@@ -1758,13 +1852,9 @@ public:
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
         }
-        if (curblock) {
-            AST_Jump* jbody = makeJump();
-            push_back(jbody);
-            jbody->target = test_block;
-            curblock->connectTo(test_block, true);
-        }
-        popRegion();
+        if (curblock)
+            pushJump(test_block, true);
+        popContinuation();
 
         CFGBlock* orelse = cfg->addBlock();
         orelse->info = "while_orelse_start";
@@ -1774,12 +1864,8 @@ public:
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
         }
-        if (curblock) {
-            AST_Jump* jend = makeJump();
-            push_back(jend);
-            jend->target = end;
-            curblock->connectTo(end);
-        }
+        if (curblock)
+            pushJump(end);
         curblock = end;
 
         cfg->placeBlock(end);
@@ -1804,18 +1890,12 @@ public:
         InternedString itername = internString(itername_buf);
         pushAssign(itername, iter_call);
 
-        auto hasnext_attr = [&]() {
-            return makeLoadAttribute(makeName(itername, AST_TYPE::Load, node->lineno), internString("__hasnext__"),
-                                     true);
-        };
-        AST_expr* next_attr
-            = makeLoadAttribute(makeName(itername, AST_TYPE::Load, node->lineno), internString("next"), true);
+        auto hasnext_attr =
+            [&]() { return makeLoadAttribute(makeLoad(itername, node), internString("__hasnext__"), true); };
+        AST_expr* next_attr = makeLoadAttribute(makeLoad(itername, node), internString("next"), true);
 
         CFGBlock* test_block = cfg->addBlock();
-        AST_Jump* jump_to_test = makeJump();
-        jump_to_test->target = test_block;
-        push_back(jump_to_test);
-        curblock->connectTo(test_block);
+        pushJump(test_block);
         curblock = test_block;
 
         AST_expr* test_call = makeCall(hasnext_attr());
@@ -1834,30 +1914,23 @@ public:
         CFGBlock* else_block = cfg->addDeferredBlock();
 
         curblock = test_true;
-
         // TODO simplify the breaking of these crit edges?
-        AST_Jump* test_true_jump = makeJump();
-        test_true_jump->target = loop_block;
-        push_back(test_true_jump);
-        test_true->connectTo(loop_block);
+        pushJump(loop_block);
 
         curblock = test_false;
-        AST_Jump* test_false_jump = makeJump();
-        test_false_jump->target = else_block;
-        push_back(test_false_jump);
-        test_false->connectTo(else_block);
+        pushJump(else_block);
 
-        pushLoopRegion(test_block, end_block);
+        pushLoopContinuation(test_block, end_block);
 
         curblock = loop_block;
         InternedString next_name(nodeName(next_attr));
         pushAssign(next_name, makeCall(next_attr));
-        pushAssign(node->target, makeName(next_name, AST_TYPE::Load, node->lineno));
+        pushAssign(node->target, makeLoad(next_name, node));
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
         }
-        popRegion();
+        popContinuation();
 
         if (curblock) {
             AST_expr* end_call = makeCall((hasnext_attr()));
@@ -1872,16 +1945,10 @@ public:
             curblock->connectTo(end_false);
 
             curblock = end_true;
-            AST_Jump* end_true_jump = makeJump();
-            end_true_jump->target = loop_block;
-            push_back(end_true_jump);
-            end_true->connectTo(loop_block, true);
+            pushJump(loop_block, true);
 
             curblock = end_false;
-            AST_Jump* end_false_jump = makeJump();
-            end_false_jump->target = else_block;
-            push_back(end_false_jump);
-            end_false->connectTo(else_block);
+            pushJump(else_block);
         }
 
         cfg->placeBlock(else_block);
@@ -1890,12 +1957,8 @@ public:
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
         }
-        if (curblock) {
-            AST_Jump* else_jump = makeJump();
-            push_back(else_jump);
-            else_jump->target = end_block;
-            curblock->connectTo(end_block);
-        }
+        if (curblock)
+            pushJump(end_block);
 
         cfg->placeBlock(end_block);
         curblock = end_block;
@@ -1956,12 +2019,8 @@ public:
         }
 
         CFGBlock* join_block = cfg->addDeferredBlock();
-        if (curblock) {
-            AST_Jump* j = new AST_Jump();
-            j->target = join_block;
-            push_back(j);
-            curblock->connectTo(join_block);
-        }
+        if (curblock)
+            pushJump(join_block);
 
         if (exc_handler_block->predecessors.size() == 0) {
             delete exc_handler_block;
@@ -1970,7 +2029,7 @@ public:
             curblock = exc_handler_block;
 
             // TODO This is supposed to be exc_type_name (value doesn't matter for checking matches)
-            AST_expr* exc_obj = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
+            AST_expr* exc_obj = makeLoad(exc_value_name, node);
 
             bool caught_all = false;
             for (AST_ExceptHandler* exc_handler : node->handlers) {
@@ -2003,9 +2062,9 @@ public:
                 }
 
                 AST_LangPrimitive* set_exc_info = new AST_LangPrimitive(AST_LangPrimitive::SET_EXC_INFO);
-                set_exc_info->args.push_back(makeName(exc_type_name, AST_TYPE::Load, node->lineno));
-                set_exc_info->args.push_back(makeName(exc_value_name, AST_TYPE::Load, node->lineno));
-                set_exc_info->args.push_back(makeName(exc_traceback_name, AST_TYPE::Load, node->lineno));
+                set_exc_info->args.push_back(makeLoad(exc_type_name, node));
+                set_exc_info->args.push_back(makeLoad(exc_value_name, node));
+                set_exc_info->args.push_back(makeLoad(exc_traceback_name, node));
                 push_back(makeExpr(set_exc_info));
 
                 if (exc_handler->name) {
@@ -2017,10 +2076,7 @@ public:
                 }
 
                 if (curblock) {
-                    AST_Jump* j = new AST_Jump();
-                    j->target = join_block;
-                    push_back(j);
-                    curblock->connectTo(join_block);
+                    pushJump(join_block);
                 }
 
                 if (exc_next) {
@@ -2033,9 +2089,9 @@ public:
 
             if (!caught_all) {
                 AST_Raise* raise = new AST_Raise();
-                raise->arg0 = makeName(exc_type_name, AST_TYPE::Load, node->lineno);
-                raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
-                raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
+                raise->arg0 = makeLoad(exc_type_name, node);
+                raise->arg1 = makeLoad(exc_value_name, node);
+                raise->arg2 = makeLoad(exc_traceback_name, node);
                 push_back(raise);
                 curblock = NULL;
             }
@@ -2061,7 +2117,7 @@ public:
         exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         CFGBlock* finally_block = cfg->addDeferredBlock();
-        pushFinallyRegion(finally_block, exc_why_name);
+        pushFinallyContinuation(finally_block, exc_why_name);
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
@@ -2069,17 +2125,14 @@ public:
 
         exc_handlers.pop_back();
 
-        int did_why = regions.back().did_why; // bad to just reach in like this
-        popRegion();                          // finally region
+        int did_why = continuations.back().did_why; // bad to just reach in like this
+        popContinuation();                          // finally continuation
 
         if (curblock) {
             // assign the exc_*_name variables to tell irgen that they won't be undefined?
             // have an :UNDEF() langprimitive to not have to do any loading there?
             pushAssign(exc_why_name, makeNum(Why::FALLTHROUGH));
-            AST_Jump* j = new AST_Jump();
-            j->target = finally_block;
-            push_back(j);
-            curblock->connectTo(finally_block);
+            pushJump(finally_block);
         }
 
         if (exc_handler_block->predecessors.size() == 0) {
@@ -2087,13 +2140,8 @@ public:
         } else {
             cfg->placeBlock(exc_handler_block);
             curblock = exc_handler_block;
-
             pushAssign(exc_why_name, makeNum(Why::EXCEPTION));
-
-            AST_Jump* j = new AST_Jump();
-            j->target = finally_block;
-            push_back(j);
-            curblock->connectTo(finally_block);
+            pushJump(finally_block);
         }
 
         cfg->placeBlock(finally_block);
@@ -2104,99 +2152,19 @@ public:
         }
 
         if (curblock) {
-            // TODO: these 4 cases are pretty copy-pasted from each other:
-            if (did_why & (1 << Why::RETURN)) {
-                CFGBlock* doreturn = cfg->addBlock();
-                CFGBlock* otherwise = cfg->addBlock();
+            if (did_why & (1 << Why::RETURN))
+                exitFinallyIf(node, Why::RETURN, exc_why_name);
+            if (did_why & (1 << Why::BREAK))
+                exitFinallyIf(node, Why::BREAK, exc_why_name);
+            if (did_why & (1 << Why::CONTINUE))
+                exitFinallyIf(node, Why::CONTINUE, exc_why_name);
 
-                AST_Compare* compare = new AST_Compare();
-                compare->ops.push_back(AST_TYPE::Eq);
-                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
-                compare->comparators.push_back(makeNum(Why::RETURN));
+            CFGBlock* reraise = cfg->addDeferredBlock();
+            CFGBlock* noexc = makeFinallyCont(Why::EXCEPTION, makeLoad(exc_why_name, node), reraise);
 
-                AST_Branch* br = new AST_Branch();
-                br->test = callNonzero(compare);
-                br->iftrue = doreturn;
-                br->iffalse = otherwise;
-                curblock->connectTo(doreturn);
-                curblock->connectTo(otherwise);
-                push_back(br);
-
-                curblock = doreturn;
-                doReturn(makeName(internString(RETURN_NAME), AST_TYPE::Load, node->lineno));
-
-                curblock = otherwise;
-            }
-
-            if (did_why & (1 << Why::BREAK)) {
-                CFGBlock* doreturn = cfg->addBlock();
-                CFGBlock* otherwise = cfg->addBlock();
-
-                AST_Compare* compare = new AST_Compare();
-                compare->ops.push_back(AST_TYPE::Eq);
-                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
-                compare->comparators.push_back(makeNum(Why::BREAK));
-
-                AST_Branch* br = new AST_Branch();
-                br->test = callNonzero(compare);
-                br->iftrue = doreturn;
-                br->iffalse = otherwise;
-                curblock->connectTo(doreturn);
-                curblock->connectTo(otherwise);
-                push_back(br);
-
-                curblock = doreturn;
-                doBreak();
-
-                curblock = otherwise;
-            }
-
-            if (did_why & (1 << Why::CONTINUE)) {
-                CFGBlock* doreturn = cfg->addBlock();
-                CFGBlock* otherwise = cfg->addBlock();
-
-                AST_Compare* compare = new AST_Compare();
-                compare->ops.push_back(AST_TYPE::Eq);
-                compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
-                compare->comparators.push_back(makeNum(Why::CONTINUE));
-
-                AST_Branch* br = new AST_Branch();
-                br->test = callNonzero(compare);
-                br->iftrue = doreturn;
-                br->iffalse = otherwise;
-                curblock->connectTo(doreturn);
-                curblock->connectTo(otherwise);
-                push_back(br);
-
-                curblock = doreturn;
-                doContinue();
-
-                curblock = otherwise;
-            }
-
-            AST_Compare* compare = new AST_Compare();
-            compare->ops.push_back(AST_TYPE::Eq);
-            compare->left = makeName(exc_why_name, AST_TYPE::Load, node->lineno);
-            compare->comparators.push_back(makeNum(Why::EXCEPTION));
-
-            AST_Branch* br = new AST_Branch();
-            br->test = callNonzero(compare);
-
-            CFGBlock* reraise = cfg->addBlock();
-            CFGBlock* noexc = cfg->addBlock();
-
-            br->iftrue = reraise;
-            br->iffalse = noexc;
-            curblock->connectTo(reraise);
-            curblock->connectTo(noexc);
-            push_back(br);
-
+            cfg->placeBlock(reraise);
             curblock = reraise;
-            AST_Raise* raise = new AST_Raise();
-            raise->arg0 = makeName(exc_type_name, AST_TYPE::Load, node->lineno);
-            raise->arg1 = makeName(exc_value_name, AST_TYPE::Load, node->lineno);
-            raise->arg2 = makeName(exc_traceback_name, AST_TYPE::Load, node->lineno);
-            push_back(raise);
+            pushReraise(node, exc_type_name, exc_value_name, exc_traceback_name);
 
             curblock = noexc;
         }
@@ -2205,105 +2173,137 @@ public:
     }
 
     bool visit_with(AST_With* node) override {
-        char ctxmgrname_buf[80];
-        snprintf(ctxmgrname_buf, 80, "#ctxmgr_%p", node);
-        InternedString ctxmgrname = internString(ctxmgrname_buf);
-        char exitname_buf[80];
-        snprintf(exitname_buf, 80, "#exit_%p", node);
-        InternedString exitname = internString(exitname_buf);
+        // see https://www.python.org/dev/peps/pep-0343/
+        // section "Specification: the 'with' Statement"
+        // which contains pseudocode for what this implements:
+        //
+        // mgr = (EXPR)
+        // exit = type(mgr).__exit__            # not calling it yet
+        // value = type(mgr).__enter__(mgr)
+        // exc = True
+        // try:
+        //     VAR = value
+        //     BLOCK
+        // except:
+        //     exc = False
+        //     if not exit(mgr, *sys.exc_info()):
+        //         raise
+        // finally:
+        //     if exc:
+        //         exit(mgr, None, None, None)
+        //
+        // Unfortunately, this pseudocode isn't *quite* correct. We don't actually call type(mgr).__exit__ and
+        // type(mgr).__enter__; rather, we use Python's "special method lookup rules" to find the appropriate method.
+        // See https://docs.python.org/2/reference/datamodel.html#new-style-special-lookup. This is one reason we can't
+        // just translate this into AST_Try{Except,Finally} nodes and recursively visit those. (If there are other
+        // reasons, I've forgotten them.)
+        InternedString ctxmgrname = nodeName(node, "ctxmgr");
+        InternedString exitname = nodeName(node, "exit");
+        InternedString whyname = nodeName(node, "why");
+        InternedString exc_type_name = nodeName(node, "exc_type");
+        InternedString exc_value_name = nodeName(node, "exc_value");
+        InternedString exc_traceback_name = nodeName(node, "exc_traceback");
         InternedString nonename = internString("None");
+        CFGBlock* exit_block = cfg->addDeferredBlock();
+        exit_block->info = "with_exit";
 
         pushAssign(ctxmgrname, remapExpr(node->context_expr));
 
-        AST_expr* enter
-            = makeLoadAttribute(makeName(ctxmgrname, AST_TYPE::Load, node->lineno), internString("__enter__"), true);
-        AST_expr* exit
-            = makeLoadAttribute(makeName(ctxmgrname, AST_TYPE::Load, node->lineno), internString("__exit__"), true);
+        // TODO(rntz): for some reason, in the interpreter (but not the JIT), this is looking up __exit__ on the
+        // instance rather than the class. See test/tests/with_ctxclass_instance_attrs.py.
+        AST_expr* exit = makeLoadAttribute(makeLoad(ctxmgrname, node), internString("__exit__"), true);
         pushAssign(exitname, exit);
+
+        // Oddly, this acces to __enter__ doesn't suffer from the same bug. Perhaps it has something to do with
+        // __enter__ being called immediately?
+        AST_expr* enter = makeLoadAttribute(makeLoad(ctxmgrname, node), internString("__enter__"), true);
         enter = remapExpr(makeCall(enter));
-
-        if (node->optional_vars) {
+        if (node->optional_vars)
             pushAssign(node->optional_vars, enter);
-        } else {
+        else
             push_back(makeExpr(enter));
-        }
 
-        CFGBlock* continue_dest = NULL, * break_dest = NULL;
-        if (regions.size()) {
-            continue_dest = cfg->addDeferredBlock();
-            continue_dest->info = "with_continue";
-            break_dest = cfg->addDeferredBlock();
-            break_dest->info = "with_break";
+        // push continuations
+        CFGBlock* finally_block = cfg->addDeferredBlock();
+        finally_block->info = "with_finally";
+        pushFinallyContinuation(finally_block, whyname);
 
-            pushLoopRegion(continue_dest, break_dest);
-        }
-
-        CFGBlock* return_dest = cfg->addDeferredBlock();
-        return_dest->info = "with_return";
-        pushReturnRegion(return_dest);
+        CFGBlock* exc_block = cfg->addDeferredBlock();
+        exc_block->info = "with_exc";
+        exc_handlers.push_back({ exc_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
         }
 
-        popRegion(); // for the retrun
+        exc_handlers.pop_back();
+        int finally_did_why = continuations.back().did_why;
+        popContinuation();
 
-        AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
-        exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-        exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-        exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-        push_back(makeExpr(exit_call));
-
-        CFGBlock* orig_ending_block = curblock;
-
-        if (continue_dest) {
-            popRegion(); // for the loop region
-            if (continue_dest->predecessors.size() == 0) {
-                delete continue_dest;
-            } else {
-                curblock = continue_dest;
-
-                AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-                push_back(makeExpr(exit_call));
-
-                cfg->placeBlock(continue_dest);
-                doContinue();
-            }
-
-            if (break_dest->predecessors.size() == 0) {
-                delete break_dest;
-            } else {
-                curblock = break_dest;
-
-                AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-                exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-                push_back(makeExpr(exit_call));
-
-                cfg->placeBlock(break_dest);
-                doBreak();
-            }
-            curblock = orig_ending_block;
+        if (curblock) {
+            // The try-suite finished as normal; jump to the finally block.
+            pushAssign(whyname, makeNum(Why::FALLTHROUGH));
+            pushJump(finally_block);
         }
 
-        if (return_dest->predecessors.size() == 0) {
-            delete return_dest;
+        // The exception-handling block
+        if (exc_block->predecessors.size() == 0) {
+            // TODO(rntz): test for this case
+            delete exc_block;
         } else {
-            cfg->placeBlock(return_dest);
-            curblock = return_dest;
+            cfg->placeBlock(exc_block);
+            curblock = exc_block;
 
-            AST_Call* exit_call = makeCall(makeName(exitname, AST_TYPE::Load, node->lineno));
-            exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-            exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-            exit_call->args.push_back(makeName(nonename, AST_TYPE::Load, node->lineno));
-            push_back(makeExpr(exit_call));
+            // call the context-manager's exit method
+            InternedString suppressname = nodeName(node, "suppress");
+            pushAssign(suppressname, makeCall(makeLoad(exitname, node), makeLoad(exc_type_name, node),
+                                              makeLoad(exc_value_name, node), makeLoad(exc_traceback_name, node)));
 
-            doReturn(makeName(internString(RETURN_NAME), AST_TYPE::Load, node->lineno));
-            curblock = orig_ending_block;
+            // if it returns true, suppress the error and go to our exit block
+            CFGBlock* reraise_block = cfg->addDeferredBlock();
+            reraise_block->info = "with_reraise";
+            // break potential critical edge
+            CFGBlock* exiter = cfg->addDeferredBlock();
+            exiter->info = "with_exiter";
+            pushBranch(makeLoad(suppressname, node), exiter, reraise_block);
+
+            cfg->placeBlock(exiter);
+            curblock = exiter;
+            pushJump(exit_block);
+
+            // otherwise, reraise the exception
+            cfg->placeBlock(reraise_block);
+            curblock = reraise_block;
+            pushReraise(node, exc_type_name, exc_value_name, exc_traceback_name);
+        }
+
+        // The finally block
+        if (finally_block->predecessors.size() == 0) {
+            // TODO(rntz): test for this case, "with foo: raise bar"
+            delete finally_block;
+        } else {
+            cfg->placeBlock(finally_block);
+            curblock = finally_block;
+            // call the context-manager's exit method, ignoring result
+            push_back(makeExpr(makeCall(makeLoad(exitname, node), makeLoad(nonename, node), makeLoad(nonename, node),
+                                        makeLoad(nonename, node))));
+
+            if (finally_did_why & (1 << Why::CONTINUE))
+                exitFinallyIf(node, Why::CONTINUE, whyname);
+            if (finally_did_why & (1 << Why::BREAK))
+                exitFinallyIf(node, Why::BREAK, whyname);
+            if (finally_did_why & (1 << Why::RETURN))
+                exitFinallyIf(node, Why::RETURN, whyname);
+            exitFinally(node, Why::FALLTHROUGH, exit_block);
+        }
+
+        if (exit_block->predecessors.size() == 0) {
+            // FIXME(rntz): does this ever happen?
+            // make a test for it!
+            delete exit_block;
+        } else {
+            cfg->placeBlock(exit_block);
+            curblock = exit_block;
         }
 
         return true;
@@ -2313,30 +2313,8 @@ public:
 void CFG::print() {
     printf("CFG:\n");
     printf("%ld blocks\n", blocks.size());
-    PrintVisitor* pv = new PrintVisitor(4);
-    for (int i = 0; i < blocks.size(); i++) {
-        CFGBlock* b = blocks[i];
-        printf("Block %d", b->idx);
-        if (b->info)
-            printf(" '%s'", b->info);
-
-        printf("; Predecessors:");
-        for (int j = 0; j < b->predecessors.size(); j++) {
-            printf(" %d", b->predecessors[j]->idx);
-        }
-        printf(" Successors:");
-        for (int j = 0; j < b->successors.size(); j++) {
-            printf(" %d", b->successors[j]->idx);
-        }
-        printf("\n");
-
-        for (int j = 0; j < b->body.size(); j++) {
-            printf("    ");
-            b->body[j]->accept(pv);
-            printf("\n");
-        }
-    }
-    delete pv;
+    for (int i = 0; i < blocks.size(); i++)
+        blocks[i]->print();
 }
 
 CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
