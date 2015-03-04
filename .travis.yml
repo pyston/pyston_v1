@@ -1,7 +1,7 @@
 language: cpp
 compiler:
   - clang
-# - gcc
+  - gcc
 
 cache:
   apt: true
