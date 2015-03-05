@@ -71,8 +71,87 @@ extern "C" PyObject* PyInt_FromLong(long n) noexcept {
     return boxInt(n);
 }
 
+/* Convert an integer to a decimal string.  On many platforms, this
+   will be significantly faster than the general arbitrary-base
+   conversion machinery in _PyInt_Format, thanks to optimization
+   opportunities offered by division by a compile-time constant. */
+static Box* int_to_decimal_string(BoxedInt* v) noexcept {
+    char buf[sizeof(long) * CHAR_BIT / 3 + 6], *p, *bufend;
+    long n = v->n;
+    unsigned long absn;
+    p = bufend = buf + sizeof(buf);
+    absn = n < 0 ? 0UL - n : n;
+    do {
+        *--p = '0' + (char)(absn % 10);
+        absn /= 10;
+    } while (absn);
+    if (n < 0)
+        *--p = '-';
+    return PyString_FromStringAndSize(p, bufend - p);
+}
+
 extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedInt* bint = reinterpret_cast<BoxedInt*>(v);
+    RELEASE_ASSERT(isSubclass(bint->cls, int_cls), "");
+
+    /* There are no doubt many, many ways to optimize this, using code
+       similar to _PyLong_Format */
+    long n = bint->n;
+    int negative = n < 0;
+    int is_zero = n == 0;
+
+    /* For the reasoning behind this size, see
+       http://c-faq.com/misc/hexio.html. Then, add a few bytes for
+       the possible sign and prefix "0[box]" */
+    char buf[sizeof(n) * CHAR_BIT + 6];
+
+    /* Start by pointing to the end of the buffer.  We fill in from
+       the back forward. */
+    char* p = &buf[sizeof(buf)];
+
+    assert(base >= 2 && base <= 36);
+
+    /* Special case base 10, for speed */
+    if (base == 10)
+        return int_to_decimal_string(bint);
+
+    do {
+        /* I'd use i_divmod, except it doesn't produce the results
+           I want when n is negative.  So just duplicate the salient
+           part here. */
+        long div = n / base;
+        long mod = n - div * base;
+
+        /* convert abs(mod) to the right character in [0-9, a-z] */
+        char cdigit = (char)(mod < 0 ? -mod : mod);
+        cdigit += (cdigit < 10) ? '0' : 'a' - 10;
+        *--p = cdigit;
+
+        n = div;
+    } while (n);
+
+    if (base == 2) {
+        *--p = 'b';
+        *--p = '0';
+    } else if (base == 8) {
+        if (newstyle) {
+            *--p = 'o';
+            *--p = '0';
+        } else if (!is_zero)
+            *--p = '0';
+    } else if (base == 16) {
+        *--p = 'x';
+        *--p = '0';
+    } else {
+        *--p = '#';
+        *--p = '0' + base % 10;
+        if (base > 10)
+            *--p = '0' + base / 10;
+    }
+    if (negative)
+        *--p = '-';
+
+    return PyString_FromStringAndSize(p, &buf[sizeof(buf)] - p);
 }
 
 extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
