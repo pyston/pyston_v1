@@ -82,6 +82,68 @@ extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
     return (int)result;
 }
 
+extern "C" PyObject* PyInt_FromString(char* s, char** pend, int base) noexcept {
+    char* end;
+    long x;
+    Py_ssize_t slen;
+    PyObject* sobj, *srepr;
+
+    if ((base != 0 && base < 2) || base > 36) {
+        PyErr_SetString(PyExc_ValueError, "int() base must be >= 2 and <= 36");
+        return NULL;
+    }
+
+    while (*s && isspace(Py_CHARMASK(*s)))
+        s++;
+    errno = 0;
+    if (base == 0 && s[0] == '0') {
+        x = (long)strtoul(s, &end, base);
+        if (x < 0)
+            return PyLong_FromString(s, pend, base);
+    } else
+        x = strtoul(s, &end, base);
+    if (end == s || !isalnum(Py_CHARMASK(end[-1])))
+        goto bad;
+    while (*end && isspace(Py_CHARMASK(*end)))
+        end++;
+    if (*end != '\0') {
+    bad:
+        slen = strlen(s) < 200 ? strlen(s) : 200;
+        sobj = PyString_FromStringAndSize(s, slen);
+        if (sobj == NULL)
+            return NULL;
+        srepr = PyObject_Repr(sobj);
+        Py_DECREF(sobj);
+        if (srepr == NULL)
+            return NULL;
+        PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base, PyString_AS_STRING(srepr));
+        Py_DECREF(srepr);
+        return NULL;
+    } else if (errno != 0)
+        return PyLong_FromString(s, pend, base);
+    if (pend)
+        *pend = end;
+    return PyInt_FromLong(x);
+}
+
+#ifdef Py_USING_UNICODE
+PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
+    PyObject* result;
+    char* buffer = (char*)PyMem_MALLOC(length + 1);
+
+    if (buffer == NULL)
+        return PyErr_NoMemory();
+
+    if (PyUnicode_EncodeDecimal(s, length, buffer, NULL)) {
+        PyMem_FREE(buffer);
+        return NULL;
+    }
+    result = PyInt_FromString(buffer, NULL, base);
+    PyMem_FREE(buffer);
+    return result;
+}
+#endif
+
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
 // If we don't have fast overflow-checking builtins, provide some slow variants:
@@ -760,10 +822,17 @@ Box* _intNew(Box* val) {
     } else if (val->cls == str_cls) {
         BoxedString* s = static_cast<BoxedString*>(val);
 
+        // TODO: use PyInt_FromString here
         std::istringstream ss(s->s);
         int64_t n;
         ss >> n;
         return new BoxedInt(n);
+    } else if (val->cls == unicode_cls) {
+        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), 10);
+        if (!r)
+            throwCAPIException();
+        assert(r);
+        return r;
     } else if (val->cls == float_cls) {
         double d = static_cast<BoxedFloat*>(val)->d;
         return new BoxedInt(d);

@@ -60,3 +60,5 @@ class L(object):
     def __int__(self):
         return 1L
 print type(int(L()))
+
+print int(u'123')
