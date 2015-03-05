@@ -269,6 +269,14 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
     return runtimeCall(setitem_func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
 }
 
+Box* instanceDelitem(Box* _inst, Box* key) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* delitem_func = _instanceGetattribute(inst, boxStrConstant("__delitem__"), true);
+    return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
@@ -295,6 +303,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)instanceLen, UNKNOWN, 1)));
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
+    instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
 
     instance_cls->freeze();
 }
