@@ -1138,5 +1138,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("classmethod", classmethod_cls);
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
+
+    BoxedClass* buffer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "buffer");
+    builtins_module->giveAttr("buffer", buffer_cls);
 }
 }

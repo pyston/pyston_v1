@@ -45,7 +45,7 @@ PyAPI_FUNC(bool) _PyInt_Check(PyObject*) PYSTON_NOEXCEPT;
 #endif
 #define PyInt_CheckExact(op) (Py_TYPE(op) == &PyInt_Type)
 
-PyAPI_FUNC(PyObject *) PyInt_FromString(char*, char**, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyInt_FromString(const char*, char**, int) PYSTON_NOEXCEPT;
 #ifdef Py_USING_UNICODE
 PyAPI_FUNC(PyObject *) PyInt_FromUnicode(Py_UNICODE*, Py_ssize_t, int) PYSTON_NOEXCEPT;
 #endif

@@ -54,6 +54,8 @@ public:
 
     BoxedClassobj* inst_cls;
 
+    Box** weakreflist;
+
     BoxedInstance(BoxedClassobj* inst_cls) : inst_cls(inst_cls) {}
 
     DEFAULT_CLASS(instance_cls);

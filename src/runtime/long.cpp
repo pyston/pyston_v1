@@ -90,6 +90,10 @@ extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 static int64_t asSignedLong(BoxedLong* self) {
     assert(self->cls == long_cls);
     if (!mpz_fits_slong_p(self->n))

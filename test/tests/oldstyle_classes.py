@@ -126,3 +126,17 @@ print g.b
 print g.__class__
 print g.__dict__.items()
 print bool(g)
+
+class MappingTest:
+    def __getitem__(self, key):
+        print "getitem", key
+        return 1
+    def __setitem__(self, key, value):
+        print "setitem", key, value
+    def __delitem__(self, key):
+        print "delitem", key
+
+m = MappingTest()
+m[1] = 2
+del m[2]
+print m[3]

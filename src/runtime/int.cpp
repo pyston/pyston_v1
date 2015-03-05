@@ -82,6 +82,68 @@ extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
     return (int)result;
 }
 
+extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noexcept {
+    char* end;
+    long x;
+    Py_ssize_t slen;
+    PyObject* sobj, *srepr;
+
+    if ((base != 0 && base < 2) || base > 36) {
+        PyErr_SetString(PyExc_ValueError, "int() base must be >= 2 and <= 36");
+        return NULL;
+    }
+
+    while (*s && isspace(Py_CHARMASK(*s)))
+        s++;
+    errno = 0;
+    if (base == 0 && s[0] == '0') {
+        x = (long)strtoul(s, &end, base);
+        if (x < 0)
+            return PyLong_FromString(s, pend, base);
+    } else
+        x = strtoul(s, &end, base);
+    if (end == s || !isalnum(Py_CHARMASK(end[-1])))
+        goto bad;
+    while (*end && isspace(Py_CHARMASK(*end)))
+        end++;
+    if (*end != '\0') {
+    bad:
+        slen = strlen(s) < 200 ? strlen(s) : 200;
+        sobj = PyString_FromStringAndSize(s, slen);
+        if (sobj == NULL)
+            return NULL;
+        srepr = PyObject_Repr(sobj);
+        Py_DECREF(sobj);
+        if (srepr == NULL)
+            return NULL;
+        PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base, PyString_AS_STRING(srepr));
+        Py_DECREF(srepr);
+        return NULL;
+    } else if (errno != 0)
+        return PyLong_FromString(s, pend, base);
+    if (pend)
+        *pend = end;
+    return PyInt_FromLong(x);
+}
+
+#ifdef Py_USING_UNICODE
+PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
+    PyObject* result;
+    char* buffer = (char*)PyMem_MALLOC(length + 1);
+
+    if (buffer == NULL)
+        return PyErr_NoMemory();
+
+    if (PyUnicode_EncodeDecimal(s, length, buffer, NULL)) {
+        PyMem_FREE(buffer);
+        return NULL;
+    }
+    result = PyInt_FromString(buffer, NULL, base);
+    PyMem_FREE(buffer);
+    return result;
+}
+#endif
+
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
 // If we don't have fast overflow-checking builtins, provide some slow variants:
@@ -751,23 +813,50 @@ extern "C" Box* intOct(BoxedInt* self) {
     return new BoxedString(std::string(buf, len));
 }
 
-Box* _intNew(Box* val) {
+static Box* _intNew(Box* val, Box* base) {
     if (isSubclass(val->cls, int_cls)) {
+        RELEASE_ASSERT(!base, "");
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
             return n;
         return new BoxedInt(n->n);
     } else if (val->cls == str_cls) {
+        int base_n;
+        if (!base)
+            base_n = 10;
+        else {
+            RELEASE_ASSERT(base->cls == int_cls, "");
+            base_n = static_cast<BoxedInt*>(base)->n;
+        }
+
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        std::istringstream ss(s->s);
-        int64_t n;
-        ss >> n;
-        return new BoxedInt(n);
+        RELEASE_ASSERT(s->s.size() == strlen(s->s.c_str()), "");
+        Box* r = PyInt_FromString(s->s.c_str(), NULL, base_n);
+        if (!r)
+            throwCAPIException();
+        assert(r);
+        return r;
+    } else if (val->cls == unicode_cls) {
+        int base_n;
+        if (!base)
+            base_n = 10;
+        else {
+            RELEASE_ASSERT(base->cls == int_cls, "");
+            base_n = static_cast<BoxedInt*>(base)->n;
+        }
+
+        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base_n);
+        if (!r)
+            throwCAPIException();
+        assert(r);
+        return r;
     } else if (val->cls == float_cls) {
+        RELEASE_ASSERT(!base, "");
         double d = static_cast<BoxedFloat*>(val)->d;
         return new BoxedInt(d);
     } else {
+        RELEASE_ASSERT(!base, "");
         static const std::string int_str("__int__");
         Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
                           ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
@@ -784,7 +873,7 @@ Box* _intNew(Box* val) {
     }
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val) {
+extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
@@ -794,9 +883,9 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
                        getNameOfClass(cls));
 
     if (cls == int_cls)
-        return _intNew(val);
+        return _intNew(val, base);
 
-    BoxedInt* n = (BoxedInt*)_intNew(val);
+    BoxedInt* n = (BoxedInt*)_intNew(val, base);
     if (n->cls == long_cls) {
         if (cls == int_cls)
             return n;
@@ -882,8 +971,8 @@ void setupInt() {
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
-    int_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
+    int_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
 
     int_cls->giveAttr("__init__",
                       new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
