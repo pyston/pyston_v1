@@ -39,6 +39,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -148,6 +149,16 @@ int main(int argc, char** argv) {
             break; // could not find the delimiter
         appendToSysPath(split_str.first);
         module_search_path = split_str.second;
+    }
+
+    if (!Py_NoSiteFlag) {
+        try {
+            std::string module_name = "site";
+            import(-1, None, &module_name);
+        } catch (ExcInfo e) {
+            e.printExcAndTraceback();
+            return 1;
+        }
     }
 
     // end of argument parsing
