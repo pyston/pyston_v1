@@ -150,7 +150,7 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     if (parent_module == NULL) {
         path_list = NULL;
     } else {
-        path_list = static_cast<BoxedList*>(parent_module->getattr("__path__", NULL));
+        path_list = static_cast<BoxedList*>(getattrInternal(parent_module, "__path__", NULL));
         if (path_list == NULL || path_list->cls != list_cls) {
             return NULL;
         }
@@ -261,7 +261,7 @@ extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* glob
 
 // Named the same thing as the CPython method:
 static void ensure_fromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
-    if (module->getattr("__path__") == NULL) {
+    if (getattrInternal(module, "__path__", NULL) == NULL) {
         // If it's not a package, then there's no sub-importing to do
         return;
     }
@@ -275,14 +275,14 @@ static void ensure_fromlist(Box* module, Box* fromlist, const std::string& modul
             if (recursive)
                 continue;
 
-            Box* all = module->getattr("__all__");
+            Box* all = getattrInternal(module, "__all__", NULL);
             if (all) {
                 ensure_fromlist(module, all, module_name, true);
             }
             continue;
         }
 
-        Box* attr = module->getattr(s->s);
+        Box* attr = getattrInternal(module, s->s, NULL);
         if (attr != NULL)
             continue;
 

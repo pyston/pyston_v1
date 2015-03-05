@@ -4097,11 +4097,11 @@ extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
 }
 
 extern "C" Box* importFrom(Box* _m, const std::string* name) {
-    assert(_m->cls == module_cls);
+    assert(isSubclass(_m->cls, module_cls));
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
 
-    Box* r = m->getattr(*name, NULL);
+    Box* r = getattrInternal(m, *name, NULL);
     if (r)
         return r;
 
