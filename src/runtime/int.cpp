@@ -82,7 +82,7 @@ extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
     return (int)result;
 }
 
-extern "C" PyObject* PyInt_FromString(char* s, char** pend, int base) noexcept {
+extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noexcept {
     char* end;
     long x;
     Py_ssize_t slen;
@@ -813,30 +813,50 @@ extern "C" Box* intOct(BoxedInt* self) {
     return new BoxedString(std::string(buf, len));
 }
 
-Box* _intNew(Box* val) {
+static Box* _intNew(Box* val, Box* base) {
     if (isSubclass(val->cls, int_cls)) {
+        RELEASE_ASSERT(!base, "");
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
             return n;
         return new BoxedInt(n->n);
     } else if (val->cls == str_cls) {
+        int base_n;
+        if (!base)
+            base_n = 10;
+        else {
+            RELEASE_ASSERT(base->cls == int_cls, "");
+            base_n = static_cast<BoxedInt*>(base)->n;
+        }
+
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        // TODO: use PyInt_FromString here
-        std::istringstream ss(s->s);
-        int64_t n;
-        ss >> n;
-        return new BoxedInt(n);
+        RELEASE_ASSERT(s->s.size() == strlen(s->s.c_str()), "");
+        Box* r = PyInt_FromString(s->s.c_str(), NULL, base_n);
+        if (!r)
+            throwCAPIException();
+        assert(r);
+        return r;
     } else if (val->cls == unicode_cls) {
-        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), 10);
+        int base_n;
+        if (!base)
+            base_n = 10;
+        else {
+            RELEASE_ASSERT(base->cls == int_cls, "");
+            base_n = static_cast<BoxedInt*>(base)->n;
+        }
+
+        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base_n);
         if (!r)
             throwCAPIException();
         assert(r);
         return r;
     } else if (val->cls == float_cls) {
+        RELEASE_ASSERT(!base, "");
         double d = static_cast<BoxedFloat*>(val)->d;
         return new BoxedInt(d);
     } else {
+        RELEASE_ASSERT(!base, "");
         static const std::string int_str("__int__");
         Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
                           ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
@@ -853,7 +873,7 @@ Box* _intNew(Box* val) {
     }
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val) {
+extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
@@ -863,9 +883,9 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
                        getNameOfClass(cls));
 
     if (cls == int_cls)
-        return _intNew(val);
+        return _intNew(val, base);
 
-    BoxedInt* n = (BoxedInt*)_intNew(val);
+    BoxedInt* n = (BoxedInt*)_intNew(val, base);
     if (n->cls == long_cls) {
         if (cls == int_cls)
             return n;
@@ -951,8 +971,8 @@ void setupInt() {
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
-    int_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
+    int_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
 
     int_cls->giveAttr("__init__",
                       new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
