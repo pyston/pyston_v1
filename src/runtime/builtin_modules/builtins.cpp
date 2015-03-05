@@ -472,6 +472,8 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     Box* fromlist = args[0];
     Box* level = args[1];
 
+    name = coerceUnicodeToStr(name);
+
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
     }
