@@ -1,9 +1,6 @@
 # Copyright 2007 Google, Inc. All Rights Reserved.
 # Licensed to PSF under a Contributor Agreement.
 
-# Pyston change: disable using the _abcoll module for now.
-raise NotImplementedError()
-
 """Abstract Base Classes (ABCs) for collections, according to PEP 3119.
 
 DON'T USE THIS MODULE DIRECTLY!  The classes here should be imported
