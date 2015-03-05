@@ -1280,6 +1280,9 @@ public:
             import->args.push_back(new AST_Num());
             static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
 
+            // level == 0 means only check sys path for imports, nothing package-relative,
+            // level == -1 means check both sys path and relative for imports.
+            // so if `from __future__ import absolute_import` was used in the file, set level to 0
             int level;
             if (!(future_flags & FF_ABSOLUTE_IMPORT))
                 level = -1;
@@ -1329,7 +1332,9 @@ public:
         import->args.push_back(new AST_Num());
         static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
 
-        // I don't quite understand this but this is what CPython does:
+        // level == 0 means only check sys path for imports, nothing package-relative,
+        // level == -1 means check both sys path and relative for imports.
+        // so if `from __future__ import absolute_import` was used in the file, set level to 0
         int level;
         if (node->level == 0 && !(future_flags & FF_ABSOLUTE_IMPORT))
             level = -1;
