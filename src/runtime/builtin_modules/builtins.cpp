@@ -485,6 +485,8 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
+    _str = coerceUnicodeToStr(_str);
+
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
@@ -493,6 +495,8 @@ Box* delattrFunc(Box* obj, Box* _str) {
 }
 
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
+    _str = coerceUnicodeToStr(_str);
+
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
@@ -518,8 +522,10 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
+    _str = coerceUnicodeToStr(_str);
+
     if (_str->cls != str_cls) {
-        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+        raiseExcHelper(TypeError, "setattr(): attribute name must be string");
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
@@ -528,10 +534,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
 }
 
 Box* hasattr(Box* obj, Box* _str) {
-    if (PyUnicode_Check(_str)) {
-        _str = _PyUnicode_AsDefaultEncodedString(_str, NULL);
-        checkAndThrowCAPIException();
-    }
+    _str = coerceUnicodeToStr(_str);
 
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "hasattr(): attribute name must be string");

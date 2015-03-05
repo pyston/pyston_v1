@@ -30,11 +30,6 @@ print hash(u'') == hash('')
 print "Hello " + u" World"
 print u"Hello " + " World"
 
-try:
-    hasattr(object(), u"\u0180")
-except UnicodeEncodeError as e:
-    print e
-
 def p(x):
     return [hex(ord(i)) for i in x]
 s = u"\u20AC" # euro sign
@@ -65,3 +60,22 @@ print u'\u0180' in 'hello world'
 print 'hello world' in u'\u0180'
 print u''.__contains__('')
 print ''.__contains__(u'')
+
+class C(object):
+    a = 1
+    # We don't support this, with or without unicode:
+    # locals()[u'b'] = 2
+c = C()
+print getattr(c, u'a')
+# print c.b
+c.__dict__[u'c'] = 3
+print c.c
+print getattr(c, u'c')
+delattr(c, u'c')
+print hasattr(c, u'c')
+
+def f(a):
+    print a
+f(a=1)
+f(**{'a':2})
+f(**{u'a':3})

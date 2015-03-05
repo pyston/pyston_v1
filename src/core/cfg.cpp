@@ -1353,6 +1353,8 @@ public:
 
                 AST_Expr* import_star_expr = new AST_Expr();
                 import_star_expr->value = import_star;
+                import_star_expr->lineno = node->lineno;
+                import_star_expr->col_offset = node->col_offset;
 
                 push_back(import_star_expr);
             } else {

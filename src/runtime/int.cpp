@@ -835,7 +835,6 @@ static Box* _intNew(Box* val, Box* base) {
         Box* r = PyInt_FromString(s->s.c_str(), NULL, base_n);
         if (!r)
             throwCAPIException();
-        assert(r);
         return r;
     } else if (val->cls == unicode_cls) {
         int base_n;
@@ -849,7 +848,6 @@ static Box* _intNew(Box* val, Box* base) {
         Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base_n);
         if (!r)
             throwCAPIException();
-        assert(r);
         return r;
     } else if (val->cls == float_cls) {
         RELEASE_ASSERT(!base, "");

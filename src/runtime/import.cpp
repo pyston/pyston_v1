@@ -259,8 +259,7 @@ extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* glob
     }
 }
 
-// Named the same thing as the CPython method:
-static void ensure_fromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
+static void ensureFromlist(Box* module, Box* fromlist, const std::string& module_name, bool recursive) {
     if (getattrInternal(module, "__path__", NULL) == NULL) {
         // If it's not a package, then there's no sub-importing to do
         return;
@@ -277,7 +276,7 @@ static void ensure_fromlist(Box* module, Box* fromlist, const std::string& modul
 
             Box* all = getattrInternal(module, "__all__", NULL);
             if (all) {
-                ensure_fromlist(module, all, module_name, true);
+                ensureFromlist(module, all, module_name, true);
             }
             continue;
         }
@@ -305,7 +304,7 @@ extern "C" Box* import(int level, Box* from_imports, const std::string* module_n
     assert(module);
 
     if (from_imports != None) {
-        ensure_fromlist(module, from_imports, *module_name, false);
+        ensureFromlist(module, from_imports, *module_name, false);
     }
 
     return module;

@@ -971,6 +971,8 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        _key = coerceUnicodeToStr(_key);
+
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         self->b->setattr(key->s, value, NULL);
@@ -980,6 +982,8 @@ public:
     static Box* get(Box* _self, Box* _key, Box* def) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        _key = coerceUnicodeToStr(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
@@ -993,12 +997,13 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
+        _key = coerceUnicodeToStr(_key);
+
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);
         Box* r = self->b->getattr(key->s);
-        if (!r) {
+        if (!r)
             raiseExcHelper(KeyError, "'%s'", key->s.c_str());
-        }
         return r;
     }
 
@@ -1027,10 +1032,7 @@ public:
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
-        if (PyUnicode_Check(_key)) {
-            _key = _PyUnicode_AsDefaultEncodedString(_key, NULL);
-            checkAndThrowCAPIException();
-        }
+        _key = coerceUnicodeToStr(_key);
 
         RELEASE_ASSERT(_key->cls == str_cls, "");
         BoxedString* key = static_cast<BoxedString*>(_key);

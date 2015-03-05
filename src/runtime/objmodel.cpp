@@ -1309,7 +1309,7 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
     }
 
     if (!cls_only) {
-        if (obj->cls != type_cls) {
+        if (!isSubclass(obj->cls, type_cls)) {
             // Look up the val in the object's dictionary and if you find it, return it.
 
             Box* val;
@@ -2689,10 +2689,12 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
         for (auto& p : d_kwargs->d) {
-            if (p.first->cls != str_cls)
+            auto k = coerceUnicodeToStr(p.first);
+
+            if (k->cls != str_cls)
                 raiseExcHelper(TypeError, "%s() keywords must be strings", getFunctionName(f).c_str());
 
-            BoxedString* s = static_cast<BoxedString*>(p.first);
+            BoxedString* s = static_cast<BoxedString*>(k);
 
             if (param_names.takes_param_names) {
                 assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
@@ -3707,8 +3709,10 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     made->tp_dictoffset = base->tp_dictoffset;
 
     for (const auto& p : attr_dict->d) {
-        assert(p.first->cls == str_cls);
-        made->setattr(static_cast<BoxedString*>(p.first)->s, p.second, NULL);
+        auto k = coerceUnicodeToStr(p.first);
+
+        RELEASE_ASSERT(k->cls == str_cls, "");
+        made->setattr(static_cast<BoxedString*>(k)->s, p.second, NULL);
     }
 
     if (!made->hasattr("__module__"))
@@ -4147,6 +4151,8 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
             }
             idx++;
 
+            attr_name = coerceUnicodeToStr(attr_name);
+
             if (attr_name->cls != str_cls)
                 raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name));
 
@@ -4170,5 +4176,18 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     }
 
     return None;
+}
+
+Box* coerceUnicodeToStr(Box* unicode) {
+    if (!isSubclass(unicode->cls, unicode_cls))
+        return unicode;
+
+    Box* r = PyUnicode_AsASCIIString(unicode);
+    if (!r) {
+        PyErr_Clear();
+        raiseExcHelper(TypeError, "Cannot use non-ascii unicode strings as attribute names or keywords");
+    }
+
+    return r;
 }
 }
