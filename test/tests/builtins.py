@@ -92,3 +92,7 @@ print l
 print bytes
 print bytes is str
 print repr(b'1234')
+
+print callable(1)
+print callable(int)
+print callable(lambda: 1)
