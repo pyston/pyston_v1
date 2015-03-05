@@ -15,6 +15,8 @@ print "  test  ".rsplit()
 print "  test  ".rsplit(' ')
 print "  test  ".rsplit(None)
 print "1<>2<>3".rsplit('<>')
+print "1<>2<>3".rsplit('<>', 1)
+print "1<>2<>3".split('<>', 1)
 
 print map(bool, ["hello", "", "world"])
 

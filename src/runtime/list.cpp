@@ -39,10 +39,6 @@ extern "C" int PyList_Append(PyObject* op, PyObject* newitem) noexcept {
     return 0;
 }
 
-extern "C" int PyList_Reverse(PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" PyObject** PyList_Items(PyObject* op) noexcept {
     RELEASE_ASSERT(PyList_Check(op), "");
 
@@ -467,6 +463,21 @@ Box* listReverse(BoxedList* self) {
     }
 
     return None;
+}
+
+extern "C" int PyList_Reverse(PyObject* v) noexcept {
+    if (v == NULL || !PyList_Check(v)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    try {
+        listReverse(static_cast<BoxedList*>(v));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+    return 0;
 }
 
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {

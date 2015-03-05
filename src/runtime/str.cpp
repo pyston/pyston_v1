@@ -23,6 +23,7 @@
 
 #include "Python.h"
 
+#include "capi/types.h"
 #include "core/common.h"
 #include "core/types.h"
 #include "core/util.h"
@@ -32,6 +33,8 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+
+extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
 
 namespace pyston {
 
@@ -1636,14 +1639,6 @@ Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     }
 }
 
-Box* strRsplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
-    // TODO: implement this for real
-    // for now, just forward rsplit() to split() in the cases they have to return the same value
-    assert(isSubclass(_max_split->cls, int_cls));
-    RELEASE_ASSERT(_max_split->n <= 0, "");
-    return strSplit(self, sep, _max_split);
-}
-
 Box* strStrip(BoxedString* self, Box* chars) {
     assert(self->cls == str_cls);
 
@@ -2236,6 +2231,10 @@ void strDestructor(Box* b) {
     self->s.~basic_string();
 }
 
+static PyMethodDef string_methods[] = {
+    { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
+};
+
 void setupStr() {
     str_cls->simple_destructor = strDestructor;
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
@@ -2329,8 +2328,10 @@ void setupStr() {
 
     str_cls->giveAttr(
         "split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
-    str_cls->giveAttr(
-        "rsplit", new BoxedFunction(boxRTFunction((void*)strRsplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
+
+    for (auto& md : string_methods) {
+        str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
+    }
 
     CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
     addRTFunction(count, (void*)strCount2, BOXED_INT);
