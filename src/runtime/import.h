@@ -20,6 +20,7 @@
 namespace pyston {
 
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name);
+extern Box* importModuleLevel(std::string* module_name, Box* globals, Box* from_imports, int level);
 }
 
 #endif

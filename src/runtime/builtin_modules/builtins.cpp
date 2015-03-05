@@ -472,9 +472,6 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     Box* fromlist = args[0];
     Box* level = args[1];
 
-    RELEASE_ASSERT(globals == None, "not implemented");
-    RELEASE_ASSERT(locals == None, "not implemented");
-
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
     }
@@ -483,7 +480,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    return import(((BoxedInt*)level)->n, fromlist, &static_cast<BoxedString*>(name)->s);
+    return importModuleLevel(&static_cast<BoxedString*>(name)->s, globals, fromlist, ((BoxedInt*)level)->n);
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
