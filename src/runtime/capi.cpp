@@ -86,58 +86,6 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     return new BoxedWrapperObject(self, inst);
 }
 
-// copied from CPython's getargs.c:
-extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_ssize_t len, int readonly,
-                                 int flags) noexcept {
-    if (view == NULL)
-        return 0;
-    if (((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE) && (readonly == 1)) {
-        // Don't support PyErr_SetString yet:
-        assert(0);
-        // PyErr_SetString(PyExc_BufferError, "Object is not writable.");
-        // return -1;
-    }
-
-    view->obj = obj;
-    if (obj)
-        Py_INCREF(obj);
-    view->buf = buf;
-    view->len = len;
-    view->readonly = readonly;
-    view->itemsize = 1;
-    view->format = NULL;
-    if ((flags & PyBUF_FORMAT) == PyBUF_FORMAT)
-        view->format = "B";
-    view->ndim = 1;
-    view->shape = NULL;
-    if ((flags & PyBUF_ND) == PyBUF_ND)
-        view->shape = &(view->len);
-    view->strides = NULL;
-    if ((flags & PyBUF_STRIDES) == PyBUF_STRIDES)
-        view->strides = &(view->itemsize);
-    view->suboffsets = NULL;
-    view->internal = NULL;
-    return 0;
-}
-
-extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
-    if (!view->buf) {
-        assert(!view->obj);
-        return;
-    }
-
-    PyObject* obj = view->obj;
-    if (obj) {
-        assert(obj->cls == str_cls);
-        if (obj && Py_TYPE(obj)->tp_as_buffer && Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer)
-            Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
-        Py_XDECREF(obj);
-    }
-
-
-    view->obj = NULL;
-}
-
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
     Py_FatalError("unimplemented");
 }
@@ -923,67 +871,6 @@ extern "C" void* PyMem_Realloc(void* ptr, size_t sz) noexcept {
 
 extern "C" void PyMem_Free(void* ptr) noexcept {
     gc_compat_free(ptr);
-}
-
-
-
-static int _IsFortranContiguous(Py_buffer* view) {
-    Py_ssize_t sd, dim;
-    int i;
-
-    if (view->ndim == 0)
-        return 1;
-    if (view->strides == NULL)
-        return (view->ndim == 1);
-
-    sd = view->itemsize;
-    if (view->ndim == 1)
-        return (view->shape[0] == 1 || sd == view->strides[0]);
-    for (i = 0; i < view->ndim; i++) {
-        dim = view->shape[i];
-        if (dim == 0)
-            return 1;
-        if (view->strides[i] != sd)
-            return 0;
-        sd *= dim;
-    }
-    return 1;
-}
-
-static int _IsCContiguous(Py_buffer* view) {
-    Py_ssize_t sd, dim;
-    int i;
-
-    if (view->ndim == 0)
-        return 1;
-    if (view->strides == NULL)
-        return 1;
-
-    sd = view->itemsize;
-    if (view->ndim == 1)
-        return (view->shape[0] == 1 || sd == view->strides[0]);
-    for (i = view->ndim - 1; i >= 0; i--) {
-        dim = view->shape[i];
-        if (dim == 0)
-            return 1;
-        if (view->strides[i] != sd)
-            return 0;
-        sd *= dim;
-    }
-    return 1;
-}
-
-extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
-    if (view->suboffsets != NULL)
-        return 0;
-
-    if (fort == 'C')
-        return _IsCContiguous(view);
-    else if (fort == 'F')
-        return _IsFortranContiguous(view);
-    else if (fort == 'A')
-        return (_IsCContiguous(view) || _IsFortranContiguous(view));
-    return 0;
 }
 
 extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) noexcept {
