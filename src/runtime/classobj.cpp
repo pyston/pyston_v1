@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "capi/types.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
@@ -277,6 +278,24 @@ Box* instanceDelitem(Box* _inst, Box* key) {
     return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
 }
 
+Box* instanceContains(Box* _inst, Box* key) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* contains_func = _instanceGetattribute(inst, boxStrConstant("__contains__"), false);
+
+    if (!contains_func) {
+        int result = _PySequence_IterSearch(inst, key, PY_ITERSEARCH_CONTAINS);
+        if (result < 0)
+            throwCAPIException();
+        assert(result == 0 || result == 1);
+        return boxBool(result);
+    }
+
+    Box* r = runtimeCall(contains_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+    return boxBool(nonzero(r));
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
@@ -304,6 +323,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
 
     instance_cls->freeze();
 }

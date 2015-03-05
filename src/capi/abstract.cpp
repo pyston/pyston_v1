@@ -932,6 +932,87 @@ extern "C" PyObject* PySequence_List(PyObject* v) noexcept {
     return result;
 }
 
+/* Iterate over seq.  Result depends on the operation:
+   PY_ITERSEARCH_COUNT:  -1 if error, else # of times obj appears in seq.
+   PY_ITERSEARCH_INDEX:  0-based index of first occurrence of obj in seq;
+    set ValueError and return -1 if none found; also return -1 on error.
+   Py_ITERSEARCH_CONTAINS:  return 1 if obj in seq, else 0; -1 on error.
+*/
+extern "C" Py_ssize_t _PySequence_IterSearch(PyObject* seq, PyObject* obj, int operation) noexcept {
+    Py_ssize_t n;
+    int wrapped;  /* for PY_ITERSEARCH_INDEX, true iff n wrapped around */
+    PyObject* it; /* iter(seq) */
+
+    if (seq == NULL || obj == NULL) {
+        null_error();
+        return -1;
+    }
+
+    it = PyObject_GetIter(seq);
+    if (it == NULL) {
+        type_error("argument of type '%.200s' is not iterable", seq);
+        return -1;
+    }
+
+    n = wrapped = 0;
+    for (;;) {
+        int cmp;
+        PyObject* item = PyIter_Next(it);
+        if (item == NULL) {
+            if (PyErr_Occurred())
+                goto Fail;
+            break;
+        }
+
+        cmp = PyObject_RichCompareBool(obj, item, Py_EQ);
+        Py_DECREF(item);
+        if (cmp < 0)
+            goto Fail;
+        if (cmp > 0) {
+            switch (operation) {
+                case PY_ITERSEARCH_COUNT:
+                    if (n == PY_SSIZE_T_MAX) {
+                        PyErr_SetString(PyExc_OverflowError, "count exceeds C integer size");
+                        goto Fail;
+                    }
+                    ++n;
+                    break;
+
+                case PY_ITERSEARCH_INDEX:
+                    if (wrapped) {
+                        PyErr_SetString(PyExc_OverflowError, "index exceeds C integer size");
+                        goto Fail;
+                    }
+                    goto Done;
+
+                case PY_ITERSEARCH_CONTAINS:
+                    n = 1;
+                    goto Done;
+
+                default:
+                    assert(!"unknown operation");
+            }
+        }
+
+        if (operation == PY_ITERSEARCH_INDEX) {
+            if (n == PY_SSIZE_T_MAX)
+                wrapped = 1;
+            ++n;
+        }
+    }
+
+    if (operation != PY_ITERSEARCH_INDEX)
+        goto Done;
+
+    PyErr_SetString(PyExc_ValueError, "sequence.index(x): x not in sequence");
+/* fall into failure code */
+Fail:
+    n = -1;
+/* fall through */
+Done:
+    Py_DECREF(it);
+    return n;
+}
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {
     va_list va;
     PyObject* args;

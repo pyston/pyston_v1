@@ -3206,17 +3206,11 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
         Box* contained = callattrInternal1(rhs, &contains_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
         if (contained == NULL) {
-            Box* iter = callattrInternal0(rhs, &iter_str, CLASS_ONLY, NULL, ArgPassSpec(0));
-            if (iter)
-                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs));
-            RELEASE_ASSERT(iter == NULL, "need to try iterating");
-
-            Box* getitem = typeLookup(rhs->cls, getitem_str, NULL);
-            if (getitem)
-                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs));
-            RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
-
-            raiseExcHelper(TypeError, "argument of type '%s' is not iterable", getTypeName(rhs));
+            int result = _PySequence_IterSearch(rhs, lhs, PY_ITERSEARCH_CONTAINS);
+            if (result < 0)
+                throwCAPIException();
+            assert(result == 0 || result == 1);
+            return boxBool(result);
         }
 
         bool b = nonzero(contained);

@@ -147,8 +147,6 @@ static const char* objectNewParameterTypeErrorMsg() {
     }
 }
 
-bool exceptionMatches(const ExcInfo& e, BoxedClass* cls);
-
 // This function will ascii-encode any unicode objects it gets passed, or return the argument
 // unmodified if it wasn't a unicode object.
 // This is intended for functions that deal with attribute or variable names, which we internally

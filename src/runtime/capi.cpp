@@ -490,7 +490,8 @@ extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
         return callattr(iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
-        setCAPIException(e);
+        if (!e.matches(StopIteration))
+            setCAPIException(e);
         return NULL;
     }
 }
