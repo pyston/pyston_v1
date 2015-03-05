@@ -305,8 +305,7 @@ struct expr_dispatcher {
 
     template <typename T> ResultPtr read(T& item) {
         pypa::Ast& a = item;
-        fprintf(stderr, "Unhandled ast expression type caught: %d @%s\n", a.type, __PRETTY_FUNCTION__);
-        return nullptr;
+        RELEASE_ASSERT(0, "Unhandled ast expression type caught: %d @%s\n", a.type, __PRETTY_FUNCTION__);
     }
 
     ResultPtr read(pypa::AstAttribute& a) {
@@ -489,6 +488,14 @@ struct expr_dispatcher {
         AST_Set* ptr = new AST_Set();
         location(ptr, s);
         readVector(ptr->elts, s.elements, interned_strings);
+        return ptr;
+    }
+
+    ResultPtr read(pypa::AstSetComp& l) {
+        AST_SetComp* ptr = new AST_SetComp();
+        location(ptr, l);
+        readVector(ptr->generators, l.generators, interned_strings);
+        ptr->elt = readItem(l.element, interned_strings);
         return ptr;
     }
 
