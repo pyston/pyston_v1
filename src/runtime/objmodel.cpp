@@ -287,14 +287,15 @@ void BoxedClass::freeze() {
     is_constant = true;
 }
 
-BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                       bool is_user_defined)
+BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
+                       int instance_size, bool is_user_defined)
     : BoxVar(0), gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset), is_constant(false),
       is_user_defined(is_user_defined), is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
     tp_basicsize = instance_size;
+    tp_weaklistoffset = weaklist_offset;
 
     tp_flags |= Py_TPFLAGS_CHECKTYPES;
     tp_flags |= Py_TPFLAGS_BASETYPE;
@@ -343,6 +344,15 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     if (base && cls && str_cls)
         giveAttr("__base__", base);
 
+    // this isn't strictly correct, as it permits subclasses from
+    // e.g. Tuples/Longs to have weakrefs, which cpython disallows.
+    if (tp_weaklistoffset == 0 && base)
+        tp_weaklistoffset = base->tp_weaklistoffset;
+    if (is_user_defined && tp_weaklistoffset == 0) {
+        tp_weaklistoffset = tp_basicsize;
+        tp_basicsize += sizeof(Box**);
+    }
+
     assert(tp_basicsize % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     if (attrs_offset) {
         assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
@@ -357,9 +367,10 @@ void BoxedClass::finishInitialization() {
     commonClassSetup(this);
 }
 
-BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
-                               bool is_user_defined, BoxedString* name)
-    : BoxedClass(base, gc_visit, attrs_offset, instance_size, is_user_defined), ht_name(name), ht_slots(NULL) {
+BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
+                               int instance_size, bool is_user_defined, BoxedString* name)
+    : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined), ht_name(name),
+      ht_slots(NULL) {
 
     tp_as_number = &as_number;
     tp_as_mapping = &as_mapping;
@@ -378,14 +389,19 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
 }
 
 BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                       int instance_size, bool is_user_defined, const std::string& name) {
-    return create(metaclass, base, gc_visit, attrs_offset, instance_size, is_user_defined, new BoxedString(name), NULL);
+                                       int weaklist_offset, int instance_size, bool is_user_defined,
+                                       const std::string& name) {
+    return create(metaclass, base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined,
+                  new BoxedString(name), NULL);
 }
 
 BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                       int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases) {
+                                       int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
+                                       BoxedTuple* bases) {
     BoxedHeapClass* made = new (metaclass)
-        BoxedHeapClass(base, gc_visit, attrs_offset, instance_size, is_user_defined, name);
+        BoxedHeapClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
+
+    assert((name || str_cls == NULL) && "name can only be NULL before str_cls has been initialized.");
 
     // While it might be ok if these were set, it'd indicate a difference in
     // expectations as to who was going to calculate them:
@@ -3680,11 +3696,12 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     BoxedClass* made;
 
     if (base->instancesHaveDictAttrs() || base->instancesHaveHCAttrs()) {
-        made = BoxedHeapClass::create(metatype, base, NULL, base->attrs_offset, base->tp_basicsize, true, name, bases);
+        made = BoxedHeapClass::create(metatype, base, NULL, base->attrs_offset, base->tp_weaklistoffset,
+                                      base->tp_basicsize, true, name, bases);
     } else {
         assert(base->tp_basicsize % sizeof(void*) == 0);
-        made = BoxedHeapClass::create(metatype, base, NULL, base->tp_basicsize, base->tp_basicsize + sizeof(HCAttrs),
-                                      true, name, bases);
+        made = BoxedHeapClass::create(metatype, base, NULL, base->tp_basicsize, base->tp_weaklistoffset,
+                                      base->tp_basicsize + sizeof(HCAttrs), true, name, bases);
     }
 
     // TODO: how much of these should be in BoxedClass::finishInitialization()?

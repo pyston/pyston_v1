@@ -198,7 +198,8 @@ protected:
     // creation due to bootstrapping issues.
     void finishInitialization();
 
-    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
+    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+               bool is_user_defined);
 
     friend void setupRuntime();
 };
@@ -215,16 +216,18 @@ public:
 
     // These functions are the preferred way to construct new types:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases);
+                                  int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
+                                  BoxedTuple* bases);
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int instance_size, bool is_user_defined, const std::string& name);
+                                  int weaklist_offset, int instance_size, bool is_user_defined,
+                                  const std::string& name);
 
 private:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
-    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
-                   BoxedString* name);
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+                   bool is_user_defined, BoxedString* name);
 
     friend void setupRuntime();
 
@@ -577,6 +580,9 @@ public:
 class BoxedGenerator : public Box {
 public:
     HCAttrs attrs;
+
+    Box** weakreflist;
+
     BoxedFunctionBase* function;
     Box* arg1, *arg2, *arg3;
     GCdArray* args;

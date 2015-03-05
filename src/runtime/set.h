@@ -33,6 +33,7 @@ class BoxedSet : public Box {
 public:
     typedef std::unordered_set<Box*, PyHasher, PyEq, StlCompatAllocator<Box*>> Set;
     Set s;
+    Box** weakreflist; /* List of weak references */
 
     BoxedSet() __attribute__((visibility("default"))) {}
 
