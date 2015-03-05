@@ -88,3 +88,7 @@ print c.s([3,2,1])
 l = range(5)
 print sorted(l, key=lambda x:-x)
 print l
+
+print bytes
+print bytes is str
+print repr(b'1234')
