@@ -78,7 +78,12 @@ extern "C" int _PyLong_AsInt(PyObject* obj) noexcept {
     return (int)result;
 }
 
-extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) noexcept {
+extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* vv) noexcept {
+    if (PyLong_Check(vv)) {
+        BoxedLong* l = static_cast<BoxedLong*>(vv);
+        return mpz_get_ui(l->n);
+    }
+
     Py_FatalError("unimplemented");
 }
 
@@ -136,10 +141,29 @@ extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) noexcept {
 }
 
 extern "C" long PyLong_AsLong(PyObject* vv) noexcept {
+    int overflow;
+    long result = PyLong_AsLongAndOverflow(vv, &overflow);
+    if (overflow) {
+        /* XXX: could be cute and give a different
+           message for overflow == -1 */
+        PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C long");
+    }
+    return result;
+}
+
+extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
-    BoxedLong* l = static_cast<BoxedLong*>(vv);
-    RELEASE_ASSERT(mpz_fits_slong_p(l->n), "");
-    return mpz_get_si(l->n);
+
+    if (PyLong_Check(vv)) {
+        BoxedLong* l = static_cast<BoxedLong*>(vv);
+        if (mpz_fits_slong_p(l->n)) {
+            return mpz_get_si(l->n);
+        } else {
+            PyErr_SetString(PyExc_OverflowError, "long int too large to convert to int");
+            return -1;
+        }
+    }
+    Py_FatalError("unimplemented");
 }
 
 extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
@@ -155,18 +179,35 @@ extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
     if (PyInt_Check(vv))
         return PyInt_AsLong(vv);
 
-    if (PyLong_Check(vv)) {
-        BoxedLong* l = static_cast<BoxedLong*>(vv);
-        if (mpz_fits_slong_p(l->n)) {
-            return mpz_get_si(l->n);
-        } else {
-            *overflow = mpz_sgn(l->n);
+    if (!PyLong_Check(vv)) {
+        PyNumberMethods* nb;
+        nb = vv->cls->tp_as_number;
+        if (nb == NULL || nb->nb_int == NULL) {
+            PyErr_SetString(PyExc_TypeError, "an integer is required");
             return -1;
         }
+
+        vv = (*nb->nb_int)(vv);
+        if (vv == NULL)
+            return -1;
+
+        if (PyInt_Check(vv))
+            return PyInt_AsLong(vv);
+
+        if (!PyLong_Check(vv)) {
+            PyErr_SetString(PyExc_TypeError, "nb_int should return int object");
+            return -1;
+        }
+        // fallthrough: this has to be a long
     }
 
-    // TODO CPython tries to go through tp_as_number
-    Py_FatalError("unsupported case");
+    BoxedLong* l = static_cast<BoxedLong*>(vv);
+    if (mpz_fits_slong_p(l->n)) {
+        return mpz_get_si(l->n);
+    } else {
+        *overflow = mpz_sgn(l->n);
+        return -1;
+    }
 }
 
 extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
@@ -288,11 +329,6 @@ extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
     if (n == 0)
         return PyLong_FromLong(0);
 
-    if (is_signed) {
-        Py_FatalError("unimplemented");
-        return 0;
-    }
-
     if (!little_endian) {
         // TODO: check if the behaviour of mpz_import is right when big endian is specified.
         Py_FatalError("unimplemented");
@@ -302,6 +338,17 @@ extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
     BoxedLong* rtn = new BoxedLong();
     mpz_init(rtn->n);
     mpz_import(rtn->n, 1, 1, n, little_endian ? -1 : 1, 0, &bytes[0]);
+
+
+    RELEASE_ASSERT(little_endian, "");
+    if (is_signed && bytes[n - 1] >= 0x80) { // todo add big endian support
+        mpz_t t;
+        mpz_init(t);
+        mpz_setbit(t, n * 8);
+        mpz_sub(rtn->n, rtn->n, t);
+        mpz_clear(t);
+    }
+
     return rtn;
 }
 
@@ -367,6 +414,8 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             const std::string& s = static_cast<BoxedString*>(val)->s;
             int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
             RELEASE_ASSERT(r == 0, "");
+        } else if (val->cls == float_cls) {
+            mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
         } else {
             static const std::string long_str("__long__");
             Box* r = callattr(val, &long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),

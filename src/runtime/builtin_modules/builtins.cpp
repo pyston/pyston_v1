@@ -44,6 +44,8 @@
 namespace pyston {
 
 extern "C" {
+Box* Ellipsis = 0;
+
 // Copied from CPython:
 #if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
 const char* Py_FileSystemDefaultEncoding = "mbcs";
@@ -960,7 +962,7 @@ void setupBuiltins() {
 
     BoxedHeapClass* ellipsis_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
-    Box* Ellipsis = new (ellipsis_cls) Box();
+    Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
     gc::registerPermanentRoot(Ellipsis);
 
@@ -1139,6 +1141,12 @@ void setupBuiltins() {
     builtins_module->giveAttr("property", property_cls);
     builtins_module->giveAttr("staticmethod", staticmethod_cls);
     builtins_module->giveAttr("classmethod", classmethod_cls);
+
+    assert(memoryview_cls);
+    Py_TYPE(&PyMemoryView_Type) = &PyType_Type;
+    PyType_Ready(&PyMemoryView_Type);
+    builtins_module->giveAttr("memoryview", memoryview_cls);
+
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
 

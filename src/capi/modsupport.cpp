@@ -83,7 +83,7 @@ static int _ustrlen(Py_UNICODE* u) {
 
 static PyObject* do_mktuple(const char**, va_list*, int, int, int) noexcept;
 static PyObject* do_mklist(const char**, va_list*, int, int, int) noexcept;
-// static PyObject *do_mkdict(const char**, va_list *, int, int, int) noexcept;
+static PyObject* do_mkdict(const char**, va_list*, int, int, int) noexcept;
 static PyObject* do_mkvalue(const char**, va_list*, int) noexcept;
 
 static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noexcept {
@@ -95,10 +95,8 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case '[':
                 return do_mklist(p_format, p_va, ']', countformat(*p_format, ']'), flags);
 
-#if 0
             case '{':
                 return do_mkdict(p_format, p_va, '}', countformat(*p_format, '}'), flags);
-#endif
 
             case 'b':
             case 'B':
@@ -198,6 +196,13 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
                 return v;
             }
 #endif
+
+            case ':':
+            case ',':
+            case ' ':
+            case '\t':
+                break;
+
             default:
                 RELEASE_ASSERT(0, "%c", *((*p_format) - 1));
         }
@@ -237,6 +242,48 @@ static PyObject* do_mktuple(const char** p_format, va_list* p_va, int endchar, i
     if (endchar)
         ++*p_format;
     return v;
+}
+
+static PyObject* do_mkdict(const char** p_format, va_list* p_va, int endchar, int n, int flags) noexcept {
+    PyObject* d;
+    int i;
+    int itemfailed = 0;
+    if (n < 0)
+        return NULL;
+    if ((d = PyDict_New()) == NULL)
+        return NULL;
+    /* Note that we can't bail immediately on error as this will leak
+       refcounts on any 'N' arguments. */
+    for (i = 0; i < n; i += 2) {
+        PyObject* k, *v;
+        int err;
+        k = do_mkvalue(p_format, p_va, flags);
+        if (k == NULL) {
+            itemfailed = 1;
+            Py_INCREF(Py_None);
+            k = Py_None;
+        }
+        v = do_mkvalue(p_format, p_va, flags);
+        if (v == NULL) {
+            itemfailed = 1;
+            Py_INCREF(Py_None);
+            v = Py_None;
+        }
+        err = PyDict_SetItem(d, k, v);
+        Py_DECREF(k);
+        Py_DECREF(v);
+        if (err < 0 || itemfailed) {
+            Py_DECREF(d);
+            return NULL;
+        }
+    }
+    if (d != NULL && **p_format != endchar) {
+        Py_DECREF(d);
+        d = NULL;
+        PyErr_SetString(PyExc_SystemError, "Unmatched paren in format");
+    } else if (endchar)
+        ++*p_format;
+    return d;
 }
 
 static PyObject* do_mklist(const char** p_format, va_list* p_va, int endchar, int n, int flags) noexcept {

@@ -892,15 +892,15 @@ finisignal(void)
 int
 PyErr_CheckSignals(void)
 {
+    if (!is_tripped)
+        return 0;
+
     // Pyston change:
     Py_FatalError("TODO");
 
 #if 0
     int i;
     PyObject *f;
-
-    if (!is_tripped)
-        return 0;
 
 #ifdef WITH_THREAD
     if (PyThread_get_thread_ident() != main_thread)

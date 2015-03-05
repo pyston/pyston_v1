@@ -628,10 +628,13 @@ init_io(void)
     if (m == NULL)
         return;
 
+    // Pyston change: we don't support importing os during init, but it looks like it works without it...
+#if 0
     /* put os in the module state */
     _PyIO_os_module = PyImport_ImportModule("os");
     if (_PyIO_os_module == NULL)
         goto fail;
+#endif
 
 #define ADD_TYPE(type, name) \
     if (PyType_Ready(type) < 0) \
@@ -647,9 +650,13 @@ init_io(void)
         goto fail;
 
     /* UnsupportedOperation inherits from ValueError and IOError */
-    _PyIO_unsupported_operation = PyObject_CallFunction(
-        (PyObject *)&PyType_Type, "s(OO){}",
-        "UnsupportedOperation", PyExc_ValueError, PyExc_IOError);
+    // Pyston change: during init we have to supply the module name by ourself.
+    _PyIO_unsupported_operation = PyObject_CallFunction((PyObject *)&PyType_Type, "s(OO){s:s}",
+          "UnsupportedOperation", PyExc_ValueError, PyExc_IOError, "__module__", "io");
+    // _PyIO_unsupported_operation = PyObject_CallFunction(
+    //    (PyObject *)&PyType_Type, "s(OO){}",
+    //    "UnsupportedOperation", PyExc_ValueError, PyExc_IOError);
+
     if (_PyIO_unsupported_operation == NULL)
         goto fail;
     Py_INCREF(_PyIO_unsupported_operation);
@@ -759,6 +766,35 @@ init_io(void)
         goto fail;
     if (!(_PyIO_zero = PyLong_FromLong(0L)))
         goto fail;
+
+    // Pyston change: register with gc
+    // TODO: automatically register static variables as roots
+    PyGC_AddRoot(_PyIO_str_close);
+    PyGC_AddRoot(_PyIO_str_closed);
+    PyGC_AddRoot(_PyIO_str_decode);
+    PyGC_AddRoot(_PyIO_str_encode);
+    PyGC_AddRoot(_PyIO_str_fileno);
+    PyGC_AddRoot(_PyIO_str_flush);
+    PyGC_AddRoot(_PyIO_str_getstate);
+    PyGC_AddRoot(_PyIO_str_isatty);
+    PyGC_AddRoot(_PyIO_str_newlines);
+    PyGC_AddRoot(_PyIO_str_nl);
+    PyGC_AddRoot(_PyIO_str_read);
+    PyGC_AddRoot(_PyIO_str_read1);
+    PyGC_AddRoot(_PyIO_str_readable);
+    PyGC_AddRoot(_PyIO_str_readinto);
+    PyGC_AddRoot(_PyIO_str_readline);
+    PyGC_AddRoot(_PyIO_str_reset);
+    PyGC_AddRoot(_PyIO_str_seek);
+    PyGC_AddRoot(_PyIO_str_seekable);
+    PyGC_AddRoot(_PyIO_str_setstate);
+    PyGC_AddRoot(_PyIO_str_tell);
+    PyGC_AddRoot(_PyIO_str_truncate);
+    PyGC_AddRoot(_PyIO_str_writable);
+    PyGC_AddRoot(_PyIO_str_write);
+    // PyGC_AddRoot(_PyIO_empty_str); // this is already registered as root
+    PyGC_AddRoot(_PyIO_empty_bytes);
+    PyGC_AddRoot(_PyIO_zero);
 
     return;
 

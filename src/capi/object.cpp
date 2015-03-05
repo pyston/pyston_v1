@@ -151,6 +151,16 @@ extern "C" int PyObject_SetAttr(PyObject* v, PyObject* name, PyObject* value) no
     Py_FatalError("unimplemented");
 }
 
+extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
+    try {
+        setattr(v, name, w);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+    return 0;
+}
+
 extern "C" PyObject* PyObject_GetAttrString(PyObject* o, const char* attr) noexcept {
     // TODO do something like this?  not sure if this is safe; will people expect that calling into a known function
     // won't end up doing a GIL check?
