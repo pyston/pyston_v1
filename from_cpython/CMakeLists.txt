@@ -15,7 +15,7 @@ endforeach(STDLIB_FILE)
 add_custom_target(copy_stdlib ALL DEPENDS ${STDLIB_TARGETS})
 
 # compile specified files in from_cpython/Modules
-file(GLOB_RECURSE STDMODULE_SRCS Modules errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c _struct.c datetimemodule.c _functoolsmodule.c _collectionsmodule.c itertoolsmodule.c resource.c signalmodule.c selectmodule.c fcntlmodule.c timemodule.c arraymodule.c zlibmodule.c _codecsmodule.c socketmodule.c unicodedata.c _weakref.c cStringIO.c)
+file(GLOB_RECURSE STDMODULE_SRCS Modules errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c _struct.c datetimemodule.c _functoolsmodule.c _collectionsmodule.c itertoolsmodule.c resource.c signalmodule.c selectmodule.c fcntlmodule.c timemodule.c arraymodule.c zlibmodule.c _codecsmodule.c socketmodule.c unicodedata.c _weakref.c cStringIO.c getpath.c)
 
 # compile specified files in from_cpython/Objects
 file(GLOB_RECURSE STDOBJECT_SRCS Objects structseq.c capsule.c stringobject.c exceptions.c unicodeobject.c unicodectype.c bytearrayobject.c bytes_methods.c weakrefobject.c)

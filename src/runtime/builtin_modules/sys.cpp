@@ -276,9 +276,8 @@ void setupSys() {
 
     sys_module->giveAttr("meta_path", new BoxedList());
 
-    // TODO: should configure this in a better way
-    sys_module->giveAttr("prefix", boxStrConstant("/usr"));
-    sys_module->giveAttr("exec_prefix", boxStrConstant("/usr"));
+    sys_module->giveAttr("prefix", boxStrConstant(Py_GetPrefix()));
+    sys_module->giveAttr("exec_prefix", boxStrConstant(Py_GetExecPrefix()));
 
     sys_module->giveAttr("copyright",
                          boxStrConstant("Copyright 2014-2015 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "

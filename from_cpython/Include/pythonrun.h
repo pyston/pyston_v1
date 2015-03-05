@@ -21,7 +21,7 @@ typedef struct {
 } PyCompilerFlags;
 
 PyAPI_FUNC(void) Py_SetProgramName(char *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(char *) Py_GetProgramName(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(const char *) Py_GetProgramName(void) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(void) Py_SetPythonHome(char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(char *) Py_GetPythonHome(void) PYSTON_NOEXCEPT;
