@@ -799,7 +799,7 @@ CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
 $(CMAKE_SETUP_GCC):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_GCC)
-	cd $(CMAKE_DIR_GCC); CC='gcc' CXX='g++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
 .PHONY: pyston_gcc
 pyston_gcc: $(CMAKE_SETUP_GCC)
 	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston $(NINJAFLAGS)

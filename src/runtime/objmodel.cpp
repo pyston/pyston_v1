@@ -3670,9 +3670,8 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     if (winner != metatype) {
         if (getattr(winner, "__new__") != getattr(type_cls, "__new__")) {
-            RELEASE_ASSERT(0, "untested");
-            return callattr(winner, &new_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
-                            ArgPassSpec(3), arg1, arg2, arg3, _args + 1, NULL);
+            return callattr(winner, &new_str, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }),
+                            ArgPassSpec(4), winner, arg1, arg2, _args, NULL);
         }
         metatype = winner;
     }
