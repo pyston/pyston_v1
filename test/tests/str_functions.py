@@ -136,4 +136,3 @@ try:
     print "hello world".index("goodbye")
 except:
     print "threw exception"
-

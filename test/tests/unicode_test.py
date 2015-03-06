@@ -79,3 +79,5 @@ def f(a):
 f(a=1)
 f(**{'a':2})
 f(**{u'a':3})
+
+print repr('%s' % u'') # this gives a unicode object!
