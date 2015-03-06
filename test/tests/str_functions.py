@@ -136,3 +136,6 @@ try:
     print "hello world".index("goodbye")
 except:
     print "threw exception"
+
+print repr("hello\tworld\t".expandtabs())
+print repr("hello\tworld\t".expandtabs(12))
