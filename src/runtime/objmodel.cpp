@@ -3295,6 +3295,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 #ifndef NDEBUG
     if ((lhs->cls == int_cls || lhs->cls == float_cls || lhs->cls == long_cls)
         && (rhs->cls == int_cls || rhs->cls == float_cls || rhs->cls == long_cls)) {
+        printf("\n%s %s %s\n", lhs->cls->tp_name, op_name.c_str(), rhs->cls->tp_name);
         Py_FatalError("missing comparison between these classes");
     }
 #endif

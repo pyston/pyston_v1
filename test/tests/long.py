@@ -8,7 +8,7 @@ for i in xrange(150):
     print t, repr(t)
 
 def test(a, b):
-    print a, b
+    print repr(a), repr(b)
     print a + b, b + a, a.__add__(b), b.__add__(a)
     print a - b, b - a, a.__sub__(b), b.__sub__(a)
     print a * b, b * a, a.__mul__(b), b.__mul__(a)
@@ -25,6 +25,9 @@ print -1L / -5L
 for a in [-5, -1, 1, 5, -2L, -1L, 1L, 2L]:
     for b in [-5, -1, 1, 5, -2L, -1L, 1L, 2L]:
         test(a, b)
+
+test(1L, 2.0)
+test(3.0, 2L)
 
 print (2L).__rdiv__(-1)
 print (2L).__rdiv__(-1L)
