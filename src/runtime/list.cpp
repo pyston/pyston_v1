@@ -283,8 +283,12 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
         BoxedList* lv = static_cast<BoxedList*>(v);
         v_size = lv->size;
         v_elts = lv->elts->elts;
+    } else if (isSubclass(v->cls, tuple_cls)) {
+        BoxedTuple* tv = static_cast<BoxedTuple*>(v);
+        v_size = tv->elts.size();
+        v_elts = &tv->elts[0];
     } else {
-        RELEASE_ASSERT(0, "unsupported value to assign to slice %s", getTypeName(v));
+        RELEASE_ASSERT(0, "unsupported type for list slice assignment: '%s'", getTypeName(v));
     }
 
     RELEASE_ASSERT(!v_elts || self->elts->elts != v_elts, "Slice self-assignment currently unsupported");
@@ -786,7 +790,7 @@ void setupList() {
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
     addRTFunction(getitem, (void*)listGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     addRTFunction(getitem, (void*)listGetitemSlice, LIST, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
-    addRTFunction(getitem, (void*)listGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN });
+    addRTFunction(getitem, (void*)listGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
     list_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     list_cls->giveAttr("__iter__",
@@ -809,13 +813,13 @@ void setupList() {
     CLFunction* setitem = createRTFunction(3, 0, false, false);
     addRTFunction(setitem, (void*)listSetitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT, UNKNOWN });
     addRTFunction(setitem, (void*)listSetitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE, UNKNOWN });
-    addRTFunction(setitem, (void*)listSetitem, NONE, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN, UNKNOWN });
+    addRTFunction(setitem, (void*)listSetitem, NONE, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN, UNKNOWN });
     list_cls->giveAttr("__setitem__", new BoxedFunction(setitem));
 
     CLFunction* delitem = createRTFunction(2, 0, false, false);
     addRTFunction(delitem, (void*)listDelitemInt, NONE, std::vector<ConcreteCompilerType*>{ LIST, BOXED_INT });
     addRTFunction(delitem, (void*)listDelitemSlice, NONE, std::vector<ConcreteCompilerType*>{ LIST, SLICE });
-    addRTFunction(delitem, (void*)listDelitem, NONE, std::vector<ConcreteCompilerType*>{ LIST, UNKNOWN });
+    addRTFunction(delitem, (void*)listDelitem, NONE, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
     list_cls->giveAttr("__delitem__", new BoxedFunction(delitem));
 
     list_cls->giveAttr("insert", new BoxedFunction(boxRTFunction((void*)listInsert, NONE, 3)));

@@ -140,3 +140,7 @@ for i1 in idxs:
 l = []
 del l[:]
 print l
+
+l = range(5)
+l[2:4] = tuple(range(2))
+print l

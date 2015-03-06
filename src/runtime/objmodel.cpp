@@ -2417,6 +2417,7 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         if (f->source == NULL) {
             // TODO I don't think this should be happening any more?
             printf("Error: couldn't find suitable function version and no source to recompile!\n");
+            printf("(First version: %p)\n", f->versions[0]->code);
             abort();
         }
 
