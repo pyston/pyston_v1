@@ -852,10 +852,6 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
 }
 
 
-extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" void* PyObject_Malloc(size_t sz) noexcept {
     return gc_compat_malloc(sz);
 }

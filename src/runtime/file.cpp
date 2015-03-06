@@ -1055,14 +1055,27 @@ extern "C" size_t Py_UniversalNewlineFread(char* buf, size_t n, FILE* stream, Py
     return dst - buf;
 }
 
+static PyObject* file_isatty(BoxedFile* f) noexcept {
+    long res;
+    if (f->f_fp == NULL)
+        return err_closed();
+    FILE_BEGIN_ALLOW_THREADS(f)
+    res = isatty((int)fileno(f->f_fp));
+    FILE_END_ALLOW_THREADS(f)
+    return PyBool_FromLong(res);
+}
+
 PyDoc_STRVAR(readlines_doc, "readlines([size]) -> list of strings, each a line from the file.\n"
                             "\n"
                             "Call readline() repeatedly and return a list of the lines so read.\n"
                             "The optional size argument, if given, is an approximate bound on the\n"
                             "total number of bytes in the lines returned.");
 
+PyDoc_STRVAR(isatty_doc, "isatty() -> true or false.  True if the file is connected to a tty device.");
+
 PyMethodDef file_methods[] = {
     { "readlines", (PyCFunction)file_readlines, METH_VARARGS, readlines_doc },
+    { "isatty", (PyCFunction)file_isatty, METH_NOARGS, isatty_doc },
 };
 
 void fileDestructor(Box* b) {

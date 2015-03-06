@@ -41,6 +41,7 @@
 #include "gc/heap.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/dict.h"
 #include "runtime/file.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
@@ -1940,7 +1941,7 @@ extern "C" BoxedInt* hash(Box* obj) {
     Box* hash = getclsattr_internal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls), "%s.__hash__", getTypeName(obj));
+        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls, "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));
     }
@@ -2693,7 +2694,13 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
         Box* kwargs
             = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
-        RELEASE_ASSERT(kwargs->cls == dict_cls, "haven't implemented this for non-dicts");
+
+        if (!isSubclass(kwargs->cls, dict_cls)) {
+            BoxedDict* d = new BoxedDict();
+            dictMerge(d, kwargs);
+            kwargs = d;
+        }
+        assert(isSubclass(kwargs->cls, dict_cls));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
         for (auto& p : d_kwargs->d) {
