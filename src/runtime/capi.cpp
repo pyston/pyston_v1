@@ -280,7 +280,13 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
 }
 
 extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    try {
+        setitem(o, key, v);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {

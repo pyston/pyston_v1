@@ -174,6 +174,15 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
+        // Try calling __missing__ if this is a subclass
+        if (self->cls != dict_cls) {
+            static const std::string missing("__missing__");
+            Box* r = callattr(self, &missing, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                              ArgPassSpec(1), k, NULL, NULL, NULL, NULL);
+            if (r)
+                return r;
+        }
+
         raiseExcHelper(KeyError, k);
     }
 
