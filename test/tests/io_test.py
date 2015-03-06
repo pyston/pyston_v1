@@ -1,4 +1,3 @@
-# allow-warning: import level 0 will be treated as -1
 import io
 filename = "io_test_.txt"
 

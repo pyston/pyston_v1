@@ -1,5 +1,4 @@
 # skip-if: '-x' in EXTRA_JIT_ARGS
-# allow-warning: import level 0 will be treated as -1
 
 print repr(unicode())
 print repr(unicode('hello world'))

@@ -1,4 +1,3 @@
-# allow-warning: import level 0 will be treated as -1
 # Simple optparse test, taken from the optparse.py docstring:
 
 from optparse import OptionParser
