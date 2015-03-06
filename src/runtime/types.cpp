@@ -1320,6 +1320,8 @@ void setupRuntime() {
     tuple_cls->finishInitialization();
     list_cls->finishInitialization();
 
+    str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
+
 
 
     module_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), 0,
