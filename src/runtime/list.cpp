@@ -273,18 +273,29 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
 
     assert(0 <= start && start <= stop && stop <= self->size);
 
-    RELEASE_ASSERT(isSubclass(v->cls, list_cls), "unsupported %s", getTypeName(v));
-    BoxedList* lv = static_cast<BoxedList*>(v);
+    size_t v_size;
+    Box** v_elts;
 
-    RELEASE_ASSERT(self->elts != lv->elts, "Slice self-assignment currently unsupported");
+    if (!v) {
+        v_size = 0;
+        v_elts = NULL;
+    } else if (isSubclass(v->cls, list_cls)) {
+        BoxedList* lv = static_cast<BoxedList*>(v);
+        v_size = lv->size;
+        v_elts = lv->elts->elts;
+    } else {
+        RELEASE_ASSERT(0, "unsupported value to assign to slice %s", getTypeName(v));
+    }
 
-    int delts = lv->size - (stop - start);
+    RELEASE_ASSERT(!v_elts || self->elts->elts != v_elts, "Slice self-assignment currently unsupported");
+
+    int delts = v_size - (stop - start);
     int remaining_elts = self->size - stop;
     self->ensure(delts);
 
-    memmove(self->elts->elts + start + lv->size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
-    for (int i = 0; i < lv->size; i++) {
-        Box* r = lv->elts->elts[i];
+    memmove(self->elts->elts + start + v_size, self->elts->elts + stop, remaining_elts * sizeof(Box*));
+    for (int i = 0; i < v_size; i++) {
+        Box* r = v_elts[i];
         self->elts->elts[start + i] = r;
     }
 
@@ -320,22 +331,7 @@ extern "C" Box* listDelitemInt(BoxedList* self, BoxedInt* slice) {
 }
 
 extern "C" Box* listDelitemSlice(BoxedList* self, BoxedSlice* slice) {
-    LOCK_REGION(self->lock.asWrite());
-
-    i64 start, stop, step;
-    parseSlice(slice, self->size, &start, &stop, &step);
-    RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
-
-    // TODO this should reuse listSetitemSlice which does proper index handling
-    assert(0 <= start && start < self->size);
-    ASSERT(0 <= stop && stop <= self->size, "%ld %ld", self->size, stop);
-    assert(start <= stop);
-
-    int remaining_elts = self->size - stop;
-
-    memmove(self->elts->elts + start, self->elts->elts + stop, remaining_elts * sizeof(Box*));
-    self->size -= (stop - start);
-    return None;
+    return listSetitemSlice(self, slice, NULL);
 }
 
 extern "C" Box* listDelitem(BoxedList* self, Box* slice) {

@@ -129,3 +129,14 @@ try:
 except ZeroDivisionError:
     pass
 print l
+
+idxs = [-100, -50, -5, -1, 0, 1, 5, 50, 100]
+for i1 in idxs:
+    for i2 in idxs:
+        l = range(10)
+        del l[i1:i2]
+        print i1, i2, l
+
+l = []
+del l[:]
+print l
