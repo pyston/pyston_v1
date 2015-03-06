@@ -15,3 +15,10 @@ def f2():
     print list(g2)
 f2()
 
+# Make sure that the 'ifs' part gets scoped properly
+def f3():
+    b = True
+    print list(x for x in range(5) if b)
+    print list(x for x in range(5) if [b for b in xrange(4)])
+    print b
+print f3()

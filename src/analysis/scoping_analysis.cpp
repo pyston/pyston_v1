@@ -407,6 +407,8 @@ public:
             for (AST_comprehension* c : node->generators) {
                 if (!first)
                     c->iter->accept(this);
+                for (auto i : c->ifs)
+                    i->accept(this);
                 c->target->accept(this);
                 first = false;
             }
