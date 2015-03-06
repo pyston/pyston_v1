@@ -75,5 +75,7 @@ bool BOOLS_AS_I64 = ENABLE_FRAME_INTROSPECTION;
 
 extern "C" {
 int Py_IgnoreEnvironmentFlag = 1;
+int Py_OptimizeFlag = 0;
+int Py_VerboseFlag = 0;
 }
 }

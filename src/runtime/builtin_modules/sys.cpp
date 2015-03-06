@@ -275,6 +275,8 @@ void setupSys() {
                                                           "getfilesystemencoding"));
 
     sys_module->giveAttr("meta_path", new BoxedList());
+    sys_module->giveAttr("path_hooks", new BoxedList());
+    sys_module->giveAttr("path_importer_cache", new BoxedDict());
 
     // TODO: should configure this in a better way
     sys_module->giveAttr("prefix", boxStrConstant("/usr"));

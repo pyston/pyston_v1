@@ -70,6 +70,7 @@ extern "C" void initunicodedata();
 extern "C" void init_weakref();
 extern "C" void initcStringIO();
 extern "C" void init_io();
+extern "C" void initzipimport();
 
 namespace pyston {
 
@@ -1549,6 +1550,7 @@ void setupRuntime() {
     init_weakref();
     initcStringIO();
     init_io();
+    initzipimport();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;

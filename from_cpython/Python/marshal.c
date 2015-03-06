@@ -1,3 +1,4 @@
+// This file is originally from CPython 2.7, with modifications for Pyston
 
 /* Write Python objects to files and read them back.
    This is intended for writing and reading compiled Python code only;
@@ -7,6 +8,9 @@
 #define PY_SSIZE_T_CLEAN
 
 #include "Python.h"
+
+// Pyston change: not yet ported
+#if 0
 #include "longintrepr.h"
 #include "code.h"
 #include "marshal.h"
@@ -48,6 +52,7 @@
 #define WFERR_UNMARSHALLABLE 1
 #define WFERR_NESTEDTOODEEP 2
 #define WFERR_NOMEMORY 3
+#endif // Pyston change
 
 typedef struct {
     FILE *fp;
@@ -61,6 +66,8 @@ typedef struct {
     int version;
 } WFILE;
 
+// Pyston change: not yet ported
+#if 0
 #define w_byte(c, p) if (((p)->fp)) putc((c), (p)->fp); \
                       else if ((p)->ptr != (p)->end) *(p)->ptr++ = (c); \
                            else w_more(c, p)
@@ -479,6 +486,7 @@ PyMarshal_WriteObjectToFile(PyObject *x, FILE *fp, int version)
     w_object(x, &wf);
     Py_XDECREF(wf.strings);
 }
+#endif // Pyston change
 
 typedef WFILE RFILE; /* Same struct with different invariants */
 
@@ -565,6 +573,8 @@ r_long64(RFILE *p)
 #endif
 }
 
+// Pyston change: not yet ported
+#if 0
 static PyObject *
 r_PyLong(RFILE *p)
 {
@@ -623,7 +633,6 @@ r_PyLong(RFILE *p)
                     "bad marshal data (digit out of range in long)");
     return NULL;
 }
-
 
 static PyObject *
 r_object(RFILE *p)
@@ -1047,7 +1056,6 @@ r_object(RFILE *p)
                             code, consts, names, varnames,
                             freevars, cellvars, filename, name,
                             firstlineno, lnotab);
-
           code_error:
             Py_XDECREF(code);
             Py_XDECREF(consts);
@@ -1088,6 +1096,7 @@ read_object(RFILE *p)
         PyErr_SetString(PyExc_TypeError, "NULL object in marshal data for object");
     return v;
 }
+#endif // Pyston change
 
 int
 PyMarshal_ReadShortFromFile(FILE *fp)
@@ -1123,6 +1132,8 @@ getfilesize(FILE *fp)
 }
 #endif
 
+// Pyston change: not yet ported
+#if 0
 /* If we can get the size of the file up-front, and it's reasonably small,
  * read it in one gulp and delegate to ...FromString() instead.  Much quicker
  * than reading a byte at a time from file; speeds .pyc imports.
@@ -1410,3 +1421,4 @@ PyMarshal_Init(void)
         return;
     PyModule_AddIntConstant(mod, "version", Py_MARSHAL_VERSION);
 }
+#endif // Pyston change
