@@ -140,3 +140,10 @@ m = MappingTest()
 m[1] = 2
 del m[2]
 print m[3]
+
+class Hashable:
+    def __hash__(self):
+        return 5
+print hash(Hashable())
+del Hashable.__hash__
+print type(hash(Hashable()))

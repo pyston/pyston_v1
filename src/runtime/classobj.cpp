@@ -296,6 +296,37 @@ Box* instanceContains(Box* _inst, Box* key) {
     return boxBool(nonzero(r));
 }
 
+static Box* instanceHash(BoxedInstance* inst) {
+    assert(inst->cls == instance_cls);
+
+    PyObject* func;
+    PyObject* res;
+
+    func = _instanceGetattribute(inst, boxStrConstant("__hash__"), false);
+    if (func == NULL) {
+        /* If there is no __eq__ and no __cmp__ method, we hash on the
+           address.  If an __eq__ or __cmp__ method exists, there must
+           be a __hash__. */
+        func = _instanceGetattribute(inst, boxStrConstant("__eq__"), false);
+        if (func == NULL) {
+            func = _instanceGetattribute(inst, boxStrConstant("__cmp__"), false);
+            if (func == NULL) {
+                return boxInt(_Py_HashPointer(inst));
+            }
+        }
+        raiseExcHelper(TypeError, "unhashable instance");
+    }
+
+    res = runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (PyInt_Check(res) || PyLong_Check(res)) {
+        static std::string hash_str("__hash__");
+        return callattr(res, &hash_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
+    } else {
+        raiseExcHelper(TypeError, "__hash__() should return an int");
+    }
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
@@ -324,6 +355,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
+    instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
 
     instance_cls->freeze();
 }
