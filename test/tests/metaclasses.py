@@ -26,6 +26,9 @@ class C(object):
     __metaclass__ = M
 
 print "Made C", type(C)
+print isinstance(C, M)
+print isinstance(C, type)
+print isinstance(C, int)
 
 def f(*args):
     print "f()", args[:2]

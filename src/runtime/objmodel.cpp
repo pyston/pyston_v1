@@ -1913,9 +1913,9 @@ extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
     }
 
     if (!false_on_noncls) {
-        assert(cls->cls == type_cls);
+        assert(isSubclass(cls->cls, type_cls));
     } else {
-        if (cls->cls != type_cls)
+        if (!isSubclass(cls->cls, type_cls))
             return false;
     }
 
