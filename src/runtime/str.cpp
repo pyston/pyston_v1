@@ -35,6 +35,8 @@
 #include "runtime/util.h"
 
 extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 
 namespace pyston {
 
@@ -1917,49 +1919,6 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     return result;
 }
 
-Box* strFind(BoxedString* self, Box* elt, Box* _start) {
-    if (self->cls != str_cls)
-        raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'", getTypeName(self));
-
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
-    if (_start->cls != int_cls) {
-        raiseExcHelper(TypeError, "'start' must be an int for now");
-        // Real error message:
-        // raiseExcHelper(TypeError, "slice indices must be integers or None or have an __index__ method");
-    }
-
-    int64_t start = static_cast<BoxedInt*>(_start)->n;
-    if (start < 0) {
-        start += self->s.size();
-        start = std::max(0L, start);
-    }
-
-    BoxedString* sub = static_cast<BoxedString*>(elt);
-
-    size_t r = self->s.find(sub->s, start);
-    if (r == std::string::npos)
-        return boxInt(-1);
-    return boxInt(r);
-}
-
-Box* strRfind(BoxedString* self, Box* elt) {
-    if (self->cls != str_cls)
-        raiseExcHelper(TypeError, "descriptor 'rfind' requires a 'str' object but received a '%s'", getTypeName(self));
-
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
-    BoxedString* sub = static_cast<BoxedString*>(elt);
-
-    size_t r = self->s.rfind(sub->s);
-    if (r == std::string::npos)
-        return boxInt(-1);
-    return boxInt(r);
-}
-
-
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     assert(self->cls == str_cls);
 
@@ -2233,6 +2192,8 @@ void strDestructor(Box* b) {
 
 static PyMethodDef string_methods[] = {
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
+    { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
+    { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
 };
 
 void setupStr() {
@@ -2287,10 +2248,6 @@ void setupStr() {
                       new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
     str_cls->giveAttr("endswith",
                       new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
-
-    str_cls->giveAttr("find",
-                      new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 3, 1, false, false), { boxInt(0) }));
-    str_cls->giveAttr("rfind", new BoxedFunction(boxRTFunction((void*)strRfind, BOXED_INT, 2)));
 
     str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
 

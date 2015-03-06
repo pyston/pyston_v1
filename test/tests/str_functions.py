@@ -80,7 +80,8 @@ print "hello world".translate(translation_map, "llo")
 print "hello world".translate(None, "llo")
 
 for i in xrange(-10, 10):
-    print i, "aaaaa".find("a", i)
+    print i, "aaaaa".find("a", i), "aaaa".find("a", 2, i)
+    print i, "aaaaa".rfind("a", i), "aaaa".rfind("a", 2, i)
 
 print "hello world".partition("hi")
 print "hello world".partition("hello")
