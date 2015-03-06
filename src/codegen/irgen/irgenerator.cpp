@@ -1863,6 +1863,8 @@ private:
 
                     // Currently we represent 'undef's as 'i16 undef'
                     val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
+                } else if (var->getType() == CLOSURE) {
+                    ptr = emitter.getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
                 } else {
                     assert(val->getType() == g.llvm_value_type_ptr);
                 }
