@@ -191,7 +191,7 @@ extern "C" PyObject* PyDict_New() noexcept {
 // The performance should hopefully be comparable to the CPython fast case, since we can use
 // runtimeICs.
 extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noexcept {
-    ASSERT(mp->cls == dict_cls || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
+    ASSERT(isSubclass(mp->cls, dict_cls) || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
 
     assert(mp);
     Box* b = static_cast<Box*>(mp);
@@ -219,7 +219,7 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
 }
 
 extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
-    ASSERT(dict->cls == dict_cls || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
+    ASSERT(isSubclass(dict->cls, dict_cls) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
     try {
         return getitem(dict, key);
     } catch (ExcInfo e) {
@@ -230,7 +230,7 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
 }
 
 extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) noexcept {
-    assert(op->cls == dict_cls);
+    assert(isSubclass(op->cls, dict_cls));
     BoxedDict* self = static_cast<BoxedDict*>(op);
 
     // Callers of PyDict_New() provide a pointer to some storage for this function to use, in
@@ -430,7 +430,7 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 void dictMerge(BoxedDict* self, Box* other) {
-    if (other->cls == dict_cls) {
+    if (isSubclass(other->cls, dict_cls)) {
         for (const auto& p : static_cast<BoxedDict*>(other)->d)
             self->d[p.first] = p.second;
         return;
