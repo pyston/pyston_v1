@@ -81,3 +81,12 @@ f(**{'a':2})
 f(**{u'a':3})
 
 print repr('%s' % u'') # this gives a unicode object!
+
+print repr('hello world'.replace(u'hello', u'hi'))
+
+print "hello world".endswith(u'hello')
+print "hello world".endswith(u'world')
+print "hello world".startswith(u'hello')
+print "hello world".startswith(u'world')
+
+print float(u'1.0')

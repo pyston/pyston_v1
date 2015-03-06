@@ -1548,6 +1548,11 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
                        getTypeName(_self));
     BoxedString* self = static_cast<BoxedString*>(_self);
 
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(_old) || PyUnicode_Check(_new))
+        return PyUnicode_Replace((PyObject*)self, _old, _new, -1 /*count*/);
+#endif
+
     if (_old->cls != str_cls)
         raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* old = static_cast<BoxedString*>(_old);
@@ -1796,9 +1801,6 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
     Py_ssize_t istart = 0, iend = PY_SSIZE_T_MAX;
     if (start) {
         int r = _PyEval_SliceIndex(start, &istart);
@@ -1811,6 +1813,27 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         if (!r)
             throwCAPIException();
     }
+
+    if (isSubclass(elt->cls, tuple_cls)) {
+        for (auto e : static_cast<BoxedTuple*>(elt)->elts) {
+            auto b = strStartswith(self, e, start, _args);
+            assert(b->cls == bool_cls);
+            if (b == True)
+                return True;
+        }
+        return False;
+    }
+
+    if (isSubclass(elt->cls, unicode_cls)) {
+        int r = PyUnicode_Tailmatch(self, elt, istart, iend, -1);
+        if (r < 0)
+            throwCAPIException();
+        assert(r == 0 || r == 1);
+        return boxBool(r);
+    }
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
@@ -1841,9 +1864,6 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
     Py_ssize_t istart = 0, iend = PY_SSIZE_T_MAX;
     if (start) {
         int r = _PyEval_SliceIndex(start, &istart);
@@ -1856,6 +1876,27 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         if (!r)
             throwCAPIException();
     }
+
+    if (isSubclass(elt->cls, unicode_cls)) {
+        int r = PyUnicode_Tailmatch(self, elt, istart, iend, +1);
+        if (r < 0)
+            throwCAPIException();
+        assert(r == 0 || r == 1);
+        return boxBool(r);
+    }
+
+    if (isSubclass(elt->cls, tuple_cls)) {
+        for (auto e : static_cast<BoxedTuple*>(elt)->elts) {
+            auto b = strEndswith(self, e, start, _args);
+            assert(b->cls == bool_cls);
+            if (b == True)
+                return True;
+        }
+        return False;
+    }
+
+    if (elt->cls != str_cls)
+        raiseExcHelper(TypeError, "expected a character buffer object");
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
 
@@ -2358,7 +2399,7 @@ void setupStr() {
     str_cls->giveAttr("join", new BoxedFunction(boxRTFunction((void*)strJoin, STR, 2)));
 
     str_cls->giveAttr("replace",
-                      new BoxedFunction(boxRTFunction((void*)strReplace, STR, 4, 1, false, false), { boxInt(-1) }));
+                      new BoxedFunction(boxRTFunction((void*)strReplace, UNKNOWN, 4, 1, false, false), { boxInt(-1) }));
 
     str_cls->giveAttr(
         "split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));

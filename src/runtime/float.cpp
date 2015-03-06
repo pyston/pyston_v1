@@ -577,6 +577,9 @@ std::string floatFmt(double x, int precision, char code) {
 }
 
 BoxedFloat* _floatNew(Box* a) {
+    // FIXME CPython uses PyUnicode_EncodeDecimal:
+    a = coerceUnicodeToStr(a);
+
     if (a->cls == float_cls) {
         return static_cast<BoxedFloat*>(a);
     } else if (isSubclass(a->cls, float_cls)) {
