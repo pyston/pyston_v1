@@ -280,7 +280,13 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
 }
 
 extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    try {
+        setitem(o, key, v);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
@@ -490,7 +496,8 @@ extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
         return callattr(iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
-        setCAPIException(e);
+        if (!e.matches(StopIteration))
+            setCAPIException(e);
         return NULL;
     }
 }

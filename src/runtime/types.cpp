@@ -511,10 +511,13 @@ static int call_gc_visit(PyObject* val, void* arg) {
 
 static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
+
+    assert(b->cls->tp_traverse);
     b->cls->tp_traverse(b, call_gc_visit, v);
 }
 
 static void proxy_to_tp_clear(Box* b) {
+    assert(b->cls->tp_clear);
     b->cls->tp_clear(b);
 }
 

@@ -23,6 +23,7 @@
 
 #include "Python.h"
 
+#include "capi/types.h"
 #include "core/common.h"
 #include "core/types.h"
 #include "core/util.h"
@@ -32,6 +33,10 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+
+extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 
 namespace pyston {
 
@@ -1636,14 +1641,6 @@ Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
     }
 }
 
-Box* strRsplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
-    // TODO: implement this for real
-    // for now, just forward rsplit() to split() in the cases they have to return the same value
-    assert(isSubclass(_max_split->cls, int_cls));
-    RELEASE_ASSERT(_max_split->n <= 0, "");
-    return strSplit(self, sep, _max_split);
-}
-
 Box* strStrip(BoxedString* self, Box* chars) {
     assert(self->cls == str_cls);
 
@@ -1922,49 +1919,6 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     return result;
 }
 
-Box* strFind(BoxedString* self, Box* elt, Box* _start) {
-    if (self->cls != str_cls)
-        raiseExcHelper(TypeError, "descriptor 'find' requires a 'str' object but received a '%s'", getTypeName(self));
-
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
-    if (_start->cls != int_cls) {
-        raiseExcHelper(TypeError, "'start' must be an int for now");
-        // Real error message:
-        // raiseExcHelper(TypeError, "slice indices must be integers or None or have an __index__ method");
-    }
-
-    int64_t start = static_cast<BoxedInt*>(_start)->n;
-    if (start < 0) {
-        start += self->s.size();
-        start = std::max(0L, start);
-    }
-
-    BoxedString* sub = static_cast<BoxedString*>(elt);
-
-    size_t r = self->s.find(sub->s, start);
-    if (r == std::string::npos)
-        return boxInt(-1);
-    return boxInt(r);
-}
-
-Box* strRfind(BoxedString* self, Box* elt) {
-    if (self->cls != str_cls)
-        raiseExcHelper(TypeError, "descriptor 'rfind' requires a 'str' object but received a '%s'", getTypeName(self));
-
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
-    BoxedString* sub = static_cast<BoxedString*>(elt);
-
-    size_t r = self->s.rfind(sub->s);
-    if (r == std::string::npos)
-        return boxInt(-1);
-    return boxInt(r);
-}
-
-
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     assert(self->cls == str_cls);
 
@@ -2188,6 +2142,82 @@ extern "C" void PyString_ConcatAndDel(register PyObject** pv, register PyObject*
     PyString_Concat(pv, w);
 }
 
+static PyObject* string_expandtabs(PyStringObject* self, PyObject* args) noexcept {
+    const char* e, *p, *qe;
+    char* q;
+    Py_ssize_t i, j, incr;
+    PyObject* u;
+    int tabsize = 8;
+
+    if (!PyArg_ParseTuple(args, "|i:expandtabs", &tabsize))
+        return NULL;
+
+    /* First pass: determine size of output string */
+    i = 0; /* chars up to and including most recent \n or \r */
+    j = 0; /* chars since most recent \n or \r (use in tab calculations) */
+    e = PyString_AS_STRING(self) + PyString_GET_SIZE(self); /* end of input */
+    for (p = PyString_AS_STRING(self); p < e; p++) {
+        if (*p == '\t') {
+            if (tabsize > 0) {
+                incr = tabsize - (j % tabsize);
+                if (j > PY_SSIZE_T_MAX - incr)
+                    goto overflow1;
+                j += incr;
+            }
+        } else {
+            if (j > PY_SSIZE_T_MAX - 1)
+                goto overflow1;
+            j++;
+            if (*p == '\n' || *p == '\r') {
+                if (i > PY_SSIZE_T_MAX - j)
+                    goto overflow1;
+                i += j;
+                j = 0;
+            }
+        }
+    }
+
+    if (i > PY_SSIZE_T_MAX - j)
+        goto overflow1;
+
+    /* Second pass: create output string and fill it */
+    u = PyString_FromStringAndSize(NULL, i + j);
+    if (!u)
+        return NULL;
+
+    j = 0;                                             /* same as in first pass */
+    q = PyString_AS_STRING(u);                         /* next output char */
+    qe = PyString_AS_STRING(u) + PyString_GET_SIZE(u); /* end of output */
+
+    for (p = PyString_AS_STRING(self); p < e; p++) {
+        if (*p == '\t') {
+            if (tabsize > 0) {
+                i = tabsize - (j % tabsize);
+                j += i;
+                while (i--) {
+                    if (q >= qe)
+                        goto overflow2;
+                    *q++ = ' ';
+                }
+            }
+        } else {
+            if (q >= qe)
+                goto overflow2;
+            *q++ = *p;
+            j++;
+            if (*p == '\n' || *p == '\r')
+                j = 0;
+        }
+    }
+
+    return u;
+
+overflow2:
+    Py_DECREF(u);
+overflow1:
+    PyErr_SetString(PyExc_OverflowError, "new string is too long");
+    return NULL;
+}
 
 static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) noexcept {
     RELEASE_ASSERT(index == 0, "");
@@ -2235,6 +2265,13 @@ void strDestructor(Box* b) {
 
     self->s.~basic_string();
 }
+
+static PyMethodDef string_methods[] = {
+    { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
+    { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
+    { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
+    { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
+};
 
 void setupStr() {
     str_cls->simple_destructor = strDestructor;
@@ -2289,16 +2326,12 @@ void setupStr() {
     str_cls->giveAttr("endswith",
                       new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
 
-    str_cls->giveAttr("find",
-                      new BoxedFunction(boxRTFunction((void*)strFind, BOXED_INT, 3, 1, false, false), { boxInt(0) }));
-    str_cls->giveAttr("rfind", new BoxedFunction(boxRTFunction((void*)strRfind, BOXED_INT, 2)));
-
     str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
 
     str_cls->giveAttr("format", new BoxedFunction(boxRTFunction((void*)strFormat, UNKNOWN, 1, 0, true, true)));
 
     str_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)strAdd, UNKNOWN, 2)));
-    str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, STR, 2)));
+    str_cls->giveAttr("__mod__", new BoxedFunction(boxRTFunction((void*)strMod, UNKNOWN, 2)));
     str_cls->giveAttr("__mul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
     // TODO not sure if this is right in all cases:
     str_cls->giveAttr("__rmul__", new BoxedFunction(boxRTFunction((void*)strMul, UNKNOWN, 2)));
@@ -2329,8 +2362,10 @@ void setupStr() {
 
     str_cls->giveAttr(
         "split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
-    str_cls->giveAttr(
-        "rsplit", new BoxedFunction(boxRTFunction((void*)strRsplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
+
+    for (auto& md : string_methods) {
+        str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
+    }
 
     CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
     addRTFunction(count, (void*)strCount2, BOXED_INT);

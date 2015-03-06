@@ -364,6 +364,13 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
 }
 
 void BoxedClass::finishInitialization() {
+    assert(!tp_traverse);
+    assert(!tp_clear);
+    if (tp_base) {
+        tp_traverse = tp_base->tp_traverse;
+        tp_clear = tp_base->tp_clear;
+    }
+
     commonClassSetup(this);
 }
 
@@ -1913,9 +1920,9 @@ extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
     }
 
     if (!false_on_noncls) {
-        assert(cls->cls == type_cls);
+        assert(isSubclass(cls->cls, type_cls));
     } else {
-        if (cls->cls != type_cls)
+        if (!isSubclass(cls->cls, type_cls))
             return false;
     }
 
@@ -2410,6 +2417,7 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         if (f->source == NULL) {
             // TODO I don't think this should be happening any more?
             printf("Error: couldn't find suitable function version and no source to recompile!\n");
+            printf("(First version: %p)\n", f->versions[0]->code);
             abort();
         }
 
@@ -2825,7 +2833,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     else
         r = chosen_cf->call(oarg1, oarg2, oarg3, oargs);
 
-    ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) %s %s",
+    ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
            g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
            chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
     return r;
@@ -3206,17 +3214,11 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 
         Box* contained = callattrInternal1(rhs, &contains_str, CLASS_ONLY, NULL, ArgPassSpec(1), lhs);
         if (contained == NULL) {
-            Box* iter = callattrInternal0(rhs, &iter_str, CLASS_ONLY, NULL, ArgPassSpec(0));
-            if (iter)
-                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs));
-            RELEASE_ASSERT(iter == NULL, "need to try iterating");
-
-            Box* getitem = typeLookup(rhs->cls, getitem_str, NULL);
-            if (getitem)
-                ASSERT(isUserDefined(rhs->cls), "%s should probably have a __contains__", getTypeName(rhs));
-            RELEASE_ASSERT(getitem == NULL, "need to try old iteration protocol");
-
-            raiseExcHelper(TypeError, "argument of type '%s' is not iterable", getTypeName(rhs));
+            int result = _PySequence_IterSearch(rhs, lhs, PY_ITERSEARCH_CONTAINS);
+            if (result < 0)
+                throwCAPIException();
+            assert(result == 0 || result == 1);
+            return boxBool(result);
         }
 
         bool b = nonzero(contained);

@@ -75,6 +75,12 @@ Box* seqiterNext(Box* s) {
     RELEASE_ASSERT(s->cls == seqiter_cls || s->cls == seqreviter_cls, "");
     BoxedSeqIter* self = static_cast<BoxedSeqIter*>(s);
 
+    if (!self->next) {
+        Box* hasnext = seqiterHasnext(s);
+        if (hasnext == False)
+            raiseExcHelper(StopIteration, "");
+    }
+
     RELEASE_ASSERT(self->next, "");
     Box* r = self->next;
     self->next = NULL;

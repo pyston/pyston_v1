@@ -7,3 +7,8 @@ for i in xrange(30):
 print o
 
 print collections.deque().maxlen
+
+d = collections.defaultdict(lambda: [])
+print d[1]
+d[2].append(3)
+print sorted(d.items())

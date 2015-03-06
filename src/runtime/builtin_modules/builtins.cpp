@@ -472,6 +472,8 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     Box* fromlist = args[0];
     Box* level = args[1];
 
+    name = coerceUnicodeToStr(name);
+
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
     }
@@ -671,6 +673,12 @@ Box* eval(Box* code) {
     BoxedModule* module = getCurrentModule();
 
     return runEval(static_cast<BoxedString*>(code)->s.c_str(), locals, module);
+}
+
+static Box* callable(Box* obj) {
+    Box* r = PyBool_FromLong((long)PyCallable_Check(obj));
+    checkAndThrowCAPIException();
+    return r;
 }
 
 BoxedClass* notimplemented_cls;
@@ -1146,6 +1154,8 @@ void setupBuiltins() {
 
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
+    builtins_module->giveAttr("callable",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
 
     BoxedClass* buffer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "buffer");
     builtins_module->giveAttr("buffer", buffer_cls);

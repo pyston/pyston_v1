@@ -15,6 +15,8 @@ print "  test  ".rsplit()
 print "  test  ".rsplit(' ')
 print "  test  ".rsplit(None)
 print "1<>2<>3".rsplit('<>')
+print "1<>2<>3".rsplit('<>', 1)
+print "1<>2<>3".split('<>', 1)
 
 print map(bool, ["hello", "", "world"])
 
@@ -78,7 +80,8 @@ print "hello world".translate(translation_map, "llo")
 print "hello world".translate(None, "llo")
 
 for i in xrange(-10, 10):
-    print i, "aaaaa".find("a", i)
+    print i, "aaaaa".find("a", i), "aaaa".find("a", 2, i)
+    print i, "aaaaa".rfind("a", i), "aaaa".rfind("a", 2, i)
 
 print "hello world".partition("hi")
 print "hello world".partition("hello")
@@ -134,3 +137,5 @@ try:
 except:
     print "threw exception"
 
+print repr("hello\tworld\t".expandtabs())
+print repr("hello\tworld\t".expandtabs(12))
