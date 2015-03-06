@@ -364,6 +364,13 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
 }
 
 void BoxedClass::finishInitialization() {
+    assert(!tp_traverse);
+    assert(!tp_clear);
+    if (tp_base) {
+        tp_traverse = tp_base->tp_traverse;
+        tp_clear = tp_base->tp_clear;
+    }
+
     commonClassSetup(this);
 }
 
@@ -2825,7 +2832,7 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
     else
         r = chosen_cf->call(oarg1, oarg2, oarg3, oargs);
 
-    ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) %s %s",
+    ASSERT(chosen_cf->spec->rtn_type->isFitBy(r->cls), "%s (%p) was supposed to return %s, but gave a %s",
            g.func_addr_registry.getFuncNameAtAddress(chosen_cf->code, true, NULL).c_str(), chosen_cf->code,
            chosen_cf->spec->rtn_type->debugName().c_str(), r->cls->tp_name);
     return r;
