@@ -123,7 +123,7 @@ template <class T> class LocMap {
 private:
     static const int N_REGS = 16;
     static const int N_XMM = 16;
-    static const int N_SCRATCH = 16;
+    static const int N_SCRATCH = 32;
     static const int N_STACK = 16;
 
     T map_reg[N_REGS];
