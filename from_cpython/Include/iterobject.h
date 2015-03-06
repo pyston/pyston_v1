@@ -14,8 +14,7 @@ extern "C" {
 
 PyAPI_FUNC(PyObject *) PySeqIter_New(PyObject *) PYSTON_NOEXCEPT;
 
-// Pyston change: this is no longer a static object
-//PyAPI_DATA(PyTypeObject) PyCallIter_Type;
+PyAPI_DATA(PyTypeObject) PyCallIter_Type;
 
 #define PyCallIter_Check(op) (Py_TYPE(op) == &PyCallIter_Type)
 

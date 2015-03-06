@@ -45,23 +45,28 @@
 #error
 #endif
 
-using namespace pyston;
+namespace pyston {
 
 // returns true iff we got a request to exit, i.e. SystemExit, placing the
 // return code in `*retcode`. does not touch `*retcode* if it returns false.
 static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
     if (e.matches(SystemExit)) {
         Box* code = e.value->getattr("code");
-        *retcode = 1;
-        if (code && isSubclass(code->cls, pyston::int_cls))
+
+        if (!code || code == None)
+            *retcode = 0;
+        else if (isSubclass(code->cls, int_cls))
             *retcode = static_cast<BoxedInt*>(code)->n;
+        else
+            *retcode = 1;
+
         return true;
     }
     e.printExcAndTraceback();
     return false;
 }
 
-int main(int argc, char** argv) {
+static int main(int argc, char** argv) {
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
     // llvm::PrettyStackTraceProgram X(argc, argv);
@@ -258,4 +263,10 @@ int main(int argc, char** argv) {
         Stats::dump();
 
     return rtncode;
+}
+
+} // namespace pyston
+
+int main(int argc, char** argv) {
+    return pyston::main(argc, argv);
 }

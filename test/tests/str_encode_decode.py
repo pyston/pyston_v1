@@ -1,4 +1,3 @@
-# allow-warning: import level 0 will be treated as -1!
 def test(string, encoding):
  s = string.encode(encoding)
  print encoding, s

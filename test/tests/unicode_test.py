@@ -1,5 +1,4 @@
 # skip-if: '-x' in EXTRA_JIT_ARGS
-# allow-warning: import level 0 will be treated as -1
 
 print repr(unicode())
 print repr(unicode('hello world'))
@@ -81,3 +80,12 @@ f(**{'a':2})
 f(**{u'a':3})
 
 print repr('%s' % u'') # this gives a unicode object!
+
+print repr('hello world'.replace(u'hello', u'hi'))
+
+print "hello world".endswith(u'hello')
+print "hello world".endswith(u'world')
+print "hello world".startswith(u'hello')
+print "hello world".startswith(u'world')
+
+print float(u'1.0')

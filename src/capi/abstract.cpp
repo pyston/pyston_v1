@@ -135,7 +135,9 @@ extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
 
     PyObject* obj = view->obj;
     if (obj) {
-        assert(obj->cls == str_cls);
+        // This is a Pyston assert
+        assert(isSubclass(obj->cls, str_cls));
+
         if (obj && Py_TYPE(obj)->tp_as_buffer && Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer)
             Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
         Py_XDECREF(obj);

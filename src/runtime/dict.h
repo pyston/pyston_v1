@@ -57,6 +57,7 @@ public:
 Box* dictViewKeysIter(Box* self);
 Box* dictViewValuesIter(Box* self);
 Box* dictViewItemsIter(Box* self);
+void dictMerge(BoxedDict* self, Box* other);
 }
 
 #endif

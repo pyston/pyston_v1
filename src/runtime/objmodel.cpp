@@ -41,6 +41,7 @@
 #include "gc/heap.h"
 #include "runtime/capi.h"
 #include "runtime/classobj.h"
+#include "runtime/dict.h"
 #include "runtime/file.h"
 #include "runtime/float.h"
 #include "runtime/generator.h"
@@ -302,6 +303,9 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     tp_flags |= Py_TPFLAGS_HAVE_CLASS;
     tp_flags |= Py_TPFLAGS_HAVE_GC;
     tp_flags |= Py_TPFLAGS_HAVE_WEAKREFS;
+
+    if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
+        tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
     tp_base = base;
 
@@ -1940,7 +1944,7 @@ extern "C" BoxedInt* hash(Box* obj) {
     Box* hash = getclsattr_internal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls), "%s.__hash__", getTypeName(obj));
+        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls, "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));
     }
@@ -2693,7 +2697,13 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
         Box* kwargs
             = getArg(argspec.num_args + argspec.num_keywords + (argspec.has_starargs ? 1 : 0), arg1, arg2, arg3, args);
-        RELEASE_ASSERT(kwargs->cls == dict_cls, "haven't implemented this for non-dicts");
+
+        if (!isSubclass(kwargs->cls, dict_cls)) {
+            BoxedDict* d = new BoxedDict();
+            dictMerge(d, kwargs);
+            kwargs = d;
+        }
+        assert(isSubclass(kwargs->cls, dict_cls));
         BoxedDict* d_kwargs = static_cast<BoxedDict*>(kwargs);
 
         for (auto& p : d_kwargs->d) {
@@ -3288,6 +3298,7 @@ Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrit
 #ifndef NDEBUG
     if ((lhs->cls == int_cls || lhs->cls == float_cls || lhs->cls == long_cls)
         && (rhs->cls == int_cls || rhs->cls == float_cls || rhs->cls == long_cls)) {
+        printf("\n%s %s %s\n", lhs->cls->tp_name, op_name.c_str(), rhs->cls->tp_name);
         Py_FatalError("missing comparison between these classes");
     }
 #endif

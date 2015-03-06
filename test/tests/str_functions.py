@@ -139,3 +139,6 @@ except:
 
 print repr("hello\tworld\t".expandtabs())
 print repr("hello\tworld\t".expandtabs(12))
+
+print "hello world".startswith(("x", "h"))
+print "hello world".endswith(("x", "h"))

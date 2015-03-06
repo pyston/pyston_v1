@@ -1159,10 +1159,9 @@ Box* objectStr(Box* obj) {
 }
 
 static Box* typeName(Box* b, void*) {
-    assert(b->cls == type_cls);
+    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
     BoxedClass* type = static_cast<BoxedClass*>(b);
 
-    // TODO is this predicate right?
     if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* et = static_cast<BoxedHeapClass*>(type);
         return et->ht_name;
@@ -1320,6 +1319,8 @@ void setupRuntime() {
     none_cls->finishInitialization();
     tuple_cls->finishInitialization();
     list_cls->finishInitialization();
+
+    str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
 
 
@@ -1516,6 +1517,7 @@ void setupRuntime() {
     setupPyston();
 
     PyType_Ready(&PyCapsule_Type);
+    PyType_Ready(&PyCallIter_Type);
 
     initerrno();
     init_sha();

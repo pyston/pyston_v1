@@ -1,4 +1,3 @@
-# allow-warning: import level 0 will be treated as -1
 # skip-if: '-x' in EXTRA_JIT_ARGS
 
 def f(a):
