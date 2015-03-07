@@ -143,6 +143,10 @@ public:
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
     void addSymbol(InternedString name, Box* value, bool allow_duplicates);
+    void setGenerator(Box* gen);
+    void setPassedClosure(Box* closure);
+    void setCreatedClosure(Box* closure);
+
     void gcVisit(GCVisitor* visitor);
 };
 
@@ -151,6 +155,21 @@ void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_dupli
     if (!allow_duplicates)
         assert(sym_table.count(name) == 0);
     sym_table[name] = value;
+}
+
+void ASTInterpreter::setGenerator(Box* gen) {
+    assert(gen->cls == generator_cls);
+    this->generator = static_cast<BoxedGenerator*>(gen);
+}
+
+void ASTInterpreter::setPassedClosure(Box* closure) {
+    assert(closure->cls == closure_cls);
+    this->passed_closure = static_cast<BoxedClosure*>(closure);
+}
+
+void ASTInterpreter::setCreatedClosure(Box* closure) {
+    assert(closure->cls == closure_cls);
+    this->created_closure = static_cast<BoxedClosure*>(closure);
 }
 
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
@@ -1144,9 +1163,17 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     for (const auto& p : locals->d) {
         assert(p.first->cls == str_cls);
-        auto name = static_cast<BoxedString*>(p.first)->s;
-        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
-        interpreter.addSymbol(interned, p.second, false);
+        std::string name = static_cast<BoxedString*>(p.first)->s;
+        if (name == PASSED_GENERATOR_NAME) {
+            interpreter.setGenerator(p.second);
+        } else if (name == PASSED_CLOSURE_NAME) {
+            interpreter.setPassedClosure(p.second);
+        } else if (name == CREATED_CLOSURE_NAME) {
+            interpreter.setCreatedClosure(p.second);
+        } else {
+            InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
+            interpreter.addSymbol(interned, p.second, false);
+        }
     }
 
     CFGBlock* start_block = NULL;

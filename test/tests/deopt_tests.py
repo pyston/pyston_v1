@@ -11,6 +11,8 @@ except ImportError:
     pass
 
 def main():
+    var_in_closure1 = 0
+    
     def f(o):
         print "starting"
 
@@ -23,6 +25,12 @@ def main():
             print e
         print o.d
         print sorted(locals().items())
+
+        print var_in_closure1
+        var_in_closure2 = 1
+        def g():
+            print var_in_closure2
+        g()
 
         print "Done"
 
