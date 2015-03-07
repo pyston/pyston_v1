@@ -311,6 +311,18 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
     return maxElement;
 }
 
+extern "C" Box* next(Box* iterator, Box* _default) {
+    try {
+        static std::string next_str = "next";
+        return callattr(iterator, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        if (_default && e.matches(StopIteration))
+            return _default;
+        throw;
+    }
+}
+
 extern "C" Box* sum(Box* container, Box* initial) {
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
@@ -1014,6 +1026,9 @@ void setupBuiltins() {
 
     max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false), "max");
     builtins_module->giveAttr("max", max_obj);
+
+    builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(
+                                          boxRTFunction((void*)next, UNKNOWN, 2, 1, false, false), "next", { NULL }));
 
     builtins_module->giveAttr("sum", new BoxedBuiltinFunctionOrMethod(
                                          boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), "sum", { boxInt(0) }));
