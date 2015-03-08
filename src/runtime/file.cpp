@@ -635,10 +635,6 @@ Box* fileEnter(BoxedFile* self) {
 Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
     Box* exc_tb = args[0];
     assert(self->cls == file_cls);
-    assert(exc_type == None);
-    assert(exc_val == None);
-    assert(exc_tb == None);
-
     fileClose(self);
     return None;
 }
