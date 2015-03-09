@@ -14,7 +14,8 @@ print 1 ** 0
 print 0 ** 0
 print -1 ** 0
 
-
+for i in (-10, 10, 0, -15):
+    print i, i.__hex__(), i.__oct__()
 
 # Testing int.__new__:
 class C(int):

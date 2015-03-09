@@ -882,7 +882,12 @@ extern "C" Box* intHex(BoxedInt* self) {
                        getTypeName(self));
 
     char buf[80];
-    int len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
+    int len = 0;
+    bool is_negative = self->n < 0;
+    if (is_negative)
+        len = snprintf(buf, sizeof(buf), "-0x%lx", std::abs(self->n));
+    else
+        len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
     return new BoxedString(std::string(buf, len));
 }
 
@@ -892,7 +897,12 @@ extern "C" Box* intOct(BoxedInt* self) {
                        getTypeName(self));
 
     char buf[80];
-    int len = snprintf(buf, sizeof(buf), "%#lo", self->n);
+    int len = 0;
+    bool is_negative = self->n < 0;
+    if (is_negative)
+        len = snprintf(buf, sizeof(buf), "-%#lo", std::abs(self->n));
+    else
+        len = snprintf(buf, sizeof(buf), "%#lo", self->n);
     return new BoxedString(std::string(buf, len));
 }
 
