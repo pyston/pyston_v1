@@ -350,10 +350,10 @@ Box* open(Box* arg1, Box* arg2) {
 }
 
 extern "C" Box* chr(Box* arg) {
-    if (arg->cls != int_cls) {
+    i64 n = PyInt_AsLong(arg);
+    if (n == -1 && PyErr_Occurred())
         raiseExcHelper(TypeError, "an integer is required");
-    }
-    i64 n = static_cast<BoxedInt*>(arg)->n;
+
     if (n < 0 || n >= 256) {
         raiseExcHelper(ValueError, "chr() arg not in range(256)");
     }
