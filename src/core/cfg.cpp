@@ -221,12 +221,6 @@ private:
 
     AST_Name* remapName(AST_Name* name) { return name; }
 
-    AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
-        AST_expr* key = remapExpr(node->key);
-        AST_expr* value = remapExpr(node->value);
-        return makeCall(makeLoadAttribute(name, internString("__setitem__"), true), key, value);
-    }
-
     AST_expr* applyComprehensionCall(AST_ListComp* node, AST_Name* name) {
         AST_expr* elt = remapExpr(node->elt);
         return makeCall(makeLoadAttribute(name, internString("append"), true), elt);
@@ -786,44 +780,37 @@ private:
         }
 
         return rtn;
-    };
+    }
 
-    AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
-        assert(node->generators.size());
-
-        // We need to evaluate the first for-expression immediately, as the PEP
-        // dictates; so we pass it in as an argument to the function we create.
-        // See
-        // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
-        AST_expr* first = remapExpr(node->generators[0]->iter);
-
+    // This is a helper function used for generators expressions and comprehensions.
+    //
+    // Generates a FunctionDef which produces scope for `node'. The function produced is empty, so you'd better fill it.
+    // `node' had better be a kind of node that scoping_analysis thinks can carry scope (see the switch (node->type)
+    // block in ScopingAnalysis::processNameUsages in analysis/scoping_analysis.cpp); e.g. a Lambda or GeneratorExp.
+    AST_FunctionDef* makeFunctionForScope(AST* node) {
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
-        InternedString func_name(nodeName(func));
+        InternedString func_name = nodeName(func);
         func->name = func_name;
-
-        scoping_analysis->registerScopeReplacement(node, func);
-
         func->args = new AST_arguments();
         func->args->vararg = internString("");
         func->args->kwarg = internString("");
+        scoping_analysis->registerScopeReplacement(node, func); // critical bit
+        return func;
+    }
 
-        InternedString first_generator_name = nodeName(node->generators[0]);
-        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
-
-        std::vector<AST_stmt*>* insert_point = &func->body;
-        for (int i = 0; i < node->generators.size(); i++) {
-            AST_comprehension* c = node->generators[i];
+    // This is a helper function used for generator expressions and comprehensions.
+    // TODO(rntz): use this to handle unscoped (i.e. list) comprehensions as well?
+    void emitComprehensionLoops(std::vector<AST_stmt*>* insert_point,
+                                const std::vector<AST_comprehension*>& comprehensions, AST_expr* first_generator,
+                                std::function<void(std::vector<AST_stmt*>*)> do_yield) {
+        for (int i = 0; i < comprehensions.size(); i++) {
+            AST_comprehension* c = comprehensions[i];
 
             AST_For* loop = new AST_For();
             loop->target = c->target;
-
-            if (i == 0) {
-                loop->iter = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
-            } else {
-                loop->iter = c->iter;
-            }
+            loop->iter = (i == 0) ? first_generator : c->iter;
 
             insert_point->push_back(loop);
             insert_point = &loop->body;
@@ -840,21 +827,72 @@ private:
             }
         }
 
-        AST_Yield* y = new AST_Yield();
-        y->value = node->elt;
-        insert_point->push_back(makeExpr(y));
+        do_yield(insert_point);
+    }
+
+    AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
+        assert(node->generators.size());
+
+        // We need to evaluate the first for-expression immediately, as the PEP dictates; so we pass it in as an
+        // argument to the function we create. See
+        // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
+        AST_expr* first = remapExpr(node->generators[0]->iter);
+        InternedString first_generator_name = nodeName(node->generators[0]);
+
+        AST_FunctionDef* func = makeFunctionForScope(node);
+        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        emitComprehensionLoops(&func->body, node->generators,
+                               makeName(first_generator_name, AST_TYPE::Load, node->lineno),
+                               [this, node](std::vector<AST_stmt*>* insert_point) {
+                                   auto y = new AST_Yield();
+                                   y->value = node->elt;
+                                   insert_point->push_back(makeExpr(y));
+                               });
+        push_back(func);
+
+        return makeCall(makeName(func->name, AST_TYPE::Load, node->lineno), first);
+    }
+
+    void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
+        // add entry to the dictionary
+        AST_expr* setitem
+            = makeLoadAttribute(makeName(dict_name, AST_TYPE::Load, node->lineno), internString("__setitem__"), true);
+        insert_point->push_back(makeExpr(makeCall(setitem, node->key, node->value)));
+    }
+
+    void emitComprehensionYield(AST_SetComp* node, InternedString set_name, std::vector<AST_stmt*>* insert_point) {
+        // add entry to the dictionary
+        AST_expr* add = makeLoadAttribute(makeName(set_name, AST_TYPE::Load, node->lineno), internString("add"), true);
+        insert_point->push_back(makeExpr(makeCall(add, node->elt)));
+    }
+
+    template <typename ResultType, typename CompType> AST_expr* remapScopedComprehension(CompType* node) {
+        // See comment in remapGeneratorExp re early vs. late binding.
+        AST_expr* first = remapExpr(node->generators[0]->iter);
+        InternedString first_generator_name = nodeName(node->generators[0]);
+
+        AST_FunctionDef* func = makeFunctionForScope(node);
+        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+
+        InternedString rtn_name = nodeName(node);
+        auto asgn = new AST_Assign();
+        asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
+        asgn->value = new ResultType();
+        func->body.push_back(asgn);
+
+        auto lambda =
+            [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
+        AST_Name* first_name = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
+        emitComprehensionLoops(&func->body, node->generators, first_name, lambda);
+
+        auto rtn = new AST_Return();
+        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
+        func->body.push_back(rtn);
 
         push_back(func);
-        AST_Call* call = new AST_Call();
-        call->lineno = node->lineno;
-        call->col_offset = node->col_offset;
 
-        call->starargs = NULL;
-        call->kwargs = NULL;
-        call->func = makeName(func_name, AST_TYPE::Load, node->lineno);
-        call->args.push_back(first);
-        return call;
-    };
+        return makeCall(makeName(func->name, AST_TYPE::Load, node->lineno), first);
+    }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
         InternedString rtn_name = nodeName(node);
@@ -1047,7 +1085,7 @@ private:
                 rtn = remapDict(ast_cast<AST_Dict>(node));
                 break;
             case AST_TYPE::DictComp:
-                rtn = remapComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
+                rtn = remapScopedComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
                 break;
             case AST_TYPE::GeneratorExp:
                 rtn = remapGeneratorExp(ast_cast<AST_GeneratorExp>(node));
@@ -1082,6 +1120,9 @@ private:
                 break;
             case AST_TYPE::Set:
                 rtn = remapSet(ast_cast<AST_Set>(node));
+                break;
+            case AST_TYPE::SetComp:
+                rtn = remapScopedComprehension<AST_Set>(ast_cast<AST_SetComp>(node));
                 break;
             case AST_TYPE::Slice:
                 rtn = remapSlice(ast_cast<AST_Slice>(node));
