@@ -14,13 +14,13 @@
 
 #!/usr/bin/env python
 
+import Queue
+import argparse
 import cPickle
 import datetime
 import functools
-import getopt
 import glob
 import os
-import Queue
 import re
 import resource
 import signal
@@ -366,34 +366,42 @@ def fileSize(fn):
     return os.stat(fn).st_size
     # return len(list(open(fn)))
 
+# our arguments
+parser = argparse.ArgumentParser(description='Runs Pyston tests.')
+parser.add_argument('-m', '--run-memcheck', action='store_true', help='run memcheck')
+parser.add_argument('-j', '--num-threads', metavar='N', type=int, default=NUM_THREADS,
+                    help='number of threads')
+parser.add_argument('-k', '--keep-going', default=KEEP_GOING, action='store_true',
+                    help='keep going after test failure')
+parser.add_argument('-R', '--image', default=IMAGE,
+                    help='the executable to test (default: %s)' % IMAGE)
+parser.add_argument('-K', '--no-keep-going', dest='keep_going', action='store_false',
+                    help='quit after test failure')
+parser.add_argument('-a', '--extra-args', default=[], action='append',
+                    help="additional arguments to pyston (must be invoked with equal sign: -a=-ARG)")
+parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
+                    help='set time limit in seconds for each test')
+
+parser.add_argument('test_dir')
+parser.add_argument('patterns', nargs='*')
+
 if __name__ == "__main__":
     run_memcheck = False
     start = 1
 
-    opts, patterns = getopt.gnu_getopt(sys.argv[1:], "j:a:t:mR:kK")
-    for (t, v) in opts:
-        if t == '-m':
-            run_memcheck = True
-        elif t == '-j':
-            NUM_THREADS = int(v)
-            assert NUM_THREADS > 0
-        elif t == '-R':
-            IMAGE = v
-        elif t == '-k':
-            KEEP_GOING = True
-        elif t == '-K':
-            KEEP_GOING = False
-        elif t == '-a':
-            EXTRA_JIT_ARGS.append(v)
-        elif t == '-t':
-            TIME_LIMIT = int(v)
-        else:
-            raise Exception((t, v))
+    opts = parser.parse_args()
+    print opts
+    run_memcheck = opts.run_memcheck
+    NUM_THREADS = opts.num_threads
+    IMAGE = opts.image
+    KEEP_GOING = opts.keep_going
+    EXTRA_JIT_ARGS += opts.extra_args
+    TIME_LIMIT = opts.time_limit
 
-    TEST_DIR = patterns[0]
+    TEST_DIR = opts.test_dir
+    patterns = opts.patterns
+
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
-
-    patterns = patterns[1:]
 
     TOSKIP = ["%s/%s.py" % (TEST_DIR, i) for i in (
         "tuple_depth",
