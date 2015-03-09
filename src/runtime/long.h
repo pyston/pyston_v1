@@ -48,6 +48,12 @@ Box* longSub(BoxedLong* lhs, Box* rhs);
 Box* longMul(BoxedLong* lhs, Box* rhs);
 Box* longDiv(BoxedLong* lhs, Box* rhs);
 Box* longPow(BoxedLong* lhs, Box* rhs);
+Box* longLshift(BoxedLong* lhs, Box* rhs);
+Box* longRshift(BoxedLong* lhs, Box* rhs);
+
+Box* longHex(BoxedLong* v);
+Box* longOct(BoxedLong* v);
+Box* longStr(BoxedLong* v);
 }
 
 #endif

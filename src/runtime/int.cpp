@@ -665,6 +665,9 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
+    if (rhs->cls == long_cls)
+        return longLshift(boxLong(lhs->n), rhs);
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -780,6 +783,9 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
     if (!isSubclass(lhs->cls, int_cls))
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
+
+    if (rhs->cls == long_cls)
+        return longRshift(boxLong(lhs->n), rhs);
 
     if (rhs->cls != int_cls) {
         return NotImplemented;
@@ -1049,7 +1055,7 @@ void setupInt() {
     _addFuncIntUnknown("__ge__", BOXED_BOOL, (void*)intGeInt, (void*)intGe);
 
     _addFuncIntUnknown("__lshift__", UNKNOWN, (void*)intLShiftInt, (void*)intLShift);
-    _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
+    _addFuncIntUnknown("__rshift__", UNKNOWN, (void*)intRShiftInt, (void*)intRShift);
 
     int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1)));
     int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1)));

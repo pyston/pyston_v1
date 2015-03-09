@@ -18,6 +18,8 @@
 #include <gmp.h>
 #include <sstream>
 
+#include "llvm/Support/raw_ostream.h"
+
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -216,8 +218,47 @@ extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
     return mpz_get_d(l->n);
 }
 
+/* Convert the long to a string object with given base,
+   appending a base prefix of 0[box] if base is 2, 8 or 16.
+   Add a trailing "L" if addL is non-zero.
+   If newstyle is zero, then use the pre-2.6 behavior of octal having
+   a leading "0", instead of the prefix "0o" */
 extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL, int newstyle) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedLong* v = (BoxedLong*)aa;
+
+    RELEASE_ASSERT(isSubclass(v->cls, long_cls), "");
+    RELEASE_ASSERT(base >= 2 && base <= 62, "");
+
+    bool is_negative = mpz_sgn(v->n) == -1;
+
+    int space_required = mpz_sizeinbase(v->n, base) + 2;
+    char* buf = (char*)malloc(space_required);
+    mpz_get_str(buf, base, v->n);
+
+    std::string str;
+    llvm::raw_string_ostream os(str);
+    if (is_negative)
+        os << '-';
+
+    if (base == 2)
+        os << "0b";
+    else if (base == 8)
+        os << (newstyle ? "0o" : "0");
+    else if (base == 16)
+        os << "0x";
+
+    if (is_negative)
+        os << buf + 1; // +1 to remove sign
+    else
+        os << buf;
+
+    if (addL)
+        os << "L";
+
+    os.flush();
+    auto rtn = new BoxedString(std::move(str));
+    free(buf);
+    return rtn;
 }
 
 extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
@@ -474,30 +515,25 @@ Box* longInt(Box* v) {
 Box* longRepr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
-
-    int space_required = mpz_sizeinbase(v->n, 10) + 2; // basic size
-    space_required += 1;                               // 'L' suffix
-    char* buf = (char*)malloc(space_required);
-    mpz_get_str(buf, 10, v->n);
-    strcat(buf, "L");
-
-    auto rtn = new BoxedString(buf);
-    free(buf);
-
-    return rtn;
+    return _PyLong_Format(v, 10, 1 /* add L */, 0);
 }
 
 Box* longStr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'", getTypeName(v));
-    int space_required = mpz_sizeinbase(v->n, 10) + 2;
-    char* buf = (char*)malloc(space_required);
-    mpz_get_str(buf, 10, v->n);
+    return _PyLong_Format(v, 10, 0 /* no L */, 0);
+}
 
-    auto rtn = new BoxedString(buf);
-    free(buf);
+Box* longHex(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'long' object but received a '%s'", getTypeName(v));
+    return _PyLong_Format(v, 16, 1 /* add L */, 0);
+}
 
-    return rtn;
+Box* longOct(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'long' object but received a '%s'", getTypeName(v));
+    return _PyLong_Format(v, 8, 1 /* add L */, 0);
 }
 
 Box* longNeg(BoxedLong* v1) {
@@ -544,6 +580,7 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
     }
 }
 
+// TODO: split common code out into a helper function
 extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'", getTypeName(v1));
@@ -565,6 +602,32 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
             mpz_init_set_si(v2_long, v2_int->n);
 
         mpz_and(r->n, v1->n, v2_long);
+        return r;
+    }
+    return NotImplemented;
+}
+
+extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'long' object but received a '%s'", getTypeName(v1));
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_ior(r->n, v1->n, v2->n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_t v2_long;
+        mpz_init(v2_long);
+        if (v2_int->n >= 0)
+            mpz_init_set_ui(v2_long, v2_int->n);
+        else
+            mpz_init_set_si(v2_long, v2_int->n);
+
+        mpz_ior(r->n, v1->n, v2_long);
         return r;
     }
     return NotImplemented;
@@ -924,6 +987,17 @@ Box* longPow(BoxedLong* v1, Box* _v2) {
     return r;
 }
 
+extern "C" Box* longInvert(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__invert__' requires a 'long' object but received a '%s'",
+                       getTypeName(v));
+
+    BoxedLong* r = new BoxedLong();
+    mpz_init(r->n);
+    mpz_com(r->n, v->n);
+    return r;
+}
+
 Box* longNonzero(BoxedLong* self) {
     if (!isSubclass(self->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'",
@@ -983,6 +1057,8 @@ void setupLong() {
 
     long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
     long_cls->giveAttr("__rand__", long_cls->getattr("__and__"));
+    long_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)longOr, UNKNOWN, 2)));
+    long_cls->giveAttr("__ror__", long_cls->getattr("__or__"));
     long_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)longXor, UNKNOWN, 2)));
     long_cls->giveAttr("__rxor__", long_cls->getattr("__xor__"));
 
@@ -999,7 +1075,10 @@ void setupLong() {
     long_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)longInt, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
+    long_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)longHex, STR, 1)));
+    long_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)longOct, STR, 1)));
 
+    long_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)longInvert, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
 

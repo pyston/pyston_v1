@@ -30,6 +30,7 @@
 #include "gc/collector.h"
 #include "runtime/capi.h"
 #include "runtime/dict.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -342,8 +343,138 @@ Py_LOCAL_INLINE(PyObject*) getnextarg(PyObject* args, Py_ssize_t arglen, Py_ssiz
     return NULL;
 }
 
-extern "C" PyObject* _PyString_FormatLong(PyObject*, int, int, int, const char**, int*) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* _PyString_FormatLong(PyObject* val, int flags, int prec, int type, const char** pbuf,
+                                          int* plen) noexcept {
+    // Pyston change:
+    RELEASE_ASSERT(val->cls == long_cls, "");
+
+
+    PyObject* result = NULL;
+    char* buf;
+    Py_ssize_t i;
+    int sign; /* 1 if '-', else 0 */
+    int len;  /* number of characters */
+    Py_ssize_t llen;
+    int numdigits; /* len == numnondigits + numdigits */
+    int numnondigits = 0;
+
+    switch (type) {
+        case 'd':
+        case 'u':
+            // Pyston change:
+            // result = Py_TYPE(val)->tp_str(val);
+            result = longStr((BoxedLong*)val);
+            break;
+        case 'o':
+            // Pyston change:
+            // result = Py_TYPE(val)->tp_as_number->nb_oct(val);
+            result = longOct((BoxedLong*)val);
+            break;
+        case 'x':
+        case 'X':
+            numnondigits = 2;
+            // Pyston change:
+            // result = Py_TYPE(val)->tp_as_number->nb_hex(val);
+            result = longHex((BoxedLong*)val);
+            break;
+        default:
+            assert(!"'type' not in [duoxX]");
+    }
+    if (!result)
+        return NULL;
+
+    buf = PyString_AsString(result);
+    if (!buf) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    /* To modify the string in-place, there can only be one reference. */
+    // Pyston change:
+    // if (Py_REFCNT(result) != 1) {
+    if (0) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    llen = PyString_Size(result);
+    if (llen > INT_MAX) {
+        PyErr_SetString(PyExc_ValueError, "string too large in _PyString_FormatLong");
+        return NULL;
+    }
+    len = (int)llen;
+    if (buf[len - 1] == 'L') {
+        --len;
+        buf[len] = '\0';
+    }
+    sign = buf[0] == '-';
+    numnondigits += sign;
+    numdigits = len - numnondigits;
+    assert(numdigits > 0);
+
+    /* Get rid of base marker unless F_ALT */
+    if ((flags & F_ALT) == 0) {
+        /* Need to skip 0x, 0X or 0. */
+        int skipped = 0;
+        switch (type) {
+            case 'o':
+                assert(buf[sign] == '0');
+                /* If 0 is only digit, leave it alone. */
+                if (numdigits > 1) {
+                    skipped = 1;
+                    --numdigits;
+                }
+                break;
+            case 'x':
+            case 'X':
+                assert(buf[sign] == '0');
+                assert(buf[sign + 1] == 'x');
+                skipped = 2;
+                numnondigits -= 2;
+                break;
+        }
+        if (skipped) {
+            buf += skipped;
+            len -= skipped;
+            if (sign)
+                buf[0] = '-';
+        }
+        assert(len == numnondigits + numdigits);
+        assert(numdigits > 0);
+    }
+
+    /* Fill with leading zeroes to meet minimum width. */
+    if (prec > numdigits) {
+        PyObject* r1 = PyString_FromStringAndSize(NULL, numnondigits + prec);
+        char* b1;
+        if (!r1) {
+            Py_DECREF(result);
+            return NULL;
+        }
+        b1 = PyString_AS_STRING(r1);
+        for (i = 0; i < numnondigits; ++i)
+            *b1++ = *buf++;
+        for (i = 0; i < prec - numdigits; i++)
+            *b1++ = '0';
+        for (i = 0; i < numdigits; i++)
+            *b1++ = *buf++;
+        *b1 = '\0';
+        Py_DECREF(result);
+        result = r1;
+        buf = PyString_AS_STRING(result);
+        len = numnondigits + prec;
+    }
+
+    /* Fix up case for hex conversions. */
+    if (type == 'X') {
+        /* Need to convert all lower case letters to upper case.
+           and need to convert 0x to 0X (and -0x to -0X). */
+        for (i = 0; i < len; i++)
+            if (buf[i] >= 'a' && buf[i] <= 'x')
+                buf[i] -= 'a' - 'A';
+    }
+    *pbuf = buf;
+    *plen = len;
+    return result;
 }
 
 static PyObject* formatfloat(PyObject* v, int flags, int prec, int type) {
