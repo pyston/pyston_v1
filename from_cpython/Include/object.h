@@ -558,10 +558,10 @@ extern int _PyObject_SlotCompare(PyObject *, PyObject *);
 /* Same as PyObject_Generic{Get,Set}Attr, but passing the attributes
    dict as the last parameter. */
 PyAPI_FUNC(PyObject *)
-_PyObject_GenericGetAttrWithDict(PyObject *, PyObject *, PyObject *);
+_PyObject_GenericGetAttrWithDict(PyObject *, PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(int)
 _PyObject_GenericSetAttrWithDict(PyObject *, PyObject *,
-                                 PyObject *, PyObject *);
+                                 PyObject *, PyObject *) PYSTON_NOEXCEPT;
 
 
 /* PyObject_Dir(obj) acts like Python __builtin__.dir(obj), returning a
