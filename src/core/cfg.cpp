@@ -791,6 +791,10 @@ private:
     AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
         assert(node->generators.size());
 
+        // We need to evaluate the first for-expression immediately, as the PEP
+        // dictates; so we pass it in as an argument to the function we create.
+        // See
+        // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
         AST_expr* first = remapExpr(node->generators[0]->iter);
 
         AST_FunctionDef* func = new AST_FunctionDef();
