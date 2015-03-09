@@ -167,6 +167,9 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
 extern "C" bool softspace(Box* b, bool newval) {
     assert(b);
 
+    // TODO do we also need to wrap the isSubclass in the try{}?  it
+    // can throw exceptions which would bubble up from print
+    // statements.
     if (isSubclass(b->cls, file_cls)) {
         int& ss = static_cast<BoxedFile*>(b)->f_softspace;
         int r = ss;
@@ -176,13 +179,18 @@ extern "C" bool softspace(Box* b, bool newval) {
     }
 
     bool r;
-    Box* gotten = getattrInternal(b, "softspace", NULL);
-    if (!gotten) {
+    try {
+        Box* gotten = getattrInternal(b, "softspace", NULL);
+        if (!gotten) {
+            r = 0;
+        } else {
+            r = nonzero(gotten);
+        }
+        setattrInternal(b, "softspace", boxInt(newval), NULL);
+    } catch (ExcInfo e) {
         r = 0;
-    } else {
-        r = nonzero(gotten);
     }
-    setattrInternal(b, "softspace", boxInt(newval), NULL);
+
     return r;
 }
 

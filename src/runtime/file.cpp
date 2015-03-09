@@ -974,7 +974,7 @@ extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
     try {
         return softspace(f, newflag);
     } catch (ExcInfo e) {
-        abort();
+        return 0;
     }
 }
 
