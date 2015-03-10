@@ -89,3 +89,5 @@ print "hello world".startswith(u'hello')
 print "hello world".startswith(u'world')
 
 print float(u'1.0')
+
+print unichr(97)

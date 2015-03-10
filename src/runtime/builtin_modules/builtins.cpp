@@ -349,6 +349,16 @@ extern "C" Box* chr(Box* arg) {
     return boxString(std::string(1, (char)n));
 }
 
+extern "C" Box* unichr(Box* arg) {
+    if (arg->cls != int_cls)
+        raiseExcHelper(TypeError, "an integer is required");
+
+    i64 n = static_cast<BoxedInt*>(arg)->n;
+    Box* rtn = PyUnicode_FromOrdinal(n);
+    checkAndThrowCAPIException();
+    return rtn;
+}
+
 extern "C" Box* ord(Box* obj) {
     long ord;
     Py_ssize_t size;
@@ -1022,6 +1032,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("id", id_obj);
     chr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)chr, STR, 1), "chr");
     builtins_module->giveAttr("chr", chr_obj);
+    builtins_module->giveAttr("unichr",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)unichr, UNKNOWN, 1), "unichr"));
     ord_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)ord, BOXED_INT, 1), "ord");
     builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)trap, UNKNOWN, 0), "trap");
