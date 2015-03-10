@@ -1178,6 +1178,8 @@ void setupBuiltins() {
     Py_TYPE(&PyMemoryView_Type) = &PyType_Type;
     PyType_Ready(&PyMemoryView_Type);
     builtins_module->giveAttr("memoryview", memoryview_cls);
+    PyType_Ready(&PyByteArray_Type);
+    builtins_module->giveAttr("bytearray", &PyByteArray_Type);
 
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));

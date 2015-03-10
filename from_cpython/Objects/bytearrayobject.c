@@ -30,7 +30,9 @@ _getbytevalue(PyObject* arg, int *value)
     long face_value;
 
     if (PyBytes_CheckExact(arg)) {
-        if (Py_SIZE(arg) != 1) {
+        // Pyston change: use correct size function
+        // if (Py_SIZE(arg) != 1) {
+        if (PyBytes_Size(arg) != 1) {
             PyErr_SetString(PyExc_ValueError, "string must be of size 1");
             return 0;
         }

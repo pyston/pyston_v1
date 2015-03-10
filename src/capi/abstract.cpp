@@ -90,8 +90,56 @@ extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
     return 0;
 }
 
+/* view is not checked for consistency in either of these.  It is
+   assumed that the size of the buffer is view->len in
+   view->len / view->itemsize elements.
+*/
 extern "C" int PyBuffer_ToContiguous(void* buf, Py_buffer* view, Py_ssize_t len, char fort) noexcept {
-    Py_FatalError("unimplemented");
+    int k;
+    void (*addone)(int, Py_ssize_t*, const Py_ssize_t*);
+    Py_ssize_t* indices, elements;
+    char* dest, *ptr;
+
+    if (len > view->len) {
+        len = view->len;
+    }
+
+    if (PyBuffer_IsContiguous(view, fort)) {
+        /* simplest copy is all that is needed */
+        memcpy(buf, view->buf, len);
+        return 0;
+    }
+
+    /* Otherwise a more elaborate scheme is needed */
+
+    /* XXX(nnorwitz): need to check for overflow! */
+    indices = (Py_ssize_t*)PyMem_Malloc(sizeof(Py_ssize_t) * (view->ndim));
+    if (indices == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
+    for (k = 0; k < view->ndim; k++) {
+        indices[k] = 0;
+    }
+
+    if (fort == 'F') {
+        addone = _Py_add_one_to_index_F;
+    } else {
+        addone = _Py_add_one_to_index_C;
+    }
+    dest = (char*)buf;
+    /* XXX : This is not going to be the fastest code in the world
+             several optimizations are possible.
+     */
+    elements = len / view->itemsize;
+    while (elements--) {
+        addone(view->ndim, indices, view->shape);
+        ptr = (char*)PyBuffer_GetPointer(view, indices);
+        memcpy(dest, ptr, view->itemsize);
+        dest += view->itemsize;
+    }
+    PyMem_Free(indices);
+    return 0;
 }
 
 extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_ssize_t len, int readonly,
@@ -135,9 +183,6 @@ extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
 
     PyObject* obj = view->obj;
     if (obj) {
-        // This is a Pyston assert
-        assert(isSubclass(obj->cls, str_cls));
-
         if (obj && Py_TYPE(obj)->tp_as_buffer && Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer)
             Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
         Py_XDECREF(obj);
