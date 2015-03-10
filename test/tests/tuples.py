@@ -71,6 +71,16 @@ t((T(1),), (T(2),1))
 
 print ("hello", "world", ["test"])
 
+class MyTuple(tuple):
+    pass
+mt = MyTuple((1, 2))
+print mt < (1, 2)
+print (1, 2) < mt
+print mt[1]
+print mt + (1,)
+print list(mt)
+print len(mt)
+
 # __add__
 print () + ()
 print (1, 2, 3) + ()

@@ -85,7 +85,7 @@ extern "C" PyObject* PyTuple_GetItem(PyObject* op, Py_ssize_t i) noexcept {
 }
 
 Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
-    assert(self->cls == tuple_cls);
+    assert(isSubclass(self->cls, tuple_cls));
     assert(slice->cls == slice_cls);
 
     i64 start, stop, step, length;
@@ -94,7 +94,7 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
 }
 
 extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t high) noexcept {
-    RELEASE_ASSERT(p->cls == tuple_cls, ""); // could it be a subclass or something else?
+    RELEASE_ASSERT(isSubclass(p->cls, tuple_cls), "");
     BoxedTuple* t = static_cast<BoxedTuple*>(p);
 
     Py_ssize_t n = t->elts.size();
@@ -123,7 +123,7 @@ Box* tupleGetitem(BoxedTuple* self, Box* slice) {
 }
 
 Box* tupleAdd(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
 
@@ -159,7 +159,7 @@ Box* tupleMul(BoxedTuple* self, Box* rhs) {
 }
 
 Box* tupleLen(BoxedTuple* t) {
-    assert(t->cls == tuple_cls);
+    assert(isSubclass(t->cls, tuple_cls));
     return boxInt(t->elts.size());
 }
 
@@ -169,7 +169,7 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
 }
 
 Box* tupleRepr(BoxedTuple* t) {
-    assert(t->cls == tuple_cls);
+    assert(isSubclass(t->cls, tuple_cls));
 
     std::ostringstream os("");
     os << "(";
@@ -231,49 +231,49 @@ Box* _tupleCmp(BoxedTuple* lhs, BoxedTuple* rhs, AST_TYPE::AST_TYPE op_type) {
 }
 
 Box* tupleLt(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Lt);
 }
 
 Box* tupleLe(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::LtE);
 }
 
 Box* tupleGt(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Gt);
 }
 
 Box* tupleGe(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::GtE);
 }
 
 Box* tupleEq(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::Eq);
 }
 
 Box* tupleNe(BoxedTuple* self, Box* rhs) {
-    if (rhs->cls != tuple_cls) {
+    if (!isSubclass(rhs->cls, tuple_cls)) {
         return NotImplemented;
     }
     return _tupleCmp(self, static_cast<BoxedTuple*>(rhs), AST_TYPE::NotEq);
 }
 
 Box* tupleNonzero(BoxedTuple* self) {
-    RELEASE_ASSERT(self->cls == tuple_cls, "");
+    RELEASE_ASSERT(isSubclass(self->cls, tuple_cls), "");
     return boxBool(self->elts.size() != 0);
 }
 
@@ -290,7 +290,7 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
 }
 
 Box* tupleHash(BoxedTuple* self) {
-    assert(self->cls == tuple_cls);
+    assert(isSubclass(self->cls, tuple_cls));
 
     int64_t rtn = 3527539;
     for (Box* e : self->elts) {
@@ -391,10 +391,9 @@ void setupTuple() {
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
-    addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN,
-                  std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, BOXED_INT });
-    addRTFunction(getitem, (void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, SLICE });
-    addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ BOXED_TUPLE, UNKNOWN });
+    addRTFunction(getitem, (void*)tupleGetitemInt, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, BOXED_INT });
+    addRTFunction(getitem, (void*)tupleGetitemSlice, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, SLICE });
+    addRTFunction(getitem, (void*)tupleGetitem, UNKNOWN, std::vector<ConcreteCompilerType*>{ UNKNOWN, UNKNOWN });
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
