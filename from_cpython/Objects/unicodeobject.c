@@ -108,10 +108,9 @@ static PyUnicodeObject *unicode_empty = NULL;
         if (unicode_empty != NULL)                      \
             Py_INCREF(unicode_empty);                   \
         else {                                          \
-            unicode_empty = _PyUnicode_New(0);          \
+            unicode_empty = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(0)); \
             if (unicode_empty != NULL) {                \
                 Py_INCREF(unicode_empty);               \
-                PyGC_AddRoot((PyObject*)unicode_empty); \
             }                                           \
         }                                               \
         return (PyObject *)unicode_empty;               \
@@ -474,10 +473,9 @@ PyObject *PyUnicode_FromUnicode(const Py_UNICODE *u,
         if (size == 1 && *u < 256) {
             unicode = unicode_latin1[*u];
             if (!unicode) {
-                unicode = _PyUnicode_New(1);
+                unicode = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(1));
                 if (!unicode)
                     return NULL;
-                PyGC_AddRoot((PyObject*)unicode);
                 unicode->str[0] = *u;
                 unicode_latin1[*u] = unicode;
             }
@@ -522,10 +520,9 @@ PyObject *PyUnicode_FromStringAndSize(const char *u, Py_ssize_t size)
         if (size == 1 && Py_CHARMASK(*u) < 128) {
             unicode = unicode_latin1[Py_CHARMASK(*u)];
             if (!unicode) {
-                unicode = _PyUnicode_New(1);
+                unicode = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(1));
                 if (!unicode)
                     return NULL;
-                PyGC_AddRoot((PyObject*)unicode);
                 unicode->str[0] = Py_CHARMASK(*u);
                 unicode_latin1[Py_CHARMASK(*u)] = unicode;
             }
@@ -8929,10 +8926,9 @@ void _PyUnicode_Init(void)
 
     /* Init the implementation */
     if (!unicode_empty) {
-        unicode_empty = _PyUnicode_New(0);
+        unicode_empty = (PyUnicodeObject*)PyGC_AddRoot((PyObject*)_PyUnicode_New(0));
         if (!unicode_empty)
             return;
-        PyGC_AddRoot((PyObject*)unicode_empty);
     }
 
     /* initialize the linebreak bloom filter */

@@ -132,8 +132,10 @@ void registerPermanentRoot(void* obj) {
 #endif
 }
 
-extern "C" void PyGC_AddRoot(PyObject* obj) noexcept {
-    registerPermanentRoot(obj);
+extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
+    if (obj)
+        registerPermanentRoot(obj);
+    return obj;
 }
 
 static std::unordered_set<void*> nonheap_roots;
