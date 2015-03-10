@@ -69,8 +69,9 @@ class excel_tab(excel):
     delimiter = '\t'
 register_dialect("excel-tab", excel_tab)
 
-
-class DictReader:
+# Pyston change: make this a new style class, looks like we don't support iterating otherwise
+# class DictReader:
+class DictReader(object):
     def __init__(self, f, fieldnames=None, restkey=None, restval=None,
                  dialect="excel", *args, **kwds):
         self._fieldnames = fieldnames   # list of keys for the dict

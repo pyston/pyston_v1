@@ -801,7 +801,11 @@ error:
 }
 
 Box* fileIterNext(BoxedFile* s) {
-    return fileReadline1(s);
+    Box* rtn = fileReadline1(s);
+    assert(!rtn || rtn->cls == str_cls);
+    if (!rtn || ((BoxedString*)rtn)->s.empty())
+        raiseExcHelper(StopIteration, "");
+    return rtn;
 }
 
 bool fileEof(BoxedFile* self) {

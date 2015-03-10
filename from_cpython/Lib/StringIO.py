@@ -39,7 +39,9 @@ def _complain_ifclosed(closed):
     if closed:
         raise ValueError, "I/O operation on closed file"
 
-class StringIO:
+# Pyston change: make this a new style class, looks like we don't support iterating otherwise
+# class StringIO:
+class StringIO(object):
     """class StringIO([buffer])
 
     When a StringIO object is created, it can be initialized to an existing
