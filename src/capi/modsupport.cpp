@@ -107,6 +107,15 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'H':
                 return PyInt_FromLong((long)va_arg(*p_va, unsigned int));
 
+            case 'I': {
+                unsigned int n;
+                n = va_arg(*p_va, unsigned int);
+                if (n > (unsigned long)PyInt_GetMax())
+                    return PyLong_FromUnsignedLong((unsigned long)n);
+                else
+                    return PyInt_FromLong(n);
+            }
+
             case 'n':
 #if SIZEOF_SIZE_T != SIZEOF_LONG
                 return PyInt_FromSsize_t(va_arg(*p_va, Py_ssize_t));

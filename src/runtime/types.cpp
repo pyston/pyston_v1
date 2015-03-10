@@ -72,6 +72,7 @@ extern "C" void initcStringIO();
 extern "C" void init_io();
 extern "C" void initzipimport();
 extern "C" void init_csv();
+extern "C" void init_ssl();
 
 namespace pyston {
 
@@ -1554,6 +1555,7 @@ void setupRuntime() {
     init_io();
     initzipimport();
     init_csv();
+    init_ssl();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
