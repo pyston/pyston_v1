@@ -762,8 +762,7 @@ init_io(void)
     if (!(_PyIO_str_writable = PyGC_AddRoot(PyString_InternFromString("writable"))))
         goto fail;
     
-    // this is already registered as root:
-    if (!(_PyIO_empty_str = PyUnicode_FromStringAndSize(NULL, 0)))
+    if (!(_PyIO_empty_str = PyGC_AddRoot(PyUnicode_FromStringAndSize(NULL, 0))))
         goto fail;
     if (!(_PyIO_empty_bytes = PyGC_AddRoot(PyBytes_FromStringAndSize(NULL, 0))))
         goto fail;

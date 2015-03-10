@@ -76,7 +76,7 @@ private:
 
 public:
     TraceStack() { get_chunk(); }
-    TraceStack(const std::vector<void*>& rhs) {
+    TraceStack(const std::unordered_set<void*>& rhs) {
         get_chunk();
         for (void* p : rhs) {
             assert(!isMarked(GCAllocation::fromUserData(p)));
@@ -119,22 +119,23 @@ public:
 std::vector<void**> TraceStack::free_chunks;
 
 
-static std::vector<void*> roots;
-void registerPermanentRoot(void* obj) {
+static std::unordered_set<void*> roots;
+void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
-    roots.push_back(obj);
 
-#ifndef NDEBUG
     // Check for double-registers.  Wouldn't cause any problems, but we probably shouldn't be doing them.
-    static std::unordered_set<void*> roots;
-    ASSERT(roots.count(obj) == 0, "Please only register roots once");
+    if (!allow_duplicates)
+        ASSERT(roots.count(obj) == 0, "Please only register roots once");
+
     roots.insert(obj);
-#endif
 }
 
 extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
-    if (obj)
-        registerPermanentRoot(obj);
+    if (obj) {
+        // Allow duplicates from CAPI code since they shouldn't have to know
+        // which objects we already registered as roots:
+        registerPermanentRoot(obj, /* allow_duplicates */ true);
+    }
     return obj;
 }
 
