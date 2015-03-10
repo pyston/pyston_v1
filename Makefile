@@ -334,6 +334,7 @@ STDMODULE_SRCS := \
 	zipimport.c \
 	_csv.c \
 	_ssl.c \
+	getpath.c \
 	$(EXTRA_STDMODULE_SRCS)
 
 STDOBJECT_SRCS := \
@@ -469,7 +470,7 @@ check:
 	$(MAKE) run_unittests
 
 	$(MAKE) pyston_gcc
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 
 	@# It can be useful to test release mode, since it actually exposes different functionality
 	@# since we can make different decisions about which internal functions to inline or not.
@@ -900,9 +901,9 @@ define make_target
 $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)

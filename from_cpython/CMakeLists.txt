@@ -57,6 +57,7 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     zipimport.c
     _csv.c
     _ssl.c
+    getpath.c
     )
 
 # compile specified files in from_cpython/Objects
