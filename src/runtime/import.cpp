@@ -30,6 +30,7 @@ static const std::string all_str("__all__");
 static const std::string name_str("__name__");
 static const std::string path_str("__path__");
 static const std::string package_str("__package__");
+static BoxedClass* null_importer_cls;
 
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn);
@@ -69,6 +70,65 @@ static bool pathExists(const std::string& path) {
     bool exists = llvm::sys::fs::exists(path);
 #endif
     return exists;
+}
+
+/* Return an importer object for a sys.path/pkg.__path__ item 'p',
+   possibly by fetching it from the path_importer_cache dict. If it
+   wasn't yet cached, traverse path_hooks until a hook is found
+   that can handle the path item. Return None if no hook could;
+   this tells our caller it should fall back to the builtin
+   import mechanism. Cache the result in path_importer_cache.
+   Returns a borrowed reference. */
+
+extern "C" PyObject* get_path_importer(PyObject* path_importer_cache, PyObject* path_hooks, PyObject* p) noexcept {
+    PyObject* importer;
+    Py_ssize_t j, nhooks;
+
+    /* These conditions are the caller's responsibility: */
+    assert(PyList_Check(path_hooks));
+    assert(PyDict_Check(path_importer_cache));
+
+    nhooks = PyList_Size(path_hooks);
+    if (nhooks < 0)
+        return NULL; /* Shouldn't happen */
+
+    importer = PyDict_GetItem(path_importer_cache, p);
+    if (importer != NULL)
+        return importer;
+
+    /* set path_importer_cache[p] to None to avoid recursion */
+    if (PyDict_SetItem(path_importer_cache, p, Py_None) != 0)
+        return NULL;
+
+    for (j = 0; j < nhooks; j++) {
+        PyObject* hook = PyList_GetItem(path_hooks, j);
+        if (hook == NULL)
+            return NULL;
+        importer = PyObject_CallFunctionObjArgs(hook, p, NULL);
+        if (importer != NULL)
+            break;
+
+        if (!PyErr_ExceptionMatches(PyExc_ImportError)) {
+            return NULL;
+        }
+        PyErr_Clear();
+    }
+    if (importer == NULL) {
+        importer = PyObject_CallFunctionObjArgs(null_importer_cls, p, NULL);
+        if (importer == NULL) {
+            if (PyErr_ExceptionMatches(PyExc_ImportError)) {
+                PyErr_Clear();
+                return Py_None;
+            }
+        }
+    }
+    if (importer != NULL) {
+        int err = PyDict_SetItem(path_importer_cache, p, importer);
+        Py_DECREF(importer);
+        if (err != 0)
+            return NULL;
+    }
+    return importer;
 }
 
 struct SearchResult {
@@ -119,6 +179,14 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
         raiseExcHelper(RuntimeError, "sys.path must be a list of directory names");
     }
 
+    BoxedList* path_hooks = static_cast<BoxedList*>(sys_module->getattr("path_hooks"));
+    if (!path_hooks || path_hooks->cls != list_cls)
+        raiseExcHelper(RuntimeError, "sys.path_hooks must be a list of import hooks");
+
+    BoxedDict* path_importer_cache = static_cast<BoxedDict*>(sys_module->getattr("path_importer_cache"));
+    if (!path_importer_cache || path_importer_cache->cls != dict_cls)
+        raiseExcHelper(RuntimeError, "sys.path_importer_cache must be a dict");
+
     llvm::SmallString<128> joined_path;
     for (int i = 0; i < path_list->size; i++) {
         Box* _p = path_list->elts->elts[i];
@@ -132,6 +200,19 @@ SearchResult findModule(const std::string& name, const std::string& full_name, B
 
         llvm::sys::path::append(joined_path, "__init__.py");
         std::string fn(joined_path.str());
+
+        PyObject* importer = get_path_importer(path_importer_cache, path_hooks, _p);
+        if (importer == NULL)
+            return SearchResult("", SearchResult::SEARCH_ERROR);
+
+        if (importer != None) {
+            auto path_pass = path_list ? path_list : None;
+            Box* loader = callattr(importer, &find_module_str,
+                                   CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
+                                   new BoxedString(full_name), path_pass, NULL, NULL, NULL);
+            if (loader != None)
+                return SearchResult(loader);
+        }
 
         if (pathExists(fn))
             return SearchResult(std::move(dn), SearchResult::PKG_DIRECTORY);
@@ -416,7 +497,7 @@ extern "C" void _PyImport_ReInitLock() noexcept {
 }
 
 extern "C" PyObject* PyImport_ImportModuleNoBlock(const char* name) noexcept {
-    Py_FatalError("unimplemented");
+    return PyImport_ImportModule(name);
 }
 
 // This function has the same behaviour as __import__()
@@ -474,6 +555,70 @@ extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
         setCAPIException(e);
         return NULL;
     }
+}
+
+/* Get the module object corresponding to a module name.
+   First check the modules dictionary if there's one there,
+   if not, create a new one and insert it in the modules dictionary.
+   Because the former action is most common, THIS DOES NOT RETURN A
+   'NEW' REFERENCE! */
+
+extern "C" PyObject* PyImport_AddModule(const char* name) noexcept {
+    try {
+        PyObject* modules = getSysModulesDict();
+        PyObject* m = PyDict_GetItemString(modules, name);
+
+        if (m != NULL && m->cls == module_cls)
+            return m;
+        return createModule(name, name);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* pathname) noexcept {
+    try {
+        RELEASE_ASSERT(co->cls == str_cls, "");
+        BoxedString* code = (BoxedString*)co;
+
+        BoxedModule* module = (BoxedModule*)PyImport_AddModule(name);
+        if (module == NULL)
+            return NULL;
+
+        AST_Module* ast = parse_string(code->s.c_str());
+        compileAndRunModule(ast, module);
+        module->setattr("__file__", boxString(pathname), NULL);
+        return module;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+static int isdir(const char* path) {
+    struct stat statbuf;
+    return stat(path, &statbuf) == 0 && S_ISDIR(statbuf.st_mode);
+}
+
+Box* nullImporterInit(Box* self, Box* _path) {
+    RELEASE_ASSERT(self->cls == null_importer_cls, "");
+
+    if (_path->cls != str_cls)
+        raiseExcHelper(TypeError, "must be string, not %s", getTypeName(_path));
+
+    BoxedString* path = (BoxedString*)_path;
+    if (path->s.empty())
+        raiseExcHelper(ImportError, "empty pathname");
+
+    if (isdir(path->s.c_str()))
+        raiseExcHelper(ImportError, "existing directory");
+
+    return None;
+}
+
+Box* nullImporterFindModule(Box* self, Box* fullname, Box* path) {
+    return None;
 }
 
 extern "C" Box* import(int level, Box* from_imports, const std::string* module_name) {
@@ -547,6 +692,16 @@ void setupImport() {
     imp_module->giveAttr("PKG_DIRECTORY", boxInt(SearchResult::PKG_DIRECTORY));
     imp_module->giveAttr("C_BUILTIN", boxInt(SearchResult::C_BUILTIN));
     imp_module->giveAttr("PY_FROZEN", boxInt(SearchResult::PY_FROZEN));
+
+    null_importer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NullImporter");
+    null_importer_cls->giveAttr(
+        "__init__", new BoxedFunction(boxRTFunction((void*)nullImporterInit, NONE, 2, 1, false, false), { None }));
+    null_importer_cls->giveAttr(
+        "find_module",
+        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)nullImporterFindModule, NONE, 2, 1, false, false),
+                                         "find_module", { None }));
+    null_importer_cls->freeze();
+    imp_module->giveAttr("NullImporter", null_importer_cls);
 
     CLFunction* find_module_func
         = boxRTFunction((void*)impFindModule, UNKNOWN, 2, 1, false, false, ParamNames({ "name", "path" }, "", ""));

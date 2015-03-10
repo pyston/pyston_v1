@@ -32,6 +32,10 @@
 
 namespace pyston {
 
+extern "C" long PyInt_GetMax() noexcept {
+    return LONG_MAX; /* To initialize sys.maxint */
+}
+
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
     if (op && PyInt_Check(op))
         return PyInt_AS_LONG((PyIntObject*)op);
