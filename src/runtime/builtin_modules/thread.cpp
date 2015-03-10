@@ -155,6 +155,32 @@ class BoxedThreadLocal : public Box {
 public:
     BoxedThreadLocal() {}
 
+    static Box* getThreadLocalObject(Box* obj) {
+        BoxedDict* dict = static_cast<BoxedDict*>(PyThreadState_GetDict());
+        Box* tls_obj = dict->getOrNull(obj);
+        if (tls_obj == NULL) {
+            tls_obj = new BoxedDict();
+            setitem(dict, obj, tls_obj);
+        }
+        return tls_obj;
+    }
+
+    static int setattr(Box* obj, char* name, Box* val) {
+        Box* tls_obj = getThreadLocalObject(obj);
+        setitem(tls_obj, boxString(name), val);
+        return 0;
+    }
+
+    static Box* getattr(Box* obj, char* name) {
+        Box* tls_obj = getThreadLocalObject(obj);
+        if (!strcmp(name, "__dict__"))
+            return tls_obj;
+        return getitem(tls_obj, boxString(name));
+    }
+
+    static Box* hash(Box* obj) { return boxInt(PyThread_get_thread_ident()); }
+
+
     DEFAULT_CLASS(thread_local_cls);
 };
 
@@ -194,8 +220,13 @@ void setupThread() {
     thread_local_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLocal), false, "_local");
     thread_local_cls->giveAttr("__module__", boxStrConstant("thread"));
+    thread_local_cls->giveAttr("__hash__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::hash, BOXED_INT, 1)));
     thread_local_cls->freeze();
     thread_module->giveAttr("_local", thread_local_cls);
+
+    thread_local_cls->tp_setattr = BoxedThreadLocal::setattr;
+    thread_local_cls->tp_getattr = BoxedThreadLocal::getattr;
 
     BoxedClass* ThreadError
         = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,

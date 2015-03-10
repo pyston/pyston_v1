@@ -71,6 +71,23 @@ static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noe
     return Py_None;
 }
 
+static PyObject* wrap_delattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    setattrofunc func = (setattrofunc)wrapped;
+    int res;
+    PyObject* name;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    name = PyTuple_GET_ITEM(args, 0);
+    if (!hackcheck(self, func, "__delattr__"))
+        return NULL;
+    res = (*func)(self, name, NULL);
+    if (res < 0)
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     hashfunc func = (hashfunc)wrapped;
     long res;
@@ -1181,6 +1198,7 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
 static slotdef slotdefs[]
     = { TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
         TPSLOT("__setattr__", tp_setattr, NULL, NULL, ""),
+        TPSLOT("__delattr__", tp_setattr, NULL, NULL, ""),
 
         TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
         TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
@@ -1191,6 +1209,7 @@ static slotdef slotdefs[]
         TPSLOT("__getattr__", tp_getattro, slot_tp_getattr_hook, NULL, ""),
         TPSLOT("__setattr__", tp_setattro, slot_tp_setattro, wrap_setattr,
                "x.__setattr__('name', value) <==> x.name = value"),
+        TPSLOT("__delattr__", tp_setattro, slot_tp_setattro, wrap_delattr, "x.__delattr__('name') <==> del x.name"),
 
         TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
         TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
