@@ -1819,6 +1819,7 @@ cache_struct(PyObject *fmt)
         cache = PyDict_New();
         if (cache == NULL)
             return NULL;
+        PyGC_AddRoot(cache);
     }
 
     s_object = PyDict_GetItem(cache, fmt);
