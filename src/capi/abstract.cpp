@@ -1132,8 +1132,12 @@ extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
     }
 }
 
-extern "C" PyObject* PyNumber_Divmod(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_Divmod(PyObject* lhs, PyObject* rhs) noexcept {
+    try {
+        return binop(lhs, rhs, AST_TYPE::DivMod);
+    } catch (ExcInfo e) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) noexcept {

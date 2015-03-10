@@ -5,3 +5,4 @@ import datetime
 print repr(datetime.time())
 print datetime.datetime.__base__
 print repr(datetime.datetime(1, 2, 3))
+print str(datetime.timedelta(0))
