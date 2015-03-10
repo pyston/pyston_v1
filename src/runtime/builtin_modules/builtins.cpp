@@ -311,6 +311,18 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
     return maxElement;
 }
 
+extern "C" Box* next(Box* iterator, Box* _default) {
+    try {
+        static std::string next_str = "next";
+        return callattr(iterator, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        if (_default && e.matches(StopIteration))
+            return _default;
+        throw;
+    }
+}
+
 extern "C" Box* sum(Box* container, Box* initial) {
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
@@ -338,10 +350,10 @@ Box* open(Box* arg1, Box* arg2) {
 }
 
 extern "C" Box* chr(Box* arg) {
-    if (arg->cls != int_cls) {
+    i64 n = PyInt_AsLong(arg);
+    if (n == -1 && PyErr_Occurred())
         raiseExcHelper(TypeError, "an integer is required");
-    }
-    i64 n = static_cast<BoxedInt*>(arg)->n;
+
     if (n < 0 || n >= 256) {
         raiseExcHelper(ValueError, "chr() arg not in range(256)");
     }
@@ -1024,6 +1036,9 @@ void setupBuiltins() {
 
     max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false), "max");
     builtins_module->giveAttr("max", max_obj);
+
+    builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(
+                                          boxRTFunction((void*)next, UNKNOWN, 2, 1, false, false), "next", { NULL }));
 
     builtins_module->giveAttr("sum", new BoxedBuiltinFunctionOrMethod(
                                          boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), "sum", { boxInt(0) }));

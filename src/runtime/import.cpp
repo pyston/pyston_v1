@@ -507,12 +507,54 @@ Box* impFindModule(Box* _name, BoxedList* path) {
     Py_FatalError("unimplemented");
 }
 
+Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
+    Box* _description = args[0];
+
+    RELEASE_ASSERT(_name->cls == str_cls, "");
+    RELEASE_ASSERT(_file == None, "");
+    RELEASE_ASSERT(_pathname->cls == str_cls, "");
+    RELEASE_ASSERT(_description->cls == tuple_cls, "");
+
+    BoxedString* name = (BoxedString*)_name;
+    BoxedString* pathname = (BoxedString*)_pathname;
+    BoxedTuple* description = (BoxedTuple*)_description;
+
+    RELEASE_ASSERT(description->elts.size() == 3, "");
+    BoxedString* suffix = (BoxedString*)description->elts[0];
+    BoxedString* mode = (BoxedString*)description->elts[1];
+    BoxedInt* type = (BoxedInt*)description->elts[2];
+
+    RELEASE_ASSERT(suffix->cls == str_cls, "");
+    RELEASE_ASSERT(mode->cls == str_cls, "");
+    RELEASE_ASSERT(type->cls == int_cls, "");
+
+    RELEASE_ASSERT(suffix->s.empty(), "");
+    RELEASE_ASSERT(mode->s.empty(), "");
+
+    if (type->n == SearchResult::PKG_DIRECTORY) {
+        return createAndRunModule(name->s, pathname->s + "/__init__.py", pathname->s);
+    }
+
+    Py_FatalError("unimplemented");
+}
+
 void setupImport() {
     BoxedModule* imp_module = createModule("imp", "__builtin__");
 
+    imp_module->giveAttr("PY_SOURCE", boxInt(SearchResult::PY_SOURCE));
+    imp_module->giveAttr("PY_COMPILED", boxInt(SearchResult::PY_COMPILED));
+    imp_module->giveAttr("C_EXTENSION", boxInt(SearchResult::C_EXTENSION));
+    imp_module->giveAttr("PKG_DIRECTORY", boxInt(SearchResult::PKG_DIRECTORY));
+    imp_module->giveAttr("C_BUILTIN", boxInt(SearchResult::C_BUILTIN));
+    imp_module->giveAttr("PY_FROZEN", boxInt(SearchResult::PY_FROZEN));
+
     CLFunction* find_module_func
         = boxRTFunction((void*)impFindModule, UNKNOWN, 2, 1, false, false, ParamNames({ "name", "path" }, "", ""));
-
     imp_module->giveAttr("find_module", new BoxedBuiltinFunctionOrMethod(find_module_func, "find_module", { None }));
+
+    CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
+                                                 ParamNames({ "name", "file", "pathname", "description" }, "", ""));
+
+    imp_module->giveAttr("load_module", new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module"));
 }
 }

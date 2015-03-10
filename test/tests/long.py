@@ -14,7 +14,9 @@ def test(a, b):
     print a * b, b * a, a.__mul__(b), b.__mul__(a)
     print a / b, b / a, a.__div__(b), b.__div__(a)
     print repr(a), repr(b), a < b, a > b, a <= b, a >= b, a == b, a != b
-    # print a ^ b, a | b, a & b
+    if not isinstance(a, float) and not isinstance(b, float):
+        print a ^ b, a | b, a & b
+        print a.__hex__(), b.__hex__(), a.__oct__(), b.__oct__()
 
 
 print 1L / 5L
@@ -22,7 +24,7 @@ print -1L / 5L
 print 1L / -5L
 print -1L / -5L
 
-for a in [-5, -1, 1, 5, -2L, -1L, 1L, 2L]:
+for a in [-5, -1, 1, 5, -2L, -1L, 1L, 2L, 15L]:
     for b in [-5, -1, 1, 5, -2L, -1L, 1L, 2L]:
         test(a, b)
 
@@ -36,6 +38,8 @@ print (-2L).__rdiv__(1)
 
 print (1L) << (2L)
 print (1L) << (2)
+print (1) << (1L)
+print (1) << (128L)
 try:
     print (1L) << (-1L)
 except ValueError, e:
@@ -44,6 +48,10 @@ try:
     print (1L) << (-1)
 except ValueError, e:
     print e
+
+print ~(1L)
+print ~(10L)
+print ~(-10L)
 
 print long("100", 16)
 print long("100", 10)
