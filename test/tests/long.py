@@ -53,6 +53,10 @@ print ~(1L)
 print ~(10L)
 print ~(-10L)
 
+print -(1L)
+print 1L**2L
+print 1L**2
+
 print long("100", 16)
 print long("100", 10)
 print long("100", 26)

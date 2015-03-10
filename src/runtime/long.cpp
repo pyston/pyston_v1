@@ -972,19 +972,27 @@ Box* longPow(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (!isSubclass(_v2->cls, long_cls))
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        RELEASE_ASSERT(mpz_sgn(v2->n) >= 0, "");
+        RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
+        uint64_t n2 = mpz_get_ui(v2->n);
+
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_pow_ui(r->n, v1->n, n2);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+        RELEASE_ASSERT(v2->n >= 0, "");
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_pow_ui(r->n, v1->n, v2->n);
+        return r;
+    } else {
         return NotImplemented;
-
-    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-    RELEASE_ASSERT(mpz_sgn(v2->n) >= 0, "");
-    RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
-    uint64_t n2 = mpz_get_ui(v2->n);
-
-    BoxedLong* r = new BoxedLong();
-    mpz_init(r->n);
-    mpz_pow_ui(r->n, v1->n, n2);
-    return r;
+    }
 }
 
 extern "C" Box* longInvert(BoxedLong* v) {
@@ -1055,6 +1063,8 @@ void setupLong() {
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr("__add__"));
 
+    long_cls->giveAttr("__pow__", new BoxedFunction(boxRTFunction((void*)longPow, UNKNOWN, 2)));
+
     long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
     long_cls->giveAttr("__rand__", long_cls->getattr("__and__"));
     long_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)longOr, UNKNOWN, 2)));
@@ -1079,6 +1089,7 @@ void setupLong() {
     long_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)longOct, STR, 1)));
 
     long_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)longInvert, UNKNOWN, 1)));
+    long_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)longNeg, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
 
