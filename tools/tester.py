@@ -390,7 +390,6 @@ if __name__ == "__main__":
     start = 1
 
     opts = parser.parse_args()
-    print opts
     run_memcheck = opts.run_memcheck
     NUM_THREADS = opts.num_threads
     IMAGE = opts.image
