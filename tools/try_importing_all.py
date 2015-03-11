@@ -20,6 +20,8 @@ total = 0
 print len(modules)
 f = open("failures.txt", 'w')
 for m in modules:
+    if '-' in m:
+        continue
     p = subprocess.Popen([EXE_PATH, "-q"], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     # We need to make pyston exit with a non-zero return code if an exception was thrown,
     # so use this little dance.  If the import succeeds, then we call sys.exit(0), otherwise
