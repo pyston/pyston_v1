@@ -4,8 +4,6 @@
 #include "marshal.h"
 #include <time.h>
 
-// Pyston change:
-#include <sys/stat.h>
 
 #define IS_SOURCE   0x0
 #define IS_BYTECODE 0x1
