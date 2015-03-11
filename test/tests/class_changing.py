@@ -1,6 +1,3 @@
-# expected: fail
-# - class changing not supported yet
-
 # Tests to make sure that setting __class__ changes the class, and that it's ok to disallow
 # having anything other than a type as the class
 class C(object):
@@ -17,5 +14,7 @@ c.foo()
 c.__class__ = D
 c.foo()
 
-# This should err:
-c.__class__ = 1
+try:
+    c.__class__ = 1
+except TypeError as e:
+    print e
