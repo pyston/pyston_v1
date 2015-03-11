@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "capi/typeobject.h"
+#include "capi/types.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -1231,6 +1232,248 @@ Box* objectStr(Box* obj) {
     return obj->reprIC();
 }
 
+static PyObject* import_copyreg(void) noexcept {
+    static PyObject* copyreg_str;
+
+    if (!copyreg_str) {
+        copyreg_str = PyGC_AddRoot(PyString_InternFromString("copy_reg"));
+        if (copyreg_str == NULL)
+            return NULL;
+    }
+
+    return PyImport_Import(copyreg_str);
+}
+
+static PyObject* slotnames(PyObject* cls) noexcept {
+    PyObject* clsdict;
+    PyObject* copyreg;
+    PyObject* slotnames;
+
+    if (!PyType_Check(cls)) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    clsdict = ((PyTypeObject*)cls)->tp_dict;
+    slotnames = PyDict_GetItemString(clsdict, "__slotnames__");
+    if (slotnames != NULL && PyList_Check(slotnames)) {
+        Py_INCREF(slotnames);
+        return slotnames;
+    }
+
+    copyreg = import_copyreg();
+    if (copyreg == NULL)
+        return NULL;
+
+    slotnames = PyObject_CallMethod(copyreg, "_slotnames", "O", cls);
+    Py_DECREF(copyreg);
+    if (slotnames != NULL && slotnames != Py_None && !PyList_Check(slotnames)) {
+        PyErr_SetString(PyExc_TypeError, "copy_reg._slotnames didn't return a list or None");
+        Py_DECREF(slotnames);
+        slotnames = NULL;
+    }
+
+    return slotnames;
+}
+
+static PyObject* reduce_2(PyObject* obj) noexcept {
+    PyObject* cls, *getnewargs;
+    PyObject* args = NULL, * args2 = NULL;
+    PyObject* getstate = NULL, * state = NULL, * names = NULL;
+    PyObject* slots = NULL, * listitems = NULL, * dictitems = NULL;
+    PyObject* copyreg = NULL, * newobj = NULL, * res = NULL;
+    Py_ssize_t i, n;
+
+    cls = PyObject_GetAttrString(obj, "__class__");
+    if (cls == NULL)
+        return NULL;
+
+    getnewargs = PyObject_GetAttrString(obj, "__getnewargs__");
+    if (getnewargs != NULL) {
+        args = PyObject_CallObject(getnewargs, NULL);
+        Py_DECREF(getnewargs);
+        if (args != NULL && !PyTuple_Check(args)) {
+            PyErr_Format(PyExc_TypeError, "__getnewargs__ should return a tuple, "
+                                          "not '%.200s'",
+                         Py_TYPE(args)->tp_name);
+            goto end;
+        }
+    } else {
+        PyErr_Clear();
+        args = PyTuple_New(0);
+    }
+    if (args == NULL)
+        goto end;
+
+    getstate = PyObject_GetAttrString(obj, "__getstate__");
+    if (getstate != NULL) {
+        state = PyObject_CallObject(getstate, NULL);
+        Py_DECREF(getstate);
+        if (state == NULL)
+            goto end;
+    } else {
+        PyErr_Clear();
+        state = PyObject_GetAttrString(obj, "__dict__");
+        if (state == NULL) {
+            PyErr_Clear();
+            state = Py_None;
+            Py_INCREF(state);
+        }
+        names = slotnames(cls);
+        if (names == NULL)
+            goto end;
+        if (names != Py_None) {
+            assert(PyList_Check(names));
+            slots = PyDict_New();
+            if (slots == NULL)
+                goto end;
+            n = 0;
+            /* Can't pre-compute the list size; the list
+               is stored on the class so accessible to other
+               threads, which may be run by DECREF */
+            for (i = 0; i < PyList_GET_SIZE(names); i++) {
+                PyObject* name, *value;
+                name = PyList_GET_ITEM(names, i);
+                value = PyObject_GetAttr(obj, name);
+                if (value == NULL)
+                    PyErr_Clear();
+                else {
+                    int err = PyDict_SetItem(slots, name, value);
+                    Py_DECREF(value);
+                    if (err)
+                        goto end;
+                    n++;
+                }
+            }
+            if (n) {
+                state = Py_BuildValue("(NO)", state, slots);
+                if (state == NULL)
+                    goto end;
+            }
+        }
+    }
+
+    if (!PyList_Check(obj)) {
+        listitems = Py_None;
+        Py_INCREF(listitems);
+    } else {
+        listitems = PyObject_GetIter(obj);
+        if (listitems == NULL)
+            goto end;
+    }
+
+    if (!PyDict_Check(obj)) {
+        dictitems = Py_None;
+        Py_INCREF(dictitems);
+    } else {
+        dictitems = PyObject_CallMethod(obj, "iteritems", "");
+        if (dictitems == NULL)
+            goto end;
+    }
+
+    copyreg = import_copyreg();
+    if (copyreg == NULL)
+        goto end;
+    newobj = PyObject_GetAttrString(copyreg, "__newobj__");
+    if (newobj == NULL)
+        goto end;
+
+    n = PyTuple_GET_SIZE(args);
+    args2 = PyTuple_New(n + 1);
+    if (args2 == NULL)
+        goto end;
+    PyTuple_SET_ITEM(args2, 0, cls);
+    cls = NULL;
+    for (i = 0; i < n; i++) {
+        PyObject* v = PyTuple_GET_ITEM(args, i);
+        Py_INCREF(v);
+        PyTuple_SET_ITEM(args2, i + 1, v);
+    }
+
+    res = PyTuple_Pack(5, newobj, args2, state, listitems, dictitems);
+
+end:
+    Py_XDECREF(cls);
+    Py_XDECREF(args);
+    Py_XDECREF(args2);
+    Py_XDECREF(slots);
+    Py_XDECREF(state);
+    Py_XDECREF(names);
+    Py_XDECREF(listitems);
+    Py_XDECREF(dictitems);
+    Py_XDECREF(copyreg);
+    Py_XDECREF(newobj);
+    return res;
+}
+
+static PyObject* _common_reduce(PyObject* self, int proto) noexcept {
+    PyObject* copyreg, *res;
+
+    if (proto >= 2)
+        return reduce_2(self);
+
+    copyreg = import_copyreg();
+    if (!copyreg)
+        return NULL;
+
+    res = PyEval_CallMethod(copyreg, "_reduce_ex", "(Oi)", self, proto);
+    Py_DECREF(copyreg);
+
+    return res;
+}
+
+static PyObject* object_reduce(PyObject* self, PyObject* args) noexcept {
+    int proto = 0;
+
+    if (!PyArg_ParseTuple(args, "|i:__reduce__", &proto))
+        return NULL;
+
+    return _common_reduce(self, proto);
+}
+
+static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
+    PyObject* reduce, *res;
+    int proto = 0;
+
+    if (!PyArg_ParseTuple(args, "|i:__reduce_ex__", &proto))
+        return NULL;
+
+    reduce = PyObject_GetAttrString(self, "__reduce__");
+    if (reduce == NULL)
+        PyErr_Clear();
+    else {
+        PyObject* cls, *clsreduce, *objreduce;
+        int override;
+        cls = PyObject_GetAttrString(self, "__class__");
+        if (cls == NULL) {
+            Py_DECREF(reduce);
+            return NULL;
+        }
+        clsreduce = PyObject_GetAttrString(cls, "__reduce__");
+        Py_DECREF(cls);
+        if (clsreduce == NULL) {
+            Py_DECREF(reduce);
+            return NULL;
+        }
+        objreduce = object_cls->getattr("__reduce__");
+        override = (clsreduce != objreduce);
+        Py_DECREF(clsreduce);
+        if (override) {
+            res = PyObject_CallObject(reduce, NULL);
+            Py_DECREF(reduce);
+            return res;
+        } else
+            Py_DECREF(reduce);
+    }
+
+    return _common_reduce(self, proto);
+}
+
+static PyMethodDef object_methods[] = {
+    { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
+    { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
+};
+
 static Box* typeName(Box* b, void*) {
     RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
     BoxedClass* type = static_cast<BoxedClass*>(b);
@@ -1474,7 +1717,6 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->freeze();
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
@@ -1505,6 +1747,12 @@ void setupRuntime() {
     closure_cls->freeze();
 
     setupCAPI();
+
+    // Can't set up object methods until we set up CAPI support:
+    for (auto& md : object_methods) {
+        object_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, object_cls));
+    }
+    object_cls->freeze();
 
     setupBool();
     setupInt();
