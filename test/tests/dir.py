@@ -77,3 +77,17 @@ class C2(C1):
     b = 3
     c = 4
 print sorted([s for s in dir(C2) if s[0] != '_'])
+
+c = C1()
+c.d = 2
+d1 = c.__dict__
+d2 = d1.copy()
+c.e = 3
+print sorted(d1.items())
+print sorted(d2.items())
+
+l = []
+for x in d1:
+    l.append(x)
+l.sort()
+print l

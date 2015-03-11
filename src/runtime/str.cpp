@@ -35,6 +35,7 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
+extern "C" PyObject* string_split(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
@@ -1589,22 +1590,19 @@ Box* strIsUpper(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
     const std::string& str(self->s);
-    bool uppered = false;
 
     if (str.empty())
         return False;
 
+    bool cased = false;
     for (const auto& c : str) {
-        if (std::isspace(c) || std::isdigit(c)) {
-            continue;
-        } else if (!std::isupper(c)) {
+        if (std::islower(c))
             return False;
-        } else {
-            uppered = true;
-        }
+        else if (!cased && isupper(c))
+            cased = true;
     }
 
-    return boxBool(uppered);
+    return boxBool(cased);
 }
 
 Box* strIsSpace(BoxedString* self) {
@@ -1734,6 +1732,21 @@ Box* strPartition(BoxedString* self, BoxedString* sep) {
                                                self->s.size() - found_idx - sep->s.size()) });
 }
 
+Box* strRpartition(BoxedString* self, BoxedString* sep) {
+    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
+    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
+
+    size_t found_idx = self->s.rfind(sep->s);
+    if (found_idx == std::string::npos)
+        return new BoxedTuple({ self, boxStrConstant(""), boxStrConstant("") });
+
+
+    return new BoxedTuple({ boxStrConstantSize(self->s.c_str(), found_idx),
+                            boxStrConstantSize(self->s.c_str() + found_idx, sep->s.size()),
+                            boxStrConstantSize(self->s.c_str() + found_idx + sep->s.size(),
+                                               self->s.size() - found_idx - sep->s.size()) });
+}
+
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
 
 Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
@@ -1744,47 +1757,6 @@ Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
     checkAndThrowCAPIException();
     assert(rtn);
     return rtn;
-}
-
-Box* strSplit(BoxedString* self, BoxedString* sep, BoxedInt* _max_split) {
-    assert(isSubclass(self->cls, str_cls));
-    if (_max_split->cls != int_cls)
-        raiseExcHelper(TypeError, "an integer is required");
-
-    if (isSubclass(sep->cls, str_cls)) {
-        if (!sep->s.empty()) {
-            llvm::SmallVector<llvm::StringRef, 16> parts;
-            llvm::StringRef(self->s).split(parts, sep->s, _max_split->n);
-
-            BoxedList* rtn = new BoxedList();
-            for (const auto& s : parts)
-                listAppendInternal(rtn, boxString(s.str()));
-            return rtn;
-        } else {
-            raiseExcHelper(ValueError, "empty separator");
-        }
-    } else if (sep->cls == none_cls) {
-        RELEASE_ASSERT(_max_split->n < 0, "this case hasn't been updated to handle limited splitting amounts");
-        BoxedList* rtn = new BoxedList();
-
-        std::ostringstream os("");
-        for (char c : self->s) {
-            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') {
-                if (os.tellp()) {
-                    listAppendInternal(rtn, boxString(os.str()));
-                    os.str("");
-                }
-            } else {
-                os << c;
-            }
-        }
-        if (os.tellp()) {
-            listAppendInternal(rtn, boxString(os.str()));
-        }
-        return rtn;
-    } else {
-        raiseExcHelper(TypeError, "expected a character buffer object");
-    }
 }
 
 Box* strStrip(BoxedString* self, Box* chars) {
@@ -2070,8 +2042,14 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     BoxedString* encoding_str = (BoxedString*)encoding;
     BoxedString* error_str = (BoxedString*)error;
 
+    if (encoding_str && encoding_str->cls == unicode_cls)
+        encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
+
     if (encoding_str && encoding_str->cls != str_cls)
         raiseExcHelper(TypeError, "decode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
+
+    if (error_str && error_str->cls == unicode_cls)
+        error_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(error_str, NULL);
 
     if (error_str && error_str->cls != str_cls)
         raiseExcHelper(TypeError, "decode() argument 2 must be string, not '%s'", getTypeName(error_str));
@@ -2089,8 +2067,14 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     BoxedString* encoding_str = (BoxedString*)encoding;
     BoxedString* error_str = (BoxedString*)error;
 
+    if (encoding_str && encoding_str->cls == unicode_cls)
+        encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
+
     if (encoding_str && encoding_str->cls != str_cls)
         raiseExcHelper(TypeError, "encode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
+
+    if (error_str && error_str->cls == unicode_cls)
+        error_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(error_str, NULL);
 
     if (error_str && error_str->cls != str_cls)
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
@@ -2449,6 +2433,7 @@ void strDestructor(Box* b) {
 }
 
 static PyMethodDef string_methods[] = {
+    { "split", (PyCFunction)string_split, METH_VARARGS, NULL },
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
     { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
@@ -2509,6 +2494,7 @@ void setupStr() {
                       new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
 
     str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
+    str_cls->giveAttr("rpartition", new BoxedFunction(boxRTFunction((void*)strRpartition, UNKNOWN, 2)));
 
     str_cls->giveAttr("format", new BoxedFunction(boxRTFunction((void*)strFormat, UNKNOWN, 1, 0, true, true)));
 
@@ -2541,9 +2527,6 @@ void setupStr() {
 
     str_cls->giveAttr("replace",
                       new BoxedFunction(boxRTFunction((void*)strReplace, UNKNOWN, 4, 1, false, false), { boxInt(-1) }));
-
-    str_cls->giveAttr(
-        "split", new BoxedFunction(boxRTFunction((void*)strSplit, LIST, 3, 2, false, false), { None, boxInt(-1) }));
 
     for (auto& md : string_methods) {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));

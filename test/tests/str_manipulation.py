@@ -93,6 +93,9 @@ for i in xrange(256):
     test(c)
     test_is(c)
 
+    for j in xrange(i, 64):
+        test_is(c + chr(j))
+
 try:
     var = 'abc'
     var.isalnum(42)

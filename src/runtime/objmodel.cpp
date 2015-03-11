@@ -1651,6 +1651,51 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
 
+    if (obj->cls == type_cls) {
+        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
+        if (!isUserDefined(cobj)) {
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
+        }
+    }
+
+    if (attr == "__class__") {
+        if (!isSubclass(val->cls, type_cls))
+            raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
+
+        auto new_cls = static_cast<BoxedClass*>(val);
+
+        // Conservative Pyston checks: make sure that both classes are derived only from Pyston types,
+        // and that they don't define any extra C-level fields
+        RELEASE_ASSERT(val->cls == type_cls, "");
+        RELEASE_ASSERT(obj->cls->cls == type_cls, "");
+        for (auto _base : static_cast<BoxedTuple*>(obj->cls->tp_mro)->elts) {
+            BoxedClass* base = static_cast<BoxedClass*>(_base);
+            RELEASE_ASSERT(base->is_pyston_class, "");
+        }
+        for (auto _base : static_cast<BoxedTuple*>(new_cls->tp_mro)->elts) {
+            BoxedClass* base = static_cast<BoxedClass*>(_base);
+            RELEASE_ASSERT(base->is_pyston_class, "");
+        }
+
+        RELEASE_ASSERT(obj->cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
+        RELEASE_ASSERT(new_cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
+        RELEASE_ASSERT(obj->cls->attrs_offset != 0, "");
+        RELEASE_ASSERT(new_cls->attrs_offset != 0, "");
+        RELEASE_ASSERT(obj->cls->tp_weaklistoffset != 0, "");
+        RELEASE_ASSERT(new_cls->tp_weaklistoffset != 0, "");
+
+        // Normal Python checks.
+        // TODO there are more checks to add here, and they should throw errors not asserts
+        RELEASE_ASSERT(obj->cls->tp_basicsize == new_cls->tp_basicsize, "");
+        RELEASE_ASSERT(obj->cls->tp_dictoffset == new_cls->tp_dictoffset, "");
+        RELEASE_ASSERT(obj->cls->tp_weaklistoffset == new_cls->tp_weaklistoffset, "");
+        RELEASE_ASSERT(obj->cls->attrs_offset == new_cls->attrs_offset, "");
+
+        obj->cls = new_cls;
+        return;
+    }
+
+
     // Lookup a descriptor
     Box* descr = NULL;
     RewriterVar* r_descr = NULL;
@@ -1744,17 +1789,8 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
 }
 
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
-    assert(strcmp(attr, "__class__") != 0);
-
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
-
-    if (obj->cls == type_cls) {
-        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
-        if (!isUserDefined(cobj)) {
-            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
-        }
-    }
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
@@ -2433,16 +2469,20 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
             abort();
         }
 
+        EffortLevel new_effort = initialEffort();
+
         std::vector<ConcreteCompilerType*> arg_types;
         for (int i = 0; i < num_output_args; i++) {
-            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-            assert(arg); // only builtin functions can pass NULL args
+            if (new_effort == EffortLevel::INTERPRETED) {
+                arg_types.push_back(UNKNOWN);
+            } else {
+                Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+                assert(arg); // only builtin functions can pass NULL args
 
-            arg_types.push_back(typeFromClass(arg->cls));
+                arg_types.push_back(typeFromClass(arg->cls));
+            }
         }
         FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-        EffortLevel new_effort = initialEffort();
 
         // this also pushes the new CompiledVersion to the back of the version list:
         chosen_cf = compileFunction(f, spec, new_effort, NULL);

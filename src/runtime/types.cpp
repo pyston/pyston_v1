@@ -561,7 +561,7 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
       *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
       *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-      *builtin_function_or_method_cls;
+      *builtin_function_or_method_cls, *attrwrapperiter_cls;
 
 BoxedTuple* EmptyTuple;
 }
@@ -596,24 +596,25 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         RELEASE_ASSERT(r, "");
         return r;
     } catch (ExcInfo e) {
-        // TODO [CAPI] bad error handling...
-
         RELEASE_ASSERT(e.matches(BaseException), "");
 
-        Box* msg = getattr(e.value, "message");
-        RELEASE_ASSERT(msg, "");
-        RELEASE_ASSERT(msg->cls == str_cls, "");
+        Box* msg = e.value;
+        assert(msg);
+        // TODO this is an extra Pyston check and I don't think we should have to do it:
+        if (isSubclass(e.value->cls, BaseException))
+            msg = getattr(e.value, "message");
 
-        PyObject* newmsg;
-        newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
-                                     "    %s",
-                                     PyString_AS_STRING(msg));
+        if (isSubclass(msg->cls, str_cls)) {
+            auto newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
+                                              "    %s",
+                                              PyString_AS_STRING(msg));
+            if (newmsg)
+                e.value = newmsg;
+        }
 
-        PyErr_Restore(e.type, newmsg, NULL);
-        checkAndThrowCAPIException();
-
-        // Should not reach here
-        abort();
+        // Go through these routines since they do some normalization:
+        PyErr_Restore(e.type, e.value, NULL);
+        throwCAPIException();
     }
 }
 
@@ -955,6 +956,30 @@ CLFunction* unboxRTFunction(Box* b) {
     return static_cast<BoxedFunction*>(b)->f;
 }
 
+class AttrWrapper;
+class AttrWrapperIter : public Box {
+private:
+    // Iterating over the an attrwrapper (~=dict) just gives the keys, which
+    // just depends on the hidden class of the object.  Let's store only that:
+    HiddenClass* hcls;
+    std::unordered_map<std::string, int>::iterator it;
+
+public:
+    AttrWrapperIter(AttrWrapper* aw);
+
+    DEFAULT_CLASS(attrwrapperiter_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b) {
+        boxGCHandler(v, b);
+
+        AttrWrapperIter* self = (AttrWrapperIter*)b;
+        v->visit(self->hcls);
+    }
+
+    static Box* hasnext(Box* _self);
+    static Box* next(Box* _self);
+};
+
 // A dictionary-like wrapper around the attributes array.
 // Not sure if this will be enough to satisfy users who expect __dict__
 // or PyModule_GetDict to return real dicts.
@@ -1006,7 +1031,7 @@ public:
 
         _key = coerceUnicodeToStr(_key);
 
-        RELEASE_ASSERT(_key->cls == str_cls, "");
+        RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
         BoxedString* key = static_cast<BoxedString*>(_key);
         Box* r = self->b->getattr(key->s);
         if (!r)
@@ -1087,6 +1112,19 @@ public:
         return rtn;
     }
 
+    static Box* copy(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        BoxedDict* rtn = new BoxedDict();
+
+        HCAttrs* attrs = self->b->getHCAttrsPtr();
+        for (const auto& p : attrs->hcls->attr_offsets) {
+            rtn->d[boxString(p.first)] = attrs->attr_list->attrs[p.second];
+        }
+        return rtn;
+    }
+
     static Box* len(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1111,7 +1149,39 @@ public:
         }
         return None;
     }
+
+    static Box* iter(Box* _self) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        return new AttrWrapperIter(self);
+    }
+
+    friend class AttrWrapperIter;
 };
+
+AttrWrapperIter::AttrWrapperIter(AttrWrapper* aw) {
+    hcls = aw->b->getHCAttrsPtr()->hcls;
+    assert(hcls);
+    it = hcls->attr_offsets.begin();
+}
+
+Box* AttrWrapperIter::hasnext(Box* _self) {
+    RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
+    AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
+
+    return boxBool(self->it != self->hcls->attr_offsets.end());
+}
+
+Box* AttrWrapperIter::next(Box* _self) {
+    RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
+    AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
+
+    assert(self->it != self->hcls->attr_offsets.end());
+    Box* r = boxString(self->it->first);
+    ++self->it;
+    return r;
+}
 
 Box* makeAttrWrapper(Box* b) {
     assert(b->cls->instancesHaveHCAttrs());
@@ -1378,6 +1448,8 @@ void setupRuntime() {
                                              sizeof(BoxedClassmethod), false, "classmethod");
     attrwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper),
                                              false, "attrwrapper");
+    attrwrapperiter_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
+                                                 sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
     // TODO: add explicit __get__ and __set__ methods to these
     pyston_getset_cls->freeze();
@@ -1504,9 +1576,16 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
+    attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
+    attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)AttrWrapper::update, NONE, 2)));
     attrwrapper_cls->freeze();
+
+    attrwrapperiter_cls->giveAttr("__hasnext__",
+                                  new BoxedFunction(boxRTFunction((void*)AttrWrapperIter::hasnext, UNKNOWN, 1)));
+    attrwrapperiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)AttrWrapperIter::next, UNKNOWN, 1)));
+    attrwrapperiter_cls->freeze();
 
     // sys is the first module that needs to be set up, due to modules
     // being tracked in sys.modules:

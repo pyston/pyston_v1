@@ -37,6 +37,8 @@ print p(s.encode("utf8"))
 print p(s.encode("utf16"))
 print p(s.encode("utf32"))
 print p(s.encode("iso_8859_15"))
+print p(s.encode(u"utf8"))
+print p("hello world".encode(u"utf8"))
 
 print repr(u' '.join(["hello", "world"]))
 
@@ -91,3 +93,6 @@ print "hello world".startswith(u'world')
 print float(u'1.0')
 
 print unichr(97)
+
+print "hello world".split(u'l')
+print "hello world".rsplit(u'l')
