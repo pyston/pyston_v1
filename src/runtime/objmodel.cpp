@@ -1526,16 +1526,6 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     static StatCounter slowpath_getattr("slowpath_getattr");
     slowpath_getattr.log();
 
-    bool is_dunder = (attr[0] == '_' && attr[1] == '_');
-
-    if (is_dunder) {
-        if (strcmp(attr, "__dict__") == 0) {
-            // TODO this is wrong, should be added at the class level as a getset
-            if (obj->cls->instancesHaveHCAttrs())
-                return makeAttrWrapper(obj);
-        }
-    }
-
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
@@ -1579,21 +1569,6 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
 
     if (val) {
         return val;
-    }
-
-    if (is_dunder) {
-        // There's more to it than this:
-        if (strcmp(attr, "__class__") == 0) {
-            assert(obj->cls != instance_cls); // I think in this case __class__ is supposed to be the classobj?
-            return obj->cls;
-        }
-
-        // This doesn't belong here either:
-        if (strcmp(attr, "__bases__") == 0 && isSubclass(obj->cls, type_cls)) {
-            BoxedClass* cls = static_cast<BoxedClass*>(obj);
-            assert(cls->tp_bases);
-            return cls->tp_bases;
-        }
     }
 
     raiseAttributeError(obj, attr);
@@ -1660,44 +1635,6 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
             raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
         }
     }
-
-    if (attr == "__class__") {
-        if (!isSubclass(val->cls, type_cls))
-            raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
-
-        auto new_cls = static_cast<BoxedClass*>(val);
-
-        // Conservative Pyston checks: make sure that both classes are derived only from Pyston types,
-        // and that they don't define any extra C-level fields
-        RELEASE_ASSERT(val->cls == type_cls, "");
-        RELEASE_ASSERT(obj->cls->cls == type_cls, "");
-        for (auto _base : static_cast<BoxedTuple*>(obj->cls->tp_mro)->elts) {
-            BoxedClass* base = static_cast<BoxedClass*>(_base);
-            RELEASE_ASSERT(base->is_pyston_class, "");
-        }
-        for (auto _base : static_cast<BoxedTuple*>(new_cls->tp_mro)->elts) {
-            BoxedClass* base = static_cast<BoxedClass*>(_base);
-            RELEASE_ASSERT(base->is_pyston_class, "");
-        }
-
-        RELEASE_ASSERT(obj->cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
-        RELEASE_ASSERT(new_cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
-        RELEASE_ASSERT(obj->cls->attrs_offset != 0, "");
-        RELEASE_ASSERT(new_cls->attrs_offset != 0, "");
-        RELEASE_ASSERT(obj->cls->tp_weaklistoffset != 0, "");
-        RELEASE_ASSERT(new_cls->tp_weaklistoffset != 0, "");
-
-        // Normal Python checks.
-        // TODO there are more checks to add here, and they should throw errors not asserts
-        RELEASE_ASSERT(obj->cls->tp_basicsize == new_cls->tp_basicsize, "");
-        RELEASE_ASSERT(obj->cls->tp_dictoffset == new_cls->tp_dictoffset, "");
-        RELEASE_ASSERT(obj->cls->tp_weaklistoffset == new_cls->tp_weaklistoffset, "");
-        RELEASE_ASSERT(obj->cls->attrs_offset == new_cls->attrs_offset, "");
-
-        obj->cls = new_cls;
-        return;
-    }
-
 
     // Lookup a descriptor
     Box* descr = NULL;
@@ -3771,6 +3708,9 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     // TODO: how much of these should be in BoxedClass::finishInitialization()?
     made->tp_dictoffset = base->tp_dictoffset;
+
+    if (!made->getattr("__dict__") && (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()))
+        made->giveAttr("__dict__", dict_descr);
 
     for (const auto& p : attr_dict->d) {
         auto k = coerceUnicodeToStr(p.first);

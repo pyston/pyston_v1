@@ -429,6 +429,20 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
     }
 }
 
+static Box* typeDict(Box* obj, void* context) {
+    if (obj->cls->instancesHaveHCAttrs())
+        return makeAttrWrapper(obj);
+    if (obj->cls->instancesHaveDictAttrs())
+        return obj->getDict();
+    abort();
+}
+
+static void typeSetDict(Box* obj, Box* val, void* context) {
+    Py_FatalError("unimplemented");
+}
+
+Box* dict_descr = NULL;
+
 extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
@@ -1490,6 +1504,47 @@ static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
     return _common_reduce(self, proto);
 }
 
+static Box* objectClass(Box* obj, void* context) {
+    assert(obj->cls != instance_cls); // should override __class__ in classobj
+    return obj->cls;
+}
+
+static void objectSetClass(Box* obj, Box* val, void* context) {
+    if (!isSubclass(val->cls, type_cls))
+        raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
+
+    auto new_cls = static_cast<BoxedClass*>(val);
+
+    // Conservative Pyston checks: make sure that both classes are derived only from Pyston types,
+    // and that they don't define any extra C-level fields
+    RELEASE_ASSERT(val->cls == type_cls, "");
+    RELEASE_ASSERT(obj->cls->cls == type_cls, "");
+    for (auto _base : static_cast<BoxedTuple*>(obj->cls->tp_mro)->elts) {
+        BoxedClass* base = static_cast<BoxedClass*>(_base);
+        RELEASE_ASSERT(base->is_pyston_class, "");
+    }
+    for (auto _base : static_cast<BoxedTuple*>(new_cls->tp_mro)->elts) {
+        BoxedClass* base = static_cast<BoxedClass*>(_base);
+        RELEASE_ASSERT(base->is_pyston_class, "");
+    }
+
+    RELEASE_ASSERT(obj->cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
+    RELEASE_ASSERT(new_cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
+    RELEASE_ASSERT(obj->cls->attrs_offset != 0, "");
+    RELEASE_ASSERT(new_cls->attrs_offset != 0, "");
+    RELEASE_ASSERT(obj->cls->tp_weaklistoffset != 0, "");
+    RELEASE_ASSERT(new_cls->tp_weaklistoffset != 0, "");
+
+    // Normal Python checks.
+    // TODO there are more checks to add here, and they should throw errors not asserts
+    RELEASE_ASSERT(obj->cls->tp_basicsize == new_cls->tp_basicsize, "");
+    RELEASE_ASSERT(obj->cls->tp_dictoffset == new_cls->tp_dictoffset, "");
+    RELEASE_ASSERT(obj->cls->tp_weaklistoffset == new_cls->tp_weaklistoffset, "");
+    RELEASE_ASSERT(obj->cls->attrs_offset == new_cls->attrs_offset, "");
+
+    obj->cls = new_cls;
+}
+
 static PyMethodDef object_methods[] = {
     { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
     { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
@@ -1540,6 +1595,18 @@ static void typeSetName(Box* b, Box* v, void*) {
     BoxedHeapClass* ht = static_cast<BoxedHeapClass*>(type);
     ht->ht_name = s;
     ht->tp_name = s->s.c_str();
+}
+
+static Box* typeBases(Box* b, void*) {
+    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    BoxedClass* type = static_cast<BoxedClass*>(b);
+
+    assert(type->tp_bases);
+    return type->tp_bases;
+}
+
+static void typeSetBases(Box* b, Box* v, void*) {
+    Py_FatalError("unimplemented");
 }
 
 // cls should be obj->cls.
@@ -1641,6 +1708,8 @@ void setupRuntime() {
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+    pyston_getset_cls
+        = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
     attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
                                          new BoxedString("attrwrapper"));
 
@@ -1652,6 +1721,7 @@ void setupRuntime() {
     tuple_cls->tp_mro = new BoxedTuple({ tuple_cls, object_cls });
     list_cls->tp_mro = new BoxedTuple({ list_cls, object_cls });
     type_cls->tp_mro = new BoxedTuple({ type_cls, object_cls });
+    pyston_getset_cls->tp_mro = new BoxedTuple({ pyston_getset_cls, object_cls });
     attrwrapper_cls->tp_mro = new BoxedTuple({ attrwrapper_cls, object_cls });
 
     object_cls->finishInitialization();
@@ -1661,10 +1731,14 @@ void setupRuntime() {
     none_cls->finishInitialization();
     tuple_cls->finishInitialization();
     list_cls->finishInitialization();
+    pyston_getset_cls->finishInitialization();
     attrwrapper_cls->finishInitialization();
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
+    dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, typeSetDict, NULL);
+    gc::registerPermanentRoot(dict_descr);
+    type_cls->giveAttr("__dict__", dict_descr);
 
 
     module_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), 0,
@@ -1704,8 +1778,6 @@ void setupRuntime() {
                                            sizeof(BoxedSet), false, "frozenset");
     member_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false, "member");
-    pyston_getset_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
     capi_getset_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
     closure_cls = BoxedHeapClass::create(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), 0,
@@ -1747,6 +1819,7 @@ void setupRuntime() {
     typeCallObj->internal_callable = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeName, typeSetName, NULL));
+    type_cls->giveAttr("__bases__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeBases, typeSetBases, NULL));
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
     type_cls->giveAttr("__new__",
@@ -1777,6 +1850,7 @@ void setupRuntime() {
     for (auto& md : object_methods) {
         object_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, object_cls));
     }
+    object_cls->giveAttr("__class__", new (pyston_getset_cls) BoxedGetsetDescriptor(objectClass, objectSetClass, NULL));
     object_cls->freeze();
 
     setupBool();
@@ -1798,6 +1872,7 @@ void setupRuntime() {
     setupDescr();
     setupTraceback();
 
+    function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
