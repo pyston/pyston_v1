@@ -2433,16 +2433,20 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
             abort();
         }
 
+        EffortLevel new_effort = initialEffort();
+
         std::vector<ConcreteCompilerType*> arg_types;
         for (int i = 0; i < num_output_args; i++) {
-            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-            assert(arg); // only builtin functions can pass NULL args
+            if (new_effort == EffortLevel::INTERPRETED) {
+                arg_types.push_back(UNKNOWN);
+            } else {
+                Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+                assert(arg); // only builtin functions can pass NULL args
 
-            arg_types.push_back(typeFromClass(arg->cls));
+                arg_types.push_back(typeFromClass(arg->cls));
+            }
         }
         FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-        EffortLevel new_effort = initialEffort();
 
         // this also pushes the new CompiledVersion to the back of the version list:
         chosen_cf = compileFunction(f, spec, new_effort, NULL);
