@@ -597,7 +597,13 @@ BoxedFloat* _floatNew(Box* a) {
         if (s == "-inf")
             return new BoxedFloat(-INFINITY);
 
-        return new BoxedFloat(strtod(s.c_str(), NULL));
+        // TODO this should just use CPython's implementation:
+        char* endptr;
+        const char* startptr = s.c_str();
+        double r = strtod(startptr, &endptr);
+        if (endptr != startptr + s.size())
+            raiseExcHelper(ValueError, "could not convert string to float: %s", s.c_str());
+        return new BoxedFloat(r);
     } else {
         static const std::string float_str("__float__");
         Box* r = callattr(a, &float_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),

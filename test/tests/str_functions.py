@@ -142,3 +142,6 @@ print repr("hello\tworld\t".expandtabs(12))
 
 print "hello world".startswith(("x", "h"))
 print "hello world".endswith(("x", "h"))
+
+print "a.b.c.d".partition('.')
+print "a.b.c.d".rpartition('.')
