@@ -614,7 +614,7 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         }
 
         // Go through these routines since they do some normalization:
-        PyErr_Restore(e.type, e.value, NULL);
+        PyErr_Restore(e.type, e.value, e.traceback);
         throwCAPIException();
     }
 }
@@ -1012,6 +1012,21 @@ public:
         return None;
     }
 
+    static Box* setdefault(Box* _self, Box* _key, Box* value) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        _key = coerceUnicodeToStr(_key);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        Box* cur = self->b->getattr(key->s);
+        if (cur)
+            return cur;
+        self->b->setattr(key->s, value, NULL);
+        return value;
+    }
+
     static Box* get(Box* _self, Box* _key, Box* def) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1145,8 +1160,14 @@ public:
             for (const auto& p : attrs->hcls->attr_offsets) {
                 self->b->setattr(p.first, attrs->attr_list->attrs[p.second], NULL);
             }
+        } else if (_container->cls == dict_cls) {
+            BoxedDict* container = static_cast<BoxedDict*>(_container);
+
+            for (const auto& p : container->d) {
+                AttrWrapper::setitem(self, p.first, p.second);
+            }
         } else {
-            RELEASE_ASSERT(0, "not implemented");
+            RELEASE_ASSERT(0, "not implemented: %s", _container->cls->tp_name);
         }
         return None;
     }
@@ -1820,6 +1841,8 @@ void setupRuntime() {
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("setdefault",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
         "get", new BoxedFunction(boxRTFunction((void*)AttrWrapper::get, UNKNOWN, 3, 1, false, false), { None }));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));

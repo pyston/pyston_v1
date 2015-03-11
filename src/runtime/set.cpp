@@ -231,6 +231,14 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     return None;
 }
 
+Box* setCopy(BoxedSet* self) {
+    assert(self->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+    rtn->s.insert(self->s.begin(), self->s.end());
+    return rtn;
+}
+
 Box* setContains(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls || self->cls == frozenset_cls);
     return boxBool(self->s.count(v) != 0);
@@ -312,6 +320,8 @@ void setupSet() {
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
+
+    set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
 
     set_cls->freeze();
     frozenset_cls->freeze();

@@ -74,3 +74,8 @@ except KeyError, e:
 def f2():
     print {5}
 f2()
+
+s = set([])
+s2 = s.copy()
+s.add(1)
+print s, s2
