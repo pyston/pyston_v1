@@ -383,6 +383,9 @@ void BoxedClass::finishInitialization() {
         tp_clear = tp_base->tp_clear;
     }
 
+    assert(!this->tp_dict);
+    this->tp_dict = makeAttrWrapper(this);
+
     commonClassSetup(this);
 }
 

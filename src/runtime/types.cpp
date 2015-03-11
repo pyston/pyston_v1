@@ -103,7 +103,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }
 #endif
     if (!cls->tp_mro) {
-        assert(!list_cls);
+        assert(!attrwrapper_cls); // the last class to be set up during bootstrapping
     } else {
         assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
         assert(cls->tp_mro->cls == tuple_cls);
@@ -1455,7 +1455,7 @@ static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
             Py_DECREF(reduce);
             return NULL;
         }
-        objreduce = object_cls->getattr("__reduce__");
+        objreduce = PyDict_GetItemString(PyBaseObject_Type.tp_dict, "__reduce__");
         override = (clsreduce != objreduce);
         Py_DECREF(clsreduce);
         if (override) {
@@ -1620,13 +1620,18 @@ void setupRuntime() {
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+    attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
+                                         new BoxedString("attrwrapper"));
+
 
     // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
     // than try to make the MRO construction code be safe against say, tuple_cls not having
     // an mro (since the mro is stored as a tuple).
+    object_cls->tp_mro = new BoxedTuple({ object_cls });
     tuple_cls->tp_mro = new BoxedTuple({ tuple_cls, object_cls });
     list_cls->tp_mro = new BoxedTuple({ list_cls, object_cls });
     type_cls->tp_mro = new BoxedTuple({ type_cls, object_cls });
+    attrwrapper_cls->tp_mro = new BoxedTuple({ attrwrapper_cls, object_cls });
 
     object_cls->finishInitialization();
     type_cls->finishInitialization();
@@ -1635,6 +1640,7 @@ void setupRuntime() {
     none_cls->finishInitialization();
     tuple_cls->finishInitialization();
     list_cls->finishInitialization();
+    attrwrapper_cls->finishInitialization();
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
@@ -1689,8 +1695,6 @@ void setupRuntime() {
                                               sizeof(BoxedStaticmethod), false, "staticmethod");
     classmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &classmethodGCHandler, 0, 0,
                                              sizeof(BoxedClassmethod), false, "classmethod");
-    attrwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper),
-                                             false, "attrwrapper");
     attrwrapperiter_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
                                                  sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
