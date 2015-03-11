@@ -3,8 +3,6 @@
 #include "Python.h"
 #include "osdefs.h"
 
-#include <sys/stat.h> // Pyston change
-
 #include <sys/types.h>
 #include <string.h>
 
