@@ -1909,8 +1909,13 @@ public:
             curblock->connectTo(end_block);
         }
 
-        cfg->placeBlock(end_block);
-        curblock = end_block;
+        if (end_block->predecessors.size() == 0) {
+            delete end_block;
+            curblock = NULL;
+        } else {
+            cfg->placeBlock(end_block);
+            curblock = end_block;
+        }
 
         return true;
     }
@@ -2436,8 +2441,13 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                    || terminator->type == AST_TYPE::Raise);
         }
 
-        if (b->predecessors.size() == 0)
-            assert(b == rtn->getStartingBlock());
+        if (b->predecessors.size() == 0) {
+            if (b != rtn->getStartingBlock()) {
+                rtn->print();
+                printf("%s\n", source->getName().c_str());
+            }
+            ASSERT(b == rtn->getStartingBlock(), "%d", b->idx);
+        }
     }
 
     // We need to generate the CFG in a way that doesn't have any critical edges,
