@@ -596,24 +596,25 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         RELEASE_ASSERT(r, "");
         return r;
     } catch (ExcInfo e) {
-        // TODO [CAPI] bad error handling...
-
         RELEASE_ASSERT(e.matches(BaseException), "");
 
-        Box* msg = getattr(e.value, "message");
-        RELEASE_ASSERT(msg, "");
-        RELEASE_ASSERT(msg->cls == str_cls, "");
+        Box* msg = e.value;
+        assert(msg);
+        // TODO this is an extra Pyston check and I don't think we should have to do it:
+        if (isSubclass(e.value->cls, BaseException))
+            msg = getattr(e.value, "message");
 
-        PyObject* newmsg;
-        newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
-                                     "    %s",
-                                     PyString_AS_STRING(msg));
+        if (isSubclass(msg->cls, str_cls)) {
+            auto newmsg = PyString_FromFormat("Error when calling the metaclass bases\n"
+                                              "    %s",
+                                              PyString_AS_STRING(msg));
+            if (newmsg)
+                e.value = newmsg;
+        }
 
-        PyErr_Restore(e.type, newmsg, NULL);
-        checkAndThrowCAPIException();
-
-        // Should not reach here
-        abort();
+        // Go through these routines since they do some normalization:
+        PyErr_Restore(e.type, e.value, NULL);
+        throwCAPIException();
     }
 }
 
