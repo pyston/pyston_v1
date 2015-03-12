@@ -425,29 +425,26 @@ Box* range(Box* start, Box* stop, Box* step) {
         RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
 
         istart = 0;
-        if(isSubclass(start->cls, long_cls))
-        {
-           istop = asSignedLong((BoxedLong*)start);
-        }else{
-           istop = static_cast<BoxedInt*>(start)->n;
+        if (isSubclass(start->cls, long_cls)) {
+            istop = asSignedLong((BoxedLong*)start);
+        } else {
+            istop = static_cast<BoxedInt*>(start)->n;
         }
         istep = 1;
     } else if (step == NULL) {
         RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
         RELEASE_ASSERT((isSubclass(stop->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(stop));
-        
-        if(isSubclass(start->cls, long_cls))
-        {
-          istart = asSignedLong((BoxedLong*)start);
-        }else{
-          istart = static_cast<BoxedInt*>(start)->n;
+
+        if (isSubclass(start->cls, long_cls)) {
+            istart = asSignedLong((BoxedLong*)start);
+        } else {
+            istart = static_cast<BoxedInt*>(start)->n;
         }
 
-        if(isSubclass(stop->cls, long_cls))
-        {
-          istop = asSignedLong((BoxedLong*)stop);
-        }else{
-          istop = static_cast<BoxedInt*>(stop)->n;
+        if (isSubclass(stop->cls, long_cls)) {
+            istop = asSignedLong((BoxedLong*)stop);
+        } else {
+            istop = static_cast<BoxedInt*>(stop)->n;
         }
         istep = 1;
     } else {
@@ -455,25 +452,22 @@ Box* range(Box* start, Box* stop, Box* step) {
         RELEASE_ASSERT((isSubclass(stop->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(stop));
         RELEASE_ASSERT((isSubclass(step->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(step));
 
-        if(isSubclass(start->cls, long_cls))
-        {
-          istart = asSignedLong((BoxedLong*)start);
-        }else{
-          istart = static_cast<BoxedInt*>(start)->n;
+        if (isSubclass(start->cls, long_cls)) {
+            istart = asSignedLong((BoxedLong*)start);
+        } else {
+            istart = static_cast<BoxedInt*>(start)->n;
         }
 
-        if(isSubclass(stop->cls, long_cls))
-        {
-          istop = asSignedLong((BoxedLong*)stop);
-        }else{
-          istop = static_cast<BoxedInt*>(stop)->n;
+        if (isSubclass(stop->cls, long_cls)) {
+            istop = asSignedLong((BoxedLong*)stop);
+        } else {
+            istop = static_cast<BoxedInt*>(stop)->n;
         }
-       
-         if(isSubclass(step->cls, long_cls))
-        {
-          istep = asSignedLong((BoxedLong*)step);
-        }else{
-          istep = static_cast<BoxedInt*>(step)->n;
+
+        if (isSubclass(step->cls, long_cls)) {
+            istep = asSignedLong((BoxedLong*)step);
+        } else {
+            istep = static_cast<BoxedInt*>(step)->n;
         }
         RELEASE_ASSERT(istep != 0, "step can't be 0");
     }
