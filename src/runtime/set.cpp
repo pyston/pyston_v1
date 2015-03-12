@@ -231,6 +231,22 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     return None;
 }
 
+Box* setUnion(BoxedSet* self, BoxedTuple* args) {
+    if (!isSubclass(self->cls, set_cls))
+        raiseExcHelper(TypeError, "descriptor 'union' requires a 'set' object but received a '%s'", getTypeName(self));
+
+    BoxedSet* rtn = new BoxedSet();
+    rtn->s.insert(self->s.begin(), self->s.end());
+
+    for (auto container : args->pyElements()) {
+        for (auto elt : container->pyElements()) {
+            rtn->s.insert(elt);
+        }
+    }
+
+    return rtn;
+}
+
 Box* setCopy(BoxedSet* self) {
     assert(self->cls == set_cls);
 
@@ -320,6 +336,7 @@ void setupSet() {
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
+    set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
 
     set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
 

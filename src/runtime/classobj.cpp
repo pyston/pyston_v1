@@ -127,6 +127,36 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     return made;
 }
 
+static Box* classobjGetattribute(Box* _cls, Box* _attr) {
+    RELEASE_ASSERT(_cls->cls == classobj_cls, "");
+    BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    // These are special cases in CPython as well:
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            return makeAttrWrapper(cls);
+
+        if (attr->s == "__bases__")
+            return cls->bases;
+
+        if (attr->s == "__name__") {
+            if (cls->name)
+                return cls->name;
+            return None;
+        }
+    }
+
+    Box* r = classLookup(cls, attr->s);
+    if (!r)
+        raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->s.c_str(), attr->s.c_str());
+
+    r = processDescriptor(r, None, cls);
+    return r;
+}
+
 Box* classobjStr(Box* _obj) {
     if (!isSubclass(_obj->cls, classobj_cls)) {
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'classobj' object but received an '%s'",
@@ -148,7 +178,7 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     RELEASE_ASSERT(_attr->cls == str_cls, "");
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
-    // TODO: special handling for accessing __dict__ and __class__
+    // These are special cases in CPython as well:
     if (attr->s[0] == '_' && attr->s[1] == '_') {
         if (attr->s == "__dict__")
             return makeAttrWrapper(inst);
@@ -340,7 +370,10 @@ void setupClassobj() {
     classobj_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)classobjCall, UNKNOWN, 1, 0, true, true)));
 
+    classobj_cls->giveAttr("__getattribute__",
+                           new BoxedFunction(boxRTFunction((void*)classobjGetattribute, UNKNOWN, 2)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)classobjStr, STR, 1)));
+    classobj_cls->giveAttr("__dict__", dict_descr);
 
     classobj_cls->freeze();
 

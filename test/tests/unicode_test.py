@@ -96,3 +96,6 @@ print unichr(97)
 
 print "hello world".split(u'l')
 print "hello world".rsplit(u'l')
+
+with open(u"/dev/null", u"r") as f:
+    print f.read()

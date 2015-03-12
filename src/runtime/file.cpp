@@ -647,6 +647,12 @@ Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
 Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
     assert(cls == file_cls);
 
+    if (s->cls == unicode_cls)
+        s = _PyUnicode_AsDefaultEncodedString(s, NULL);
+
+    if (m->cls == unicode_cls)
+        m = _PyUnicode_AsDefaultEncodedString(m, NULL);
+
     if (s->cls != str_cls) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(s));
         raiseExcHelper(TypeError, "");

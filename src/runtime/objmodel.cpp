@@ -1484,6 +1484,12 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         return descr;
     }
 
+    // TODO this shouldn't go here; it should be in instancemethod_cls->tp_getattr[o]
+    if (obj->cls == instancemethod_cls) {
+        assert(!rewrite_args || !rewrite_args->out_success);
+        return getattrInternalGeneral(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
+                                      bind_obj_out, NULL);
+    }
     // Finally, check __getattr__
 
     if (!cls_only) {
@@ -1928,7 +1934,9 @@ extern "C" BoxedInt* hash(Box* obj) {
     Box* hash = getclsattr_internal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls, "%s.__hash__", getTypeName(obj));
+        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls
+                   || obj->cls == classobj_cls,
+               "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));
     }

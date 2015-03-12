@@ -79,3 +79,9 @@ s = set([])
 s2 = s.copy()
 s.add(1)
 print s, s2
+
+s1 = set([3])
+s2 = set([1])
+print sorted(s1.union(s2))
+print sorted(s1.union(range(5, 7)))
+print s2.union([], [], [], [])

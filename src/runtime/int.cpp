@@ -861,7 +861,7 @@ extern "C" Box* intNeg(BoxedInt* v) {
 
 extern "C" Box* intNonzero(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__nonzer__' requires a 'int' object but received a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__nonzero__' requires a 'int' object but received a '%s'",
                        getTypeName(v));
 
     return boxBool(v->n != 0);

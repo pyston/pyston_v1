@@ -23,6 +23,12 @@ while not done:
 
 print "done!"
 
+done = False
+with print_lock:
+    t = start_new_thread(run, (), {'arg': 6})
+while not done:
+    time.sleep(0)
+
 l = allocate_lock()
 print l.acquire()
 print l.acquire(0)

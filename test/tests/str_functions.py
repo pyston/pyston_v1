@@ -145,3 +145,6 @@ print "hello world".endswith(("x", "h"))
 
 print "a.b.c.d".partition('.')
 print "a.b.c.d".rpartition('.')
+
+print 'ab c\n\nde fg\rkl\r\n'.splitlines()
+print 'ab c\n\nde fg\rkl\r\n'.splitlines(True)

@@ -70,8 +70,8 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
 }
 
 // TODO this should take kwargs, which defaults to empty
-Box* startNewThread(Box* target, Box* args) {
-    intptr_t thread_id = start_thread(&thread_start, target, args, NULL);
+Box* startNewThread(Box* target, Box* args, Box* kw) {
+    intptr_t thread_id = start_thread(&thread_start, target, args, kw);
     return boxInt(thread_id ^ 0x12345678901L);
 }
 
@@ -169,9 +169,9 @@ Box* stackSize() {
 void setupThread() {
     thread_module = createModule("thread", "__builtin__");
 
-    thread_module->giveAttr(
-        "start_new_thread",
-        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)startNewThread, BOXED_INT, 2), "start_new_thread"));
+    thread_module->giveAttr("start_new_thread", new BoxedBuiltinFunctionOrMethod(
+                                                    boxRTFunction((void*)startNewThread, BOXED_INT, 3, 1, false, false),
+                                                    "start_new_thread", { NULL }));
     thread_module->giveAttr("allocate_lock", new BoxedBuiltinFunctionOrMethod(
                                                  boxRTFunction((void*)allocateLock, UNKNOWN, 0), "allocate_lock"));
     thread_module->giveAttr(

@@ -147,3 +147,22 @@ class Hashable:
 print hash(Hashable())
 del Hashable.__hash__
 print type(hash(Hashable()))
+
+class C():
+    def foo(self):
+        pass
+
+    @classmethod
+    def bar(cls):
+        print cls
+
+c = C()
+print type(C.foo)
+print type(getattr(C, "foo"))
+print type(getattr(C, "foo").im_func)
+c.bar()
+C.bar()
+try:
+    C.doesnt_exist
+except AttributeError as e:
+    print e

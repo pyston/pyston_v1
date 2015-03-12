@@ -10,3 +10,11 @@ def show(obj):
         print sorted(obj.__dict__.items())
 
 show(object())
+
+class C: # oldstyle
+    pass
+
+print C.__dict__["__module__"]
+print len(C().__dict__)
+# show(C)
+# show(C())
