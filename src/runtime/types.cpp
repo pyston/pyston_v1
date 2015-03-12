@@ -1927,6 +1927,10 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
+    // TODO: not quite right
+    attrwrapper_cls->giveAttr("iterkeys", attrwrapper_cls->getattr("keys"));
+    attrwrapper_cls->giveAttr("itervalues", attrwrapper_cls->getattr("values"));
+    attrwrapper_cls->giveAttr("iteritems", attrwrapper_cls->getattr("items"));
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
