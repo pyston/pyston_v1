@@ -678,11 +678,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         return;
     }
 
-    if (cls->tp_setattro) {
-        cls->tp_setattro(this, boxString(attr), val);
-        return;
-    }
-
     // Unreachable
     abort();
 }
