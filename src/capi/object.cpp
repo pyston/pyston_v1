@@ -158,8 +158,6 @@ extern "C" int PyObject_SetAttr(PyObject* v, PyObject* name, PyObject* value) no
 }
 
 extern "C" int PyObject_SetAttrString(PyObject* v, const char* name, PyObject* w) noexcept {
-    if (Py_TYPE(v)->tp_setattr != NULL)
-        return (*Py_TYPE(v)->tp_setattr)(v, const_cast<char*>(name), w);
     try {
         setattr(v, name, w);
     } catch (ExcInfo e) {
