@@ -432,6 +432,57 @@ extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long valu
     return PyModule_AddObject(_m, name, boxInt(value));
 }
 
+extern "C" PyObject* PyEval_CallMethod(PyObject* obj, const char* methodname, const char* format, ...) noexcept {
+    va_list vargs;
+    PyObject* meth;
+    PyObject* args;
+    PyObject* res;
+
+    meth = PyObject_GetAttrString(obj, methodname);
+    if (meth == NULL)
+        return NULL;
+
+    va_start(vargs, format);
+
+    args = Py_VaBuildValue(format, vargs);
+    va_end(vargs);
+
+    if (args == NULL) {
+        Py_DECREF(meth);
+        return NULL;
+    }
+
+    res = PyEval_CallObject(meth, args);
+    Py_DECREF(meth);
+    Py_DECREF(args);
+
+    return res;
+}
+
+extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
+    PyObject* result;
+
+    if (arg == NULL) {
+        arg = PyTuple_New(0);
+        if (arg == NULL)
+            return NULL;
+    } else if (!PyTuple_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "argument list must be a tuple");
+        return NULL;
+    } else
+        Py_INCREF(arg);
+
+    if (kw != NULL && !PyDict_Check(kw)) {
+        PyErr_SetString(PyExc_TypeError, "keyword list must be a dictionary");
+        Py_DECREF(arg);
+        return NULL;
+    }
+
+    result = PyObject_Call(func, arg, kw);
+    Py_DECREF(arg);
+    return result;
+}
+
 
 
 } // namespace pyston

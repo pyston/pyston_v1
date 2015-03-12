@@ -521,7 +521,39 @@ static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
 }
 
 extern "C" PyObject* PyObject_CallMethod(PyObject* o, const char* name, const char* format, ...) noexcept {
-    Py_FatalError("unimplemented");
+    va_list va;
+    PyObject* args;
+    PyObject* func = NULL;
+    PyObject* retval = NULL;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = PyObject_GetAttrString(o, name);
+    if (func == NULL) {
+        PyErr_SetString(PyExc_AttributeError, name);
+        return 0;
+    }
+
+    if (!PyCallable_Check(func)) {
+        type_error("attribute of type '%.200s' is not callable", func);
+        goto exit;
+    }
+
+    if (format && *format) {
+        va_start(va, format);
+        args = Py_VaBuildValue(format, va);
+        va_end(va);
+    } else
+        args = PyTuple_New(0);
+
+    retval = call_function_tail(func, args);
+
+exit:
+    /* args gets consumed in call_function_tail */
+    Py_XDECREF(func);
+
+    return retval;
 }
 
 extern "C" PyObject* PyObject_CallMethodObjArgs(PyObject* callable, PyObject* name, ...) noexcept {

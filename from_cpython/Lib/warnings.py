@@ -183,6 +183,12 @@ def warn(message, category=None, stacklevel=1):
     assert issubclass(category, Warning)
     # Get context information
     try:
+        # Pyston change: manually skip the call to _getframe.
+        # A ValueError() is supposed to specify that the "depth" argument is greater
+        # than the stack level, so it doesn't seem appropriate for us to throw as
+        # a signal that it's unimplemented.
+        raise ValueError()
+
         caller = sys._getframe(stacklevel)
     except ValueError:
         globals = sys.__dict__

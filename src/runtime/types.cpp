@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "capi/typeobject.h"
+#include "capi/types.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -102,7 +103,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }
 #endif
     if (!cls->tp_mro) {
-        assert(!list_cls);
+        assert(!attrwrapper_cls); // the last class to be set up during bootstrapping
     } else {
         assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
         assert(cls->tp_mro->cls == tuple_cls);
@@ -428,6 +429,20 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
     }
 }
 
+static Box* typeDict(Box* obj, void* context) {
+    if (obj->cls->instancesHaveHCAttrs())
+        return makeAttrWrapper(obj);
+    if (obj->cls->instancesHaveDictAttrs())
+        return obj->getDict();
+    abort();
+}
+
+static void typeSetDict(Box* obj, Box* val, void* context) {
+    Py_FatalError("unimplemented");
+}
+
+Box* dict_descr = NULL;
+
 extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
@@ -613,7 +628,7 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         }
 
         // Go through these routines since they do some normalization:
-        PyErr_Restore(e.type, e.value, NULL);
+        PyErr_Restore(e.type, e.value, e.traceback);
         throwCAPIException();
     }
 }
@@ -1011,6 +1026,21 @@ public:
         return None;
     }
 
+    static Box* setdefault(Box* _self, Box* _key, Box* value) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        _key = coerceUnicodeToStr(_key);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        Box* cur = self->b->getattr(key->s);
+        if (cur)
+            return cur;
+        self->b->setattr(key->s, value, NULL);
+        return value;
+    }
+
     static Box* get(Box* _self, Box* _key, Box* def) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1144,8 +1174,14 @@ public:
             for (const auto& p : attrs->hcls->attr_offsets) {
                 self->b->setattr(p.first, attrs->attr_list->attrs[p.second], NULL);
             }
+        } else if (_container->cls == dict_cls) {
+            BoxedDict* container = static_cast<BoxedDict*>(_container);
+
+            for (const auto& p : container->d) {
+                AttrWrapper::setitem(self, p.first, p.second);
+            }
         } else {
-            RELEASE_ASSERT(0, "not implemented");
+            RELEASE_ASSERT(0, "not implemented: %s", _container->cls->tp_name);
         }
         return None;
     }
@@ -1231,6 +1267,289 @@ Box* objectStr(Box* obj) {
     return obj->reprIC();
 }
 
+static PyObject* import_copyreg(void) noexcept {
+    static PyObject* copyreg_str;
+
+    if (!copyreg_str) {
+        copyreg_str = PyGC_AddRoot(PyString_InternFromString("copy_reg"));
+        if (copyreg_str == NULL)
+            return NULL;
+    }
+
+    return PyImport_Import(copyreg_str);
+}
+
+static PyObject* slotnames(PyObject* cls) noexcept {
+    PyObject* clsdict;
+    PyObject* copyreg;
+    PyObject* slotnames;
+
+    if (!PyType_Check(cls)) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    clsdict = ((PyTypeObject*)cls)->tp_dict;
+    slotnames = PyDict_GetItemString(clsdict, "__slotnames__");
+    if (slotnames != NULL && PyList_Check(slotnames)) {
+        Py_INCREF(slotnames);
+        return slotnames;
+    }
+
+    copyreg = import_copyreg();
+    if (copyreg == NULL)
+        return NULL;
+
+    slotnames = PyObject_CallMethod(copyreg, "_slotnames", "O", cls);
+    Py_DECREF(copyreg);
+    if (slotnames != NULL && slotnames != Py_None && !PyList_Check(slotnames)) {
+        PyErr_SetString(PyExc_TypeError, "copy_reg._slotnames didn't return a list or None");
+        Py_DECREF(slotnames);
+        slotnames = NULL;
+    }
+
+    return slotnames;
+}
+
+static PyObject* reduce_2(PyObject* obj) noexcept {
+    PyObject* cls, *getnewargs;
+    PyObject* args = NULL, * args2 = NULL;
+    PyObject* getstate = NULL, * state = NULL, * names = NULL;
+    PyObject* slots = NULL, * listitems = NULL, * dictitems = NULL;
+    PyObject* copyreg = NULL, * newobj = NULL, * res = NULL;
+    Py_ssize_t i, n;
+
+    cls = PyObject_GetAttrString(obj, "__class__");
+    if (cls == NULL)
+        return NULL;
+
+    getnewargs = PyObject_GetAttrString(obj, "__getnewargs__");
+    if (getnewargs != NULL) {
+        args = PyObject_CallObject(getnewargs, NULL);
+        Py_DECREF(getnewargs);
+        if (args != NULL && !PyTuple_Check(args)) {
+            PyErr_Format(PyExc_TypeError, "__getnewargs__ should return a tuple, "
+                                          "not '%.200s'",
+                         Py_TYPE(args)->tp_name);
+            goto end;
+        }
+    } else {
+        PyErr_Clear();
+        args = PyTuple_New(0);
+    }
+    if (args == NULL)
+        goto end;
+
+    getstate = PyObject_GetAttrString(obj, "__getstate__");
+    if (getstate != NULL) {
+        state = PyObject_CallObject(getstate, NULL);
+        Py_DECREF(getstate);
+        if (state == NULL)
+            goto end;
+    } else {
+        PyErr_Clear();
+        state = PyObject_GetAttrString(obj, "__dict__");
+        if (state == NULL) {
+            PyErr_Clear();
+            state = Py_None;
+            Py_INCREF(state);
+        }
+        names = slotnames(cls);
+        if (names == NULL)
+            goto end;
+        if (names != Py_None) {
+            assert(PyList_Check(names));
+            slots = PyDict_New();
+            if (slots == NULL)
+                goto end;
+            n = 0;
+            /* Can't pre-compute the list size; the list
+               is stored on the class so accessible to other
+               threads, which may be run by DECREF */
+            for (i = 0; i < PyList_GET_SIZE(names); i++) {
+                PyObject* name, *value;
+                name = PyList_GET_ITEM(names, i);
+                value = PyObject_GetAttr(obj, name);
+                if (value == NULL)
+                    PyErr_Clear();
+                else {
+                    int err = PyDict_SetItem(slots, name, value);
+                    Py_DECREF(value);
+                    if (err)
+                        goto end;
+                    n++;
+                }
+            }
+            if (n) {
+                state = Py_BuildValue("(NO)", state, slots);
+                if (state == NULL)
+                    goto end;
+            }
+        }
+    }
+
+    if (!PyList_Check(obj)) {
+        listitems = Py_None;
+        Py_INCREF(listitems);
+    } else {
+        listitems = PyObject_GetIter(obj);
+        if (listitems == NULL)
+            goto end;
+    }
+
+    if (!PyDict_Check(obj)) {
+        dictitems = Py_None;
+        Py_INCREF(dictitems);
+    } else {
+        dictitems = PyObject_CallMethod(obj, "iteritems", "");
+        if (dictitems == NULL)
+            goto end;
+    }
+
+    copyreg = import_copyreg();
+    if (copyreg == NULL)
+        goto end;
+    newobj = PyObject_GetAttrString(copyreg, "__newobj__");
+    if (newobj == NULL)
+        goto end;
+
+    n = PyTuple_GET_SIZE(args);
+    args2 = PyTuple_New(n + 1);
+    if (args2 == NULL)
+        goto end;
+    PyTuple_SET_ITEM(args2, 0, cls);
+    cls = NULL;
+    for (i = 0; i < n; i++) {
+        PyObject* v = PyTuple_GET_ITEM(args, i);
+        Py_INCREF(v);
+        PyTuple_SET_ITEM(args2, i + 1, v);
+    }
+
+    res = PyTuple_Pack(5, newobj, args2, state, listitems, dictitems);
+
+end:
+    Py_XDECREF(cls);
+    Py_XDECREF(args);
+    Py_XDECREF(args2);
+    Py_XDECREF(slots);
+    Py_XDECREF(state);
+    Py_XDECREF(names);
+    Py_XDECREF(listitems);
+    Py_XDECREF(dictitems);
+    Py_XDECREF(copyreg);
+    Py_XDECREF(newobj);
+    return res;
+}
+
+static PyObject* _common_reduce(PyObject* self, int proto) noexcept {
+    PyObject* copyreg, *res;
+
+    if (proto >= 2)
+        return reduce_2(self);
+
+    copyreg = import_copyreg();
+    if (!copyreg)
+        return NULL;
+
+    res = PyEval_CallMethod(copyreg, "_reduce_ex", "(Oi)", self, proto);
+    Py_DECREF(copyreg);
+
+    return res;
+}
+
+static PyObject* object_reduce(PyObject* self, PyObject* args) noexcept {
+    int proto = 0;
+
+    if (!PyArg_ParseTuple(args, "|i:__reduce__", &proto))
+        return NULL;
+
+    return _common_reduce(self, proto);
+}
+
+static PyObject* object_reduce_ex(PyObject* self, PyObject* args) noexcept {
+    PyObject* reduce, *res;
+    int proto = 0;
+
+    if (!PyArg_ParseTuple(args, "|i:__reduce_ex__", &proto))
+        return NULL;
+
+    reduce = PyObject_GetAttrString(self, "__reduce__");
+    if (reduce == NULL)
+        PyErr_Clear();
+    else {
+        PyObject* cls, *clsreduce, *objreduce;
+        int override;
+        cls = PyObject_GetAttrString(self, "__class__");
+        if (cls == NULL) {
+            Py_DECREF(reduce);
+            return NULL;
+        }
+        clsreduce = PyObject_GetAttrString(cls, "__reduce__");
+        Py_DECREF(cls);
+        if (clsreduce == NULL) {
+            Py_DECREF(reduce);
+            return NULL;
+        }
+        objreduce = PyDict_GetItemString(PyBaseObject_Type.tp_dict, "__reduce__");
+        override = (clsreduce != objreduce);
+        Py_DECREF(clsreduce);
+        if (override) {
+            res = PyObject_CallObject(reduce, NULL);
+            Py_DECREF(reduce);
+            return res;
+        } else
+            Py_DECREF(reduce);
+    }
+
+    return _common_reduce(self, proto);
+}
+
+static Box* objectClass(Box* obj, void* context) {
+    assert(obj->cls != instance_cls); // should override __class__ in classobj
+    return obj->cls;
+}
+
+static void objectSetClass(Box* obj, Box* val, void* context) {
+    if (!isSubclass(val->cls, type_cls))
+        raiseExcHelper(TypeError, "__class__ must be set to new-style class, not '%s' object", val->cls->tp_name);
+
+    auto new_cls = static_cast<BoxedClass*>(val);
+
+    // Conservative Pyston checks: make sure that both classes are derived only from Pyston types,
+    // and that they don't define any extra C-level fields
+    RELEASE_ASSERT(val->cls == type_cls, "");
+    RELEASE_ASSERT(obj->cls->cls == type_cls, "");
+    for (auto _base : static_cast<BoxedTuple*>(obj->cls->tp_mro)->elts) {
+        BoxedClass* base = static_cast<BoxedClass*>(_base);
+        RELEASE_ASSERT(base->is_pyston_class, "");
+    }
+    for (auto _base : static_cast<BoxedTuple*>(new_cls->tp_mro)->elts) {
+        BoxedClass* base = static_cast<BoxedClass*>(_base);
+        RELEASE_ASSERT(base->is_pyston_class, "");
+    }
+
+    RELEASE_ASSERT(obj->cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
+    RELEASE_ASSERT(new_cls->tp_basicsize == object_cls->tp_basicsize + sizeof(HCAttrs) + sizeof(Box**), "");
+    RELEASE_ASSERT(obj->cls->attrs_offset != 0, "");
+    RELEASE_ASSERT(new_cls->attrs_offset != 0, "");
+    RELEASE_ASSERT(obj->cls->tp_weaklistoffset != 0, "");
+    RELEASE_ASSERT(new_cls->tp_weaklistoffset != 0, "");
+
+    // Normal Python checks.
+    // TODO there are more checks to add here, and they should throw errors not asserts
+    RELEASE_ASSERT(obj->cls->tp_basicsize == new_cls->tp_basicsize, "");
+    RELEASE_ASSERT(obj->cls->tp_dictoffset == new_cls->tp_dictoffset, "");
+    RELEASE_ASSERT(obj->cls->tp_weaklistoffset == new_cls->tp_weaklistoffset, "");
+    RELEASE_ASSERT(obj->cls->attrs_offset == new_cls->attrs_offset, "");
+
+    obj->cls = new_cls;
+}
+
+static PyMethodDef object_methods[] = {
+    { "__reduce_ex__", object_reduce_ex, METH_VARARGS, NULL }, //
+    { "__reduce__", object_reduce, METH_VARARGS, NULL },       //
+};
+
 static Box* typeName(Box* b, void*) {
     RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
     BoxedClass* type = static_cast<BoxedClass*>(b);
@@ -1276,6 +1595,18 @@ static void typeSetName(Box* b, Box* v, void*) {
     BoxedHeapClass* ht = static_cast<BoxedHeapClass*>(type);
     ht->ht_name = s;
     ht->tp_name = s->s.c_str();
+}
+
+static Box* typeBases(Box* b, void*) {
+    RELEASE_ASSERT(isSubclass(b->cls, type_cls), "");
+    BoxedClass* type = static_cast<BoxedClass*>(b);
+
+    assert(type->tp_bases);
+    return type->tp_bases;
+}
+
+static void typeSetBases(Box* b, Box* v, void*) {
+    Py_FatalError("unimplemented");
 }
 
 // cls should be obj->cls.
@@ -1377,13 +1708,21 @@ void setupRuntime() {
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+    pyston_getset_cls
+        = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
+    attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
+                                         new BoxedString("attrwrapper"));
+
 
     // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
     // than try to make the MRO construction code be safe against say, tuple_cls not having
     // an mro (since the mro is stored as a tuple).
+    object_cls->tp_mro = new BoxedTuple({ object_cls });
     tuple_cls->tp_mro = new BoxedTuple({ tuple_cls, object_cls });
     list_cls->tp_mro = new BoxedTuple({ list_cls, object_cls });
     type_cls->tp_mro = new BoxedTuple({ type_cls, object_cls });
+    pyston_getset_cls->tp_mro = new BoxedTuple({ pyston_getset_cls, object_cls });
+    attrwrapper_cls->tp_mro = new BoxedTuple({ attrwrapper_cls, object_cls });
 
     object_cls->finishInitialization();
     type_cls->finishInitialization();
@@ -1392,9 +1731,14 @@ void setupRuntime() {
     none_cls->finishInitialization();
     tuple_cls->finishInitialization();
     list_cls->finishInitialization();
+    pyston_getset_cls->finishInitialization();
+    attrwrapper_cls->finishInitialization();
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
+    dict_descr = new (pyston_getset_cls) BoxedGetsetDescriptor(typeDict, typeSetDict, NULL);
+    gc::registerPermanentRoot(dict_descr);
+    type_cls->giveAttr("__dict__", dict_descr);
 
 
     module_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, offsetof(BoxedModule, attrs), 0,
@@ -1434,8 +1778,6 @@ void setupRuntime() {
                                            sizeof(BoxedSet), false, "frozenset");
     member_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false, "member");
-    pyston_getset_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
     capi_getset_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
     closure_cls = BoxedHeapClass::create(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), 0,
@@ -1446,8 +1788,6 @@ void setupRuntime() {
                                               sizeof(BoxedStaticmethod), false, "staticmethod");
     classmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &classmethodGCHandler, 0, 0,
                                              sizeof(BoxedClassmethod), false, "classmethod");
-    attrwrapper_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper),
-                                             false, "attrwrapper");
     attrwrapperiter_cls = BoxedHeapClass::create(type_cls, object_cls, &AttrWrapperIter::gcHandler, 0, 0,
                                                  sizeof(AttrWrapperIter), false, "attrwrapperiter");
 
@@ -1474,12 +1814,12 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->freeze();
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
 
     type_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeName, typeSetName, NULL));
+    type_cls->giveAttr("__bases__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeBases, typeSetBases, NULL));
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
     type_cls->giveAttr("__new__",
@@ -1506,6 +1846,13 @@ void setupRuntime() {
 
     setupCAPI();
 
+    // Can't set up object methods until we set up CAPI support:
+    for (auto& md : object_methods) {
+        object_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, object_cls));
+    }
+    object_cls->giveAttr("__class__", new (pyston_getset_cls) BoxedGetsetDescriptor(objectClass, objectSetClass, NULL));
+    object_cls->freeze();
+
     setupBool();
     setupInt();
     setupLong();
@@ -1525,6 +1872,7 @@ void setupRuntime() {
     setupDescr();
     setupTraceback();
 
+    function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
@@ -1568,6 +1916,8 @@ void setupRuntime() {
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("setdefault",
+                              new BoxedFunction(boxRTFunction((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
         "get", new BoxedFunction(boxRTFunction((void*)AttrWrapper::get, UNKNOWN, 3, 1, false, false), { None }));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));
