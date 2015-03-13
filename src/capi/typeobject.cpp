@@ -16,6 +16,7 @@
 #include "capi/typeobject.h"
 
 #include "capi/types.h"
+#include "runtime/classobj.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
@@ -1607,11 +1608,8 @@ static int fill_classic_mro(PyObject* mro, PyObject* cls) {
         if (PyList_Append(mro, cls) < 0)
             return -1;
     }
-    Py_FatalError("unimplemented");
 
-// We should add multiple inheritance for old-style classes
-#if 0
-    bases = ((PyClassObject*)cls)->cl_bases;
+    bases = ((BoxedClassobj*)cls)->bases;
     assert(bases && PyTuple_Check(bases));
     n = PyTuple_GET_SIZE(bases);
     for (i = 0; i < n; i++) {
@@ -1620,7 +1618,6 @@ static int fill_classic_mro(PyObject* mro, PyObject* cls) {
             return -1;
     }
     return 0;
-#endif
 }
 
 static PyObject* classic_mro(PyObject* cls) {

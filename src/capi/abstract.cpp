@@ -1092,6 +1092,18 @@ Done:
     Py_DECREF(it);
     return n;
 }
+
+extern "C" int PySequence_Contains(PyObject* seq, PyObject* ob) noexcept {
+    Py_ssize_t result;
+    if (PyType_HasFeature(seq->cls, Py_TPFLAGS_HAVE_SEQUENCE_IN)) {
+        PySequenceMethods* sqm = seq->cls->tp_as_sequence;
+        if (sqm != NULL && sqm->sq_contains != NULL)
+            return (*sqm->sq_contains)(seq, ob);
+    }
+    result = _PySequence_IterSearch(seq, ob, PY_ITERSEARCH_CONTAINS);
+    return Py_SAFE_DOWNCAST(result, Py_ssize_t, int);
+}
+
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {
     va_list va;
     PyObject* args;
