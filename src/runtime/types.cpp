@@ -2025,6 +2025,15 @@ BoxedModule* createModule(const std::string& name, const std::string& fn) {
     d->d[b_name] = module;
 
     module->giveAttr("__doc__", None);
+
+    // not strictly correct, as the value of __dict__ is not a
+    // BoxedDict, and also doing it this way makes the following work
+    // in pyston but not cpython:
+    //
+    // import sys
+    // sys.__dict__['__dict__']
+    module->giveAttr("__dict__", makeAttrWrapper(module));
+
     return module;
 }
 
