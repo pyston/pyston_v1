@@ -66,6 +66,11 @@ Box* setiteratorNext(BoxedSetIterator* self) {
     return self->next();
 }
 
+Box* setiteratorIter(BoxedSetIterator* self) {
+    assert(self->cls == set_iterator_cls);
+    return self;
+}
+
 Box* setAdd2(Box* _self, Box* b) {
     assert(_self->cls == set_cls || _self->cls == frozenset_cls);
     BoxedSet* self = static_cast<BoxedSet*>(_self);
@@ -272,6 +277,8 @@ using namespace pyston::set;
 void setupSet() {
     set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, 0, sizeof(BoxedSet),
                                               false, "setiterator");
+    set_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
