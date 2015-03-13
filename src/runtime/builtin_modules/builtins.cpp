@@ -61,7 +61,6 @@ extern "C" Box* trap() {
 
     return None;
 }
-
 /* Helper for PyObject_Dir.
    Merge the __dict__ of aclass into dict, and recursively also all
    the __dict__s of aclass's base classes.  The order of merging isn't
