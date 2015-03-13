@@ -406,69 +406,42 @@ extern "C" Box* ord(Box* obj) {
                    size);
 }
 
-/**
- We must refactoring this function 'static int64_t asSignedLong(pyston::BoxedLong* self)'
- because It is duplicated in oher file 'long.cpp'
-**/
-static int64_t asSignedLong(BoxedLong* self) {
-    assert(self->cls == long_cls);
-    if (!mpz_fits_slong_p(self->n))
-        raiseExcHelper(OverflowError, "long int too large to convert to int");
-    return mpz_get_si(self->n);
-}
-/**
- Quick fix for support Long type, but we need to refactoring this function
-**/
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
         RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
 
         istart = 0;
-        if (isSubclass(start->cls, long_cls)) {
-            istop = asSignedLong((BoxedLong*)start);
-        } else {
-            istop = static_cast<BoxedInt*>(start)->n;
-        }
+
+        istop = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+
         istep = 1;
     } else if (step == NULL) {
         RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
         RELEASE_ASSERT((isSubclass(stop->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(stop));
 
-        if (isSubclass(start->cls, long_cls)) {
-            istart = asSignedLong((BoxedLong*)start);
-        } else {
-            istart = static_cast<BoxedInt*>(start)->n;
-        }
+        istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
 
-        if (isSubclass(stop->cls, long_cls)) {
-            istop = asSignedLong((BoxedLong*)stop);
-        } else {
-            istop = static_cast<BoxedInt*>(stop)->n;
-        }
+        istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
+
         istep = 1;
     } else {
         RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
         RELEASE_ASSERT((isSubclass(stop->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(stop));
         RELEASE_ASSERT((isSubclass(step->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(step));
 
-        if (isSubclass(start->cls, long_cls)) {
-            istart = asSignedLong((BoxedLong*)start);
-        } else {
-            istart = static_cast<BoxedInt*>(start)->n;
-        }
+        istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
 
-        if (isSubclass(stop->cls, long_cls)) {
-            istop = asSignedLong((BoxedLong*)stop);
-        } else {
-            istop = static_cast<BoxedInt*>(stop)->n;
-        }
+        istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
 
-        if (isSubclass(step->cls, long_cls)) {
-            istep = asSignedLong((BoxedLong*)step);
-        } else {
-            istep = static_cast<BoxedInt*>(step)->n;
-        }
+        istep = PyLong_AsLong(step);
+        checkAndThrowCAPIException();
+
         RELEASE_ASSERT(istep != 0, "step can't be 0");
     }
 
