@@ -1214,7 +1214,10 @@ extern "C" Box* strLen(BoxedString* self) {
 extern "C" Box* strStr(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    return self;
+    if (self->cls == str_cls)
+        return self;
+
+    return new BoxedString(self->s);
 }
 
 static bool _needs_escaping[256]
@@ -1488,7 +1491,7 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
     assert(isSubclass(cls, str_cls));
 
     Box* rtn = str(obj);
-    assert(rtn->cls == str_cls);
+    assert(isSubclass(rtn->cls, str_cls));
 
     if (cls == str_cls)
         return rtn;

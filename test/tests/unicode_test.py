@@ -99,3 +99,41 @@ print "hello world".rsplit(u'l')
 
 with open(u"/dev/null", u"r") as f:
     print f.read()
+
+class CustomRepr(object):
+    def __init__(self, x):
+        self.x = x
+
+    def __str__(self):
+        return self.x
+
+    def __repr__(self):
+        return self.x
+
+print repr(str(CustomRepr(u'')))
+print repr(repr(CustomRepr(u'')))
+
+try:
+    str(CustomRepr(u'\u0180'))
+except Exception as e:
+    print type(e), e
+try:
+    repr(CustomRepr(u'\u0180'))
+except Exception as e:
+    print type(e), e
+try:
+    str(CustomRepr(1))
+except Exception as e:
+    print type(e), e
+try:
+    repr(CustomRepr(1))
+except Exception as e:
+    print type(e), e
+
+class MyStr(str):
+    pass
+
+print type(str(CustomRepr(MyStr("hi"))))
+
+print type(MyStr("hi").__str__())
+print type(str(MyStr("hi")))
