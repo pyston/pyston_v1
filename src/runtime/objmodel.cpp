@@ -1727,9 +1727,7 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
             if (setattr->cls != wrapperdescr_cls
                 || ((BoxedWrapperDescriptor*)setattr)->wrapped != PyObject_GenericSetAttr) {
                 Box* boxstr = boxString(attr);
-                Box* rtn = callattrInternal2(obj, &setattr_str, CLASS_ONLY, NULL, ArgPassSpec(2), boxstr, val);
-                if (rtn == NULL)
-                    runtimeCall3(setattr, ArgPassSpec(3), obj, boxstr, val);
+                runtimeCallInternal(setattr, NULL, ArgPassSpec(3), obj, boxstr, val, NULL, NULL);
                 return;
             }
         }
