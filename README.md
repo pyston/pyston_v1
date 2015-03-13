@@ -91,7 +91,7 @@ There are a number of common flags you can pass to your make invocations:
 - `BR=breakpoint`: when running under gdb, automatically set a breakpoint at the given location.
 - `SELF_HOST=1`: run all of our Python scripts using pyston_dbg.
 
-For a full list, please check out the (Makefile)[https://github.com/dropbox/pyston/blob/master/src/Makefile].
+For a full list, please check out the (Makefile)[https://github.com/dropbox/pyston/blob/master/Makefile].
 
 #### Pyston command-line options:
 
