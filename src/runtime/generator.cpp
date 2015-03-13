@@ -176,8 +176,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
     : function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false), running(false),
       returnValue(nullptr), exception(nullptr, nullptr, nullptr), context(nullptr), returnContext(nullptr) {
 
-    giveAttr("__name__", boxString(function->f->source->getName()));
-
     int numArgs = function->f->num_args;
     if (numArgs > 3) {
         numArgs -= 3;
@@ -280,6 +278,13 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     }
 }
 
+Box* generatorName(Box* _self, void* context) {
+    assert(isSubclass(_self->cls, generator_cls));
+    BoxedGenerator* self = static_cast<BoxedGenerator*>(_self);
+
+    return boxString(self->function->f->source->getName());
+}
+
 void generatorDestructor(Box* b) {
     assert(isSubclass(b->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
@@ -299,8 +304,8 @@ void generatorDestructor(Box* b) {
 
 void setupGenerator() {
     generator_cls
-        = BoxedHeapClass::create(type_cls, object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
-                                 offsetof(BoxedGenerator, weakreflist), sizeof(BoxedGenerator), false, "generator");
+        = BoxedHeapClass::create(type_cls, object_cls, &generatorGCHandler, 0, offsetof(BoxedGenerator, weakreflist),
+                                 sizeof(BoxedGenerator), false, "generator");
     generator_cls->simple_destructor = generatorDestructor;
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
@@ -309,6 +314,8 @@ void setupGenerator() {
     generator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)generatorNext, UNKNOWN, 1)));
     generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend, UNKNOWN, 2)));
     generator_cls->giveAttr("throw", new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 2)));
+
+    generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));
 
     generator_cls->freeze();
 }

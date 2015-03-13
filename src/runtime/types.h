@@ -430,7 +430,6 @@ class BoxedFunctionBase : public Box {
 public:
     Box** in_weakreflist;
 
-    HCAttrs attrs;
     CLFunction* f;
     BoxedClosure* closure;
 
@@ -451,6 +450,8 @@ public:
 
 class BoxedFunction : public BoxedFunctionBase {
 public:
+    HCAttrs attrs;
+
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   bool isGenerator = false);
@@ -580,8 +581,6 @@ public:
 
 class BoxedGenerator : public Box {
 public:
-    HCAttrs attrs;
-
     Box** weakreflist;
 
     BoxedFunctionBase* function;
