@@ -409,40 +409,23 @@ extern "C" Box* ord(Box* obj) {
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
-        RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
-
         istart = 0;
-
         istop = PyLong_AsLong(start);
         checkAndThrowCAPIException();
-
         istep = 1;
     } else if (step == NULL) {
-        RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
-        RELEASE_ASSERT((isSubclass(stop->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(stop));
-
         istart = PyLong_AsLong(start);
         checkAndThrowCAPIException();
-
         istop = PyLong_AsLong(stop);
         checkAndThrowCAPIException();
-
         istep = 1;
     } else {
-        RELEASE_ASSERT((isSubclass(start->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(start));
-        RELEASE_ASSERT((isSubclass(stop->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(stop));
-        RELEASE_ASSERT((isSubclass(step->cls, int_cls) || isSubclass(start->cls, long_cls)), "%s", getTypeName(step));
-
         istart = PyLong_AsLong(start);
         checkAndThrowCAPIException();
-
         istop = PyLong_AsLong(stop);
         checkAndThrowCAPIException();
-
         istep = PyLong_AsLong(step);
         checkAndThrowCAPIException();
-
-        RELEASE_ASSERT(istep != 0, "step can't be 0");
     }
 
     BoxedList* rtn = new BoxedList();
