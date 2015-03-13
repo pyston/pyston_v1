@@ -810,6 +810,9 @@ def getargspec(func):
     'defaults' is an n-tuple of the default values of the last n arguments.
     """
 
+    # Pyston change:
+    return ArgSpec((), "args", "kw", ())
+
     if ismethod(func):
         func = func.im_func
     if not isfunction(func):

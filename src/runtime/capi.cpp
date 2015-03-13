@@ -373,30 +373,6 @@ extern "C" int PyObject_Not(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
-    PyObject* result;
-
-    if (arg == NULL) {
-        arg = PyTuple_New(0);
-        if (arg == NULL)
-            return NULL;
-    } else if (!PyTuple_Check(arg)) {
-        PyErr_SetString(PyExc_TypeError, "argument list must be a tuple");
-        return NULL;
-    } else
-        Py_INCREF(arg);
-
-    if (kw != NULL && !PyDict_Check(kw)) {
-        PyErr_SetString(PyExc_TypeError, "keyword list must be a dictionary");
-        Py_DECREF(arg);
-        return NULL;
-    }
-
-    result = PyObject_Call(func, arg, kw);
-    Py_DECREF(arg);
-    return result;
-}
-
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
     try {
         if (kw)

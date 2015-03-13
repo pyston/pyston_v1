@@ -34,3 +34,12 @@ else:
 for i in xrange(5):
     print i
     break
+
+def f():
+    for i in xrange(5):
+        if i == 10:
+            return 2
+    else:
+        return 5
+
+f()

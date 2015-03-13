@@ -202,6 +202,13 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         printf("%s\n", ss.str().c_str());
     }
 
+#ifndef NDEBUG
+    if (effort == EffortLevel::INTERPRETED) {
+        for (auto arg_type : spec->arg_types)
+            assert(arg_type == UNKNOWN);
+    }
+#endif
+
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
         source->cfg = computeCFG(source, source->body);

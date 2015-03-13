@@ -383,6 +383,9 @@ void BoxedClass::finishInitialization() {
         tp_clear = tp_base->tp_clear;
     }
 
+    assert(!this->tp_dict);
+    this->tp_dict = makeAttrWrapper(this);
+
     commonClassSetup(this);
 }
 
@@ -1523,16 +1526,6 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
     static StatCounter slowpath_getattr("slowpath_getattr");
     slowpath_getattr.log();
 
-    bool is_dunder = (attr[0] == '_' && attr[1] == '_');
-
-    if (is_dunder) {
-        if (strcmp(attr, "__dict__") == 0) {
-            // TODO this is wrong, should be added at the class level as a getset
-            if (obj->cls->instancesHaveHCAttrs())
-                return makeAttrWrapper(obj);
-        }
-    }
-
     if (VERBOSITY() >= 2) {
 #if !DISABLE_STATS
         std::string per_name_stat_name = "getattr__" + std::string(attr);
@@ -1576,21 +1569,6 @@ extern "C" Box* getattr(Box* obj, const char* attr) {
 
     if (val) {
         return val;
-    }
-
-    if (is_dunder) {
-        // There's more to it than this:
-        if (strcmp(attr, "__class__") == 0) {
-            assert(obj->cls != instance_cls); // I think in this case __class__ is supposed to be the classobj?
-            return obj->cls;
-        }
-
-        // This doesn't belong here either:
-        if (strcmp(attr, "__bases__") == 0 && isSubclass(obj->cls, type_cls)) {
-            BoxedClass* cls = static_cast<BoxedClass*>(obj);
-            assert(cls->tp_bases);
-            return cls->tp_bases;
-        }
     }
 
     raiseAttributeError(obj, attr);
@@ -1650,6 +1628,13 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 
 void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
+
+    if (obj->cls == type_cls) {
+        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
+        if (!isUserDefined(cobj)) {
+            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
+        }
+    }
 
     // Lookup a descriptor
     Box* descr = NULL;
@@ -1744,17 +1729,8 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
 }
 
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
-    assert(strcmp(attr, "__class__") != 0);
-
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
-
-    if (obj->cls == type_cls) {
-        BoxedClass* cobj = static_cast<BoxedClass*>(obj);
-        if (!isUserDefined(cobj)) {
-            raiseExcHelper(TypeError, "can't set attributes of built-in/extension type '%s'", getNameOfClass(cobj));
-        }
-    }
 
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
@@ -2433,16 +2409,20 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
             abort();
         }
 
+        EffortLevel new_effort = initialEffort();
+
         std::vector<ConcreteCompilerType*> arg_types;
         for (int i = 0; i < num_output_args; i++) {
-            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-            assert(arg); // only builtin functions can pass NULL args
+            if (new_effort == EffortLevel::INTERPRETED) {
+                arg_types.push_back(UNKNOWN);
+            } else {
+                Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+                assert(arg); // only builtin functions can pass NULL args
 
-            arg_types.push_back(typeFromClass(arg->cls));
+                arg_types.push_back(typeFromClass(arg->cls));
+            }
         }
         FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-        EffortLevel new_effort = initialEffort();
 
         // this also pushes the new CompiledVersion to the back of the version list:
         chosen_cf = compileFunction(f, spec, new_effort, NULL);
@@ -3728,6 +3708,9 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 
     // TODO: how much of these should be in BoxedClass::finishInitialization()?
     made->tp_dictoffset = base->tp_dictoffset;
+
+    if (!made->getattr("__dict__") && (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()))
+        made->giveAttr("__dict__", dict_descr);
 
     for (const auto& p : attr_dict->d) {
         auto k = coerceUnicodeToStr(p.first);

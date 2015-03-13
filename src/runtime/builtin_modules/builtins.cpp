@@ -495,8 +495,8 @@ Box* issubclass_func(Box* child, Box* parent) {
         return boxBool(classobjIssubclass(static_cast<BoxedClassobj*>(child), static_cast<BoxedClassobj*>(parent)));
     }
 
-    assert(isSubclass(child->cls, type_cls));
-    if (parent->cls != type_cls)
+    RELEASE_ASSERT(isSubclass(child->cls, type_cls), "");
+    if (!isSubclass(parent->cls, type_cls))
         return False;
 
     return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));

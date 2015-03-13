@@ -213,3 +213,11 @@ print list(d.viewvalues())
 print list(d.viewitems())
 print 'keys of d: ', keys
 print 'viewkeys of d: ', list(viewkeys)
+
+print {} == {}
+d1 = {}
+d2 = {}
+for i in xrange(6):
+    d1[i] = 5 - i
+    d2[5 - i] = i
+    print d1 == d2, d1 != d2
