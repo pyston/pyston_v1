@@ -100,3 +100,5 @@ print repr(b'1234')
 print callable(1)
 print callable(int)
 print callable(lambda: 1)
+
+print range(5L, 7L)
