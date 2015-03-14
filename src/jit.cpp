@@ -18,10 +18,10 @@
 #include <cstdlib>
 #include <readline/history.h>
 #include <readline/readline.h>
+#include <signal.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <signal.h>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
