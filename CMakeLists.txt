@@ -114,6 +114,9 @@ ExternalProject_Add(libunwind
 add_subdirectory(libpypa)
 add_dependencies(pypa gitsubmodules)
 
+# CPack
+include(cmake/Deploy.cmake)
+
 # valgrind
 if(ENABLE_VALGRIND)
   find_package(Valgrind REQUIRED)
