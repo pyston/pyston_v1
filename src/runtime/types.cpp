@@ -74,6 +74,7 @@ extern "C" void init_io();
 extern "C" void initzipimport();
 extern "C" void init_csv();
 extern "C" void init_ssl();
+extern "C" void init_sqlite3();
 
 namespace pyston {
 
@@ -1985,6 +1986,7 @@ void setupRuntime() {
     initzipimport();
     init_csv();
     init_ssl();
+    init_sqlite3();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
