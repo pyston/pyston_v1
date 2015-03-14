@@ -82,6 +82,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     weakrefobject.c
     memoryobject.c
     iterobject.c
+    bufferobject.c
     )
 
 # compile specified files in from_cpython/Python
