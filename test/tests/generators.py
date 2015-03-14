@@ -3,9 +3,10 @@ def G1(i=0):
         yield i
         i += i
 
-g1 = G1();
+g1 = G1()
 for i in range(5):
     print g1.next()
+print g1.__name__
 
 
 

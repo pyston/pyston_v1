@@ -293,6 +293,11 @@ void BoxedClass::freeze() {
 
     fixup_slot_dispatchers(this);
 
+    if (instancesHaveDictAttrs() || instancesHaveHCAttrs())
+        ASSERT(this == closure_cls || this == classobj_cls || this == instance_cls
+                   || typeLookup(this, "__dict__", NULL),
+               "%s", tp_name);
+
     is_constant = true;
 }
 
