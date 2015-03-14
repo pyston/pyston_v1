@@ -28,6 +28,7 @@
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
+#include <llvm/ADT/SmallVector.h>
 #ifndef NVALGRIND
 #include "valgrind.h"
 #endif
@@ -35,16 +36,17 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+#define MAXFREECHUNKS 50
 namespace pyston {
 namespace gc {
 
 class TraceStack {
 private:
     const int CHUNK_SIZE = 256;
-    const int MAX_FREE_CHUNKS = 50;
+    const int MAX_FREE_CHUNKS = MAXFREECHUNKS;
 
     std::vector<void**> chunks;
-    static std::vector<void**> free_chunks;
+    static llvm::SmallVector<void**, MAXFREECHUNKS> free_chunks;
 
     void** cur;
     void** start;
@@ -116,7 +118,7 @@ public:
         return pop_chunk_and_item();
     }
 };
-std::vector<void**> TraceStack::free_chunks;
+llvm::SmallVector<void**, MAXFREECHUNKS> TraceStack::free_chunks;
 
 
 static std::unordered_set<void*> roots;

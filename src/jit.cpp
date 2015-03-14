@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <unistd.h>
-
+#include <signal.h>
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Path.h"
@@ -69,6 +69,15 @@ static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
     return false;
 }
 
+/**
+  function that in order to avoid die with SIGINT
+**/
+static void sig_int(int sig_no) {
+    sigset_t sigset, oldset;
+    sigfillset(&sigset);
+    sigprocmask(SIG_BLOCK, &sigset, &oldset);
+    printf("\nKeyboardInterrupt");
+}
 static int main(int argc, char** argv) {
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
@@ -218,7 +227,7 @@ static int main(int argc, char** argv) {
         } else {
             main_module->fn = "<stdin>";
         }
-
+        signal(SIGINT, sig_int);
         for (;;) {
             char* line = readline(">> ");
             if (!line)
