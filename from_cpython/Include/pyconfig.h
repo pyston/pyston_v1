@@ -54,6 +54,7 @@
 #define HAVE_SOCKADDR_STORAGE 1
 #define HAVE_SOCKETPAIR 1
 #define HAVE_GETPEERNAME 1
+#define HAVE_TIMES 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"
