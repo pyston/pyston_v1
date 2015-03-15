@@ -124,6 +124,9 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'l':
                 return PyInt_FromLong(va_arg(*p_va, long));
 
+            case 'd':
+                return PyFloat_FromDouble(va_arg(*p_va, double));
+
             case 'N':
             case 'S':
             case 'O':
