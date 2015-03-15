@@ -380,7 +380,7 @@ extern "C" PyObject* Py_BuildValue(const char* fmt, ...) noexcept {
 
 extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
                                     int apiver) noexcept {
-    BoxedModule* module = createModule(name, "__builtin__");
+    BoxedModule* module = createModule(name, "__builtin__", doc);
 
     // Pass self as is, even if NULL we are not allowed to change it to None
     Box* passthrough = static_cast<Box*>(self);
@@ -394,10 +394,6 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
                          new BoxedCApiFunction(methods->ml_flags, passthrough, methods->ml_name, methods->ml_meth));
 
         methods++;
-    }
-
-    if (doc) {
-        module->setattr("__doc__", boxStrConstant(doc), NULL);
     }
 
     return module;

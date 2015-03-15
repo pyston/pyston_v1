@@ -442,6 +442,7 @@ public:
     // Accessed via member descriptor
     Box* modname;      // __module__
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
+    Box* doc;          // __doc__
 
     BoxedFunctionBase(CLFunction* f);
     BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
@@ -461,9 +462,9 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name);
+    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc = NULL);
     BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
-                                 BoxedClosure* closure = NULL, bool isGenerator = false);
+                                 BoxedClosure* closure = NULL, bool isGenerator = false, const char* doc = NULL);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
 };
@@ -476,7 +477,7 @@ public:
     std::string fn;
     FutureFlags future_flags;
 
-    BoxedModule(const std::string& name, const std::string& fn);
+    BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
     std::string name();
 
     DEFAULT_CLASS(module_cls);

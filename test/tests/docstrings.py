@@ -2,6 +2,19 @@ print __doc__
 __doc__ = "module_doc"
 print __doc__
 
+import test_package
+print test_package.__doc__
+test_package.__doc__ = "changeable module docs"
+print test_package.__doc__
+
+def foo():
+    """ foo docs go here """
+    pass
+
+print foo.__doc__
+foo.__doc__ = "no they don't"
+print foo.__doc__
+
 class C1(object):
     print 1, __doc__
     "hello world"

@@ -261,6 +261,8 @@ public:
     const std::string getName();
     InternedString mangleName(InternedString id);
 
+    Box* getDocString();
+
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
 };
 
@@ -515,7 +517,7 @@ class BoxedClass;
 void setupRuntime();
 void teardownRuntime();
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn);
-BoxedModule* createModule(const std::string& name, const std::string& fn);
+BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc = NULL);
 
 // TODO where to put this
 void appendToSysPath(const std::string& path);
