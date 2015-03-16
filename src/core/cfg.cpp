@@ -1837,9 +1837,14 @@ public:
             jend->target = end;
             curblock->connectTo(end);
         }
-        curblock = end;
 
-        cfg->placeBlock(end);
+        if (end->predecessors.size() == 0) {
+            delete end;
+            curblock = NULL;
+        } else {
+            curblock = end;
+            cfg->placeBlock(end);
+        }
 
         return true;
     }
