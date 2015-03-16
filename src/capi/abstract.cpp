@@ -1153,7 +1153,7 @@ extern "C" int PyNumber_Check(PyObject* obj) noexcept {
     assert(obj && obj->cls);
 
     // Our check, since we don't currently fill in tp_as_number:
-    if (isSubclass(obj->cls, int_cls) || isSubclass(obj->cls, long_cls))
+    if (isSubclass(obj->cls, int_cls) || isSubclass(obj->cls, long_cls) || isSubclass(obj->cls, float_cls))
         return true;
 
     // The CPython check:
@@ -1329,6 +1329,47 @@ extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) noexcept {
     Py_FatalError("unimplemented");
 }
 
+extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const char* error_format) noexcept {
+    const char* type_name;
+    static PyObject* int_name = NULL;
+    if (int_name == NULL) {
+        int_name = PyString_InternFromString("__int__");
+        if (int_name == NULL)
+            return NULL;
+    }
+
+    if (integral && (!PyInt_Check(integral) && !PyLong_Check(integral))) {
+        /* Don't go through tp_as_number->nb_int to avoid
+           hitting the classic class fallback to __trunc__. */
+        PyObject* int_func = PyObject_GetAttr(integral, int_name);
+        if (int_func == NULL) {
+            PyErr_Clear(); /* Raise a different error. */
+            goto non_integral_error;
+        }
+        Py_DECREF(integral);
+        integral = PyEval_CallObject(int_func, NULL);
+        Py_DECREF(int_func);
+        if (integral && (!PyInt_Check(integral) && !PyLong_Check(integral))) {
+            goto non_integral_error;
+        }
+    }
+    return integral;
+
+non_integral_error:
+    if (PyInstance_Check(integral)) {
+        Py_FatalError("unimplemented");
+        /* cpython has this:
+        type_name = PyString_AS_STRING(((PyInstanceObject *)integral)
+                                       ->in_class->cl_name);
+        */
+    } else {
+        type_name = integral->cls->tp_name;
+    }
+    PyErr_Format(PyExc_TypeError, error_format, type_name);
+    Py_DECREF(integral);
+    return NULL;
+}
+
 extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
     PyNumberMethods* m;
     const char* buffer;
@@ -1358,21 +1399,20 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
         return PyInt_FromLong(io->n);
     }
 
-    Py_FatalError("unimplemented __trunc__ and string -> int conversion");
-// the remainder of PyNumber_Int deals with __trunc__ usage, and converting from unicode/string to int
-#if 0
     PyObject* trunc_func = getattr(o, "__trunc__");
     if (trunc_func) {
-      PyObject *truncated = PyEval_CallObject(trunc_func, NULL);
-      Py_DECREF(trunc_func);
-      /* __trunc__ is specified to return an Integral type, but
-     int() needs to return an int. */
-      return _PyNumber_ConvertIntegralToInt(
-                      truncated,
-                      "__trunc__ returned non-Integral (type %.200s)");
-    }
-    PyErr_Clear();  /* It's not an error if  o.__trunc__ doesn't exist. */
+        PyObject* truncated = PyEval_CallObject(trunc_func, NULL);
+        Py_DECREF(trunc_func);
+        /* __trunc__ is specified to return an Integral type, but
+       int() needs to return an int. */
 
+        return _PyNumber_ConvertIntegralToInt(truncated, "__trunc__ returned non-Integral (type %.200s)");
+    }
+    PyErr_Clear(); /* It's not an error if  o.__trunc__ doesn't exist. */
+
+    // the remainder of PyNumber_Int deals with converting from unicode/string to int
+    Py_FatalError("unimplemented string -> int conversion");
+#if 0
     if (PyString_Check(o))
       return int_from_string(PyString_AS_STRING(o),
                  PyString_GET_SIZE(o));
