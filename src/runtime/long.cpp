@@ -1035,6 +1035,14 @@ Box* longHash(BoxedLong* self) {
     return boxInt(n);
 }
 
+extern "C" Box* longTrunc(BoxedLong* self) {
+    if (!isSubclass(self->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'long' object but received a '%s'",
+                       getTypeName(self));
+
+    return self;
+}
+
 void* customised_allocation(size_t alloc_size) {
     return gc::gc_alloc(alloc_size, gc::GCKind::CONSERVATIVE);
 }
@@ -1096,6 +1104,8 @@ void setupLong() {
     long_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)longNeg, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
+
+    long_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)longTrunc, UNKNOWN, 1)));
 
     long_cls->freeze();
 }
