@@ -35,9 +35,11 @@
 #include "runtime/types.h"
 #include "runtime/util.h"
 
+extern "C" PyObject* string_count(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_split(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
 
@@ -2080,8 +2082,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (error_str && error_str->cls != str_cls)
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
-    Box* result
-        = PyCodec_Encode(self, encoding_str ? encoding_str->s.c_str() : NULL, error_str ? error_str->s.c_str() : NULL);
+    Box* result = PyCodec_Encode(self, encoding_str ? encoding_str->s.c_str() : PyUnicode_GetDefaultEncoding(),
+                                 error_str ? error_str->s.c_str() : NULL);
     checkAndThrowCAPIException();
     return result;
 }
@@ -2158,48 +2160,6 @@ extern "C" void strIteratorGCHandler(GCVisitor* v, Box* b) {
 Box* strIter(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
     return new BoxedStringIterator(self);
-}
-
-int64_t strCount2Unboxed(BoxedString* self, Box* elt) {
-    assert(isSubclass(self->cls, str_cls));
-
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
-    const std::string& s = self->s;
-    const std::string& pattern = static_cast<BoxedString*>(elt)->s;
-
-    int found = 0;
-    size_t start = 0;
-    while (start < s.size()) {
-        size_t next = s.find(pattern, start);
-        if (next == std::string::npos)
-            break;
-
-        found++;
-        start = next + pattern.size();
-    }
-    return found;
-}
-
-Box* strCount2(BoxedString* self, Box* elt) {
-    return boxInt(strCount2Unboxed(self, elt));
-}
-
-Box* strIndex(BoxedString* self, Box* elt) {
-    assert(isSubclass(self->cls, str_cls));
-
-    if (elt->cls != str_cls)
-        raiseExcHelper(TypeError, "expected a character buffer object");
-
-    const std::string& s = self->s;
-    const std::string& pattern = static_cast<BoxedString*>(elt)->s;
-
-    size_t idx = s.find(pattern, 0);
-    if (idx == std::string::npos)
-        raiseExcHelper(ValueError, "substring not found");
-
-    return boxInt(idx);
 }
 
 extern "C" PyObject* PyString_FromString(const char* s) noexcept {
@@ -2434,9 +2394,11 @@ void strDestructor(Box* b) {
 }
 
 static PyMethodDef string_methods[] = {
+    { "count", (PyCFunction)string_count, METH_VARARGS, NULL },
     { "split", (PyCFunction)string_split, METH_VARARGS, NULL },
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
     { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
+    { "index", (PyCFunction)string_index, METH_VARARGS, NULL },
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
@@ -2533,11 +2495,6 @@ void setupStr() {
     for (auto& md : string_methods) {
         str_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, str_cls));
     }
-
-    CLFunction* count = boxRTFunction((void*)strCount2Unboxed, INT, 2);
-    addRTFunction(count, (void*)strCount2, BOXED_INT);
-    str_cls->giveAttr("count", new BoxedFunction(count));
-    str_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)strIndex, BOXED_INT, 2)));
 
     str_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)strNew, UNKNOWN, 2, 1, false, false),
                                                    { boxStrConstant("") }));
