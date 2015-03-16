@@ -586,7 +586,9 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
             }
 
             for (const auto& p : cf->location_map->names) {
-                if (p.first[0] == '!')
+                if (p.first[0] == '!' && (only_user_visible
+                                          || !(p.first == PASSED_GENERATOR_NAME || p.first == PASSED_CLOSURE_NAME
+                                               || p.first == CREATED_CLOSURE_NAME)))
                     continue;
 
                 if (only_user_visible && p.first[0] == '#')
