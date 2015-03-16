@@ -49,7 +49,12 @@ except IOError as e:
    print str(e)
 
 f = open("/dev/null", "w")
+print f.tell()
 print f.write("hello world")
 f.softspace = 0
+print f.tell()
+print f.seek(0)
+print f.write("H")
+print f.tell()
 print f.flush()
 print f.close()
