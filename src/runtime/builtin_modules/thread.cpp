@@ -175,7 +175,12 @@ public:
         Box* tls_obj = getThreadLocalObject(obj);
         if (!strcmp(name, "__dict__"))
             return tls_obj;
-        return getitem(tls_obj, boxString(name));
+
+        try {
+            return getitem(tls_obj, boxString(name));
+        } catch (ExcInfo e) {
+            raiseExcHelper(AttributeError, "'%.50s' object has no attribute '%.400s'", obj->cls->tp_name, name);
+        }
     }
 
     static Box* hash(Box* obj) { return boxInt(PyThread_get_thread_ident()); }

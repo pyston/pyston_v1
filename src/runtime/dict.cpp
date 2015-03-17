@@ -232,9 +232,11 @@ extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
     try {
         return getitem(dict, key);
     } catch (ExcInfo e) {
-        if (e.matches(KeyError))
-            return NULL;
-        abort();
+        // PyDict_GetItem has special error behavior in CPython for backwards-compatibility reasons,
+        // and apparently it's important enough that we have to follow that.
+        // The behavior is that all errors get suppressed, and in fact I think it's supposed to
+        // restore the previous exception afterwards (we don't do that yet).
+        return NULL;
     }
 }
 

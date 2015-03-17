@@ -12,3 +12,4 @@ thread.start()
 thread.join()
 
 print a.x
+print getattr(a, "doesnt_exist", 5)
