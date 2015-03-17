@@ -411,11 +411,7 @@ Box* dictNonzero(BoxedDict* self) {
     return boxBool(self->d.size());
 }
 
-Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
-    if (!isSubclass(self->cls, dict_cls))
-        raiseExcHelper(TypeError, "descriptor 'fromkeys' requires a 'dict' object but received a '%s'",
-                       getTypeName(self));
-
+Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
     auto rtn = new BoxedDict();
     for (Box* e : iterable->pyElements()) {
         dictSetitem(rtn, e, default_value);
@@ -640,8 +636,6 @@ void setupDict() {
     dict_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)dictCopy, DICT, 1)));
 
     dict_cls->giveAttr("has_key", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
-    dict_cls->giveAttr("fromkeys",
-                       new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None }));
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1)));
     dict_cls->giveAttr("iteritems",
                        new BoxedFunction(boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1)));
@@ -656,6 +650,8 @@ void setupDict() {
     dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
     dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));
 
+    auto* fromkeys_func = new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None });
+    dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func));
 
     dict_cls->giveAttr("viewkeys", new BoxedFunction(boxRTFunction((void*)dictViewKeys, UNKNOWN, 1)));
     dict_cls->giveAttr("viewvalues", new BoxedFunction(boxRTFunction((void*)dictViewValues, UNKNOWN, 1)));
