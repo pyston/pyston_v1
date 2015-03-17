@@ -234,14 +234,13 @@ Box* instanceRepr(Box* _inst) {
     }
 }
 
-Box* instanceEq(Box* _inst, Box* other)
-{
-   RELEASE_ASSERT(_inst->cls == instance_cls,"");
-   RELEASE_ASSERT(other->cls == instance_cls, "");
+Box* instanceEq(Box* _inst, Box* other) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    RELEASE_ASSERT(other->cls == instance_cls, "");
 
-   BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
-   Box* eq_func =  _instanceGetattribute(inst, boxStrConstant("__eq__"), true);
-   return runtimeCall(eq_func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+    Box* eq_func = _instanceGetattribute(inst, boxStrConstant("__eq__"), true);
+    return runtimeCall(eq_func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
 }
 
 Box* instanceStr(Box* _inst) {
