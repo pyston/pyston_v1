@@ -248,9 +248,22 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
 
         assert(pp->numICStackmapArgs() == 0); // don't do anything with these for now
 
-        std::unique_ptr<ICInfo> icinfo = registerCompiledPatchpoint(
-            start_addr, slowpath_start, end_addr, slowpath_rtn_addr, ic,
-            StackInfo({ stack_size, scratch_size, scratch_rbp_offset }), std::move(live_outs));
+        // We currently specify the scratch's location as an RSP offset, but LLVM gives it
+        // to us as an RBP offset.  It's easy to convert between them if the function has a static
+        // stack size, but if the function doesn't have a fixed stack size (which happens if there
+        // is a non-static alloca), then we can't convert.
+        // Internally, it's easy enough to handle either rsp-relative or rbp-relative offsets
+        // for the scratch array, but there are some places that require the use of rsp-relative
+        // offsets, and we don't (yet) have the ability to specify on a per-patchpoint basis
+        // which one we want to use.
+        RELEASE_ASSERT(stack_size >= 0, "function does not have static stack size!");
+
+        // (rbp - rsp) == (stack_size - 8)  -- the "-8" is from the value of rbp being pushed onto the stack
+        int scratch_rsp_offset = scratch_rbp_offset + (stack_size - 8);
+
+        std::unique_ptr<ICInfo> icinfo
+            = registerCompiledPatchpoint(start_addr, slowpath_start, end_addr, slowpath_rtn_addr, ic,
+                                         StackInfo(scratch_size, scratch_rsp_offset), std::move(live_outs));
 
         assert(cf);
         // TODO: unsafe.  hard to use a unique_ptr here though.

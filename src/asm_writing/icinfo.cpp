@@ -95,18 +95,21 @@ void ICSlotRewrite::commit(CommitHook* hook) {
     if (ic_entry == NULL)
         return;
 
+    uint8_t* slot_start = (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
+    uint8_t* continue_point = (uint8_t*)ic->continue_addr;
+
+    bool do_commit = hook->finishAssembly(ic_entry, continue_point - slot_start);
+
+    if (!do_commit)
+        return;
+
+    assert(assembler->isExactlyFull());
+    assert(!assembler->hasFailed());
+
     for (int i = 0; i < dependencies.size(); i++) {
         ICInvalidator* invalidator = dependencies[i].first;
         invalidator->addDependent(ic_entry);
     }
-
-    uint8_t* slot_start = (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
-    uint8_t* continue_point = (uint8_t*)ic->continue_addr;
-
-    hook->finishAssembly(ic_entry, continue_point - slot_start);
-
-    assert(assembler->isExactlyFull());
-    assert(!assembler->hasFailed());
 
     // if (VERBOSITY()) printf("Commiting to %p-%p\n", start, start + ic->slot_size);
     memcpy(slot_start, buf, ic->getSlotSize());
@@ -129,18 +132,13 @@ int ICSlotRewrite::getSlotSize() {
     return ic->getSlotSize();
 }
 
-int ICSlotRewrite::getFuncStackSize() {
-    return ic->stack_info.stack_size;
+int ICSlotRewrite::getScratchRspOffset() {
+    assert(ic->stack_info.scratch_size);
+    return ic->stack_info.scratch_rsp_offset;
 }
 
-int ICSlotRewrite::getScratchRbpOffset() {
-    assert(ic->stack_info.scratch_bytes);
-    return ic->stack_info.scratch_rbp_offset;
-}
-
-int ICSlotRewrite::getScratchBytes() {
-    assert(ic->stack_info.scratch_bytes);
-    return ic->stack_info.scratch_bytes;
+int ICSlotRewrite::getScratchSize() {
+    return ic->stack_info.scratch_size;
 }
 
 TypeRecorder* ICSlotRewrite::getTypeRecorder() {

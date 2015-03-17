@@ -1810,7 +1810,7 @@ private:
             // Maybe if there are a ton of live variables it'd be nice to have them be
             // heap-allocated, or if we don't immediately return the result of the OSR?
             bool use_malloc = false;
-            if (false) {
+            if (use_malloc) {
                 llvm::Value* n_bytes = getConstantInt((sorted_symbol_table.size() - 3) * sizeof(Box*), g.i64);
                 llvm::Value* l_malloc = embedConstantPtr(
                     (void*)malloc, llvm::FunctionType::get(g.i8->getPointerTo(), g.i64, false)->getPointerTo());
@@ -1818,7 +1818,10 @@ private:
                 arg_array = emitter.getBuilder()->CreateBitCast(malloc_save, g.llvm_value_type_ptr->getPointerTo());
             } else {
                 llvm::Value* n_varargs = llvm::ConstantInt::get(g.i64, sorted_symbol_table.size() - 3, false);
-                arg_array = emitter.getBuilder()->CreateAlloca(g.llvm_value_type_ptr, n_varargs);
+                // TODO we have a number of allocas with non-overlapping lifetimes, that end up
+                // being redundant.
+                arg_array = new llvm::AllocaInst(g.llvm_value_type_ptr, n_varargs, "",
+                                                 irstate->getLLVMFunction()->getEntryBlock().getFirstInsertionPt());
             }
         }
 

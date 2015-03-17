@@ -20,6 +20,8 @@ for i in xrange(400):
         while nworkers >= MAX_WORKERS:
             cv.wait()
 
+        nworkers += 1
+
     t = threading.Thread(target=worker)
     t.start()
     threads.append(t)

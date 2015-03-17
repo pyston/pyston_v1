@@ -522,8 +522,9 @@ ExcInfo* getFrameExcInfo() {
         *copy_from_exc = ExcInfo(None, None, None);
     }
 
-    assert(copy_from_exc->value);
-    assert(copy_from_exc->traceback);
+    assert(gc::isValidGCObject(copy_from_exc->type));
+    assert(gc::isValidGCObject(copy_from_exc->value));
+    assert(gc::isValidGCObject(copy_from_exc->traceback));
 
     for (auto* ex : to_update) {
         *ex = *copy_from_exc;

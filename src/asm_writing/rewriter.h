@@ -384,7 +384,7 @@ private:
     // Do the bookkeeping to say that var is no longer in location l
     void removeLocationFromVar(RewriterVar* var, Location l);
 
-    void finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
+    bool finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val, Location loc);
