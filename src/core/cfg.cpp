@@ -74,8 +74,10 @@ public:
     }
 
     ~CFGVisitor() {
-        assert(regions.size() == 0);
-        assert(exc_handlers.size() == 0);
+        // if we're being destroyed due to an exception, our internal invariants may be violated, but that's okay; the
+        // CFG isn't going to get used anyway. (Maybe we should check that it won't be used somehow?)
+        assert(regions.size() == 0 || std::uncaught_exception());
+        assert(exc_handlers.size() == 0 || std::uncaught_exception());
     }
 
 private:
