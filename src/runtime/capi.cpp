@@ -20,6 +20,8 @@
 #include "Python.h"
 
 #include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 #include "capi/types.h"
 #include "core/threading.h"
@@ -1194,8 +1196,18 @@ extern "C" void PyEval_InitThreads(void) noexcept {
 }
 
 BoxedModule* importTestExtension(const std::string& name) {
-    std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
-    const char* pathname = pathname_name.c_str();
+    llvm::SmallString<128> pathname_str;
+    // TODO supposed to pass argv0, main_addr to this function:
+    pathname_str = llvm::sys::fs::getMainExecutable(NULL, NULL);
+    assert(pathname_str.size() && "could not find the path to the pyston src dir");
+
+    // Start by removing the binary name
+    llvm::sys::path::remove_filename(pathname_str);
+
+    llvm::sys::path::append(pathname_str, "test/test_extension");
+    llvm::sys::path::append(pathname_str, name + ".pyston.so");
+
+    const char* pathname = pathname_str.str().str().c_str();
     void* handle = dlopen(pathname, RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "%s\n", dlerror());

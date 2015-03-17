@@ -23,6 +23,7 @@ import glob
 import os
 import re
 import resource
+import shutil
 import signal
 import subprocess
 import sys
@@ -52,7 +53,7 @@ def set_ulimits():
     MAX_MEM_MB = 100
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
-EXTMODULE_DIR = os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/"
+EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
 _extmodule_mtime = None
 def get_extmodule_mtime():
     global _extmodule_mtime
@@ -120,7 +121,7 @@ def canonicalize_stderr(stderr):
 
 failed = []
 def run_test(fn, check_stats, run_memcheck):
-    r = fn.rjust(FN_JUST_SIZE)
+    r = os.path.basename(fn).rjust(FN_JUST_SIZE)
 
     statchecks = []
     jit_args = ["-rq"] + EXTRA_JIT_ARGS
@@ -385,19 +386,26 @@ parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
 parser.add_argument('test_dir')
 parser.add_argument('patterns', nargs='*')
 
-if __name__ == "__main__":
+def main(orig_dir):
+    global KEEP_GOING
+    global IMAGE
+    global EXTRA_JIT_ARGS
+    global TIME_LIMIT
+    global TEST_DIR
+    global FN_JUST_SIZE
+
     run_memcheck = False
     start = 1
 
     opts = parser.parse_args()
     run_memcheck = opts.run_memcheck
     NUM_THREADS = opts.num_threads
-    IMAGE = opts.image
+    IMAGE = os.path.join(orig_dir, opts.image)
     KEEP_GOING = opts.keep_going
     EXTRA_JIT_ARGS += opts.extra_args
     TIME_LIMIT = opts.time_limit
 
-    TEST_DIR = opts.test_dir
+    TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     patterns = opts.patterns
 
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
@@ -417,7 +425,6 @@ if __name__ == "__main__":
         for t in tests:
             l.append("%s/%s.py" % (TEST_DIR, t))
     skip = functools.partial(_addto, TOSKIP)
-    nostat = functools.partial(_addto, IGNORE_STATS)
 
     if not patterns:
         skip(["t", "t2"])
@@ -463,7 +470,7 @@ if __name__ == "__main__":
         print >>sys.stderr, "No tests specified!"
         sys.exit(1)
 
-    FN_JUST_SIZE = max(20, 2 + max(map(len, tests)))
+    FN_JUST_SIZE = max(20, 2 + max(len(os.path.basename(fn)) for fn in tests))
 
     if TEST_PYPY:
         IMAGE = '/usr/local/bin/pypy'
@@ -487,7 +494,7 @@ if __name__ == "__main__":
 
     for fn in tests:
         if fn in TOSKIP:
-            print fn.rjust(FN_JUST_SIZE),
+            print os.path.basename(fn).rjust(FN_JUST_SIZE),
             print "   Skipping"
             continue
 
@@ -513,3 +520,12 @@ if __name__ == "__main__":
 
     if failed:
         sys.exit(1)
+
+if __name__ == "__main__":
+    origdir = os.getcwd()
+    tmpdir = tempfile.mkdtemp()
+    os.chdir(tmpdir)
+    try:
+        main(origdir)
+    finally:
+        shutil.rmtree(tmpdir)
