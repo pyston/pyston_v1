@@ -407,6 +407,37 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
 
     return result
 
+# Pyston change: use this hacky / slow? version of namedtuple while we work
+# on exec support
+def namedtuple(name, fields):
+    if isinstance(fields, str):
+        fields = fields.split()
+    assert isinstance(fields, list)
+    for f in fields:
+        assert isinstance(f, str)
+
+    class NamedTuple(object):
+        def __init__(self, *args):
+            assert len(args) == len(fields)
+            for i in xrange(len(fields)):
+                setattr(self, fields[i], args[i])
+
+        def __getitem__(self, idx):
+            assert 0 <= idx < len(fields)
+            return getattr(self, fields[idx])
+
+        def __repr__(self):
+            s = name + "("
+            first = True
+            for f in fields:
+                if not first:
+                    s += ", "
+                first = False
+                s += "%s=%r" % (f, getattr(self, f))
+            s += ")"
+            return s
+
+    return NamedTuple
 
 ########################################################################
 ###  Counter

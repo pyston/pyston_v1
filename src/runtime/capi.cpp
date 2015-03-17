@@ -451,10 +451,6 @@ extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySequence_Contains(PyObject* o, PyObject* value) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }

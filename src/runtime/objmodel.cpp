@@ -1862,8 +1862,13 @@ extern "C" BoxedString* str(Box* obj) {
         obj = callattrInternal(obj, &str_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
-    if (obj->cls != str_cls) {
-        raiseExcHelper(TypeError, "__str__ did not return a string!");
+    if (isSubclass(obj->cls, unicode_cls)) {
+        obj = PyUnicode_AsASCIIString(obj);
+        checkAndThrowCAPIException();
+    }
+
+    if (!isSubclass(obj->cls, str_cls)) {
+        raiseExcHelper(TypeError, "__str__ returned non-string (type %s)", obj->cls->tp_name);
     }
     return static_cast<BoxedString*>(obj);
 }
@@ -1874,8 +1879,13 @@ extern "C" BoxedString* repr(Box* obj) {
 
     obj = callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
-    if (obj->cls != str_cls) {
-        raiseExcHelper(TypeError, "__repr__ did not return a string!");
+    if (isSubclass(obj->cls, unicode_cls)) {
+        obj = PyUnicode_AsASCIIString(obj);
+        checkAndThrowCAPIException();
+    }
+
+    if (!isSubclass(obj->cls, str_cls)) {
+        raiseExcHelper(TypeError, "__repr__ returned non-string (type %s)", obj->cls->tp_name);
     }
     return static_cast<BoxedString*>(obj);
 }
@@ -1939,8 +1949,8 @@ extern "C" BoxedInt* hash(Box* obj) {
     Box* hash = getclsattr_internal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls
-                   || obj->cls == classobj_cls,
+        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls || obj->cls == classobj_cls
+                   || obj->cls == module_cls,
                "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));

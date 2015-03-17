@@ -84,6 +84,15 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
         raiseExcHelper(TypeError, "PyClass_New: bases must be a tuple");
     BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
 
+    for (auto base : bases->elts) {
+        if (!PyClass_Check(base) && PyCallable_Check(base->cls)) {
+            Box* r = PyObject_CallFunctionObjArgs(base->cls, name, bases, dict, NULL);
+            if (!r)
+                throwCAPIException();
+            return r;
+        }
+    }
+
     BoxedClassobj* made = new (cls) BoxedClassobj(name, bases);
 
     made->giveAttr("__module__", boxString(getCurrentModule()->name()));

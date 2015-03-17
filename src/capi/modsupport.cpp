@@ -389,7 +389,8 @@ extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, cons
         if (VERBOSITY())
             printf("Loading method %s\n", methods->ml_name);
 
-        assert((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
+        RELEASE_ASSERT((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0, "%d",
+                       methods->ml_flags);
         module->giveAttr(methods->ml_name,
                          new BoxedCApiFunction(methods->ml_flags, passthrough, methods->ml_name, methods->ml_meth));
 

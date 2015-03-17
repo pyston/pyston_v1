@@ -1092,6 +1092,18 @@ Done:
     Py_DECREF(it);
     return n;
 }
+
+extern "C" int PySequence_Contains(PyObject* seq, PyObject* ob) noexcept {
+    Py_ssize_t result;
+    if (PyType_HasFeature(seq->cls, Py_TPFLAGS_HAVE_SEQUENCE_IN)) {
+        PySequenceMethods* sqm = seq->cls->tp_as_sequence;
+        if (sqm != NULL && sqm->sq_contains != NULL)
+            return (*sqm->sq_contains)(seq, ob);
+    }
+    result = _PySequence_IterSearch(seq, ob, PY_ITERSEARCH_CONTAINS);
+    return Py_SAFE_DOWNCAST(result, Py_ssize_t, int);
+}
+
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {
     va_list va;
     PyObject* args;
@@ -1153,7 +1165,7 @@ extern "C" int PyNumber_Check(PyObject* obj) noexcept {
     assert(obj && obj->cls);
 
     // Our check, since we don't currently fill in tp_as_number:
-    if (isSubclass(obj->cls, int_cls) || isSubclass(obj->cls, long_cls))
+    if (isSubclass(obj->cls, int_cls) || isSubclass(obj->cls, long_cls) || isSubclass(obj->cls, float_cls))
         return true;
 
     // The CPython check:
