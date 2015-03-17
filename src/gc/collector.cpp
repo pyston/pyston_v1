@@ -29,7 +29,6 @@
 #include "runtime/types.h"
 
 #include <llvm/ADT/SmallVector.h>
-
 #ifndef NVALGRIND
 #include "valgrind.h"
 #endif
