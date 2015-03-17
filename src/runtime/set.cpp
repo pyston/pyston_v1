@@ -66,6 +66,11 @@ Box* setiteratorNext(BoxedSetIterator* self) {
     return self->next();
 }
 
+Box* setiteratorIter(BoxedSetIterator* self) {
+    assert(self->cls == set_iterator_cls);
+    return self;
+}
+
 Box* setAdd2(Box* _self, Box* b) {
     assert(_self->cls == set_cls || _self->cls == frozenset_cls);
     BoxedSet* self = static_cast<BoxedSet*>(_self);
@@ -247,6 +252,29 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
     return rtn;
 }
 
+static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
+    assert(self->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+    for (auto elt : container->pyElements()) {
+        if (self->s.count(elt))
+            rtn->s.insert(elt);
+    }
+    return rtn;
+}
+
+Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
+    if (!isSubclass(self->cls, set_cls))
+        raiseExcHelper(TypeError, "descriptor 'intersection' requires a 'set' object but received a '%s'",
+                       getTypeName(self));
+
+    BoxedSet* rtn = self;
+    for (auto container : args->pyElements()) {
+        rtn = setIntersection2(rtn, container);
+    }
+    return rtn;
+}
+
 Box* setCopy(BoxedSet* self) {
     assert(self->cls == set_cls);
 
@@ -264,6 +292,18 @@ Box* setNonzero(BoxedSet* self) {
     return boxBool(self->s.size());
 }
 
+Box* setHash(BoxedSet* self) {
+    RELEASE_ASSERT(isSubclass(self->cls, frozenset_cls), "");
+
+    int64_t rtn = 1927868237L;
+    for (Box* e : self->s) {
+        BoxedInt* h = hash(e);
+        assert(isSubclass(h->cls, int_cls));
+        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
+    }
+
+    return boxInt(rtn);
+}
 
 } // namespace set
 
@@ -272,6 +312,8 @@ using namespace pyston::set;
 void setupSet() {
     set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, 0, sizeof(BoxedSet),
                                               false, "setiterator");
+    set_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
@@ -331,12 +373,16 @@ void setupSet() {
     set_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)setNonzero, BOXED_BOOL, 1)));
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));
 
+    frozenset_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)setHash, BOXED_INT, 1)));
+
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
     set_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)setRemove, NONE, 2)));
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
     set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("intersection",
+                      new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
 
     set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
 
