@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <readline/history.h>
 #include <readline/readline.h>
+#include <signal.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -69,6 +70,15 @@ static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
     return false;
 }
 
+/**
+  function that in order to avoid die with SIGINT
+**/
+static void sig_int(int sig_no) {
+    sigset_t sigset, oldset;
+    sigfillset(&sigset);
+    sigprocmask(SIG_BLOCK, &sigset, &oldset);
+    printf("\nKeyboardInterrupt");
+}
 static int main(int argc, char** argv) {
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
@@ -223,7 +233,7 @@ static int main(int argc, char** argv) {
         } else {
             main_module->fn = "<stdin>";
         }
-
+        signal(SIGINT, sig_int);
         for (;;) {
             char* line = readline(">> ");
             if (!line)
