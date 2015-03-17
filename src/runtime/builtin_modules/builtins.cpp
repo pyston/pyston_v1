@@ -980,6 +980,16 @@ Box* pydumpAddr(Box* p) {
     return None;
 }
 
+Box* builtinIter(Box* obj, Box* sentinel) {
+    if (sentinel == NULL)
+        return getiter(obj);
+
+    Box* r = PyCallIter_New(obj, sentinel);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -1121,7 +1131,8 @@ void setupBuiltins() {
                                             boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false), "locals"));
 
     builtins_module->giveAttr(
-        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false), "iter"));
+        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinIter, UNKNOWN, 2, 1, false, false), "iter",
+                                                 { NULL }));
     builtins_module->giveAttr(
         "reversed",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false), "reversed"));

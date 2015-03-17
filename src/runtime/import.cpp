@@ -627,6 +627,7 @@ extern "C" Box* import(int level, Box* from_imports, const std::string* module_n
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {
+    _name = coerceUnicodeToStr(_name);
     RELEASE_ASSERT(_name->cls == str_cls, "");
 
     BoxedString* name = static_cast<BoxedString*>(_name);

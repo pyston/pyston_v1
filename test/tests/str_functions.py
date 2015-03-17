@@ -136,10 +136,13 @@ for c in "hello world":
 print "hello world".index("world")
 print "hello world".index("world", 1, 30)
 print "hello world".index("l", 3)
+print "hello world".rindex("world")
+print "hello world".rindex("world", 1, 30)
+print "hello world".rindex("l", 3)
 try:
     print "hello world".index("goodbye")
-except:
-    print "threw exception"
+except Exception as e:
+    print e
 
 print repr("hello\tworld\t".expandtabs())
 print repr("hello\tworld\t".expandtabs(12))

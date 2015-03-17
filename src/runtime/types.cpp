@@ -109,6 +109,9 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
         assert(cls->tp_mro->cls == tuple_cls);
         for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+            // old-style classes are always pyston classes:
+            if (b->cls == classobj_cls)
+                continue;
             assert(isSubclass(b->cls, type_cls));
             ASSERT(static_cast<BoxedClass*>(b)->is_pyston_class, "%s (%s)", cls->tp_name,
                    static_cast<BoxedClass*>(b)->tp_name);
