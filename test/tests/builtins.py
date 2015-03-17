@@ -102,3 +102,8 @@ print callable(int)
 print callable(lambda: 1)
 
 print range(5L, 7L)
+
+
+print list(iter(xrange(100).__iter__().next, 20))
+
+print bytearray(xrange(256))

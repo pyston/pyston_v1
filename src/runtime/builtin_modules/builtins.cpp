@@ -980,6 +980,28 @@ Box* pydumpAddr(Box* p) {
     return None;
 }
 
+Box* builtinIter(Box* obj, Box* sentinel) {
+    if (sentinel == NULL)
+        return getiter(obj);
+
+    Box* r = PyCallIter_New(obj, sentinel);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+Box* rawInput(Box* prompt) {
+    Py_FatalError("unimplemented");
+}
+
+Box* input(Box* prompt) {
+    Py_FatalError("unimplemented");
+}
+
+Box* builtinCmp(Box* lhs, Box* rhs) {
+    Py_FatalError("unimplemented");
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__");
 
@@ -1121,7 +1143,8 @@ void setupBuiltins() {
                                             boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false), "locals"));
 
     builtins_module->giveAttr(
-        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false), "iter"));
+        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinIter, UNKNOWN, 2, 1, false, false), "iter",
+                                                 { NULL }));
     builtins_module->giveAttr(
         "reversed",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false), "reversed"));
@@ -1184,5 +1207,14 @@ void setupBuiltins() {
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
+
+    builtins_module->giveAttr(
+        "raw_input", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)rawInput, UNKNOWN, 1, 1, false, false),
+                                                      "raw_input", { NULL }));
+    builtins_module->giveAttr(
+        "input",
+        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)input, UNKNOWN, 1, 1, false, false), "input", { NULL }));
+    builtins_module->giveAttr("cmp",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinCmp, UNKNOWN, 2), "cmp"));
 }
 }

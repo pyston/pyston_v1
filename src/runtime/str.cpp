@@ -40,6 +40,7 @@ extern "C" PyObject* string_split(PyStringObject* self, PyObject* args) noexcept
 extern "C" PyObject* string_rsplit(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_find(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
 
@@ -2402,6 +2403,7 @@ static PyMethodDef string_methods[] = {
     { "rsplit", (PyCFunction)string_rsplit, METH_VARARGS, NULL },
     { "find", (PyCFunction)string_find, METH_VARARGS, NULL },
     { "index", (PyCFunction)string_index, METH_VARARGS, NULL },
+    { "rindex", (PyCFunction)string_rindex, METH_VARARGS, NULL },
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },

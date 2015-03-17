@@ -1434,7 +1434,6 @@ extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
 }
 
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
-
     if (isSubclass(o->cls, int_cls)) {
         int64_t n = static_cast<BoxedInt*>(o)->n;
         static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
@@ -1443,6 +1442,9 @@ extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
         return PyLong_AsSsize_t(o);
     }
 
-    Py_FatalError("unimplemented");
+    PyErr_Format(PyExc_TypeError, "'%.200s' object cannot be interpreted "
+                                  "as an index",
+                 o->cls->tp_name);
+    return -1;
 }
 }

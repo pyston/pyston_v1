@@ -212,6 +212,16 @@ Box* setRemove(BoxedSet* self, Box* v) {
     return None;
 }
 
+Box* setDiscard(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls);
+
+    auto it = self->s.find(v);
+    if (it != self->s.end())
+        self->s.erase(it);
+
+    return None;
+}
+
 Box* setClear(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls);
     self->s.clear();
@@ -280,6 +290,18 @@ Box* setCopy(BoxedSet* self) {
 
     BoxedSet* rtn = new BoxedSet();
     rtn->s.insert(self->s.begin(), self->s.end());
+    return rtn;
+}
+
+Box* setPop(BoxedSet* self) {
+    assert(self->cls == set_cls);
+
+    if (!self->s.size())
+        raiseExcHelper(KeyError, "pop from an empty set");
+
+    auto it = self->s.begin();
+    Box* rtn = *it;
+    self->s.erase(it);
     return rtn;
 }
 
@@ -377,6 +399,7 @@ void setupSet() {
 
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
     set_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)setRemove, NONE, 2)));
+    set_cls->giveAttr("discard", new BoxedFunction(boxRTFunction((void*)setDiscard, NONE, 2)));
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
@@ -385,6 +408,7 @@ void setupSet() {
                       new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
 
     set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
+    set_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)setPop, UNKNOWN, 1)));
 
     set_cls->freeze();
     frozenset_cls->freeze();

@@ -173,11 +173,12 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
-    ASSERT(f->versions.size() < 20, "%ld", f->versions.size());
     SourceInfo* source = f->source;
     assert(source);
 
     std::string name = source->getName();
+
+    ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
