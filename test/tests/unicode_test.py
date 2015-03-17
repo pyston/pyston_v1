@@ -1,5 +1,3 @@
-# skip-if: '-x' in EXTRA_JIT_ARGS
-
 print repr(unicode())
 print repr(unicode('hello world'))
 
@@ -32,6 +30,7 @@ print u"Hello " + " World"
 def p(x):
     return [hex(ord(i)) for i in x]
 s = u"\u20AC" # euro sign
+print p(u"\N{EURO SIGN}")
 print p(s) 
 print p(s.encode("utf8"))
 print p(s.encode("utf16"))
