@@ -41,6 +41,54 @@ static int check_num_args(PyObject* ob, int n) noexcept {
     return 0;
 }
 
+/* Helper to check for object.__setattr__ or __delattr__ applied to a type.
+   This is called the Carlo Verre hack after its discoverer. */
+static int hackcheck(PyObject* self, setattrofunc func, const char* what) noexcept {
+    PyTypeObject* type = Py_TYPE(self);
+    while (type && type->tp_flags & Py_TPFLAGS_HEAPTYPE)
+        type = type->tp_base;
+    /* If type is NULL now, this is a really weird type.
+       In the spirit of backwards compatibility (?), just shut up. */
+    if (type && type->tp_setattro != func) {
+        PyErr_Format(PyExc_TypeError, "can't apply this %s to %s object", what, type->tp_name);
+        return 0;
+    }
+    return 1;
+}
+
+static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    setattrofunc func = (setattrofunc)wrapped;
+    int res;
+    PyObject* name, *value;
+
+    if (!PyArg_UnpackTuple(args, "", 2, 2, &name, &value))
+        return NULL;
+    if (!hackcheck(self, func, "__setattr__"))
+        return NULL;
+    res = (*func)(self, name, value);
+    if (res < 0)
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject* wrap_delattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    setattrofunc func = (setattrofunc)wrapped;
+    int res;
+    PyObject* name;
+
+    if (!check_num_args(args, 1))
+        return NULL;
+    name = PyTuple_GET_ITEM(args, 0);
+    if (!hackcheck(self, func, "__delattr__"))
+        return NULL;
+    res = (*func)(self, name, NULL);
+    if (res < 0)
+        return NULL;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     hashfunc func = (hashfunc)wrapped;
     long res;
@@ -633,6 +681,20 @@ static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
 }
 
+static int slot_tp_setattro(PyObject* self, PyObject* name, PyObject* value) noexcept {
+    PyObject* res;
+    static PyObject* delattr_str, *setattr_str;
+
+    if (value == NULL)
+        res = call_method(self, "__delattr__", &delattr_str, "(O)", name);
+    else
+        res = call_method(self, "__setattr__", &setattr_str, "(OO)", name, value);
+    if (res == NULL)
+        return -1;
+    Py_DECREF(res);
+    return 0;
+}
+
 static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) noexcept {
     PyObject* res, * descr = NULL;
     descrgetfunc f = Py_TYPE(attr)->tp_descr_get;
@@ -1136,6 +1198,8 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
 
 static slotdef slotdefs[]
     = { TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
+        TPSLOT("__setattr__", tp_setattr, NULL, NULL, ""),
+        TPSLOT("__delattr__", tp_setattr, NULL, NULL, ""),
 
         TPSLOT("__repr__", tp_repr, slot_tp_repr, wrap_unaryfunc, "x.__repr__() <==> repr(x)"),
         TPSLOT("__hash__", tp_hash, slot_tp_hash, wrap_hashfunc, "x.__hash__() <==> hash(x)"),
@@ -1144,6 +1208,9 @@ static slotdef slotdefs[]
         TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
 
         TPSLOT("__getattr__", tp_getattro, slot_tp_getattr_hook, NULL, ""),
+        TPSLOT("__setattr__", tp_setattro, slot_tp_setattro, wrap_setattr,
+               "x.__setattr__('name', value) <==> x.name = value"),
+        TPSLOT("__delattr__", tp_setattro, slot_tp_setattro, wrap_delattr, "x.__delattr__('name') <==> del x.name"),
 
         TPSLOT("__lt__", tp_richcompare, slot_tp_richcompare, richcmp_lt, "x.__lt__(y) <==> x<y"),
         TPSLOT("__le__", tp_richcompare, slot_tp_richcompare, richcmp_le, "x.__le__(y) <==> x<=y"),
@@ -2308,11 +2375,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     gc::registerNonheapRootObject(cls);
 
     // unhandled fields:
-    RELEASE_ASSERT(cls->tp_setattr == NULL, "");
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
 
     RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
-    RELEASE_ASSERT(cls->tp_setattro == NULL || cls->tp_setattro == PyObject_GenericSetAttr, "");
 
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
                           | Py_TPFLAGS_HAVE_NEWBUFFER;

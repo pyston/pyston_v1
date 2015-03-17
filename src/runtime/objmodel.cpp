@@ -81,6 +81,7 @@ static const std::string iter_str("__iter__");
 static const std::string new_str("__new__");
 static const std::string none_str("None");
 static const std::string repr_str("__repr__");
+static const std::string setattr_str("__setattr__");
 static const std::string setitem_str("__setitem__");
 static const std::string set_str("__set__");
 static const std::string str_str("__str__");
@@ -1709,8 +1710,35 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         // We don't need to to the invalidation stuff in this case.
         return;
     } else {
+        // Finally, check __setattr__
+        if (obj->cls->tp_setattr) {
+            rewrite_args = NULL;
+            REWRITE_ABORTED("");
+
+            int rtn = obj->cls->tp_setattr(obj, const_cast<char*>(attr.c_str()), val);
+            if (rtn)
+                throwCAPIException();
+            return;
+        }
+        Box* setattr = typeLookup(obj->cls, setattr_str, NULL);
+        if (setattr) {
+            rewrite_args = NULL;
+            REWRITE_ABORTED("");
+
+            // if we're dealing with a BoxedWrapperDescriptor wrapping
+            // PyObject_GenericSetAttr, skip calling __setattr__, as
+            // that will just re-enter us.
+            if (setattr->cls != wrapperdescr_cls
+                || ((BoxedWrapperDescriptor*)setattr)->wrapped != PyObject_GenericSetAttr) {
+                Box* boxstr = boxString(attr);
+                runtimeCallInternal(setattr, NULL, ArgPassSpec(3), obj, boxstr, val, NULL, NULL);
+                return;
+            }
+        }
+
         if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs())
             raiseAttributeError(obj, attr.c_str());
+
         obj->setattr(attr, val, rewrite_args);
     }
 

@@ -144,7 +144,13 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 }
 
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
-    Py_FatalError("unimplemented");
+    try {
+        setattr(obj, static_cast<BoxedString*>(name)->s.c_str(), value);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+    return 0;
 }
 
 extern "C" int PyObject_SetAttr(PyObject* v, PyObject* name, PyObject* value) noexcept {

@@ -272,6 +272,16 @@ extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexce
     }
 }
 
+extern "C" PyObject* _PyObject_GenericGetAttrWithDict(PyObject* obj, PyObject* name, PyObject* dict) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int _PyObject_GenericSetAttrWithDict(PyObject* obj, PyObject* name, PyObject* value,
+                                                PyObject* dict) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
     try {
         return getitem(o, key);
