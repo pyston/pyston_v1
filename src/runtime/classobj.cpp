@@ -234,6 +234,16 @@ Box* instanceRepr(Box* _inst) {
     }
 }
 
+Box* instanceEq(Box* _inst, Box* other)
+{
+   RELEASE_ASSERT(_inst->cls == instance_cls,"");
+   RELEASE_ASSERT(other->cls == instance_cls, "");
+
+   BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+   Box* eq_func =  _instanceGetattribute(inst, boxStrConstant("__eq__"), true);
+   return runtimeCall(eq_func, ArgPassSpec(1), other, NULL, NULL, NULL, NULL);
+}
+
 Box* instanceStr(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -389,6 +399,7 @@ void setupClassobj() {
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
+    instance_cls->giveAttr("__EQ__", new BoxedFunction(boxRTFunction((void*)instanceEq, UNKNOWN, 1)));
 
     instance_cls->freeze();
 }
