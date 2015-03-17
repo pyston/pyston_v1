@@ -18,7 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include <llvm/ADT/SmallVector.h>
+#include "llvm/ADT/SmallVector.h"
 
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
