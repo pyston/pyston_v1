@@ -1271,6 +1271,17 @@ Box* objectStr(Box* obj) {
     return obj->reprIC();
 }
 
+Box* objectSetattr(Box* obj, Box* attr, Box* value) {
+    attr = coerceUnicodeToStr(attr);
+    if (attr->cls != str_cls) {
+        raiseExcHelper(TypeError, "attribute name must be string, not '%s'", attr->cls->tp_name);
+    }
+
+    BoxedString* attr_str = static_cast<BoxedString*>(attr);
+    setattrGeneric(obj, attr_str->s, value, NULL);
+    return None;
+}
+
 static PyObject* import_copyreg(void) noexcept {
     static PyObject* copyreg_str;
 
@@ -1817,6 +1828,7 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
+    object_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)objectSetattr, UNKNOWN, 3)));
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;

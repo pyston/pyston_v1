@@ -603,6 +603,7 @@ public:
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* objectNewNoArgs(BoxedClass* cls);
+Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* makeAttrWrapper(Box* b);
 

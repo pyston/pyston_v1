@@ -548,7 +548,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattrInternal(obj, str->s, value, NULL);
+    setattr(obj, str->s.c_str(), value);
     return None;
 }
 

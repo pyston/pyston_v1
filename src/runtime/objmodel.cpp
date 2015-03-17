@@ -187,7 +187,7 @@ extern "C" bool softspace(Box* b, bool newval) {
         } else {
             r = nonzero(gotten);
         }
-        setattrInternal(b, "softspace", boxInt(newval), NULL);
+        setattr(b, "softspace", boxInt(newval));
     } catch (ExcInfo e) {
         r = 0;
     }
@@ -1638,9 +1638,10 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
     return false;
 }
 
-void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
 
+    // TODO this should be in type_setattro
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
         if (!isUserDefined(cobj)) {
@@ -1710,38 +1711,13 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
         // We don't need to to the invalidation stuff in this case.
         return;
     } else {
-        // Finally, check __setattr__
-        if (obj->cls->tp_setattr) {
-            rewrite_args = NULL;
-            REWRITE_ABORTED("");
-
-            int rtn = obj->cls->tp_setattr(obj, const_cast<char*>(attr.c_str()), val);
-            if (rtn)
-                throwCAPIException();
-            return;
-        }
-        Box* setattr = typeLookup(obj->cls, setattr_str, NULL);
-        if (setattr) {
-            rewrite_args = NULL;
-            REWRITE_ABORTED("");
-
-            // if we're dealing with a BoxedWrapperDescriptor wrapping
-            // PyObject_GenericSetAttr, skip calling __setattr__, as
-            // that will just re-enter us.
-            if (setattr->cls != wrapperdescr_cls
-                || ((BoxedWrapperDescriptor*)setattr)->wrapped != PyObject_GenericSetAttr) {
-                Box* boxstr = boxString(attr);
-                runtimeCallInternal(setattr, NULL, ArgPassSpec(3), obj, boxstr, val, NULL, NULL);
-                return;
-            }
-        }
-
         if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs())
             raiseAttributeError(obj, attr.c_str());
 
         obj->setattr(attr, val, rewrite_args);
     }
 
+    // TODO this should be in type_setattro
     if (isSubclass(obj->cls, type_cls)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
@@ -1771,19 +1747,64 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
 
+    if (obj->cls->tp_setattr) {
+        int rtn = obj->cls->tp_setattr(obj, const_cast<char*>(attr), attr_val);
+        if (rtn)
+            throwCAPIException();
+        return;
+    }
+
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
     if (rewriter.get()) {
         // rewriter->trap();
-        SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
-        setattrInternal(obj, attr, attr_val, &rewrite_args);
+        rewriter->getArg(0)->getAttr(offsetof(Box, cls))->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
+    }
+
+    Box* setattr;
+    RewriterVar* r_setattr;
+    if (rewriter.get()) {
+        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
+                                        Location::any());
+        setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
+
         if (rewrite_args.out_success) {
-            rewriter->commit();
+            r_setattr = rewrite_args.out_rtn;
+            // TODO this is not good enough, since the object could get collected:
+            r_setattr->addGuard((intptr_t)setattr);
+        } else {
+            rewriter.reset(NULL);
         }
     } else {
-        setattrInternal(obj, attr, attr_val, NULL);
+        setattr = typeLookup(obj->cls, setattr_str, NULL);
     }
+    assert(setattr);
+
+    // We should probably add this as a GC root, but we can cheat a little bit since
+    // we know it's not going to get deallocated:
+    static Box* object_setattr = object_cls->getattr("__setattr__");
+    assert(object_setattr);
+
+    // I guess this check makes it ok for us to just rely on having guarded on the value of setattr without
+    // invalidating on deallocation, since we assume that object.__setattr__ will never get deallocated.
+    if (setattr == object_setattr) {
+        if (rewriter.get()) {
+            // rewriter->trap();
+            SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
+            setattrGeneric(obj, attr, attr_val, &rewrite_args);
+            if (rewrite_args.out_success) {
+                rewriter->commit();
+            }
+        } else {
+            setattrGeneric(obj, attr, attr_val, NULL);
+        }
+        return;
+    }
+
+    setattr = processDescriptor(setattr, obj, obj->cls);
+    Box* boxstr = boxString(attr);
+    runtimeCallInternal(setattr, NULL, ArgPassSpec(2), boxstr, attr_val, NULL, NULL, NULL);
 }
 
 bool isUserDefined(BoxedClass* cls) {
@@ -2934,6 +2955,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         // Some functions are sufficiently important that we want them to be able to patchpoint themselves;
         // they can do this by setting the "internal_callable" field:
         CLFunction::InternalCallable callable = f->f->internal_callable;
+        if (rewrite_args && !rewrite_args->func_guarded) {
+            rewrite_args->obj->addGuard((intptr_t)f);
+            rewrite_args->func_guarded = true;
+            rewrite_args->rewriter->addDependenceOn(f->dependent_ics);
+        }
+
         if (callable == NULL) {
             callable = callFunc;
         }
@@ -3790,6 +3817,9 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
 Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
+
+    if (rewrite_args)
+        assert(rewrite_args->func_guarded);
 
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();

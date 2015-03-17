@@ -1,3 +1,6 @@
+# skip-if: '-n' not in EXTRA_JIT_ARGS and '-O' not in EXTRA_JIT_ARGS
+# statcheck: noninit_count('slowpath_setattr') < 50
+
 class MyDescr(object):
     def __set__(self, inst, val):
         print type(self), type(inst), val
@@ -11,30 +14,19 @@ class Test(object):
 
 def test(t):
     print "testing..."
-    t.hello = "world1"
-    t.hello = "world2"
+    t.hello = "world"
+    t.hello = "world"
     t.foo = 2
 
-test(Test())
+for i in xrange(100):
+    test(Test())
 Test.__setattr__ = object.__dict__['__setattr__']
 print "set setattr to object setattr"
-test(Test())
+for i in xrange(100):
+    test(Test())
 Test.__setattr__ = Test._setattr__
 print "changed setattr to custom setattr"
 test(Test())
 del Test.__setattr__
-test(Test())
-
-
-class MyDescriptor(object):
-    def __get__(self, inst, val):
-        print type(self), type(inst), type(val)
-        return self
-
-    def __call__(self, *args):
-        print args
-class Test(object):
-    __setattr__ = MyDescriptor()
-
-t = Test()
-t.a = 1
+for i in xrange(100):
+    test(Test())
