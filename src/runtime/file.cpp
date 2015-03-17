@@ -606,6 +606,171 @@ static PyObject* close_the_file(BoxedFile* f) {
     Py_RETURN_NONE;
 }
 
+/* Our very own off_t-like type, 64-bit if possible */
+#if !defined(HAVE_LARGEFILE_SUPPORT)
+typedef off_t Py_off_t;
+#elif SIZEOF_OFF_T >= 8
+typedef off_t Py_off_t;
+#elif SIZEOF_FPOS_T >= 8
+typedef fpos_t Py_off_t;
+#else
+#error "Large file support, but neither off_t nor fpos_t is large enough."
+#endif
+
+/* a portable fseek() function
+   return 0 on success, non-zero on failure (with errno set) */
+static int _portable_fseek(FILE* fp, Py_off_t offset, int whence) {
+#if !defined(HAVE_LARGEFILE_SUPPORT)
+    return fseek(fp, offset, whence);
+#elif defined(HAVE_FSEEKO) && SIZEOF_OFF_T >= 8
+    return fseeko(fp, offset, whence);
+#elif defined(HAVE_FSEEK64)
+    return fseek64(fp, offset, whence);
+#elif defined(__BEOS__)
+    return _fseek(fp, offset, whence);
+#elif SIZEOF_FPOS_T >= 8
+    /* lacking a 64-bit capable fseek(), use a 64-bit capable fsetpos()
+       and fgetpos() to implement fseek()*/
+    fpos_t pos;
+    switch (whence) {
+        case SEEK_END:
+#ifdef MS_WINDOWS
+            fflush(fp);
+            if (_lseeki64(fileno(fp), 0, 2) == -1)
+                return -1;
+#else
+            if (fseek(fp, 0, SEEK_END) != 0)
+                return -1;
+#endif
+        /* fall through */
+        case SEEK_CUR:
+            if (fgetpos(fp, &pos) != 0)
+                return -1;
+            offset += pos;
+            break;
+            /* case SEEK_SET: break; */
+    }
+    return fsetpos(fp, &offset);
+#else
+#error "Large file support, but no way to fseek."
+#endif
+}
+
+static void drop_readahead(BoxedFile* f) {
+    if (f->f_buf != NULL) {
+        PyMem_Free(f->f_buf);
+        f->f_buf = NULL;
+    }
+}
+
+static PyObject* file_seek(BoxedFile* f, PyObject* args) {
+    int whence;
+    int ret;
+    Py_off_t offset;
+    PyObject* offobj, *off_index;
+
+    if (f->f_fp == NULL)
+        return err_closed();
+    drop_readahead(f);
+    whence = 0;
+    if (!PyArg_ParseTuple(args, "O|i:seek", &offobj, &whence))
+        return NULL;
+    off_index = PyNumber_Index(offobj);
+    if (!off_index) {
+        if (!PyFloat_Check(offobj))
+            return NULL;
+        /* Deprecated in 2.6 */
+        PyErr_Clear();
+        if (PyErr_WarnEx(PyExc_DeprecationWarning, "integer argument expected, got float", 1) < 0)
+            return NULL;
+        off_index = offobj;
+        Py_INCREF(offobj);
+    }
+#if !defined(HAVE_LARGEFILE_SUPPORT)
+    offset = PyInt_AsLong(off_index);
+#else
+    offset = PyLong_Check(off_index) ? PyLong_AsLongLong(off_index) : PyInt_AsLong(off_index);
+#endif
+    Py_DECREF(off_index);
+    if (PyErr_Occurred())
+        return NULL;
+
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    ret = _portable_fseek(f->f_fp, offset, whence);
+    FILE_END_ALLOW_THREADS(f)
+
+    if (ret != 0) {
+        PyErr_SetFromErrno(PyExc_IOError);
+        clearerr(f->f_fp);
+        return NULL;
+    }
+    f->f_skipnextlf = 0;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+/* a portable ftell() function
+   Return -1 on failure with errno set appropriately, current file
+   position on success */
+static Py_off_t _portable_ftell(FILE* fp) {
+#if !defined(HAVE_LARGEFILE_SUPPORT)
+    return ftell(fp);
+#elif defined(HAVE_FTELLO) && SIZEOF_OFF_T >= 8
+    return ftello(fp);
+#elif defined(HAVE_FTELL64)
+    return ftell64(fp);
+#elif SIZEOF_FPOS_T >= 8
+    fpos_t pos;
+    if (fgetpos(fp, &pos) != 0)
+        return -1;
+    return pos;
+#else
+#error "Large file support, but no way to ftell."
+#endif
+}
+
+static PyObject* file_tell(BoxedFile* f) {
+    Py_off_t pos;
+
+    if (f->f_fp == NULL)
+        return err_closed();
+    FILE_BEGIN_ALLOW_THREADS(f)
+    errno = 0;
+    pos = _portable_ftell(f->f_fp);
+    FILE_END_ALLOW_THREADS(f)
+
+    if (pos == -1) {
+        PyErr_SetFromErrno(PyExc_IOError);
+        clearerr(f->f_fp);
+        return NULL;
+    }
+    if (f->f_skipnextlf) {
+        int c;
+        c = GETC(f->f_fp);
+        if (c == '\n') {
+            f->f_newlinetypes |= NEWLINE_CRLF;
+            pos++;
+            f->f_skipnextlf = 0;
+        } else if (c != EOF)
+            ungetc(c, f->f_fp);
+    }
+#if !defined(HAVE_LARGEFILE_SUPPORT)
+    return PyInt_FromLong(pos);
+#else
+    return PyLong_FromLongLong(pos);
+#endif
+}
+
+Box* fileTell(BoxedFile* f) {
+    if (!isSubclass(f->cls, file_cls))
+        raiseExcHelper(TypeError, "descriptor 'tell' requires a 'file' object but received a '%s'", getTypeName(f));
+
+    auto rtn = file_tell(f);
+    checkAndThrowCAPIException();
+    return rtn;
+}
+
 Box* fileClose(BoxedFile* self) {
     assert(self->cls == file_cls);
 
@@ -1074,6 +1239,18 @@ static PyObject* file_isatty(BoxedFile* f) noexcept {
     return PyBool_FromLong(res);
 }
 
+PyDoc_STRVAR(seek_doc, "seek(offset[, whence]) -> None.  Move to new file position.\n"
+                       "\n"
+                       "Argument offset is a byte count.  Optional argument whence defaults to\n"
+                       "0 (offset from start of file, offset should be >= 0); other values are 1\n"
+                       "(move relative to current position, positive or negative), and 2 (move\n"
+                       "relative to end of file, usually negative, although many platforms allow\n"
+                       "seeking beyond the end of a file).  If the file is opened in text mode,\n"
+                       "only offsets returned by tell() are legal.  Use of other offsets causes\n"
+                       "undefined behavior."
+                       "\n"
+                       "Note that not all file objects are seekable.");
+
 PyDoc_STRVAR(readlines_doc, "readlines([size]) -> list of strings, each a line from the file.\n"
                             "\n"
                             "Call readline() repeatedly and return a list of the lines so read.\n"
@@ -1083,6 +1260,7 @@ PyDoc_STRVAR(readlines_doc, "readlines([size]) -> list of strings, each a line f
 PyDoc_STRVAR(isatty_doc, "isatty() -> true or false.  True if the file is connected to a tty device.");
 
 PyMethodDef file_methods[] = {
+    { "seek", (PyCFunction)file_seek, METH_VARARGS, seek_doc },
     { "readlines", (PyCFunction)file_readlines, METH_VARARGS, readlines_doc },
     { "isatty", (PyCFunction)file_isatty, METH_NOARGS, isatty_doc },
 };
@@ -1119,6 +1297,7 @@ void setupFile() {
     file_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)fileIterHasNext, BOXED_BOOL, 1)));
     file_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)fileIterNext, STR, 1)));
 
+    file_cls->giveAttr("tell", new BoxedFunction(boxRTFunction((void*)fileTell, UNKNOWN, 1)));
     file_cls->giveAttr("softspace",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::INT, offsetof(BoxedFile, f_softspace), false));
 

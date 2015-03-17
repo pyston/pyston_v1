@@ -168,6 +168,11 @@ static int main(int argc, char** argv) {
         module_search_path = split_str.second;
     }
 
+    if (!fn) {
+        // if we are in repl or command mode prepend "" to the path
+        prependToSysPath("");
+    }
+
     if (!Py_NoSiteFlag) {
         try {
             std::string module_name = "site";

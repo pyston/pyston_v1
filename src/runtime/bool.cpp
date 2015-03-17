@@ -47,6 +47,39 @@ extern "C" Box* boolNew(Box* cls, Box* val) {
     return boxBool(b);
 }
 
+extern "C" Box* boolAnd(BoxedBool* lhs, BoxedBool* rhs) {
+    if (lhs->cls != bool_cls)
+        raiseExcHelper(TypeError, "descriptor '__and__' requires a 'bool' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (rhs->cls != bool_cls)
+        return NotImplemented;
+
+    return boxBool(lhs->n && rhs->n);
+}
+
+extern "C" Box* boolOr(BoxedBool* lhs, BoxedBool* rhs) {
+    if (lhs->cls != bool_cls)
+        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'bool' object but received a '%s'", getTypeName(lhs));
+
+    if (rhs->cls != bool_cls)
+        return NotImplemented;
+
+    return boxBool(lhs->n || rhs->n);
+}
+
+extern "C" Box* boolXor(BoxedBool* lhs, BoxedBool* rhs) {
+    if (lhs->cls != bool_cls)
+        raiseExcHelper(TypeError, "descriptor '__xor__' requires a 'bool' object but received a '%s'",
+                       getTypeName(lhs));
+
+    if (rhs->cls != bool_cls)
+        return NotImplemented;
+
+    return boxBool(lhs->n ^ rhs->n);
+}
+
+
 void setupBool() {
     bool_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)boolNonzero, BOXED_BOOL, 1)));
     bool_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)boolRepr, STR, 1)));
@@ -55,6 +88,9 @@ void setupBool() {
     bool_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)boolNew, UNKNOWN, 2, 1, false, false), { None }));
 
+    bool_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)boolAnd, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)boolOr, BOXED_BOOL, 2)));
+    bool_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)boolXor, BOXED_BOOL, 2)));
 
     bool_cls->freeze();
 

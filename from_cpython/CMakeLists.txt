@@ -58,6 +58,15 @@ file(GLOB_RECURSE STDMODULE_SRCS Modules
     _csv.c
     _ssl.c
     getpath.c
+    cache.c
+    connection.c
+    cursor.c
+    microprotocols.c
+    module.c
+    prepare_protocol.c
+    row.c
+    statement.c
+    util.c
     )
 
 # compile specified files in from_cpython/Objects
@@ -73,6 +82,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     weakrefobject.c
     memoryobject.c
     iterobject.c
+    bufferobject.c
     )
 
 # compile specified files in from_cpython/Python

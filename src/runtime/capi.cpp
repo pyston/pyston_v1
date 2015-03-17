@@ -20,6 +20,8 @@
 #include "Python.h"
 
 #include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 #include "capi/types.h"
 #include "core/threading.h"
@@ -591,6 +593,18 @@ finally:
     }
     PyErr_NormalizeException(exc, val, tb);
     --tstate->recursion_depth;
+}
+
+extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" void PyGILState_Release(PyGILState_STATE) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
+    Py_FatalError("unimplemented");
 }
 
 void setCAPIException(const ExcInfo& e) {
@@ -1173,17 +1187,27 @@ extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
     return 1;
 }
 
-extern "C" PyObject* PyBuffer_FromMemory(void* ptr, Py_ssize_t size) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PyEval_GetRestricted(void) noexcept {
     return 0; // We don't support restricted mode
 }
 
+extern "C" void PyEval_InitThreads(void) noexcept {
+    // nothing to do here
+}
+
 BoxedModule* importTestExtension(const std::string& name) {
-    std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
-    const char* pathname = pathname_name.c_str();
+    llvm::SmallString<128> pathname_str;
+    // TODO supposed to pass argv0, main_addr to this function:
+    pathname_str = llvm::sys::fs::getMainExecutable(NULL, NULL);
+    assert(pathname_str.size() && "could not find the path to the pyston src dir");
+
+    // Start by removing the binary name
+    llvm::sys::path::remove_filename(pathname_str);
+
+    llvm::sys::path::append(pathname_str, "test/test_extension");
+    llvm::sys::path::append(pathname_str, name + ".pyston.so");
+
+    const char* pathname = pathname_str.str().str().c_str();
     void* handle = dlopen(pathname, RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "%s\n", dlerror());

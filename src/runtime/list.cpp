@@ -589,12 +589,29 @@ Box* listCount(BoxedList* self, Box* elt) {
     return boxInt(count);
 }
 
-Box* listIndex(BoxedList* self, Box* elt) {
+Box* listIndex(BoxedList* self, Box* elt, BoxedInt* _start, Box** args) {
     LOCK_REGION(self->lock.asRead());
 
-    int size = self->size;
+    BoxedInt* _stop = (BoxedInt*)args[0];
+    RELEASE_ASSERT(!_start || _start->cls == int_cls, "");
+    RELEASE_ASSERT(!_stop || _stop->cls == int_cls, "");
 
-    for (int i = 0; i < size; i++) {
+    int64_t start = _start ? _start->n : 0;
+    int64_t stop = _stop ? _stop->n : self->size;
+
+    if (start < 0) {
+        start += self->size;
+        if (start < 0)
+            start = 0;
+    }
+
+    if (stop < 0) {
+        stop += self->size;
+        if (stop < 0)
+            stop = 0;
+    }
+
+    for (int64_t i = start; i < stop; i++) {
         Box* e = self->elts->elts[i];
         Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
         bool b = nonzero(cmp);
@@ -840,7 +857,8 @@ void setupList() {
                        new BoxedFunction(boxRTFunction((void*)listInit, UNKNOWN, 2, 1, false, false), { None }));
 
     list_cls->giveAttr("count", new BoxedFunction(boxRTFunction((void*)listCount, BOXED_INT, 2)));
-    list_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 2)));
+    list_cls->giveAttr(
+        "index", new BoxedFunction(boxRTFunction((void*)listIndex, BOXED_INT, 4, 2, false, false), { NULL, NULL }));
     list_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)listRemove, NONE, 2)));
     list_cls->giveAttr("reverse", new BoxedFunction(boxRTFunction((void*)listReverse, NONE, 1)));
     list_cls->freeze();

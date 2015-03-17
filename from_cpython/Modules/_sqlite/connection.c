@@ -30,7 +30,11 @@
 #include "util.h"
 #include "sqlitecompat.h"
 
+#include "Python.h"
 #include "pythread.h"
+
+// Pyston change: cpython supplies this as a cpp flag
+#define MODULE_NAME "sqlite3"
 
 #define ACTION_FINALIZE 1
 #define ACTION_RESET 2
