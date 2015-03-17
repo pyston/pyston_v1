@@ -25,6 +25,9 @@
 #include "cursor.h"
 #include "sqlitecompat.h"
 
+// Pyston change: cpython supplies this as a cpp flag
+#define MODULE_NAME "sqlite3"
+
 void pysqlite_row_dealloc(pysqlite_Row* self)
 {
     Py_XDECREF(self->data);

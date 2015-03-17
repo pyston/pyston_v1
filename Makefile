@@ -165,7 +165,7 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
-COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp -lssl -lcrypto
+COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp -lssl -lcrypto -lsqlite3
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
@@ -335,6 +335,15 @@ STDMODULE_SRCS := \
 	_csv.c \
 	_ssl.c \
 	getpath.c \
+	_sqlite/cache.c \
+	_sqlite/connection.c \
+	_sqlite/cursor.c \
+	_sqlite/microprotocols.c \
+	_sqlite/module.c \
+	_sqlite/prepare_protocol.c \
+	_sqlite/row.c \
+	_sqlite/statement.c \
+	_sqlite/util.c \
 	$(EXTRA_STDMODULE_SRCS)
 
 STDOBJECT_SRCS := \
@@ -349,6 +358,7 @@ STDOBJECT_SRCS := \
 	weakrefobject.c \
 	memoryobject.c \
 	iterobject.c \
+	bufferobject.c \
 	$(EXTRA_STDOBJECT_SRCS)
 
 STDPYTHON_SRCS := \

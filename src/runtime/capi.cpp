@@ -593,6 +593,18 @@ finally:
     --tstate->recursion_depth;
 }
 
+extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" void PyGILState_Release(PyGILState_STATE) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 void setCAPIException(const ExcInfo& e) {
     cur_thread_state.curexc_type = e.type;
     cur_thread_state.curexc_value = e.value;
@@ -1173,12 +1185,12 @@ extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
     return 1;
 }
 
-extern "C" PyObject* PyBuffer_FromMemory(void* ptr, Py_ssize_t size) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PyEval_GetRestricted(void) noexcept {
     return 0; // We don't support restricted mode
+}
+
+extern "C" void PyEval_InitThreads(void) noexcept {
+    // nothing to do here
 }
 
 BoxedModule* importTestExtension(const std::string& name) {

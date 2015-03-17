@@ -97,6 +97,10 @@ extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {
     Py_FatalError("unimplemented");
 }
 
+extern "C" PY_LONG_LONG PyLong_AsLongLongAndOverflow(PyObject* obj, int* overflow) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) noexcept {
     Py_FatalError("unimplemented");
 }

@@ -29,6 +29,9 @@
 #include "microprotocols.h"
 #include "row.h"
 
+// Pyston change: cpython supplies this as a cpp flag
+#define MODULE_NAME "sqlite3"
+
 #if SQLITE_VERSION_NUMBER >= 3003003
 #define HAVE_SHARED_CACHE
 #endif
@@ -396,8 +399,11 @@ PyMODINIT_FUNC init_sqlite3(void)
      * need to be a string subclass. Just anything that can act as a special
      * marker for us. So I pulled PyCell_Type out of my magic hat.
      */
-    Py_INCREF((PyObject*)&PyCell_Type);
-    pysqlite_OptimizedUnicode = (PyObject*)&PyCell_Type;
+    // Pyston change: Pyston doesn't expose PyCell_Type, so let's use PyBuffer_Type instead.
+    // Py_INCREF((PyObject*)&PyCell_Type);
+    // pysqlite_OptimizedUnicode = (PyObject*)&PyCell_Type;
+    // PyDict_SetItemString(dict, "OptimizedUnicode", pysqlite_OptimizedUnicode);
+    pysqlite_OptimizedUnicode = (PyObject*)&PyBuffer_Type;
     PyDict_SetItemString(dict, "OptimizedUnicode", pysqlite_OptimizedUnicode);
 
     /* Set integer constants */

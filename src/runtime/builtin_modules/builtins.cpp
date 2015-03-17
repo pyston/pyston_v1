@@ -1176,13 +1176,13 @@ void setupBuiltins() {
     builtins_module->giveAttr("memoryview", memoryview_cls);
     PyType_Ready(&PyByteArray_Type);
     builtins_module->giveAttr("bytearray", &PyByteArray_Type);
+    Py_TYPE(&PyBuffer_Type) = &PyType_Type;
+    PyType_Ready(&PyBuffer_Type);
+    builtins_module->giveAttr("buffer", &PyBuffer_Type);
 
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
-
-    BoxedClass* buffer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "buffer");
-    builtins_module->giveAttr("buffer", buffer_cls);
 }
 }
