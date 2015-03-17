@@ -54,18 +54,21 @@ def set_ulimits():
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
-_extmodule_mtime = None
-def get_extmodule_mtime():
-    global _extmodule_mtime
-    if _extmodule_mtime is not None:
-        return _extmodule_mtime
+THIS_FILE = os.path.abspath(__file__)
+_global_mtime = None
+def get_global_mtime():
+    global _global_mtime
+    if _global_mtime is not None:
+        return _global_mtime
 
-    rtn = 0
+    # Start off by depending on the tester itself
+    rtn = os.stat(THIS_FILE).st_mtime
+
     for fn in os.listdir(EXTMODULE_DIR):
         if not fn.endswith(".so"):
             continue
         rtn = max(rtn, os.stat(os.path.join(EXTMODULE_DIR, fn)).st_mtime)
-    _extmodule_mtime = rtn
+    _global_mtime = rtn
     return rtn
 
 def get_expected_output(fn):
@@ -78,7 +81,7 @@ def get_expected_output(fn):
     cache_fn = fn[:-3] + ".expected_cache"
     if os.path.exists(cache_fn):
         cache_mtime = os.stat(cache_fn).st_mtime
-        if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_extmodule_mtime():
+        if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_global_mtime():
             try:
                 return cPickle.load(open(cache_fn))
             except (EOFError, ValueError):
