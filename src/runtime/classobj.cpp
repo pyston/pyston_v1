@@ -225,6 +225,39 @@ Box* instanceGetattribute(Box* _inst, Box* _attr) {
     return _instanceGetattribute(_inst, _attr, true);
 }
 
+Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    // These are special cases in CPython as well:
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            Py_FatalError("unimplemented");
+
+        if (attr->s == "__class__") {
+            if (value->cls != classobj_cls)
+                raiseExcHelper(TypeError, "__class__ must be set to a class");
+
+            inst->inst_cls = static_cast<BoxedClassobj*>(value);
+            return None;
+        }
+    }
+
+    static const std::string setattr_str("__setattr__");
+    Box* setattr = classLookup(inst->inst_cls, setattr_str);
+
+    if (setattr) {
+        setattr = processDescriptor(setattr, inst, inst->inst_cls);
+        return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+    }
+
+    _inst->setattr(attr->s, value, NULL);
+    return None;
+}
+
 Box* instanceRepr(Box* _inst) {
     RELEASE_ASSERT(_inst->cls == instance_cls, "");
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -389,6 +422,7 @@ void setupClassobj() {
 
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
+    instance_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)instanceSetattr, UNKNOWN, 3)));
     instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
     instance_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instanceRepr, UNKNOWN, 1)));
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));

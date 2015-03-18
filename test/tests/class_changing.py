@@ -18,3 +18,25 @@ try:
     c.__class__ = 1
 except TypeError as e:
     print e
+
+
+# Same thing but for old-style classes:
+
+class C():
+    def foo(self):
+        print "C.foo()"
+
+class D():
+    def foo(self):
+        print "D.foo()"
+
+c = C()
+c.foo()
+
+c.__class__ = D
+c.foo()
+
+try:
+    c.__class__ = 1
+except TypeError as e:
+    print e

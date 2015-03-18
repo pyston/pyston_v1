@@ -125,6 +125,14 @@ print g.__class__
 print g.__dict__.items()
 print bool(g)
 
+class SetattrTest:
+    def __setattr__(self, attr, value):
+        print "setattr", attr, value
+
+s = SetattrTest()
+s.b = 2
+print g.__dict__.items()
+
 class MappingTest:
     def __getitem__(self, key):
         print "getitem", key
