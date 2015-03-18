@@ -522,7 +522,7 @@ private:
         // TODO should we speculate that classdefs will generally return a class?
         // CompilerType* t = typeFromClass(type_cls);
         CompilerType* t = UNKNOWN;
-        _doSet(node->name, t);
+        _doSet(scope_info->mangleName(node->name), t);
     }
 
     void visit_delete(AST_Delete* node) override {
@@ -559,7 +559,10 @@ private:
             getType(d);
         }
 
-        _doSet(node->name, typeFromClass(function_cls));
+        CompilerType* t = UNKNOWN;
+        if (node->decorator_list.empty())
+            t = typeFromClass(function_cls);
+        _doSet(scope_info->mangleName(node->name), t);
     }
 
     void visit_global(AST_Global* node) override {}

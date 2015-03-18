@@ -156,3 +156,13 @@ print _MyClass._MyClass__a
 class ___(object):
     __a = 2
 print ___.__a
+
+# this fails if the type analysis does not mangle the function name
+class C():
+    def f():
+        def __f2():
+            print "hi"
+        if 1:
+            pass
+    f()
+
