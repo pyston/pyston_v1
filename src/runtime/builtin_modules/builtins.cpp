@@ -998,6 +998,22 @@ Box* input(Box* prompt) {
     Py_FatalError("unimplemented");
 }
 
+Box* builtinRound(Box* _number, Box* _ndigits) {
+    if (!isSubclass(_number->cls, float_cls))
+        raiseExcHelper(TypeError, "a float is required");
+
+    BoxedFloat* number = (BoxedFloat*)_number;
+
+    if (isSubclass(_ndigits->cls, int_cls)) {
+        BoxedInt* ndigits = (BoxedInt*)_ndigits;
+
+        if (ndigits->n == 0)
+            return boxFloat(round(number->d));
+    }
+
+    Py_FatalError("unimplemented");
+}
+
 Box* builtinCmp(Box* lhs, Box* rhs) {
     Py_FatalError("unimplemented");
 }
@@ -1128,6 +1144,10 @@ void setupBuiltins() {
     range_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)range, LIST, 3, 2, false, false), "range",
                                                  { NULL, NULL });
     builtins_module->giveAttr("range", range_obj);
+
+    auto* round_obj = new BoxedBuiltinFunctionOrMethod(
+        boxRTFunction((void*)builtinRound, BOXED_FLOAT, 2, 1, false, false), "round", { boxInt(0) });
+    builtins_module->giveAttr("round", round_obj);
 
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
