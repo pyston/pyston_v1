@@ -452,7 +452,13 @@ private:
 
     void* visit_slice(AST_Slice* node) override { return SLICE; }
 
-    void* visit_str(AST_Str* node) override { return STR; }
+    void* visit_str(AST_Str* node) override {
+        if (node->str_type == AST_Str::STR)
+            return STR;
+        else if (node->str_type == AST_Str::UNICODE)
+            return typeFromClass(unicode_cls);
+        RELEASE_ASSERT(0, "Unknown string type %d", (int)node->str_type);
+    }
 
     void* visit_subscript(AST_Subscript* node) override {
         CompilerType* val = getType(node->value);

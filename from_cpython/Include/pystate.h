@@ -118,6 +118,8 @@ typedef struct _ts {
     PyObject *curexc_traceback;
 
     PyObject *dict;  /* Stores per-thread state */
+
+    // Pyston note: additions in here need to be mirrored in ThreadStateInternal::accept
 } PyThreadState;
 
 
