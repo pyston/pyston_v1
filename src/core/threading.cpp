@@ -119,6 +119,8 @@ public:
             v->visit(pub_state->curexc_value);
         if (pub_state->curexc_traceback)
             v->visit(pub_state->curexc_traceback);
+        if (pub_state->dict)
+            v->visit(pub_state->dict);
 
         for (auto& stack_info : previous_stacks) {
             v->visit(stack_info.next_generator);
