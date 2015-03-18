@@ -145,7 +145,7 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
     try {
-        setattr(obj, static_cast<BoxedString*>(name)->s.c_str(), value);
+        setattrGeneric(obj, static_cast<BoxedString*>(name)->s.c_str(), value, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;

@@ -94,7 +94,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
 extern "C" void dump(void* p);
 
 struct SetattrRewriteArgs;
-void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
+void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
 struct BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
