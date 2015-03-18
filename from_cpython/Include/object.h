@@ -826,7 +826,7 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
 
 
 #define Py_INCREF(op) ((void)(op))
-#define Py_DECREF(op) ((void)(op))
+#define Py_DECREF(op) asm volatile("" : : "X"(op))
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
  * and tp_dealloc implementatons.
@@ -874,7 +874,7 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force) PYSTON_NOEXCEPT;
 /* Macros to use in case the object pointer may be NULL: */
 // Pyston change: made these noops as well
 #define Py_XINCREF(op) ((void)(op))
-#define Py_XDECREF(op) ((void)(op))
+#define Py_XDECREF(op) asm volatile("" : : "X"(op))
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
