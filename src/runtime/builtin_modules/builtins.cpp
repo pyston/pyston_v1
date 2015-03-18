@@ -148,7 +148,7 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args) {
 
     Box* minElement;
     Box* container;
-    if (args->elts.size() == 0) {
+    if (args->size() == 0) {
         minElement = nullptr;
         container = arg0;
     } else {
@@ -178,7 +178,7 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
 
     Box* maxElement;
     Box* container;
-    if (args->elts.size() == 0) {
+    if (args->size() == 0) {
         maxElement = nullptr;
         container = arg0;
     } else {
@@ -250,7 +250,8 @@ extern "C" Box* chr(Box* arg) {
         raiseExcHelper(ValueError, "chr() arg not in range(256)");
     }
 
-    return boxString(std::string(1, (char)n));
+    char c = (char)n;
+    return boxStringRef(llvm::StringRef(&c, 1));
 }
 
 extern "C" Box* unichr(Box* arg) {
@@ -382,7 +383,8 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    return importModuleLevel(&static_cast<BoxedString*>(name)->s, globals, fromlist, ((BoxedInt*)level)->n);
+    std::string _name = static_cast<BoxedString*>(name)->s;
+    return importModuleLevel(_name, globals, fromlist, ((BoxedInt*)level)->n);
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
@@ -391,7 +393,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
-    delattr(obj, str->s.c_str());
+    delattr(obj, str->s.data());
     return None;
 }
 
@@ -406,7 +408,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattr(obj, str->s.c_str());
+        rtn = getattr(obj, str->s.data());
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -416,7 +418,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         if (default_value)
             return default_value;
         else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.c_str());
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.data());
     }
 
     return rtn;
@@ -430,7 +432,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattr(obj, str->s.c_str(), value);
+    setattr(obj, str->s.data(), value);
     return None;
 }
 
@@ -465,7 +467,7 @@ Box* map2(Box* f, Box* container) {
 
 Box* map(Box* f, BoxedTuple* args) {
     assert(args->cls == tuple_cls);
-    auto num_iterable = args->elts.size();
+    auto num_iterable = args->size();
     if (num_iterable < 1)
         raiseExcHelper(TypeError, "map() requires at least two args");
 
@@ -475,7 +477,8 @@ Box* map(Box* f, BoxedTuple* args) {
 
     std::vector<BoxIterator> args_it;
     std::vector<BoxIterator> args_end;
-    for (auto& e : args->elts) {
+
+    for (auto e : *args) {
         auto range = e->pyElements();
         args_it.emplace_back(range.begin());
         args_end.emplace_back(range.end());
@@ -559,8 +562,7 @@ Box* zip2(Box* container1, Box* container2) {
     BoxIterator it2 = range2.begin();
 
     for (; it1 != range1.end() && it2 != range2.end(); ++it1, ++it2) {
-        BoxedTuple::GCVector elts{ *it1, *it2 };
-        listAppendInternal(rtn, new BoxedTuple(std::move(elts)));
+        listAppendInternal(rtn, BoxedTuple::create({ *it1, *it2 }));
     }
     return rtn;
 }
@@ -583,7 +585,7 @@ public:
         RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
         BoxedException* exc = static_cast<BoxedException*>(self);
 
-        return new BoxedTuple({ self->cls, EmptyTuple, makeAttrWrapper(self) });
+        return BoxedTuple::create({ self->cls, EmptyTuple, makeAttrWrapper(self) });
     }
 };
 
@@ -598,7 +600,7 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
     BoxedException* rtn = new (cls) BoxedException();
 
     // TODO: this should be a MemberDescriptor and set during init
-    if (args->elts.size() == 1)
+    if (args->size() == 1)
         rtn->giveAttr("message", args->elts[0]);
     else
         rtn->giveAttr("message", boxStrConstant(""));
@@ -623,7 +625,7 @@ Box* exceptionRepr(Box* b) {
     assert(message->cls == str_cls);
 
     BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxString(std::string(getTypeName(b)) + "(" + message_s->s + ",)");
+    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s + ",)");
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
@@ -667,7 +669,7 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         }
         checkAndThrowCAPIException();
 
-        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, new BoxedTuple({ base }), dict, NULL, NULL);
+        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
         return cls;
     } catch (ExcInfo e) {
         abort();
@@ -706,7 +708,7 @@ public:
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         Box* val = *self->iterator;
         ++self->iterator;
-        return new BoxedTuple({ boxInt(self->idx++), val });
+        return BoxedTuple::create({ boxInt(self->idx++), val });
     }
 
     static Box* hasnext(Box* _self) {
@@ -766,14 +768,14 @@ Box* execfile(Box* _fn) {
 #endif
 
 #else
-    bool exists = llvm::sys::fs::exists(fn->s);
+    bool exists = llvm::sys::fs::exists(std::string(fn->s));
 #endif
 
     if (!exists)
-        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.c_str());
+        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.data());
 
     // Run directly inside the current module:
-    AST_Module* ast = caching_parse_file(fn->s.c_str());
+    AST_Module* ast = caching_parse_file(fn->s.data());
     compileAndRunModule(ast, getCurrentModule());
 
     return None;
@@ -785,7 +787,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     Box* dest, *end;
 
-    auto it = kwargs->d.find(new BoxedString("file"));
+    auto it = kwargs->d.find(boxStrConstant("file"));
     if (it != kwargs->d.end()) {
         dest = it->second;
         kwargs->d.erase(it);
@@ -793,23 +795,23 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
         dest = getSysStdout();
     }
 
-    it = kwargs->d.find(new BoxedString("end"));
+    it = kwargs->d.find(boxStrConstant("end"));
     if (it != kwargs->d.end()) {
         end = it->second;
         kwargs->d.erase(it);
     } else {
-        end = new BoxedString("\n");
+        end = boxStrConstant("\n");
     }
 
     RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
     static const std::string write_str("write");
 
-    Box* space_box = new BoxedString(" ");
+    Box* space_box = boxStrConstant(" ");
 
     // TODO softspace handling?
     bool first = true;
-    for (auto e : args->elts) {
+    for (auto e : *args) {
         BoxedString* s = str(e);
 
         if (!first) {

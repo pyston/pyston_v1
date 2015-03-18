@@ -14,7 +14,7 @@
 
 #include "runtime/set.h"
 
-#include <sstream>
+#include <llvm/Support/raw_ostream.h>
 
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
@@ -97,7 +97,8 @@ Box* setNew(Box* _cls, Box* container) {
 }
 
 static Box* _setRepr(BoxedSet* self, const char* type_name) {
-    std::ostringstream os("");
+    std::string O("");
+    llvm::raw_string_ostream os(O);
 
     os << type_name << "([";
     bool first = true;
@@ -232,7 +233,7 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     assert(self->cls == set_cls);
     assert(args->cls == tuple_cls);
 
-    for (auto l : args->elts) {
+    for (auto l : *args) {
         if (l->cls == set_cls) {
             BoxedSet* s2 = static_cast<BoxedSet*>(l);
             self->s.insert(s2->s.begin(), s2->s.end());

@@ -128,8 +128,9 @@ static Box* (*callattrInternal3)(Box*, const std::string*, LookupScope, CallRewr
 
 size_t PyHasher::operator()(Box* b) const {
     if (b->cls == str_cls) {
-        StringHash<std::string> H;
-        return H(static_cast<BoxedString*>(b)->s);
+        StringHash<char> H;
+        auto s = static_cast<BoxedString*>(b);
+        return H(s->data(), s->size());
     }
 
     BoxedInt* i = hash(b);
@@ -218,7 +219,7 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
 extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
     if (msg) {
         BoxedString* tostr = str(msg);
-        raiseExcHelper(AssertionError, "%s", tostr->s.c_str());
+        raiseExcHelper(AssertionError, "%s", tostr->data());
     } else {
         raiseExcHelper(AssertionError, "");
     }
@@ -272,7 +273,7 @@ static void _checkUnpackingLength(i64 expected, i64 given) {
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     if (obj->cls == tuple_cls) {
         BoxedTuple* t = static_cast<BoxedTuple*>(obj);
-        _checkUnpackingLength(expected_size, t->elts.size());
+        _checkUnpackingLength(expected_size, t->size());
         return &t->elts[0];
     }
 
@@ -413,7 +414,7 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     if (!ht_name)
         assert(str_cls == NULL);
     else
-        tp_name = ht_name->s.c_str();
+        tp_name = ht_name->data();
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));
@@ -425,7 +426,7 @@ BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, 
                                        int weaklist_offset, int instance_size, bool is_user_defined,
                                        const std::string& name) {
     return create(metaclass, base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined,
-                  new BoxedString(name), NULL);
+                  static_cast<BoxedString*>(boxString(name)), NULL);
 }
 
 BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
@@ -458,7 +459,7 @@ std::string getFullNameOfClass(BoxedClass* cls) {
 
     BoxedString* module = static_cast<BoxedString*>(b);
 
-    return module->s + "." + cls->tp_name;
+    return (llvm::Twine(module->s) + "." + cls->tp_name).str();
 }
 
 std::string getFullTypeName(Box* o) {
@@ -782,7 +783,7 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
         // address.
         obj_saved->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)mro);
 
-        for (auto base : mro->elts) {
+        for (auto base : *mro) {
             rewrite_args->out_success = false;
             if (base == cls) {
                 // Small optimization: don't have to load the class again since it was given to us in
@@ -801,7 +802,7 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
     } else {
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
-        for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+        for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
             val = b->getattr(attr, NULL);
             if (val)
                 return val;
@@ -952,7 +953,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
 Box* boxChar(char c) {
     char d[1];
     d[0] = c;
-    return new BoxedString(std::string(d, 1));
+    return boxStringRef(llvm::StringRef(d, 1));
 }
 
 static Box* noneIfNull(Box* b) {
@@ -967,12 +968,12 @@ static Box* boxStringOrNone(const char* s) {
     if (s == NULL) {
         return None;
     } else {
-        return boxString(std::string(s));
+        return boxStrConstant(s);
     }
 }
 
 static Box* boxStringFromCharPtr(const char* s) {
-    return boxString(std::string(s));
+    return boxStrConstant(s);
 }
 
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const std::string& attr_name, Box* obj,
@@ -1100,7 +1101,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                 rewrite_args = NULL;
                 REWRITE_ABORTED("");
                 char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
-                return boxString(std::string(rtn));
+                return boxStringRef(llvm::StringRef(rtn));
             }
 
             default:
@@ -1164,7 +1165,7 @@ Box* getattrInternalEx(Box* obj, const std::string& attr, GetattrRewriteArgs* re
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
-            Box* r = obj->cls->tp_getattro(obj, new BoxedString(attr));
+            Box* r = obj->cls->tp_getattro(obj, boxString(attr));
             if (!r)
                 throwCAPIException();
             return r;
@@ -2205,7 +2206,7 @@ extern "C" void dump(void* p) {
 
             if (cls->tp_mro && cls->tp_mro->cls == tuple_cls) {
                 bool first = true;
-                for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+                for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
                     if (!first)
                         printf(" ->");
                     first = false;
@@ -2216,11 +2217,11 @@ extern "C" void dump(void* p) {
         }
 
         if (isSubclass(b->cls, str_cls)) {
-            printf("String value: %s\n", static_cast<BoxedString*>(b)->s.c_str());
+            printf("String value: %s\n", static_cast<BoxedString*>(b)->data());
         }
 
         if (isSubclass(b->cls, tuple_cls)) {
-            printf("%ld elements\n", static_cast<BoxedTuple*>(b)->elts.size());
+            printf("%ld elements\n", static_cast<BoxedTuple*>(b)->size());
         }
 
         if (isSubclass(b->cls, int_cls)) {
@@ -2760,7 +2761,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), emptyTupleConst);
         }
 
-        Box* ovarargs = new BoxedTuple(BoxedTuple::GCVector(unused_positional.begin(), unused_positional.end()));
+        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", getFunctionName(f).c_str(),
@@ -2851,7 +2852,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 Box*& v = okwargs->d[p.first];
                 if (v) {
                     raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'",
-                                   getFunctionName(f).c_str(), s->s.c_str());
+                                   getFunctionName(f).c_str(), s->data());
                 }
                 v = p.second;
             }
@@ -3840,14 +3841,15 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     RELEASE_ASSERT(arg1->cls == str_cls, "");
     BoxedString* name = static_cast<BoxedString*>(arg1);
 
-    if (bases->elts.size() == 0) {
-        bases = new BoxedTuple({ object_cls });
+    if (bases->size() == 0) {
+        bases = BoxedTuple::create({ object_cls });
     }
 
     // Ported from CPython:
-    int nbases = bases->elts.size();
+    int nbases = bases->size();
     BoxedClass* winner = metatype;
-    for (auto tmp : bases->elts) {
+
+    for (auto tmp : *bases) {
         auto tmptype = tmp->cls;
         if (tmptype == classobj_cls)
             continue;
@@ -3926,7 +3928,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made->tp_alloc = PyType_GenericAlloc;
 
     assert(!made->simple_destructor);
-    for (auto b : bases->elts) {
+    for (auto b : *bases) {
         if (!isSubclass(b->cls, type_cls))
             continue;
         BoxedClass* b_cls = static_cast<BoxedClass*>(b);
@@ -4228,7 +4230,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
 Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     assert(vararg->cls == tuple_cls);
 
-    int n = vararg->elts.size();
+    int n = vararg->size();
     int args_to_pass = n + 2; // 1 for obj, 1 for kwargs
 
     Box** args = NULL;
@@ -4371,7 +4373,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
             Box* attr_value = from_module->getattr(casted_attr_name->s);
 
             if (!attr_value)
-                raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->s.c_str());
+                raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->data());
 
             to_module->setattr(casted_attr_name->s, attr_value, NULL);
         }

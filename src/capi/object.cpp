@@ -421,9 +421,9 @@ extern "C" PyObject* PyObject_SelfIter(PyObject* obj) noexcept {
 extern "C" int PyObject_GenericSetAttr(PyObject* obj, PyObject* name, PyObject* value) noexcept {
     try {
         if (value == NULL)
-            delattrGeneric(obj, static_cast<BoxedString*>(name)->s, NULL);
+            delattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s), NULL);
         else
-            setattrGeneric(obj, static_cast<BoxedString*>(name)->s.c_str(), value, NULL);
+            setattrGeneric(obj, std::string(static_cast<BoxedString*>(name)->s), value, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;

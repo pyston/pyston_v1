@@ -580,7 +580,7 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Box* type = last_exception.type;
         Box* value = last_exception.value ? last_exception.value : None;
         Box* traceback = last_exception.traceback ? last_exception.traceback : None;
-        v = new BoxedTuple({ type, value, traceback });
+        v = BoxedTuple::create({ type, value, traceback });
         last_exception = ExcInfo(NULL, NULL, NULL);
     } else if (node->opcode == AST_LangPrimitive::CHECK_EXC_MATCH) {
         assert(node->args.size() == 2);
@@ -747,11 +747,11 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
     ScopeInfo* scope_info = source_info->scoping->getScopeInfoForNode(node);
     assert(scope_info);
 
-    BoxedTuple::GCVector bases;
-    for (AST_expr* b : node->bases)
-        bases.push_back(visit_expr(b).o);
-
-    BoxedTuple* basesTuple = new BoxedTuple(std::move(bases));
+    BoxedTuple* basesTuple = BoxedTuple::create(node->bases.size());
+    int base_idx = 0;
+    for (AST_expr* b : node->bases) {
+        basesTuple->elts[base_idx++] = visit_expr(b).o;
+    }
 
     std::vector<Box*, StlCompatAllocator<Box*>> decorators;
     for (AST_expr* d : node->decorator_list)
@@ -1132,10 +1132,11 @@ Value ASTInterpreter::visit_list(AST_List* node) {
 }
 
 Value ASTInterpreter::visit_tuple(AST_Tuple* node) {
-    BoxedTuple::GCVector elts;
+    BoxedTuple* rtn = BoxedTuple::create(node->elts.size());
+    int rtn_idx = 0;
     for (AST_expr* e : node->elts)
-        elts.push_back(visit_expr(e).o);
-    return new BoxedTuple(std::move(elts));
+        rtn->elts[rtn_idx++] = visit_expr(e).o;
+    return rtn;
 }
 
 Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
@@ -1194,7 +1195,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
-        std::string name = static_cast<BoxedString*>(p.first)->s;
+        auto& name = static_cast<BoxedString*>(p.first)->s;
         if (name == PASSED_GENERATOR_NAME) {
             interpreter.setGenerator(p.second);
         } else if (name == PASSED_CLOSURE_NAME) {

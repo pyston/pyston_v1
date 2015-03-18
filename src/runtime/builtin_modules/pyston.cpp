@@ -43,7 +43,7 @@ static Box* setOption(Box* option, Box* value) {
     else CHECK(REOPT_THRESHOLD_BASELINE);
     else CHECK(OSR_THRESHOLD_BASELINE);
     else CHECK(SPECULATION_THRESHOLD);
-    else raiseExcHelper(ValueError, "unknown option name '%s", option_string->s.c_str());
+    else raiseExcHelper(ValueError, "unknown option name '%s", option_string->s.data());
 
     return None;
 }
