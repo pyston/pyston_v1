@@ -469,7 +469,7 @@ const char* getNameOfClass(BoxedClass* cls) {
 }
 
 HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
-    std::unordered_map<std::string, HiddenClass*>::iterator it = children.find(attr);
+    auto it = children.find(attr);
     if (it != children.end())
         return it->second;
 
@@ -492,9 +492,9 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
     std::vector<std::string> new_attrs(attr_offsets.size() - 1);
     for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
         if (it->second < idx)
-            new_attrs[it->second] = it->first;
+            new_attrs[it->second] = it->first();
         else if (it->second > idx) {
-            new_attrs[it->second - 1] = it->first;
+            new_attrs[it->second - 1] = it->first();
         }
     }
 
@@ -647,7 +647,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         assert(new_hcls->attr_offsets[attr] == numattrs);
 #ifndef NDEBUG
         for (const auto& p : hcls->attr_offsets) {
-            assert(new_hcls->attr_offsets[p.first] == p.second);
+            assert(new_hcls->attr_offsets[p.first()] == p.second);
         }
 #endif
 
@@ -4254,10 +4254,10 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
     for (auto& p : module_attrs->hcls->attr_offsets) {
-        if (p.first[0] == '_')
+        if (p.first()[0] == '_')
             continue;
 
-        to_module->setattr(p.first, module_attrs->attr_list->attrs[p.second], NULL);
+        to_module->setattr(p.first(), module_attrs->attr_list->attrs[p.second], NULL);
     }
 
     return None;

@@ -171,12 +171,12 @@ extern "C" Box* dir(Box* obj) {
     }
 
     for (auto const& kv : obj->cls->attrs.hcls->attr_offsets) {
-        listAppend(result, boxString(kv.first));
+        listAppend(result, boxString(kv.first()));
     }
     if (obj->cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = obj->getHCAttrsPtr();
         for (auto const& kv : attrs->hcls->attr_offsets) {
-            listAppend(result, boxString(kv.first));
+            listAppend(result, boxString(kv.first()));
         }
     }
     if (obj->cls->instancesHaveDictAttrs()) {

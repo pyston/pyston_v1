@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include <llvm/ADT/StringMap.h>
 #include <ucontext.h>
 
 #include "Python.h"
@@ -255,7 +256,11 @@ static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 class HiddenClass : public GCAllocated<gc::GCKind::HIDDEN_CLASS> {
 private:
     HiddenClass() {}
-    HiddenClass(const HiddenClass* parent) : attr_offsets(parent->attr_offsets) {}
+    HiddenClass(HiddenClass* parent) : attr_offsets() {
+        for (auto& p : parent->attr_offsets) {
+            this->attr_offsets.insert(&p);
+        }
+    }
 
 public:
     static HiddenClass* makeRoot() {
@@ -267,8 +272,8 @@ public:
         return new HiddenClass();
     }
 
-    std::unordered_map<std::string, int> attr_offsets;
-    std::unordered_map<std::string, HiddenClass*> children;
+    llvm::StringMap<int> attr_offsets;
+    llvm::StringMap<HiddenClass*> children;
 
     HiddenClass* getOrMakeChild(const std::string& attr);
 

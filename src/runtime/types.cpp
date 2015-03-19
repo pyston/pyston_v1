@@ -981,7 +981,7 @@ private:
     // Iterating over the an attrwrapper (~=dict) just gives the keys, which
     // just depends on the hidden class of the object.  Let's store only that:
     HiddenClass* hcls;
-    std::unordered_map<std::string, int>::iterator it;
+    decltype(HiddenClass::attr_offsets)::iterator it;
 
 public:
     AttrWrapperIter(AttrWrapper* aw);
@@ -1088,7 +1088,7 @@ public:
             first = false;
 
             BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
-            os << p.first << ": " << v->s;
+            os << p.first().str() << ": " << v->s;
         }
         os << "})";
         return boxString(os.str());
@@ -1114,7 +1114,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
-            listAppend(rtn, boxString(p.first));
+            listAppend(rtn, boxString(p.first()));
         }
         return rtn;
     }
@@ -1140,7 +1140,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
-            BoxedTuple* t = new BoxedTuple({ boxString(p.first), attrs->attr_list->attrs[p.second] });
+            BoxedTuple* t = new BoxedTuple({ boxString(p.first()), attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
         }
         return rtn;
@@ -1154,7 +1154,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
-            rtn->d[boxString(p.first)] = attrs->attr_list->attrs[p.second];
+            rtn->d[boxString(p.first())] = attrs->attr_list->attrs[p.second];
         }
         return rtn;
     }
@@ -1176,7 +1176,7 @@ public:
             HCAttrs* attrs = container->b->getHCAttrsPtr();
 
             for (const auto& p : attrs->hcls->attr_offsets) {
-                self->b->setattr(p.first, attrs->attr_list->attrs[p.second], NULL);
+                self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
             }
         } else if (_container->cls == dict_cls) {
             BoxedDict* container = static_cast<BoxedDict*>(_container);
@@ -1218,7 +1218,7 @@ Box* AttrWrapperIter::next(Box* _self) {
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
 
     assert(self->it != self->hcls->attr_offsets.end());
-    Box* r = boxString(self->it->first);
+    Box* r = boxString(self->it->first());
     ++self->it;
     return r;
 }
