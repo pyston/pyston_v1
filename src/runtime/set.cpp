@@ -273,6 +273,30 @@ static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
     return rtn;
 }
 
+static Box* setIssubset(BoxedSet* self, Box* container) {
+    assert(self->cls == set_cls);
+    RELEASE_ASSERT(container->cls == set_cls, "");
+
+    BoxedSet* rhs = static_cast<BoxedSet*>(container);
+    for (auto e : self->s) {
+        if (rhs->s.find(e) == rhs->s.end())
+            return False;
+    }
+    return True;
+}
+
+static Box* setIssuperset(BoxedSet* self, Box* container) {
+    assert(self->cls == set_cls);
+    RELEASE_ASSERT(container->cls == set_cls, "");
+
+    BoxedSet* rhs = static_cast<BoxedSet*>(container);
+    for (auto e : rhs->s) {
+        if (self->s.find(e) == self->s.end())
+            return False;
+    }
+    return True;
+}
+
 Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
     if (!isSubclass(self->cls, set_cls))
         raiseExcHelper(TypeError, "descriptor 'intersection' requires a 'set' object but received a '%s'",
@@ -406,6 +430,8 @@ void setupSet() {
     set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
     set_cls->giveAttr("intersection",
                       new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));
+    set_cls->giveAttr("issuperset", new BoxedFunction(boxRTFunction((void*)setIssuperset, UNKNOWN, 2)));
 
     set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
     set_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)setPop, UNKNOWN, 1)));

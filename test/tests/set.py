@@ -98,3 +98,8 @@ s.discard(1)
 print s
 s.discard(1)
 print s
+
+s = set(range(5))
+for i in xrange(10):
+    s2 = set(range(i))
+    print s.issubset(s2), s.issuperset(s2)
