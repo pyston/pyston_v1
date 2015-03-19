@@ -26,6 +26,7 @@
 #include "llvm/Support/FileSystem.h"
 
 #include "analysis/scoping_analysis.h"
+#include "codegen/compvars.h"
 #include "core/ast.h"
 #include "core/util.h"
 
@@ -199,5 +200,21 @@ GlobalState::GlobalState() : context(llvm::getGlobalContext()), cur_module(NULL)
 
 llvm::JITEventListener* makeRegistryListener() {
     return new RegistryEventListener();
+}
+
+
+FunctionSpecialization::FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {
+    accepts_all_inputs = true;
+    boxed_return_value = (rtn_type->llvmType() == UNKNOWN->llvmType());
+}
+
+FunctionSpecialization::FunctionSpecialization(ConcreteCompilerType* rtn_type,
+                                               const std::vector<ConcreteCompilerType*>& arg_types)
+    : rtn_type(rtn_type), arg_types(arg_types) {
+    accepts_all_inputs = true;
+    boxed_return_value = (rtn_type->llvmType() == UNKNOWN->llvmType());
+    for (auto t : arg_types) {
+        accepts_all_inputs = accepts_all_inputs && (t == UNKNOWN);
+    }
 }
 }

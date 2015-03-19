@@ -157,14 +157,11 @@ public:
 struct FunctionSpecialization {
     ConcreteCompilerType* rtn_type;
     std::vector<ConcreteCompilerType*> arg_types;
+    bool boxed_return_value;
+    bool accepts_all_inputs;
 
-    FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {}
-
-    FunctionSpecialization(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2)
-        : rtn_type(rtn_type), arg_types({ arg1, arg2 }) {}
-
-    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types)
-        : rtn_type(rtn_type), arg_types(arg_types) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type);
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types);
 };
 
 class BoxedClosure;
@@ -278,6 +275,7 @@ public:
 
     FunctionList
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
+    CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
     // Functions can provide an "internal" version, which will get called instead
@@ -290,12 +288,12 @@ public:
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(source), param_names(source->ast) {
+          source(source), param_names(source->ast), always_use_version(NULL) {
         assert(num_args >= num_defaults);
     }
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(NULL), param_names(param_names) {
+          source(NULL), param_names(param_names), always_use_version(NULL) {
         assert(num_args >= num_defaults);
     }
 

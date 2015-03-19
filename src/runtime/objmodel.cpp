@@ -2444,16 +2444,28 @@ static inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** ar
     return args[idx - 3];
 }
 
+static StatCounter slowpath_pickversion("slowpath_pickversion");
 static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
                                      Box** oargs) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
-    CompiledFunction* chosen_cf = NULL;
+    if (f->always_use_version)
+        return f->always_use_version;
+    slowpath_pickversion.log();
+
     for (CompiledFunction* cf : f->versions) {
         assert(cf->spec->arg_types.size() == num_output_args);
 
-        if (cf->spec->rtn_type->llvmType() != UNKNOWN->llvmType())
+        if (!cf->spec->boxed_return_value)
             continue;
+
+        if (cf->spec->accepts_all_inputs) {
+            if (cf == f->versions[0] && cf->effort == EffortLevel::MAXIMAL)
+                f->always_use_version = cf;
+            return cf;
+        }
+
+        assert(cf->spec->rtn_type->llvmType() == UNKNOWN->llvmType());
 
         bool works = true;
         for (int i = 0; i < num_output_args; i++) {
@@ -2469,38 +2481,33 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         if (!works)
             continue;
 
-        chosen_cf = cf;
-        break;
+        return cf;
     }
 
-    if (chosen_cf == NULL) {
-        if (f->source == NULL) {
-            // TODO I don't think this should be happening any more?
-            printf("Error: couldn't find suitable function version and no source to recompile!\n");
-            printf("(First version: %p)\n", f->versions[0]->code);
-            abort();
-        }
-
-        EffortLevel new_effort = initialEffort();
-
-        std::vector<ConcreteCompilerType*> arg_types;
-        for (int i = 0; i < num_output_args; i++) {
-            if (new_effort == EffortLevel::INTERPRETED) {
-                arg_types.push_back(UNKNOWN);
-            } else {
-                Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-                assert(arg); // only builtin functions can pass NULL args
-
-                arg_types.push_back(typeFromClass(arg->cls));
-            }
-        }
-        FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-        // this also pushes the new CompiledVersion to the back of the version list:
-        chosen_cf = compileFunction(f, spec, new_effort, NULL);
+    if (f->source == NULL) {
+        // TODO I don't think this should be happening any more?
+        printf("Error: couldn't find suitable function version and no source to recompile!\n");
+        printf("(First version: %p)\n", f->versions[0]->code);
+        abort();
     }
 
-    return chosen_cf;
+    EffortLevel new_effort = initialEffort();
+
+    std::vector<ConcreteCompilerType*> arg_types;
+    for (int i = 0; i < num_output_args; i++) {
+        if (new_effort == EffortLevel::INTERPRETED) {
+            arg_types.push_back(UNKNOWN);
+        } else {
+            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+            assert(arg); // only builtin functions can pass NULL args
+
+            arg_types.push_back(typeFromClass(arg->cls));
+        }
+    }
+    FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
+
+    // this also pushes the new CompiledVersion to the back of the version list:
+    return compileFunction(f, spec, new_effort, NULL);
 }
 
 static std::string getFunctionName(CLFunction* f) {
