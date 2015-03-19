@@ -31,10 +31,13 @@ private:
     const char* desc;
     long min_usec;
     bool ended;
+    std::function<void(long)> exit_callback;
 
 public:
     Timer(const char* desc = NULL, long min_usec = -1);
     ~Timer();
+
+    void setExitCallback(std::function<void(long)> _exit_callback) { exit_callback = _exit_callback; }
 
     void restart(const char* newdesc, long new_min_usec);
     void restart(const char* newdesc = NULL);
