@@ -1054,7 +1054,10 @@ AST_Module* caching_parse_file(const char* fn) {
     code = stat(cache_fn.c_str(), &cache_stat);
     if (code != 0 || cache_stat.st_mtime < source_stat.st_mtime
         || (cache_stat.st_mtime == source_stat.st_mtime && cache_stat.st_mtim.tv_nsec < source_stat.st_mtim.tv_nsec)) {
-        _reparse(fn, cache_fn);
+        auto result = _reparse(fn, cache_fn);
+        if (result == ParseResult::PYC_UNWRITABLE)
+            return parse_file(fn);
+
         code = stat(cache_fn.c_str(), &cache_stat);
         assert(code == 0);
     }
@@ -1095,11 +1098,9 @@ AST_Module* caching_parse_file(const char* fn) {
         if (!good) {
             fclose(fp);
             auto result = _reparse(fn, cache_fn);
-            if (result == ParseResult::PYC_UNWRITABLE) {
-                if (VERBOSITY())
-                    printf("Unable to write to %s, falling back to non-caching parse\n", cache_fn.c_str());
+            if (result == ParseResult::PYC_UNWRITABLE)
                 return parse_file(fn);
-            }
+
             code = stat(cache_fn.c_str(), &cache_stat);
             assert(code == 0);
 
