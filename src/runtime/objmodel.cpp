@@ -180,6 +180,7 @@ extern "C" bool softspace(Box* b, bool newval) {
     }
 
     bool r;
+    Box* gotten = NULL;
     try {
         Box* gotten = getattrInternal(b, "softspace", NULL);
         if (!gotten) {
@@ -187,6 +188,11 @@ extern "C" bool softspace(Box* b, bool newval) {
         } else {
             r = nonzero(gotten);
         }
+    } catch (ExcInfo e) {
+        r = 0;
+    }
+
+    try {
         setattr(b, "softspace", boxInt(newval));
     } catch (ExcInfo e) {
         r = 0;
