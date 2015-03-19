@@ -1019,7 +1019,9 @@ Box* builtinCmp(Box* lhs, Box* rhs) {
 }
 
 void setupBuiltins() {
-    builtins_module = createModule("__builtin__", "__builtin__");
+    builtins_module = createModule("__builtin__", "__builtin__",
+                                   "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
+                                   "the `nil' object; Ellipsis represents `...' in slices.");
 
     BoxedHeapClass* ellipsis_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");

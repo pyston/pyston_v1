@@ -916,6 +916,14 @@ extern "C" Box* intOct(BoxedInt* self) {
     return new BoxedString(std::string(buf, len));
 }
 
+extern "C" Box* intTrunc(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    return self;
+}
+
 static Box* _intNew(Box* val, Box* base) {
     if (isSubclass(val->cls, int_cls)) {
         RELEASE_ASSERT(!base, "");
@@ -1071,6 +1079,8 @@ void setupInt() {
 
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
+
+    int_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)intTrunc, BOXED_INT, 1)));
 
     int_cls->giveAttr(
         "__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));

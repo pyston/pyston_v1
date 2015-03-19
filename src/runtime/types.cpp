@@ -263,14 +263,14 @@ std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
-      name(NULL) {
+      name(NULL), doc(NULL) {
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
+        this->doc = None;
     }
-
-    this->giveAttr("__doc__", None);
 
     assert(f->num_defaults == ndefaults);
 }
@@ -278,7 +278,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, bool isGenerator)
     : in_weakreflist(NULL), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL),
-      modname(NULL), name(NULL) {
+      modname(NULL), name(NULL), doc(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -289,8 +289,10 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
 
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
+        this->doc = None;
     }
 
     assert(f->num_defaults == ndefaults);
@@ -309,21 +311,22 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     if (f->source) {
         this->name = static_cast<BoxedString*>(boxString(f->source->getName()));
     }
-
-    this->giveAttr("__doc__", None);
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name)
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
     : BoxedBuiltinFunctionOrMethod(f, name, {}) {
+
+    this->doc = doc ? boxStrConstant(doc) : None;
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
                                                            std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                                           bool isGenerator)
+                                                           bool isGenerator, const char* doc)
     : BoxedFunctionBase(f, defaults, closure, isGenerator) {
 
     assert(name);
     this->name = static_cast<BoxedString*>(boxString(name));
+    this->doc = doc ? boxStrConstant(doc) : None;
 }
 
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
@@ -337,6 +340,9 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
 
     if (f->modname)
         v->visit(f->modname);
+
+    if (f->doc)
+        v->visit(f->doc);
 
     if (f->closure)
         v->visit(f->closure);
@@ -360,9 +366,10 @@ static void functionDtor(Box* b) {
     self->dependent_ics.~ICInvalidator();
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : fn(fn) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) : fn(fn) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
+    this->giveAttr("__doc__", doc ? boxStrConstant(doc) : None);
 }
 
 std::string BoxedModule::name() {
@@ -928,6 +935,7 @@ static void typeSetModule(Box* _type, PyObject* value, void* context) {
 
     type->setattr("__module__", value, NULL);
 }
+
 
 Box* typeHash(BoxedClass* self) {
     assert(isSubclass(self->cls, type_cls));
@@ -1893,6 +1901,8 @@ void setupRuntime() {
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
                                                                    offsetof(BoxedFunction, modname), false));
+    function_cls->giveAttr(
+        "__doc__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, doc), false));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
@@ -1906,6 +1916,9 @@ void setupRuntime() {
         "__repr__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodRepr, STR, 1)));
     builtin_function_or_method_cls->giveAttr(
         "__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(builtinFunctionOrMethodName, NULL, NULL));
+    builtin_function_or_method_cls->giveAttr(
+        "__doc__",
+        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, doc), false));
     builtin_function_or_method_cls->freeze();
 
     instancemethod_cls->giveAttr(
@@ -2036,16 +2049,15 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string& name, const std::string& fn) {
+BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc) {
     assert(fn.size() && "probably wanted to set the fn to <stdin>?");
-    BoxedModule* module = new BoxedModule(name, fn);
+    BoxedModule* module = new BoxedModule(name, fn, doc);
 
     BoxedDict* d = getSysModulesDict();
     Box* b_name = boxStringPtr(&name);
     ASSERT(d->d.count(b_name) == 0, "%s", name.c_str());
     d->d[b_name] = module;
 
-    module->giveAttr("__doc__", None);
     return module;
 }
 

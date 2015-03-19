@@ -652,6 +652,36 @@ Box* floatRepr(BoxedFloat* self) {
     return boxString(floatFmt(self->d, 16, 'g'));
 }
 
+Box* floatTrunc(BoxedFloat* self) {
+    if (!isSubclass(self->cls, float_cls))
+        raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'float' object but received a '%s'",
+                       getTypeName(self));
+
+    double wholepart; /* integral portion of x, rounded toward 0 */
+
+    (void)modf(self->d, &wholepart);
+    /* Try to get out cheap if this fits in a Python int.  The attempt
+     * to cast to long must be protected, as C doesn't define what
+     * happens if the double is too big to fit in a long.  Some rare
+     * systems raise an exception then (RISCOS was mentioned as one,
+     * and someone using a non-default option on Sun also bumped into
+     * that).  Note that checking for <= LONG_MAX is unsafe: if a long
+     * has more bits of precision than a double, casting LONG_MAX to
+     * double may yield an approximation, and if that's rounded up,
+     * then, e.g., wholepart=LONG_MAX+1 would yield true from the C
+     * expression wholepart<=LONG_MAX, despite that wholepart is
+     * actually greater than LONG_MAX.  However, assuming a two's complement
+     * machine with no trap representation, LONG_MIN will be a power of 2 (and
+     * hence exactly representable as a double), and LONG_MAX = -1-LONG_MIN, so
+     * the comparisons with (double)LONG_MIN below should be safe.
+     */
+    if ((double)LONG_MIN <= wholepart && wholepart < -(double)LONG_MIN) {
+        const long aslong = (long)wholepart;
+        return PyInt_FromLong(aslong);
+    }
+    return PyLong_FromDouble(wholepart);
+}
+
 extern "C" void printFloat(double d) {
     std::string s = floatFmt(d, 12, 'g');
     printf("%s", s.c_str());
@@ -711,6 +741,9 @@ void setupFloat() {
     // float_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)floatNonzero, NULL, 1)));
     float_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)floatStr, STR, 1)));
     float_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)floatRepr, STR, 1)));
+
+    float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, BOXED_INT, 1)));
+
     float_cls->freeze();
 }
 

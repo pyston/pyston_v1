@@ -101,6 +101,17 @@ const std::string SourceInfo::getName() {
     }
 }
 
+Box* SourceInfo::getDocString() {
+    AST_Str* first_str = NULL;
+
+    if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
+        && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
+        return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
+    }
+
+    return None;
+}
+
 ScopeInfo* SourceInfo::getScopeInfo() {
     return scoping->getScopeInfoForNode(ast);
 }
@@ -297,6 +308,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+
+        bm->setattr("__doc__", si->getDocString(), NULL);
 
         EffortLevel effort = initialEffort();
 
