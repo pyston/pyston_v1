@@ -65,6 +65,9 @@ public:
 #else
 struct Stats {
     static void dump() { printf("(Stats disabled)\n"); }
+    static void log(int id, int count = 1) {}
+    static int getStatId(const std::string& name) { return 0; }
+    static void endOfInit() {}
 };
 struct StatCounter {
     StatCounter(const char* name) {}

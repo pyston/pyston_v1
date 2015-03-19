@@ -66,14 +66,15 @@ struct ArgPassSpec {
 
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
-    uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
+    uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
 
     void dump() {
         printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
                has_kwargs ? "true" : "false", num_keywords, num_args);
     }
 };
-static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
+static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register! (CC is probably wrong)");
+static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
 
 namespace gc {
 

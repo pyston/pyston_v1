@@ -187,6 +187,8 @@ static int main(int argc, char** argv) {
         } catch (ExcInfo e) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
+            if (stats)
+                Stats::dump();
             return retcode;
         }
     }
@@ -210,6 +212,8 @@ static int main(int argc, char** argv) {
         } catch (ExcInfo e) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
+            if (stats)
+                Stats::dump();
             return retcode;
         }
     }
@@ -257,8 +261,11 @@ static int main(int argc, char** argv) {
                 compileAndRunModule(m, main_module);
             } catch (ExcInfo e) {
                 int retcode = 0xdeadbeef; // should never be seen
-                if (handle_toplevel_exn(e, &retcode))
+                if (handle_toplevel_exn(e, &retcode)) {
+                    if (stats)
+                        Stats::dump();
                     return retcode;
+                }
             }
         }
     }
@@ -275,7 +282,7 @@ static int main(int argc, char** argv) {
     int rtncode = joinRuntime();
     _t.split("finishing up");
 
-    if (VERBOSITY() >= 1 || stats)
+    if (stats)
         Stats::dump();
 
     return rtncode;

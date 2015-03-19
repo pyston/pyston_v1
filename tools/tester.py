@@ -195,7 +195,7 @@ def run_test(fn, check_stats, run_memcheck):
         out = "\n".join(out_lines)
 
     stats = None
-    if code == 0 and collect_stats:
+    if code >= 0 and collect_stats:
         stats = {}
         assert out.count("Stats:") == 1
         out, stats_str = out.split("Stats:")

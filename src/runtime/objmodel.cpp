@@ -2551,6 +2551,8 @@ static KeywordDest placeKeyword(const ParamNames& param_names, llvm::SmallVector
     }
 }
 
+static StatCounter slowpath_callfunc("slowpath_callfunc");
+static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
 
@@ -2562,16 +2564,13 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
      * - error about missing parameters
      */
 
-    static StatCounter slowpath_resolveclfunc("slowpath_callfunc");
-    slowpath_resolveclfunc.log();
-
+    BoxedClosure* closure = func->closure;
     CLFunction* f = func->f;
-    FunctionList& versions = f->versions;
+
+    slowpath_callfunc.log();
 
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
-
-    BoxedClosure* closure = func->closure;
 
     if (argspec.has_starargs || argspec.has_kwargs || func->isGenerator) {
         rewrite_args = NULL;
@@ -2604,6 +2603,16 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
         }
     }
+
+    // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
+    // django-admin test this covers something like 93% of all calls to callFunc.
+    if (!func->isGenerator) {
+        if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
+            && !f->takes_varargs && !f->takes_kwargs) {
+            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, arg1, arg2, arg3, args);
+        }
+    }
+    slowpath_callfunc_slowpath.log();
 
     if (rewrite_args) {
         // We might have trouble if we have more output args than input args,
