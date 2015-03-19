@@ -1,5 +1,3 @@
-# skip-if: '-x' in EXTRA_JIT_ARGS
-
 def f(a):
     print a
 

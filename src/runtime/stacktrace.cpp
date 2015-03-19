@@ -118,11 +118,9 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     Box* exc = runtimeCall(SyntaxError, ArgPassSpec(1), boxStrConstant(msg), NULL, NULL, NULL, NULL);
 
     auto tb = getTraceback();
-    // TODO: push the syntax error line back on it:
-    //// TODO: leaks this!
-    // last_tb.push_back(new LineInfo(lineno, col_offset, file, func));
-
-    raiseRaw(ExcInfo(exc->cls, exc, tb));
+    std::vector<const LineInfo*> entries = tb->lines;
+    entries.push_back(new LineInfo(lineno, col_offset, file, func));
+    raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(entries))));
 }
 
 void _printStacktrace() {

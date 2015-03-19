@@ -31,6 +31,9 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/capi.h"
+#include "runtime/objmodel.h"
+#include "runtime/types.h"
 
 namespace pypa {
 bool string_to_double(String const& s, double& result);
@@ -511,7 +514,7 @@ struct expr_dispatcher {
     ResultPtr read(pypa::AstStr& s) {
         AST_Str* ptr = new AST_Str();
         location(ptr, s);
-        ptr->str_type = AST_Str::STR;
+        ptr->str_type = s.unicode ? AST_Str::UNICODE : AST_Str::STR;
         ptr->str_data = s.value;
         return ptr;
     }
@@ -799,7 +802,7 @@ struct stmt_dispatcher {
         location(ptr, d);
         AST_Str* str = new AST_Str();
         ptr->value = str;
-        str->str_type = AST_Str::STR;
+        str->str_type = d.unicode ? AST_Str::UNICODE : AST_Str::STR;
         str->str_data = d.doc;
         return ptr;
     }
@@ -823,11 +826,29 @@ AST_Module* readModule(pypa::AstModule& t) {
 }
 
 void pypaErrorHandler(pypa::Error e) {
-    //    raiseSyntaxError
-    //    void raiseSyntaxError(const char* msg, int lineno, int col_offset, const
-    //    std::string& file, const std::string& func);
     if (e.type != pypa::ErrorType::SyntaxWarning) {
         raiseSyntaxError(e.message.c_str(), e.cur.line, e.cur.column, e.file_name, std::string());
+    }
+}
+
+pypa::String pypaUnicodeEscapeDecoder(pypa::String s, bool raw_prefix, bool& error) {
+    try {
+        error = false;
+        Box* unicode = NULL;
+        if (raw_prefix)
+            unicode = PyUnicode_DecodeRawUnicodeEscape(s.c_str(), s.size(), "strict");
+        else
+            unicode = PyUnicode_DecodeUnicodeEscape(s.c_str(), s.size(), "strict");
+        checkAndThrowCAPIException();
+        BoxedString* str_utf8 = (BoxedString*)PyUnicode_AsUTF8String(unicode);
+        checkAndThrowCAPIException();
+        return str_utf8->s;
+    } catch (ExcInfo e) {
+        error = true;
+        BoxedString* error_message = str(e.value);
+        if (error_message && error_message->cls == str_cls)
+            return error_message->s;
+        return "Encountered an unknown error inside pypaUnicodeEscapeDecoder";
     }
 }
 
@@ -842,6 +863,7 @@ AST_Module* pypa_parse(char const* file_path) {
     options.python3only = false;
     options.handle_future_errors = false;
     options.error_handler = pypaErrorHandler;
+    options.unicode_escape_handler = pypaUnicodeEscapeDecoder;
 
     if (pypa::parse(lexer, module, symbols, options) && module) {
         return readModule(*module);
