@@ -1432,7 +1432,15 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
 }
 
 Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
-    ICInfo* ic = getICInfo(rtn_addr);
+    ICInfo* ic = NULL;
+
+    // Horrible non-robust optimization: addresses below this address are probably in the binary (ex the interpreter),
+    // so don't do the more-expensive hash table lookup to find it.
+    if (rtn_addr > (void*)0x1000000) {
+        ic = getICInfo(rtn_addr);
+    } else {
+        assert(!getICInfo(rtn_addr));
+    }
 
     static StatCounter rewriter_attempts("rewriter_attempts");
     rewriter_attempts.log();
