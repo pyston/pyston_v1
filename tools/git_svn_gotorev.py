@@ -45,7 +45,7 @@ def find_rev(svn_id, fetch_if_necessary=True):
 if __name__ == "__main__":
     repo, svn_rev, patch_dir = sys.argv[1:]
     svn_rev = int(svn_rev)
-    assert os.path.isdir(repo)
+    assert os.path.isdir(repo), "Expected to find repo directory at %s" % (repo,)
 
     commit, rid = find_rev(svn_rev)
 
