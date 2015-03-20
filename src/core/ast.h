@@ -128,6 +128,8 @@ enum AST_TYPE {
     AugBinOp = 203,
     Invoke = 204,
     LangPrimitive = 205,
+    MakeClass = 206,    // wraps a ClassDef to make it an expr
+    MakeFunction = 207, // wraps a FunctionDef to make it an expr
 
     // These aren't real AST types, but since we use AST types to represent binexp types
     // and divmod+truediv are essentially types of binops, we add them here (at least for now):
@@ -951,6 +953,31 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
 };
 
+class AST_MakeFunction : public AST_expr {
+public:
+    AST_FunctionDef* function_def;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_MakeFunction(AST_FunctionDef* fd)
+        : AST_expr(AST_TYPE::MakeFunction, fd->lineno, fd->col_offset), function_def(fd) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeFunction;
+};
+
+class AST_MakeClass : public AST_expr {
+public:
+    AST_ClassDef* class_def;
+
+    virtual void accept(ASTVisitor* v);
+    virtual void* accept_expr(ExprVisitor* v);
+
+    AST_MakeClass(AST_ClassDef* cd) : AST_expr(AST_TYPE::MakeClass, cd->lineno, cd->col_offset), class_def(cd) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::MakeClass;
+};
+
 
 // AST pseudo-nodes that will get added during CFG-construction.  These don't exist in the input AST, but adding them in
 // lets us avoid creating a completely new IR for this phase
@@ -1116,6 +1143,8 @@ public:
     virtual bool visit_with(AST_With* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
 
+    virtual bool visit_makeclass(AST_MakeClass* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_makefunction(AST_MakeFunction* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_branch(AST_Branch* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_jump(AST_Jump* node) { RELEASE_ASSERT(0, ""); }
 };
@@ -1188,6 +1217,8 @@ public:
 
     virtual bool visit_branch(AST_Branch* node) { return false; }
     virtual bool visit_jump(AST_Jump* node) { return false; }
+    virtual bool visit_makeclass(AST_MakeClass* node) { return false; }
+    virtual bool visit_makefunction(AST_MakeFunction* node) { return false; }
 };
 
 class ExprVisitor {
@@ -1224,6 +1255,8 @@ public:
     virtual void* visit_tuple(AST_Tuple* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_unaryop(AST_UnaryOp* node) { RELEASE_ASSERT(0, ""); }
     virtual void* visit_yield(AST_Yield* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_makeclass(AST_MakeClass* node) { RELEASE_ASSERT(0, ""); }
+    virtual void* visit_makefunction(AST_MakeFunction* node) { RELEASE_ASSERT(0, ""); }
 };
 
 class StmtVisitor {
@@ -1333,6 +1366,8 @@ public:
 
     virtual bool visit_branch(AST_Branch* node);
     virtual bool visit_jump(AST_Jump* node);
+    virtual bool visit_makefunction(AST_MakeFunction* node);
+    virtual bool visit_makeclass(AST_MakeClass* node);
 };
 
 // Given an AST node, return a vector of the node plus all its descendents.

@@ -88,10 +88,8 @@ private:
     Value visit_assign(AST_Assign* node);
     Value visit_binop(AST_BinOp* node);
     Value visit_call(AST_Call* node);
-    Value visit_classDef(AST_ClassDef* node);
     Value visit_compare(AST_Compare* node);
     Value visit_delete(AST_Delete* node);
-    Value visit_functionDef(AST_FunctionDef* node);
     Value visit_global(AST_Global* node);
     Value visit_module(AST_Module* node);
     Value visit_print(AST_Print* node);
@@ -117,6 +115,8 @@ private:
     Value visit_tuple(AST_Tuple* node);
     Value visit_yield(AST_Yield* node);
 
+    Value visit_makeClass(AST_MakeClass* node);
+    Value visit_makeFunction(AST_MakeFunction* node);
 
     // pseudo
     Value visit_augBinOp(AST_AugBinOp* node);
@@ -606,14 +606,10 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
             return visit_assert((AST_Assert*)node);
         case AST_TYPE::Assign:
             return visit_assign((AST_Assign*)node);
-        case AST_TYPE::ClassDef:
-            return visit_classDef((AST_ClassDef*)node);
         case AST_TYPE::Delete:
             return visit_delete((AST_Delete*)node);
         case AST_TYPE::Expr:
             return visit_expr((AST_Expr*)node);
-        case AST_TYPE::FunctionDef:
-            return visit_functionDef((AST_FunctionDef*)node);
         case AST_TYPE::Pass:
             return Value(); // nothing todo
         case AST_TYPE::Print:
@@ -691,7 +687,8 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
     return boxCLFunction(cl, closure, is_generator, u.il);
 }
 
-Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {
+Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
+    AST_FunctionDef* node = mkfn->function_def;
     AST_arguments* args = node->args;
 
     std::vector<Box*, StlCompatAllocator<Box*>> decorators;
@@ -703,11 +700,11 @@ Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {
     for (int i = decorators.size() - 1; i >= 0; i--)
         func = runtimeCall(decorators[i], ArgPassSpec(1), func, 0, 0, 0, 0);
 
-    doStore(source_info->mangleName(node->name), func);
-    return Value();
+    return Value(func);
 }
 
-Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
+Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
+    AST_ClassDef* node = mkclass->class_def;
     ScopeInfo* scope_info = source_info->scoping->getScopeInfoForNode(node);
     assert(scope_info);
 
@@ -730,8 +727,7 @@ Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
     for (int i = decorators.size() - 1; i >= 0; i--)
         classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
 
-    doStore(source_info->mangleName(node->name), classobj);
-    return Value();
+    return Value(classobj);
 }
 
 Value ASTInterpreter::visit_raise(AST_Raise* node) {
@@ -897,6 +893,10 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_clsAttribute((AST_ClsAttribute*)node);
         case AST_TYPE::LangPrimitive:
             return visit_langPrimitive((AST_LangPrimitive*)node);
+        case AST_TYPE::MakeClass:
+            return visit_makeClass((AST_MakeClass*)node);
+        case AST_TYPE::MakeFunction:
+            return visit_makeFunction((AST_MakeFunction*)node);
         default:
             RELEASE_ASSERT(0, "");
     };

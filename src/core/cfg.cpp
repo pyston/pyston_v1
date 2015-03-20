@@ -799,7 +799,7 @@ private:
     // Generates a FunctionDef which produces scope for `node'. The function produced is empty, so you'd better fill it.
     // `node' had better be a kind of node that scoping_analysis thinks can carry scope (see the switch (node->type)
     // block in ScopingAnalysis::processNameUsages in analysis/scoping_analysis.cpp); e.g. a Lambda or GeneratorExp.
-    AST_FunctionDef* makeFunctionForScope(AST* node) {
+    AST_MakeFunction* makeFunctionForScope(AST* node) {
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
@@ -809,7 +809,7 @@ private:
         func->args->vararg = internString("");
         func->args->kwarg = internString("");
         scoping_analysis->registerScopeReplacement(node, func); // critical bit
-        return func;
+        return new AST_MakeFunction(func);
     }
 
     // This is a helper function used for generator expressions and comprehensions.
@@ -851,18 +851,18 @@ private:
         AST_expr* first = remapExpr(node->generators[0]->iter);
         InternedString first_generator_name = nodeName(node->generators[0]);
 
-        AST_FunctionDef* func = makeFunctionForScope(node);
-        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
-        emitComprehensionLoops(&func->body, node->generators,
+        AST_MakeFunction* func = makeFunctionForScope(node);
+        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        emitComprehensionLoops(&func->function_def->body, node->generators,
                                makeName(first_generator_name, AST_TYPE::Load, node->lineno),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
                                    insert_point->push_back(makeExpr(y));
                                });
-        push_back(func);
+        pushAssign(func->function_def->name, func);
 
-        return makeCall(makeName(func->name, AST_TYPE::Load, node->lineno), first);
+        return makeCall(makeName(func->function_def->name, AST_TYPE::Load, node->lineno), first);
     }
 
     void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
@@ -883,27 +883,27 @@ private:
         AST_expr* first = remapExpr(node->generators[0]->iter);
         InternedString first_generator_name = nodeName(node->generators[0]);
 
-        AST_FunctionDef* func = makeFunctionForScope(node);
-        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        AST_MakeFunction* func = makeFunctionForScope(node);
+        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
 
         InternedString rtn_name = nodeName(node);
         auto asgn = new AST_Assign();
         asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
         asgn->value = new ResultType();
-        func->body.push_back(asgn);
+        func->function_def->body.push_back(asgn);
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
         AST_Name* first_name = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
-        emitComprehensionLoops(&func->body, node->generators, first_name, lambda);
+        emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
         rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
-        func->body.push_back(rtn);
+        func->function_def->body.push_back(rtn);
 
-        push_back(func);
+        pushAssign(func->function_def->name, func);
 
-        return makeCall(makeName(func->name, AST_TYPE::Load, node->lineno), first);
+        return makeCall(makeName(func->function_def->name, AST_TYPE::Load, node->lineno), first);
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
@@ -957,14 +957,25 @@ private:
         return rtn;
     }
 
+    AST_arguments* remapArguments(AST_arguments* args) {
+        auto rtn = new AST_arguments();
+        rtn = new AST_arguments();
+        // don't remap args, they're not evaluated. NB. expensive vector copy.
+        rtn->args = args->args;
+        rtn->kwarg = args->kwarg;
+        rtn->vararg = args->vararg;
+        for (auto expr : args->defaults)
+            rtn->defaults.push_back(remapExpr(expr));
+        return rtn;
+    }
+
     AST_expr* remapLambda(AST_Lambda* node) {
-        // Remap in place: see note in visit_functiondef for why.
-
-        for (int i = 0; i < node->args->defaults.size(); i++) {
-            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
-        }
-
-        return node;
+        auto rtn = new AST_Lambda();
+        rtn->body = node->body; // don't remap now; will be CFG'ed later
+        rtn->args = remapArguments(node->args);
+        // lambdas create scope, need to register as replacement
+        scoping_analysis->registerScopeReplacement(node, rtn);
+        return rtn;
     }
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
@@ -1277,42 +1288,47 @@ public:
     }
 
     bool visit_classdef(AST_ClassDef* node) override {
-        // Remap in place: see note in visit_functiondef for why.
+        // waitaminute, who deallocates `node'?
+        auto def = new AST_ClassDef();
+        def->lineno = node->lineno;
+        def->col_offset = node->col_offset;
+        def->name = node->name;
+        def->body = node->body; // expensive vector copy
 
-        // Decorators are evaluated before the defaults:
-        for (int i = 0; i < node->decorator_list.size(); i++) {
-            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
-        }
+        // Decorators are evaluated before bases:
+        for (auto expr : node->decorator_list)
+            def->decorator_list.push_back(remapExpr(expr));
+        for (auto expr : node->bases)
+            def->bases.push_back(remapExpr(expr));
 
-        for (int i = 0; i < node->bases.size(); i++) {
-            node->bases[i] = remapExpr(node->bases[i]);
-        }
+        scoping_analysis->registerScopeReplacement(node, def);
 
-        push_back(node);
+        auto tmp = nodeName(node);
+        pushAssign(tmp, new AST_MakeClass(def));
+        // is this name mangling correct?
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
+
         return true;
     }
 
+    // FIXME: make this use MakeFunction
     bool visit_functiondef(AST_FunctionDef* node) override {
-        // As much as I don't like it, for now we're remapping these in place.
-        // This is because we do certain analyses pre-remapping, and associate the
-        // results with the node.  We can either do some refactoring and have a way
-        // of associating the new node with the same results, or just do the remapping
-        // in-place.
-        // Doing it in-place seems ugly, but I can't think of anything it should break,
-        // so just do that for now.
-        // TODO If we remap these (functiondefs, lambdas, classdefs) in place, we should probably
-        // remap everything in place?
+        auto def = new AST_FunctionDef();
+        def->name = node->name;
+        def->body = node->body; // expensive vector copy
+        // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
+        // TODO(rntz): do we have a test for this
+        for (auto expr : node->decorator_list)
+            def->decorator_list.push_back(remapExpr(expr));
+        def->args = remapArguments(node->args);
 
-        // Decorators are evaluated before the defaults:
-        for (int i = 0; i < node->decorator_list.size(); i++) {
-            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
-        }
+        scoping_analysis->registerScopeReplacement(node, def);
 
-        for (int i = 0; i < node->args->defaults.size(); i++) {
-            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
-        }
+        auto tmp = nodeName(node);
+        pushAssign(tmp, new AST_MakeFunction(def));
+        // is this name mangling correct?
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
 
-        push_back(node);
         return true;
     }
 
