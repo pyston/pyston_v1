@@ -19,7 +19,7 @@ git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
 clang requires a fairly modern [host compiler](http://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library), so typically you will have to install a new one.  The easiest thing to do is to just create a fresh build of GCC:
 
 ```
-sudo apt-get install libsqlite3-dev libgmp-dev libmpfr-dev libmpc-dev make build-essential libtool zip gcc-multilib autogen
+sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev make build-essential libtool zip gcc-multilib autogen
 cd ~/pyston_deps
 wget http://ftpmirror.gnu.org/gcc/gcc-4.8.2/gcc-4.8.2.tar.bz2
 tar xvf gcc-4.8.2.tar.bz2
