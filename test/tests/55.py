@@ -1,6 +1,3 @@
-# expected: fail
-# - object.__getattribute__ doesn't exist
-
 # attr-getting resolution.
 
 class M(type):

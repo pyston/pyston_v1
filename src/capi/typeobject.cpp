@@ -142,6 +142,24 @@ static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
     return res;
 }
 
+static PyObject* wrap_descr_get(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    descrgetfunc func = (descrgetfunc)wrapped;
+    PyObject* obj;
+    PyObject* type = NULL;
+
+    if (!PyArg_UnpackTuple(args, "", 1, 2, &obj, &type))
+        return NULL;
+    if (obj == Py_None)
+        obj = NULL;
+    if (type == Py_None)
+        type = NULL;
+    if (type == NULL && obj == NULL) {
+        PyErr_SetString(PyExc_TypeError, "__get__(None, None) is invalid");
+        return NULL;
+    }
+    return (*func)(self, obj, type);
+}
+
 static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     coercion func = (coercion)wrapped;
     PyObject* other, *res;
@@ -676,6 +694,25 @@ static PyObject* slot_tp_iternext(PyObject* self) noexcept {
     return call_method(self, "next", &next_str, "()");
 }
 
+static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
+    PyTypeObject* tp = Py_TYPE(self);
+    PyObject* get;
+
+    get = typeLookup(tp, "__get__", NULL);
+    if (get == NULL) {
+        /* Avoid further slowdowns */
+        if (tp->tp_descr_get == slot_tp_descr_get)
+            tp->tp_descr_get = NULL;
+        Py_INCREF(self);
+        return self;
+    }
+    if (obj == NULL)
+        obj = Py_None;
+    if (type == NULL)
+        type = Py_None;
+    return PyObject_CallFunctionObjArgs(get, self, obj, type, NULL);
+}
+
 static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
     static PyObject* getattribute_str = NULL;
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
@@ -719,8 +756,6 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 
 static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     PyObject* getattr, *getattribute, * res = NULL;
-    static PyObject* getattribute_str = NULL;
-    static PyObject* getattr_str = NULL;
 
     /* speed hack: we could use lookup_maybe, but that would resolve the
          method fully for each attribute lookup for classes with
@@ -746,13 +781,9 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     } else {
         res = call_attribute(self, getattribute, name);
     }
-    if (res == NULL) {
-        try {
-            res = runtimeCall(getattr, ArgPassSpec(2, 0, false, false), self, name, NULL, NULL, NULL);
-        } catch (ExcInfo e) {
-            setCAPIException(e);
-            return NULL;
-        }
+    if (res == NULL && PyErr_ExceptionMatches(PyExc_AttributeError)) {
+        PyErr_Clear();
+        res = call_attribute(self, getattr, name);
     }
     return res;
 }
@@ -1224,6 +1255,7 @@ static slotdef slotdefs[]
 
         TPSLOT("__iter__", tp_iter, slot_tp_iter, wrap_unaryfunc, "x.__iter__() <==> iter(x)"),
         TPSLOT("next", tp_iternext, slot_tp_iternext, wrap_next, "x.next() -> the next value, or raise StopIteration"),
+        TPSLOT("__get__", tp_descr_get, slot_tp_descr_get, wrap_descr_get, "descr.__get__(obj[, type]) -> value"),
 
         FLSLOT("__init__", tp_init, slot_tp_init, (wrapperfunc)wrap_init, "x.__init__(...) initializes x; "
                                                                           "see help(type(x)) for signature",
