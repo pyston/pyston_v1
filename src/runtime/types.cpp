@@ -104,7 +104,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }
 #endif
     if (!cls->tp_mro) {
-        assert(!attrwrapper_cls); // the last class to be set up during bootstrapping
+        assert(!wrapperdescr_cls); // the last class to be set up during bootstrapping
     } else {
         assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
         assert(cls->tp_mro->cls == tuple_cls);
@@ -1735,6 +1735,8 @@ void setupRuntime() {
         = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
     attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
                                          new BoxedString("attrwrapper"));
+    wrapperdescr_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperDescriptor), false,
+                                          new BoxedString("wrapper_descriptor"));
 
 
     // Kind of hacky, but it's easier to manually construct the mro for a couple key classes
@@ -1756,6 +1758,10 @@ void setupRuntime() {
     list_cls->finishInitialization();
     pyston_getset_cls->finishInitialization();
     attrwrapper_cls->finishInitialization();
+    wrapperdescr_cls->finishInitialization();
+
+    object_cls->tp_getattro = PyObject_GenericGetAttr;
+    add_operators(object_cls);
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 

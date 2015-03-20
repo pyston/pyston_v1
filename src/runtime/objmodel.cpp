@@ -1103,10 +1103,39 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
     return NULL;
 }
 
-inline Box* getclsattr_internal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
-    return getattrInternalGeneral(obj, attr, rewrite_args,
-                                  /* cls_only */ true,
-                                  /* for_call */ false, NULL, NULL);
+Box* getattrInternalEx(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
+                       bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
+    if (!cls_only) {
+        BoxedClass* cls = obj->cls;
+        if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
+            Box* r = obj->cls->tp_getattro(obj, new BoxedString(attr));
+            if (!r)
+                throwCAPIException();
+            return r;
+        }
+
+        if (obj->cls->tp_getattr) {
+            Box* r = obj->cls->tp_getattr(obj, const_cast<char*>(attr.c_str()));
+            if (!r)
+                throwCAPIException();
+            return r;
+        }
+
+        // We could also use the old invalidation-based approach here:
+        if (rewrite_args) {
+            auto r_cls = rewrite_args->obj->getAttr(offsetof(Box, cls));
+            r_cls->addAttrGuard(offsetof(BoxedClass, tp_getattr), (uint64_t)obj->cls->tp_getattr);
+            r_cls->addAttrGuard(offsetof(BoxedClass, tp_getattro), (uint64_t)obj->cls->tp_getattro);
+        }
+    }
+
+    return getattrInternalGeneric(obj, attr, rewrite_args, cls_only, for_call, bind_obj_out, r_bind_obj_out);
+}
+
+inline Box* getclsattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
+    return getattrInternalEx(obj, attr, rewrite_args,
+                             /* cls_only */ true,
+                             /* for_call */ false, NULL, NULL);
 }
 
 extern "C" Box* getclsattr(Box* obj, const char* attr) {
@@ -1121,7 +1150,7 @@ extern "C" Box* getclsattr(Box* obj, const char* attr) {
     if (rewriter.get()) {
         //rewriter->trap();
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0));
-        gotten = getclsattr_internal(obj, attr, &rewrite_args, NULL);
+        gotten = getclsattrInternal(obj, attr, &rewrite_args, NULL);
 
         if (rewrite_args.out_success && gotten) {
             rewrite_args.out_rtn.move(-1);
@@ -1134,7 +1163,7 @@ extern "C" Box* getclsattr(Box* obj, const char* attr) {
     if (rewriter.get()) {
         // rewriter->trap();
         GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-        gotten = getclsattr_internal(obj, attr, &rewrite_args);
+        gotten = getclsattrInternal(obj, attr, &rewrite_args);
 
         if (rewrite_args.out_success && gotten) {
             rewriter->commitReturning(rewrite_args.out_rtn);
@@ -1142,7 +1171,7 @@ extern "C" Box* getclsattr(Box* obj, const char* attr) {
 #endif
 }
 else {
-    gotten = getclsattr_internal(obj, attr, NULL);
+    gotten = getclsattrInternal(obj, attr, NULL);
 }
 RELEASE_ASSERT(gotten, "%s:%s", getTypeName(obj), attr);
 
@@ -1173,12 +1202,13 @@ static Box* (*runtimeCall2)(Box*, ArgPassSpec, Box*, Box*) = (Box * (*)(Box*, Ar
 static Box* (*runtimeCall3)(Box*, ArgPassSpec, Box*, Box*, Box*)
     = (Box * (*)(Box*, ArgPassSpec, Box*, Box*, Box*))runtimeCall;
 
-Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
+Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     if (for_call) {
         *bind_obj_out = NULL;
     }
 
+    // TODO this should be a custom getattr
     if (obj->cls == closure_cls) {
         Box* val = NULL;
         if (rewrite_args) {
@@ -1211,23 +1241,6 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
             return getattrInternal(closure->parent, attr, rewrite_args);
         }
         raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", attr.c_str());
-    }
-
-    if (!cls_only) {
-        // Don't need to pass icentry args, since we special-case __getattribtue__ and __getattr__ to use
-        // invalidation rather than guards
-        // TODO since you changed this to typeLookup you need to guard
-        Box* getattribute = typeLookup(obj->cls, getattribute_str, NULL);
-        if (getattribute) {
-            // TODO this is a good candidate for interning?
-            Box* boxstr = boxString(attr);
-            Box* rtn = runtimeCall2(getattribute, ArgPassSpec(2), obj, boxstr);
-            return rtn;
-        }
-
-        if (rewrite_args) {
-            rewrite_args->rewriter->addDependenceOn(obj->cls->dependent_icgetattrs);
-        }
     }
 
     // Handle descriptor logic here.
@@ -1499,34 +1512,10 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
     // TODO this shouldn't go here; it should be in instancemethod_cls->tp_getattr[o]
     if (obj->cls == instancemethod_cls) {
         assert(!rewrite_args || !rewrite_args->out_success);
-        return getattrInternalGeneral(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
-                                      bind_obj_out, NULL);
+        return getattrInternalEx(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
+                                 bind_obj_out, NULL);
     }
     // Finally, check __getattr__
-
-    if (!cls_only) {
-        // Don't need to pass icentry args, since we special-case __getattribute__ and __getattr__ to use
-        // invalidation rather than guards
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
-
-        if (obj->cls->tp_getattr) {
-            Box* rtn = obj->cls->tp_getattr(obj, const_cast<char*>(attr.c_str()));
-            if (rtn == NULL)
-                throwCAPIException();
-            return rtn;
-        }
-        Box* getattr = typeLookup(obj->cls, getattr_str, NULL);
-        if (getattr) {
-            Box* boxstr = boxString(attr);
-            Box* rtn = runtimeCall2(getattr, ArgPassSpec(2), obj, boxstr);
-            return rtn;
-        }
-
-        if (rewrite_args) {
-            rewrite_args->rewriter->addDependenceOn(obj->cls->dependent_icgetattrs);
-        }
-    }
 
     if (rewrite_args) {
         rewrite_args->out_success = true;
@@ -1535,9 +1524,9 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
 }
 
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args) {
-    return getattrInternalGeneral(obj, attr, rewrite_args,
-                                  /* cls_only */ false,
-                                  /* for_call */ false, NULL, NULL);
+    return getattrInternalEx(obj, attr, rewrite_args,
+                             /* cls_only */ false,
+                             /* for_call */ false, NULL, NULL);
 }
 
 extern "C" Box* getattr(Box* obj, const char* attr) {
@@ -1878,9 +1867,9 @@ extern "C" bool nonzero(Box* obj) {
     // Stats::log(id);
 
     // go through descriptor logic
-    Box* func = getclsattr_internal(obj, "__nonzero__", NULL);
+    Box* func = getclsattrInternal(obj, "__nonzero__", NULL);
     if (!func)
-        func = getclsattr_internal(obj, "__len__", NULL);
+        func = getclsattrInternal(obj, "__len__", NULL);
 
     if (func == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
@@ -2001,7 +1990,7 @@ extern "C" BoxedInt* hash(Box* obj) {
     slowpath_hash.log();
 
     // goes through descriptor logic
-    Box* hash = getclsattr_internal(obj, "__hash__", NULL);
+    Box* hash = getclsattrInternal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls || obj->cls == classobj_cls
@@ -2241,20 +2230,20 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
     // Look up the argument. Pass in the arguments to getattrInternalGeneral or getclsattr_general
     // that will shortcut functions by not putting them into instancemethods
-    Box* bind_obj;
+    Box* bind_obj = NULL; // Initialize this to NULL to allow getattrInternalEx to ignore it
     RewriterVar* r_bind_obj;
     Box* val;
     RewriterVar* r_val = NULL;
     if (rewrite_args) {
         GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, rewrite_args->obj, Location::any());
-        val = getattrInternalGeneral(obj, *attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
+        val = getattrInternalEx(obj, *attr, &grewrite_args, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
         if (!grewrite_args.out_success) {
             rewrite_args = NULL;
         } else if (val) {
             r_val = grewrite_args.out_rtn;
         }
     } else {
-        val = getattrInternalGeneral(obj, *attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
+        val = getattrInternalEx(obj, *attr, NULL, scope == CLASS_ONLY, true, &bind_obj, &r_bind_obj);
     }
 
     if (val == NULL) {
@@ -3448,7 +3437,7 @@ extern "C" Box* unaryop(Box* operand, int op_type) {
 
     const std::string& op_name = getOpName(op_type);
 
-    Box* attr_func = getclsattr_internal(operand, op_name, NULL);
+    Box* attr_func = getclsattrInternal(operand, op_name, NULL);
 
     ASSERT(attr_func, "%s.%s", getTypeName(operand), op_name.c_str());
 

@@ -98,6 +98,7 @@ public:
     DEFAULT_CLASS(wrapperdescr_cls);
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+    static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
 };
 
 class BoxedWrapperObject : public Box {

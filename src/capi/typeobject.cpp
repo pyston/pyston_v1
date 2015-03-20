@@ -707,7 +707,7 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
             attr = descr;
     }
     try {
-        res = runtimeCall(attr, ArgPassSpec(1, 0, true, true), name, NULL, NULL, NULL, NULL);
+        res = runtimeCall(attr, ArgPassSpec(1, 0, false, false), name, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         Py_XDECREF(descr);
@@ -748,7 +748,7 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     }
     if (res == NULL) {
         try {
-            res = runtimeCall(getattr, ArgPassSpec(2, 0, true, true), self, name, NULL, NULL, NULL);
+            res = runtimeCall(getattr, ArgPassSpec(2, 0, false, false), self, name, NULL, NULL, NULL);
         } catch (ExcInfo e) {
             setCAPIException(e);
             return NULL;
@@ -1197,7 +1197,8 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
     ETSLOT(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, "x." NAME "(y) <==> " DOC)
 
 static slotdef slotdefs[]
-    = { TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
+    = { TPSLOT("__getattribute__", tp_getattr, NULL, NULL, ""),
+        TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
         TPSLOT("__setattr__", tp_setattr, NULL, NULL, ""),
         TPSLOT("__delattr__", tp_setattr, NULL, NULL, ""),
 
@@ -1207,6 +1208,8 @@ static slotdef slotdefs[]
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
 
+        TPSLOT("__getattribute__", tp_getattro, slot_tp_getattr_hook, wrap_binaryfunc,
+               "x.__getattribute__('name') <==> x.name"),
         TPSLOT("__getattr__", tp_getattro, slot_tp_getattr_hook, NULL, ""),
         TPSLOT("__setattr__", tp_setattro, slot_tp_setattro, wrap_setattr,
                "x.__setattr__('name', value) <==> x.name = value"),
@@ -1509,7 +1512,7 @@ static void add_tp_new_wrapper(BoxedClass* type) noexcept {
                    new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
 }
 
-static void add_operators(BoxedClass* cls) noexcept {
+void add_operators(BoxedClass* cls) noexcept {
     init_slotdefs();
 
     for (const slotdef& p : slotdefs) {
