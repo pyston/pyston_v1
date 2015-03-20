@@ -2343,14 +2343,6 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
         }
     } else {
         Box* rtn;
-        // I *think* this check is here to limit the recursion nesting for rewriting, and originates
-        // from a time when we didn't have silent-abort-when-patchpoint-full.
-        if (val->cls != function_cls && val->cls != builtin_function_or_method_cls && val->cls != instancemethod_cls
-            && val->cls != capifunc_cls) {
-            rewrite_args = NULL;
-            REWRITE_ABORTED("");
-        }
-
         if (rewrite_args) {
             CallRewriteArgs srewrite_args(rewrite_args->rewriter, r_val, rewrite_args->destination);
             if (npassed_args >= 1)
