@@ -88,6 +88,19 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     return new BoxedWrapperObject(self, inst);
 }
 
+Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args) {
+    RELEASE_ASSERT(descr->cls == wrapperdescr_cls, "");
+
+    BoxedDict* kw = static_cast<BoxedDict*>(_args[0]);
+
+    if (!isSubclass(self->cls, descr->type))
+        raiseExcHelper(TypeError, "descriptor '' requires a '%s' object but received a '%s'",
+                       getFullNameOfClass(descr->type).c_str(), getFullTypeName(self).c_str());
+
+    auto wrapper = new BoxedWrapperObject(descr, self);
+    return BoxedWrapperObject::__call__(wrapper, args, kw);
+}
+
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
     Py_FatalError("unimplemented");
 }
@@ -264,12 +277,11 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 }
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
-    try {
-        return getattr(o, static_cast<BoxedString*>(name)->s.c_str());
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
+    Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->s.c_str(), NULL, false, false, NULL, NULL);
+    if (!r)
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
+                     PyString_AS_STRING(name));
+    return r;
 }
 
 extern "C" PyObject* _PyObject_GenericGetAttrWithDict(PyObject* obj, PyObject* name, PyObject* dict) noexcept {
@@ -1279,9 +1291,6 @@ static Box* methodGetDoc(Box* b, void*) {
 }
 
 void setupCAPI() {
-    capifunc_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedCApiFunction), false, "capifunc");
-
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
 
@@ -1291,8 +1300,6 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 
-    method_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedMethodDescriptor), false, "method");
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
@@ -1300,14 +1307,12 @@ void setupCAPI() {
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
-    wrapperdescr_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedWrapperDescriptor), false,
-                                              "wrapper_descriptor");
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
+    wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
+                                                                           UNKNOWN, 2, 0, true, true)));
     wrapperdescr_cls->freeze();
 
-    wrapperobject_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedWrapperObject), false, "method-wrapper");
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->freeze();

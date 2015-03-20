@@ -25,6 +25,7 @@ namespace pyston {
 static const std::string _new_str("__new__");
 static const std::string _getattr_str("__getattr__");
 static const std::string _getattribute_str("__getattribute__");
+typedef int (*update_callback)(PyTypeObject*, void*);
 
 extern "C" void conservativeGCHandler(GCVisitor* v, Box* b) noexcept {
     v->visitPotentialRange((void* const*)b, (void* const*)((char*)b + b->cls->tp_basicsize));
@@ -140,6 +141,24 @@ static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
     if (res == NULL && !PyErr_Occurred())
         PyErr_SetNone(PyExc_StopIteration);
     return res;
+}
+
+static PyObject* wrap_descr_get(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    descrgetfunc func = (descrgetfunc)wrapped;
+    PyObject* obj;
+    PyObject* type = NULL;
+
+    if (!PyArg_UnpackTuple(args, "", 1, 2, &obj, &type))
+        return NULL;
+    if (obj == Py_None)
+        obj = NULL;
+    if (type == Py_None)
+        type = NULL;
+    if (type == NULL && obj == NULL) {
+        PyErr_SetString(PyExc_TypeError, "__get__(None, None) is invalid");
+        return NULL;
+    }
+    return (*func)(self, obj, type);
 }
 
 static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
@@ -676,6 +695,25 @@ static PyObject* slot_tp_iternext(PyObject* self) noexcept {
     return call_method(self, "next", &next_str, "()");
 }
 
+static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
+    PyTypeObject* tp = Py_TYPE(self);
+    PyObject* get;
+
+    get = typeLookup(tp, "__get__", NULL);
+    if (get == NULL) {
+        /* Avoid further slowdowns */
+        if (tp->tp_descr_get == slot_tp_descr_get)
+            tp->tp_descr_get = NULL;
+        Py_INCREF(self);
+        return self;
+    }
+    if (obj == NULL)
+        obj = Py_None;
+    if (type == NULL)
+        type = Py_None;
+    return PyObject_CallFunctionObjArgs(get, self, obj, type, NULL);
+}
+
 static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
     static PyObject* getattribute_str = NULL;
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
@@ -707,7 +745,7 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
             attr = descr;
     }
     try {
-        res = runtimeCall(attr, ArgPassSpec(1, 0, true, true), name, NULL, NULL, NULL, NULL);
+        res = runtimeCall(attr, ArgPassSpec(1, 0, false, false), name, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
         setCAPIException(e);
         Py_XDECREF(descr);
@@ -719,8 +757,6 @@ static PyObject* call_attribute(PyObject* self, PyObject* attr, PyObject* name) 
 
 static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     PyObject* getattr, *getattribute, * res = NULL;
-    static PyObject* getattribute_str = NULL;
-    static PyObject* getattr_str = NULL;
 
     /* speed hack: we could use lookup_maybe, but that would resolve the
          method fully for each attribute lookup for classes with
@@ -746,13 +782,9 @@ static PyObject* slot_tp_getattr_hook(PyObject* self, PyObject* name) noexcept {
     } else {
         res = call_attribute(self, getattribute, name);
     }
-    if (res == NULL) {
-        try {
-            res = runtimeCall(getattr, ArgPassSpec(2, 0, true, true), self, name, NULL, NULL, NULL);
-        } catch (ExcInfo e) {
-            setCAPIException(e);
-            return NULL;
-        }
+    if (res == NULL && PyErr_ExceptionMatches(PyExc_AttributeError)) {
+        PyErr_Clear();
+        res = call_attribute(self, getattr, name);
     }
     return res;
 }
@@ -1197,7 +1229,8 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
     ETSLOT(NAME, as_number.SLOT, FUNCTION, wrap_binaryfunc_r, "x." NAME "(y) <==> " DOC)
 
 static slotdef slotdefs[]
-    = { TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
+    = { TPSLOT("__getattribute__", tp_getattr, NULL, NULL, ""),
+        TPSLOT("__getattr__", tp_getattr, NULL, NULL, ""),
         TPSLOT("__setattr__", tp_setattr, NULL, NULL, ""),
         TPSLOT("__delattr__", tp_setattr, NULL, NULL, ""),
 
@@ -1207,6 +1240,8 @@ static slotdef slotdefs[]
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__str__", tp_str, slot_tp_str, wrap_unaryfunc, "x.__str__() <==> str(x)"),
 
+        TPSLOT("__getattribute__", tp_getattro, slot_tp_getattr_hook, wrap_binaryfunc,
+               "x.__getattribute__('name') <==> x.name"),
         TPSLOT("__getattr__", tp_getattro, slot_tp_getattr_hook, NULL, ""),
         TPSLOT("__setattr__", tp_setattro, slot_tp_setattro, wrap_setattr,
                "x.__setattr__('name', value) <==> x.name = value"),
@@ -1221,6 +1256,7 @@ static slotdef slotdefs[]
 
         TPSLOT("__iter__", tp_iter, slot_tp_iter, wrap_unaryfunc, "x.__iter__() <==> iter(x)"),
         TPSLOT("next", tp_iternext, slot_tp_iternext, wrap_next, "x.next() -> the next value, or raise StopIteration"),
+        TPSLOT("__get__", tp_descr_get, slot_tp_descr_get, wrap_descr_get, "descr.__get__(obj[, type]) -> value"),
 
         FLSLOT("__init__", tp_init, slot_tp_init, (wrapperfunc)wrap_init, "x.__init__(...) initializes x; "
                                                                           "see help(type(x)) for signature",
@@ -1461,18 +1497,55 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
     return p;
 }
 
-bool update_slot(BoxedClass* self, const std::string& attr) noexcept {
-    bool updated = false;
-    for (const slotdef& p : slotdefs) {
-        if (!p.name)
-            continue;
-        if (p.name == attr) {
-            // TODO update subclasses;
-            update_one_slot(self, &p);
-            updated = true;
-        }
+/* In the type, update the slots whose slotdefs are gathered in the pp array.
+   This is a callback for update_subclasses(). */
+static int update_slots_callback(PyTypeObject* type, void* data) noexcept {
+    slotdef** pp = (slotdef**)data;
+
+    for (; *pp; pp++)
+        update_one_slot(type, *pp);
+    return 0;
+}
+
+static int update_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept;
+static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept;
+
+bool update_slot(BoxedClass* type, const std::string& attr) noexcept {
+    slotdef* ptrs[MAX_EQUIV];
+    slotdef* p;
+    slotdef** pp;
+    int offset;
+
+    /* Clear the VALID_VERSION flag of 'type' and all its
+       subclasses.  This could possibly be unified with the
+       update_subclasses() recursion below, but carefully:
+       they each have their own conditions on which to stop
+       recursing into subclasses. */
+    PyType_Modified(type);
+
+    init_slotdefs();
+    pp = ptrs;
+    for (p = slotdefs; p->name; p++) {
+        /* XXX assume name is interned! */
+        if (p->name == attr)
+            *pp++ = p;
     }
-    return updated;
+    *pp = NULL;
+    for (pp = ptrs; *pp; pp++) {
+        p = *pp;
+        offset = p->offset;
+        while (p > slotdefs && (p - 1)->offset == offset)
+            --p;
+        *pp = p;
+    }
+    if (ptrs[0] == NULL)
+        return false; /* Not an attribute that affects any slots */
+    int r = update_subclasses(type, new BoxedString(attr), update_slots_callback, (void*)ptrs);
+
+    // TODO this is supposed to be a CAPI function!
+    if (r)
+        throwCAPIException();
+    return true;
 }
 
 void fixup_slot_dispatchers(BoxedClass* self) noexcept {
@@ -1481,6 +1554,40 @@ void fixup_slot_dispatchers(BoxedClass* self) noexcept {
     const slotdef* p = slotdefs;
     while (p->name)
         p = update_one_slot(self, p);
+}
+
+static int update_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept {
+    if (callback(type, data) < 0)
+        return -1;
+    return recurse_down_subclasses(type, name, callback, data);
+}
+
+static int recurse_down_subclasses(PyTypeObject* type, PyObject* name, update_callback callback, void* data) noexcept {
+    PyTypeObject* subclass;
+    PyObject* ref, *subclasses, *dict;
+    Py_ssize_t i, n;
+
+    subclasses = type->tp_subclasses;
+    if (subclasses == NULL)
+        return 0;
+    assert(PyList_Check(subclasses));
+    n = PyList_GET_SIZE(subclasses);
+    for (i = 0; i < n; i++) {
+        ref = PyList_GET_ITEM(subclasses, i);
+        assert(PyWeakref_CheckRef(ref));
+        subclass = (PyTypeObject*)PyWeakref_GET_OBJECT(ref);
+        assert(subclass != NULL);
+        if ((PyObject*)subclass == Py_None)
+            continue;
+        assert(PyType_Check(subclass));
+        /* Avoid recursing down into unaffected classes */
+        dict = subclass->tp_dict;
+        if (dict != NULL && PyDict_Check(dict) && PyDict_GetItem(dict, name) != NULL)
+            continue;
+        if (update_subclasses(subclass, name, callback, data) < 0)
+            return -1;
+    }
+    return 0;
 }
 
 static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds) noexcept {
@@ -1509,7 +1616,7 @@ static void add_tp_new_wrapper(BoxedClass* type) noexcept {
                    new BoxedCApiFunction(METH_VARARGS | METH_KEYWORDS, type, "__new__", (PyCFunction)tp_new_wrapper));
 }
 
-static void add_operators(BoxedClass* cls) noexcept {
+void add_operators(BoxedClass* cls) noexcept {
     init_slotdefs();
 
     for (const slotdef& p : slotdefs) {
@@ -2335,6 +2442,52 @@ static void inherit_slots(PyTypeObject* type, PyTypeObject* base) noexcept {
     }
 }
 
+static int add_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
+    Py_ssize_t i;
+    int result;
+    PyObject* list, *ref, *newobj;
+
+    list = base->tp_subclasses;
+    if (list == NULL) {
+        base->tp_subclasses = list = PyList_New(0);
+        if (list == NULL)
+            return -1;
+    }
+    assert(PyList_Check(list));
+    newobj = PyWeakref_NewRef((PyObject*)type, NULL);
+    i = PyList_GET_SIZE(list);
+    while (--i >= 0) {
+        ref = PyList_GET_ITEM(list, i);
+        assert(PyWeakref_CheckRef(ref));
+        if (PyWeakref_GET_OBJECT(ref) == Py_None)
+            return PyList_SetItem(list, i, newobj);
+    }
+    result = PyList_Append(list, newobj);
+    Py_DECREF(newobj);
+    return result;
+}
+
+static void remove_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
+    Py_ssize_t i;
+    PyObject* list, *ref;
+
+    list = base->tp_subclasses;
+    if (list == NULL) {
+        return;
+    }
+    assert(PyList_Check(list));
+    i = PyList_GET_SIZE(list);
+    while (--i >= 0) {
+        ref = PyList_GET_ITEM(list, i);
+        assert(PyWeakref_CheckRef(ref));
+        if (PyWeakref_GET_OBJECT(ref) == (PyObject*)type) {
+            /* this can't fail, right? */
+            PySequence_DelItem(list, i);
+            return;
+        }
+    }
+}
+
 // commonClassSetup is for the common code between PyType_Ready (which is just for extension classes)
 // and our internal type-creation endpoints (BoxedClass::BoxedClass()).
 // TODO: Move more of the duplicated logic into here.
@@ -2344,6 +2497,12 @@ void commonClassSetup(BoxedClass* cls) {
             cls->tp_bases = new BoxedTuple({ cls->tp_base });
         else
             cls->tp_bases = new BoxedTuple({});
+    }
+
+    /* Link into each base class's list of subclasses */
+    for (PyObject* b : static_cast<BoxedTuple*>(cls->tp_bases)->elts) {
+        if (PyType_Check(b) && add_subclass((PyTypeObject*)b, cls) < 0)
+            throwCAPIException();
     }
 
     /* Calculate method resolution order */
