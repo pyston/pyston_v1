@@ -93,12 +93,6 @@ void setupBool() {
     bool_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)boolXor, BOXED_BOOL, 2)));
 
     bool_cls->freeze();
-
-    True = new BoxedBool(true);
-    False = new BoxedBool(false);
-
-    gc::registerPermanentRoot(True);
-    gc::registerPermanentRoot(False);
 }
 
 void teardownBool() {

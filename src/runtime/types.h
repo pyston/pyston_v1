@@ -204,6 +204,7 @@ protected:
                bool is_user_defined);
 
     friend void setupRuntime();
+    friend void setupSysEnd();
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -232,6 +233,7 @@ private:
                    bool is_user_defined, BoxedString* name);
 
     friend void setupRuntime();
+    friend void setupSys();
 
     DEFAULT_CLASS(type_cls);
 };

@@ -144,7 +144,11 @@ extern "C" void abort() {
         // that object, _printStackTrace will hang waiting for the first construction
         // to finish.)
         alarm(1);
-        _printStacktrace();
+        try {
+            _printStacktrace();
+        } catch (ExcInfo) {
+            fprintf(stderr, "error printing stack trace during abort()");
+        }
 
         // Cancel the alarm.
         // This is helpful for when running in a debugger, since the debugger will catch the
