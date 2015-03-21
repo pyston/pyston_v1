@@ -1,4 +1,11 @@
 class C(object):
+    def __delattr__(self, attr):
+        print "delattr", attr
+        if attr.startswith("c"):
+            print "yum"
+        else:
+            object.__delattr__(self, attr)
+
     def __setattr__(self, attr, value):
         print attr, value
         if attr.startswith("c"):
@@ -18,3 +25,8 @@ c.b = 2
 c.c = 3
 print sorted(c.__dict__.items())
 print c.a, c.b, c.c
+
+del c.a
+del c.b
+del c.c
+print sorted(c.__dict__.items())

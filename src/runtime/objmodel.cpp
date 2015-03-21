@@ -1682,6 +1682,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 }
 
 void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+    assert(val);
     assert(gc::isValidGCObject(val));
 
     // TODO this should be in type_setattro
@@ -3652,18 +3653,7 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
     abort();
 }
 
-extern "C" void delattrInternal(Box* obj, const std::string& attr, bool allow_custom,
-                                DelattrRewriteArgs* rewrite_args) {
-    // custom __delattr__
-    if (allow_custom) {
-        Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
-        if (delAttr != NULL) {
-            Box* boxstr = boxString(attr);
-            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
-            return;
-        }
-    }
-
+extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args) {
     // first check whether the deleting attribute is a descriptor
     Box* clsAttr = typeLookup(obj->cls, attr, NULL);
     if (clsAttr != NULL) {
@@ -3715,6 +3705,17 @@ extern "C" void delattrInternal(Box* obj, const std::string& attr, bool allow_cu
     }
 }
 
+extern "C" void delattrInternal(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args) {
+    Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
+    if (delAttr != NULL) {
+        Box* boxstr = boxString(attr);
+        Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
+        return;
+    }
+
+    delattrGeneric(obj, attr, rewrite_args);
+}
+
 // del target.attr
 extern "C" void delattr(Box* obj, const char* attr) {
     static StatCounter slowpath_delattr("slowpath_delattr");
@@ -3728,7 +3729,7 @@ extern "C" void delattr(Box* obj, const char* attr) {
     }
 
 
-    delattrInternal(obj, attr, true, NULL);
+    delattrInternal(obj, attr, NULL);
 }
 
 extern "C" Box* createBoxedIterWrapper(Box* o) {

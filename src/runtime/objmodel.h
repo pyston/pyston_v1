@@ -51,6 +51,7 @@ extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" void delattr(Box* obj, const char* attr);
+extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
 extern "C" Box* callattr(Box*, const std::string*, CallattrFlags, ArgPassSpec, Box*, Box*, Box*, Box**,
