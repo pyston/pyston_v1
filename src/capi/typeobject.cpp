@@ -709,10 +709,9 @@ static PyObject* slot_tp_iternext(PyObject* self) noexcept {
 
 static bool slotTppHasnext(PyObject* self) {
     static PyObject* hasnext_str;
-    Box* r = call_method(self, "__hasnext__", &hasnext_str, "()");
-    if (!r)
-        throwCAPIException();
-    return nonzero(r);
+    Box* r = self->hasnextOrNullIC();
+    assert(r);
+    return r->nonzeroIC();
 }
 
 static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {

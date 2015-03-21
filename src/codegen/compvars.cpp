@@ -710,6 +710,7 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
 
 ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
     bool do_patchpoint = ENABLE_ICS && !info.isInterpreted();
+    do_patchpoint = false; // we are currently using runtime ics for this
     llvm::Value* rtn_val;
     if (do_patchpoint) {
         ICSetupInfo* pp = createHasnextIC(info.getTypeRecorder());
