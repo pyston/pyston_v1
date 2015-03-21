@@ -166,6 +166,15 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
     return r;
 }
 
+static Box* classobj_getattro(Box* cls, Box* attr) noexcept {
+    try {
+        return classobjGetattribute(cls, attr);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* classobjStr(Box* _obj) {
     if (!isSubclass(_obj->cls, classobj_cls)) {
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'classobj' object but received an '%s'",
@@ -223,6 +232,15 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
 
 Box* instanceGetattribute(Box* _inst, Box* _attr) {
     return _instanceGetattribute(_inst, _attr, true);
+}
+
+static Box* instance_getattro(Box* cls, Box* attr) noexcept {
+    try {
+        return instanceGetattribute(cls, attr);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
@@ -418,6 +436,7 @@ void setupClassobj() {
     classobj_cls->giveAttr("__dict__", dict_descr);
 
     classobj_cls->freeze();
+    classobj_cls->tp_getattro = classobj_getattro;
 
 
     instance_cls->giveAttr("__getattribute__",
@@ -434,5 +453,6 @@ void setupClassobj() {
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
 
     instance_cls->freeze();
+    instance_cls->tp_getattro = instance_getattro;
 }
 }

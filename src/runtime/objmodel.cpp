@@ -3676,14 +3676,16 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o) {
         }
     }
 
-    if (typeLookup(o->cls, hasnext_str, NULL) == NULL)
+    // assert((typeLookup(o->cls, hasnext_str, NULL) == NULL) == (o->cls->tpp_hasnext == object_cls->tpp_hasnext));
+    if (o->cls->tpp_hasnext == object_cls->tpp_hasnext)
         return new BoxedIterWrapper(o);
     return o;
 }
 
 extern "C" Box* getPystonIter(Box* o) {
     Box* r = getiter(o);
-    if (typeLookup(r->cls, hasnext_str, NULL) == NULL)
+    // assert((typeLookup(r->cls, hasnext_str, NULL) == NULL) == (r->cls->tpp_hasnext == object_cls->tpp_hasnext));
+    if (r->cls->tpp_hasnext == object_cls->tpp_hasnext)
         return new BoxedIterWrapper(r);
     return r;
 }

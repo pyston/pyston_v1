@@ -428,6 +428,7 @@ void setupTuple() {
     tuple_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)tupleiterNext, UNKNOWN, 1)));
 
     tuple_iterator_cls->freeze();
+    tuple_iterator_cls->tpp_hasnext = tupleiterHasnextUnboxed;
 }
 
 void teardownTuple() {

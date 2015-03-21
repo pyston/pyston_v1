@@ -249,9 +249,6 @@ private:
             InternedString iter_name = nodeName(node, "lc_iter", i);
             pushAssign(iter_name, iter_call);
 
-            // TODO bad to save these like this?
-            AST_expr* hasnext_attr = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno),
-                                                       internString("__hasnext__"), true);
             AST_expr* next_attr
                 = makeLoadAttribute(makeName(iter_name, AST_TYPE::Load, node->lineno), internString("next"), true);
 
@@ -267,7 +264,9 @@ private:
             push_back(j);
 
             curblock = test_block;
-            AST_expr* test_call = callNonzero(remapExpr(makeCall(hasnext_attr)));
+            AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+            test_call->args.push_back(makeName(iter_name, AST_TYPE::Load, node->lineno));
+            AST_expr* test = remapExpr(test_call);
 
             CFGBlock* body_block = cfg->addBlock();
             body_block->info = "comprehension_body";
@@ -279,7 +278,7 @@ private:
             AST_Branch* br = new AST_Branch();
             br->col_offset = node->col_offset;
             br->lineno = node->lineno;
-            br->test = test_call;
+            br->test = test;
             br->iftrue = body_block;
             br->iffalse = exit_block;
             curblock->connectTo(body_block);

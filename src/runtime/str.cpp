@@ -2419,6 +2419,7 @@ void setupStr() {
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
+    str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
 
     str_cls->tp_as_buffer = &string_as_buffer;
 
