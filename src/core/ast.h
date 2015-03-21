@@ -1031,6 +1031,7 @@ public:
         NONZERO,
         SET_EXC_INFO,
         UNCACHE_EXC_INFO,
+        HASNEXT,
     } opcode;
     std::vector<AST_expr*> args;
 

@@ -190,6 +190,9 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
+    typedef bool (*pyston_inquiry)(Box*);
+    pyston_inquiry tpp_hasnext;
+
     bool hasGenericGetattr() { return tp_getattr == NULL; }
 
     void freeze();

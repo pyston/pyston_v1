@@ -120,11 +120,13 @@ public:
         assert(self->descr->wrapper->offset > 0);
 
         Box* rtn;
-        if (flags & PyWrapperFlag_KEYWORDS) {
+        if (flags == PyWrapperFlag_KEYWORDS) {
             wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
             rtn = (*wk)(self->obj, args, self->descr->wrapped, kwds);
-        } else {
+        } else if (flags == 0) {
             rtn = (*wrapper)(self->obj, args, self->descr->wrapped);
+        } else {
+            RELEASE_ASSERT(0, "%d", flags);
         }
 
         checkAndThrowCAPIException();

@@ -231,6 +231,18 @@ static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped)
     return PyBool_FromLong((long)res);
 }
 
+static PyObject* wrapInquirypred(PyObject* self, PyObject* args, void* wrapped) {
+    inquiry func = (inquiry)wrapped;
+    int res;
+
+    if (!check_num_args(args, 0))
+        throwCAPIException();
+    res = (*func)(self);
+    assert(res == 0 || res == 1);
+    assert(!PyErr_Occurred());
+    return PyBool_FromLong((long)res);
+}
+
 static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
@@ -693,6 +705,14 @@ static PyObject* slot_tp_iter(PyObject* self) noexcept {
 static PyObject* slot_tp_iternext(PyObject* self) noexcept {
     static PyObject* next_str;
     return call_method(self, "next", &next_str, "()");
+}
+
+static bool slotTppHasnext(PyObject* self) {
+    static PyObject* hasnext_str;
+    Box* r = call_method(self, "__hasnext__", &hasnext_str, "()");
+    if (!r)
+        throwCAPIException();
+    return nonzero(r);
 }
 
 static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
@@ -1208,6 +1228,8 @@ static void** slotptr(BoxedClass* type, int offset) noexcept {
 // Copied from CPython:
 #define TPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                     \
     { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), 0 }
+#define TPPSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                    \
+    { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), PyWrapperFlag_PYSTON }
 #define FLSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC, FLAGS)                                                              \
     { NAME, offsetof(PyTypeObject, SLOT), (void*)(FUNCTION), WRAPPER, PyDoc_STR(DOC), FLAGS }
 #define ETSLOT(NAME, SLOT, FUNCTION, WRAPPER, DOC)                                                                     \
@@ -1262,6 +1284,7 @@ static slotdef slotdefs[]
                                                                           "see help(type(x)) for signature",
                PyWrapperFlag_KEYWORDS),
         TPSLOT("__new__", tp_new, slot_tp_new, NULL, ""),
+        TPPSLOT("__hasnext__", tpp_hasnext, slotTppHasnext, wrapInquirypred, "hasnext"),
 
         BINSLOT("__add__", nb_add, slot_nb_add, "+"),                             // [force clang-format to line break]
         RBINSLOT("__radd__", nb_add, slot_nb_add, "+"),                           //
@@ -1452,7 +1475,8 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
             if (tptr == NULL || tptr == ptr)
                 generic = p->function;
             d = (BoxedWrapperDescriptor*)descr;
-            if (d->wrapper->wrapper == p->wrapper && PyType_IsSubtype(type, d->type)) {
+            if (d->wrapper->wrapper == p->wrapper && PyType_IsSubtype(type, d->type)
+                && ((d->wrapper->flags & PyWrapperFlag_PYSTON) == (p->flags & PyWrapperFlag_PYSTON))) {
                 if (specific == NULL || specific == d->wrapped)
                     specific = d->wrapped;
                 else

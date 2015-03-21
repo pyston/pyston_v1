@@ -459,7 +459,8 @@ struct _typeobject {
     void* _gcvisit_func;
     void* _dtor;
     int _attrs_offset;
-    bool _flags[2];
+    bool _flags[3];
+    void* _tpp_hasnext;
 };
 
 /* The *real* layout of a type object when allocated on the heap */

@@ -205,5 +205,6 @@ void setupXrange() {
 
     xrange_cls->freeze();
     xrange_iterator_cls->freeze();
+    xrange_iterator_cls->tpp_hasnext = BoxedXrangeIterator::xrangeIteratorHasnextUnboxed;
 }
 }
