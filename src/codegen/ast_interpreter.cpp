@@ -570,8 +570,12 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.empty());
         getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
         v = None;
+    } else if (node->opcode == AST_LangPrimitive::HASNEXT) {
+        assert(node->args.size() == 1);
+        Value obj = visit_expr(node->args[0]);
+        v = boxBool(hasnext(obj.o));
     } else
-        RELEASE_ASSERT(0, "not implemented");
+        RELEASE_ASSERT(0, "unknown opcode %d", node->opcode);
     return v;
 }
 

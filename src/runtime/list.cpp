@@ -871,6 +871,7 @@ void setupList() {
     list_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)listiterNext, UNKNOWN, 1)));
 
     list_iterator_cls->freeze();
+    list_iterator_cls->tpp_hasnext = listiterHasnextUnboxed;
 
     list_reverse_iterator_cls->giveAttr("__name__", boxStrConstant("listreverseiterator"));
 

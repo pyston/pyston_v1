@@ -1868,10 +1868,6 @@ public:
         InternedString itername = internString(itername_buf);
         pushAssign(itername, iter_call);
 
-        auto hasnext_attr = [&]() {
-            return makeLoadAttribute(makeName(itername, AST_TYPE::Load, node->lineno), internString("__hasnext__"),
-                                     true);
-        };
         AST_expr* next_attr
             = makeLoadAttribute(makeName(itername, AST_TYPE::Load, node->lineno), internString("next"), true);
 
@@ -1882,7 +1878,8 @@ public:
         curblock->connectTo(test_block);
         curblock = test_block;
 
-        AST_expr* test_call = makeCall(hasnext_attr());
+        AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+        test_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
         AST_Branch* test_br = makeBranch(remapExpr(test_call));
 
         push_back(test_br);
@@ -1924,7 +1921,8 @@ public:
         popRegion();
 
         if (curblock) {
-            AST_expr* end_call = makeCall((hasnext_attr()));
+            AST_LangPrimitive* end_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+            end_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
             AST_Branch* end_br = makeBranch(remapExpr(end_call));
             push_back(end_br);
 

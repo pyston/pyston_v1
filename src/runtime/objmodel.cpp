@@ -537,10 +537,20 @@ BoxedDict* Box::getDict() {
     return d;
 }
 
+static StatCounter box_getattr_slowpath("slowpath_box_getattr");
 Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
 
     if (rewrite_args)
         rewrite_args->obj->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)cls);
+
+#if 0
+    if (attr[0] == '_' && attr[1] == '_') {
+        std::string per_name_stat_name = "slowpath_box_getattr." + std::string(attr);
+        int id = Stats::getStatId(per_name_stat_name);
+        Stats::log(id);
+    }
+#endif
+    box_getattr_slowpath.log();
 
     // Have to guard on the memory layout of this object.
     // Right now, guard on the specific Python-class, which in turn
@@ -3690,6 +3700,10 @@ Box* getiter(Box* o) {
     if (r)
         return r;
     return getiterHelper(o);
+}
+
+extern "C" bool hasnext(Box* o) {
+    return o->cls->tpp_hasnext(o);
 }
 
 llvm::iterator_range<BoxIterator> Box::pyElements() {
