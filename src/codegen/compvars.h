@@ -100,6 +100,10 @@ public:
         printf("nonzero not defined for %s\n", debugName().c_str());
         abort();
     }
+    virtual ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, VAR* var) {
+        printf("hasnext not defined for %s\n", debugName().c_str());
+        abort();
+    }
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, VAR* var, const std::string* attr,
                                       bool cls_only) {
         printf("getattr not defined for %s\n", debugName().c_str());
@@ -256,6 +260,7 @@ public:
     virtual BoxedClass* guaranteedClass() = 0;
 
     virtual ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) = 0;
+    virtual ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info) = 0;
     virtual CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only)
         = 0;
     virtual void setattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, CompilerVariable* v) = 0;
@@ -326,6 +331,9 @@ public:
     }
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info) override {
         return type->nonzero(emitter, info, this);
+    }
+    ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info) override {
+        return type->hasnext(emitter, info, this);
     }
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, const std::string* attr, bool cls_only) override {
         return type->getattr(emitter, info, this, attr, cls_only);

@@ -576,13 +576,16 @@ private:
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
                 ConcreteCompilerVariable* rtn = obj->nonzero(emitter, getOpInfoForNode(node, unw_info));
-                assert(rtn->getType() == BOOL);
-                llvm::Value* v = i1FromBool(emitter, rtn);
-                assert(v->getType() == g.i1);
-
                 obj->decvref(emitter);
+                return rtn;
+            }
+            case AST_LangPrimitive::HASNEXT: {
+                assert(node->args.size() == 1);
+                CompilerVariable* obj = evalExpr(node->args[0], unw_info);
 
-                return boolFromI1(emitter, v);
+                ConcreteCompilerVariable* rtn = obj->hasnext(emitter, getOpInfoForNode(node, unw_info));
+                obj->decvref(emitter);
+                return rtn;
             }
             case AST_LangPrimitive::SET_EXC_INFO: {
                 assert(node->args.size() == 3);

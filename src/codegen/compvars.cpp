@@ -237,6 +237,7 @@ public:
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override;
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
+    ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
 
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
                  CompilerVariable* v) override {
@@ -703,6 +704,23 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
         rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
     } else {
         rtn_val = emitter.createCall(info.unw_info, g.funcs.nonzero, var->getValue());
+    }
+    return boolFromI1(emitter, rtn_val);
+}
+
+ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
+    bool do_patchpoint = ENABLE_ICS && !info.isInterpreted();
+    llvm::Value* rtn_val;
+    if (do_patchpoint) {
+        ICSetupInfo* pp = createHasnextIC(info.getTypeRecorder());
+
+        std::vector<llvm::Value*> llvm_args;
+        llvm_args.push_back(var->getValue());
+
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::hasnext, llvm_args, info.unw_info);
+        rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
+    } else {
+        rtn_val = emitter.createCall(info.unw_info, g.funcs.hasnext, var->getValue());
     }
     return boolFromI1(emitter, rtn_val);
 }
@@ -1717,6 +1735,18 @@ public:
         }
 
         return UNKNOWN->nonzero(emitter, info, var);
+    }
+
+    ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
+        static const std::string attr("__hasnext__");
+
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, NULL);
+
+        if (called_constant)
+            return called_constant;
+
+        return UNKNOWN->hasnext(emitter, info, var);
     }
 
     static NormalObjectType* fromClass(BoxedClass* cls) {

@@ -90,6 +90,7 @@ void force() {
     FORCE(isinstance);
     FORCE(yield);
     FORCE(getiterHelper);
+    FORCE(hasnext);
 
     FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);

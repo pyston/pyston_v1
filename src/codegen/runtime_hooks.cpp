@@ -209,6 +209,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(isinstance);
     GET(yield);
     GET(getiterHelper);
+    GET(hasnext);
 
     GET(unpackIntoArray);
     GET(raiseAttributeError);
