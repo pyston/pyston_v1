@@ -1821,6 +1821,10 @@ void setupRuntime() {
     // Weakrefs are used for tp_subclasses:
     init_weakref();
 
+    object_cls->tp_getattro = PyObject_GenericGetAttr;
+    object_cls->tp_setattro = PyObject_GenericSetAttr;
+    add_operators(object_cls);
+
     object_cls->finishInitialization();
     type_cls->finishInitialization();
     basestring_cls->finishInitialization();
@@ -1845,9 +1849,6 @@ void setupRuntime() {
     method_cls->finishInitialization();
     wrapperobject_cls->finishInitialization();
     wrapperdescr_cls->finishInitialization();
-
-    object_cls->tp_getattro = PyObject_GenericGetAttr;
-    add_operators(object_cls);
 
     str_cls->tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
 
@@ -1890,7 +1891,10 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
-    object_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)objectSetattr, UNKNOWN, 3)));
+    // __setattr__ was already set to a WrapperDescriptor; it'd be nice to set this to a faster BoxedFunction
+    // object_cls->setattr("__setattr__", new BoxedFunction(boxRTFunction((void*)objectSetattr, UNKNOWN, 3)), NULL);
+    // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
+    // Punting on that until needed; hopefully by then we will have better Pyston slots support.
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
@@ -2089,6 +2093,9 @@ void setupRuntime() {
     weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
     weakref_callableproxy->simple_destructor = proxy_to_tp_clear;
     weakref_callableproxy->is_pyston_class = true;
+
+    assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
+    assert(none_cls->tp_setattro == PyObject_GenericSetAttr);
 
     setupSysEnd();
 

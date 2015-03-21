@@ -551,9 +551,15 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
 
 #if 0
     if (attr[0] == '_' && attr[1] == '_') {
-        std::string per_name_stat_name = "slowpath_box_getattr." + std::string(attr);
-        int id = Stats::getStatId(per_name_stat_name);
-        Stats::log(id);
+        // Only do this logging for potentially-avoidable cases:
+        if (!rewrite_args && cls != classobj_cls) {
+            if (attr == "__setattr__")
+                printf("");
+
+            std::string per_name_stat_name = "slowpath_box_getattr." + std::string(attr);
+            int id = Stats::getStatId(per_name_stat_name);
+            Stats::log(id);
+        }
     }
 #endif
     box_getattr_slowpath.log();
@@ -1679,6 +1685,7 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
 }
 
 void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+    assert(val);
     assert(gc::isValidGCObject(val));
 
     // TODO this should be in type_setattro
@@ -1797,38 +1804,54 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
+    setattrofunc tp_setattro = obj->cls->tp_setattro;
+    assert(tp_setattro);
+
+    assert(!obj->cls->tp_setattr);
+
     if (rewriter.get()) {
+        auto r_cls = rewriter->getArg(0)->getAttr(offsetof(Box, cls));
         // rewriter->trap();
-        rewriter->getArg(0)->getAttr(offsetof(Box, cls))->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
+        r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
+        r_cls->addAttrGuard(offsetof(BoxedClass, tp_setattro), (intptr_t)tp_setattro);
     }
 
-    Box* setattr;
+
+    // Note: setattr will only be retrieved if we think it will be profitable to try calling that as opposed to
+    // the tp_setattr function pointer.
+    Box* setattr = NULL;
     RewriterVar* r_setattr;
-    if (rewriter.get()) {
-        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
-                                        Location::any());
-        setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
+    if (tp_setattro != PyObject_GenericSetAttr) {
+        if (rewriter.get()) {
+            GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
+                                            Location::any());
+            setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
+            assert(setattr);
 
-        if (rewrite_args.out_success) {
-            r_setattr = rewrite_args.out_rtn;
-            // TODO this is not good enough, since the object could get collected:
-            r_setattr->addGuard((intptr_t)setattr);
+            if (rewrite_args.out_success) {
+                r_setattr = rewrite_args.out_rtn;
+                // TODO this is not good enough, since the object could get collected:
+                r_setattr->addGuard((intptr_t)setattr);
+            } else {
+                rewriter.reset(NULL);
+            }
         } else {
-            rewriter.reset(NULL);
+            // setattr = typeLookup(obj->cls, setattr_str, NULL);
         }
-    } else {
-        setattr = typeLookup(obj->cls, setattr_str, NULL);
     }
-    assert(setattr);
 
     // We should probably add this as a GC root, but we can cheat a little bit since
     // we know it's not going to get deallocated:
     static Box* object_setattr = object_cls->getattr("__setattr__");
     assert(object_setattr);
 
+    if (DEBUG >= 2) {
+        assert((typeLookup(obj->cls, setattr_str, NULL) == object_setattr) == (tp_setattro == PyObject_GenericSetAttr));
+    }
+
     // I guess this check makes it ok for us to just rely on having guarded on the value of setattr without
     // invalidating on deallocation, since we assume that object.__setattr__ will never get deallocated.
-    if (setattr == object_setattr) {
+    if (tp_setattro == PyObject_GenericSetAttr) {
         if (rewriter.get()) {
             // rewriter->trap();
             SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
@@ -1842,9 +1865,18 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
         return;
     }
 
-    setattr = processDescriptor(setattr, obj, obj->cls);
     Box* boxstr = boxString(attr);
-    runtimeCallInternal(setattr, NULL, ArgPassSpec(2), boxstr, attr_val, NULL, NULL, NULL);
+    if (rewriter.get()) {
+        assert(setattr);
+
+        // TODO actually rewrite this?
+        setattr = processDescriptor(setattr, obj, obj->cls);
+        runtimeCallInternal(setattr, NULL, ArgPassSpec(2), boxstr, attr_val, NULL, NULL, NULL);
+    } else {
+        int r = tp_setattro(obj, boxstr, attr_val);
+        if (r)
+            throwCAPIException();
+    }
 }
 
 bool isUserDefined(BoxedClass* cls) {
@@ -3624,18 +3656,7 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
     abort();
 }
 
-extern "C" void delattrInternal(Box* obj, const std::string& attr, bool allow_custom,
-                                DelattrRewriteArgs* rewrite_args) {
-    // custom __delattr__
-    if (allow_custom) {
-        Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
-        if (delAttr != NULL) {
-            Box* boxstr = boxString(attr);
-            Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
-            return;
-        }
-    }
-
+extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args) {
     // first check whether the deleting attribute is a descriptor
     Box* clsAttr = typeLookup(obj->cls, attr, NULL);
     if (clsAttr != NULL) {
@@ -3687,6 +3708,17 @@ extern "C" void delattrInternal(Box* obj, const std::string& attr, bool allow_cu
     }
 }
 
+extern "C" void delattrInternal(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args) {
+    Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
+    if (delAttr != NULL) {
+        Box* boxstr = boxString(attr);
+        Box* rtn = runtimeCall2(delAttr, ArgPassSpec(2), obj, boxstr);
+        return;
+    }
+
+    delattrGeneric(obj, attr, rewrite_args);
+}
+
 // del target.attr
 extern "C" void delattr(Box* obj, const char* attr) {
     static StatCounter slowpath_delattr("slowpath_delattr");
@@ -3700,7 +3732,7 @@ extern "C" void delattr(Box* obj, const char* attr) {
     }
 
 
-    delattrInternal(obj, attr, true, NULL);
+    delattrInternal(obj, attr, NULL);
 }
 
 extern "C" Box* createBoxedIterWrapper(Box* o) {

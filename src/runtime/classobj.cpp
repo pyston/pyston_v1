@@ -250,6 +250,8 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
     RELEASE_ASSERT(_attr->cls == str_cls, "");
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
+    assert(value);
+
     // These are special cases in CPython as well:
     if (attr->s[0] == '_' && attr->s[1] == '_') {
         if (attr->s == "__dict__")
@@ -274,6 +276,20 @@ Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
 
     _inst->setattr(attr->s, value, NULL);
     return None;
+}
+
+static int instance_setattro(Box* cls, Box* attr, Box* value) noexcept {
+    try {
+        if (value) {
+            instanceSetattr(cls, attr, value);
+            return 0;
+        } else {
+            RELEASE_ASSERT(0, "");
+        }
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 Box* instanceRepr(Box* _inst) {
@@ -454,5 +470,6 @@ void setupClassobj() {
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
+    instance_cls->tp_setattro = instance_setattro;
 }
 }
