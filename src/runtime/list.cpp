@@ -785,10 +785,11 @@ extern "C" int PyList_SetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh, P
     ASSERT(isSubclass(l->cls, list_cls), "%s", l->cls->tp_name);
 
     try {
+        BoxedSlice* slice = (BoxedSlice*)createSlice(boxInt(ilow), boxInt(ihigh), None);
         if (v)
-            listSetitemSlice(l, new BoxedSlice(boxInt(ilow), boxInt(ihigh), None), v);
+            listSetitemSlice(l, slice, v);
         else
-            listDelitemSlice(l, new BoxedSlice(boxInt(ilow), boxInt(ihigh), None));
+            listDelitemSlice(l, slice);
         return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
