@@ -105,6 +105,8 @@ public:
 
     bool isPassedToViaClosure(InternedString name) override { return false; }
 
+    bool areLocalsFromModule() override { return true; }
+
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
 };
@@ -244,6 +246,8 @@ public:
 
         return usage->got_from_closure.count(name) > 0 || usage->passthrough_accesses.count(name) > 0;
     }
+
+    bool areLocalsFromModule() override { return false; }
 
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());

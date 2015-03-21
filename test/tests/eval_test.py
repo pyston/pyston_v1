@@ -5,17 +5,17 @@ print eval("3 + 4")
 a = 5
 print eval("a")
 
-#print eval("[b for b in range(5)]")
-#print b
+print eval("[b for b in range(5)]")
+print b
 
-#c = 2
-#print eval("[c for c in range(5)]")
-#print c
+c = 2
+print eval("[c for c in range(5)]")
+print c
 
-#try:
-#    print eval("int('abc')")
-#except ValueError:
-#    print 'got ValueError'
+try:
+    print eval("int('abc')")
+except ValueError:
+    print 'got ValueError'
 
 d = 19
 e = 20
@@ -85,7 +85,7 @@ o = 300
 print 'eval eval o', eval("eval('o')")
 
 # This works in the global scope but not in the local scope, because o1 is a global:
-#print eval("[(lambda p1 : p1 + o1)(5) for o1 in range(5)]")
+# print eval("[(lambda p1 : p1 + o1)(5) for o1 in range(5)]")
 def lambda_func():
     try:
         pass #print eval("[(lambda p2 : p2 + o2)(5) for o2 in range(5)]")
