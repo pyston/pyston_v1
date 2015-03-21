@@ -70,17 +70,24 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND NOT ENABLE_LLVM_DEBUG)
 endif()
 
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
-
-# llvm and clang patches
-add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
+execute_process(COMMAND tools/llvm_patchset_hash.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVM_PATCHSET_HASH OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
                    COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                    COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
                    DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
 add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
+
+# llvm and clang patches
+file(GLOB clang_patches clang_patches/*.patch)
+file(GLOB llvm_patches llvm_patches/*.patch llvm_revision.txt)
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/llvmup
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches
+                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/llvmup
+                   DEPENDS ${llvm_patches} ${clang_patches} gitsubmodules
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(llvm_up DEPENDS ${CMAKE_BINARY_DIR}/llvmup)
 
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
@@ -90,9 +97,35 @@ if(ENABLE_INTEL_JIT_EVENTS)
   set(INTEL_JIT_EVENTS_LIB "inteljitevents")
   add_definitions(-DENABLE_INTEL_JIT_EVENTS=1)
 endif()
-add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
-set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
-include(LLVMConfig)
+
+if(LLVM_DIR)
+  find_package(LLVM REQUIRED CONFIG)
+  message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+  message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+else()
+  add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
+  set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
+  include(LLVMConfig)
+  set(CLANG_TARGET clang)
+  set(CLANG_FORMAT_TARGET clang-format)
+  set(UNITTESTS unittests)
+
+  # llvm_up applies patches to these components
+  add_dependencies(LLVMCodeGen llvm_up)
+  add_dependencies(LLVMCore llvm_up)
+  add_dependencies(LLVMMC llvm_up)
+  add_dependencies(LLVMRuntimeDyld llvm_up)
+  add_dependencies(LLVMScalarOpts llvm_up)
+  add_dependencies(LLVMSelectionDAG llvm_up)
+  add_dependencies(LLVMSupport llvm_up)
+  add_dependencies(LLVMTableGen llvm_up)
+  add_dependencies(LLVMX86CodeGen llvm_up)
+
+  add_custom_target(package_llvm COMMAND ${CMAKE_COMMAND} -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/llvm-install -P ${CMAKE_BINARY_DIR}/llvm/cmake_install.cmake
+                                 COMMAND tar -zcf llvm-${LLVM_PATCHSET_HASH}.tar.gz llvm-install
+                                 DEPENDS ${LLVM_TEST_DEPENDS} llvm-stress llvm-pdbdump LTO clang clang-format libclang clang-check clangASTMatchers clangDynamicASTMatchers clangTooling clangToolingCore clangIndex) #TODO: find a better way to include all LLVM install dependencies
+endif()
+
 llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
 
 # libunwind
@@ -113,7 +146,7 @@ ExternalProject_Add(libunwind
                     LOG_INSTALL ON)
 
 # libpypa
-add_subdirectory(libpypa)
+add_subdirectory(libpypa EXCLUDE_FROM_ALL)
 add_dependencies(pypa gitsubmodules)
 
 # lz4
@@ -181,7 +214,9 @@ add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
 add_subdirectory(src)
 add_subdirectory(test/test_extension)
-add_subdirectory(test/unittests)
+if(NOT LLVM_DIR) #TODO: add gtest without LLVM
+  add_subdirectory(test/unittests)
+endif()
 add_subdirectory(tools)
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
@@ -202,8 +237,10 @@ set(PYTHONIOENCODING utf-8)
 
 add_test(NAME lint COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_test(NAME gc_unittest COMMAND gc_unittest)
-add_test(NAME analysis_unittest COMMAND analysis_unittest)
+if(NOT LLVM_DIR) #TODO: add gtest without LLVM
+  add_test(NAME gc_unittest COMMAND gc_unittest)
+  add_test(NAME analysis_unittest COMMAND analysis_unittest)
+endif()
 add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 # we pass -I to cpython tests and skip failing ones b/c they are slooow otherwise
 add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -a=-I -k --exit-code-only --skip-failing ${CMAKE_SOURCE_DIR}/test/cpython)
@@ -213,14 +250,14 @@ add_test(NAME pyston_old_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/
 
 # format
 file(GLOB_RECURSE FORMAT_FILES ${CMAKE_SOURCE_DIR}/src/*.h ${CMAKE_SOURCE_DIR}/src/*.cpp)
-add_custom_target(format ${LLVM_TOOLS_BINARY_DIR}/clang-format -style=file -i ${FORMAT_FILES} DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format DEPENDS clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_custom_target(format ${LLVM_TOOLS_BINARY_DIR}/clang-format -style=file -i ${FORMAT_FILES} DEPENDS ${CLANG_FORMAT_TARGET} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_custom_target(check-format ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${LLVM_TOOLS_BINARY_DIR}/clang-format DEPENDS ${CLANG_FORMAT_TARGET} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # lint
 add_custom_target(lint ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/lint.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 
 # check
-add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston copy_stdlib copy_libpyston clang-format ext_cpython ext_pyston unittests) 
+add_custom_target(check-pyston COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure DEPENDS pyston copy_stdlib copy_libpyston ext_cpython ext_pyston ${UNITTESTS} ${CLANG_FORMAT_TARGET}) 
 
 # {run,dbg,perf,memcheck,memleaks,cachegrind}_TESTNAME
 file(GLOB RUNTARGETS ${CMAKE_SOURCE_DIR}/test/tests/*.py ${CMAKE_SOURCE_DIR}/microbenchmarks/*.py ${CMAKE_SOURCE_DIR}/minibenchmarks/*.py)

@@ -1,0 +1,25 @@
+From 071e0b705168455ee04fa4a5b3dde0af6dd31836 Mon Sep 17 00:00:00 2001
+From: Daniel Agar <daniel@agar.ca>
+Date: Sun, 22 Mar 2015 14:57:59 -0400
+Subject: [PATCH] DO NOT MERGE pyston cmake cache LLVM test dependencies to create LLVM
+ package
+
+---
+ test/CMakeLists.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index f85a1d9..2b474b9 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -55,6 +55,7 @@ set(LLVM_TEST_DEPENDS
+           yaml2obj
+           obj2yaml
+           verify-uselistorder
++          CACHE STRING "LLVM test depends"
+         )
+ 
+ # If Intel JIT events are supported, depend on a tool that tests the listener.
+-- 
+1.9.1
+
