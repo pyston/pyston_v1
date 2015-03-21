@@ -636,6 +636,12 @@ call_funcs(PyObject* _module, PyObject* args) {
 
     // we aren't checking for tp_setattro.  it's set in cpython and not in pyston
 
+    if (cls->tp_descr_get) {
+        printf("tp_descr_get exists\n");
+    } else {
+        printf("tp_descr_get doesnt exist\n");
+    }
+
     if (cls->tp_as_mapping) {
         printf("tp_as_mapping exists\n");
         PyMappingMethods* map = cls->tp_as_mapping;

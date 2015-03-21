@@ -62,6 +62,12 @@
 #define BOOL_B_OFFSET ((char*)&(((BoxedBool*)0x01)->n) - (char*)0x1)
 #define INT_N_OFFSET ((char*)&(((BoxedInt*)0x01)->n) - (char*)0x1)
 
+#ifndef NDEBUG
+#define DEBUG 1
+#else
+#define DEBUG 0
+#endif
+
 namespace pyston {
 
 static const std::string all_str("__all__");
@@ -1193,9 +1199,15 @@ return gotten;
 // this function is useful for custom getattribute implementations that already know whether the descriptor
 // came from the class or not.
 Box* processDescriptorOrNull(Box* obj, Box* inst, Box* owner) {
-    Box* descr_r
-        = callattrInternal(obj, &get_str, LookupScope::CLASS_ONLY, NULL, ArgPassSpec(2), inst, owner, NULL, NULL, NULL);
-    return descr_r;
+    if (DEBUG >= 2)
+        assert((obj->cls->tp_descr_get == NULL) == (typeLookup(obj->cls, get_str, NULL) == NULL));
+    if (obj->cls->tp_descr_get) {
+        Box* r = obj->cls->tp_descr_get(obj, inst, owner);
+        if (!r)
+            throwCAPIException();
+        return r;
+    }
+    return NULL;
 }
 
 Box* processDescriptor(Box* obj, Box* inst, Box* owner) {
@@ -1286,9 +1298,14 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
     }
 
     // Check if it's a data descriptor
+    descrgetfunc descr_get = NULL;
+    // Note: _get_ will only be retrieved if we think it will be profitable to try calling that as opposed to
+    // the descr_get function pointer.
     Box* _get_ = NULL;
     RewriterVar* r_get = NULL;
     if (descr) {
+        descr_get = descr->cls->tp_descr_get;
+
         if (rewrite_args)
             r_descr->addAttrGuard(BOX_CLS_OFFSET, (uint64_t)descr->cls);
 
@@ -1304,22 +1321,35 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
         // we can immediately know to skip this part if it's one of the
         // special case nondata descriptors.
         if (!isNondataDescriptorInstanceSpecialCase(descr)) {
-            // Check if __get__ exists
             if (rewrite_args) {
                 RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
-                GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
-                _get_ = typeLookup(descr->cls, get_str, &grewrite_args);
-                if (!grewrite_args.out_success) {
-                    rewrite_args = NULL;
-                } else if (_get_) {
-                    r_get = grewrite_args.out_rtn;
+                r_descr_cls->addAttrGuard(offsetof(BoxedClass, tp_descr_get), (intptr_t)descr_get);
+            }
+
+            // Check if __get__ exists
+            if (descr_get) {
+                if (rewrite_args) {
+                    RewriterVar* r_descr_cls = r_descr->getAttr(BOX_CLS_OFFSET, Location::any());
+                    GetattrRewriteArgs grewrite_args(rewrite_args->rewriter, r_descr_cls, Location::any());
+                    _get_ = typeLookup(descr->cls, get_str, &grewrite_args);
+                    assert(_get_);
+                    if (!grewrite_args.out_success) {
+                        rewrite_args = NULL;
+                    } else if (_get_) {
+                        r_get = grewrite_args.out_rtn;
+                    }
+                } else {
+                    // Don't look up __get__ if we can't rewrite under the assumption that it will
+                    // usually be faster to just call tp_descr_get:
+                    //_get_ = typeLookup(descr->cls, get_str, NULL);
                 }
             } else {
-                _get_ = typeLookup(descr->cls, get_str, NULL);
+                if (DEBUG >= 2)
+                    assert(typeLookup(descr->cls, get_str, NULL) == NULL);
             }
 
             // As an optimization, don't check for __set__ if we're in cls_only mode, since it won't matter.
-            if (_get_ && !cls_only) {
+            if (descr_get && !cls_only) {
                 // Check if __set__ exists
                 Box* _set_ = NULL;
                 if (rewrite_args) {
@@ -1357,7 +1387,9 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
                             rewrite_args->out_rtn = crewrite_args.out_rtn;
                         }
                     } else {
-                        res = runtimeCallInternal(_get_, NULL, ArgPassSpec(3), descr, obj, obj->cls, NULL, NULL);
+                        res = descr_get(descr, obj, obj->cls);
+                        if (!res)
+                            throwCAPIException();
                     }
                     return res;
                 }
@@ -1485,7 +1517,7 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
 
         // We looked up __get__ above. If we found it, call it and return
         // the result.
-        if (_get_) {
+        if (descr_get) {
             // this could happen for the callattr path...
             if (for_call) {
                 rewrite_args = NULL;
@@ -1494,6 +1526,7 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
 
             Box* res;
             if (rewrite_args) {
+                assert(_get_);
                 CallRewriteArgs crewrite_args(rewrite_args->rewriter, r_get, rewrite_args->destination);
                 crewrite_args.arg1 = r_descr;
                 crewrite_args.arg2 = rewrite_args->obj;
@@ -1506,7 +1539,9 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
                     rewrite_args->out_rtn = crewrite_args.out_rtn;
                 }
             } else {
-                res = runtimeCallInternal(_get_, NULL, ArgPassSpec(3), descr, obj, obj->cls, NULL, NULL);
+                res = descr_get(descr, obj, obj->cls);
+                if (!res)
+                    throwCAPIException();
             }
             return res;
         }
@@ -2456,11 +2491,8 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         if (!cf->spec->boxed_return_value)
             continue;
 
-        if (cf->spec->accepts_all_inputs) {
-            if (cf == f->versions[0] && cf->effort == EffortLevel::MAXIMAL)
-                f->always_use_version = cf;
+        if (cf->spec->accepts_all_inputs)
             return cf;
-        }
 
         assert(cf->spec->rtn_type->llvmType() == UNKNOWN->llvmType());
 
@@ -3592,8 +3624,8 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
     abort();
 }
 
-extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_custom,
-                                 DelattrRewriteArgs* rewrite_args) {
+extern "C" void delattrInternal(Box* obj, const std::string& attr, bool allow_custom,
+                                DelattrRewriteArgs* rewrite_args) {
     // custom __delattr__
     if (allow_custom) {
         Box* delAttr = typeLookup(obj->cls, delattr_str, NULL);
@@ -3628,6 +3660,31 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
             raiseAttributeError(obj, attr.c_str());
         }
     }
+
+    // TODO this should be in type_setattro
+    if (isSubclass(obj->cls, type_cls)) {
+        BoxedClass* self = static_cast<BoxedClass*>(obj);
+
+        if (attr == getattr_str || attr == getattribute_str) {
+            if (rewrite_args)
+                REWRITE_ABORTED("");
+            // Will have to embed the clear in the IC, so just disable the patching for now:
+            rewrite_args = NULL;
+
+            // TODO should put this clearing behavior somewhere else, since there are probably more
+            // cases in which we want to do it.
+            self->dependent_icgetattrs.invalidateAll();
+        }
+
+        if (attr == "__base__" && self->getattr("__base__"))
+            raiseExcHelper(TypeError, "readonly attribute");
+
+        bool touched_slot = update_slot(self, attr);
+        if (touched_slot) {
+            rewrite_args = NULL;
+            REWRITE_ABORTED("");
+        }
+    }
 }
 
 // del target.attr
@@ -3643,7 +3700,7 @@ extern "C" void delattr(Box* obj, const char* attr) {
     }
 
 
-    delattr_internal(obj, attr, true, NULL);
+    delattrInternal(obj, attr, true, NULL);
 }
 
 extern "C" Box* createBoxedIterWrapper(Box* o) {

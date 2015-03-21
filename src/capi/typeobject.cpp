@@ -733,6 +733,16 @@ static PyObject* slot_tp_descr_get(PyObject* self, PyObject* obj, PyObject* type
     return PyObject_CallFunctionObjArgs(get, self, obj, type, NULL);
 }
 
+static PyObject* slot_tp_tpp_descr_get(PyObject* self, PyObject* obj, PyObject* type) noexcept {
+    assert(self->cls->tpp_descr_get);
+    try {
+        return self->cls->tpp_descr_get(self, obj, type);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 static PyObject* slot_tp_getattro(PyObject* self, PyObject* name) noexcept {
     static PyObject* getattribute_str = NULL;
     return call_method(self, "__getattribute__", &getattribute_str, "(O)", name);
@@ -1502,6 +1512,10 @@ static const slotdef* update_one_slot(BoxedClass* type, const slotdef* p) noexce
                sanity checks.  I'll buy the first person to
                point out a bug in this reasoning a beer. */
 #endif
+        } else if (offset == offsetof(BoxedClass, tp_descr_get) && descr->cls == function_cls
+                   && static_cast<BoxedFunction*>(descr)->f->always_use_version) {
+            type->tpp_descr_get = (descrgetfunc) static_cast<BoxedFunction*>(descr)->f->always_use_version->code;
+            specific = (void*)slot_tp_tpp_descr_get;
         } else if (descr == Py_None && ptr == (void**)&type->tp_hash) {
             /* We specifically allow __hash__ to be set to None
                to prevent inheritance of the default

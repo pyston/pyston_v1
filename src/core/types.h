@@ -308,7 +308,12 @@ public:
         assert(compiled->is_interpreted == (compiled->code == NULL));
         assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
         compiled->clfunc = this;
+
         if (compiled->entry_descriptor == NULL) {
+            if (versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL && compiled->spec->accepts_all_inputs
+                && compiled->spec->boxed_return_value)
+                always_use_version = compiled;
+
             assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
             versions.push_back(compiled);
         } else {

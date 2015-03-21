@@ -191,6 +191,11 @@ public:
     bool is_pyston_class;
 
     typedef bool (*pyston_inquiry)(Box*);
+
+    // tpp_descr_get is currently just a cache only for the use of tp_descr_get, and shouldn't
+    // be called or examined by clients:
+    descrgetfunc tpp_descr_get;
+
     pyston_inquiry tpp_hasnext;
 
     bool hasGenericGetattr() { return tp_getattr == NULL; }

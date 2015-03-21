@@ -211,3 +211,9 @@ try:
     del c.bar
 except Exception as e:
     pass
+
+slots_test.call_funcs(C())
+C.__get__ = lambda *args: None
+slots_test.call_funcs(C())
+del C.__get__
+slots_test.call_funcs(C())

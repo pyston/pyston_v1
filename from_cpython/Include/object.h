@@ -460,6 +460,7 @@ struct _typeobject {
     void* _dtor;
     int _attrs_offset;
     bool _flags[3];
+    void* _tpp_descr_get;
     void* _tpp_hasnext;
 };
 

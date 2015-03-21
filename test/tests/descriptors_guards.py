@@ -11,7 +11,7 @@ def get(self, obj, typ):
     return self.elem
 
 def set(self, obj, typ):
-    print '__get__ called'
+    print '__set__ called'
     print type(self)
     print type(obj)
     print typ
@@ -29,17 +29,17 @@ class C(object):
 c = C()
 
 def f():
-    print c.a
-    print C.a
+    print "c.a:", c.a
+    print "C.a:", C.a
 
 def g():
     try:
-        print c.b()
+        print "c.b():", c.b()
     except TypeError:
         print 'got TypeError'
 
     try:
-        print C.b()
+        print "C.b():", C.b()
     except TypeError:
         print 'got TypeError'
 
@@ -47,6 +47,8 @@ def h():
     c.c = 10
 
 for i in xrange(2000):
+    print i
+
     f()
     g()
     h()
