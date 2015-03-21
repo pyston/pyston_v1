@@ -69,16 +69,22 @@ endif()
 
 execute_process(COMMAND cat llvm_revision.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE LLVMREV OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-# llvm and clang patches
-add_custom_target(llvm_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(clang_gotorev python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(llvm_up DEPENDS llvm_gotorev clang_gotorev)
-
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/gitmodules
                    COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                    COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/gitmodules
                    DEPENDS ${CMAKE_SOURCE_DIR}/.gitmodules)
 add_custom_target(gitsubmodules DEPENDS ${CMAKE_BINARY_DIR}/gitmodules)
+
+# llvm and clang patches
+file(GLOB clang_patches clang_patches/*.patch)
+file(GLOB llvm_patches llvm_patches/*.patch llvm_revision.txt)
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/llvmup
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk ${LLVMREV} llvm_patches
+                   COMMAND python ${CMAKE_SOURCE_DIR}/tools/git_svn_gotorev.py ${DEPS_DIR}/llvm-trunk/tools/clang ${LLVMREV} clang_patches
+                   COMMAND cmake -E touch ${CMAKE_BINARY_DIR}/llvmup
+                   DEPENDS ${llvm_patches} ${clang_patches} gitsubmodules
+                   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(llvm_up DEPENDS ${CMAKE_BINARY_DIR}/llvmup)
 
 # llvm
 set(LLVM_TARGETS_TO_BUILD "host" CACHE STRING "LLVM targets")
@@ -92,6 +98,7 @@ add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_AL
 set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
 include(LLVMConfig)
 llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
+add_dependencies(LLVMCore llvm_up)
 
 # libunwind
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
