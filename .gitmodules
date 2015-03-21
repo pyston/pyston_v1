@@ -1,6 +1,7 @@
 [submodule "libunwind"]
 	path = libunwind
 	url = git://git.sv.gnu.org/libunwind.git
+	ignore = dirty
 [submodule "libpypa"]
 	path = libpypa
 	url = git://github.com/vinzenz/libpypa.git

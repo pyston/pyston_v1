@@ -340,7 +340,6 @@ CC='clang' CXX='clang++' cmake -GNinja ~/pyston
 
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
-ninja llvm_up
 
 ninja check-pyston # run the test suite
 ```
@@ -359,7 +358,6 @@ CC='clang' CXX='clang++' cmake -GNinja ~/pyston
 
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
-ninja llvm_up
 
 ninja check-pyston # run the test suite
 ```
