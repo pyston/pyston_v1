@@ -43,6 +43,9 @@
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
+namespace {
+int _dummy_ = unw_set_caching_policy(unw_local_addr_space, UNW_CACHE_PER_THREAD);
+}
 
 // Definition from libunwind, but standardized I suppose by the format of the .eh_frame_hdr section:
 struct uw_table_entry {
