@@ -1,5 +1,3 @@
-# TODO lots of eval functionality not implemented
-
 print eval("3 + 4")
 
 a = 5
@@ -85,10 +83,10 @@ o = 300
 print 'eval eval o', eval("eval('o')")
 
 # This works in the global scope but not in the local scope, because o1 is a global:
-# print eval("[(lambda p1 : p1 + o1)(5) for o1 in range(5)]")
+print eval("[(lambda p1 : p1 + o1)(5) for o1 in range(5)]")
 def lambda_func():
     try:
-        pass #print eval("[(lambda p2 : p2 + o2)(5) for o2 in range(5)]")
+        print eval("[(lambda p2 : p2 + o2)(5) for o2 in range(5)]")
     except NameError as e:
         print e.message
 lambda_func()
@@ -106,9 +104,9 @@ def func2():
 
     print 'shadow3', eval("shadow3 + sum([2 for shadow3 in range(5)]) + shadow3")
 func2()
-#print 'shadow1', shadow2
-#print 'shadow2', shadow2
-#print 'shadow3', shadow3
+print 'shadow1', shadow2
+print 'shadow2', shadow2
+print 'shadow3', shadow3
 
 
 def func3():
@@ -123,15 +121,11 @@ def func3():
         print 'NameError', e.message
 func3()
 
-"""
-
 changing_global = -1
 def print_changing_global():
     print 'changing_global is', changing_global
     return 0
 eval("[print_changing_global() for changing_global in range(5)]")
-
-"""
 
 def do_changing_local():
     # this won't get modified:
