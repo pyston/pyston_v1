@@ -41,6 +41,7 @@ SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const
         case AST_TYPE::Lambda:
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
+        case AST_TYPE::Suite:
             is_generator = false;
             break;
         case AST_TYPE::FunctionDef:

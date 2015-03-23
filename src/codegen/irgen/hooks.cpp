@@ -30,6 +30,7 @@
 #include "codegen/parser.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
+#include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/common.h"
@@ -44,7 +45,8 @@ namespace pyston {
 
 // TODO terrible place for these!
 ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
-    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression) {
+    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
+        || ast->type == AST_TYPE::Suite) {
         kwarg = "";
         vararg = "";
     } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
@@ -95,6 +97,7 @@ const std::string SourceInfo::getName() {
             return "<lambda>";
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
+        case AST_TYPE::Suite:
             return "<module>";
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
@@ -304,7 +307,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         bm->future_flags = getFutureFlags(m, bm->fn.c_str());
 
-        ScopingAnalysis* scoping = runScopingAnalysis(m);
+        ScopingAnalysis* scoping = new ScopingAnalysis(m);
 
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
@@ -323,40 +326,71 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
-static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm, BoxedDict* locals) {
+template <typename AST_Type>
+Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, Box* boxedLocals) {
     CompiledFunction* cf;
 
     { // scope for limiting the locked region:
         LOCK_REGION(codegen_rwlock.asWrite());
 
-        Timer _t("for compileEval()");
+        Timer _t("for evalOrExec()");
 
-        ScopingAnalysis* scoping = new ScopingAnalysis(expr);
+        ScopingAnalysis* scoping = new ScopingAnalysis(source);
 
-        AST_Return* stmt = new AST_Return();
-        stmt->value = expr->body;
-        SourceInfo* si = new SourceInfo(bm, scoping, expr, { stmt });
+        SourceInfo* si = new SourceInfo(bm, scoping, source, body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
+        // TODO Right now we only support going into an exec or eval through the
+        // intepretter, since the interpretter has a special function which lets
+        // us set the locals object. We should probably support it for optimized
+        // code as well, so we could use initialEffort() here instead of hard-coding
+        // INTERPRETED. This could actually be useful if we actually cache the parse
+        // results (since sometimes eval or exec might be called on constant strings).
         EffortLevel effort = EffortLevel::INTERPRETED;
 
         cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
         assert(cf->clfunc->versions.size());
     }
 
-    return astInterpretFunctionEval(cf, locals);
+    return astInterpretFunctionEval(cf, boxedLocals);
 }
 
-Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
+// Main entrypoints for eval and exec.
+Box* eval(Box* boxedCode) {
+    Box* boxedLocals = fastLocalsToBoxedLocals();
+    BoxedModule* module = getCurrentModule();
+
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
+    RELEASE_ASSERT(boxedCode->cls == str_cls, "");
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
     AST_Module* parsedModule = parse_string(code);
-    assert(parsedModule->body[0]->type == AST_TYPE::Expr);
+    RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
     AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
     parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
 
-    return compileAndRunExpression(parsedExpr, module, locals);
+    // We need body (list of statements) to compile.
+    // Obtain this by simply making a single statement which contains the expression.
+    AST_Return* stmt = new AST_Return();
+    stmt->value = parsedExpr->body;
+    std::vector<AST_stmt*> body = { stmt };
+
+    return evalOrExec<AST_Expression>(parsedExpr, body, module, boxedLocals);
+}
+
+Box* exec(Box* boxedCode) {
+    Box* boxedLocals = fastLocalsToBoxedLocals();
+    BoxedModule* module = getCurrentModule();
+
+    // TODO same issues as in `eval`
+    RELEASE_ASSERT(boxedCode->cls == str_cls, "");
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
+    AST_Module* parsedModule = parse_string(code);
+    AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
+    parsedSuite->body = parsedModule->body;
+
+    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, boxedLocals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it
@@ -456,9 +490,8 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     assert(exit->parent_cf->clfunc);
     CompiledFunction*& new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
-        EffortLevel new_effort = EffortLevel::MAXIMAL;
-        if (exit->parent_cf->effort == EffortLevel::INTERPRETED)
-            new_effort = EffortLevel::MINIMAL;
+        EffortLevel new_effort = exit->parent_cf->effort == EffortLevel::INTERPRETED ? EffortLevel::MINIMAL
+                                                                                     : EffortLevel::MAXIMAL;
         CompiledFunction* compiled = compileFunction(exit->parent_cf->clfunc, NULL, new_effort, exit->entry);
         assert(compiled == new_cf);
 

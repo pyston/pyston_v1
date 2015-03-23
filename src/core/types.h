@@ -110,7 +110,8 @@ typedef ValuedCompilerType<llvm::Value*> ConcreteCompilerType;
 ConcreteCompilerType* typeFromClass(BoxedClass*);
 
 extern ConcreteCompilerType* INT, *BOXED_INT, *LONG, *FLOAT, *BOXED_FLOAT, *VOID, *UNKNOWN, *BOOL, *STR, *NONE, *LIST,
-    *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR, *BOXED_COMPLEX;
+    *SLICE, *MODULE, *DICT, *BOOL, *BOXED_BOOL, *BOXED_TUPLE, *SET, *FROZENSET, *CLOSURE, *GENERATOR, *BOXED_COMPLEX,
+    *FRAME_INFO;
 extern CompilerType* UNDEF;
 
 class CompilerVariable;
@@ -535,6 +536,7 @@ void addToSysArgv(const char* str);
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func);
+void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...);
 
 struct LineInfo {
 public:
@@ -564,7 +566,9 @@ struct FrameInfo {
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
     ExcInfo exc;
 
-    FrameInfo(ExcInfo exc) : exc(exc) {}
+    Box* boxedLocals;
+
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL) {}
 };
 
 struct CallattrFlags {

@@ -415,11 +415,21 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
                 } else if (p.second == CLOSURE) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
+                } else if (p.second == FRAME_INFO) {
+                    ptr = entry_emitter->getBuilder()->CreateBitCast(
+                        ptr, g.llvm_frame_info_type->getPointerTo()->getPointerTo());
                 } else {
                     assert(p.second->llvmType() == g.llvm_value_type_ptr);
                 }
                 from_arg = entry_emitter->getBuilder()->CreateLoad(ptr);
                 assert(from_arg->getType() == p.second->llvmType());
+            }
+
+            if (from_arg->getType() == g.llvm_frame_info_type->getPointerTo()) {
+                assert(p.first.str() == FRAME_INFO_PTR_NAME);
+                irstate->setFrameInfoArgument(from_arg);
+                // Don't add the frame info to the symbol table since we will store it separately:
+                continue;
             }
 
             ConcreteCompilerType* phi_type;
@@ -593,6 +603,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             assert(phis);
 
             for (const auto& p : entry_descriptor->args) {
+                // Don't add the frame info to the symbol table since we will store it separately
+                // (we manually added it during the calculation of osr_syms):
+                if (p.first.str() == FRAME_INFO_PTR_NAME)
+                    continue;
+
                 ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
 
                 // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
@@ -632,7 +647,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (source->is_generator)
                 names.insert(source->getInternedStrings().get(PASSED_GENERATOR_NAME));
 
-            for (const auto& s : names) {
+            for (const InternedString& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi

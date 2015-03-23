@@ -31,39 +31,12 @@ const std::map<std::string, FutureOption> future_options
         { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), FF_NESTED_SCOPES } },
         { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), FF_WITH_STATEMENT } } };
 
-// Helper function:
-void raiseSyntaxError(const char* file, AST* node_at, const char* msg, ...) {
-    va_list ap;
-    va_start(ap, msg);
-
-    char buf[1024];
-    vsnprintf(buf, sizeof(buf), msg, ap);
-
-
-    // TODO I'm not sure that it's safe to raise an exception here, since I think
-    // there will be things that end up not getting cleaned up.
-    // Then again, there are a huge number of things that don't get cleaned up even
-    // if an exception doesn't get thrown...
-
-    // TODO output is still a little wrong, should be, for example
-    //
-    //  File "../test/tests/future_non_existent.py", line 1
-    //    from __future__ import rvalue_references # should cause syntax error
-    //
-    // but instead it is
-    //
-    // Traceback (most recent call last):
-    //  File "../test/tests/future_non_existent.py", line -1, in :
-    //    from __future__ import rvalue_references # should cause syntax error
-    ::pyston::raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
-}
-
 void raiseFutureImportErrorNotFound(const char* file, AST* node, const char* name) {
-    raiseSyntaxError(file, node, "future feature %s is not defined", name);
+    raiseSyntaxErrorHelper(file, "", node, "future feature %s is not defined", name);
 }
 
 void raiseFutureImportErrorNotBeginning(const char* file, AST* node) {
-    raiseSyntaxError(file, node, "from __future__ imports must occur at the beginning of the file");
+    raiseSyntaxErrorHelper(file, "", node, "from __future__ imports must occur at the beginning of the file");
 }
 
 class BadFutureImportVisitor : public NoopASTVisitor {

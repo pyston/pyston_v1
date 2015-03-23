@@ -683,16 +683,6 @@ Box* zip2(Box* container1, Box* container2) {
     return rtn;
 }
 
-Box* eval(Box* code) {
-    // TODO implement full functionality (args and stuff)
-    RELEASE_ASSERT(code->cls == str_cls, "eval not implemented for non-strings");
-
-    BoxedDict* locals = getLocals(true /* only_user_visible */, true /* includeClosure */);
-    BoxedModule* module = getCurrentModule();
-
-    return runEval(static_cast<BoxedString*>(code)->s.c_str(), locals, module);
-}
-
 static Box* callable(Box* obj) {
     Box* r = PyBool_FromLong((long)PyCallable_Check(obj));
     checkAndThrowCAPIException();
@@ -859,7 +849,7 @@ Box* globals() {
 }
 
 Box* locals() {
-    return getLocals(true /* filter */, true /* includeClosure */);
+    return fastLocalsToBoxedLocals();
 }
 
 Box* divmod(Box* lhs, Box* rhs) {

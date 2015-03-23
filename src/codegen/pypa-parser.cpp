@@ -633,10 +633,9 @@ struct stmt_dispatcher {
         AST_Exec* ptr = new AST_Exec();
         location(ptr, e);
         ptr->body = readItem(e.body, interned_strings);
-        if (e.globals)
-            ptr->globals = readItem(e.globals, interned_strings);
-        if (e.locals)
-            ptr->locals = readItem(e.locals, interned_strings);
+        ptr->globals = e.globals ? readItem(e.globals, interned_strings) : NULL;
+        ptr->locals = e.locals ? readItem(e.locals, interned_strings) : NULL;
+        assert(ptr->globals || !ptr->locals);
         return ptr;
     }
 

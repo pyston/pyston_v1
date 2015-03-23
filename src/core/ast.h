@@ -23,6 +23,7 @@
 
 #include "llvm/ADT/StringRef.h"
 
+#include "analysis/scoping_analysis.h"
 #include "core/common.h"
 #include "core/stringpool.h"
 
@@ -120,6 +121,7 @@ enum AST_TYPE {
     Ellipsis = 87,
     Expression = 88,
     SetComp = 89,
+    Suite = 90,
 
     // Pseudo-nodes that are specific to this compiler:
     Branch = 200,
@@ -674,6 +676,20 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
 };
 
+class AST_Suite : public AST {
+public:
+    std::unique_ptr<InternedStringPool> interned_strings;
+
+    std::vector<AST_stmt*> body;
+
+    virtual void accept(ASTVisitor* v);
+
+    AST_Suite(std::unique_ptr<InternedStringPool> interned_strings)
+        : AST(AST_TYPE::Suite), interned_strings(std::move(interned_strings)) {}
+
+    static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Suite;
+};
+
 class AST_Name : public AST_expr {
 public:
     AST_TYPE::AST_TYPE ctx_type;
@@ -682,20 +698,14 @@ public:
     // The resolved scope of this name.  Kind of hacky to be storing it in the AST node;
     // in CPython it ends up getting "cached" by being translated into one of a number of
     // different bytecodes.
-    // We don't have a separate bytecode representation, so just store it in here for now.
-    enum LookupType {
-        UNKNOWN,
-        GLOBAL,
-        CLOSURE,
-        FAST_LOCAL,
-        LOCAL,
-    } lookup_type;
+    ScopeInfo::VarScopeType lookup_type;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
-        : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id), lookup_type(UNKNOWN) {}
+        : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id),
+          lookup_type(ScopeInfo::VarScopeType::UNKNOWN) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
@@ -1079,6 +1089,7 @@ public:
     virtual bool visit_exec(AST_Exec* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expr(AST_Expr* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_expression(AST_Expression* node) { RELEASE_ASSERT(0, ""); }
+    virtual bool visit_suite(AST_Suite* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_extslice(AST_ExtSlice* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_for(AST_For* node) { RELEASE_ASSERT(0, ""); }
     virtual bool visit_functiondef(AST_FunctionDef* node) { RELEASE_ASSERT(0, ""); }
@@ -1149,6 +1160,7 @@ public:
     virtual bool visit_exec(AST_Exec* node) { return false; }
     virtual bool visit_expr(AST_Expr* node) { return false; }
     virtual bool visit_expr(AST_Expression* node) { return false; }
+    virtual bool visit_suite(AST_Suite* node) { return false; }
     virtual bool visit_extslice(AST_ExtSlice* node) { return false; }
     virtual bool visit_for(AST_For* node) { return false; }
     virtual bool visit_functiondef(AST_FunctionDef* node) { return false; }
@@ -1294,6 +1306,7 @@ public:
     virtual bool visit_exec(AST_Exec* node);
     virtual bool visit_expr(AST_Expr* node);
     virtual bool visit_expression(AST_Expression* node);
+    virtual bool visit_suite(AST_Suite* node);
     virtual bool visit_extslice(AST_ExtSlice* node);
     virtual bool visit_for(AST_For* node);
     virtual bool visit_functiondef(AST_FunctionDef* node);

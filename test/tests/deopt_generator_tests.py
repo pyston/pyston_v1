@@ -11,10 +11,14 @@ except ImportError:
     pass
 
 def main():
-    var_in_closure1 = 0
-    
-    def f(o):
-        print "starting f"
+    class C(object):
+        def __repr__(self):
+            return "<C>"
+
+    def f_gen(o):
+        print "starting f_gen, yielding:"
+
+        yield 8
 
         try:
             print o.a
@@ -26,17 +30,8 @@ def main():
         print o.d
         print sorted(locals().items())
 
-        print var_in_closure1
-        var_in_closure2 = 1
-        def g():
-            print var_in_closure2
-        g()
-
-        print "Done"
-
-    class C(object):
-        def __repr__(self):
-            return "<C>"
+        print "yielding again:"
+        yield 9
 
     c = C()
     c.a = 1
@@ -60,24 +55,8 @@ def main():
             c.b = 0
             c.d = 1.0
 
-        f(c)
+        g = f_gen(c)
+        print 'yielded(1):', g.next()
+        print 'yielded(2):', g.next()
 
-    # Regression test reduced from subprocess.py:
-    import types
-    def f2(self, args):
-        if isinstance(args, types.StringTypes):
-            pass
-
-        try:
-            self.pid
-        except:
-            pass
-
-    c = C()
-    c.pid = 1
-    for i in xrange(2000):
-        f2(c, None)
-
-        if i == 1500:
-            c.pid = 1.0
 main()

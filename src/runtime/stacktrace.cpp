@@ -123,6 +123,32 @@ void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::st
     raiseRaw(ExcInfo(exc->cls, exc, new BoxedTraceback(std::move(entries))));
 }
 
+void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...) {
+    va_list ap;
+    va_start(ap, msg);
+
+    char buf[1024];
+    vsnprintf(buf, sizeof(buf), msg, ap);
+
+
+    // TODO I'm not sure that it's safe to raise an exception here, since I think
+    // there will be things that end up not getting cleaned up.
+    // Then again, there are a huge number of things that don't get cleaned up even
+    // if an exception doesn't get thrown...
+
+    // TODO output is still a little wrong, should be, for example
+    //
+    //  File "../test/tests/future_non_existent.py", line 1
+    //    from __future__ import rvalue_references # should cause syntax error
+    //
+    // but instead it is
+    //
+    // Traceback (most recent call last):
+    //  File "../test/tests/future_non_existent.py", line -1, in :
+    //    from __future__ import rvalue_references # should cause syntax error
+    raiseSyntaxError(buf, node_at->lineno, node_at->col_offset, file, "");
+}
+
 void _printStacktrace() {
     printTraceback(getTraceback());
 }

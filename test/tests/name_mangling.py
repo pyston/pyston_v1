@@ -79,6 +79,25 @@ class MyClass(object):
 
 class MyClass(object):
     try:
+        from __foo import __bar
+    except ImportError, e:
+        print e
+
+#TODO enable this once we support `import *` in functions
+#class MyClass(object):
+#    try:
+#        from __foo import *
+#    except ImportError, e:
+#        print e
+
+class MyClass(object):
+    try:
+        from sys import __bar
+    except ImportError, e:
+        print e
+
+class MyClass(object):
+    try:
         # Except if it's a dotted name:
         import __foo.__bar
     except ImportError, e:
