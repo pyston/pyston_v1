@@ -95,7 +95,6 @@ def get_expected_output(fn):
     code = p.wait()
 
     r = code, out, err
-    assert code >= 0, "CPython exited with an unexpected exit code: %d" % (code,)
 
     cPickle.dump(r, open(cache_fn, 'w'))
     return r
@@ -204,7 +203,10 @@ def run_test(fn, check_stats, run_memcheck):
             stats[k.strip()] = int(v)
 
     expected_code, expected_out, expected_err = get_expected_output(fn)
-    if code != expected_code:
+    if expected_code < 0:
+        r += "    CPython gave unexpected exit code: %d" % expected_code
+        return r
+    elif code != expected_code:
         color = 31 # red
 
         if code == 0:

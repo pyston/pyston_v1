@@ -6,6 +6,7 @@
 # PyPy seems to not do this, and setting sys.modules to something else
 # raises an exception when you try to import something else.
 # Jython seems to crash.
+# I've actually seen CPython segfault too, at least on 2.7.4.
 
 import sys
 
