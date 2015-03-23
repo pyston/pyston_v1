@@ -433,6 +433,17 @@ static Box* instanceHash(BoxedInstance* inst) {
     }
 }
 
+Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
+    assert(_inst->cls == instance_cls);
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* call_func = _instanceGetattribute(inst, boxStrConstant("__call__"), false);
+    if (!call_func)
+        raiseExcHelper(AttributeError, "%s instance has no __call__ method", inst->inst_cls->name->s.c_str());
+
+    return runtimeCall(call_func, ArgPassSpec(0, 0, true, true), _args, _kwargs, NULL, NULL, NULL);
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
                                           offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
@@ -467,6 +478,8 @@ void setupClassobj() {
     instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
     instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
+    instance_cls->giveAttr("__call__",
+                           new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, 0, true, true)));
 
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
