@@ -59,7 +59,26 @@ static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
 }
 
 extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) noexcept {
-    Py_FatalError("unimplemented");
+    Py_ssize_t i, n;
+    if (klass == base)
+        return 1;
+    if (PyTuple_Check(base)) {
+        n = PyTuple_GET_SIZE(base);
+        for (i = 0; i < n; i++) {
+            if (PyClass_IsSubclass(klass, PyTuple_GET_ITEM(base, i)))
+                return 1;
+        }
+        return 0;
+    }
+    if (klass == NULL || !PyClass_Check(klass))
+        return 0;
+    BoxedClassobj* cp = (BoxedClassobj*)klass;
+    n = PyTuple_Size(cp->bases);
+    for (i = 0; i < n; i++) {
+        if (PyClass_IsSubclass(PyTuple_GetItem(cp->bases, i), base))
+            return 1;
+    }
+    return 0;
 }
 
 Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
@@ -172,6 +191,58 @@ static Box* classobj_getattro(Box* cls, Box* attr) noexcept {
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
+    }
+}
+
+static const char* set_bases(PyClassObject* c, PyObject* v) {
+    Py_ssize_t i, n;
+
+    if (v == NULL || !PyTuple_Check(v))
+        return "__bases__ must be a tuple object";
+    n = PyTuple_Size(v);
+    for (i = 0; i < n; i++) {
+        PyObject* x = PyTuple_GET_ITEM(v, i);
+        if (!PyClass_Check(x))
+            return "__bases__ items must be classes";
+        if (PyClass_IsSubclass(x, (PyObject*)c))
+            return "a __bases__ item causes an inheritance cycle";
+    }
+    // Pyston change:
+    // set_slot(&c->cl_bases, v);
+    // set_attr_slots(c);
+    ((BoxedClassobj*)c)->bases = (BoxedTuple*)v;
+    return "";
+}
+
+static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
+    RELEASE_ASSERT(_cls->cls == classobj_cls, "");
+    BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    if (attr->s == "__bases__") {
+        const char* error_str = set_bases((PyClassObject*)cls, _value);
+        if (error_str && error_str[0] != '\0')
+            raiseExcHelper(TypeError, "%s", error_str);
+        cls->setattr("__bases__", _value, NULL);
+        return;
+    }
+    PyObject_GenericSetAttr(cls, _attr, _value);
+    checkAndThrowCAPIException();
+}
+
+static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
+    try {
+        if (value) {
+            classobjSetattr(cls, attr, value);
+            return 0;
+        } else {
+            RELEASE_ASSERT(0, "");
+        }
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
     }
 }
 
@@ -459,11 +530,13 @@ void setupClassobj() {
 
     classobj_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)classobjGetattribute, UNKNOWN, 2)));
+    classobj_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)classobjSetattr, UNKNOWN, 3)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)classobjStr, STR, 1)));
     classobj_cls->giveAttr("__dict__", dict_descr);
 
     classobj_cls->freeze();
     classobj_cls->tp_getattro = classobj_getattro;
+    classobj_cls->tp_setattro = classobj_setattro;
 
 
     instance_cls->giveAttr("__getattribute__",

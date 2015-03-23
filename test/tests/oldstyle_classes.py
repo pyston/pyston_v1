@@ -210,3 +210,16 @@ class MyCustomClass(object):
 
 # type(MyCustomClass()) is MyCustomClass, which is callable, leading to another call to __init__
 print ClassType("aoeu", (MyCustomClass(), ), {})
+
+class D():
+    def test(self):
+        return "D.test"
+
+class LateSubclassing():
+    def __init__(self):
+        LateSubclassing.__bases__ = (C, D)
+print LateSubclassing().test()
+print issubclass(LateSubclassing, C)
+print issubclass(LateSubclassing, D)
+print issubclass(LateSubclassing, E)
+
