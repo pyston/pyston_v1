@@ -68,8 +68,6 @@ public:
     uint8_t readByte() {
         ensure(1);
         RELEASE_ASSERT(end > start, "premature eof");
-        if (VERBOSITY("parsing") >= 2)
-            printf("readByte, now %d %d\n", start + 1, end);
         return buf[start++];
     }
     uint16_t readShort() { return (readByte() << 8) | (readByte()); }
@@ -101,16 +99,20 @@ AST_stmt* readASTStmt(BufferedReader* reader);
 
 static std::string readString(BufferedReader* reader) {
     int strlen = reader->readShort();
-    std::vector<char> chars;
+    llvm::SmallString<32> chars;
     for (int i = 0; i < strlen; i++) {
         chars.push_back(reader->readByte());
     }
-    return std::string(chars.begin(), chars.end());
+    return chars.str().str();
 }
 
 InternedString BufferedReader::readAndInternString() {
-    std::string str = readString(this);
-    return intern_pool->get(std::move(str));
+    int strlen = readShort();
+    llvm::SmallString<32> chars;
+    for (int i = 0; i < strlen; i++) {
+        chars.push_back(readByte());
+    }
+    return intern_pool->get(chars.str());
 }
 
 void BufferedReader::readAndInternStringVector(std::vector<InternedString>& v) {

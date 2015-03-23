@@ -447,7 +447,7 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
 extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
     try {
         // Not sure if this is really the same:
-        return getitem(o, new BoxedSlice(boxInt(i1), boxInt(i2), None));
+        return getitem(o, createSlice(boxInt(i1), boxInt(i2), None));
     } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
