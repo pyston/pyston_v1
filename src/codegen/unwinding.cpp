@@ -478,6 +478,7 @@ static const LineInfo* lineInfoForFrame(PythonFrameIterator& frame_it) {
     return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->parent_module->fn, source->getName());
 }
 
+static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
@@ -488,6 +489,8 @@ BoxedTraceback* getTraceback() {
         return new BoxedTraceback();
     }
 
+    Timer _t("getTraceback");
+
     std::vector<const LineInfo*> entries;
     for (auto& frame_info : unwindPythonFrames()) {
         const LineInfo* line_info = lineInfoForFrame(frame_info);
@@ -496,6 +499,10 @@ BoxedTraceback* getTraceback() {
     }
 
     std::reverse(entries.begin(), entries.end());
+
+    long us = _t.end();
+    us_gettraceback.log(us);
+
     return new BoxedTraceback(std::move(entries));
 }
 

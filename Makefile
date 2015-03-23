@@ -977,7 +977,7 @@ $(call make_target,_prof)
 $(call make_target,_gcc)
 
 runpy_% pyrun_%: %.py ext_python
-	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
+	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
 $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 

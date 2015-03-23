@@ -1845,10 +1845,6 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     static Box* object_setattr = object_cls->getattr("__setattr__");
     assert(object_setattr);
 
-    if (DEBUG >= 2) {
-        assert((typeLookup(obj->cls, setattr_str, NULL) == object_setattr) == (tp_setattro == PyObject_GenericSetAttr));
-    }
-
     // I guess this check makes it ok for us to just rely on having guarded on the value of setattr without
     // invalidating on deallocation, since we assume that object.__setattr__ will never get deallocated.
     if (tp_setattro == PyObject_GenericSetAttr) {
@@ -2993,9 +2989,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
 
     if (obj->cls != function_cls && obj->cls != builtin_function_or_method_cls && obj->cls != instancemethod_cls) {
         Box* rtn;
+
+        if (DEBUG >= 2) {
+            assert((obj->cls->tp_call == NULL) == (typeLookup(obj->cls, call_str, NULL) == NULL));
+        }
+
         if (rewrite_args) {
-            // TODO is this ok?
-            // rewrite_args->rewriter->trap();
             rtn = callattrInternal(obj, &call_str, CLASS_ONLY, rewrite_args, argspec, arg1, arg2, arg3, args,
                                    keyword_names);
         } else {
