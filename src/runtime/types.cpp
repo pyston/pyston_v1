@@ -120,11 +120,13 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }
 #endif
 
-    // Maybe we should only zero the extension memory?
-    // I'm not sure we have the information at the moment, but when we were in Box::operator new()
-    // we knew which memory was beyond C++ class.
     void* mem = gc_alloc(size, gc::GCKind::PYTHON);
     RELEASE_ASSERT(mem, "");
+
+    // Not sure if we can get away with not initializing this memory.
+    // I think there are small optimizations we can do, like not initializing cls (always
+    // the first 8 bytes) since it will get written by PyObject_Init.
+    memset(mem, '\0', size);
 
     Box* rtn = static_cast<Box*>(mem);
 

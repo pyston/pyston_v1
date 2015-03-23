@@ -663,6 +663,7 @@ calculate_path(void)
         strcat(buf, exec_prefix);
 
         /* And publish the results */
+        PyGC_AddRoot((void*)buf);
         module_search_path = buf;
     }
 

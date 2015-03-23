@@ -272,6 +272,7 @@ private:
         char _data[ATOM_SIZE];
     };
 
+public:
     struct Block {
         union {
             struct {
@@ -299,7 +300,7 @@ private:
     static_assert(offsetof(Block, _header_end) >= BLOCK_HEADER_SIZE, "bad header size");
     static_assert(offsetof(Block, _header_end) <= BLOCK_HEADER_SIZE, "bad header size");
 
-
+private:
     struct ThreadBlockCache {
         Heap* heap;
         SmallArena* small;
@@ -473,14 +474,24 @@ public:
         // reused.  Would be nice to factor it all out here into this
         // method.
 
+        GCAllocation* rtn;
         if (large_arena.contains(alloc)) {
-            return large_arena.realloc(alloc, bytes);
+            rtn = large_arena.realloc(alloc, bytes);
         } else if (huge_arena.contains(alloc)) {
-            return huge_arena.realloc(alloc, bytes);
+            rtn = huge_arena.realloc(alloc, bytes);
+        } else {
+            assert(small_arena.contains(alloc));
+            rtn = small_arena.realloc(alloc, bytes);
         }
 
-        assert(small_arena.contains(alloc));
-        return small_arena.realloc(alloc, bytes);
+        // We keep track of the size of conservative objects in the "kind_data" field,
+        // so with a realloc we have to update that:
+        if (rtn->kind_id == GCKind::CONSERVATIVE) {
+            // Round up to a multiple of sizeof(void*):
+            rtn->kind_data = (bytes + sizeof(void*) - 1) & (~(sizeof(void*) - 1));
+        }
+
+        return rtn;
     }
 
     GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
@@ -523,6 +534,7 @@ public:
 
         return NULL;
     }
+
     // not thread safe:
     void freeUnmarked(std::list<Box*, StlCompatAllocator<Box*>>& weakly_referenced) {
         small_arena.freeUnmarked(weakly_referenced);
@@ -531,6 +543,8 @@ public:
     }
 
     void dumpHeapStatistics();
+
+    friend void markPhase();
 };
 
 extern Heap global_heap;

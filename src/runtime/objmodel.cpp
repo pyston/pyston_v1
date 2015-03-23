@@ -4003,6 +4003,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
 
     static Box* object_new = NULL;
     static Box* object_init = NULL;
+    // this is ok with not using StlCompatAllocator since we will manually register these objects with the GC
     static std::vector<Box*> allowable_news;
     if (!object_new) {
         object_new = typeLookup(object_cls, new_str, NULL);

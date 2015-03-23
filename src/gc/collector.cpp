@@ -35,6 +35,12 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+#ifndef NDEBUG
+#define DEBUG 1
+#else
+#define DEBUG 0
+#endif
+
 namespace pyston {
 namespace gc {
 
@@ -222,7 +228,7 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     }
 }
 
-static void markPhase() {
+void markPhase() {
 #ifndef NVALGRIND
     // Have valgrind close its eyes while we do the conservative stack and data scanning,
     // since we'll be looking at potentially-uninitialized values:
@@ -263,6 +269,12 @@ static void markPhase() {
             continue;
         } else if (kind_id == GCKind::CONSERVATIVE) {
             uint32_t bytes = al->kind_data;
+            if (DEBUG >= 2) {
+                if (global_heap.small_arena.contains(p)) {
+                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
+                    assert(b->size >= bytes);
+                }
+            }
             visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
         } else if (kind_id == GCKind::PRECISE) {
             uint32_t bytes = al->kind_data;

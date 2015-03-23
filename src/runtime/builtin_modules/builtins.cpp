@@ -602,7 +602,7 @@ Box* map(Box* f, BoxedTuple* args) {
     assert(args_end.size() == num_iterable);
 
     Box* rtn = new BoxedList();
-    std::vector<Box*> current_val(num_iterable);
+    std::vector<Box*, StlCompatAllocator<Box*>> current_val(num_iterable);
     while (true) {
         int num_done = 0;
         for (int i = 0; i < num_iterable; ++i) {

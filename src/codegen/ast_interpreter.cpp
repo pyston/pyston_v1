@@ -42,6 +42,12 @@
 #include "runtime/set.h"
 #include "runtime/types.h"
 
+#ifndef NDEBUG
+#define DEBUG 1
+#else
+#define DEBUG 0
+#endif
+
 namespace pyston {
 
 namespace {
@@ -55,7 +61,10 @@ union Value {
     Value(bool b) : b(b) {}
     Value(int64_t n = 0) : n(n) {}
     Value(double d) : d(d) {}
-    Value(Box* o) : o(o) {}
+    Value(Box* o) : o(o) {
+        if (DEBUG >= 2)
+            assert(gc::isValidGCObject(o));
+    }
 };
 
 class ASTInterpreter {
@@ -187,7 +196,7 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     if (scope_info->createsClosure())
         created_closure = createClosure(passed_closure);
 
-    std::vector<Box*> argsArray{ arg1, arg2, arg3 };
+    std::vector<Box*, StlCompatAllocator<Box*>> argsArray{ arg1, arg2, arg3 };
     for (int i = 3; i < nargs; ++i)
         argsArray.push_back(args[i - 3]);
 
@@ -445,7 +454,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
             OSRExit exit(compiled_func, found_entry);
 
-            std::vector<Box*> arg_array;
+            std::vector<Box*, StlCompatAllocator<Box*>> arg_array;
             for (auto& it : sorted_symbol_table) {
                 arg_array.push_back(it.second);
             }
@@ -638,7 +647,7 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
 Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
     CLFunction* cl = wrapFunction(node, args, body, source_info);
 
-    std::vector<Box*> defaults;
+    std::vector<Box*, StlCompatAllocator<Box*>> defaults;
     for (AST_expr* d : args->defaults)
         defaults.push_back(visit_expr(d).o);
     defaults.push_back(0);
@@ -685,7 +694,7 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
 Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {
     AST_arguments* args = node->args;
 
-    std::vector<Box*> decorators;
+    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -708,7 +717,7 @@ Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
 
     BoxedTuple* basesTuple = new BoxedTuple(std::move(bases));
 
-    std::vector<Box*> decorators;
+    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -919,7 +928,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         func = visit_expr(node->func);
     }
 
-    std::vector<Box*> args;
+    std::vector<Box*, StlCompatAllocator<Box*>> args;
     for (AST_expr* e : node->args)
         args.push_back(visit_expr(e).o);
 
