@@ -2350,6 +2350,42 @@ overflow1:
     return NULL;
 }
 
+static PyObject* string_zfill(PyObject* self, PyObject* args) {
+    Py_ssize_t fill;
+    PyObject* s;
+    char* p;
+    Py_ssize_t width;
+
+    if (!PyArg_ParseTuple(args, "n:zfill", &width))
+        return NULL;
+
+    if (PyString_GET_SIZE(self) >= width) {
+        if (PyString_CheckExact(self)) {
+            Py_INCREF(self);
+            return (PyObject*)self;
+        } else
+            return PyString_FromStringAndSize(PyString_AS_STRING(self), PyString_GET_SIZE(self));
+    }
+
+    fill = width - PyString_GET_SIZE(self);
+
+    // Pyston change:
+    // s = pad(self, fill, 0, '0');
+    s = pad((BoxedString*)self, boxInt(width), boxString("0"), JUST_RIGHT);
+
+    if (s == NULL)
+        return NULL;
+
+    p = PyString_AS_STRING(s);
+    if (p[fill] == '+' || p[fill] == '-') {
+        /* move sign to beginning of string */
+        p[0] = p[fill];
+        p[fill] = '0';
+    }
+
+    return (PyObject*)s;
+}
+
 static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) noexcept {
     RELEASE_ASSERT(index == 0, "");
     // I think maybe this can just be a non-release assert?  shouldn't be able to call this with
@@ -2407,6 +2443,7 @@ static PyMethodDef string_methods[] = {
     { "rfind", (PyCFunction)string_rfind, METH_VARARGS, NULL },
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
+    { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
 };
 
 void setupStr() {
