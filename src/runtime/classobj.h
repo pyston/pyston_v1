@@ -45,6 +45,10 @@ public:
         BoxedClassobj* o = static_cast<BoxedClassobj*>(_o);
 
         boxGCHandler(v, o);
+        if (o->bases)
+            v->visit(o->bases);
+        if (o->name)
+            v->visit(o->name);
     }
 };
 
@@ -65,6 +69,8 @@ public:
         BoxedInstance* o = static_cast<BoxedInstance*>(_o);
 
         boxGCHandler(v, o);
+        if (o->inst_cls)
+            v->visit(o->inst_cls);
     }
 };
 }
