@@ -44,7 +44,7 @@ install:
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - make -C $TRAVIS_BUILD_DIR llvm_up
-  - cmake -GNinja $TRAVIS_BUILD_DIR
+  - cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
   - ninja libunwind ext_cpython
 
 script:
