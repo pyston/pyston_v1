@@ -177,17 +177,11 @@ public:
 
     GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
         registerGCManagedBytes(bytes);
-        if (bytes <= 16)
-            return _alloc(16, 0);
-        else if (bytes <= 32)
-            return _alloc(32, 1);
-        else {
-            for (int i = 2; i < NUM_BUCKETS; i++) {
-                if (sizes[i] >= bytes) {
-                    return _alloc(sizes[i], i);
-                }
-            }
+        if (bytes > 4096) {
             return NULL;
+        } else {
+            size_t size = (bytes + 15) & -16;
+            return _alloc(size, (size / 16) - 1);
         }
     }
 
