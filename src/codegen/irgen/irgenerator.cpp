@@ -898,10 +898,29 @@ private:
             assert(!is_kill);
             assert(scope_info->takesClosure());
 
-            CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
-            assert(closure);
+            DerefInfo deref_info = scope_info->getDerefInfo(node->id);
 
-            return closure->getattr(emitter, getEmptyOpInfo(unw_info), &node->id.str(), false);
+            static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
+            static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
+            static_assert(offsetof(BoxedClosure, nelts) + sizeof(size_t) == offsetof(BoxedClosure, elts), "");
+
+            CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
+            llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
+            closure->decvref(emitter);
+            llvm::Value* gep;
+            for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
+                gep = emitter.getBuilder()->CreateConstInBoundsGEP2_32(closureValue, 0, 1);
+                closureValue = emitter.getBuilder()->CreateLoad(gep);
+            }
+            gep = emitter.getBuilder()->CreateGEP(closureValue,
+                                                  { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3),
+                                                    llvm::ConstantInt::get(g.i32, deref_info.offset) });
+            llvm::Value* lookupResult = emitter.getBuilder()->CreateLoad(gep);
+
+            emitter.createCall(unw_info, g.funcs.assertDerefNameDefined,
+                               { lookupResult, getStringConstantPtr(node->id.str() + '\0') });
+
+            return new ConcreteCompilerVariable(UNKNOWN, lookupResult, true);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = getStringConstantPtr(node->id.str() + '\0');
@@ -1431,10 +1450,22 @@ private:
             _popFake(defined_name, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
+                size_t offset = scope_info->getClosureOffset(name);
+
+                CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+                llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
+                closure->decvref(emitter);
+                llvm::Value* gep = emitter.getBuilder()->CreateGEP(
+                    closureValue, { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3),
+                                    llvm::ConstantInt::get(g.i32, offset) });
+                emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
+
+                /*
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 assert(closure);
 
                 closure->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
+                */
             }
         }
     }
@@ -1893,7 +1924,8 @@ private:
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
 
-            // This line can never get hit right now for the same reason that the variables must already be concrete,
+            // This line can never get hit right now for the same reason that the variables must already be
+            // concrete,
             // because we're over-generating phis.
             ASSERT(var->isGrabbed(), "%s", p.first.c_str());
             // var->ensureGrabbed(emitter);
@@ -2152,7 +2184,8 @@ private:
             } else {
 #ifndef NDEBUG
                 if (myblock->successors.size()) {
-                    // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want
+                    // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
+                    // want
                     // here, but this is just for debugging so I guess let it happen for now:
                     ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                     ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
@@ -2352,7 +2385,8 @@ public:
             if (!passed_closure)
                 passed_closure = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
 
-            llvm::Value* new_closure = emitter.getBuilder()->CreateCall(g.funcs.createClosure, passed_closure);
+            llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
+                g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
             symbol_table[internString(CREATED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
         }

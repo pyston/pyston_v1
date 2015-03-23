@@ -25,6 +25,11 @@ class AST_Module;
 class AST_Expression;
 class AST_Suite;
 
+struct DerefInfo {
+    size_t num_parents_from_passed_closure;
+    size_t offset;
+};
+
 class ScopeInfo {
 public:
     ScopeInfo() {}
@@ -75,39 +80,6 @@ public:
     };
     virtual VarScopeType getScopeTypeOfName(InternedString name) = 0;
 
-    // Returns true if the variable should be passed via a closure to this scope.
-    // Note that:
-    //      (a) This can be false even if there is an entry in the closure object
-    //          passed to the scope, if the variable is not actually used in this
-    //          scope or any child scopes. This can happen, because the variable
-    //          could be in the closure to be accessed by a different function, e.g.
-    //
-    //                  def f();
-    //                      a = 0
-    //                      b = 0
-    //                      def g():
-    //                           print a
-    //                      def h():
-    //                           print b
-    //                           # locals() should not contain `a` even though `h` is
-    //                           # passed a closure object with `a` in it
-    //                           print locals()
-    //
-    //      (b) This can be true even if it is not used in this scope, if it
-    //          is used in a child scope. For example:
-    //
-    //                  def f():
-    //                       a = 0
-    //                       def g():
-    //                           def h():
-    //                               print a
-    //                           print locals() # should contain `a`
-    //
-    // This is useful because it determines whether a variable from a closure
-    // into the locals() dictionary.
-
-    virtual bool isPassedToViaClosure(InternedString name) = 0;
-
     // Returns true if the scope may contain NAME variables.
     // In particular, it returns true for ClassDef scope, for any scope
     // with an `exec` statement or `import *` statement in it, or for any
@@ -115,6 +87,11 @@ public:
     virtual bool usesNameLookup() = 0;
 
     virtual bool areLocalsFromModule() = 0;
+
+    virtual DerefInfo getDerefInfo(InternedString name) = 0;
+    virtual const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() = 0;
+    virtual size_t getClosureOffset(InternedString name) = 0;
+    virtual size_t getClosureSize() = 0;
 
     virtual InternedString mangleName(InternedString id) = 0;
     virtual InternedString internString(llvm::StringRef) = 0;

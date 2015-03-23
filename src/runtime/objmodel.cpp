@@ -233,6 +233,12 @@ extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls,
     }
 }
 
+extern "C" void assertDerefNameDefined(Box* b, const char* name) {
+    if (b == NULL) {
+        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", name);
+    }
+}
+
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) {
     raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr);
 }
@@ -1274,39 +1280,7 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
     }
 
     // TODO this should be a custom getattr
-    if (obj->cls == closure_cls) {
-        Box* val = NULL;
-        if (rewrite_args) {
-            GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
-            val = obj->getattr(attr, &hrewrite_args);
-
-            if (!hrewrite_args.out_success) {
-                rewrite_args = NULL;
-            } else if (val) {
-                rewrite_args->out_rtn = hrewrite_args.out_rtn;
-                rewrite_args->out_success = true;
-                return val;
-            }
-        } else {
-            val = obj->getattr(attr, NULL);
-            if (val) {
-                return val;
-            }
-        }
-
-        // If val doesn't exist, then we move up to the parent closure
-        // TODO closures should get their own treatment, but now just piggy-back on the
-        // normal hidden-class IC logic.
-        // Can do better since we don't need to guard on the cls (always going to be closure)
-        BoxedClosure* closure = static_cast<BoxedClosure*>(obj);
-        if (closure->parent) {
-            if (rewrite_args) {
-                rewrite_args->obj = rewrite_args->obj->getAttr(offsetof(BoxedClosure, parent));
-            }
-            return getattrInternal(closure->parent, attr, rewrite_args);
-        }
-        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", attr.c_str());
-    }
+    assert(obj->cls != closure_cls);
 
     // Handle descriptor logic here.
     // A descriptor is either a data descriptor or a non-data descriptor.
