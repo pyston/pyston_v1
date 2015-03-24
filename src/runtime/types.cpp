@@ -422,6 +422,8 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
                     break;
                 }
                 case HiddenClass::DICT_BACKED: {
+                    HCAttrs::AttrList* attr_list = attrs->attr_list;
+                    v->visit(attrs->attr_list);
                     v->visit(attrs->attr_list->attrs[0]);
                     break;
                 }
