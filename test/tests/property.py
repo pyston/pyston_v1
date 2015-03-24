@@ -63,3 +63,22 @@ try:
 except AttributeError, e:
     print e
 c.x = 1
+
+class MyProperty(property):
+    pass
+
+class C(object):
+    v = "empty"
+    @MyProperty
+    def p(self):
+        print "get"
+        return self.v
+
+    @p.setter
+    def p(self, value):
+        print "set"
+        self.v = "it " + value
+
+c = C()
+c.p = "worked"
+print c.p
