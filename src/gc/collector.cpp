@@ -259,7 +259,7 @@ void markPhase() {
     }
 
     for (auto h : *getRootHandles()) {
-        visitor.visitPotential(h->value);
+        visitor.visit(h->value);
     }
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());
