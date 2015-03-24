@@ -95,7 +95,7 @@ llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader ipo irread
 
 # libunwind
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-  set(LIBUNWIND_FLAGS "-g -O0")
+  set(LIBUNWIND_DEBUG_CFLAGS "CFLAGS=-O0 -g")
   set(LIBUNWIND_DEBUG "--enable-debug")
   set(LIBUNWIND_DEBUG_FRAME "--enable-debug-frame")
 endif()
@@ -104,7 +104,7 @@ ExternalProject_Add(libunwind
                     SOURCE_DIR ${CMAKE_SOURCE_DIR}/libunwind
                     DEPENDS gitsubmodules
                     UPDATE_COMMAND autoreconf -i
-                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure CFLAGS=${LIBUNWIND_FLAGS} CXXFLAGS=${LIBUNWIND_FLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
+                    CONFIGURE_COMMAND ${CMAKE_SOURCE_DIR}/libunwind/configure ${LIBUNWIND_DEBUG_CFLAGS} --prefix=${CMAKE_BINARY_DIR}/libunwind --enable-shared=0 ${LIBUNWIND_DEBUG} ${LIBUNWIND_DEBUG_FRAME}
                     LOG_UPDATE ON
                     LOG_CONFIGURE ON
                     LOG_BUILD ON
