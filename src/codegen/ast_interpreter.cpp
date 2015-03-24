@@ -30,6 +30,7 @@
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/common.h"
+#include "core/contiguous_map.h"
 #include "core/stats.h"
 #include "core/thread_utils.h"
 #include "core/util.h"
@@ -69,7 +70,7 @@ union Value {
 
 class ASTInterpreter {
 public:
-    typedef llvm::DenseMap<InternedString, Box*> SymMap;
+    typedef ContiguousMap<InternedString, Box*> SymMap;
 
     ASTInterpreter(CompiledFunction* compiled_function);
 
@@ -195,10 +196,7 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 }
 
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
-    for (const auto& p2 : getSymbolTable()) {
-        visitor->visitPotential(p2.second);
-    }
-
+    visitor->visitRange((void* const*)&sym_table.vector()[0], (void* const*)&sym_table.vector()[sym_table.size()]);
     if (passed_closure)
         visitor->visit(passed_closure);
     if (created_closure)
@@ -315,7 +313,7 @@ void ASTInterpreter::eraseDeadSymbols() {
                                                 source_info->liveness, scope_info);
 
     std::vector<InternedString> dead_symbols;
-    for (auto&& it : sym_table) {
+    for (auto& it : sym_table) {
         if (!source_info->liveness->isLiveAtEnd(it.first, current_block)) {
             dead_symbols.push_back(it.first);
         } else if (source_info->phis->isRequiredAfter(it.first, current_block)) {
@@ -455,11 +453,11 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                     // TODO only mangle once
                     sorted_symbol_table[getIsDefinedName(name, source_info->getInternedStrings())] = (Box*)is_defined;
                     if (is_defined)
-                        assert(it->second != NULL);
-                    sorted_symbol_table[name] = is_defined ? it->second : NULL;
+                        assert(sym_table.getMapped(it->second) != NULL);
+                    sorted_symbol_table[name] = is_defined ? sym_table.getMapped(it->second) : NULL;
                 } else {
                     ASSERT(it != sym_table.end(), "%s", name.c_str());
-                    sorted_symbol_table[it->first] = it->second;
+                    sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
                 }
             }
 
@@ -1088,7 +1086,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         case ScopeInfo::VarScopeType::CLOSURE: {
             SymMap::iterator it = sym_table.find(node->id);
             if (it != sym_table.end())
-                return it->second;
+                return sym_table.getMapped(it->second);
 
             assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
             return Value();
@@ -1269,11 +1267,11 @@ BoxedDict* localsForInterpretedFrame(void* frame_ptr, bool only_user_visible) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
     BoxedDict* rtn = new BoxedDict();
-    for (auto&& l : interpreter->getSymbolTable()) {
+    for (auto& l : interpreter->getSymbolTable()) {
         if (only_user_visible && (l.first.str()[0] == '!' || l.first.str()[0] == '#'))
             continue;
 
-        rtn->d[new BoxedString(l.first.str())] = l.second;
+        rtn->d[boxString(l.first.str())] = interpreter->getSymbolTable().getMapped(l.second);
     }
 
     return rtn;
