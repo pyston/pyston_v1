@@ -384,22 +384,18 @@ private:
 
     CompilerVariable* evalLangPrimitive(AST_LangPrimitive* node, UnwindInfo unw_info) {
         switch (node->opcode) {
-            case AST_LangPrimitive::ISINSTANCE: {
-                assert(node->args.size() == 3);
+            case AST_LangPrimitive::CHECK_EXC_MATCH: {
+                assert(node->args.size() == 2);
                 CompilerVariable* obj = evalExpr(node->args[0], unw_info);
                 CompilerVariable* cls = evalExpr(node->args[1], unw_info);
-                CompilerVariable* flags = evalExpr(node->args[2], unw_info);
 
                 ConcreteCompilerVariable* converted_obj = obj->makeConverted(emitter, obj->getBoxType());
                 ConcreteCompilerVariable* converted_cls = cls->makeConverted(emitter, cls->getBoxType());
-                ConcreteCompilerVariable* converted_flags = flags->makeConverted(emitter, INT);
                 obj->decvref(emitter);
                 cls->decvref(emitter);
-                flags->decvref(emitter);
 
-                llvm::Value* v = emitter.createCall(
-                    unw_info, g.funcs.isinstance,
-                    { converted_obj->getValue(), converted_cls->getValue(), converted_flags->getValue() });
+                llvm::Value* v = emitter.createCall(unw_info, g.funcs.exceptionMatches,
+                                                    { converted_obj->getValue(), converted_cls->getValue() });
                 assert(v->getType() == g.i1);
 
                 return boolFromI1(emitter, v);

@@ -1448,8 +1448,8 @@ bool PrintVisitor::visit_lambda(AST_Lambda* node) {
 bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
     printf(":");
     switch (node->opcode) {
-        case AST_LangPrimitive::ISINSTANCE:
-            printf("ISINSTANCE");
+        case AST_LangPrimitive::CHECK_EXC_MATCH:
+            printf("CHECK_EXC_MATCH");
             break;
         case AST_LangPrimitive::LANDINGPAD:
             printf("LANDINGPAD");

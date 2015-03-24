@@ -36,13 +36,11 @@ typedef struct _PyIntObject PyIntObject;
 PyAPI_DATA(PyTypeObject*) int_cls;
 #define PyInt_Type (*int_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyInt_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PyInt_Check(op) _PyInt_Check((PyObject*)(op))
-#if 0
+// Pyston change: (op)->ob_type --> Py_TYPE(op)
+// #define PyInt_Check(op) \
+// 		 PyType_FastSubclass((op)->ob_type, Py_TPFLAGS_INT_SUBCLASS)
 #define PyInt_Check(op) \
-		 PyType_FastSubclass((op)->ob_type, Py_TPFLAGS_INT_SUBCLASS)
-#endif
+        PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_INT_SUBCLASS)
 #define PyInt_CheckExact(op) (Py_TYPE(op) == &PyInt_Type)
 
 PyAPI_FUNC(PyObject *) PyInt_FromString(const char*, char**, int) PYSTON_NOEXCEPT;

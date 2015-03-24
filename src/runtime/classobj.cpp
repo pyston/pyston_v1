@@ -28,21 +28,6 @@ extern "C" {
 BoxedClass* classobj_cls, *instance_cls;
 }
 
-bool classobjIssubclass(BoxedClassobj* child, BoxedClassobj* parent) {
-    if (child == parent)
-        return true;
-
-    for (auto e : child->bases->elts) {
-        if (e->cls == classobj_cls && classobjIssubclass(static_cast<BoxedClassobj*>(e), parent))
-            return true;
-    }
-    return false;
-}
-
-bool instanceIsinstance(BoxedInstance* obj, BoxedClassobj* cls) {
-    return classobjIssubclass(obj->inst_cls, cls);
-}
-
 static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
     Box* r = cls->getattr(attr);
     if (r)

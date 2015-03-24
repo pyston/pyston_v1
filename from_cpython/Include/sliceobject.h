@@ -39,10 +39,7 @@ PyAPI_DATA(PyTypeObject*) slice_cls;
 PyAPI_DATA(PyTypeObject*) ellipsis_cls;
 #define PyEllipsis_Type (*ellipsis_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-//#define PySlice_Check(op) (Py_TYPE(op) == &PySlice_Type)
-PyAPI_FUNC(bool) _PySlice_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PySlice_Check(op) _PySlice_Check((PyObject*)(op))
+#define PySlice_Check(op) (Py_TYPE(op) == &PySlice_Type)
 
 PyAPI_FUNC(PyObject *) PySlice_New(PyObject* start, PyObject* stop,
                                   PyObject* step) PYSTON_NOEXCEPT;

@@ -223,3 +223,13 @@ print issubclass(LateSubclassing, C)
 print issubclass(LateSubclassing, D)
 print issubclass(LateSubclassing, E)
 
+# Mixed old and new style class inheritance
+class C():
+    pass
+class D(C):
+    pass
+class E(C, object):
+    pass
+print issubclass(D, C), isinstance(D(), C)
+print issubclass(E, C), isinstance(E(), C)
+print isinstance(E, object), isinstance(E(), object)

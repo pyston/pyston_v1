@@ -61,7 +61,7 @@ extern "C" BoxedString* str(Box* obj);
 extern "C" BoxedString* repr(Box* obj);
 extern "C" BoxedString* reprOrNull(Box* obj); // similar to repr, but returns NULL on exception
 extern "C" BoxedString* strOrNull(Box* obj);  // similar to str, but returns NULL on exception
-extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags);
+extern "C" bool exceptionMatches(Box* obj, Box* cls);
 extern "C" BoxedInt* hash(Box* obj);
 extern "C" Box* abs_(Box* obj);
 Box* open(Box* arg1, Box* arg2);

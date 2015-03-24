@@ -1010,16 +1010,71 @@ extern "C" FILE* PyFile_AsFile(PyObject* f) noexcept {
 }
 
 extern "C" int PyFile_WriteObject(PyObject* v, PyObject* f, int flags) noexcept {
-    if (f->cls != file_cls || v->cls != str_cls || flags != Py_PRINT_RAW)
-        Py_FatalError("unimplemented");
-    try {
-        Box* r = fileWrite(static_cast<BoxedFile*>(f), v);
-        assert(r == None);
-        return 0;
-    } catch (ExcInfo e) {
-        setCAPIException(e);
+    PyObject* writer, *value, *args, *result;
+    if (f == NULL) {
+        PyErr_SetString(PyExc_TypeError, "writeobject with NULL file");
+        return -1;
+    } else if (PyFile_Check(f)) {
+        BoxedFile* fobj = (BoxedFile*)f;
+#ifdef Py_USING_UNICODE
+        PyObject* enc = fobj->f_encoding;
+        int result;
+#endif
+        if (fobj->f_fp == NULL) {
+            err_closed();
+            return -1;
+        }
+#ifdef Py_USING_UNICODE
+        if ((flags & Py_PRINT_RAW) && PyUnicode_Check(v) && enc != Py_None) {
+            char* cenc = PyString_AS_STRING(enc);
+            const char* errors = fobj->f_errors == Py_None ? "strict" : PyString_AS_STRING(fobj->f_errors);
+            value = PyUnicode_AsEncodedString(v, cenc, errors);
+            if (value == NULL)
+                return -1;
+        } else {
+            value = v;
+            Py_INCREF(value);
+        }
+        // Pyston change:
+        // result = file_PyObject_Print(value, fobj, flags);
+        result = PyObject_Print(value, fobj->f_fp, flags);
+        Py_DECREF(value);
+        return result;
+#else
+        // Pyston change:
+        // return file_PyObject_Print(v, fobj, flags);
+        return PyObject_Print(v, fobj->f_fp, flags);
+#endif
+    }
+    writer = PyObject_GetAttrString(f, "write");
+    if (writer == NULL)
+        return -1;
+    if (flags & Py_PRINT_RAW) {
+        if (PyUnicode_Check(v)) {
+            value = v;
+            Py_INCREF(value);
+        } else
+            value = PyObject_Str(v);
+    } else
+        value = PyObject_Repr(v);
+    if (value == NULL) {
+        Py_DECREF(writer);
         return -1;
     }
+    args = PyTuple_Pack(1, value);
+    if (args == NULL) {
+        Py_DECREF(value);
+        Py_DECREF(writer);
+        return -1;
+    }
+    result = PyEval_CallObject(writer, args);
+    Py_DECREF(args);
+    Py_DECREF(value);
+    Py_DECREF(writer);
+    if (result == NULL)
+        return -1;
+    Py_DECREF(result);
+    return 0;
 }
 
 extern "C" int PyFile_WriteString(const char* s, PyObject* f) noexcept {

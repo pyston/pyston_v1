@@ -41,13 +41,8 @@ typedef struct _PyTupleObject PyTupleObject;
 PyAPI_DATA(PyTypeObject*) tuple_cls;
 #define PyTuple_Type (*tuple_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyTuple_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PyTuple_Check(op) _PyTuple_Check((PyObject*)(op))
-#if 0
 #define PyTuple_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TUPLE_SUBCLASS)
-#endif
 #define PyTuple_CheckExact(op) (Py_TYPE(op) == &PyTuple_Type)
 
 PyAPI_FUNC(PyObject *) PyTuple_New(Py_ssize_t size) PYSTON_NOEXCEPT;

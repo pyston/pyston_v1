@@ -48,13 +48,8 @@ typedef struct _PyListObject PyListObject;
 PyAPI_DATA(PyTypeObject*) list_cls;
 #define PyList_Type (*list_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyList_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PyList_Check(op) _PyList_Check((PyObject*)(op))
-#if 0
 #define PyList_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LIST_SUBCLASS)
-#endif
 #define PyList_CheckExact(op) (Py_TYPE(op) == &PyList_Type)
 
 PyAPI_FUNC(PyObject *) PyList_New(Py_ssize_t size) PYSTON_NOEXCEPT;

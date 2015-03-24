@@ -38,25 +38,6 @@ namespace pyston {
 
 BoxedClass* method_cls;
 
-#define MAKE_CHECK(NAME, cls_name)                                                                                     \
-    extern "C" bool _Py##NAME##_Check(PyObject* op) noexcept { return isSubclass(op->cls, cls_name); }
-
-MAKE_CHECK(Int, int_cls)
-MAKE_CHECK(String, str_cls)
-MAKE_CHECK(Long, long_cls)
-MAKE_CHECK(List, list_cls)
-MAKE_CHECK(Tuple, tuple_cls)
-MAKE_CHECK(Dict, dict_cls)
-MAKE_CHECK(Slice, slice_cls)
-MAKE_CHECK(Type, type_cls)
-
-#ifdef Py_USING_UNICODE
-MAKE_CHECK(Unicode, unicode_cls)
-#endif
-
-#undef MAKE_CHECK
-#undef MAKE_CHECK2
-
 extern "C" bool _PyIndex_Check(PyObject* op) noexcept {
     // TODO this is wrong (the CPython version checks for things that can be coerced to a number):
     return PyInt_Check(op);
@@ -418,8 +399,53 @@ extern "C" int PyObject_GetBuffer(PyObject* obj, Py_buffer* view, int flags) noe
     return (*(obj->cls->tp_as_buffer->bf_getbuffer))(obj, view, flags);
 }
 
+/* Implementation of PyObject_Print with recursion checking */
+static int internal_print(PyObject* op, FILE* fp, int flags, int nesting) noexcept {
+    int ret = 0;
+    if (nesting > 10) {
+        PyErr_SetString(PyExc_RuntimeError, "print recursion");
+        return -1;
+    }
+    if (PyErr_CheckSignals())
+        return -1;
+#ifdef USE_STACKCHECK
+    if (PyOS_CheckStack()) {
+        PyErr_SetString(PyExc_MemoryError, "stack overflow");
+        return -1;
+    }
+#endif
+    clearerr(fp); /* Clear any previous error condition */
+    if (op == NULL) {
+        Py_BEGIN_ALLOW_THREADS fprintf(fp, "<nil>");
+        Py_END_ALLOW_THREADS
+    } else {
+        if (Py_TYPE(op)->tp_print == NULL) {
+            PyObject* s;
+            if (flags & Py_PRINT_RAW)
+                s = PyObject_Str(op);
+            else
+                s = PyObject_Repr(op);
+            if (s == NULL)
+                ret = -1;
+            else {
+                ret = internal_print(s, fp, Py_PRINT_RAW, nesting + 1);
+            }
+            Py_XDECREF(s);
+        } else
+            ret = (*Py_TYPE(op)->tp_print)(op, fp, flags);
+    }
+    if (ret == 0) {
+        if (ferror(fp)) {
+            PyErr_SetFromErrno(PyExc_IOError);
+            clearerr(fp);
+            ret = -1;
+        }
+    }
+    return ret;
+}
+
 extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
-    Py_FatalError("unimplemented");
+    return internal_print(obj, fp, flags, 0);
 };
 
 extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {

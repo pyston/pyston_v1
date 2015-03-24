@@ -64,13 +64,8 @@ PyAPI_DATA(PyTypeObject*) basestring_cls;
 PyAPI_DATA(PyTypeObject*) str_cls;
 #define PyString_Type (*str_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyString_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PyString_Check(op) _PyString_Check((PyObject*)(op))
-#if 0
 #define PyString_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_STRING_SUBCLASS)
-#endif
 #define PyString_CheckExact(op) (Py_TYPE(op) == &PyString_Type)
 
 PyAPI_FUNC(PyObject *) PyString_FromStringAndSize(const char *, Py_ssize_t) PYSTON_NOEXCEPT;

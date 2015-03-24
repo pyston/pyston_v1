@@ -87,7 +87,7 @@ void force() {
     FORCE(importStar);
     FORCE(repr);
     FORCE(str);
-    FORCE(isinstance);
+    FORCE(exceptionMatches);
     FORCE(yield);
     FORCE(getiterHelper);
     FORCE(hasnext);

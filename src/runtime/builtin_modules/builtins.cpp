@@ -463,27 +463,17 @@ Box* sorted(Box* obj, Box* key, Box* cmp, Box** args) {
 }
 
 Box* isinstance_func(Box* obj, Box* cls) {
-    return boxBool(isinstance(obj, cls, 0));
+    int rtn = PyObject_IsInstance(obj, cls);
+    if (rtn < 0)
+        checkAndThrowCAPIException();
+    return boxBool(rtn);
 }
 
 Box* issubclass_func(Box* child, Box* parent) {
-    if (!isSubclass(child->cls, type_cls) && child->cls != classobj_cls)
-        raiseExcHelper(TypeError, "issubclass() arg 1 must be a class");
-
-    RELEASE_ASSERT(parent->cls != tuple_cls, "unsupported");
-
-    if (child->cls == classobj_cls) {
-        if (parent->cls != classobj_cls)
-            return False;
-
-        return boxBool(classobjIssubclass(static_cast<BoxedClassobj*>(child), static_cast<BoxedClassobj*>(parent)));
-    }
-
-    RELEASE_ASSERT(isSubclass(child->cls, type_cls), "");
-    if (!isSubclass(parent->cls, type_cls))
-        return False;
-
-    return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
+    int rtn = PyObject_IsSubclass(child, parent);
+    if (rtn < 0)
+        checkAndThrowCAPIException();
+    return boxBool(rtn);
 }
 
 Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {

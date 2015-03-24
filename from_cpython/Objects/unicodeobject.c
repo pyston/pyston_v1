@@ -8842,9 +8842,6 @@ unicode_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)pnew;
 }
 
-// Pyston change: Leave this in as a reminder in case we want to go back to using it:
-#define Py_TPFLAGS_UNICODE_SUBCLASS     (0)
-
 PyDoc_STRVAR(unicode_doc,
              "unicode(object='') -> unicode object\n\
 unicode(string[, encoding[, errors]]) -> unicode object\n\

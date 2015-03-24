@@ -122,13 +122,8 @@ PyAPI_DATA(PyTypeObject*) dictitems_cls;
 PyAPI_DATA(PyTypeObject*) dictvalues_cls;
 #define PyDictValues_Type (*dictvalues_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyDict_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PyDict_Check(op) _PyDict_Check((PyObject*)(op))
-#if 0
 #define PyDict_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_DICT_SUBCLASS)
-#endif
 #define PyDict_CheckExact(op) (Py_TYPE(op) == &PyDict_Type)
 #define PyDictKeys_Check(op) (Py_TYPE(op) == &PyDictKeys_Type)
 #define PyDictItems_Check(op) (Py_TYPE(op) == &PyDictItems_Type)
