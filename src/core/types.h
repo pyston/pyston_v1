@@ -414,7 +414,7 @@ struct DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
-    struct AttrList : public GCAllocated<gc::GCKind::PRECISE> {
+    struct AttrList {
         Box* attrs[0];
     };
 
@@ -428,6 +428,9 @@ class BoxedDict;
 class BoxedString;
 
 class Box {
+private:
+    BoxedDict** getDictPtr();
+
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
     Box() {}
@@ -441,6 +444,7 @@ public:
     llvm::iterator_range<BoxIterator> pyElements();
 
     HCAttrs* getHCAttrsPtr();
+    void setDict(BoxedDict* d);
     BoxedDict* getDict();
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);

@@ -658,7 +658,7 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
             // Add the locals from the closure
             for (; closure != NULL; closure = closure->parent) {
                 assert(closure->cls == closure_cls);
-                for (auto& attr_offset : closure->attrs.hcls->attr_offsets) {
+                for (auto& attr_offset : closure->attrs.hcls->getAttrOffsets()) {
                     const std::string& name = attr_offset.first();
                     int offset = attr_offset.second;
                     Box* val = closure->attrs.attr_list->attrs[offset];

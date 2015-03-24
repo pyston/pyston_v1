@@ -264,13 +264,28 @@ static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 
 
 class HiddenClass : public GCAllocated<gc::GCKind::HIDDEN_CLASS> {
+public:
+    // We have a couple different storage strategies for attributes, which
+    // are distinguished by having a different hidden class type.
+    enum HCType {
+        NORMAL,      // attributes stored in attributes array, name->offset map stored in hidden class
+        DICT_BACKED, // first attribute in array is a dict-like object which stores the attributes
+    } const type;
+
+    static HiddenClass* dict_backed;
+
 private:
-    HiddenClass() {}
-    HiddenClass(HiddenClass* parent) : attr_offsets() {
+    HiddenClass(HCType type) : type(type) {}
+    HiddenClass(HiddenClass* parent) : type(NORMAL), attr_offsets() {
+        assert(parent->type == NORMAL);
         for (auto& p : parent->attr_offsets) {
             this->attr_offsets.insert(&p);
         }
     }
+
+    // Only makes sense for NORMAL hidden classes.  Clients should access through getAttrOffsets():
+    llvm::StringMap<int> attr_offsets;
+    llvm::StringMap<HiddenClass*> children;
 
 public:
     static HiddenClass* makeRoot() {
@@ -279,27 +294,45 @@ public:
         assert(!made);
         made = true;
 #endif
-        return new HiddenClass();
+        return new HiddenClass(NORMAL);
+    }
+    static HiddenClass* makeDictBacked() {
+#ifndef NDEBUG
+        static bool made = false;
+        assert(!made);
+        made = true;
+#endif
+        return new HiddenClass(DICT_BACKED);
     }
 
-    llvm::StringMap<int> attr_offsets;
-    llvm::StringMap<HiddenClass*> children;
+    void gc_visit(GCVisitor* visitor) {
+        // Visit children even for the dict-backed case, since children will just be empty
+        for (const auto& p : children) {
+            visitor->visit(p.second);
+        }
+    }
 
+
+    // Only makes sense for NORMAL hidden classes:
+    const llvm::StringMap<int>& getAttrOffsets() {
+        assert(type == NORMAL);
+        return attr_offsets;
+    }
+
+    // Only makes sense for NORMAL hidden classes:
     HiddenClass* getOrMakeChild(const std::string& attr);
 
+    // Only makes sense for NORMAL hidden classes:
     int getOffset(const std::string& attr) {
+        assert(type == NORMAL);
         auto it = attr_offsets.find(attr);
         if (it == attr_offsets.end())
             return -1;
         return it->second;
     }
-    HiddenClass* delAttrToMakeHC(const std::string& attr);
 
-    void gc_visit(GCVisitor* visitor) {
-        for (const auto& p : children) {
-            visitor->visit(p.second);
-        }
-    }
+    // Only makes sense for NORMAL hidden classes:
+    HiddenClass* delAttrToMakeHC(const std::string& attr);
 };
 
 class BoxedInt : public Box {

@@ -1,5 +1,7 @@
-# expected: fail
-# - we don't support setting __dict__ yet
+try:
+    object().__dict__ = 1
+except AttributeError as e:
+    print e
 
 class C(object):
     pass
@@ -22,4 +24,17 @@ p()
 
 c1.a = 6
 c2.b = 7
+p()
+
+print c1.a, c1.b, c2.a, c2.b
+del c1.a
+try:
+    del c1.a
+except AttributeError as e:
+    # the error message CPython gives here is just "a" which I don't think we should copy.
+    print "caught AttributeError"
+p()
+
+c1.__dict__ = d = {}
+d['i'] = 5
 p()

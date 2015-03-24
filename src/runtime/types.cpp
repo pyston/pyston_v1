@@ -410,12 +410,21 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
             HCAttrs* attrs = b->getHCAttrsPtr();
 
             v->visit(attrs->hcls);
-            int nattrs = attrs->hcls->attr_offsets.size();
-            if (nattrs) {
-                HCAttrs::AttrList* attr_list = attrs->attr_list;
-                assert(attr_list);
-                v->visit(attr_list);
-                v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
+            switch (attrs->hcls->type) {
+                case HiddenClass::NORMAL: {
+                    int nattrs = attrs->hcls->getAttrOffsets().size();
+                    if (nattrs) {
+                        HCAttrs::AttrList* attr_list = attrs->attr_list;
+                        assert(attr_list);
+                        v->visit(attr_list);
+                        v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
+                    }
+                    break;
+                }
+                case HiddenClass::DICT_BACKED: {
+                    v->visit(attrs->attr_list->attrs[0]);
+                    break;
+                }
             }
         }
 
@@ -459,7 +468,28 @@ static Box* typeDict(Box* obj, void* context) {
 }
 
 static void typeSetDict(Box* obj, Box* val, void* context) {
-    Py_FatalError("unimplemented");
+    if (obj->cls->instancesHaveDictAttrs()) {
+        RELEASE_ASSERT(val->cls == dict_cls, "");
+        obj->setDict(static_cast<BoxedDict*>(val));
+        return;
+    }
+
+    if (obj->cls->instancesHaveHCAttrs()) {
+        RELEASE_ASSERT(val->cls == dict_cls || val->cls == attrwrapper_cls, "");
+
+        auto new_attr_list
+            = (HCAttrs::AttrList*)gc_alloc(sizeof(HCAttrs::AttrList) + sizeof(Box*), gc::GCKind::UNTRACKED);
+        new_attr_list->attrs[0] = val;
+
+        HCAttrs* hcattrs = obj->getHCAttrsPtr();
+
+        hcattrs->hcls = HiddenClass::dict_backed;
+        hcattrs->attr_list = new_attr_list;
+        return;
+    }
+
+    // This should have thrown an exception rather than get here:
+    abort();
 }
 
 Box* dict_descr = NULL;
@@ -781,6 +811,7 @@ Box* range_obj = NULL;
 }
 
 HiddenClass* root_hcls;
+HiddenClass* HiddenClass::dict_backed;
 
 extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     BoxedSlice* rtn = new BoxedSlice(start, stop, step);
@@ -999,7 +1030,7 @@ private:
     // Iterating over the an attrwrapper (~=dict) just gives the keys, which
     // just depends on the hidden class of the object.  Let's store only that:
     HiddenClass* hcls;
-    decltype(HiddenClass::attr_offsets)::iterator it;
+    llvm::StringMap<int>::const_iterator it;
 
 public:
     AttrWrapperIter(AttrWrapper* aw);
@@ -1025,7 +1056,16 @@ private:
     Box* b;
 
 public:
-    AttrWrapper(Box* b) : b(b) { assert(b->cls->instancesHaveHCAttrs()); }
+    AttrWrapper(Box* b) : b(b) {
+        assert(b->cls->instancesHaveHCAttrs());
+
+        // We currently don't support creating an attrwrapper around a dict-backed object,
+        // so try asserting that here.
+        // This check doesn't cover all cases, since an attrwrapper could be created around
+        // a normal object which then becomes dict-backed, so we RELEASE_ASSERT later
+        // that that doesn't happen.
+        assert(b->getHCAttrsPtr()->hcls->type == HiddenClass::NORMAL);
+    }
 
     DEFAULT_CLASS(attrwrapper_cls);
 
@@ -1091,6 +1131,21 @@ public:
         return r;
     }
 
+    static Box* delitem(Box* _self, Box* _key) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        _key = coerceUnicodeToStr(_key);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "%s", _key->cls->tp_name);
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        if (self->b->getattr(key->s))
+            self->b->delattr(key->s, NULL);
+        else
+            raiseExcHelper(KeyError, "'%s'", key->s.c_str());
+        return None;
+    }
+
     static Box* str(Box* _self) {
         RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
@@ -1099,8 +1154,9 @@ public:
         os << "attrwrapper({";
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
         bool first = true;
-        for (const auto& p : attrs->hcls->attr_offsets) {
+        for (const auto& p : attrs->hcls->getAttrOffsets()) {
             if (!first)
                 os << ", ";
             first = false;
@@ -1131,7 +1187,8 @@ public:
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        for (const auto& p : attrs->hcls->attr_offsets) {
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        for (const auto& p : attrs->hcls->getAttrOffsets()) {
             listAppend(rtn, boxString(p.first()));
         }
         return rtn;
@@ -1144,7 +1201,8 @@ public:
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        for (const auto& p : attrs->hcls->attr_offsets) {
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        for (const auto& p : attrs->hcls->getAttrOffsets()) {
             listAppend(rtn, attrs->attr_list->attrs[p.second]);
         }
         return rtn;
@@ -1157,7 +1215,8 @@ public:
         BoxedList* rtn = new BoxedList();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        for (const auto& p : attrs->hcls->attr_offsets) {
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        for (const auto& p : attrs->hcls->getAttrOffsets()) {
             BoxedTuple* t = new BoxedTuple({ boxString(p.first()), attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
         }
@@ -1171,7 +1230,8 @@ public:
         BoxedDict* rtn = new BoxedDict();
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        for (const auto& p : attrs->hcls->attr_offsets) {
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        for (const auto& p : attrs->hcls->getAttrOffsets()) {
             rtn->d[boxString(p.first())] = attrs->attr_list->attrs[p.second];
         }
         return rtn;
@@ -1182,7 +1242,8 @@ public:
         AttrWrapper* self = static_cast<AttrWrapper*>(_self);
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
-        return boxInt(attrs->hcls->attr_offsets.size());
+        RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+        return boxInt(attrs->hcls->getAttrOffsets().size());
     }
 
     static Box* update(Box* _self, Box* _container) {
@@ -1193,7 +1254,8 @@ public:
             AttrWrapper* container = static_cast<AttrWrapper*>(_container);
             HCAttrs* attrs = container->b->getHCAttrsPtr();
 
-            for (const auto& p : attrs->hcls->attr_offsets) {
+            RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
+            for (const auto& p : attrs->hcls->getAttrOffsets()) {
                 self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
             }
         } else if (_container->cls == dict_cls) {
@@ -1221,21 +1283,24 @@ public:
 AttrWrapperIter::AttrWrapperIter(AttrWrapper* aw) {
     hcls = aw->b->getHCAttrsPtr()->hcls;
     assert(hcls);
-    it = hcls->attr_offsets.begin();
+    RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL, "");
+    it = hcls->getAttrOffsets().begin();
 }
 
 Box* AttrWrapperIter::hasnext(Box* _self) {
     RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
+    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL, "");
 
-    return boxBool(self->it != self->hcls->attr_offsets.end());
+    return boxBool(self->it != self->hcls->getAttrOffsets().end());
 }
 
 Box* AttrWrapperIter::next(Box* _self) {
     RELEASE_ASSERT(_self->cls == attrwrapperiter_cls, "");
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
+    RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL, "");
 
-    assert(self->it != self->hcls->attr_offsets.end());
+    assert(self->it != self->hcls->getAttrOffsets().end());
     Box* r = boxString(self->it->first());
     ++self->it;
     return r;
@@ -1243,6 +1308,10 @@ Box* AttrWrapperIter::next(Box* _self) {
 
 Box* makeAttrWrapper(Box* b) {
     assert(b->cls->instancesHaveHCAttrs());
+    if (b->getHCAttrsPtr()->hcls->type == HiddenClass::DICT_BACKED) {
+        return b->getHCAttrsPtr()->attr_list->attrs[0];
+    }
+
     return new AttrWrapper(b);
 }
 
@@ -1687,6 +1756,8 @@ bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
     gc::registerPermanentRoot(root_hcls);
+    HiddenClass::dict_backed = HiddenClass::makeDictBacked();
+    gc::registerPermanentRoot(HiddenClass::dict_backed);
 
     // Disable the GC while we do some manual initialization of the object hierarchy:
     gc::disableGC();
@@ -2009,6 +2080,7 @@ void setupRuntime() {
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
+    attrwrapper_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::delitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("setdefault",
                               new BoxedFunction(boxRTFunction((void*)AttrWrapper::setdefault, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr(
@@ -2123,13 +2195,6 @@ BoxedModule* createModule(const std::string& name, const std::string& fn, const 
     return module;
 }
 
-void freeHiddenClasses(HiddenClass* hcls) {
-    for (const auto& p : hcls->children) {
-        freeHiddenClasses(p.second);
-    }
-    gc::gc_free(hcls);
-}
-
 void teardownRuntime() {
     // Things start to become very precarious after this point, as the basic classes stop to work.
     // TODO it's probably a waste of time to tear these down in non-debugging mode
@@ -2190,7 +2255,5 @@ void teardownRuntime() {
     decref(none_cls);
     decref(type_cls);
     */
-
-    freeHiddenClasses(root_hcls);
 }
 }

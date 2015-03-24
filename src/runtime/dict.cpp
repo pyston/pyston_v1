@@ -87,6 +87,8 @@ Box* dictValues(BoxedDict* self) {
 }
 
 Box* dictKeys(BoxedDict* self) {
+    RELEASE_ASSERT(isSubclass(self->cls, dict_cls), "");
+
     BoxedList* rtn = new BoxedList();
     for (const auto& p : self->d) {
         listAppendInternal(rtn, p.first);
@@ -321,14 +323,14 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
 }
 
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
+    ASSERT(isSubclass(op->cls, dict_cls) || op->cls == attrwrapper_cls, "%s", getTypeName(op));
     try {
-        dictDelitem((BoxedDict*)op, key);
+        delitem(op, key);
+        return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
     }
-
-    return 0;
 }
 
 extern "C" int PyDict_DelItemString(PyObject* v, const char* key) noexcept {

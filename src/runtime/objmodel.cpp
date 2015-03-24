@@ -481,6 +481,8 @@ const char* getNameOfClass(BoxedClass* cls) {
 }
 
 HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
+    assert(type == NORMAL);
+
     auto it = children.find(attr);
     if (it != children.end())
         return it->second;
@@ -498,6 +500,7 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
  * del attr from current HiddenClass, pertain the orders of remaining attrs
  */
 HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
+    assert(type == NORMAL);
     int idx = getOffset(attr);
     assert(idx >= 0);
 
@@ -527,13 +530,26 @@ HCAttrs* Box::getHCAttrsPtr() {
     return reinterpret_cast<HCAttrs*>(p);
 }
 
-BoxedDict* Box::getDict() {
+BoxedDict** Box::getDictPtr() {
     assert(cls->instancesHaveDictAttrs());
 
     char* p = reinterpret_cast<char*>(this);
     p += cls->tp_dictoffset;
 
     BoxedDict** d_ptr = reinterpret_cast<BoxedDict**>(p);
+    return d_ptr;
+}
+
+void Box::setDict(BoxedDict* d) {
+    assert(cls->instancesHaveDictAttrs());
+
+    *getDictPtr() = d;
+}
+
+BoxedDict* Box::getDict() {
+    assert(cls->instancesHaveDictAttrs());
+
+    BoxedDict** d_ptr = getDictPtr();
     BoxedDict* d = *d_ptr;
     if (!d) {
         d = *d_ptr = new BoxedDict();
@@ -574,11 +590,24 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     // structure (ex user class) and the same hidden classes, because
     // otherwise the guard will fail anyway.;
     if (cls->instancesHaveHCAttrs()) {
-        if (rewrite_args)
-            rewrite_args->out_success = true;
-
         HCAttrs* attrs = getHCAttrsPtr();
         HiddenClass* hcls = attrs->hcls;
+
+        if (hcls->type == HiddenClass::DICT_BACKED) {
+            if (rewrite_args)
+                assert(!rewrite_args->out_success);
+            rewrite_args = NULL;
+            Box* d = attrs->attr_list->attrs[0];
+            assert(d);
+            Box* r = PyDict_GetItemString(d, attr.c_str());
+            // r can be NULL if the item didn't exist
+            return r;
+        }
+
+        assert(hcls->type == HiddenClass::NORMAL);
+
+        if (rewrite_args)
+            rewrite_args->out_success = true;
 
         if (rewrite_args) {
             if (!rewrite_args->obj_hcls_guarded)
@@ -641,7 +670,20 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
     if (cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = getHCAttrsPtr();
         HiddenClass* hcls = attrs->hcls;
-        int numattrs = hcls->attr_offsets.size();
+
+        if (hcls->type == HiddenClass::DICT_BACKED) {
+            if (rewrite_args)
+                assert(!rewrite_args->out_success);
+            rewrite_args = NULL;
+            Box* d = attrs->attr_list->attrs[0];
+            assert(d);
+            PyDict_SetItemString(d, attr.c_str(), val);
+            checkAndThrowCAPIException();
+            return;
+        }
+
+        assert(hcls->type == HiddenClass::NORMAL);
+        int numattrs = hcls->getAttrOffsets().size();
 
         int offset = hcls->getOffset(attr);
 
@@ -672,10 +714,10 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
 
         // TODO need to make sure we don't need to rearrange the attributes
-        assert(new_hcls->attr_offsets[attr] == numattrs);
+        assert(new_hcls->getAttrOffsets().lookup(attr) == numattrs);
 #ifndef NDEBUG
-        for (const auto& p : hcls->attr_offsets) {
-            assert(new_hcls->attr_offsets[p.first()] == p.second);
+        for (const auto& p : hcls->getAttrOffsets()) {
+            assert(new_hcls->getAttrOffsets().lookup(p.first()) == p.second);
         }
 #endif
 
@@ -3629,12 +3671,25 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
         // as soon as the hcls changes, the guard on hidden class won't pass.
         HCAttrs* attrs = getHCAttrsPtr();
         HiddenClass* hcls = attrs->hcls;
+
+        if (hcls->type == HiddenClass::DICT_BACKED) {
+            if (rewrite_args)
+                assert(!rewrite_args->out_success);
+            rewrite_args = NULL;
+            Box* d = attrs->attr_list->attrs[0];
+            assert(d);
+            PyDict_DelItemString(d, attr.c_str());
+            checkAndThrowCAPIException();
+            return;
+        }
+
+        assert(hcls->type == HiddenClass::NORMAL);
         HiddenClass* new_hcls = hcls->delAttrToMakeHC(attr);
 
         // The order of attributes is pertained as delAttrToMakeHC constructs
         // the new HiddenClass by invoking getOrMakeChild in the prevous order
         // of remaining attributes
-        int num_attrs = hcls->attr_offsets.size();
+        int num_attrs = hcls->getAttrOffsets().size();
         int offset = hcls->getOffset(attr);
         assert(offset >= 0);
         Box** start = attrs->attr_list->attrs;
@@ -4372,7 +4427,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     }
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
-    for (auto& p : module_attrs->hcls->attr_offsets) {
+    for (auto& p : module_attrs->hcls->getAttrOffsets()) {
         if (p.first()[0] == '_')
             continue;
 
