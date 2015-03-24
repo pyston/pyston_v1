@@ -27,14 +27,14 @@ private:
     Box* value;
 
 public:
-    BoxIteratorGeneric(Box* container) : BoxIteratorImpl(container), iterator(nullptr), value(nullptr) {
+    BoxIteratorGeneric(Box* container) : iterator(nullptr), value(nullptr) {
         if (container) {
             // TODO: this should probably call getPystonIter
             iterator = getiter(container);
             if (iterator)
                 next();
             else
-                *this = end();
+                *this = *end();
         }
     }
 
@@ -45,14 +45,14 @@ public:
             if (hasnext->nonzeroIC()) {
                 value = iterator->nextIC();
             } else {
-                *this = end();
+                *this = *end();
             }
         } else {
             try {
                 value = iterator->nextIC();
             } catch (ExcInfo e) {
                 if (e.matches(StopIteration))
-                    *this = end();
+                    *this = *end();
                 else
                     throw e;
             }
@@ -61,17 +61,15 @@ public:
 
     Box* getValue() override { return value; }
 
-    void gcHandler(GCVisitor* v) override {
-        v->visitPotential(iterator);
-        v->visitPotential(value);
-    }
-
     bool isSame(const BoxIteratorImpl* _rhs) override {
         const BoxIteratorGeneric* rhs = (const BoxIteratorGeneric*)_rhs;
         return iterator == rhs->iterator && value == rhs->value;
     }
 
-    static BoxIteratorGeneric end() { return BoxIteratorGeneric(nullptr); }
+    static BoxIteratorGeneric* end() {
+        static BoxIteratorGeneric _end(nullptr);
+        return &_end;
+    }
 };
 
 template <typename T> class BoxIteratorIndex : public BoxIteratorImpl {
@@ -89,51 +87,52 @@ private:
     static Box* getValue(BoxedString* o, uint64_t i) { return new BoxedString(std::string(1, o->s[i])); }
 
 public:
-    BoxIteratorIndex(T* obj) : BoxIteratorImpl(obj), obj(obj), index(0) {
+    BoxIteratorIndex(T* obj) : obj(obj), index(0) {
         if (obj && !hasnext(obj, index))
-            *this = end();
+            *this = *end();
     }
 
     void next() override {
-        if (!end().isSame(this)) {
+        if (!end()->isSame(this)) {
             ++index;
             if (!hasnext(obj, index))
-                *this = end();
+                *this = *end();
         }
     }
 
     Box* getValue() override { return getValue(obj, index); }
-
-    void gcHandler(GCVisitor* v) override { v->visitPotential(obj); }
 
     bool isSame(const BoxIteratorImpl* _rhs) override {
         const auto rhs = (const BoxIteratorIndex*)_rhs;
         return obj == rhs->obj && index == rhs->index;
     }
 
-    static BoxIteratorIndex end() { return BoxIteratorIndex(nullptr); }
+    static BoxIteratorIndex* end() {
+        static BoxIteratorIndex _end(nullptr);
+        return &_end;
+    }
 };
 }
 
 llvm::iterator_range<BoxIterator> BoxIterator::getRange(Box* container) {
     if (container->cls == list_cls) {
         using BoxIteratorList = BoxIteratorIndex<BoxedList>;
-        BoxIterator begin(std::make_shared<BoxIteratorIndex<BoxedList>>((BoxedList*)container));
-        static BoxIterator end(std::make_shared<BoxIteratorIndex<BoxedList>>(BoxIteratorList::end()));
+        BoxIterator begin = new BoxIteratorList((BoxedList*)container);
+        BoxIterator end = BoxIteratorList::end();
         return llvm::iterator_range<BoxIterator>(std::move(begin), end);
     } else if (container->cls == tuple_cls) {
         using BoxIteratorTuple = BoxIteratorIndex<BoxedTuple>;
-        BoxIterator begin(std::make_shared<BoxIteratorIndex<BoxedTuple>>((BoxedTuple*)container));
-        static BoxIterator end(std::make_shared<BoxIteratorIndex<BoxedTuple>>(BoxIteratorTuple::end()));
+        BoxIterator begin = new BoxIteratorTuple((BoxedTuple*)container);
+        BoxIterator end = BoxIteratorTuple::end();
         return llvm::iterator_range<BoxIterator>(std::move(begin), end);
     } else if (container->cls == str_cls) {
         using BoxIteratorString = BoxIteratorIndex<BoxedString>;
-        BoxIterator begin(std::make_shared<BoxIteratorIndex<BoxedString>>((BoxedString*)container));
-        static BoxIterator end(std::make_shared<BoxIteratorIndex<BoxedString>>(BoxIteratorString::end()));
+        BoxIterator begin = new BoxIteratorString((BoxedString*)container);
+        BoxIterator end = BoxIteratorString::end();
         return llvm::iterator_range<BoxIterator>(std::move(begin), end);
     }
-    BoxIterator begin(std::make_shared<BoxIteratorGeneric>(container));
-    static BoxIterator end(std::make_shared<BoxIteratorGeneric>(BoxIteratorGeneric::end()));
+    BoxIterator begin = new BoxIteratorGeneric(container);
+    BoxIterator end = BoxIteratorGeneric::end();
     return llvm::iterator_range<BoxIterator>(std::move(begin), end);
 }
 }

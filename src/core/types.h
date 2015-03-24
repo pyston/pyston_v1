@@ -354,38 +354,6 @@ class BinopIC;
 
 class Box;
 
-class BoxIteratorImpl {
-public:
-    BoxIteratorImpl(Box* container) {}
-    virtual ~BoxIteratorImpl() = default;
-    virtual void next() = 0;
-    virtual Box* getValue() = 0;
-    virtual void gcHandler(GCVisitor* v) {}
-    virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
-};
-
-class BoxIterator {
-public:
-    std::shared_ptr<BoxIteratorImpl> impl;
-
-    BoxIterator(std::shared_ptr<BoxIteratorImpl> impl) : impl(impl) {}
-    ~BoxIterator() = default;
-
-    static llvm::iterator_range<BoxIterator> getRange(Box* container);
-    bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl.get()); }
-    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
-
-    BoxIterator& operator++() {
-        impl->next();
-        return *this;
-    }
-
-    Box* operator*() const { return impl->getValue(); }
-    Box* operator*() { return impl->getValue(); }
-
-    void gcHandler(GCVisitor* v) { impl->gcHandler(v); }
-};
-
 namespace gc {
 
 enum class GCKind : uint8_t {
@@ -397,12 +365,43 @@ enum class GCKind : uint8_t {
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
+extern "C" void gc_free(void* ptr);
 }
 
 template <gc::GCKind gc_kind> class GCAllocated {
 public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc_alloc(size, gc_kind); }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc::gc_alloc(size, gc_kind); }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { gc::gc_free(ptr); }
+};
+
+class BoxIteratorImpl : public GCAllocated<gc::GCKind::CONSERVATIVE> {
+public:
+    virtual ~BoxIteratorImpl() = default;
+    virtual void next() = 0;
+    virtual Box* getValue() = 0;
+    virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+};
+
+class BoxIterator {
+public:
+    BoxIteratorImpl* impl;
+
+    BoxIterator(BoxIteratorImpl* impl) : impl(impl) {}
+    ~BoxIterator() = default;
+
+    static llvm::iterator_range<BoxIterator> getRange(Box* container);
+    bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl); }
+    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
+
+    BoxIterator& operator++() {
+        impl->next();
+        return *this;
+    }
+
+    Box* operator*() const { return impl->getValue(); }
+    Box* operator*() { return impl->getValue(); }
+
+    void gcHandler(GCVisitor* v) { v->visitPotential(impl); }
 };
 
 class HiddenClass;
