@@ -340,6 +340,7 @@ void runCollection() {
     for (auto o : weakly_referenced) {
         PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(o);
         while (PyWeakReference* head = *list) {
+            assert(isValidGCObject(head));
             if (head->wr_object != Py_None) {
                 _PyWeakref_ClearRef(head);
                 if (head->wr_callback) {

@@ -68,7 +68,10 @@ extern "C" Box* listRepr(BoxedList* self) {
         if (i > 0)
             os << ", ";
 
-        BoxedString* s = static_cast<BoxedString*>(self->elts->elts[i]->reprIC());
+        Box* r = self->elts->elts[i]->reprICAsString();
+
+        assert(r->cls == str_cls);
+        BoxedString* s = static_cast<BoxedString*>(r);
         os << s->s;
     }
     os << ']';
@@ -282,7 +285,11 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     } else if (isSubclass(v->cls, list_cls)) {
         BoxedList* lv = static_cast<BoxedList*>(v);
         v_size = lv->size;
-        v_elts = lv->elts->elts;
+        // If lv->size is 0, lv->elts->elts is garbage
+        if (v_size)
+            v_elts = lv->elts->elts;
+        else
+            v_elts = NULL;
     } else if (isSubclass(v->cls, tuple_cls)) {
         BoxedTuple* tv = static_cast<BoxedTuple*>(v);
         v_size = tv->elts.size();
@@ -291,7 +298,9 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
         RELEASE_ASSERT(0, "unsupported type for list slice assignment: '%s'", getTypeName(v));
     }
 
-    RELEASE_ASSERT(!v_elts || self->elts->elts != v_elts, "Slice self-assignment currently unsupported");
+    // If self->size is 0, self->elts->elts is garbage
+    RELEASE_ASSERT(self->size == 0 || !v_elts || self->elts->elts != v_elts,
+                   "Slice self-assignment currently unsupported");
 
     int delts = v_size - (stop - start);
     int remaining_elts = self->size - stop;

@@ -64,6 +64,8 @@ private:
     CFGBlock* curblock;
     ScopingAnalysis* scoping_analysis;
 
+    friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
+
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
                ScopingAnalysis* scoping_analysis, CFG* cfg)
@@ -138,6 +140,7 @@ private:
 
     void doReturn(AST_expr* value) {
         assert(value);
+        assert(curblock);
 
         for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
             if (region.return_dest) {
@@ -166,6 +169,7 @@ private:
     }
 
     void doContinue() {
+        assert(curblock);
         for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
             if (region.continue_dest) {
                 if (region.say_why) {
@@ -186,6 +190,7 @@ private:
     }
 
     void doBreak() {
+        assert(curblock);
         for (auto& region : llvm::make_range(regions.rbegin(), regions.rend())) {
             if (region.break_dest) {
                 if (region.say_why) {
@@ -229,6 +234,8 @@ private:
     }
 
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
+        assert(curblock);
+
         InternedString rtn_name = nodeName(node);
         pushAssign(rtn_name, new ResultASTType());
         std::vector<CFGBlock*> exit_blocks;
@@ -606,6 +613,8 @@ private:
     }
 
     AST_expr* remapBoolOp(AST_BoolOp* node) {
+        assert(curblock);
+
         InternedString name = nodeName(node);
 
         CFGBlock* starting_block = curblock;
@@ -701,6 +710,8 @@ private:
     }
 
     AST_expr* remapCompare(AST_Compare* node) {
+        assert(curblock);
+
         // special case unchained comparisons to avoid generating a unnecessary complex cfg.
         if (node->ops.size() == 1) {
             AST_Compare* rtn = new AST_Compare();
@@ -896,6 +907,8 @@ private:
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
+        assert(curblock);
+
         InternedString rtn_name = nodeName(node);
 
         AST_Branch* br = new AST_Branch();
@@ -1432,6 +1445,8 @@ public:
     bool visit_pass(AST_Pass* node) override { return true; }
 
     bool visit_assert(AST_Assert* node) override {
+        assert(curblock);
+
         AST_Branch* br = new AST_Branch();
         br->test = callNonzero(remapExpr(node->test));
         push_back(br);
@@ -1695,6 +1710,8 @@ public:
     }
 
     bool visit_return(AST_Return* node) override {
+        assert(curblock);
+
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda && root_type != AST_TYPE::Expression) {
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
@@ -1710,8 +1727,7 @@ public:
     }
 
     bool visit_if(AST_If* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         AST_Branch* br = new AST_Branch();
         br->col_offset = node->col_offset;
@@ -1730,6 +1746,8 @@ public:
         curblock = iftrue;
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             AST_Jump* jtrue = new AST_Jump();
@@ -1746,6 +1764,8 @@ public:
         curblock = iffalse;
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             AST_Jump* jfalse = new AST_Jump();
@@ -1765,8 +1785,7 @@ public:
     }
 
     bool visit_break(AST_Break* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         doBreak();
         assert(!curblock);
@@ -1774,8 +1793,7 @@ public:
     }
 
     bool visit_continue(AST_Continue* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         doContinue();
         assert(!curblock);
@@ -1785,8 +1803,7 @@ public:
     bool visit_exec(AST_Exec* node) override { raiseExcHelper(SyntaxError, "'exec' currently not supported"); }
 
     bool visit_while(AST_While* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         CFGBlock* test_block = cfg->addBlock();
         test_block->info = "while_test";
@@ -1815,6 +1832,8 @@ public:
         curblock = body;
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             AST_Jump* jbody = makeJump();
@@ -1831,6 +1850,8 @@ public:
         curblock = orelse;
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             AST_Jump* jend = makeJump();
@@ -1851,8 +1872,7 @@ public:
     }
 
     bool visit_for(AST_For* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         // TODO this is so complicated because I tried doing loop inversion;
         // is it really worth it?  It got so bad because all the edges became
@@ -1916,6 +1936,8 @@ public:
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
         popRegion();
 
@@ -1950,6 +1972,8 @@ public:
 
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             AST_Jump* else_jump = makeJump();
@@ -1970,6 +1994,8 @@ public:
     }
 
     bool visit_raise(AST_Raise* node) override {
+        assert(curblock);
+
         AST_Raise* remapped = new AST_Raise();
         remapped->col_offset = node->col_offset;
         remapped->lineno = node->lineno;
@@ -1991,6 +2017,8 @@ public:
     }
 
     bool visit_tryexcept(AST_TryExcept* node) override {
+        assert(curblock);
+
         // The pypa parser will generate a tryexcept node inside a try-finally block with
         // no except clauses
         if (node->handlers.size() == 0) {
@@ -1999,6 +2027,8 @@ public:
 
             for (AST_stmt* subnode : node->body) {
                 subnode->accept(this);
+                if (!curblock)
+                    break;
             }
             return true;
         }
@@ -2013,12 +2043,18 @@ public:
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
+            if (!curblock)
+                break;
         }
 
         exc_handlers.pop_back();
 
-        for (AST_stmt* subnode : node->orelse) {
-            subnode->accept(this);
+        if (curblock) {
+            for (AST_stmt* subnode : node->orelse) {
+                subnode->accept(this);
+                if (!curblock)
+                    break;
+            }
         }
 
         CFGBlock* join_block = cfg->addDeferredBlock();
@@ -2080,6 +2116,8 @@ public:
 
                 for (AST_stmt* subnode : exc_handler->body) {
                     subnode->accept(this);
+                    if (!curblock)
+                        break;
                 }
 
                 if (curblock) {
@@ -2119,6 +2157,8 @@ public:
     }
 
     bool visit_tryfinally(AST_TryFinally* node) override {
+        assert(curblock);
+
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
         InternedString exc_type_name = nodeName(node, "type");
         InternedString exc_value_name = nodeName(node, "value");
@@ -2131,6 +2171,8 @@ public:
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
+            if (!curblock)
+                break;
         }
 
         exc_handlers.pop_back();
@@ -2167,6 +2209,8 @@ public:
 
         for (AST_stmt* subnode : node->finalbody) {
             subnode->accept(this);
+            if (!curblock)
+                break;
         }
 
         if (curblock) {
@@ -2271,6 +2315,8 @@ public:
     }
 
     bool visit_with(AST_With* node) override {
+        assert(curblock);
+
         char ctxmgrname_buf[80];
         snprintf(ctxmgrname_buf, 80, "#ctxmgr_%p", node);
         InternedString ctxmgrname = internString(ctxmgrname_buf);
@@ -2310,6 +2356,8 @@ public:
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
 
         popRegion(); // for the retrun
@@ -2441,6 +2489,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     }
 
     for (int i = (skip_first ? 1 : 0); i < body.size(); i++) {
+        if (!visitor.curblock)
+            break;
         body[i]->accept(&visitor);
     }
 

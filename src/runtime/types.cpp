@@ -243,6 +243,11 @@ Box* Box::reprIC() {
 
 BoxedString* Box::reprICAsString() {
     Box* r = this->reprIC();
+
+    if (isSubclass(r->cls, unicode_cls)) {
+        r = PyUnicode_AsASCIIString(r);
+        checkAndThrowCAPIException();
+    }
     if (r->cls != str_cls) {
         raiseExcHelper(TypeError, "__repr__ did not return a string!");
     }

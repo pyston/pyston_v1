@@ -136,3 +136,8 @@ print type(str(CustomRepr(MyStr("hi"))))
 
 print type(MyStr("hi").__str__())
 print type(str(MyStr("hi")))
+
+class C(object):
+    def __repr__(self):
+        return u"hello world"
+print [C()], set([C()]), {1:C()}

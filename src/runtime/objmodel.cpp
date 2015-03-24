@@ -3918,6 +3918,17 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     else
         made->tp_alloc = PyType_GenericAlloc;
 
+    assert(!made->simple_destructor);
+    for (auto b : bases->elts) {
+        if (!isSubclass(b->cls, type_cls))
+            continue;
+        BoxedClass* b_cls = static_cast<BoxedClass*>(b);
+        RELEASE_ASSERT(made->simple_destructor == base->simple_destructor || made->simple_destructor == NULL
+                           || base->simple_destructor == NULL,
+                       "Conflicting simple destructors!");
+        made->simple_destructor = base->simple_destructor;
+    }
+
     return made;
 }
 
