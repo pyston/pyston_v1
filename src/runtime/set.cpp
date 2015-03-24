@@ -334,6 +334,29 @@ Box* setContains(BoxedSet* self, Box* v) {
     return boxBool(self->s.count(v) != 0);
 }
 
+Box* setEq(BoxedSet* self, BoxedSet* rhs) {
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    if (rhs->cls != set_cls && rhs->cls != frozenset_cls)
+        return NotImplemented;
+
+    if (self->s.size() != rhs->s.size())
+        return False;
+
+    for (auto e : self->s) {
+        if (!rhs->s.count(e))
+            return False;
+    }
+    return True;
+}
+
+Box* setNe(BoxedSet* self, BoxedSet* rhs) {
+    Box* r = setEq(self, rhs);
+    if (r->cls == bool_cls)
+        return boxBool(r == False);
+    assert(r == NotImplemented);
+    return r;
+}
+
 Box* setNonzero(BoxedSet* self) {
     return boxBool(self->s.size());
 }
@@ -415,6 +438,11 @@ void setupSet() {
 
     set_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)setContains, BOXED_BOOL, 2)));
     frozenset_cls->giveAttr("__contains__", set_cls->getattr("__contains__"));
+
+    set_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)setEq, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("__eq__", set_cls->getattr("__eq__"));
+    set_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)setNe, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("__ne__", set_cls->getattr("__ne__"));
 
     set_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)setNonzero, BOXED_BOOL, 1)));
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));

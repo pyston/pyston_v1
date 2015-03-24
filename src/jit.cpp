@@ -207,14 +207,18 @@ static int main(int argc, char** argv) {
         llvm::sys::path::remove_filename(path);
         prependToSysPath(path.str());
 
+        main_module = createModule("__main__", fn);
         try {
-            main_module = createAndRunModule("__main__", fn);
+            AST_Module* ast = caching_parse_file(fn);
+            compileAndRunModule(ast, main_module);
         } catch (ExcInfo e) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
-            if (stats)
-                Stats::dump();
-            return retcode;
+            if (!force_repl) {
+                if (stats)
+                    Stats::dump();
+                return retcode;
+            }
         }
     }
 

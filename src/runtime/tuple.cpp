@@ -289,6 +289,19 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
     return False;
 }
 
+Box* tupleIndex(BoxedTuple* self, Box* elt) {
+    int size = self->elts.size();
+    for (int i = 0; i < size; i++) {
+        Box* e = self->elts[i];
+        Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
+        bool b = nonzero(cmp);
+        if (b)
+            return boxInt(i);
+    }
+
+    raiseExcHelper(ValueError, "tuple.index(x): x not in tuple");
+}
+
 Box* tupleHash(BoxedTuple* self) {
     assert(isSubclass(self->cls, tuple_cls));
 
@@ -397,6 +410,7 @@ void setupTuple() {
     tuple_cls->giveAttr("__getitem__", new BoxedFunction(getitem));
 
     tuple_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)tupleContains, BOXED_BOOL, 2)));
+    tuple_cls->giveAttr("index", new BoxedFunction(boxRTFunction((void*)tupleIndex, BOXED_INT, 2)));
 
     tuple_cls->giveAttr("__iter__",
                         new BoxedFunction(boxRTFunction((void*)tupleIter, typeFromClass(tuple_iterator_cls), 1)));

@@ -1745,7 +1745,7 @@ Box* strRpartition(BoxedString* self, BoxedString* sep) {
 
     size_t found_idx = self->s.rfind(sep->s);
     if (found_idx == std::string::npos)
-        return new BoxedTuple({ self, boxStrConstant(""), boxStrConstant("") });
+        return new BoxedTuple({ boxStrConstant(""), boxStrConstant(""), self });
 
 
     return new BoxedTuple({ boxStrConstantSize(self->s.c_str(), found_idx),

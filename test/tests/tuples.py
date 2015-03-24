@@ -208,3 +208,9 @@ print -1 * x
 print 0 * x
 print 1 * x
 print 5 * x
+
+print (1, 3, 5, 3).index(3)
+try:
+    print (1, 3, 5, 3).index(2)
+except ValueError as e:
+    print e
