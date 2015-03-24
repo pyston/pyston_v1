@@ -22,6 +22,7 @@
 #include "structmember.h"
 
 #include "codegen/irgen/future.h"
+#include "core/contiguous_map.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "gc/gc_alloc.h"
@@ -286,7 +287,7 @@ private:
 
     // Only makes sense for NORMAL hidden classes.  Clients should access through getAttrOffsets():
     llvm::StringMap<int> attr_offsets;
-    llvm::StringMap<HiddenClass*> children;
+    ContiguousMap<llvm::StringRef, HiddenClass*, llvm::StringMap<int>> children;
 
 public:
     static HiddenClass* makeRoot() {
@@ -308,11 +309,8 @@ public:
 
     void gc_visit(GCVisitor* visitor) {
         // Visit children even for the dict-backed case, since children will just be empty
-        for (const auto& p : children) {
-            visitor->visit(p.second);
-        }
+        visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
     }
-
 
     // Only makes sense for NORMAL hidden classes:
     const llvm::StringMap<int>& getAttrOffsets() {

@@ -191,6 +191,9 @@ bool GCVisitor::isValid(void* p) {
 }
 
 void GCVisitor::visit(void* p) {
+    if (!p)
+        return;
+
     if (isNonheapRoot(p)) {
         return;
     } else {

@@ -474,7 +474,7 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
 
     auto it = children.find(attr);
     if (it != children.end())
-        return it->second;
+        return children.getMapped(it->second);
 
     static StatCounter num_hclses("num_hidden_classes");
     num_hclses.log();
