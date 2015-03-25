@@ -25,6 +25,11 @@ class AST_Module;
 class AST_Expression;
 class AST_Suite;
 
+// Each closure has an array (fixed-size for that particular scope) of variables
+// and a parent pointer to a parent closure. To look up a variable from the passed-in
+// closure (i.e., DEREF), you just need to know (i) how many parents up to go and
+// (ii) what offset into the array to find the variable. This struct stores that
+// information. You can query the ScopeInfo with a name to get this info.
 struct DerefInfo {
     size_t num_parents_from_passed_closure;
     size_t offset;
@@ -88,9 +93,50 @@ public:
 
     virtual bool areLocalsFromModule() = 0;
 
+    // For a variable with DEREF lookup, return the DerefInfo used to lookup
+    // the variable in a passed closure.
     virtual DerefInfo getDerefInfo(InternedString name) = 0;
+
+    // Gets the DerefInfo for each DEREF variable accessible in the scope.
+    // The returned vector is in SORTED ORDER by the `num_parents_from_passed_closure` field.
+    // This allows the caller to iterate through the vector while also walking up
+    // the closure chain to collect all the DEREF variable values. This is useful, for example,
+    // in the implementation of locals().
+    //
+    // Note that:
+    //      (a) This may not return a variable even if it is in the passed-in scope,
+    //          if the variable is not actually used in this scope or any child
+    //          scopes. This can happen, because the variable
+    //          could be in the closure to be accessed by a different function, e.g.
+    //
+    //                  def f();
+    //                      a = 0
+    //                      b = 0
+    //                      def g():
+    //                           print a
+    //                      def h():
+    //                           print b
+    //                           # locals() should not contain `a` even though `h` is
+    //                           # passed a closure object with `a` in it
+    //                           print locals()
+    //
+    //      (b) This can contain a variable even if it is not access in this scope,
+    //          if it used in a child scope instead. For example:
+    //
+    //                  def f():
+    //                       a = 0
+    //                       def g():
+    //                           def h():
+    //                               print a
+    //                           print locals() # should contain `a`
     virtual const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() = 0;
+
+    // For a variable with CLOSURE lookup, returns the offset within the `elts`
+    // array of a closure that this variable is stored.
     virtual size_t getClosureOffset(InternedString name) = 0;
+
+    // Returns the size of the `elts` array for a closure created by this scope.
+    // Should only be called if this scope creates a closure.
     virtual size_t getClosureSize() = 0;
 
     virtual InternedString mangleName(InternedString id) = 0;

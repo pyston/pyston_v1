@@ -72,6 +72,21 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     return scratch_space;
 }
 
+static llvm::Value* getClosureParentGep(IREmitter& emitter, llvm::Value* closure) {
+    static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
+    static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
+    return emitter.getBuilder()->CreateConstInBoundsGEP2_32(closure, 0, 1);
+}
+
+static llvm::Value* getClosureElementGep(IREmitter& emitter, llvm::Value* closure, size_t index) {
+    static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
+    static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
+    static_assert(offsetof(BoxedClosure, nelts) + sizeof(size_t) == offsetof(BoxedClosure, elts), "");
+    return emitter.getBuilder()->CreateGEP(
+        closure,
+        { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3), llvm::ConstantInt::get(g.i32, index) });
+}
+
 static llvm::Value* getBoxedLocalsGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
     static_assert(sizeof(ExcInfo) == 24, "");
@@ -898,27 +913,27 @@ private:
             assert(!is_kill);
             assert(scope_info->takesClosure());
 
+            // This is the information on how to look up the variable in the closure object.
             DerefInfo deref_info = scope_info->getDerefInfo(node->id);
 
-            static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
-            static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
-            static_assert(offsetof(BoxedClosure, nelts) + sizeof(size_t) == offsetof(BoxedClosure, elts), "");
-
+            // This code is basically:
+            // closure = created_closure;
+            // closure = closure->parent;
+            // [...]
+            // closure = closure->parent;
+            // closure->elts[deref_info.offset]
+            // Where the parent lookup is done `deref_info.num_parents_from_passed_closure` times
             CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
             llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
             closure->decvref(emitter);
-            llvm::Value* gep;
             for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
-                gep = emitter.getBuilder()->CreateConstInBoundsGEP2_32(closureValue, 0, 1);
-                closureValue = emitter.getBuilder()->CreateLoad(gep);
+                closureValue = emitter.getBuilder()->CreateLoad(getClosureParentGep(emitter, closureValue));
             }
-            gep = emitter.getBuilder()->CreateGEP(closureValue,
-                                                  { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3),
-                                                    llvm::ConstantInt::get(g.i32, deref_info.offset) });
-            llvm::Value* lookupResult = emitter.getBuilder()->CreateLoad(gep);
+            llvm::Value* lookupResult
+                = emitter.getBuilder()->CreateLoad(getClosureElementGep(emitter, closureValue, deref_info.offset));
 
-            // If the value is NULL, it is undefined.
-            // Create a branch on if the value is NULL
+            // If the value is NULL, the variable is undefined.
+            // Create a branch on if the value is NULL.
             llvm::BasicBlock* success_bb
                 = llvm::BasicBlock::Create(g.context, "deref_defined", irstate->getLLVMFunction());
             success_bb->moveAfter(curblock);
@@ -929,7 +944,7 @@ private:
                 = emitter.getBuilder()->CreateICmpEQ(lookupResult, embedConstantPtr(NULL, g.llvm_value_type_ptr));
             llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
 
-            // In the case that it failed, call the assert fail function
+            // Case that it is undefined: call the assert fail function.
             curblock = fail_bb;
             emitter.getBuilder()->SetInsertPoint(curblock);
 
@@ -938,7 +953,7 @@ private:
             call.setDoesNotReturn();
             emitter.getBuilder()->CreateUnreachable();
 
-            // Carry on in the case that it succeeded
+            // Case that it is defined: carry on in with the retrieved value.
             curblock = success_bb;
             emitter.getBuilder()->SetInsertPoint(curblock);
 
@@ -1474,12 +1489,11 @@ private:
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
                 size_t offset = scope_info->getClosureOffset(name);
 
+                // This is basically `closure->elts[offset] = val;`
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
                 closure->decvref(emitter);
-                llvm::Value* gep = emitter.getBuilder()->CreateGEP(
-                    closureValue, { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3),
-                                    llvm::ConstantInt::get(g.i32, offset) });
+                llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
                 emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
             }
         }
