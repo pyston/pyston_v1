@@ -304,13 +304,16 @@ extern "C" PyObject* PyString_FromFormat(const char* format, ...) noexcept {
 extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (_rhs->cls == unicode_cls) {
+    if (isSubclass(_rhs->cls, unicode_cls)) {
         Box* rtn = PyUnicode_Concat(lhs, _rhs);
         checkAndThrowCAPIException();
         return rtn;
     }
 
-    if (_rhs->cls != str_cls) {
+    if (!isSubclass(_rhs->cls, str_cls)) {
+        // Note: this is deliberately not returning NotImplemented, even though
+        // that would be more usual.  I assume this behavior of CPython's is
+        // for backwards compatibility.
         raiseExcHelper(TypeError, "cannot concatenate 'str' and '%s' objects", getTypeName(_rhs));
     }
 
@@ -1094,7 +1097,7 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strLt(BoxedString* lhs, Box* rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (rhs->cls != str_cls)
+    if (!isSubclass(rhs->cls, str_cls))
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1104,7 +1107,7 @@ extern "C" Box* strLt(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strLe(BoxedString* lhs, Box* rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (rhs->cls != str_cls)
+    if (!isSubclass(rhs->cls, str_cls))
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1114,7 +1117,7 @@ extern "C" Box* strLe(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strGt(BoxedString* lhs, Box* rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (rhs->cls != str_cls)
+    if (!isSubclass(rhs->cls, str_cls))
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1124,7 +1127,7 @@ extern "C" Box* strGt(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strGe(BoxedString* lhs, Box* rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (rhs->cls != str_cls)
+    if (!isSubclass(rhs->cls, str_cls))
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1134,7 +1137,7 @@ extern "C" Box* strGe(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (rhs->cls != str_cls)
+    if (!isSubclass(rhs->cls, str_cls))
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1144,7 +1147,7 @@ extern "C" Box* strEq(BoxedString* lhs, Box* rhs) {
 extern "C" Box* strNe(BoxedString* lhs, Box* rhs) {
     assert(isSubclass(lhs->cls, str_cls));
 
-    if (rhs->cls != str_cls)
+    if (!isSubclass(rhs->cls, str_cls))
         return NotImplemented;
 
     BoxedString* srhs = static_cast<BoxedString*>(rhs);
@@ -1689,7 +1692,7 @@ extern "C" PyObject* _PyString_Join(PyObject* sep, PyObject* x) noexcept {
 }
 
 Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
-    if (_self->cls != str_cls)
+    if (!isSubclass(_self->cls, str_cls))
         raiseExcHelper(TypeError, "descriptor 'replace' requires a 'str' object but received a '%s'",
                        getTypeName(_self));
     BoxedString* self = static_cast<BoxedString*>(_self);
@@ -1699,11 +1702,11 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
         return PyUnicode_Replace((PyObject*)self, _old, _new, -1 /*count*/);
 #endif
 
-    if (_old->cls != str_cls)
+    if (!isSubclass(_old->cls, str_cls))
         raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* old = static_cast<BoxedString*>(_old);
 
-    if (_new->cls != str_cls)
+    if (!isSubclass(_new->cls, str_cls))
         raiseExcHelper(TypeError, "expected a character buffer object");
     BoxedString* new_ = static_cast<BoxedString*>(_new);
 
@@ -1843,20 +1846,20 @@ Box* strTitle(BoxedString* self) {
 }
 
 Box* strTranslate(BoxedString* self, BoxedString* table, BoxedString* delete_chars) {
-    if (self->cls != str_cls)
+    if (!isSubclass(self->cls, str_cls))
         raiseExcHelper(TypeError, "descriptor 'translate' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
     std::unordered_set<char> delete_set;
     if (delete_chars) {
-        if (delete_chars->cls != str_cls)
+        if (!isSubclass(delete_chars->cls, str_cls))
             raiseExcHelper(TypeError, "expected a character buffer object");
         delete_set.insert(delete_chars->s.begin(), delete_chars->s.end());
     }
 
     bool have_table = table != None;
     if (have_table) {
-        if (table->cls != str_cls)
+        if (!isSubclass(table->cls, str_cls))
             raiseExcHelper(TypeError, "expected a character buffer object");
         if (table->s.size() != 256)
             raiseExcHelper(ValueError, "translation table must be 256 characters long");
@@ -1903,7 +1906,7 @@ Box* strContains(BoxedString* self, Box* elt) {
         return boxBool(r);
     }
 
-    if (elt->cls != str_cls)
+    if (!isSubclass(elt->cls, str_cls))
         raiseExcHelper(TypeError, "'in <string>' requires string as left operand, not %s", getTypeName(elt));
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
@@ -1917,7 +1920,7 @@ Box* strContains(BoxedString* self, Box* elt) {
 Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
     Box* end = _args[0];
 
-    if (self->cls != str_cls)
+    if (!isSubclass(self->cls, str_cls))
         raiseExcHelper(TypeError, "descriptor 'startswith' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
@@ -1952,7 +1955,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return boxBool(r);
     }
 
-    if (elt->cls != str_cls)
+    if (!isSubclass(elt->cls, str_cls))
         raiseExcHelper(TypeError, "expected a character buffer object");
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
@@ -1980,7 +1983,7 @@ Box* strStartswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
     Box* end = _args[0];
 
-    if (self->cls != str_cls)
+    if (!isSubclass(self->cls, str_cls))
         raiseExcHelper(TypeError, "descriptor 'endswith' requires a 'str' object but received a '%s'",
                        getTypeName(self));
 
@@ -2015,7 +2018,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
         return False;
     }
 
-    if (elt->cls != str_cls)
+    if (!isSubclass(elt->cls, str_cls))
         raiseExcHelper(TypeError, "expected a character buffer object");
 
     BoxedString* sub = static_cast<BoxedString*>(elt);
@@ -2043,7 +2046,7 @@ Box* strEndswith(BoxedString* self, Box* elt, Box* start, Box** _args) {
 }
 
 Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
-    if (self->cls != str_cls)
+    if (!isSubclass(self->cls, str_cls))
         raiseExcHelper(TypeError, "descriptor 'decode' requires a 'str' object but received a '%s'", getTypeName(self));
 
     BoxedString* encoding_str = (BoxedString*)encoding;
@@ -2052,13 +2055,13 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
 
-    if (encoding_str && encoding_str->cls != str_cls)
+    if (encoding_str && !isSubclass(encoding_str->cls, str_cls))
         raiseExcHelper(TypeError, "decode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
 
     if (error_str && error_str->cls == unicode_cls)
         error_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(error_str, NULL);
 
-    if (error_str && error_str->cls != str_cls)
+    if (error_str && !isSubclass(error_str->cls, str_cls))
         raiseExcHelper(TypeError, "decode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
     Box* result
@@ -2068,7 +2071,7 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
 }
 
 Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
-    if (self->cls != str_cls)
+    if (!isSubclass(self->cls, str_cls))
         raiseExcHelper(TypeError, "descriptor 'encode' requires a 'str' object but received a '%s'", getTypeName(self));
 
     BoxedString* encoding_str = (BoxedString*)encoding;
@@ -2077,13 +2080,13 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (encoding_str && encoding_str->cls == unicode_cls)
         encoding_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(encoding_str, NULL);
 
-    if (encoding_str && encoding_str->cls != str_cls)
+    if (encoding_str && !isSubclass(encoding_str->cls, str_cls))
         raiseExcHelper(TypeError, "encode() argument 1 must be string, not '%s'", getTypeName(encoding_str));
 
     if (error_str && error_str->cls == unicode_cls)
         error_str = (BoxedString*)_PyUnicode_AsDefaultEncodedString(error_str, NULL);
 
-    if (error_str && error_str->cls != str_cls)
+    if (error_str && !isSubclass(error_str->cls, str_cls))
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
     Box* result = PyCodec_Encode(self, encoding_str ? encoding_str->s.c_str() : PyUnicode_GetDefaultEncoding(),
@@ -2143,6 +2146,11 @@ public:
     static Box* hasnext(BoxedStringIterator* self) {
         assert(self->cls == str_iterator_cls);
         return boxBool(self->it != self->end);
+    }
+
+    static Box* iter(BoxedStringIterator* self) {
+        assert(self->cls == str_iterator_cls);
+        return self;
     }
 
     static Box* next(BoxedStringIterator* self) {
@@ -2454,6 +2462,8 @@ void setupStr() {
                                               sizeof(BoxedStringIterator), false, "striterator");
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
+    str_iterator_cls->giveAttr("__iter__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::iter, UNKNOWN, 1)));
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
     str_iterator_cls->freeze();
     str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;

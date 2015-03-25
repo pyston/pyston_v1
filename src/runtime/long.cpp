@@ -102,7 +102,15 @@ extern "C" PY_LONG_LONG PyLong_AsLongLongAndOverflow(PyObject* obj, int* overflo
 }
 
 extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(pend == NULL, "unsupported");
+
+    // See comment in _longNew
+    RELEASE_ASSERT(base >= 0, "unsupported");
+
+    BoxedLong* rtn = new BoxedLong();
+    int r = mpz_init_set_str(rtn->n, str, base);
+    RELEASE_ASSERT(r == 0, "");
+    return rtn;
 }
 
 static int64_t asSignedLong(BoxedLong* self) {

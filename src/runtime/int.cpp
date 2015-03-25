@@ -931,7 +931,7 @@ static Box* _intNew(Box* val, Box* base) {
         if (val->cls == int_cls)
             return n;
         return new BoxedInt(n->n);
-    } else if (val->cls == str_cls) {
+    } else if (isSubclass(val->cls, str_cls)) {
         int base_n;
         if (!base)
             base_n = 10;
@@ -947,7 +947,7 @@ static Box* _intNew(Box* val, Box* base) {
         if (!r)
             throwCAPIException();
         return r;
-    } else if (val->cls == unicode_cls) {
+    } else if (isSubclass(val->cls, unicode_cls)) {
         int base_n;
         if (!base)
             base_n = 10;

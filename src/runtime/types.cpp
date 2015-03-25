@@ -1842,8 +1842,8 @@ void setupRuntime() {
     attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
                                          new BoxedString("attrwrapper"));
     dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false, new BoxedString("dict"));
-    file_cls = new BoxedHeapClass(object_cls, NULL, 0, offsetof(BoxedFile, weakreflist), sizeof(BoxedFile), false,
-                                  new BoxedString("file"));
+    file_cls = new BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
+                                  sizeof(BoxedFile), false, new BoxedString("file"));
     int_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false, new BoxedString("int"));
     bool_cls = new BoxedHeapClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false, new BoxedString("bool"));
     complex_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedComplex), false, new BoxedString("complex"));

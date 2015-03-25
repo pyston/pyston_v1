@@ -141,3 +141,5 @@ class C(object):
     def __repr__(self):
         return u"hello world"
 print [C()], set([C()]), {1:C()}
+
+print "hello" + u"world"

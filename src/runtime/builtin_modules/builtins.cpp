@@ -516,7 +516,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
     _str = coerceUnicodeToStr(_str);
 
-    if (_str->cls != str_cls) {
+    if (!isSubclass(_str->cls, str_cls)) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
 

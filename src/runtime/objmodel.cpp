@@ -1989,7 +1989,7 @@ extern "C" bool nonzero(Box* obj) {
     if (func == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
-                   || obj->cls == instancemethod_cls || obj->cls == module_cls,
+                   || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls,
                "%s.__nonzero__", getTypeName(obj)); // TODO
 
         // TODO should rewrite these?
@@ -2109,7 +2109,7 @@ extern "C" BoxedInt* hash(Box* obj) {
 
     if (hash == NULL) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls || obj->cls == classobj_cls
-                   || obj->cls == module_cls,
+                   || obj->cls == module_cls || obj->cls == capifunc_cls || obj->cls == instancemethod_cls,
                "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));

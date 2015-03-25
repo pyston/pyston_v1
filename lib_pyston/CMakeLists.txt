@@ -1,5 +1,5 @@
 # Copy any changed lib_pyston sources:
-file(GLOB_RECURSE LIBPYSTON_SRCS . "*.py")
+file(GLOB_RECURSE LIBPYSTON_SRCS . "*")
 set(LIBPYSTON_TARGETS "")
 foreach(STDLIB_FILE ${LIBPYSTON_SRCS})
     file(RELATIVE_PATH FN_REL ${CMAKE_SOURCE_DIR} ${STDLIB_FILE})

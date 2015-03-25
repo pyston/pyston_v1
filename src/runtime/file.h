@@ -22,7 +22,8 @@ namespace pyston {
 
 class BoxedFile : public Box {
 public:
-    PyObject_HEAD FILE* f_fp;
+    PyObject_HEAD;
+    FILE* f_fp;
     PyObject* f_name;
     PyObject* f_mode;
     int (*f_close)(FILE*);
@@ -48,6 +49,8 @@ public:
         __attribute__((visibility("default")));
 
     DEFAULT_CLASS(file_cls);
+
+    static void gcHandler(GCVisitor* v, Box* b);
 };
 }
 

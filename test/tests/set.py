@@ -86,6 +86,11 @@ print sorted(s1.union(s2)), sorted(s1.intersection(s2))
 print sorted(s1.union(range(5, 7))), sorted(s1.intersection(range(5, 7)))
 print sorted(s2.union([], [], [], [])), sorted(s2.intersection())
 
+s = frozenset([1, 5])
+d = s.difference([1], [1], [2])
+print d, len(s)
+print
+
 l = []
 s = set(range(5))
 while s:
@@ -102,4 +107,4 @@ print s
 s = set(range(5))
 for i in xrange(10):
     s2 = set(range(i))
-    print s.issubset(s2), s.issuperset(s2), s == s2, s != s2
+    print s.issubset(s2), s.issuperset(s2), s == s2, s != s2, s.difference(s2)

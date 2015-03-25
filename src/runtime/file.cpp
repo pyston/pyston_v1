@@ -1358,6 +1358,18 @@ void fileDestructor(Box* b) {
     self->f_fp = NULL;
 }
 
+void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    assert(isSubclass(b->cls, file_cls));
+    BoxedFile* f = static_cast<BoxedFile*>(b);
+
+    v->visit(f->f_name);
+    v->visit(f->f_mode);
+    v->visit(f->f_encoding);
+    v->visit(f->f_errors);
+}
+
 void setupFile() {
     file_cls->simple_destructor = fileDestructor;
 

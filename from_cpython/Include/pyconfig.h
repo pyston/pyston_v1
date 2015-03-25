@@ -56,6 +56,8 @@
 #define HAVE_GETPEERNAME 1
 #define HAVE_STRFTIME 1
 #define HAVE_TIMES 1
+#define HAVE_STRUCT_TM_TM_ZONE 1
+#define HAVE_MKTIME 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"

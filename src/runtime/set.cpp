@@ -262,6 +262,22 @@ Box* setUnion(BoxedSet* self, BoxedTuple* args) {
     return rtn;
 }
 
+Box* setDifference(BoxedSet* self, BoxedTuple* args) {
+    if (!isSubclass(self->cls, set_cls) && !isSubclass(self->cls, frozenset_cls))
+        raiseExcHelper(TypeError, "descriptor 'difference' requires a 'set' object but received a '%s'",
+                       getTypeName(self));
+
+    BoxedSet* rtn = (BoxedSet*)setNew(self->cls, self);
+
+    for (auto container : args->pyElements()) {
+        for (auto elt : container->pyElements()) {
+            rtn->s.erase(elt);
+        }
+    }
+
+    return rtn;
+}
+
 static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
     assert(self->cls == set_cls);
 
@@ -458,6 +474,8 @@ void setupSet() {
     set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
     set_cls->giveAttr("intersection",
                       new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("difference", new BoxedFunction(boxRTFunction((void*)setDifference, UNKNOWN, 1, 0, true, false)));
+    frozenset_cls->giveAttr("difference", set_cls->getattr("difference"));
     set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));
     set_cls->giveAttr("issuperset", new BoxedFunction(boxRTFunction((void*)setIssuperset, UNKNOWN, 2)));
 
