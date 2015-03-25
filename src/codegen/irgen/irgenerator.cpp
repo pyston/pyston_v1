@@ -1013,9 +1013,8 @@ private:
 
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
-            llvm::Value* rtn
-                = embedConstantPtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data),
-                                   g.llvm_boxed_string_type_ptr);
+            llvm::Value* rtn = embedConstantPtr(
+                irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
 
             return new ConcreteCompilerVariable(STR, rtn, true);
 
