@@ -1991,7 +1991,8 @@ private:
                 doDelete(ast_cast<AST_Delete>(node), unw_info);
                 break;
             case AST_TYPE::Expr:
-                doExpr(ast_cast<AST_Expr>(node), unw_info);
+                if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str)
+                    doExpr(ast_cast<AST_Expr>(node), unw_info);
                 break;
             case AST_TYPE::FunctionDef:
                 doFunctionDef(ast_cast<AST_FunctionDef>(node), unw_info);

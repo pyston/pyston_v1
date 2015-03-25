@@ -611,7 +611,11 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
         case AST_TYPE::Delete:
             return visit_delete((AST_Delete*)node);
         case AST_TYPE::Expr:
-            return visit_expr((AST_Expr*)node);
+            // docstrings are str constant expression statements.
+            // ignore those while interpreting.
+            if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str)
+                return visit_expr((AST_Expr*)node);
+            break;
         case AST_TYPE::FunctionDef:
             return visit_functionDef((AST_FunctionDef*)node);
         case AST_TYPE::Pass:
