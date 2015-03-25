@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/SwapByteOrder.h"
 
 #include "core/ast.h"
 #include "core/options.h"
@@ -43,6 +44,7 @@ namespace pyston {
 
 void location(AST* t, pypa::Ast& a) {
     t->lineno = a.line;
+    assert(a.column < 100000);
     t->col_offset = a.column;
 }
 
@@ -635,8 +637,12 @@ struct stmt_dispatcher {
         ptr->body = readItem(e.body, interned_strings);
         if (e.globals)
             ptr->globals = readItem(e.globals, interned_strings);
+        else
+            ptr->globals = NULL;
         if (e.locals)
             ptr->locals = readItem(e.locals, interned_strings);
+        else
+            ptr->locals = NULL;
         return ptr;
     }
 
@@ -801,6 +807,7 @@ struct stmt_dispatcher {
         AST_Expr* ptr = new AST_Expr();
         location(ptr, d);
         AST_Str* str = new AST_Str();
+        location(str, d);
         ptr->value = str;
         str->str_type = d.unicode ? AST_Str::UNICODE : AST_Str::STR;
         str->str_data = d.doc;

@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_CODEGEN_PYPAPARSER_H
-#define PYSTON_CODEGEN_PYPAPARSER_H
+#ifndef PYSTON_CODEGEN_SERIALIZEAST_H
+#define PYSTON_CODEGEN_SERIALIZEAST_H
 
 #include <cstdio>
 
 namespace pyston {
 class AST_Module;
-AST_Module* pypa_parse(char const* file_path);
+unsigned long serializeAST(AST_Module* module, FILE* file);
 }
 
-#endif // PYSTON_CODEGEN_PYPAPARSER_H
+#endif // PYSTON_CODEGEN_SERIALIZEAST_H

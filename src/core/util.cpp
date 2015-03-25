@@ -77,7 +77,11 @@ long Timer::end() {
 }
 
 Timer::~Timer() {
-    end();
+    if (!ended) {
+        long t = end();
+        if (exit_callback)
+            exit_callback(t);
+    }
 }
 
 bool startswith(const std::string& s, const std::string& pattern) {

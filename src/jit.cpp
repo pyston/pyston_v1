@@ -180,9 +180,9 @@ static int main(int argc, char** argv) {
 
     // if the user invoked `pyston -c command`
     if (command != NULL) {
-        main_module = createModule("__main__", "<string>");
-        AST_Module* m = parse_string(command);
         try {
+            main_module = createModule("__main__", "<string>");
+            AST_Module* m = parse_string(command);
             compileAndRunModule(m, main_module);
         } catch (ExcInfo e) {
             int retcode = 1;
