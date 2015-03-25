@@ -41,11 +41,14 @@ import linecache
 from operator import attrgetter
 from collections import namedtuple
 
+# Pyston change: we don't support all of these flags yet, so just enable the ones that we do:
+CO_VARARGS = 0x4
+CO_VARKEYWORDS = 0x8
 # These constants are from Include/code.h.
-CO_OPTIMIZED, CO_NEWLOCALS, CO_VARARGS, CO_VARKEYWORDS = 0x1, 0x2, 0x4, 0x8
-CO_NESTED, CO_GENERATOR, CO_NOFREE = 0x10, 0x20, 0x40
+# CO_OPTIMIZED, CO_NEWLOCALS, CO_VARARGS, CO_VARKEYWORDS = 0x1, 0x2, 0x4, 0x8
+# CO_NESTED, CO_GENERATOR, CO_NOFREE = 0x10, 0x20, 0x40
 # See Include/object.h
-TPFLAGS_IS_ABSTRACT = 1 << 20
+# TPFLAGS_IS_ABSTRACT = 1 << 20
 
 # ----------------------------------------------------------- type-checking
 def ismodule(object):
@@ -809,9 +812,6 @@ def getargspec(func):
     'varargs' and 'varkw' are the names of the * and ** arguments or None.
     'defaults' is an n-tuple of the default values of the last n arguments.
     """
-
-    # Pyston change:
-    return ArgSpec((), "args", "kw", ())
 
     if ismethod(func):
         func = func.im_func

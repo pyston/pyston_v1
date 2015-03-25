@@ -628,8 +628,8 @@ void setupDict() {
     dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NONE, 1, 0, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
 
-    dict_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)dictEq, BOXED_BOOL, 2)));
-    dict_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)dictNe, BOXED_BOOL, 2)));
+    dict_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)dictEq, UNKNOWN, 2)));
+    dict_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)dictNe, UNKNOWN, 2)));
 
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));

@@ -1436,6 +1436,7 @@ public:
     }
 
     CompilerType* getattrType(const std::string* attr, bool cls_only) override {
+        // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL)
@@ -1446,7 +1447,8 @@ public:
                 return AbstractFunctionType::fromRT(static_cast<BoxedFunction*>(rtattr), true);
                 // return typeFromClass(instancemethod_cls);
             } else {
-                return typeFromClass(rtattr->cls);
+                // Have to follow the descriptor protocol here
+                return UNKNOWN;
             }
         }
 
@@ -1460,7 +1462,7 @@ public:
 
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) override {
-        // printf("%s.getattr %s\n", debugName().c_str(), attr->c_str());
+        // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
@@ -2281,6 +2283,11 @@ public:
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        return undefVariable();
+    }
+
+    CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                              CompilerVariable* slice) override {
         return undefVariable();
     }
 

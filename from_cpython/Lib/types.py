@@ -43,9 +43,7 @@ DictType = DictionaryType = dict
 def _f(): pass
 FunctionType = type(_f)
 LambdaType = type(lambda: None)         # Same as FunctionType
-# Pyston change: there is no concept of a "code object" yet:
-# CodeType = type(_f.func_code)
-CodeType = None
+CodeType = type(_f.func_code)
 
 def _g():
     yield 1

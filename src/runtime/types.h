@@ -65,6 +65,7 @@ void teardownCAPI();
 void setupGenerator();
 void setupDescr();
 void teardownDescr();
+void setupCode();
 
 void setupSys();
 void setupBuiltins();
@@ -684,5 +685,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 // Classes created in Python get this automatically, but builtin types (including extension types)
 // are supposed to add one themselves.  type_cls and function_cls do this, for example.
 extern Box* dict_descr;
+
+Box* codeForFunction(BoxedFunction*);
 }
 #endif

@@ -799,6 +799,21 @@ static Box* builtinFunctionOrMethodName(Box* b, void*) {
     return func->name;
 }
 
+static Box* functionCode(Box* self, void*) {
+    assert(self->cls == function_cls);
+    BoxedFunction* func = static_cast<BoxedFunction*>(self);
+    // This fails "f.func_code is f.func_code"
+    return codeForFunction(func);
+}
+
+static Box* functionDefaults(Box* self, void*) {
+    assert(self->cls == function_cls);
+    BoxedFunction* func = static_cast<BoxedFunction*>(self);
+    if (!func->ndefaults)
+        return None;
+    return new BoxedTuple(BoxedTuple::GCVector(&func->defaults->elts[0], &func->defaults->elts[func->ndefaults]));
+}
+
 static Box* functionNonzero(BoxedFunction* self) {
     return True;
 }
@@ -2040,6 +2055,7 @@ void setupRuntime() {
     _PyUnicode_Init();
     setupDescr();
     setupTraceback();
+    setupCode();
 
     function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
@@ -2052,6 +2068,9 @@ void setupRuntime() {
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
     function_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)functionNonzero, BOXED_BOOL, 1)));
+    function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
+    function_cls->giveAttr("func_defaults",
+                           new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, NULL, NULL));
     function_cls->freeze();
 
     builtin_function_or_method_cls->giveAttr(
