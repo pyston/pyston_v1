@@ -1013,7 +1013,7 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
 
 Value ASTInterpreter::visit_str(AST_Str* node) {
     if (node->str_type == AST_Str::STR) {
-        return boxString(node->str_data);
+        return source_info->parent_module->getStringConstant(node->str_data);
     } else if (node->str_type == AST_Str::UNICODE) {
         return decodeUTF8StringPtr(&node->str_data);
     } else {

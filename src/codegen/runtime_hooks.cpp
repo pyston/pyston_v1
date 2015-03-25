@@ -153,6 +153,9 @@ void initGlobalFuncs(GlobalState& g) {
     g.frame_info_type = g.stdlib_module->getTypeByName("struct.pyston::FrameInfo");
     assert(g.frame_info_type);
 
+    g.llvm_boxed_string_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedString")->getPointerTo();
+    assert(g.llvm_boxed_string_type_ptr);
+
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
     g.funcs.printf = addFunc((void*)printf, g.i8_ptr, true);

@@ -390,6 +390,25 @@ std::string BoxedModule::name() {
     }
 }
 
+Box* BoxedModule::getStringConstant(const std::string& ast_str) {
+    auto idx_iter = str_const_index.find(ast_str);
+    if (idx_iter != str_const_index.end())
+        return str_constants[idx_iter->second];
+
+    Box* box = boxString(ast_str);
+    str_const_index[ast_str] = str_constants.size();
+    str_constants.push_back(box);
+    return box;
+}
+
+extern "C" void moduleGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
+    BoxedModule* d = (BoxedModule*)b;
+
+    v->visitRange((void* const*)&d->str_constants[0], (void* const*)&d->str_constants[d->str_constants.size()]);
+}
+
 extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
                               std::initializer_list<Box*> defaults) {
     if (closure)
@@ -1859,8 +1878,8 @@ void setupRuntime() {
     function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
 
 
-    module_cls = new BoxedHeapClass(object_cls, NULL, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false,
-                                    new BoxedString("module"));
+    module_cls = new BoxedHeapClass(object_cls, &moduleGCHandler, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule),
+                                    false, new BoxedString("module"));
     member_cls
         = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false, new BoxedString("member"));
     capifunc_cls

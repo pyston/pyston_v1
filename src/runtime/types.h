@@ -529,6 +529,11 @@ public:
     BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
     std::string name();
 
+    Box* getStringConstant(const std::string& ast_str);
+
+    llvm::StringMap<int> str_const_index;
+    std::vector<Box*> str_constants;
+
     DEFAULT_CLASS(module_cls);
 };
 

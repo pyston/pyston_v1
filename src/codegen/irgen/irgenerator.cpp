@@ -1013,7 +1013,12 @@ private:
 
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
-            return makeStr(&node->str_data);
+            llvm::Value* rtn
+                = embedConstantPtr(irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data),
+                                   g.llvm_boxed_string_type_ptr);
+
+            return new ConcreteCompilerVariable(STR, rtn, true);
+
         } else if (node->str_type == AST_Str::UNICODE) {
             return makeUnicode(emitter, &node->str_data);
         } else {

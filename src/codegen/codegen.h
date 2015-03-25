@@ -72,7 +72,7 @@ struct GlobalState {
     llvm::Type* llvm_str_type_ptr;
     llvm::Type* frame_info_type;
     llvm::Type* llvm_clfunction_type_ptr, *llvm_closure_type_ptr, *llvm_generator_type_ptr;
-    llvm::Type* llvm_module_type_ptr, *llvm_bool_type_ptr;
+    llvm::Type* llvm_module_type_ptr, *llvm_bool_type_ptr, *llvm_boxed_string_type_ptr;
     llvm::Type* llvm_excinfo_type;
     llvm::Type* i1, *i8, *i8_ptr, *i32, *i64, *void_, *double_;
     llvm::Type* vector_ptr;
