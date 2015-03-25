@@ -1481,6 +1481,9 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
         case AST_LangPrimitive::UNCACHE_EXC_INFO:
             printf("UNCACHE_EXC_INFO");
             break;
+        case AST_LangPrimitive::HASNEXT:
+            printf("HASNEXT");
+            break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }
