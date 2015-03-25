@@ -233,10 +233,8 @@ extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls,
     }
 }
 
-extern "C" void assertDerefNameDefined(Box* b, const char* name) {
-    if (b == NULL) {
-        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", name);
-    }
+extern "C" void assertFailDerefNameDefined(const char* name) {
+    raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", name);
 }
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) {

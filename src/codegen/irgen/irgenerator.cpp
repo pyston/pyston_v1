@@ -917,8 +917,30 @@ private:
                                                     llvm::ConstantInt::get(g.i32, deref_info.offset) });
             llvm::Value* lookupResult = emitter.getBuilder()->CreateLoad(gep);
 
-            emitter.createCall(unw_info, g.funcs.assertDerefNameDefined,
-                               { lookupResult, getStringConstantPtr(node->id.str() + '\0') });
+            // If the value is NULL, it is undefined.
+            // Create a branch on if the value is NULL
+            llvm::BasicBlock* success_bb
+                = llvm::BasicBlock::Create(g.context, "deref_defined", irstate->getLLVMFunction());
+            success_bb->moveAfter(curblock);
+            llvm::BasicBlock* fail_bb
+                = llvm::BasicBlock::Create(g.context, "deref_undefined", irstate->getLLVMFunction());
+
+            llvm::Value* check_val
+                = emitter.getBuilder()->CreateICmpEQ(lookupResult, embedConstantPtr(NULL, g.llvm_value_type_ptr));
+            llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
+
+            // In the case that it failed, call the assert fail function
+            curblock = fail_bb;
+            emitter.getBuilder()->SetInsertPoint(curblock);
+
+            llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
+                                                     getStringConstantPtr(node->id.str() + '\0'));
+            call.setDoesNotReturn();
+            emitter.getBuilder()->CreateUnreachable();
+
+            // Carry on in the case that it succeeded
+            curblock = success_bb;
+            emitter.getBuilder()->SetInsertPoint(curblock);
 
             return new ConcreteCompilerVariable(UNKNOWN, lookupResult, true);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
@@ -1459,13 +1481,6 @@ private:
                     closureValue, { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3),
                                     llvm::ConstantInt::get(g.i32, offset) });
                 emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
-
-                /*
-                CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
-                assert(closure);
-
-                closure->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
-                */
             }
         }
     }
