@@ -497,6 +497,8 @@ static void typeSetDict(Box* obj, Box* val, void* context) {
 Box* dict_descr = NULL;
 
 extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
     if (im->obj) {
@@ -506,6 +508,8 @@ extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
     BoxedProperty* prop = (BoxedProperty*)b;
 
     if (prop->prop_get)
@@ -519,6 +523,8 @@ extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
     BoxedStaticmethod* sm = (BoxedStaticmethod*)b;
 
     if (sm->sm_callable)
@@ -526,6 +532,8 @@ extern "C" void staticmethodGCHandler(GCVisitor* v, Box* b) {
 }
 
 extern "C" void classmethodGCHandler(GCVisitor* v, Box* b) {
+    boxGCHandler(v, b);
+
     BoxedClassmethod* cm = (BoxedClassmethod*)b;
 
     if (cm->cm_callable)

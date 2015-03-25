@@ -13,3 +13,6 @@ for a in (1, "", "/proc", "nonexisting_dir"):
     except Exception as e:
         print e
 
+imp.acquire_lock()
+imp.release_lock()
+
