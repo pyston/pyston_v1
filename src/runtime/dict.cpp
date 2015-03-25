@@ -67,6 +67,7 @@ Box* dictCopy(BoxedDict* self) {
 Box* dictItems(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
 
+    rtn->ensure(self->d.size());
     for (const auto& p : self->d) {
         BoxedTuple::GCVector elts;
         elts.push_back(p.first);
@@ -80,6 +81,7 @@ Box* dictItems(BoxedDict* self) {
 
 Box* dictValues(BoxedDict* self) {
     BoxedList* rtn = new BoxedList();
+    rtn->ensure(self->d.size());
     for (const auto& p : self->d) {
         listAppendInternal(rtn, p.second);
     }
@@ -90,6 +92,7 @@ Box* dictKeys(BoxedDict* self) {
     RELEASE_ASSERT(isSubclass(self->cls, dict_cls), "");
 
     BoxedList* rtn = new BoxedList();
+    rtn->ensure(self->d.size());
     for (const auto& p : self->d) {
         listAppendInternal(rtn, p.first);
     }
