@@ -176,7 +176,9 @@ COMMON_LDFLAGS += `pkg-config tinfo 2>/dev/null && pkg-config tinfo --libs || ec
 COMMON_LDFLAGS += -Wl,-E
 
 # We get multiple shared libraries (libstdc++, libgcc_s) from the gcc installation:
-COMMON_LDFLAGS += -Wl,-rpath $(GCC_DIR)/lib64
+ifneq ($(GCC_DIR),/usr)
+	COMMON_LDFLAGS += -Wl,-rpath $(GCC_DIR)/lib64
+endif
 
 ifneq ($(USE_DEBUG_LIBUNWIND),0)
 	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-debug-install/lib
@@ -443,13 +445,15 @@ define checksha
 endef
 
 .PHONY: format check_format
+ifneq ($(USE_CMAKE),1)
 format:
 	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
-ifneq ($(USE_CMAKE),1)
 check_format:
 	$(ECHO) checking formatting...
 	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
 else
+format:
+	$(NINJA) -C $(HOME)/pyston-build-release format
 check_format:
 	$(NINJA) -C $(HOME)/pyston-build-release check-format
 endif
