@@ -97,5 +97,10 @@ file(GLOB_RECURSE STDPYTHON_SRCS Python
     marshal.c
     )
 
+# compile specified files in from_cpython/Python
+file(GLOB_RECURSE STDPARSER_SRCS Parser
+    myreadline.c
+    )
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-tautological-compare -Wno-type-limits -Wno-unused-result -Wno-strict-aliasing")
-add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS})
+add_library(FROM_CPYTHON OBJECT ${STDMODULE_SRCS} ${STDOBJECT_SRCS} ${STDPYTHON_SRCS} ${STDPARSER_SRCS})

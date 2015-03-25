@@ -374,7 +374,10 @@ STDPYTHON_SRCS := \
 	marshal.c \
 	$(EXTRA_STDPYTHON_SRCS)
 
-FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS))
+STDPARSER_SRCS := \
+	myreadline.c
+
+FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS)) $(addprefix from_cpython/Parser/,$(STDPARSER_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:

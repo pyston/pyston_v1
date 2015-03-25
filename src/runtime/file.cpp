@@ -1152,6 +1152,90 @@ extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
     }
 }
 
+extern "C" PyObject* PyFile_GetLine(PyObject* f, int n) noexcept {
+    PyObject* result;
+
+    if (f == NULL) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+
+    if (PyFile_Check(f)) {
+        BoxedFile* fo = (BoxedFile*)f;
+        if (fo->f_fp == NULL)
+            return err_closed();
+        if (!fo->readable)
+            return err_mode("reading");
+        /* refuse to mix with f.next() */
+        if (fo->f_buf != NULL && (fo->f_bufend - fo->f_bufptr) > 0 && fo->f_buf[0] != '\0')
+            return err_iterbuffered();
+        result = get_line(fo, n);
+    } else {
+        PyObject* reader;
+        PyObject* args;
+
+        reader = PyObject_GetAttrString(f, "readline");
+        if (reader == NULL)
+            return NULL;
+        if (n <= 0)
+            args = PyTuple_New(0);
+        else
+            args = Py_BuildValue("(i)", n);
+        if (args == NULL) {
+            Py_DECREF(reader);
+            return NULL;
+        }
+        result = PyEval_CallObject(reader, args);
+        Py_DECREF(reader);
+        Py_DECREF(args);
+        if (result != NULL && !PyString_Check(result) && !PyUnicode_Check(result)) {
+            Py_DECREF(result);
+            result = NULL;
+            PyErr_SetString(PyExc_TypeError, "object.readline() returned non-string");
+        }
+    }
+
+    if (n < 0 && result != NULL && PyString_Check(result)) {
+        char* s = PyString_AS_STRING(result);
+        Py_ssize_t len = PyString_GET_SIZE(result);
+        if (len == 0) {
+            Py_DECREF(result);
+            result = NULL;
+            PyErr_SetString(PyExc_EOFError, "EOF when reading a line");
+        } else if (s[len - 1] == '\n') {
+            if (/*result->ob_refcnt*/ 2 == 1) {
+                if (_PyString_Resize(&result, len - 1))
+                    return NULL;
+            } else {
+                PyObject* v;
+                v = PyString_FromStringAndSize(s, len - 1);
+                Py_DECREF(result);
+                result = v;
+            }
+        }
+    }
+#ifdef Py_USING_UNICODE
+    if (n < 0 && result != NULL && PyUnicode_Check(result)) {
+        Py_UNICODE* s = PyUnicode_AS_UNICODE(result);
+        Py_ssize_t len = PyUnicode_GET_SIZE(result);
+        if (len == 0) {
+            Py_DECREF(result);
+            result = NULL;
+            PyErr_SetString(PyExc_EOFError, "EOF when reading a line");
+        } else if (s[len - 1] == '\n') {
+            if (/*result->ob_refcnt*/ 2 == 1)
+                PyUnicode_Resize(&result, len - 1);
+            else {
+                PyObject* v;
+                v = PyUnicode_FromUnicode(s, len - 1);
+                Py_DECREF(result);
+                result = v;
+            }
+        }
+    }
+#endif
+    return result;
+}
 /*
 ** Py_UniversalNewlineFread is an fread variation that understands
 ** all of \r, \n and \r\n conventions.

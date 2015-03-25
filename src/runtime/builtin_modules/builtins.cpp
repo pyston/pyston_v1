@@ -990,8 +990,75 @@ Box* builtinIter(Box* obj, Box* sentinel) {
     return r;
 }
 
+// Copied from builtin_raw_input, but without the argument handling
+// 'v' is the prompt, and can be NULL corresponding to the arg not getting passed.
+static PyObject* raw_input(PyObject* v) noexcept {
+    PyObject* fin = PySys_GetObject("stdin");
+    PyObject* fout = PySys_GetObject("stdout");
+
+    if (fin == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "[raw_]input: lost sys.stdin");
+        return NULL;
+    }
+    if (fout == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "[raw_]input: lost sys.stdout");
+        return NULL;
+    }
+    if (PyFile_SoftSpace(fout, 0)) {
+        if (PyFile_WriteString(" ", fout) != 0)
+            return NULL;
+    }
+    if (PyFile_AsFile(fin) && PyFile_AsFile(fout) && isatty(fileno(PyFile_AsFile(fin)))
+        && isatty(fileno(PyFile_AsFile(fout)))) {
+        PyObject* po;
+        const char* prompt;
+        char* s;
+        PyObject* result;
+        if (v != NULL) {
+            po = PyObject_Str(v);
+            if (po == NULL)
+                return NULL;
+            prompt = PyString_AsString(po);
+            if (prompt == NULL)
+                return NULL;
+        } else {
+            po = NULL;
+            prompt = "";
+        }
+        s = PyOS_Readline(PyFile_AsFile(fin), PyFile_AsFile(fout), prompt);
+        Py_XDECREF(po);
+        if (s == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_SetNone(PyExc_KeyboardInterrupt);
+            return NULL;
+        }
+        if (*s == '\0') {
+            PyErr_SetNone(PyExc_EOFError);
+            result = NULL;
+        } else { /* strip trailing '\n' */
+            size_t len = strlen(s);
+            if (len > PY_SSIZE_T_MAX) {
+                PyErr_SetString(PyExc_OverflowError, "[raw_]input: input too long");
+                result = NULL;
+            } else {
+                result = PyString_FromStringAndSize(s, len - 1);
+            }
+        }
+        PyMem_FREE(s);
+        return result;
+    }
+    if (v != NULL) {
+        if (PyFile_WriteObject(v, fout, Py_PRINT_RAW) != 0)
+            return NULL;
+    }
+    return PyFile_GetLine(fin, -1);
+}
+
 Box* rawInput(Box* prompt) {
-    Py_FatalError("unimplemented");
+    Box* r = raw_input(prompt);
+    if (!r)
+        throwCAPIException();
+    return r;
 }
 
 Box* input(Box* prompt) {
