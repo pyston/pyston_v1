@@ -21,7 +21,7 @@ typedef struct {
 } PyCompilerFlags;
 
 PyAPI_FUNC(void) Py_SetProgramName(char *) PYSTON_NOEXCEPT;
-PyAPI_FUNC(char *) Py_GetProgramName(void) PYSTON_NOEXCEPT;
+PyAPI_FUNC(const char *) Py_GetProgramName(void) PYSTON_NOEXCEPT;
 
 PyAPI_FUNC(void) Py_SetPythonHome(char *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(char *) Py_GetPythonHome(void) PYSTON_NOEXCEPT;
@@ -148,9 +148,9 @@ PyAPI_FUNC(void) PyOS_FiniInterrupts(void) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyByteArray_Fini(void) PYSTON_NOEXCEPT;
 
 /* Stuff with no proper home (yet) */
-PyAPI_FUNC(char *) PyOS_Readline(FILE *, FILE *, char *) PYSTON_NOEXCEPT;
+PyAPI_FUNC(char *) PyOS_Readline(FILE *, FILE *, const char *) PYSTON_NOEXCEPT;
 PyAPI_DATA(int) (*PyOS_InputHook)(void);
-PyAPI_DATA(char) *(*PyOS_ReadlineFunctionPointer)(FILE *, FILE *, char *);
+PyAPI_DATA(char) *(*PyOS_ReadlineFunctionPointer)(FILE *, FILE *, const char *);
 PyAPI_DATA(PyThreadState*) _PyOS_ReadlineTState;
 
 /* Stack size, in "pointers" (so we get extra safety margins

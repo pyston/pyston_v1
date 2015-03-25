@@ -82,9 +82,7 @@ class MyClass(object):
         # Except if it's a dotted name:
         import __foo.__bar
     except ImportError, e:
-        # CPython says "no module named __foo.__bar__" but Pyston (and PyPy) say "no module named __foo".
-        # Canonicalize it slightly:
-        print e.message.split('.')[0]
+        print e.message
 
 # names inside classes with mangled names don't get the mangled class name:
 class MyClass(object):
@@ -158,3 +156,13 @@ print _MyClass._MyClass__a
 class ___(object):
     __a = 2
 print ___.__a
+
+# this fails if the type analysis does not mangle the function name
+class C():
+    def f():
+        def __f2():
+            print "hi"
+        if 1:
+            pass
+    f()
+

@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "capi/types.h"
 #include "core/types.h"
 #include "gc/collector.h"
 #include "runtime/objmodel.h"
@@ -58,7 +59,26 @@ static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
 }
 
 extern "C" int PyClass_IsSubclass(PyObject* klass, PyObject* base) noexcept {
-    Py_FatalError("unimplemented");
+    Py_ssize_t i, n;
+    if (klass == base)
+        return 1;
+    if (PyTuple_Check(base)) {
+        n = PyTuple_GET_SIZE(base);
+        for (i = 0; i < n; i++) {
+            if (PyClass_IsSubclass(klass, PyTuple_GET_ITEM(base, i)))
+                return 1;
+        }
+        return 0;
+    }
+    if (klass == NULL || !PyClass_Check(klass))
+        return 0;
+    BoxedClassobj* cp = (BoxedClassobj*)klass;
+    n = PyTuple_Size(cp->bases);
+    for (i = 0; i < n; i++) {
+        if (PyClass_IsSubclass(PyTuple_GetItem(cp->bases, i), base))
+            return 1;
+    }
+    return 0;
 }
 
 Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
@@ -82,6 +102,15 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
     if (_bases->cls != tuple_cls)
         raiseExcHelper(TypeError, "PyClass_New: bases must be a tuple");
     BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
+
+    for (auto base : bases->elts) {
+        if (!PyClass_Check(base) && PyCallable_Check(base->cls)) {
+            Box* r = PyObject_CallFunctionObjArgs(base->cls, name, bases, dict, NULL);
+            if (!r)
+                throwCAPIException();
+            return r;
+        }
+    }
 
     BoxedClassobj* made = new (cls) BoxedClassobj(name, bases);
 
@@ -126,6 +155,97 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
     return made;
 }
 
+static Box* classobjGetattribute(Box* _cls, Box* _attr) {
+    RELEASE_ASSERT(_cls->cls == classobj_cls, "");
+    BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    // These are special cases in CPython as well:
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            return makeAttrWrapper(cls);
+
+        if (attr->s == "__bases__")
+            return cls->bases;
+
+        if (attr->s == "__name__") {
+            if (cls->name)
+                return cls->name;
+            return None;
+        }
+    }
+
+    Box* r = classLookup(cls, attr->s);
+    if (!r)
+        raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->s.c_str(), attr->s.c_str());
+
+    r = processDescriptor(r, None, cls);
+    return r;
+}
+
+static Box* classobj_getattro(Box* cls, Box* attr) noexcept {
+    try {
+        return classobjGetattribute(cls, attr);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+static const char* set_bases(PyClassObject* c, PyObject* v) {
+    Py_ssize_t i, n;
+
+    if (v == NULL || !PyTuple_Check(v))
+        return "__bases__ must be a tuple object";
+    n = PyTuple_Size(v);
+    for (i = 0; i < n; i++) {
+        PyObject* x = PyTuple_GET_ITEM(v, i);
+        if (!PyClass_Check(x))
+            return "__bases__ items must be classes";
+        if (PyClass_IsSubclass(x, (PyObject*)c))
+            return "a __bases__ item causes an inheritance cycle";
+    }
+    // Pyston change:
+    // set_slot(&c->cl_bases, v);
+    // set_attr_slots(c);
+    ((BoxedClassobj*)c)->bases = (BoxedTuple*)v;
+    return "";
+}
+
+static void classobjSetattr(Box* _cls, Box* _attr, Box* _value) {
+    RELEASE_ASSERT(_cls->cls == classobj_cls, "");
+    BoxedClassobj* cls = static_cast<BoxedClassobj*>(_cls);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    if (attr->s == "__bases__") {
+        const char* error_str = set_bases((PyClassObject*)cls, _value);
+        if (error_str && error_str[0] != '\0')
+            raiseExcHelper(TypeError, "%s", error_str);
+        cls->setattr("__bases__", _value, NULL);
+        return;
+    }
+    PyObject_GenericSetAttr(cls, _attr, _value);
+    checkAndThrowCAPIException();
+}
+
+static int classobj_setattro(Box* cls, Box* attr, Box* value) noexcept {
+    try {
+        if (value) {
+            classobjSetattr(cls, attr, value);
+            return 0;
+        } else {
+            RELEASE_ASSERT(0, "");
+        }
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
+}
+
 Box* classobjStr(Box* _obj) {
     if (!isSubclass(_obj->cls, classobj_cls)) {
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'classobj' object but received an '%s'",
@@ -147,7 +267,7 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     RELEASE_ASSERT(_attr->cls == str_cls, "");
     BoxedString* attr = static_cast<BoxedString*>(_attr);
 
-    // TODO: special handling for accessing __dict__ and __class__
+    // These are special cases in CPython as well:
     if (attr->s[0] == '_' && attr->s[1] == '_') {
         if (attr->s == "__dict__")
             return makeAttrWrapper(inst);
@@ -183,6 +303,64 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
 
 Box* instanceGetattribute(Box* _inst, Box* _attr) {
     return _instanceGetattribute(_inst, _attr, true);
+}
+
+static Box* instance_getattro(Box* cls, Box* attr) noexcept {
+    try {
+        return instanceGetattribute(cls, attr);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+Box* instanceSetattr(Box* _inst, Box* _attr, Box* value) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    RELEASE_ASSERT(_attr->cls == str_cls, "");
+    BoxedString* attr = static_cast<BoxedString*>(_attr);
+
+    assert(value);
+
+    // These are special cases in CPython as well:
+    if (attr->s[0] == '_' && attr->s[1] == '_') {
+        if (attr->s == "__dict__")
+            Py_FatalError("unimplemented");
+
+        if (attr->s == "__class__") {
+            if (value->cls != classobj_cls)
+                raiseExcHelper(TypeError, "__class__ must be set to a class");
+
+            inst->inst_cls = static_cast<BoxedClassobj*>(value);
+            return None;
+        }
+    }
+
+    static const std::string setattr_str("__setattr__");
+    Box* setattr = classLookup(inst->inst_cls, setattr_str);
+
+    if (setattr) {
+        setattr = processDescriptor(setattr, inst, inst->inst_cls);
+        return runtimeCall(setattr, ArgPassSpec(2), _attr, value, NULL, NULL, NULL);
+    }
+
+    _inst->setattr(attr->s, value, NULL);
+    return None;
+}
+
+static int instance_setattro(Box* cls, Box* attr, Box* value) noexcept {
+    try {
+        if (value) {
+            instanceSetattr(cls, attr, value);
+            return 0;
+        } else {
+            RELEASE_ASSERT(0, "");
+        }
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 Box* instanceRepr(Box* _inst) {
@@ -269,11 +447,80 @@ Box* instanceSetitem(Box* _inst, Box* key, Box* value) {
     return runtimeCall(setitem_func, ArgPassSpec(2), key, value, NULL, NULL, NULL);
 }
 
+Box* instanceDelitem(Box* _inst, Box* key) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* delitem_func = _instanceGetattribute(inst, boxStrConstant("__delitem__"), true);
+    return runtimeCall(delitem_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+}
+
+Box* instanceContains(Box* _inst, Box* key) {
+    RELEASE_ASSERT(_inst->cls == instance_cls, "");
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* contains_func = _instanceGetattribute(inst, boxStrConstant("__contains__"), false);
+
+    if (!contains_func) {
+        int result = _PySequence_IterSearch(inst, key, PY_ITERSEARCH_CONTAINS);
+        if (result < 0)
+            throwCAPIException();
+        assert(result == 0 || result == 1);
+        return boxBool(result);
+    }
+
+    Box* r = runtimeCall(contains_func, ArgPassSpec(1), key, NULL, NULL, NULL, NULL);
+    return boxBool(nonzero(r));
+}
+
+static Box* instanceHash(BoxedInstance* inst) {
+    assert(inst->cls == instance_cls);
+
+    PyObject* func;
+    PyObject* res;
+
+    func = _instanceGetattribute(inst, boxStrConstant("__hash__"), false);
+    if (func == NULL) {
+        /* If there is no __eq__ and no __cmp__ method, we hash on the
+           address.  If an __eq__ or __cmp__ method exists, there must
+           be a __hash__. */
+        func = _instanceGetattribute(inst, boxStrConstant("__eq__"), false);
+        if (func == NULL) {
+            func = _instanceGetattribute(inst, boxStrConstant("__cmp__"), false);
+            if (func == NULL) {
+                return boxInt(_Py_HashPointer(inst));
+            }
+        }
+        raiseExcHelper(TypeError, "unhashable instance");
+    }
+
+    res = runtimeCall(func, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    if (PyInt_Check(res) || PyLong_Check(res)) {
+        static std::string hash_str("__hash__");
+        return callattr(res, &hash_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), nullptr, nullptr, nullptr, nullptr, nullptr);
+    } else {
+        raiseExcHelper(TypeError, "__hash__() should return an int");
+    }
+}
+
+Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
+    assert(_inst->cls == instance_cls);
+    BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
+
+    Box* call_func = _instanceGetattribute(inst, boxStrConstant("__call__"), false);
+    if (!call_func)
+        raiseExcHelper(AttributeError, "%s instance has no __call__ method", inst->inst_cls->name->s.c_str());
+
+    return runtimeCall(call_func, ArgPassSpec(0, 0, true, true), _args, _kwargs, NULL, NULL, NULL);
+}
+
 void setupClassobj() {
     classobj_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedClassobj::gcHandler,
-                                          offsetof(BoxedClassobj, attrs), sizeof(BoxedClassobj), false, "classobj");
-    instance_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedInstance::gcHandler,
-                                          offsetof(BoxedInstance, attrs), sizeof(BoxedInstance), false, "instance");
+                                          offsetof(BoxedClassobj, attrs), 0, sizeof(BoxedClassobj), false, "classobj");
+    instance_cls
+        = BoxedHeapClass::create(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
+                                 offsetof(BoxedInstance, weakreflist), sizeof(BoxedInstance), false, "instance");
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, 0, false, false)));
@@ -281,20 +528,34 @@ void setupClassobj() {
     classobj_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)classobjCall, UNKNOWN, 1, 0, true, true)));
 
+    classobj_cls->giveAttr("__getattribute__",
+                           new BoxedFunction(boxRTFunction((void*)classobjGetattribute, UNKNOWN, 2)));
+    classobj_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)classobjSetattr, UNKNOWN, 3)));
     classobj_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)classobjStr, STR, 1)));
+    classobj_cls->giveAttr("__dict__", dict_descr);
 
     classobj_cls->freeze();
+    classobj_cls->tp_getattro = classobj_getattro;
+    classobj_cls->tp_setattro = classobj_setattro;
 
 
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));
+    instance_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)instanceSetattr, UNKNOWN, 3)));
     instance_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)instanceStr, UNKNOWN, 1)));
     instance_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instanceRepr, UNKNOWN, 1)));
     instance_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)instanceNonzero, UNKNOWN, 1)));
     instance_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)instanceLen, UNKNOWN, 1)));
     instance_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)instanceGetitem, UNKNOWN, 2)));
     instance_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)instanceSetitem, UNKNOWN, 3)));
+    instance_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)instanceDelitem, UNKNOWN, 2)));
+    instance_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)instanceContains, UNKNOWN, 2)));
+    instance_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)instanceHash, UNKNOWN, 1)));
+    instance_cls->giveAttr("__call__",
+                           new BoxedFunction(boxRTFunction((void*)instanceCall, UNKNOWN, 1, 0, true, true)));
 
     instance_cls->freeze();
+    instance_cls->tp_getattro = instance_getattro;
+    instance_cls->tp_setattro = instance_setattro;
 }
 }

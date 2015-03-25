@@ -122,6 +122,11 @@ make -j4
 make install
 ```
 
+### libssl, libcrypto
+```
+apt-get install libssl-dev
+```
+
 ### gtest
 
 For running the unittests:
@@ -169,6 +174,30 @@ echo "GDB := \$(DEPS_DIR)/gdb-7.6.2/gdb/gdb --data-directory \$(DEPS_DIR)/gdb-7.
 TODO: GDB should be able to determine its data directory.  maybe it should be installed rather that run
 from inside the source dir?
 --->
+
+#### getting gdb to pretty-print STL types
+
+GDB ships with python scripts that tell it how to pretty-print STL containers, but they only work against the stdlib in the corresponding version of GCC. Unfortunately, we compile against an old version of gcc's C++ stdlib. Here's how to get GDB to use the *old* pretty-print scripts for GCC 4.8.2. (Note: Have only tested this with gdb 7.8.1-ubuntu4 and gcc-4.8.2.)
+
+If you've built GCC, the GDB scripts will be in `~/pyston_deps/gcc-4.8.2-install/share/gcc-4.8.2/python`. Unfortunately they're for Python 2, and GDB 7.8.1 uses Python 3. So we'll use `2to3` to update them:
+
+```
+cd ~/pyston_deps/gcc-4.8.2-install/share/gcc-4.8.2/python/libstdcxx/v6
+2to3 -w printers.py
+```
+
+Don't worry, `2to3` makes a backup of the file it changes if you need to go back. Now, edit your `~/.gdbinit` file to contain the following:
+
+```
+python
+import sys
+sys.path.insert(0, '/YOUR/HOME/DIR/pyston_deps/gcc-4.8.2-install/share/gcc-4.8.2/python')
+from libstdcxx.v6.printers import register_libstdcxx_printers
+register_libstdcxx_printers(None)
+print('--- Registered cxx printers for gcc 4.8.2! ---')
+```
+
+And there you go!
 
 ### gold
 
@@ -299,7 +328,7 @@ sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
 sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
 sudo apt-get -qq update
 
-sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.4 libstdc++-4.8-dev
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.4 libstdc++-4.8-dev libssl-dev libsqlite3-dev
 
 git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
 
@@ -318,7 +347,7 @@ ninja check-pyston # run the test suite
 
 **Ubuntu 14.04**
 ```
-sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.5
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.5 libssl-dev libsqlite3-dev
 
 git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
 

@@ -36,3 +36,17 @@ class F2(float):
 print type(F2(D(F())))
 
 print type(float(F()))
+
+try:
+    f = float("hello world")
+    print f
+except ValueError as e:
+    print e
+
+try:
+    f = float("5 hello world")
+    print f
+except ValueError as e:
+    pass
+    # We don't print the right thing yet:
+    # print e

@@ -46,9 +46,9 @@ static PyObject *zip_directory_cache = NULL;
 /* forward decls */
 static PyObject *read_directory(char *archive);
 static PyObject *get_data(char *archive, PyObject *toc_entry);
+
 static PyObject *get_module_code(ZipImporter *self, char *fullname,
                                  int *p_ispackage, char **p_modpath);
-
 
 #define ZipImporter_Check(op) PyObject_TypeCheck(op, &ZipImporter_Type)
 
@@ -956,6 +956,8 @@ eq_mtime(time_t t1, time_t t2)
     return d <= 1;
 }
 
+// Pyston change: We don't support bytecode archives yet
+#if 0
 /* Given the contents of a .py[co] file in a buffer, unmarshal the data
    and return the code object. Return None if it the magic word doesn't
    match (we do this instead of raising an exception as we fall back
@@ -1103,6 +1105,7 @@ get_mtime_of_source(ZipImporter *self, char *path)
     path[lastchar] = savechar;
     return mtime;
 }
+#endif // Pyston change
 
 /* Return the code object for the module named by 'fullname' from the
    Zip archive as a new reference. */
@@ -1123,6 +1126,11 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
 
     modpath = PyString_AsString(PyTuple_GetItem(toc_entry, 0));
 
+    // Pyston change: Just return the source code for now
+#if 1
+    assert(!isbytecode);
+    return data;
+#else // Pyston change
     if (isbytecode) {
         code = unmarshal_code(modpath, data, mtime);
     }
@@ -1131,6 +1139,7 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
     }
     Py_DECREF(data);
     return code;
+#endif // Pyston change
 }
 
 /* Get the code object associated with the module specified by
@@ -1164,8 +1173,14 @@ get_module_code(ZipImporter *self, char *fullname,
             int ispackage = zso->type & IS_PACKAGE;
             int isbytecode = zso->type & IS_BYTECODE;
 
-            if (isbytecode)
-                mtime = get_mtime_of_source(self, path);
+
+            if (isbytecode) {
+                // Pyston change: We don't support bytecode archives currently
+                // mtime = get_mtime_of_source(self, path);
+                PyErr_Format(ZipImportError, "Pyston can't load bytecode from archives yet. ' '%.200s'", fullname);
+                return NULL;
+            }
+
             if (p_ispackage != NULL)
                 *p_ispackage = ispackage;
             code = get_code_from_data(self, ispackage,
@@ -1254,4 +1269,8 @@ initzipimport(void)
     if (PyModule_AddObject(mod, "_zip_directory_cache",
                            zip_directory_cache) < 0)
         return;
+
+    // Pyston change: register zip module import hook
+    PyObject* zipimporter = PyObject_GetAttrString(mod, "zipimporter");
+    PyList_Append(PySys_GetObject("path_hooks"), zipimporter);
 }

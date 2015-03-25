@@ -67,9 +67,7 @@ public:
 
     uint8_t readByte() {
         ensure(1);
-        assert(end > start && "premature eof");
-        if (VERBOSITY("parsing") >= 2)
-            printf("readByte, now %d %d\n", start + 1, end);
+        RELEASE_ASSERT(end > start, "premature eof");
         return buf[start++];
     }
     uint16_t readShort() { return (readByte() << 8) | (readByte()); }
@@ -101,16 +99,20 @@ AST_stmt* readASTStmt(BufferedReader* reader);
 
 static std::string readString(BufferedReader* reader) {
     int strlen = reader->readShort();
-    std::vector<char> chars;
+    llvm::SmallString<32> chars;
     for (int i = 0; i < strlen; i++) {
         chars.push_back(reader->readByte());
     }
-    return std::string(chars.begin(), chars.end());
+    return chars.str().str();
 }
 
 InternedString BufferedReader::readAndInternString() {
-    std::string str = readString(this);
-    return intern_pool->get(std::move(str));
+    int strlen = readShort();
+    llvm::SmallString<32> chars;
+    for (int i = 0; i < strlen; i++) {
+        chars.push_back(readByte());
+    }
+    return intern_pool->get(chars.str());
 }
 
 void BufferedReader::readAndInternStringVector(std::vector<InternedString>& v) {
@@ -640,6 +642,16 @@ AST_Set* read_set(BufferedReader* reader) {
     return rtn;
 }
 
+AST_SetComp* read_setcomp(BufferedReader* reader) {
+    AST_SetComp* rtn = new AST_SetComp();
+
+    rtn->col_offset = readColOffset(reader);
+    rtn->elt = readASTExpr(reader);
+    readMiscVector(rtn->generators, reader);
+    rtn->lineno = reader->readULL();
+    return rtn;
+}
+
 AST_Slice* read_slice(BufferedReader* reader) {
     AST_Slice* rtn = new AST_Slice();
 
@@ -805,6 +817,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_repr(reader);
         case AST_TYPE::Set:
             return read_set(reader);
+        case AST_TYPE::SetComp:
+            return read_setcomp(reader);
         case AST_TYPE::Slice:
             return read_slice(reader);
         case AST_TYPE::Str:
@@ -1042,7 +1056,10 @@ AST_Module* caching_parse_file(const char* fn) {
     code = stat(cache_fn.c_str(), &cache_stat);
     if (code != 0 || cache_stat.st_mtime < source_stat.st_mtime
         || (cache_stat.st_mtime == source_stat.st_mtime && cache_stat.st_mtim.tv_nsec < source_stat.st_mtim.tv_nsec)) {
-        _reparse(fn, cache_fn);
+        auto result = _reparse(fn, cache_fn);
+        if (result == ParseResult::PYC_UNWRITABLE)
+            return parse_file(fn);
+
         code = stat(cache_fn.c_str(), &cache_stat);
         assert(code == 0);
     }
@@ -1083,11 +1100,9 @@ AST_Module* caching_parse_file(const char* fn) {
         if (!good) {
             fclose(fp);
             auto result = _reparse(fn, cache_fn);
-            if (result == ParseResult::PYC_UNWRITABLE) {
-                if (VERBOSITY())
-                    printf("Unable to write to %s, falling back to non-caching parse\n", cache_fn.c_str());
+            if (result == ParseResult::PYC_UNWRITABLE)
                 return parse_file(fn);
-            }
+
             code = stat(cache_fn.c_str(), &cache_stat);
             assert(code == 0);
 

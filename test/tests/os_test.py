@@ -1,4 +1,4 @@
-# allow-warning: converting unicode literal to str
+#
 
 # currently broken:
 # import os.path

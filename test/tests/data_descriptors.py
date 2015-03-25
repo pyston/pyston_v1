@@ -34,8 +34,8 @@ C.ndd = 7
 #TODO it would be nice to print these out (once __dict__ is implemented)
 #print C.__dict__['dd']
 #print C.__dict__['ndd']
-print c.dd
-print c.ndd
+print C.dd
+print C.ndd
 
 # Repeat all of the above for subclasses of the descriptors
 

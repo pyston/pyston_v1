@@ -94,6 +94,8 @@ TYPE_MAP = {
         _ast.UAdd: 85,
         _ast.FloorDiv: 86,
         _ast.Ellipsis: 87,
+        _ast.Expression: 88,
+        _ast.SetComp: 89,
     }
 
 if sys.version_info >= (2,7):

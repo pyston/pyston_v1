@@ -36,6 +36,7 @@ extern "C" void raise0() __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
+void _printStacktrace();
 
 extern "C" Box* deopt(AST_expr* expr, Box* value);
 
@@ -51,6 +52,7 @@ extern "C" void my_assert(bool b);
 extern "C" Box* getattr(Box* obj, const char* attr);
 extern "C" void setattr(Box* obj, const char* attr, Box* attr_val);
 extern "C" void delattr(Box* obj, const char* attr);
+extern "C" void delattrGeneric(Box* obj, const std::string& attr, DelattrRewriteArgs* rewrite_args);
 extern "C" bool nonzero(Box* obj);
 extern "C" Box* runtimeCall(Box*, ArgPassSpec, Box*, Box*, Box*, Box**, const std::vector<const std::string*>*);
 extern "C" Box* callattr(Box*, const std::string*, CallattrFlags, ArgPassSpec, Box*, Box*, Box*, Box**,
@@ -90,11 +92,12 @@ Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
 extern "C" Box* getiterHelper(Box* o);
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
+extern "C" bool hasnext(Box* o);
 
 extern "C" void dump(void* p);
 
 struct SetattrRewriteArgs;
-void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
+void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
 
 struct BinopRewriteArgs;
 extern "C" Box* binopInternal(Box* lhs, Box* rhs, int op_type, bool inplace, BinopRewriteArgs* rewrite_args);
@@ -121,7 +124,7 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args);
-Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
+Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
@@ -147,7 +150,15 @@ static const char* objectNewParameterTypeErrorMsg() {
     }
 }
 
-bool exceptionMatches(const ExcInfo& e, BoxedClass* cls);
+// This function will ascii-encode any unicode objects it gets passed, or return the argument
+// unmodified if it wasn't a unicode object.
+// This is intended for functions that deal with attribute or variable names, which we internally
+// assume will always be strings, but CPython lets be unicode.
+// If we used an encoding like utf8 instead of ascii, we would allow collisions between unicode
+// strings and a string that happens to be its encoding.  It seems safer to just encode as ascii,
+// which will throw an exception if you try to pass something that might run into this risk.
+// (We wrap the unicode error and throw a TypeError)
+Box* coerceUnicodeToStr(Box* unicode);
 
 inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int num_args) {
     Box* arg1 = num_args >= 1 ? args[0] : nullptr;

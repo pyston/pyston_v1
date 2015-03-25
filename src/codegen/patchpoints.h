@@ -105,6 +105,7 @@ public:
         Delitem,
         Binexp,
         Nonzero,
+        Hasnext,
     };
 
 private:
@@ -146,6 +147,7 @@ ICSetupInfo* createSetitemIC(TypeRecorder* type_recorder);
 ICSetupInfo* createDelitemIC(TypeRecorder* type_recorder);
 ICSetupInfo* createBinexpIC(TypeRecorder* type_recorder);
 ICSetupInfo* createNonzeroIC(TypeRecorder* type_recorder);
+ICSetupInfo* createHasnextIC(TypeRecorder* type_recorder);
 
 } // namespace pyston
 

@@ -19,7 +19,8 @@
 #ifdef WITH_THREAD
 #include "pythread.h"
 
-
+// Pyston change: changed to use our internal API
+/*
 #define PySSL_BEGIN_ALLOW_THREADS { \
             PyThreadState *_save = NULL;  \
             if (_ssl_locks_count>0) {_save = PyEval_SaveThread();}
@@ -27,6 +28,13 @@
 #define PySSL_UNBLOCK_THREADS   if (_ssl_locks_count>0){_save = PyEval_SaveThread()};
 #define PySSL_END_ALLOW_THREADS if (_ssl_locks_count>0){PyEval_RestoreThread(_save);} \
          }
+*/
+#define PySSL_BEGIN_ALLOW_THREADS { \
+                                    if (_ssl_locks_count>0) beginAllowThreads();
+#define PySSL_BLOCK_THREADS         if (_ssl_locks_count>0) endAllowThreads();
+#define PySSL_UNBLOCK_THREADS       if (_ssl_locks_count>0) beginAllowThreads();
+#define PySSL_END_ALLOW_THREADS     if (_ssl_locks_count>0) endAllowThreads(); \
+                                  }
 
 #else   /* no WITH_THREAD */
 
@@ -1744,6 +1752,9 @@ init_ssl(void)
     unsigned int major, minor, fix, patch, status;
 
     Py_TYPE(&PySSL_Type) = &PyType_Type;
+
+    // Pyston change
+    PyType_Ready(&PySSL_Type);
 
     m = Py_InitModule3("_ssl", PySSL_methods, module_doc);
     if (m == NULL)

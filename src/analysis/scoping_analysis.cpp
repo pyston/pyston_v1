@@ -302,7 +302,6 @@ public:
     // bool visit_classdef(AST_ClassDef *node) override { return false; }
     bool visit_continue(AST_Continue* node) override { return false; }
     bool visit_dict(AST_Dict* node) override { return false; }
-    bool visit_dictcomp(AST_DictComp* node) override { return false; }
     bool visit_excepthandler(AST_ExceptHandler* node) override { return false; }
     bool visit_expr(AST_Expr* node) override { return false; }
     bool visit_for(AST_For* node) override { return false; }
@@ -334,11 +333,8 @@ public:
     bool visit_while(AST_While* node) override { return false; }
     bool visit_with(AST_With* node) override { return false; }
     bool visit_yield(AST_Yield* node) override { return false; }
-
     bool visit_branch(AST_Branch* node) override { return false; }
     bool visit_jump(AST_Jump* node) override { return false; }
-
-
     bool visit_delete(AST_Delete* node) override { return false; }
 
     bool visit_global(AST_Global* node) override {
@@ -401,25 +397,39 @@ public:
         }
     }
 
-    bool visit_generatorexp(AST_GeneratorExp* node) override {
+    // helper methods for visit_{generatorexp,dictcomp,setcomp}
+    void visit_comp_values(AST_GeneratorExp* node) { node->elt->accept(this); }
+    void visit_comp_values(AST_SetComp* node) { node->elt->accept(this); }
+    void visit_comp_values(AST_DictComp* node) {
+        node->key->accept(this);
+        node->value->accept(this);
+    }
+
+    template <typename CompType> bool visit_comp(CompType* node) {
+        // NB. comprehensions evaluate their first for-subject's expression outside of the function scope they create.
         if (node == orig_node) {
             bool first = true;
             for (AST_comprehension* c : node->generators) {
                 if (!first)
                     c->iter->accept(this);
+                for (auto i : c->ifs)
+                    i->accept(this);
                 c->target->accept(this);
                 first = false;
             }
 
-            node->elt->accept(this);
+            visit_comp_values(node);
         } else {
             node->generators[0]->iter->accept(this);
             (*map)[node] = new ScopingAnalysis::ScopeNameUsage(node, cur, scoping);
             collect(node, map, scoping);
         }
-
         return true;
     }
+
+    bool visit_generatorexp(AST_GeneratorExp* node) override { return visit_comp(node); }
+    bool visit_dictcomp(AST_DictComp* node) override { return visit_comp(node); }
+    bool visit_setcomp(AST_SetComp* node) override { return visit_comp(node); }
 
     bool visit_lambda(AST_Lambda* node) override {
         if (node == orig_node) {
@@ -560,7 +570,9 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             }
             case AST_TYPE::FunctionDef:
             case AST_TYPE::Lambda:
-            case AST_TYPE::GeneratorExp: {
+            case AST_TYPE::GeneratorExp:
+            case AST_TYPE::DictComp:
+            case AST_TYPE::SetComp: {
                 ScopeInfoBase* scopeInfo
                     = new ScopeInfoBase(parent_info, usage, usage->node, false /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
@@ -627,6 +639,7 @@ ScopingAnalysis* runScopingAnalysis(AST_Module* m) {
 }
 
 ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
-    scopes[e] = getScopeInfoForNode(e);
+    auto scope_info = getScopeInfoForNode(e);
+    scopes[e] = scope_info;
 }
 }

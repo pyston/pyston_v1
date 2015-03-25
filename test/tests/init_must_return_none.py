@@ -1,3 +1,4 @@
+# should_error
 # As the test filename says, init functions must return None.
 # This file tests that; it also makes sure that it gets tested
 # when in a patchpoint.

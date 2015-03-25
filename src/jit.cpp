@@ -27,6 +27,8 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
 
+#include "osdefs.h"
+
 #include "codegen/entry.h"
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
@@ -37,6 +39,7 @@
 #include "core/threading.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/import.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -45,23 +48,28 @@
 #error
 #endif
 
-using namespace pyston;
+namespace pyston {
 
 // returns true iff we got a request to exit, i.e. SystemExit, placing the
 // return code in `*retcode`. does not touch `*retcode* if it returns false.
 static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
     if (e.matches(SystemExit)) {
         Box* code = e.value->getattr("code");
-        *retcode = 1;
-        if (code && isSubclass(code->cls, pyston::int_cls))
+
+        if (!code || code == None)
+            *retcode = 0;
+        else if (isSubclass(code->cls, int_cls))
             *retcode = static_cast<BoxedInt*>(code)->n;
+        else
+            *retcode = 1;
+
         return true;
     }
     e.printExcAndTraceback();
     return false;
 }
 
-int main(int argc, char** argv) {
+static int main(int argc, char** argv) {
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
     // llvm::PrettyStackTraceProgram X(argc, argv);
@@ -71,7 +79,7 @@ int main(int argc, char** argv) {
     bool force_repl = false;
     bool stats = false;
     const char* command = NULL;
-    while ((code = getopt(argc, argv, "+OqdIibpjtrsvnxc:")) != -1) {
+    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -94,6 +102,8 @@ int main(int argc, char** argv) {
             DUMPJIT = true;
         } else if (code == 's') {
             stats = true;
+        } else if (code == 'S') {
+            Py_NoSiteFlag = 1;
         } else if (code == 'r') {
             USE_STRIPPED_STDLIB = true;
         } else if (code == 'b') {
@@ -112,6 +122,8 @@ int main(int argc, char** argv) {
 
     threading::registerMainThread();
     threading::acquireGLRead();
+
+    Py_SetProgramName(argv[0]);
 
     {
         Timer _t("for initCodegen");
@@ -137,20 +149,29 @@ int main(int argc, char** argv) {
         addToSysArgv(argv[i]);
     }
 
-    std::string self_path = llvm::sys::fs::getMainExecutable(argv[0], (void*)main);
-    assert(self_path.size());
+    llvm::StringRef module_search_path = Py_GetPath();
+    while (true) {
+        std::pair<llvm::StringRef, llvm::StringRef> split_str = module_search_path.split(DELIM);
+        if (split_str.first == module_search_path)
+            break; // could not find the delimiter
+        appendToSysPath(split_str.first);
+        module_search_path = split_str.second;
+    }
 
-    llvm::SmallString<128> stdlib_dir(self_path);
-    llvm::sys::path::remove_filename(stdlib_dir); // executable name
-    llvm::sys::path::append(stdlib_dir, "from_cpython");
-    llvm::sys::path::append(stdlib_dir, "Lib");
-    appendToSysPath(stdlib_dir.c_str());
+    if (!fn) {
+        // if we are in repl or command mode prepend "" to the path
+        prependToSysPath("");
+    }
 
-    // go from ./from_cpython/Lib to ./lib_pyston
-    llvm::sys::path::remove_filename(stdlib_dir);
-    llvm::sys::path::remove_filename(stdlib_dir);
-    llvm::sys::path::append(stdlib_dir, "lib_pyston");
-    appendToSysPath(stdlib_dir.c_str());
+    if (!Py_NoSiteFlag) {
+        try {
+            std::string module_name = "site";
+            importModuleLevel(&module_name, None, None, 0);
+        } catch (ExcInfo e) {
+            e.printExcAndTraceback();
+            return 1;
+        }
+    }
 
     // end of argument parsing
 
@@ -166,6 +187,8 @@ int main(int argc, char** argv) {
         } catch (ExcInfo e) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
+            if (stats)
+                Stats::dump();
             return retcode;
         }
     }
@@ -184,12 +207,18 @@ int main(int argc, char** argv) {
         llvm::sys::path::remove_filename(path);
         prependToSysPath(path.str());
 
+        main_module = createModule("__main__", fn);
         try {
-            main_module = createAndRunModule("__main__", fn);
+            AST_Module* ast = caching_parse_file(fn);
+            compileAndRunModule(ast, main_module);
         } catch (ExcInfo e) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
-            return retcode;
+            if (!force_repl) {
+                if (stats)
+                    Stats::dump();
+                return retcode;
+            }
         }
     }
 
@@ -210,34 +239,37 @@ int main(int argc, char** argv) {
 
             add_history(line);
 
-            AST_Module* m = parse_string(line);
-
-            Timer _t("repl");
-
-            if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
-                AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
-                AST_Call* c = new AST_Call();
-                AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
-                c->func = r;
-                c->starargs = NULL;
-                c->kwargs = NULL;
-                c->args.push_back(e->value);
-                c->lineno = 0;
-
-                AST_Print* p = new AST_Print();
-                p->dest = NULL;
-                p->nl = true;
-                p->values.push_back(c);
-                p->lineno = 0;
-                m->body[0] = p;
-            }
-
             try {
+                AST_Module* m = parse_string(line);
+
+                Timer _t("repl");
+
+                if (m->body.size() > 0 && m->body[0]->type == AST_TYPE::Expr) {
+                    AST_Expr* e = ast_cast<AST_Expr>(m->body[0]);
+                    AST_Call* c = new AST_Call();
+                    AST_Name* r = new AST_Name(m->interned_strings->get("repr"), AST_TYPE::Load, 0);
+                    c->func = r;
+                    c->starargs = NULL;
+                    c->kwargs = NULL;
+                    c->args.push_back(e->value);
+                    c->lineno = 0;
+
+                    AST_Print* p = new AST_Print();
+                    p->dest = NULL;
+                    p->nl = true;
+                    p->values.push_back(c);
+                    p->lineno = 0;
+                    m->body[0] = p;
+                }
+
                 compileAndRunModule(m, main_module);
             } catch (ExcInfo e) {
                 int retcode = 0xdeadbeef; // should never be seen
-                if (handle_toplevel_exn(e, &retcode))
+                if (handle_toplevel_exn(e, &retcode)) {
+                    if (stats)
+                        Stats::dump();
                     return retcode;
+                }
             }
         }
     }
@@ -254,8 +286,14 @@ int main(int argc, char** argv) {
     int rtncode = joinRuntime();
     _t.split("finishing up");
 
-    if (VERBOSITY() >= 1 || stats)
+    if (stats)
         Stats::dump();
 
     return rtncode;
+}
+
+} // namespace pyston
+
+int main(int argc, char** argv) {
+    return pyston::main(argc, argv);
 }

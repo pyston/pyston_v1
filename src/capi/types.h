@@ -98,6 +98,7 @@ public:
     DEFAULT_CLASS(wrapperdescr_cls);
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+    static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
 };
 
 class BoxedWrapperObject : public Box {
@@ -119,11 +120,13 @@ public:
         assert(self->descr->wrapper->offset > 0);
 
         Box* rtn;
-        if (flags & PyWrapperFlag_KEYWORDS) {
+        if (flags == PyWrapperFlag_KEYWORDS) {
             wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
             rtn = (*wk)(self->obj, args, self->descr->wrapped, kwds);
-        } else {
+        } else if (flags == 0) {
             rtn = (*wrapper)(self->obj, args, self->descr->wrapped);
+        } else {
+            RELEASE_ASSERT(0, "%d", flags);
         }
 
         checkAndThrowCAPIException();
@@ -144,10 +147,20 @@ public:
     static Box* __get__(BoxedMethodDescriptor* self, Box* inst, Box* owner) {
         RELEASE_ASSERT(self->cls == method_cls, "");
 
+        // CPython handles this differently: they create the equivalent of different BoxedMethodDescriptor
+        // objects but with different class objects, which define different __get__ and __call__ methods.
+        if (self->method->ml_flags & METH_CLASS)
+            return boxInstanceMethod(owner, self);
+
+        if (self->method->ml_flags & METH_STATIC)
+            Py_FatalError("unimplemented");
+        if (self->method->ml_flags & METH_COEXIST)
+            Py_FatalError("unimplemented");
+
         if (inst == None)
             return self;
-        // CPython apparently returns a "builtin_function_or_method" object
-        return boxInstanceMethod(inst, self);
+        else
+            return boxInstanceMethod(inst, self);
     }
 
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);

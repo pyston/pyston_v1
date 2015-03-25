@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include <llvm/ADT/StringMap.h>
 #include <ucontext.h>
 
 #include "Python.h"
@@ -64,6 +65,7 @@ void teardownCAPI();
 void setupGenerator();
 void setupDescr();
 void teardownDescr();
+void setupCode();
 
 void setupSys();
 void setupBuiltins();
@@ -84,6 +86,7 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
     *builtin_function_or_method_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
+#define memoryview_cls (&PyMemoryView_Type)
 
 extern "C" {
 extern Box* None, *NotImplemented, *True, *False;
@@ -188,6 +191,14 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
+    typedef bool (*pyston_inquiry)(Box*);
+
+    // tpp_descr_get is currently just a cache only for the use of tp_descr_get, and shouldn't
+    // be called or examined by clients:
+    descrgetfunc tpp_descr_get;
+
+    pyston_inquiry tpp_hasnext;
+
     bool hasGenericGetattr() { return tp_getattr == NULL; }
 
     void freeze();
@@ -198,9 +209,11 @@ protected:
     // creation due to bootstrapping issues.
     void finishInitialization();
 
-    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined);
+    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+               bool is_user_defined);
 
     friend void setupRuntime();
+    friend void setupSysEnd();
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -215,18 +228,21 @@ public:
 
     // These functions are the preferred way to construct new types:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int instance_size, bool is_user_defined, BoxedString* name, BoxedTuple* bases);
+                                  int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
+                                  BoxedTuple* bases);
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
-                                  int instance_size, bool is_user_defined, const std::string& name);
+                                  int weaklist_offset, int instance_size, bool is_user_defined,
+                                  const std::string& name);
 
 private:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
-    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size, bool is_user_defined,
-                   BoxedString* name);
+    BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+                   bool is_user_defined, BoxedString* name);
 
     friend void setupRuntime();
+    friend void setupSys();
 
     DEFAULT_CLASS(type_cls);
 };
@@ -249,9 +265,28 @@ static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 
 
 class HiddenClass : public GCAllocated<gc::GCKind::HIDDEN_CLASS> {
+public:
+    // We have a couple different storage strategies for attributes, which
+    // are distinguished by having a different hidden class type.
+    enum HCType {
+        NORMAL,      // attributes stored in attributes array, name->offset map stored in hidden class
+        DICT_BACKED, // first attribute in array is a dict-like object which stores the attributes
+    } const type;
+
+    static HiddenClass* dict_backed;
+
 private:
-    HiddenClass() {}
-    HiddenClass(const HiddenClass* parent) : attr_offsets(parent->attr_offsets) {}
+    HiddenClass(HCType type) : type(type) {}
+    HiddenClass(HiddenClass* parent) : type(NORMAL), attr_offsets() {
+        assert(parent->type == NORMAL);
+        for (auto& p : parent->attr_offsets) {
+            this->attr_offsets.insert(&p);
+        }
+    }
+
+    // Only makes sense for NORMAL hidden classes.  Clients should access through getAttrOffsets():
+    llvm::StringMap<int> attr_offsets;
+    llvm::StringMap<HiddenClass*> children;
 
 public:
     static HiddenClass* makeRoot() {
@@ -260,27 +295,45 @@ public:
         assert(!made);
         made = true;
 #endif
-        return new HiddenClass();
+        return new HiddenClass(NORMAL);
+    }
+    static HiddenClass* makeDictBacked() {
+#ifndef NDEBUG
+        static bool made = false;
+        assert(!made);
+        made = true;
+#endif
+        return new HiddenClass(DICT_BACKED);
     }
 
-    std::unordered_map<std::string, int> attr_offsets;
-    std::unordered_map<std::string, HiddenClass*> children;
+    void gc_visit(GCVisitor* visitor) {
+        // Visit children even for the dict-backed case, since children will just be empty
+        for (const auto& p : children) {
+            visitor->visit(p.second);
+        }
+    }
 
+
+    // Only makes sense for NORMAL hidden classes:
+    const llvm::StringMap<int>& getAttrOffsets() {
+        assert(type == NORMAL);
+        return attr_offsets;
+    }
+
+    // Only makes sense for NORMAL hidden classes:
     HiddenClass* getOrMakeChild(const std::string& attr);
 
+    // Only makes sense for NORMAL hidden classes:
     int getOffset(const std::string& attr) {
+        assert(type == NORMAL);
         auto it = attr_offsets.find(attr);
         if (it == attr_offsets.end())
             return -1;
         return it->second;
     }
-    HiddenClass* delAttrToMakeHC(const std::string& attr);
 
-    void gc_visit(GCVisitor* visitor) {
-        for (const auto& p : children) {
-            visitor->visit(p.second);
-        }
-    }
+    // Only makes sense for NORMAL hidden classes:
+    HiddenClass* delAttrToMakeHC(const std::string& attr);
 };
 
 class BoxedInt : public Box {
@@ -426,7 +479,6 @@ class BoxedFunctionBase : public Box {
 public:
     Box** in_weakreflist;
 
-    HCAttrs attrs;
     CLFunction* f;
     BoxedClosure* closure;
 
@@ -439,6 +491,7 @@ public:
     // Accessed via member descriptor
     Box* modname;      // __module__
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
+    Box* doc;          // __doc__
 
     BoxedFunctionBase(CLFunction* f);
     BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
@@ -447,6 +500,8 @@ public:
 
 class BoxedFunction : public BoxedFunctionBase {
 public:
+    HCAttrs attrs;
+
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
                   bool isGenerator = false);
@@ -456,9 +511,9 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name);
+    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc = NULL);
     BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
-                                 BoxedClosure* closure = NULL, bool isGenerator = false);
+                                 BoxedClosure* closure = NULL, bool isGenerator = false, const char* doc = NULL);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
 };
@@ -466,10 +521,12 @@ public:
 class BoxedModule : public Box {
 public:
     HCAttrs attrs;
-    std::string fn; // for traceback purposes; not the same as __file__
+
+    // for traceback purposes; not the same as __file__.  This corresponds to co_filename
+    std::string fn;
     FutureFlags future_flags;
 
-    BoxedModule(const std::string& name, const std::string& fn);
+    BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
     std::string name();
 
     DEFAULT_CLASS(module_cls);
@@ -574,7 +631,8 @@ public:
 
 class BoxedGenerator : public Box {
 public:
-    HCAttrs attrs;
+    Box** weakreflist;
+
     BoxedFunctionBase* function;
     Box* arg1, *arg2, *arg3;
     GCdArray* args;
@@ -595,6 +653,7 @@ public:
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* objectNewNoArgs(BoxedClass* cls);
+Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* makeAttrWrapper(Box* b);
 
@@ -621,5 +680,12 @@ Box* makeAttrWrapper(Box* b);
 
 // Our default for tp_alloc:
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept;
+
+// A descriptor that you can add to your class to provide instances with a __dict__ accessor.
+// Classes created in Python get this automatically, but builtin types (including extension types)
+// are supposed to add one themselves.  type_cls and function_cls do this, for example.
+extern Box* dict_descr;
+
+Box* codeForFunction(BoxedFunction*);
 }
 #endif

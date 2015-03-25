@@ -15,13 +15,18 @@
 #ifndef PYSTON_ASMWRITING_TYPES_H
 #define PYSTON_ASMWRITING_TYPES_H
 
+#include "core/common.h"
+
 namespace pyston {
 
 struct StackInfo {
-    int stack_size;
+    int scratch_size;
+    int scratch_rsp_offset;
 
-    int scratch_bytes;
-    int scratch_rbp_offset;
+    StackInfo(int scratch_size, int scratch_rsp_offset)
+        : scratch_size(scratch_size), scratch_rsp_offset(scratch_rsp_offset) {
+        assert(scratch_rsp_offset >= 0);
+    }
 };
 
 namespace assembler {

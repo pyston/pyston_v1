@@ -1,6 +1,3 @@
-# skip-if: '-x' in EXTRA_JIT_ARGS
-# allow-warning: import level 0 will be treated as -1
-
 print repr(unicode())
 print repr(unicode('hello world'))
 
@@ -30,19 +27,17 @@ print hash(u'') == hash('')
 print "Hello " + u" World"
 print u"Hello " + " World"
 
-try:
-    hasattr(object(), u"\u0180")
-except UnicodeEncodeError as e:
-    print e
-
 def p(x):
     return [hex(ord(i)) for i in x]
 s = u"\u20AC" # euro sign
+print p(u"\N{EURO SIGN}")
 print p(s) 
 print p(s.encode("utf8"))
 print p(s.encode("utf16"))
 print p(s.encode("utf32"))
 print p(s.encode("iso_8859_15"))
+print p(s.encode(u"utf8"))
+print p("hello world".encode(u"utf8"))
 
 print repr(u' '.join(["hello", "world"]))
 
@@ -57,3 +52,92 @@ for i in xrange(100):
     # do some allocations:
     for j in xrange(100):
         [None] * j
+
+print u'' in ''
+print '' in u''
+print u'aoeu' in ''
+print u'\u0180' in 'hello world'
+print 'hello world' in u'\u0180'
+print u''.__contains__('')
+print ''.__contains__(u'')
+
+class C(object):
+    a = 1
+    # We don't support this, with or without unicode:
+    # locals()[u'b'] = 2
+c = C()
+print getattr(c, u'a')
+# print c.b
+c.__dict__[u'c'] = 3
+print c.c
+print getattr(c, u'c')
+delattr(c, u'c')
+print hasattr(c, u'c')
+
+def f(a):
+    print a
+f(a=1)
+f(**{'a':2})
+f(**{u'a':3})
+
+print repr('%s' % u'') # this gives a unicode object!
+
+print repr('hello world'.replace(u'hello', u'hi'))
+
+print "hello world".endswith(u'hello')
+print "hello world".endswith(u'world')
+print "hello world".startswith(u'hello')
+print "hello world".startswith(u'world')
+
+print float(u'1.0')
+
+print unichr(97)
+
+print "hello world".split(u'l')
+print "hello world".rsplit(u'l')
+
+with open(u"/dev/null", u"r") as f:
+    print f.read()
+
+class CustomRepr(object):
+    def __init__(self, x):
+        self.x = x
+
+    def __str__(self):
+        return self.x
+
+    def __repr__(self):
+        return self.x
+
+print repr(str(CustomRepr(u'')))
+print repr(repr(CustomRepr(u'')))
+
+try:
+    str(CustomRepr(u'\u0180'))
+except Exception as e:
+    print type(e), e
+try:
+    repr(CustomRepr(u'\u0180'))
+except Exception as e:
+    print type(e), e
+try:
+    str(CustomRepr(1))
+except Exception as e:
+    print type(e), e
+try:
+    repr(CustomRepr(1))
+except Exception as e:
+    print type(e), e
+
+class MyStr(str):
+    pass
+
+print type(str(CustomRepr(MyStr("hi"))))
+
+print type(MyStr("hi").__str__())
+print type(str(MyStr("hi")))
+
+class C(object):
+    def __repr__(self):
+        return u"hello world"
+print [C()], set([C()]), {1:C()}

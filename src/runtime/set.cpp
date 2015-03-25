@@ -66,6 +66,11 @@ Box* setiteratorNext(BoxedSetIterator* self) {
     return self->next();
 }
 
+Box* setiteratorIter(BoxedSetIterator* self) {
+    assert(self->cls == set_iterator_cls);
+    return self;
+}
+
 Box* setAdd2(Box* _self, Box* b) {
     assert(_self->cls == set_cls || _self->cls == frozenset_cls);
     BoxedSet* self = static_cast<BoxedSet*>(_self);
@@ -207,6 +212,16 @@ Box* setRemove(BoxedSet* self, Box* v) {
     return None;
 }
 
+Box* setDiscard(BoxedSet* self, Box* v) {
+    assert(self->cls == set_cls);
+
+    auto it = self->s.find(v);
+    if (it != self->s.end())
+        self->s.erase(it);
+
+    return None;
+}
+
 Box* setClear(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls);
     self->s.clear();
@@ -231,23 +246,143 @@ Box* setUpdate(BoxedSet* self, BoxedTuple* args) {
     return None;
 }
 
+Box* setUnion(BoxedSet* self, BoxedTuple* args) {
+    if (!isSubclass(self->cls, set_cls))
+        raiseExcHelper(TypeError, "descriptor 'union' requires a 'set' object but received a '%s'", getTypeName(self));
+
+    BoxedSet* rtn = new BoxedSet();
+    rtn->s.insert(self->s.begin(), self->s.end());
+
+    for (auto container : args->pyElements()) {
+        for (auto elt : container->pyElements()) {
+            rtn->s.insert(elt);
+        }
+    }
+
+    return rtn;
+}
+
+static BoxedSet* setIntersection2(BoxedSet* self, Box* container) {
+    assert(self->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+    for (auto elt : container->pyElements()) {
+        if (self->s.count(elt))
+            rtn->s.insert(elt);
+    }
+    return rtn;
+}
+
+static Box* setIssubset(BoxedSet* self, Box* container) {
+    assert(self->cls == set_cls);
+    RELEASE_ASSERT(container->cls == set_cls, "");
+
+    BoxedSet* rhs = static_cast<BoxedSet*>(container);
+    for (auto e : self->s) {
+        if (rhs->s.find(e) == rhs->s.end())
+            return False;
+    }
+    return True;
+}
+
+static Box* setIssuperset(BoxedSet* self, Box* container) {
+    assert(self->cls == set_cls);
+    RELEASE_ASSERT(container->cls == set_cls, "");
+
+    BoxedSet* rhs = static_cast<BoxedSet*>(container);
+    for (auto e : rhs->s) {
+        if (self->s.find(e) == self->s.end())
+            return False;
+    }
+    return True;
+}
+
+Box* setIntersection(BoxedSet* self, BoxedTuple* args) {
+    if (!isSubclass(self->cls, set_cls))
+        raiseExcHelper(TypeError, "descriptor 'intersection' requires a 'set' object but received a '%s'",
+                       getTypeName(self));
+
+    BoxedSet* rtn = self;
+    for (auto container : args->pyElements()) {
+        rtn = setIntersection2(rtn, container);
+    }
+    return rtn;
+}
+
+Box* setCopy(BoxedSet* self) {
+    assert(self->cls == set_cls);
+
+    BoxedSet* rtn = new BoxedSet();
+    rtn->s.insert(self->s.begin(), self->s.end());
+    return rtn;
+}
+
+Box* setPop(BoxedSet* self) {
+    assert(self->cls == set_cls);
+
+    if (!self->s.size())
+        raiseExcHelper(KeyError, "pop from an empty set");
+
+    auto it = self->s.begin();
+    Box* rtn = *it;
+    self->s.erase(it);
+    return rtn;
+}
+
 Box* setContains(BoxedSet* self, Box* v) {
     assert(self->cls == set_cls || self->cls == frozenset_cls);
     return boxBool(self->s.count(v) != 0);
+}
+
+Box* setEq(BoxedSet* self, BoxedSet* rhs) {
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
+    if (rhs->cls != set_cls && rhs->cls != frozenset_cls)
+        return NotImplemented;
+
+    if (self->s.size() != rhs->s.size())
+        return False;
+
+    for (auto e : self->s) {
+        if (!rhs->s.count(e))
+            return False;
+    }
+    return True;
+}
+
+Box* setNe(BoxedSet* self, BoxedSet* rhs) {
+    Box* r = setEq(self, rhs);
+    if (r->cls == bool_cls)
+        return boxBool(r == False);
+    assert(r == NotImplemented);
+    return r;
 }
 
 Box* setNonzero(BoxedSet* self) {
     return boxBool(self->s.size());
 }
 
+Box* setHash(BoxedSet* self) {
+    RELEASE_ASSERT(isSubclass(self->cls, frozenset_cls), "");
+
+    int64_t rtn = 1927868237L;
+    for (Box* e : self->s) {
+        BoxedInt* h = hash(e);
+        assert(isSubclass(h->cls, int_cls));
+        rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
+    }
+
+    return boxInt(rtn);
+}
 
 } // namespace set
 
 using namespace pyston::set;
 
 void setupSet() {
-    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, sizeof(BoxedSet), false,
-                                              "setiterator");
+    set_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &setIteratorGCHandler, 0, 0, sizeof(BoxedSet),
+                                              false, "setiterator");
+    set_iterator_cls->giveAttr(
+        "__iter__", new BoxedFunction(boxRTFunction((void*)setiteratorIter, typeFromClass(set_iterator_cls), 1)));
     set_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)setiteratorHasnext, BOXED_BOOL, 1)));
     set_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)setiteratorNext, UNKNOWN, 1)));
@@ -304,14 +439,30 @@ void setupSet() {
     set_cls->giveAttr("__contains__", new BoxedFunction(boxRTFunction((void*)setContains, BOXED_BOOL, 2)));
     frozenset_cls->giveAttr("__contains__", set_cls->getattr("__contains__"));
 
+    set_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)setEq, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("__eq__", set_cls->getattr("__eq__"));
+    set_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)setNe, UNKNOWN, 2)));
+    frozenset_cls->giveAttr("__ne__", set_cls->getattr("__ne__"));
+
     set_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)setNonzero, BOXED_BOOL, 1)));
     frozenset_cls->giveAttr("__nonzero__", set_cls->getattr("__nonzero__"));
 
+    frozenset_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)setHash, BOXED_INT, 1)));
+
     set_cls->giveAttr("add", new BoxedFunction(boxRTFunction((void*)setAdd, NONE, 2)));
     set_cls->giveAttr("remove", new BoxedFunction(boxRTFunction((void*)setRemove, NONE, 2)));
+    set_cls->giveAttr("discard", new BoxedFunction(boxRTFunction((void*)setDiscard, NONE, 2)));
 
     set_cls->giveAttr("clear", new BoxedFunction(boxRTFunction((void*)setClear, NONE, 1)));
     set_cls->giveAttr("update", new BoxedFunction(boxRTFunction((void*)setUpdate, NONE, 1, 0, true, false)));
+    set_cls->giveAttr("union", new BoxedFunction(boxRTFunction((void*)setUnion, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("intersection",
+                      new BoxedFunction(boxRTFunction((void*)setIntersection, UNKNOWN, 1, 0, true, false)));
+    set_cls->giveAttr("issubset", new BoxedFunction(boxRTFunction((void*)setIssubset, UNKNOWN, 2)));
+    set_cls->giveAttr("issuperset", new BoxedFunction(boxRTFunction((void*)setIssuperset, UNKNOWN, 2)));
+
+    set_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)setCopy, UNKNOWN, 1)));
+    set_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)setPop, UNKNOWN, 1)));
 
     set_cls->freeze();
     frozenset_cls->freeze();

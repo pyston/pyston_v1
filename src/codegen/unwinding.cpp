@@ -43,6 +43,9 @@
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
+namespace {
+int _dummy_ = unw_set_caching_policy(unw_local_addr_space, UNW_CACHE_PER_THREAD);
+}
 
 // Definition from libunwind, but standardized I suppose by the format of the .eh_frame_hdr section:
 struct uw_table_entry {
@@ -461,8 +464,8 @@ PythonFrameIterator::Manager unwindPythonFrames() {
 
 static std::unique_ptr<PythonFrameIterator> getTopPythonFrame() {
     std::unique_ptr<PythonFrameIterator> fr = PythonFrameIterator::begin();
-    RELEASE_ASSERT(fr != PythonFrameIterator::end(), "no valid python frames??");
-
+    if (fr == PythonFrameIterator::end())
+        return std::unique_ptr<PythonFrameIterator>();
     return fr;
 }
 
@@ -475,6 +478,7 @@ static const LineInfo* lineInfoForFrame(PythonFrameIterator& frame_it) {
     return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->parent_module->fn, source->getName());
 }
 
+static StatCounter us_gettraceback("us_gettraceback");
 BoxedTraceback* getTraceback() {
     if (!ENABLE_FRAME_INTROSPECTION) {
         static bool printed_warning = false;
@@ -485,6 +489,8 @@ BoxedTraceback* getTraceback() {
         return new BoxedTraceback();
     }
 
+    Timer _t("getTraceback");
+
     std::vector<const LineInfo*> entries;
     for (auto& frame_info : unwindPythonFrames()) {
         const LineInfo* line_info = lineInfoForFrame(frame_info);
@@ -493,6 +499,10 @@ BoxedTraceback* getTraceback() {
     }
 
     std::reverse(entries.begin(), entries.end());
+
+    long us = _t.end();
+    us_gettraceback.log(us);
+
     return new BoxedTraceback(std::move(entries));
 }
 
@@ -522,8 +532,9 @@ ExcInfo* getFrameExcInfo() {
         *copy_from_exc = ExcInfo(None, None, None);
     }
 
-    assert(copy_from_exc->value);
-    assert(copy_from_exc->traceback);
+    assert(gc::isValidGCObject(copy_from_exc->type));
+    assert(gc::isValidGCObject(copy_from_exc->value));
+    assert(gc::isValidGCObject(copy_from_exc->traceback));
 
     for (auto* ex : to_update) {
         *ex = *copy_from_exc;
@@ -533,12 +544,16 @@ ExcInfo* getFrameExcInfo() {
 }
 
 CompiledFunction* getTopCompiledFunction() {
+    auto rtn = getTopPythonFrame();
+    if (!rtn)
+        return NULL;
     return getTopPythonFrame()->getCF();
 }
 
 BoxedModule* getCurrentModule() {
     CompiledFunction* compiledFunction = getTopCompiledFunction();
-    assert(compiledFunction);
+    if (!compiledFunction)
+        return NULL;
     return compiledFunction->clfunc->source->parent_module;
 }
 
@@ -643,8 +658,8 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
             // Add the locals from the closure
             for (; closure != NULL; closure = closure->parent) {
                 assert(closure->cls == closure_cls);
-                for (auto& attr_offset : closure->attrs.hcls->attr_offsets) {
-                    const std::string& name = attr_offset.first;
+                for (auto& attr_offset : closure->attrs.hcls->getAttrOffsets()) {
+                    const std::string& name = attr_offset.first();
                     int offset = attr_offset.second;
                     Box* val = closure->attrs.attr_list->attrs[offset];
                     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();

@@ -14,7 +14,8 @@ print 1 ** 0
 print 0 ** 0
 print -1 ** 0
 
-
+for i in (-10, 10, 0, -15):
+    print i, i.__hex__(), i.__oct__()
 
 # Testing int.__new__:
 class C(int):
@@ -60,3 +61,15 @@ class L(object):
     def __int__(self):
         return 1L
 print type(int(L()))
+
+print int(u'123')
+
+for b in range(26):
+    try:
+        print int('123', b)
+    except ValueError as e:
+        print e
+    try:
+        print int(u'123', b)
+    except ValueError as e:
+        print e

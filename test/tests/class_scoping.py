@@ -66,8 +66,6 @@ class C3(object):
     print __module__
 print C3.__module__
 
-"""
-# not supported (del)
 print
 class C4(object):
     print __module__
@@ -78,7 +76,6 @@ class C4(object):
     except NameError:
         pass
 print C4.__module__
-"""
 
 class C5(object):
     try:

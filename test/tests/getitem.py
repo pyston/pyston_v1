@@ -21,4 +21,7 @@ c = C()
 c.__getitem__ = gi
 print c[1]
 
-print 1[1]
+try:
+    print 1[1]
+except TypeError, e:
+    print e

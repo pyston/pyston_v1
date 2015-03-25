@@ -5,7 +5,7 @@ for k in sorted(dir(resource)):
         continue
     print k, getattr(resource, k)
 
-TIME_LIMIT = 100
+TIME_LIMIT = 5
 resource.setrlimit(resource.RLIMIT_CPU, (TIME_LIMIT + 1, TIME_LIMIT + 1))
 
 MAX_MEM_MB = 100

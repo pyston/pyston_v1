@@ -53,6 +53,15 @@ for i in xrange(5):
 list_index = [1, 2, 3, 4, 5]
 for i in xrange(1, 6):
     assert list_index.index(i) == i-1
+    try:
+        print list_index.index(i, 3, 4)
+    except ValueError as e:
+        print e
+    try:
+        print list_index.index(i, -1, -1)
+    except ValueError as e:
+        print e
+        
 assert list_index.index(3) == 2
 assert [1, '2'].index('2') == 1
 
@@ -128,4 +137,19 @@ try:
     print sorted(l, key=lambda i:1.0/(5-i))
 except ZeroDivisionError:
     pass
+print l
+
+idxs = [-100, -50, -5, -1, 0, 1, 5, 50, 100]
+for i1 in idxs:
+    for i2 in idxs:
+        l = range(10)
+        del l[i1:i2]
+        print i1, i2, l
+
+l = []
+del l[:]
+print l
+
+l = range(5)
+l[2:4] = tuple(range(2))
 print l

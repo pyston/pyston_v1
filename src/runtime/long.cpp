@@ -18,6 +18,8 @@
 #include <gmp.h>
 #include <sstream>
 
+#include "llvm/Support/raw_ostream.h"
+
 #include "core/common.h"
 #include "core/options.h"
 #include "core/stats.h"
@@ -78,7 +80,12 @@ extern "C" int _PyLong_AsInt(PyObject* obj) noexcept {
     return (int)result;
 }
 
-extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* op) noexcept {
+extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject* vv) noexcept {
+    if (PyLong_Check(vv)) {
+        BoxedLong* l = static_cast<BoxedLong*>(vv);
+        return mpz_get_ui(l->n);
+    }
+
     Py_FatalError("unimplemented");
 }
 
@@ -87,6 +94,14 @@ extern "C" unsigned PY_LONG_LONG PyLong_AsUnsignedLongLongMask(PyObject* vv) noe
 }
 
 extern "C" PY_LONG_LONG PyLong_AsLongLong(PyObject* vv) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PY_LONG_LONG PyLong_AsLongLongAndOverflow(PyObject* obj, int* overflow) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyObject* PyLong_FromString(const char* str, char** pend, int base) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -132,10 +147,29 @@ extern "C" unsigned long PyLong_AsUnsignedLong(PyObject* vv) noexcept {
 }
 
 extern "C" long PyLong_AsLong(PyObject* vv) noexcept {
+    int overflow;
+    long result = PyLong_AsLongAndOverflow(vv, &overflow);
+    if (overflow) {
+        /* XXX: could be cute and give a different
+           message for overflow == -1 */
+        PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C long");
+    }
+    return result;
+}
+
+extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject* vv) noexcept {
     RELEASE_ASSERT(PyLong_Check(vv), "");
-    BoxedLong* l = static_cast<BoxedLong*>(vv);
-    RELEASE_ASSERT(mpz_fits_slong_p(l->n), "");
-    return mpz_get_si(l->n);
+
+    if (PyLong_Check(vv)) {
+        BoxedLong* l = static_cast<BoxedLong*>(vv);
+        if (mpz_fits_slong_p(l->n)) {
+            return mpz_get_si(l->n);
+        } else {
+            PyErr_SetString(PyExc_OverflowError, "long int too large to convert to int");
+            return -1;
+        }
+    }
+    Py_FatalError("unimplemented");
 }
 
 extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
@@ -151,18 +185,35 @@ extern "C" long PyLong_AsLongAndOverflow(Box* vv, int* overflow) noexcept {
     if (PyInt_Check(vv))
         return PyInt_AsLong(vv);
 
-    if (PyLong_Check(vv)) {
-        BoxedLong* l = static_cast<BoxedLong*>(vv);
-        if (mpz_fits_slong_p(l->n)) {
-            return mpz_get_si(l->n);
-        } else {
-            *overflow = mpz_sgn(l->n);
+    if (!PyLong_Check(vv)) {
+        PyNumberMethods* nb;
+        nb = vv->cls->tp_as_number;
+        if (nb == NULL || nb->nb_int == NULL) {
+            PyErr_SetString(PyExc_TypeError, "an integer is required");
             return -1;
         }
+
+        vv = (*nb->nb_int)(vv);
+        if (vv == NULL)
+            return -1;
+
+        if (PyInt_Check(vv))
+            return PyInt_AsLong(vv);
+
+        if (!PyLong_Check(vv)) {
+            PyErr_SetString(PyExc_TypeError, "nb_int should return int object");
+            return -1;
+        }
+        // fallthrough: this has to be a long
     }
 
-    // TODO CPython tries to go through tp_as_number
-    Py_FatalError("unsupported case");
+    BoxedLong* l = static_cast<BoxedLong*>(vv);
+    if (mpz_fits_slong_p(l->n)) {
+        return mpz_get_si(l->n);
+    } else {
+        *overflow = mpz_sgn(l->n);
+        return -1;
+    }
 }
 
 extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
@@ -171,8 +222,47 @@ extern "C" double PyLong_AsDouble(PyObject* vv) noexcept {
     return mpz_get_d(l->n);
 }
 
+/* Convert the long to a string object with given base,
+   appending a base prefix of 0[box] if base is 2, 8 or 16.
+   Add a trailing "L" if addL is non-zero.
+   If newstyle is zero, then use the pre-2.6 behavior of octal having
+   a leading "0", instead of the prefix "0o" */
 extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL, int newstyle) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedLong* v = (BoxedLong*)aa;
+
+    RELEASE_ASSERT(isSubclass(v->cls, long_cls), "");
+    RELEASE_ASSERT(base >= 2 && base <= 62, "");
+
+    bool is_negative = mpz_sgn(v->n) == -1;
+
+    int space_required = mpz_sizeinbase(v->n, base) + 2;
+    char* buf = (char*)malloc(space_required);
+    mpz_get_str(buf, base, v->n);
+
+    std::string str;
+    llvm::raw_string_ostream os(str);
+    if (is_negative)
+        os << '-';
+
+    if (base == 2)
+        os << "0b";
+    else if (base == 8)
+        os << (newstyle ? "0o" : "0");
+    else if (base == 16)
+        os << "0x";
+
+    if (is_negative)
+        os << buf + 1; // +1 to remove sign
+    else
+        os << buf;
+
+    if (addL)
+        os << "L";
+
+    os.flush();
+    auto rtn = new BoxedString(std::move(str));
+    free(buf);
+    return rtn;
 }
 
 extern "C" PyObject* PyLong_FromDouble(double v) noexcept {
@@ -284,11 +374,6 @@ extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
     if (n == 0)
         return PyLong_FromLong(0);
 
-    if (is_signed) {
-        Py_FatalError("unimplemented");
-        return 0;
-    }
-
     if (!little_endian) {
         // TODO: check if the behaviour of mpz_import is right when big endian is specified.
         Py_FatalError("unimplemented");
@@ -298,6 +383,17 @@ extern "C" PyObject* _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
     BoxedLong* rtn = new BoxedLong();
     mpz_init(rtn->n);
     mpz_import(rtn->n, 1, 1, n, little_endian ? -1 : 1, 0, &bytes[0]);
+
+
+    RELEASE_ASSERT(little_endian, "");
+    if (is_signed && bytes[n - 1] >= 0x80) { // todo add big endian support
+        mpz_t t;
+        mpz_init(t);
+        mpz_setbit(t, n * 8);
+        mpz_sub(rtn->n, rtn->n, t);
+        mpz_clear(t);
+    }
+
     return rtn;
 }
 
@@ -363,6 +459,8 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             const std::string& s = static_cast<BoxedString*>(val)->s;
             int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
             RELEASE_ASSERT(r == 0, "");
+        } else if (val->cls == float_cls) {
+            mpz_init_set_si(rtn->n, static_cast<BoxedFloat*>(val)->d);
         } else {
             static const std::string long_str("__long__");
             Box* r = callattr(val, &long_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
@@ -421,30 +519,25 @@ Box* longInt(Box* v) {
 Box* longRepr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__repr__' requires a 'long' object but received a '%s'", getTypeName(v));
-
-    int space_required = mpz_sizeinbase(v->n, 10) + 2; // basic size
-    space_required += 1;                               // 'L' suffix
-    char* buf = (char*)malloc(space_required);
-    mpz_get_str(buf, 10, v->n);
-    strcat(buf, "L");
-
-    auto rtn = new BoxedString(buf);
-    free(buf);
-
-    return rtn;
+    return _PyLong_Format(v, 10, 1 /* add L */, 0);
 }
 
 Box* longStr(BoxedLong* v) {
     if (!isSubclass(v->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__str__' requires a 'long' object but received a '%s'", getTypeName(v));
-    int space_required = mpz_sizeinbase(v->n, 10) + 2;
-    char* buf = (char*)malloc(space_required);
-    mpz_get_str(buf, 10, v->n);
+    return _PyLong_Format(v, 10, 0 /* no L */, 0);
+}
 
-    auto rtn = new BoxedString(buf);
-    free(buf);
+Box* longHex(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__hex__' requires a 'long' object but received a '%s'", getTypeName(v));
+    return _PyLong_Format(v, 16, 1 /* add L */, 0);
+}
 
-    return rtn;
+Box* longOct(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__oct__' requires a 'long' object but received a '%s'", getTypeName(v));
+    return _PyLong_Format(v, 8, 1 /* add L */, 0);
 }
 
 Box* longNeg(BoxedLong* v1) {
@@ -491,6 +584,7 @@ Box* longAdd(BoxedLong* v1, Box* _v2) {
     }
 }
 
+// TODO: split common code out into a helper function
 extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__and__' requires a 'long' object but received a '%s'", getTypeName(v1));
@@ -512,6 +606,32 @@ extern "C" Box* longAnd(BoxedLong* v1, Box* _v2) {
             mpz_init_set_si(v2_long, v2_int->n);
 
         mpz_and(r->n, v1->n, v2_long);
+        return r;
+    }
+    return NotImplemented;
+}
+
+extern "C" Box* longOr(BoxedLong* v1, Box* _v2) {
+    if (!isSubclass(v1->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__or__' requires a 'long' object but received a '%s'", getTypeName(v1));
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_ior(r->n, v1->n, v2->n);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2_int = static_cast<BoxedInt*>(_v2);
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_t v2_long;
+        mpz_init(v2_long);
+        if (v2_int->n >= 0)
+            mpz_init_set_ui(v2_long, v2_int->n);
+        else
+            mpz_init_set_si(v2_long, v2_int->n);
+
+        mpz_ior(r->n, v1->n, v2_long);
         return r;
     }
     return NotImplemented;
@@ -856,18 +976,37 @@ Box* longPow(BoxedLong* v1, Box* _v2) {
     if (!isSubclass(v1->cls, long_cls))
         raiseExcHelper(TypeError, "descriptor '__pow__' requires a 'long' object but received a '%s'", getTypeName(v1));
 
-    if (!isSubclass(_v2->cls, long_cls))
+    if (isSubclass(_v2->cls, long_cls)) {
+        BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
+
+        RELEASE_ASSERT(mpz_sgn(v2->n) >= 0, "");
+        RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
+        uint64_t n2 = mpz_get_ui(v2->n);
+
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_pow_ui(r->n, v1->n, n2);
+        return r;
+    } else if (isSubclass(_v2->cls, int_cls)) {
+        BoxedInt* v2 = static_cast<BoxedInt*>(_v2);
+        RELEASE_ASSERT(v2->n >= 0, "");
+        BoxedLong* r = new BoxedLong();
+        mpz_init(r->n);
+        mpz_pow_ui(r->n, v1->n, v2->n);
+        return r;
+    } else {
         return NotImplemented;
+    }
+}
 
-    BoxedLong* v2 = static_cast<BoxedLong*>(_v2);
-
-    RELEASE_ASSERT(mpz_sgn(v2->n) >= 0, "");
-    RELEASE_ASSERT(mpz_fits_ulong_p(v2->n), "");
-    uint64_t n2 = mpz_get_ui(v2->n);
+extern "C" Box* longInvert(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__invert__' requires a 'long' object but received a '%s'",
+                       getTypeName(v));
 
     BoxedLong* r = new BoxedLong();
     mpz_init(r->n);
-    mpz_pow_ui(r->n, v1->n, n2);
+    mpz_com(r->n, v->n);
     return r;
 }
 
@@ -894,6 +1033,14 @@ Box* longHash(BoxedLong* self) {
     };
     d = mpz_get_d(self->n);
     return boxInt(n);
+}
+
+extern "C" Box* longTrunc(BoxedLong* self) {
+    if (!isSubclass(self->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'long' object but received a '%s'",
+                       getTypeName(self));
+
+    return self;
 }
 
 void* customised_allocation(size_t alloc_size) {
@@ -928,8 +1075,12 @@ void setupLong() {
     long_cls->giveAttr("__add__", new BoxedFunction(boxRTFunction((void*)longAdd, UNKNOWN, 2)));
     long_cls->giveAttr("__radd__", long_cls->getattr("__add__"));
 
+    long_cls->giveAttr("__pow__", new BoxedFunction(boxRTFunction((void*)longPow, UNKNOWN, 2)));
+
     long_cls->giveAttr("__and__", new BoxedFunction(boxRTFunction((void*)longAnd, UNKNOWN, 2)));
     long_cls->giveAttr("__rand__", long_cls->getattr("__and__"));
+    long_cls->giveAttr("__or__", new BoxedFunction(boxRTFunction((void*)longOr, UNKNOWN, 2)));
+    long_cls->giveAttr("__ror__", long_cls->getattr("__or__"));
     long_cls->giveAttr("__xor__", new BoxedFunction(boxRTFunction((void*)longXor, UNKNOWN, 2)));
     long_cls->giveAttr("__rxor__", long_cls->getattr("__xor__"));
 
@@ -946,9 +1097,15 @@ void setupLong() {
     long_cls->giveAttr("__int__", new BoxedFunction(boxRTFunction((void*)longInt, UNKNOWN, 1)));
     long_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)longRepr, STR, 1)));
     long_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)longStr, STR, 1)));
+    long_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)longHex, STR, 1)));
+    long_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)longOct, STR, 1)));
 
+    long_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)longInvert, UNKNOWN, 1)));
+    long_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)longNeg, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
+
+    long_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)longTrunc, UNKNOWN, 1)));
 
     long_cls->freeze();
 }

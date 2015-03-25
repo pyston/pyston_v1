@@ -3,11 +3,14 @@ compiler:
   - clang
 # - gcc
 
+cache:
+  apt: true
+
 install:
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
   - sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
   - sudo apt-get -qq update
-  - sudo apt-get install -yqq git cmake ninja-build libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils
+  - sudo apt-get install -yqq git cmake ninja-build libsqlite3-dev libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils
   - if [ "$CXX" = "clang++" ]; then sudo apt-get install -qq clang-3.4 libstdc++-4.8-dev; fi
   - if [ "$CXX" = "g++" ]; then sudo apt-get install -qq g++-4.8; fi
   - if [ "$CXX" = "g++" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi

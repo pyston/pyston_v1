@@ -101,6 +101,17 @@ const std::string SourceInfo::getName() {
     }
 }
 
+Box* SourceInfo::getDocString() {
+    AST_Str* first_str = NULL;
+
+    if (body.size() > 0 && body[0]->type == AST_TYPE::Expr
+        && static_cast<AST_Expr*>(body[0])->value->type == AST_TYPE::Str) {
+        return boxString(static_cast<AST_Str*>(static_cast<AST_Expr*>(body[0])->value)->str_data);
+    }
+
+    return None;
+}
+
 ScopeInfo* SourceInfo::getScopeInfo() {
     return scoping->getScopeInfoForNode(ast);
 }
@@ -173,11 +184,12 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
-    ASSERT(f->versions.size() < 20, "%ld", f->versions.size());
     SourceInfo* source = f->source;
     assert(source);
 
     std::string name = source->getName();
+
+    ASSERT(f->versions.size() < 20, "%s %ld", name.c_str(), f->versions.size());
 
     if (VERBOSITY("irgen") >= 1) {
         std::string s;
@@ -201,6 +213,13 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         ss << "\033[0m";
         printf("%s\n", ss.str().c_str());
     }
+
+#ifndef NDEBUG
+    if (effort == EffortLevel::INTERPRETED) {
+        for (auto arg_type : spec->arg_types)
+            assert(arg_type == UNKNOWN);
+    }
+#endif
 
     // Do the analysis now if we had deferred it earlier:
     if (source->cfg == NULL) {
@@ -289,6 +308,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+
+        bm->setattr("__doc__", si->getDocString(), NULL);
 
         EffortLevel effort = initialEffort();
 

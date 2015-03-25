@@ -14,15 +14,16 @@
 
 #!/usr/bin/env python
 
+import Queue
+import argparse
 import cPickle
 import datetime
 import functools
-import getopt
 import glob
 import os
-import Queue
 import re
 import resource
+import shutil
 import signal
 import subprocess
 import sys
@@ -52,19 +53,22 @@ def set_ulimits():
     MAX_MEM_MB = 100
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
-EXTMODULE_DIR = os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/"
-_extmodule_mtime = None
-def get_extmodule_mtime():
-    global _extmodule_mtime
-    if _extmodule_mtime is not None:
-        return _extmodule_mtime
+EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
+THIS_FILE = os.path.abspath(__file__)
+_global_mtime = None
+def get_global_mtime():
+    global _global_mtime
+    if _global_mtime is not None:
+        return _global_mtime
 
-    rtn = 0
+    # Start off by depending on the tester itself
+    rtn = os.stat(THIS_FILE).st_mtime
+
     for fn in os.listdir(EXTMODULE_DIR):
         if not fn.endswith(".so"):
             continue
         rtn = max(rtn, os.stat(os.path.join(EXTMODULE_DIR, fn)).st_mtime)
-    _extmodule_mtime = rtn
+    _global_mtime = rtn
     return rtn
 
 def get_expected_output(fn):
@@ -77,7 +81,7 @@ def get_expected_output(fn):
     cache_fn = fn[:-3] + ".expected_cache"
     if os.path.exists(cache_fn):
         cache_mtime = os.stat(cache_fn).st_mtime
-        if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_extmodule_mtime():
+        if cache_mtime > os.stat(fn).st_mtime and cache_mtime > get_global_mtime():
             try:
                 return cPickle.load(open(cache_fn))
             except (EOFError, ValueError):
@@ -121,12 +125,13 @@ def canonicalize_stderr(stderr):
 
 failed = []
 def run_test(fn, check_stats, run_memcheck):
-    r = fn.rjust(FN_JUST_SIZE)
+    r = os.path.basename(fn).rjust(FN_JUST_SIZE)
 
     statchecks = []
     jit_args = ["-rq"] + EXTRA_JIT_ARGS
     collect_stats = True
     expected = "success"
+    should_error = False
     allow_warnings = []
     for l in open(fn):
         l = l.strip()
@@ -142,6 +147,8 @@ def run_test(fn, check_stats, run_memcheck):
             jit_args += l
         elif l.startswith("# expected:"):
             expected = l[len("# expected:"):].strip()
+        elif l.startswith("# should_error"):
+            should_error = True
         elif l.startswith("# fail-if:"):
             condition = l.split(':', 1)[1].strip()
             if eval(condition):
@@ -189,7 +196,7 @@ def run_test(fn, check_stats, run_memcheck):
         out = "\n".join(out_lines)
 
     stats = None
-    if code == 0 and collect_stats:
+    if code >= 0 and collect_stats:
         stats = {}
         assert out.count("Stats:") == 1
         out, stats_str = out.split("Stats:")
@@ -217,13 +224,29 @@ def run_test(fn, check_stats, run_memcheck):
         if expected == "fail":
             r += "    Expected failure (got code %d, should be %d)" % (code, expected_code)
             return r
+        elif KEEP_GOING:
+            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
+            failed.append(fn)
+            return r
         else:
-            if KEEP_GOING:
-                r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
-                failed.append(fn)
-                return r
-            else:
-                raise Exception("%s\n%s\n%s" % (msg, err, stderr))
+            raise Exception("%s\n%s\n%s" % (msg, err, stderr))
+
+    elif should_error == (code == 0):
+        color = 31              # red
+        if code == 0:
+            msg = "Exited successfully; remove '# should_error' if this is expected"
+        else:
+            msg = "Exited with code %d; add '# should_error' if this is expected" % code
+
+        if KEEP_GOING:
+            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
+            failed.append(fn)
+            return r
+        else:
+            # show last line of stderr so we have some idea went wrong
+            print "Last line of stderr: " + last_stderr_line
+            raise Exception(msg)
+
     elif out != expected_out:
         if expected == "fail":
             r += "    Expected failure (bad output)"
@@ -348,34 +371,48 @@ def fileSize(fn):
     return os.stat(fn).st_size
     # return len(list(open(fn)))
 
-if __name__ == "__main__":
+# our arguments
+parser = argparse.ArgumentParser(description='Runs Pyston tests.')
+parser.add_argument('-m', '--run-memcheck', action='store_true', help='run memcheck')
+parser.add_argument('-j', '--num-threads', metavar='N', type=int, default=NUM_THREADS,
+                    help='number of threads')
+parser.add_argument('-k', '--keep-going', default=KEEP_GOING, action='store_true',
+                    help='keep going after test failure')
+parser.add_argument('-R', '--image', default=IMAGE,
+                    help='the executable to test (default: %s)' % IMAGE)
+parser.add_argument('-K', '--no-keep-going', dest='keep_going', action='store_false',
+                    help='quit after test failure')
+parser.add_argument('-a', '--extra-args', default=[], action='append',
+                    help="additional arguments to pyston (must be invoked with equal sign: -a=-ARG)")
+parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
+                    help='set time limit in seconds for each test')
+
+parser.add_argument('test_dir')
+parser.add_argument('patterns', nargs='*')
+
+def main(orig_dir):
+    global KEEP_GOING
+    global IMAGE
+    global EXTRA_JIT_ARGS
+    global TIME_LIMIT
+    global TEST_DIR
+    global FN_JUST_SIZE
+
     run_memcheck = False
     start = 1
 
-    opts, patterns = getopt.gnu_getopt(sys.argv[1:], "j:a:t:mR:kK")
-    for (t, v) in opts:
-        if t == '-m':
-            run_memcheck = True
-        elif t == '-j':
-            NUM_THREADS = int(v)
-            assert NUM_THREADS > 0
-        elif t == '-R':
-            IMAGE = v
-        elif t == '-k':
-            KEEP_GOING = True
-        elif t == '-K':
-            KEEP_GOING = False
-        elif t == '-a':
-            EXTRA_JIT_ARGS.append(v)
-        elif t == '-t':
-            TIME_LIMIT = int(v)
-        else:
-            raise Exception((t, v))
+    opts = parser.parse_args()
+    run_memcheck = opts.run_memcheck
+    NUM_THREADS = opts.num_threads
+    IMAGE = os.path.join(orig_dir, opts.image)
+    KEEP_GOING = opts.keep_going
+    EXTRA_JIT_ARGS += opts.extra_args
+    TIME_LIMIT = opts.time_limit
 
-    TEST_DIR = patterns[0]
+    TEST_DIR = os.path.join(orig_dir, opts.test_dir)
+    patterns = opts.patterns
+
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
-
-    patterns = patterns[1:]
 
     TOSKIP = ["%s/%s.py" % (TEST_DIR, i) for i in (
         "tuple_depth",
@@ -392,7 +429,6 @@ if __name__ == "__main__":
         for t in tests:
             l.append("%s/%s.py" % (TEST_DIR, t))
     skip = functools.partial(_addto, TOSKIP)
-    nostat = functools.partial(_addto, IGNORE_STATS)
 
     if not patterns:
         skip(["t", "t2"])
@@ -438,7 +474,7 @@ if __name__ == "__main__":
         print >>sys.stderr, "No tests specified!"
         sys.exit(1)
 
-    FN_JUST_SIZE = max(20, 2 + max(map(len, tests)))
+    FN_JUST_SIZE = max(20, 2 + max(len(os.path.basename(fn)) for fn in tests))
 
     if TEST_PYPY:
         IMAGE = '/usr/local/bin/pypy'
@@ -462,7 +498,7 @@ if __name__ == "__main__":
 
     for fn in tests:
         if fn in TOSKIP:
-            print fn.rjust(FN_JUST_SIZE),
+            print os.path.basename(fn).rjust(FN_JUST_SIZE),
             print "   Skipping"
             continue
 
@@ -488,3 +524,12 @@ if __name__ == "__main__":
 
     if failed:
         sys.exit(1)
+
+if __name__ == "__main__":
+    origdir = os.getcwd()
+    tmpdir = tempfile.mkdtemp()
+    os.chdir(tmpdir)
+    try:
+        main(origdir)
+    finally:
+        shutil.rmtree(tmpdir)

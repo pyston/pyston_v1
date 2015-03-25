@@ -237,6 +237,7 @@ public:
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override;
     ConcreteCompilerVariable* nonzero(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
+    ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override;
 
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
                  CompilerVariable* v) override {
@@ -703,6 +704,24 @@ ConcreteCompilerVariable* UnknownType::nonzero(IREmitter& emitter, const OpInfo&
         rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
     } else {
         rtn_val = emitter.createCall(info.unw_info, g.funcs.nonzero, var->getValue());
+    }
+    return boolFromI1(emitter, rtn_val);
+}
+
+ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) {
+    bool do_patchpoint = ENABLE_ICS && !info.isInterpreted();
+    do_patchpoint = false; // we are currently using runtime ics for this
+    llvm::Value* rtn_val;
+    if (do_patchpoint) {
+        ICSetupInfo* pp = createHasnextIC(info.getTypeRecorder());
+
+        std::vector<llvm::Value*> llvm_args;
+        llvm_args.push_back(var->getValue());
+
+        llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::hasnext, llvm_args, info.unw_info);
+        rtn_val = emitter.getBuilder()->CreateTrunc(uncasted, g.i1);
+    } else {
+        rtn_val = emitter.createCall(info.unw_info, g.funcs.hasnext, var->getValue());
     }
     return boolFromI1(emitter, rtn_val);
 }
@@ -1419,6 +1438,7 @@ public:
     }
 
     CompilerType* getattrType(const std::string* attr, bool cls_only) override {
+        // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL)
@@ -1429,7 +1449,8 @@ public:
                 return AbstractFunctionType::fromRT(static_cast<BoxedFunction*>(rtattr), true);
                 // return typeFromClass(instancemethod_cls);
             } else {
-                return typeFromClass(rtattr->cls);
+                // Have to follow the descriptor protocol here
+                return UNKNOWN;
             }
         }
 
@@ -1443,7 +1464,7 @@ public:
 
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) override {
-        // printf("%s.getattr %s\n", debugName().c_str(), attr->c_str());
+        // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
             Box* rtattr = cls->getattr(*attr);
             if (rtattr == NULL) {
@@ -1719,6 +1740,18 @@ public:
         }
 
         return UNKNOWN->nonzero(emitter, info, var);
+    }
+
+    ConcreteCompilerVariable* hasnext(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var) override {
+        static const std::string attr("__hasnext__");
+
+        ConcreteCompilerVariable* called_constant
+            = tryCallattrConstant(emitter, info, var, &attr, true, ArgPassSpec(0, 0, 0, 0), {}, NULL, NULL);
+
+        if (called_constant)
+            return called_constant;
+
+        return UNKNOWN->hasnext(emitter, info, var);
     }
 
     static NormalObjectType* fromClass(BoxedClass* cls) {
@@ -2252,6 +2285,11 @@ public:
 
     CompilerVariable* binexp(IREmitter& emitter, const OpInfo& info, VAR* var, CompilerVariable* rhs,
                              AST_TYPE::AST_TYPE op_type, BinExpType exp_type) override {
+        return undefVariable();
+    }
+
+    CompilerVariable* getitem(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
+                              CompilerVariable* slice) override {
         return undefVariable();
     }
 

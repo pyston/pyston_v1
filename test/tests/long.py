@@ -8,13 +8,15 @@ for i in xrange(150):
     print t, repr(t)
 
 def test(a, b):
-    print a, b
+    print repr(a), repr(b)
     print a + b, b + a, a.__add__(b), b.__add__(a)
     print a - b, b - a, a.__sub__(b), b.__sub__(a)
     print a * b, b * a, a.__mul__(b), b.__mul__(a)
     print a / b, b / a, a.__div__(b), b.__div__(a)
     print repr(a), repr(b), a < b, a > b, a <= b, a >= b, a == b, a != b
-    # print a ^ b, a | b, a & b
+    if not isinstance(a, float) and not isinstance(b, float):
+        print a ^ b, a | b, a & b
+        print a.__hex__(), b.__hex__(), a.__oct__(), b.__oct__()
 
 
 print 1L / 5L
@@ -22,9 +24,12 @@ print -1L / 5L
 print 1L / -5L
 print -1L / -5L
 
-for a in [-5, -1, 1, 5, -2L, -1L, 1L, 2L]:
+for a in [-5, -1, 1, 5, -2L, -1L, 1L, 2L, 15L]:
     for b in [-5, -1, 1, 5, -2L, -1L, 1L, 2L]:
         test(a, b)
+
+test(1L, 2.0)
+test(3.0, 2L)
 
 print (2L).__rdiv__(-1)
 print (2L).__rdiv__(-1L)
@@ -33,6 +38,8 @@ print (-2L).__rdiv__(1)
 
 print (1L) << (2L)
 print (1L) << (2)
+print (1) << (1L)
+print (1) << (128L)
 try:
     print (1L) << (-1L)
 except ValueError, e:
@@ -42,9 +49,20 @@ try:
 except ValueError, e:
     print e
 
+print ~(1L)
+print ~(10L)
+print ~(-10L)
+
+print -(1L)
+print 1L**2L
+print 1L**2
+
 print long("100", 16)
 print long("100", 10)
 print long("100", 26)
+print long(-1.1)
+print long(1.9)
+print long(-1.9)
 
 print type(hash(1L))
 print hash(1L) == hash(2L)

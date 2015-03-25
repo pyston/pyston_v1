@@ -29,6 +29,9 @@
 #include "util.h"
 #include "sqlitecompat.h"
 
+// Pyston change: cpython supplies this as a cpp flag
+#define MODULE_NAME "sqlite3"
+
 /* prototypes */
 static int pysqlite_check_remaining_sql(const char* tail);
 

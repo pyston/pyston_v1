@@ -28,7 +28,7 @@ Box* listIterIter(Box* s) {
 }
 
 Box* listIter(Box* s) {
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
     return new BoxedListIterator(self, 0);
 }
@@ -62,7 +62,7 @@ Box* listiterNext(Box* s) {
 
 
 Box* listReversed(Box* s) {
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
     return new (list_reverse_iterator_cls) BoxedListIterator(self, self->size - 1);
 }
@@ -132,7 +132,7 @@ void BoxedList::ensure(int space) {
 extern "C" void listAppendInternal(Box* s, Box* v) {
     // Lock must be held!
 
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     assert(self->size <= self->capacity);
@@ -147,7 +147,7 @@ extern "C" void listAppendInternal(Box* s, Box* v) {
 extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
     // Lock must be held!
 
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     assert(self->size <= self->capacity);
@@ -161,7 +161,7 @@ extern "C" void listAppendArrayInternal(Box* s, Box** v, int nelts) {
 
 // TODO the inliner doesn't want to inline these; is there any point to having them in the inline section?
 extern "C" Box* listAppend(Box* s, Box* v) {
-    assert(s->cls == list_cls);
+    assert(isSubclass(s->cls, list_cls));
     BoxedList* self = static_cast<BoxedList*>(s);
 
     LOCK_REGION(self->lock.asWrite());

@@ -15,7 +15,8 @@ class C(object):
     pass
 
 _x = 1
-__all__ = ['x']
+z = 2
+__all__ = ['x', u'z']
 
 def letMeCallThatForYou(f, *args):
     return f(*args)

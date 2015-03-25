@@ -168,7 +168,7 @@ COMMON_CXXFLAGS += -DGITREV=$(shell git rev-parse HEAD | head -c 12) -DLLVMREV=$
 COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFAULT_PYTHON_MINOR_VERSION=$(PYTHON_MINOR_VERSION) -DDEFAULT_PYTHON_MICRO_VERSION=$(PYTHON_MICRO_VERSION)
 
 # Use our "custom linker" that calls gold if available
-COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp
+COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp -lssl -lcrypto -lsqlite3
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
@@ -179,7 +179,9 @@ COMMON_LDFLAGS += `pkg-config tinfo 2>/dev/null && pkg-config tinfo --libs || ec
 COMMON_LDFLAGS += -Wl,-E
 
 # We get multiple shared libraries (libstdc++, libgcc_s) from the gcc installation:
-COMMON_LDFLAGS += -Wl,-rpath $(GCC_DIR)/lib64
+ifneq ($(GCC_DIR),/usr)
+	COMMON_LDFLAGS += -Wl,-rpath $(GCC_DIR)/lib64
+endif
 
 ifneq ($(USE_DEBUG_LIBUNWIND),0)
 	COMMON_LDFLAGS += -L$(DEPS_DIR)/libunwind-trunk-debug-install/lib
@@ -204,7 +206,6 @@ LDFLAGS := $(LLVM_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_DEBUG := $(LLVM_DEBUG_LDFLAGS) $(COMMON_LDFLAGS)
 LDFLAGS_PROFILE = $(LLVM_PROFILE_LDFLAGS) -pg $(COMMON_LDFLAGS)
 LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
-LDFLAGS_RELEASE := $(LLVM_RELEASE_LDFLAGS) $(COMMON_LDFLAGS)
 # Can't add this, because there are functions in the compiler that look unused but are hooked back from the runtime:
 # LDFLAGS_RELEASE += -Wl,--gc-sections
 
@@ -226,7 +227,8 @@ CLANGFLAGS_RELEASE := $(CXXFLAGS_RELEASE) $(CLANG_EXTRA_FLAGS)
 
 EXT_CFLAGS := $(COMMON_CFLAGS) -fPIC -Wimplicit -O2 -Ifrom_cpython/Include
 EXT_CFLAGS += -Wno-missing-field-initializers
-EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits
+EXT_CFLAGS += -Wno-tautological-compare -Wno-type-limits -Wno-strict-aliasing
+EXT_CFLAGS_PROFILE := $(EXT_CFLAGS) -pg
 ifneq ($(USE_CLANG),0)
 	EXT_CFLAGS += $(CLANG_EXTRA_FLAGS)
 endif
@@ -245,6 +247,7 @@ CLANGFLAGS += -Wno-sign-conversion -Wnon-virtual-dtor -Winit-self -Wimplicit-int
 CXX := $(GPP)
 CC := $(GCC)
 CXX_PROFILE := $(GPP)
+CC_PROFILE := $(GCC)
 CLANG_CXX := $(CLANGPP_EXE)
 
 ifneq ($(USE_CLANG),0)
@@ -294,16 +297,96 @@ STDLIB_OBJS := stdlib.bc.o stdlib.stripped.bc.o
 STDLIB_RELEASE_OBJS := stdlib.release.bc.o
 ASM_SRCS := $(wildcard src/runtime/*.S)
 
-STDMODULE_SRCS := errnomodule.c shamodule.c sha256module.c sha512module.c _math.c mathmodule.c md5.c md5module.c _randommodule.c _sre.c operator.c binascii.c pwdmodule.c posixmodule.c _struct.c datetimemodule.c _functoolsmodule.c _collectionsmodule.c itertoolsmodule.c resource.c signalmodule.c selectmodule.c fcntlmodule.c timemodule.c arraymodule.c zlibmodule.c _codecsmodule.c socketmodule.c unicodedata.c _weakref.c cStringIO.c $(EXTRA_STDMODULE_SRCS)
-STDOBJECT_SRCS := structseq.c capsule.c stringobject.c exceptions.c unicodeobject.c unicodectype.c bytearrayobject.c bytes_methods.c weakrefobject.c $(EXTRA_STDOBJECT_SRCS)
-STDPYTHON_SRCS := pyctype.c getargs.c formatter_string.c pystrtod.c dtoa.c formatter_unicode.c structmember.c $(EXTRA_STDPYTHON_SRCS)
-FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS))
+STDMODULE_SRCS := \
+	errnomodule.c \
+	shamodule.c \
+	sha256module.c \
+	sha512module.c \
+	_math.c \
+	mathmodule.c \
+	md5.c \
+	md5module.c \
+	_randommodule.c \
+	_sre.c \
+	operator.c \
+	binascii.c \
+	pwdmodule.c \
+	posixmodule.c \
+	_struct.c \
+	datetimemodule.c \
+	_functoolsmodule.c \
+	_collectionsmodule.c \
+	itertoolsmodule.c \
+	resource.c \
+	signalmodule.c \
+	selectmodule.c \
+	fcntlmodule.c \
+	timemodule.c \
+	arraymodule.c \
+	zlibmodule.c \
+	_codecsmodule.c \
+	socketmodule.c \
+	unicodedata.c \
+	_weakref.c \
+	cStringIO.c \
+	_io/bufferedio.c \
+	_io/bytesio.c \
+	_io/fileio.c \
+	_io/iobase.c \
+	_io/_iomodule.c \
+	_io/stringio.c \
+	_io/textio.c \
+	zipimport.c \
+	_csv.c \
+	_ssl.c \
+	getpath.c \
+	_sqlite/cache.c \
+	_sqlite/connection.c \
+	_sqlite/cursor.c \
+	_sqlite/microprotocols.c \
+	_sqlite/module.c \
+	_sqlite/prepare_protocol.c \
+	_sqlite/row.c \
+	_sqlite/statement.c \
+	_sqlite/util.c \
+	$(EXTRA_STDMODULE_SRCS)
+
+STDOBJECT_SRCS := \
+	structseq.c \
+	capsule.c \
+	stringobject.c \
+	exceptions.c \
+	unicodeobject.c \
+	unicodectype.c \
+	bytearrayobject.c \
+	bytes_methods.c \
+	weakrefobject.c \
+	memoryobject.c \
+	iterobject.c \
+	bufferobject.c \
+	$(EXTRA_STDOBJECT_SRCS)
+
+STDPYTHON_SRCS := \
+	pyctype.c \
+	getargs.c \
+	formatter_string.c \
+	pystrtod.c \
+	dtoa.c \
+	formatter_unicode.c \
+	structmember.c \
+	marshal.c \
+	$(EXTRA_STDPYTHON_SRCS)
+
+STDPARSER_SRCS := \
+	myreadline.c
+
+FROM_CPYTHON_SRCS := $(addprefix from_cpython/Modules/,$(STDMODULE_SRCS)) $(addprefix from_cpython/Objects/,$(STDOBJECT_SRCS)) $(addprefix from_cpython/Python/,$(STDPYTHON_SRCS)) $(addprefix from_cpython/Parser/,$(STDPARSER_SRCS))
 
 # The stdlib objects have slightly longer dependency chains,
 # so put them first in the list:
 OBJS := $(STDLIB_OBJS) $(SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o) $(ASM_SRCS)
 ASTPRINT_OBJS := $(STDLIB_OBJS) $(BASE_SRCS:.cpp=.o) $(FROM_CPYTHON_SRCS:.c=.o) $(ASM_SRCS)
-PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o) $(ASM_SRCS)
+PROFILE_OBJS := $(STDLIB_RELEASE_OBJS) $(MAIN_SRCS:.cpp=.prof.o) $(STDLIB_SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.prof.o) $(ASM_SRCS)
 OPT_OBJS := $(STDLIB_RELEASE_OBJS) $(SRCS:.cpp=.release.o) $(FROM_CPYTHON_SRCS:.c=.release.o) $(ASM_SRCS)
 
 OPTIONAL_SRCS := src/codegen/profiling/oprofile.cpp src/codegen/profiling/pprof.cpp
@@ -372,13 +455,15 @@ define checksha
 endef
 
 .PHONY: format check_format
+ifneq ($(USE_CMAKE),1)
 format:
 	cd src && find \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(LLVM_BIN)/clang-format -style=file -i
-ifneq ($(USE_CMAKE),1)
 check_format:
 	$(ECHO) checking formatting...
 	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
 else
+format:
+	$(NINJA) -C $(HOME)/pyston-build-release format
 check_format:
 	$(NINJA) -C $(HOME)/pyston-build-release check-format
 endif
@@ -408,14 +493,14 @@ check:
 
 	$(MAKE) run_unittests
 
-	@# jit_prof forces the use of GCC as the compiler, which can expose other errors, so just build it and see what happens:
-	$(MAKE) pyston_prof
-	@# and run some basic tests to make sure it works:
-	$(call checksha,./pyston_prof -q  $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -qn $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
-	$(call checksha,./pyston_prof -qO $(TESTS_DIR)/raytrace_small.py,0544f4621dd45fe94205219488a2576b84dc044d)
+	$(MAKE) pyston_gcc
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 
+	@# It can be useful to test release mode, since it actually exposes different functionality
+	@# since we can make different decisions about which internal functions to inline or not.
+	@# Doing the full check_release is probably overkill though.
 	$(MAKE) check_release
+
 	echo "All tests passed"
 
 quick_check:
@@ -767,6 +852,11 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
+cmake_check:
+	@clang --version >/dev/null || (echo "clang not available"; false)
+	@cmake --version >/dev/null || (echo "cmake not available"; false)
+	@ninja --version >/dev/null || (echo "ninja not available"; false)
+
 ifneq ($(USE_CMAKE),1)
 $(call link,_dbg,$(OBJS),$(LDFLAGS),$(LLVM_DEPS))
 $(call link,_debug,$(OBJS),$(LDFLAGS_DEBUG),$(LLVM_DEBUG_DEPS))
@@ -778,10 +868,6 @@ CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
 .PHONY: cmake_check
-cmake_check:
-	@clang --version >/dev/null || (echo "clang not available"; false)
-	@cmake --version >/dev/null || (echo "cmake not available"; false)
-	@ninja --version >/dev/null || (echo "ninja not available"; false)
 $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
 	@mkdir -p $(CMAKE_DIR_DBG)
@@ -793,12 +879,22 @@ $(CMAKE_SETUP_RELEASE):
 
 .PHONY: pyston_dbg pyston_release
 pyston_dbg: $(CMAKE_SETUP_DBG)
-	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-dbg pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-dbg/pyston pyston_dbg
 pyston_release: $(CMAKE_SETUP_RELEASE)
-	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston $(NINJAFLAGS)
+	$(NINJA) -C $(HOME)/pyston-build-release pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
 	ln -sf $(HOME)/pyston-build-release/pyston pyston_release
 endif
+CMAKE_DIR_GCC := $(HOME)/pyston-build-gcc
+CMAKE_SETUP_GCC := $(CMAKE_DIR_GCC)/build.ninja
+$(CMAKE_SETUP_GCC):
+	@$(MAKE) cmake_check
+	@mkdir -p $(CMAKE_DIR_GCC)
+	cd $(CMAKE_DIR_GCC); CC='$(GCC)' CXX='$(GPP)' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
+.PHONY: pyston_gcc
+pyston_gcc: $(CMAKE_SETUP_GCC)
+	$(NINJA) -C $(HOME)/pyston-build-gcc pyston copy_stdlib copy_libpyston ext_pyston $(NINJAFLAGS)
+	ln -sf $(HOME)/pyston-build-gcc/pyston pyston_gcc
 
 -include $(wildcard src/*.d) $(wildcard src/*/*.d) $(wildcard src/*/*/*.d) $(wildcard $(UNITTEST_DIR)/*.d) $(wildcard from_cpython/*/*.d) $(wildcard from_cpython/*/*/*.d)
 
@@ -829,9 +925,9 @@ define make_target
 $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -a -x -R pyston$1 -j$(TEST_THREADS) -a -n -k $(TESTS_DIR) $(ARGS)
-	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a -O -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
@@ -888,12 +984,14 @@ perf_%: perf_release_%
 $(call make_target,_dbg)
 $(call make_target,_debug)
 $(call make_target,_release)
-$(call make_target,_grwl)
-$(call make_target,_grwl_dbg)
-$(call make_target,_nosync)
+# $(call make_target,_grwl)
+# $(call make_target,_grwl_dbg)
+# $(call make_target,_nosync)
+$(call make_target,_prof)
+$(call make_target,_gcc)
 
 runpy_% pyrun_%: %.py ext_python
-	PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 python $<
+	$(VERB) PYTHONPATH=test/test_extension/build/lib.linux-x86_64-2.7 zsh -c 'time python $<'
 $(call make_search,runpy_%)
 $(call make_search,pyrun_%)
 
@@ -1050,6 +1148,10 @@ $(FROM_CPYTHON_SRCS:.c=.o.ll): %.o.ll: %.c $(BUILD_SYSTEM_DEPS)
 $(FROM_CPYTHON_SRCS:.c=.release.o): %.release.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC) $(EXT_CFLAGS) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
+
+$(FROM_CPYTHON_SRCS:.c=.prof.o): %.prof.o: %.c $(BUILD_SYSTEM_DEPS)
+	$(ECHO) Compiling C file to $@
+	$(VERB) $(CC_PROFILE) $(EXT_CFLAGS_PROFILE) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
 # These are necessary until we support unicode:
 ../from_cpython/Modules/_sre.o: EXT_CFLAGS += -Wno-sometimes-uninitialized

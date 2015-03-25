@@ -44,6 +44,8 @@
 namespace pyston {
 
 extern "C" {
+Box* Ellipsis = 0;
+
 // Copied from CPython:
 #if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
 const char* Py_FileSystemDefaultEncoding = "mbcs";
@@ -168,13 +170,13 @@ extern "C" Box* dir(Box* obj) {
         result = new BoxedList();
     }
 
-    for (auto const& kv : obj->cls->attrs.hcls->attr_offsets) {
-        listAppend(result, boxString(kv.first));
+    for (auto const& kv : obj->cls->attrs.hcls->getAttrOffsets()) {
+        listAppend(result, boxString(kv.first()));
     }
     if (obj->cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = obj->getHCAttrsPtr();
-        for (auto const& kv : attrs->hcls->attr_offsets) {
-            listAppend(result, boxString(kv.first));
+        for (auto const& kv : attrs->hcls->getAttrOffsets()) {
+            listAppend(result, boxString(kv.first()));
         }
     }
     if (obj->cls->instancesHaveDictAttrs()) {
@@ -309,6 +311,18 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
     return maxElement;
 }
 
+extern "C" Box* next(Box* iterator, Box* _default) {
+    try {
+        static std::string next_str = "next";
+        return callattr(iterator, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
+                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        if (_default && e.matches(StopIteration))
+            return _default;
+        throw;
+    }
+}
+
 extern "C" Box* sum(Box* container, Box* initial) {
     if (initial->cls == str_cls)
         raiseExcHelper(TypeError, "sum() can't sum strings [use ''.join(seq) instead]");
@@ -336,15 +350,25 @@ Box* open(Box* arg1, Box* arg2) {
 }
 
 extern "C" Box* chr(Box* arg) {
-    if (arg->cls != int_cls) {
+    i64 n = PyInt_AsLong(arg);
+    if (n == -1 && PyErr_Occurred())
         raiseExcHelper(TypeError, "an integer is required");
-    }
-    i64 n = static_cast<BoxedInt*>(arg)->n;
+
     if (n < 0 || n >= 256) {
         raiseExcHelper(ValueError, "chr() arg not in range(256)");
     }
 
     return boxString(std::string(1, (char)n));
+}
+
+extern "C" Box* unichr(Box* arg) {
+    if (arg->cls != int_cls)
+        raiseExcHelper(TypeError, "an integer is required");
+
+    i64 n = static_cast<BoxedInt*>(arg)->n;
+    Box* rtn = PyUnicode_FromOrdinal(n);
+    checkAndThrowCAPIException();
+    return rtn;
 }
 
 extern "C" Box* ord(Box* obj) {
@@ -386,27 +410,23 @@ extern "C" Box* ord(Box* obj) {
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-
         istart = 0;
-        istop = static_cast<BoxedInt*>(start)->n;
+        istop = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
         istep = 1;
     } else if (step == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
-
-        istart = static_cast<BoxedInt*>(start)->n;
-        istop = static_cast<BoxedInt*>(stop)->n;
+        istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+        istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
         istep = 1;
     } else {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
-        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step));
-
-        istart = static_cast<BoxedInt*>(start)->n;
-        istop = static_cast<BoxedInt*>(stop)->n;
-        istep = static_cast<BoxedInt*>(step)->n;
-        RELEASE_ASSERT(istep != 0, "step can't be 0");
+        istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+        istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
+        istep = PyLong_AsLong(step);
+        checkAndThrowCAPIException();
     }
 
     BoxedList* rtn = new BoxedList();
@@ -459,8 +479,8 @@ Box* issubclass_func(Box* child, Box* parent) {
         return boxBool(classobjIssubclass(static_cast<BoxedClassobj*>(child), static_cast<BoxedClassobj*>(parent)));
     }
 
-    assert(isSubclass(child->cls, type_cls));
-    if (parent->cls != type_cls)
+    RELEASE_ASSERT(isSubclass(child->cls, type_cls), "");
+    if (!isSubclass(parent->cls, type_cls))
         return False;
 
     return boxBool(isSubclass(static_cast<BoxedClass*>(child), static_cast<BoxedClass*>(parent)));
@@ -470,8 +490,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
     Box* fromlist = args[0];
     Box* level = args[1];
 
-    RELEASE_ASSERT(globals == None, "not implemented");
-    RELEASE_ASSERT(locals == None, "not implemented");
+    name = coerceUnicodeToStr(name);
 
     if (name->cls != str_cls) {
         raiseExcHelper(TypeError, "__import__() argument 1 must be string, not %s", getTypeName(name));
@@ -481,10 +500,12 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    return import(((BoxedInt*)level)->n, fromlist, &static_cast<BoxedString*>(name)->s);
+    return importModuleLevel(&static_cast<BoxedString*>(name)->s, globals, fromlist, ((BoxedInt*)level)->n);
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
+    _str = coerceUnicodeToStr(_str);
+
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
@@ -493,6 +514,8 @@ Box* delattrFunc(Box* obj, Box* _str) {
 }
 
 Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
+    _str = coerceUnicodeToStr(_str);
+
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "getattr(): attribute name must be string");
     }
@@ -518,20 +541,19 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 }
 
 Box* setattrFunc(Box* obj, Box* _str, Box* value) {
+    _str = coerceUnicodeToStr(_str);
+
     if (_str->cls != str_cls) {
-        raiseExcHelper(TypeError, "getattr(): attribute name must be string");
+        raiseExcHelper(TypeError, "setattr(): attribute name must be string");
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattrInternal(obj, str->s, value, NULL);
+    setattr(obj, str->s.c_str(), value);
     return None;
 }
 
 Box* hasattr(Box* obj, Box* _str) {
-    if (PyUnicode_Check(_str)) {
-        _str = _PyUnicode_AsDefaultEncodedString(_str, NULL);
-        checkAndThrowCAPIException();
-    }
+    _str = coerceUnicodeToStr(_str);
 
     if (_str->cls != str_cls) {
         raiseExcHelper(TypeError, "hasattr(): attribute name must be string");
@@ -580,7 +602,7 @@ Box* map(Box* f, BoxedTuple* args) {
     assert(args_end.size() == num_iterable);
 
     Box* rtn = new BoxedList();
-    std::vector<Box*> current_val(num_iterable);
+    std::vector<Box*, StlCompatAllocator<Box*>> current_val(num_iterable);
     while (true) {
         int num_done = 0;
         for (int i = 0; i < num_iterable; ++i) {
@@ -671,6 +693,12 @@ Box* eval(Box* code) {
     return runEval(static_cast<BoxedString*>(code)->s.c_str(), locals, module);
 }
 
+static Box* callable(Box* obj) {
+    Box* r = PyBool_FromLong((long)PyCallable_Check(obj));
+    checkAndThrowCAPIException();
+    return r;
+}
+
 BoxedClass* notimplemented_cls;
 BoxedModule* builtins_module;
 
@@ -730,7 +758,8 @@ static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int 
     if (size == 0)
         size = base->tp_basicsize;
 
-    BoxedClass* cls = BoxedHeapClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), size, false, name);
+    BoxedClass* cls
+        = BoxedHeapClass::create(type_cls, base, NULL, offsetof(BoxedException, attrs), 0, size, false, name);
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {
@@ -951,12 +980,119 @@ Box* pydumpAddr(Box* p) {
     return None;
 }
 
+Box* builtinIter(Box* obj, Box* sentinel) {
+    if (sentinel == NULL)
+        return getiter(obj);
+
+    Box* r = PyCallIter_New(obj, sentinel);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+// Copied from builtin_raw_input, but without the argument handling
+// 'v' is the prompt, and can be NULL corresponding to the arg not getting passed.
+static PyObject* raw_input(PyObject* v) noexcept {
+    PyObject* fin = PySys_GetObject("stdin");
+    PyObject* fout = PySys_GetObject("stdout");
+
+    if (fin == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "[raw_]input: lost sys.stdin");
+        return NULL;
+    }
+    if (fout == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "[raw_]input: lost sys.stdout");
+        return NULL;
+    }
+    if (PyFile_SoftSpace(fout, 0)) {
+        if (PyFile_WriteString(" ", fout) != 0)
+            return NULL;
+    }
+    if (PyFile_AsFile(fin) && PyFile_AsFile(fout) && isatty(fileno(PyFile_AsFile(fin)))
+        && isatty(fileno(PyFile_AsFile(fout)))) {
+        PyObject* po;
+        const char* prompt;
+        char* s;
+        PyObject* result;
+        if (v != NULL) {
+            po = PyObject_Str(v);
+            if (po == NULL)
+                return NULL;
+            prompt = PyString_AsString(po);
+            if (prompt == NULL)
+                return NULL;
+        } else {
+            po = NULL;
+            prompt = "";
+        }
+        s = PyOS_Readline(PyFile_AsFile(fin), PyFile_AsFile(fout), prompt);
+        Py_XDECREF(po);
+        if (s == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_SetNone(PyExc_KeyboardInterrupt);
+            return NULL;
+        }
+        if (*s == '\0') {
+            PyErr_SetNone(PyExc_EOFError);
+            result = NULL;
+        } else { /* strip trailing '\n' */
+            size_t len = strlen(s);
+            if (len > PY_SSIZE_T_MAX) {
+                PyErr_SetString(PyExc_OverflowError, "[raw_]input: input too long");
+                result = NULL;
+            } else {
+                result = PyString_FromStringAndSize(s, len - 1);
+            }
+        }
+        PyMem_FREE(s);
+        return result;
+    }
+    if (v != NULL) {
+        if (PyFile_WriteObject(v, fout, Py_PRINT_RAW) != 0)
+            return NULL;
+    }
+    return PyFile_GetLine(fin, -1);
+}
+
+Box* rawInput(Box* prompt) {
+    Box* r = raw_input(prompt);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+Box* input(Box* prompt) {
+    Py_FatalError("unimplemented");
+}
+
+Box* builtinRound(Box* _number, Box* _ndigits) {
+    if (!isSubclass(_number->cls, float_cls))
+        raiseExcHelper(TypeError, "a float is required");
+
+    BoxedFloat* number = (BoxedFloat*)_number;
+
+    if (isSubclass(_ndigits->cls, int_cls)) {
+        BoxedInt* ndigits = (BoxedInt*)_ndigits;
+
+        if (ndigits->n == 0)
+            return boxFloat(round(number->d));
+    }
+
+    Py_FatalError("unimplemented");
+}
+
+Box* builtinCmp(Box* lhs, Box* rhs) {
+    Py_FatalError("unimplemented");
+}
+
 void setupBuiltins() {
-    builtins_module = createModule("__builtin__", "__builtin__");
+    builtins_module = createModule("__builtin__", "__builtin__",
+                                   "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
+                                   "the `nil' object; Ellipsis represents `...' in slices.");
 
     BoxedHeapClass* ellipsis_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(Box), false, "ellipsis");
-    Box* Ellipsis = new (ellipsis_cls) Box();
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
+    Ellipsis = new (ellipsis_cls) Box();
     assert(Ellipsis->cls);
     gc::registerPermanentRoot(Ellipsis);
 
@@ -969,7 +1105,7 @@ void setupBuiltins() {
         "print", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)print, NONE, 0, 0, true, true), "print"));
 
     notimplemented_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(Box), false, "NotImplementedType");
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "NotImplementedType");
     notimplemented_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)notimplementedRepr, STR, 1)));
     notimplemented_cls->freeze();
     NotImplemented = new (notimplemented_cls) Box();
@@ -1004,6 +1140,9 @@ void setupBuiltins() {
     max_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)max, UNKNOWN, 1, 0, true, false), "max");
     builtins_module->giveAttr("max", max_obj);
 
+    builtins_module->giveAttr("next", new BoxedBuiltinFunctionOrMethod(
+                                          boxRTFunction((void*)next, UNKNOWN, 2, 1, false, false), "next", { NULL }));
+
     builtins_module->giveAttr("sum", new BoxedBuiltinFunctionOrMethod(
                                          boxRTFunction((void*)sum, UNKNOWN, 2, 1, false, false), "sum", { boxInt(0) }));
 
@@ -1011,6 +1150,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("id", id_obj);
     chr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)chr, STR, 1), "chr");
     builtins_module->giveAttr("chr", chr_obj);
+    builtins_module->giveAttr("unichr",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)unichr, UNKNOWN, 1), "unichr"));
     ord_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)ord, BOXED_INT, 1), "ord");
     builtins_module->giveAttr("ord", ord_obj);
     trap_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)trap, UNKNOWN, 0), "trap");
@@ -1048,8 +1189,8 @@ void setupBuiltins() {
     builtins_module->giveAttr("__import__", new BoxedBuiltinFunctionOrMethod(import_func, "__import__",
                                                                              { None, None, None, new BoxedInt(-1) }));
 
-    enumerate_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, sizeof(BoxedEnumerate),
-                                           false, "enumerate");
+    enumerate_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedEnumerate::gcHandler, 0, 0,
+                                           sizeof(BoxedEnumerate), false, "enumerate");
     enumerate_cls->giveAttr(
         "__new__",
         new BoxedFunction(boxRTFunction((void*)BoxedEnumerate::new_, UNKNOWN, 3, 1, false, false), { boxInt(0) }));
@@ -1073,6 +1214,10 @@ void setupBuiltins() {
                                                  { NULL, NULL });
     builtins_module->giveAttr("range", range_obj);
 
+    auto* round_obj = new BoxedBuiltinFunctionOrMethod(
+        boxRTFunction((void*)builtinRound, BOXED_FLOAT, 2, 1, false, false), "round", { boxInt(0) });
+    builtins_module->giveAttr("round", round_obj);
+
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
@@ -1087,7 +1232,8 @@ void setupBuiltins() {
                                             boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false), "locals"));
 
     builtins_module->giveAttr(
-        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false), "iter"));
+        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinIter, UNKNOWN, 2, 1, false, false), "iter",
+                                                 { NULL }));
     builtins_module->giveAttr(
         "reversed",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false), "reversed"));
@@ -1112,6 +1258,7 @@ void setupBuiltins() {
                                           boxRTFunction((void*)vars, UNKNOWN, 1, 1, false, false), "vars", { NULL }));
     builtins_module->giveAttr("object", object_cls);
     builtins_module->giveAttr("str", str_cls);
+    builtins_module->giveAttr("bytes", str_cls);
     assert(unicode_cls);
     builtins_module->giveAttr("unicode", unicode_cls);
     builtins_module->giveAttr("basestring", basestring_cls);
@@ -1134,7 +1281,29 @@ void setupBuiltins() {
     builtins_module->giveAttr("property", property_cls);
     builtins_module->giveAttr("staticmethod", staticmethod_cls);
     builtins_module->giveAttr("classmethod", classmethod_cls);
+
+    assert(memoryview_cls);
+    Py_TYPE(&PyMemoryView_Type) = &PyType_Type;
+    PyType_Ready(&PyMemoryView_Type);
+    builtins_module->giveAttr("memoryview", memoryview_cls);
+    PyType_Ready(&PyByteArray_Type);
+    builtins_module->giveAttr("bytearray", &PyByteArray_Type);
+    Py_TYPE(&PyBuffer_Type) = &PyType_Type;
+    PyType_Ready(&PyBuffer_Type);
+    builtins_module->giveAttr("buffer", &PyBuffer_Type);
+
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
+    builtins_module->giveAttr("callable",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
+
+    builtins_module->giveAttr(
+        "raw_input", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)rawInput, UNKNOWN, 1, 1, false, false),
+                                                      "raw_input", { NULL }));
+    builtins_module->giveAttr(
+        "input",
+        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)input, UNKNOWN, 1, 1, false, false), "input", { NULL }));
+    builtins_module->giveAttr("cmp",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinCmp, UNKNOWN, 2), "cmp"));
 }
 }

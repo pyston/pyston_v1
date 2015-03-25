@@ -48,7 +48,7 @@ public:
     class CommitHook {
     public:
         virtual ~CommitHook() {}
-        virtual void finishAssembly(ICSlotInfo* picked_slot, int fastpath_offset) = 0;
+        virtual bool finishAssembly(ICSlotInfo* picked_slot, int fastpath_offset) = 0;
     };
 
 private:
@@ -67,9 +67,8 @@ public:
 
     assembler::Assembler* getAssembler() { return assembler; }
     int getSlotSize();
-    int getFuncStackSize();
-    int getScratchRbpOffset();
-    int getScratchBytes();
+    int getScratchRspOffset();
+    int getScratchSize();
 
     TypeRecorder* getTypeRecorder();
 

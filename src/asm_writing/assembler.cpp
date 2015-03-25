@@ -737,12 +737,15 @@ void Assembler::cmp(Indirect mem, Immediate imm) {
     emitRex(rex);
     emitByte(0x81);
 
-    assert(-0x80 <= mem.offset && mem.offset < 0x80);
     if (mem.offset == 0) {
         emitModRM(0b00, 7, src_idx);
-    } else {
+    } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, 7, src_idx);
         emitByte(mem.offset);
+    } else {
+        assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
+        emitModRM(0b10, 7, src_idx);
+        emitInt(mem.offset, 4);
     }
 
     emitInt(val, 4);

@@ -20,6 +20,8 @@
 #include "Python.h"
 
 #include "llvm/Support/ErrorHandling.h" // For llvm_unreachable
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 #include "capi/types.h"
 #include "core/threading.h"
@@ -86,57 +88,17 @@ Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Bo
     return new BoxedWrapperObject(self, inst);
 }
 
-extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssize_t* buffer_len) noexcept {
-    Py_FatalError("unimplemented");
-}
+Box* BoxedWrapperDescriptor::__call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args) {
+    RELEASE_ASSERT(descr->cls == wrapperdescr_cls, "");
 
-// copied from CPython's getargs.c:
-extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_ssize_t len, int readonly,
-                                 int flags) noexcept {
-    if (view == NULL)
-        return 0;
-    if (((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE) && (readonly == 1)) {
-        // Don't support PyErr_SetString yet:
-        assert(0);
-        // PyErr_SetString(PyExc_BufferError, "Object is not writable.");
-        // return -1;
-    }
+    BoxedDict* kw = static_cast<BoxedDict*>(_args[0]);
 
-    view->obj = obj;
-    if (obj)
-        Py_INCREF(obj);
-    view->buf = buf;
-    view->len = len;
-    view->readonly = readonly;
-    view->itemsize = 1;
-    view->format = NULL;
-    if ((flags & PyBUF_FORMAT) == PyBUF_FORMAT)
-        view->format = "B";
-    view->ndim = 1;
-    view->shape = NULL;
-    if ((flags & PyBUF_ND) == PyBUF_ND)
-        view->shape = &(view->len);
-    view->strides = NULL;
-    if ((flags & PyBUF_STRIDES) == PyBUF_STRIDES)
-        view->strides = &(view->itemsize);
-    view->suboffsets = NULL;
-    view->internal = NULL;
-    return 0;
-}
+    if (!isSubclass(self->cls, descr->type))
+        raiseExcHelper(TypeError, "descriptor '' requires a '%s' object but received a '%s'",
+                       getFullNameOfClass(descr->type).c_str(), getFullTypeName(self).c_str());
 
-extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
-    if (!view->buf) {
-        assert(!view->obj);
-        return;
-    }
-
-    PyObject* obj = view->obj;
-    assert(obj);
-    assert(obj->cls == str_cls);
-    if (obj && Py_TYPE(obj)->tp_as_buffer && Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer)
-        Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
-    Py_XDECREF(obj);
-    view->obj = NULL;
+    auto wrapper = new BoxedWrapperObject(descr, self);
+    return BoxedWrapperObject::__call__(wrapper, args, kw);
 }
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {
@@ -309,18 +271,28 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
     try {
         return getattr(o, static_cast<BoxedString*>(attr_name)->s.c_str());
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
-    try {
-        return getattr(o, static_cast<BoxedString*>(name)->s.c_str());
-    } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
 }
+
+extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
+    Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->s.c_str(), NULL, false, false, NULL, NULL);
+    if (!r)
+        PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
+                     PyString_AS_STRING(name));
+    return r;
+}
+
+extern "C" PyObject* _PyObject_GenericGetAttrWithDict(PyObject* obj, PyObject* name, PyObject* dict) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" int _PyObject_GenericSetAttrWithDict(PyObject* obj, PyObject* name, PyObject* value,
+                                                PyObject* dict) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 
 extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
     try {
@@ -332,7 +304,13 @@ extern "C" PyObject* PyObject_GetItem(PyObject* o, PyObject* key) noexcept {
 }
 
 extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    try {
+        setitem(o, key, v);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
@@ -340,7 +318,36 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
 }
 
 extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) noexcept {
-    Py_FatalError("unimplemented");
+    int translated_op;
+    switch (opid) {
+        case Py_LT:
+            translated_op = AST_TYPE::Lt;
+            break;
+        case Py_LE:
+            translated_op = AST_TYPE::LtE;
+            break;
+        case Py_EQ:
+            translated_op = AST_TYPE::Eq;
+            break;
+        case Py_NE:
+            translated_op = AST_TYPE::NotEq;
+            break;
+        case Py_GT:
+            translated_op = AST_TYPE::Gt;
+            break;
+        case Py_GE:
+            translated_op = AST_TYPE::GtE;
+            break;
+        default:
+            Py_FatalError("unimplemented");
+    };
+
+    try {
+        return compare(o1, o2, translated_op);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 extern "C" {
@@ -388,30 +395,6 @@ extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
 
 extern "C" int PyObject_Not(PyObject* o) noexcept {
     Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
-    PyObject* result;
-
-    if (arg == NULL) {
-        arg = PyTuple_New(0);
-        if (arg == NULL)
-            return NULL;
-    } else if (!PyTuple_Check(arg)) {
-        PyErr_SetString(PyExc_TypeError, "argument list must be a tuple");
-        return NULL;
-    } else
-        Py_INCREF(arg);
-
-    if (kw != NULL && !PyDict_Check(kw)) {
-        PyErr_SetString(PyExc_TypeError, "keyword list must be a dictionary");
-        Py_DECREF(arg);
-        return NULL;
-    }
-
-    result = PyObject_Call(func, arg, kw);
-    Py_DECREF(arg);
-    return result;
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
@@ -464,7 +447,7 @@ extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
 extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
     try {
         // Not sure if this is really the same:
-        return getitem(o, new BoxedSlice(boxInt(i1), boxInt(i2), None));
+        return getitem(o, createSlice(boxInt(i1), boxInt(i2), None));
     } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
@@ -490,10 +473,6 @@ extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" int PySequence_Contains(PyObject* o, PyObject* value) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
     Py_FatalError("unimplemented");
 }
@@ -513,7 +492,8 @@ extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
         return callattr(iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
                         ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     } catch (ExcInfo e) {
-        setCAPIException(e);
+        if (!e.matches(StopIteration))
+            setCAPIException(e);
         return NULL;
     }
 }
@@ -631,6 +611,18 @@ finally:
     }
     PyErr_NormalizeException(exc, val, tb);
     --tstate->recursion_depth;
+}
+
+extern "C" PyGILState_STATE PyGILState_Ensure(void) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" void PyGILState_Release(PyGILState_STATE) noexcept {
+    Py_FatalError("unimplemented");
+}
+
+extern "C" PyThreadState* PyGILState_GetThisThreadState(void) noexcept {
+    Py_FatalError("unimplemented");
 }
 
 void setCAPIException(const ExcInfo& e) {
@@ -861,16 +853,12 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
     RELEASE_ASSERT(module_name->cls == str_cls, "");
 
     try {
-        return import(-1, None, &static_cast<BoxedString*>(module_name)->s);
+        return importModuleLevel(&static_cast<BoxedString*>(module_name)->s, None, None, -1);
     } catch (ExcInfo e) {
         Py_FatalError("unimplemented");
     }
 }
 
-
-extern "C" PyObject* PyCallIter_New(PyObject* callable, PyObject* sentinel) noexcept {
-    Py_FatalError("unimplemented");
-}
 
 extern "C" void* PyObject_Malloc(size_t sz) noexcept {
     return gc_compat_malloc(sz);
@@ -894,280 +882,6 @@ extern "C" void* PyMem_Realloc(void* ptr, size_t sz) noexcept {
 
 extern "C" void PyMem_Free(void* ptr) noexcept {
     gc_compat_free(ptr);
-}
-
-extern "C" int PyNumber_Check(PyObject* obj) noexcept {
-    assert(obj && obj->cls);
-
-    // Our check, since we don't currently fill in tp_as_number:
-    if (isSubclass(obj->cls, int_cls) || isSubclass(obj->cls, long_cls))
-        return true;
-
-    // The CPython check:
-    return obj->cls->tp_as_number && (obj->cls->tp_as_number->nb_int || obj->cls->tp_as_number->nb_float);
-}
-
-extern "C" PyObject* PyNumber_Add(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Add);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Sub);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Mult);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Div);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::Mod);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_Divmod(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Negative(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
-    try {
-        return abs_(o);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::RShift);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
-    try {
-        return binop(lhs, rhs, AST_TYPE::BitAnd);
-    } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
-    }
-}
-
-extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Or(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlacePower(PyObject*, PyObject*, PyObject* o3) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceLshift(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceRshift(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceAnd(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceXor(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" int PyNumber_Coerce(PyObject**, PyObject**) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
-    PyNumberMethods* m;
-    const char* buffer;
-    Py_ssize_t buffer_len;
-
-    if (o == NULL) {
-        PyErr_SetString(PyExc_SystemError, "null argument to internal routing");
-        return NULL;
-    }
-    if (PyInt_CheckExact(o)) {
-        Py_INCREF(o);
-        return o;
-    }
-    m = o->cls->tp_as_number;
-    if (m && m->nb_int) { /* This should include subclasses of int */
-        /* Classic classes always take this branch. */
-        PyObject* res = m->nb_int(o);
-        if (res && (!PyInt_Check(res) && !PyLong_Check(res))) {
-            PyErr_Format(PyExc_TypeError, "__int__ returned non-int (type %.200s)", res->cls->tp_name);
-            Py_DECREF(res);
-            return NULL;
-        }
-        return res;
-    }
-    if (PyInt_Check(o)) { /* A int subclass without nb_int */
-        BoxedInt* io = (BoxedInt*)o;
-        return PyInt_FromLong(io->n);
-    }
-
-    Py_FatalError("unimplemented __trunc__ and string -> int conversion");
-// the remainder of PyNumber_Int deals with __trunc__ usage, and converting from unicode/string to int
-#if 0
-    PyObject* trunc_func = getattr(o, "__trunc__");
-    if (trunc_func) {
-      PyObject *truncated = PyEval_CallObject(trunc_func, NULL);
-      Py_DECREF(trunc_func);
-      /* __trunc__ is specified to return an Integral type, but
-	 int() needs to return an int. */
-      return _PyNumber_ConvertIntegralToInt(
-					  truncated,
-					  "__trunc__ returned non-Integral (type %.200s)");
-    }
-    PyErr_Clear();  /* It's not an error if  o.__trunc__ doesn't exist. */
-
-    if (PyString_Check(o))
-      return int_from_string(PyString_AS_STRING(o),
-                 PyString_GET_SIZE(o));
-#ifdef Py_USING_UNICODE
-    if (PyUnicode_Check(o))
-      return PyInt_FromUnicode(PyUnicode_AS_UNICODE(o),
-                   PyUnicode_GET_SIZE(o),
-                   10);
-#endif
-    if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
-      return int_from_string((char*)buffer, buffer_len);
-
-    return type_error("int() argument must be a string or a "
-              "number, not '%.200s'", o);
-#endif
-}
-
-extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
-    // This method should do quite a bit more, including checking tp_as_number->nb_long or calling __trunc__
-
-    if (o->cls == long_cls)
-        return o;
-
-    if (o->cls == float_cls)
-        return PyLong_FromDouble(PyFloat_AsDouble(o));
-
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
-    Py_FatalError("unimplemented");
-}
-
-extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
-    RELEASE_ASSERT(o->cls != long_cls, "unhandled");
-
-    RELEASE_ASSERT(isSubclass(o->cls, int_cls), "??");
-    int64_t n = static_cast<BoxedInt*>(o)->n;
-    static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
-    return n;
-}
-
-extern "C" int PyBuffer_IsContiguous(Py_buffer* view, char fort) noexcept {
-    Py_FatalError("unimplemented");
 }
 
 extern "C" int PyOS_snprintf(char* str, size_t size, const char* format, ...) noexcept {
@@ -1273,6 +987,28 @@ static int dev_urandom_python(char* buffer, Py_ssize_t size) noexcept {
     close(fd);
     return 0;
 }
+}
+
+static const char* progname = "pyston";
+extern "C" void Py_SetProgramName(char* pn) noexcept {
+    if (pn && *pn)
+        progname = pn;
+}
+
+extern "C" const char* Py_GetProgramName(void) noexcept {
+    return progname;
+}
+
+static char* default_home = NULL;
+extern "C" void Py_SetPythonHome(char* home) noexcept {
+    default_home = home;
+}
+
+extern "C" char* Py_GetPythonHome(void) noexcept {
+    char* home = default_home;
+    if (home == NULL && !Py_IgnoreEnvironmentFlag)
+        home = Py_GETENV("PYTHONHOME");
+    return home;
 }
 
 extern "C" PyObject* PyThreadState_GetDict(void) noexcept {
@@ -1469,17 +1205,27 @@ extern "C" int _PyEval_SliceIndex(PyObject* v, Py_ssize_t* pi) noexcept {
     return 1;
 }
 
-extern "C" PyObject* PyBuffer_FromMemory(void* ptr, Py_ssize_t size) noexcept {
-    Py_FatalError("unimplemented");
-}
-
 extern "C" int PyEval_GetRestricted(void) noexcept {
     return 0; // We don't support restricted mode
 }
 
+extern "C" void PyEval_InitThreads(void) noexcept {
+    // nothing to do here
+}
+
 BoxedModule* importTestExtension(const std::string& name) {
-    std::string pathname_name = "test/test_extension/" + name + ".pyston.so";
-    const char* pathname = pathname_name.c_str();
+    llvm::SmallString<128> pathname_str;
+    // TODO supposed to pass argv0, main_addr to this function:
+    pathname_str = llvm::sys::fs::getMainExecutable(NULL, NULL);
+    assert(pathname_str.size() && "could not find the path to the pyston src dir");
+
+    // Start by removing the binary name
+    llvm::sys::path::remove_filename(pathname_str);
+
+    llvm::sys::path::append(pathname_str, "test/test_extension");
+    llvm::sys::path::append(pathname_str, name + ".pyston.so");
+
+    const char* pathname = pathname_str.str().str().c_str();
     void* handle = dlopen(pathname, RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "%s\n", dlerror());
@@ -1545,8 +1291,6 @@ static Box* methodGetDoc(Box* b, void*) {
 }
 
 void setupCAPI() {
-    capifunc_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false, "capifunc");
-
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
 
@@ -1556,7 +1300,6 @@ void setupCAPI() {
 
     capifunc_cls->freeze();
 
-    method_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false, "method");
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
@@ -1564,14 +1307,12 @@ void setupCAPI() {
     method_cls->giveAttr("__doc__", new (pyston_getset_cls) BoxedGetsetDescriptor(methodGetDoc, NULL, NULL));
     method_cls->freeze();
 
-    wrapperdescr_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false,
-                                              "wrapper_descriptor");
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
+    wrapperdescr_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__call__,
+                                                                           UNKNOWN, 2, 0, true, true)));
     wrapperdescr_cls->freeze();
 
-    wrapperobject_cls
-        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false, "method-wrapper");
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->freeze();

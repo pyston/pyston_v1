@@ -42,6 +42,7 @@
 #include "core/options.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 /*
@@ -167,10 +168,10 @@ public:
 }
 };
 
-static void handle_sigfpe(int signum) {
-    assert(signum == SIGFPE);
-    fprintf(stderr, "SIGFPE!\n");
-    abort();
+static void handle_sigusr1(int signum) {
+    assert(signum == SIGUSR1);
+    fprintf(stderr, "SIGUSR1, printing stack trace\n");
+    _printStacktrace();
 }
 
 static void handle_sigint(int signum) {
@@ -272,6 +273,7 @@ void initCodegen() {
     setupRuntime();
 
     // signal(SIGFPE, &handle_sigfpe);
+    signal(SIGUSR1, &handle_sigusr1);
     signal(SIGINT, &handle_sigint);
 
 

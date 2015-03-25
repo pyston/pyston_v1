@@ -1,3 +1,4 @@
+# should_error
 def msg():
     print "msg()"
     return "failure message"

@@ -51,6 +51,10 @@ def G():
     yield "A"; yield "B"; yield "C"
 print list(enumerate(G()))
 
+print next(iter([]), "default")
+print next(iter([]), None)
+print next(iter([1]), "default")
+
 class C(object):
     def __init__(self):
         self.a = 1
@@ -88,3 +92,20 @@ print c.s([3,2,1])
 l = range(5)
 print sorted(l, key=lambda x:-x)
 print l
+
+print bytes
+print bytes is str
+print repr(b'1234')
+
+print callable(1)
+print callable(int)
+print callable(lambda: 1)
+
+print range(5L, 7L)
+
+print round(-1.1), round(-1.9)
+print round(0.5), round(-0.5)
+
+print list(iter(xrange(100).__iter__().next, 20))
+
+print bytearray(xrange(256))

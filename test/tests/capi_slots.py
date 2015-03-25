@@ -157,4 +157,63 @@ try:
 except SystemError, e:
     print e
 
-print c.foo()
+try:
+    print c.foo()
+except SystemError, e:
+    print e
+
+
+print "**** setattr on class def"
+class C7(C):
+    def __setattr__(self, attr, val):
+        print "setattr", attr, val
+
+c = C7()
+slots_test.call_funcs(c)
+c.foo = 1
+c.bar = 2
+c.baz = 3
+
+
+print "**** setattr set after the fact"
+def _setattr_(self, attr, val):
+    print "_setattr_", attr, val
+
+c = C6()
+c.__setattr__ = _setattr_
+slots_test.call_funcs(c)
+c.foo = 1
+c.bar = 2
+c.baz = 3
+
+print "**** delattr on class def"
+class C8(C):
+    def __delattr__(self, attr):
+        print "delattr", attr
+
+c = C8()
+slots_test.call_funcs(c)
+delattr(c, 'foo')
+del c.bar
+
+print "**** delattr set after the fact"
+def _delattr_(self, attr):
+    print "_delattr_", attr
+
+c = C6()
+c.__delattr__ = _delattr_
+slots_test.call_funcs(c)
+try:
+    delattr(c, 'foo')
+except Exception as e:
+    pass
+try:
+    del c.bar
+except Exception as e:
+    pass
+
+slots_test.call_funcs(C())
+C.__get__ = lambda *args: None
+slots_test.call_funcs(C())
+del C.__get__
+slots_test.call_funcs(C())

@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "runtime/dict.h"
+#include "runtime/objmodel.h"
 
 namespace pyston {
 
@@ -23,19 +24,19 @@ BoxedDictIterator::BoxedDictIterator(BoxedDict* d, IteratorType type)
 }
 
 Box* dictIterKeys(Box* s) {
-    assert(s->cls == dict_cls);
+    assert(isSubclass(s->cls, dict_cls));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::KeyIterator);
 }
 
 Box* dictIterValues(Box* s) {
-    assert(s->cls == dict_cls);
+    assert(isSubclass(s->cls, dict_cls));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::ValueIterator);
 }
 
 Box* dictIterItems(Box* s) {
-    assert(s->cls == dict_cls);
+    assert(isSubclass(s->cls, dict_cls));
     BoxedDict* self = static_cast<BoxedDict*>(s);
     return new BoxedDictIterator(self, BoxedDictIterator::ItemIterator);
 }

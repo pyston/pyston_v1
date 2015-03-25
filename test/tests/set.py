@@ -74,3 +74,32 @@ except KeyError, e:
 def f2():
     print {5}
 f2()
+
+s = set([])
+s2 = s.copy()
+s.add(1)
+print s, s2
+
+s1 = set([3, 5])
+s2 = set([1, 5])
+print sorted(s1.union(s2)), sorted(s1.intersection(s2))
+print sorted(s1.union(range(5, 7))), sorted(s1.intersection(range(5, 7)))
+print sorted(s2.union([], [], [], [])), sorted(s2.intersection())
+
+l = []
+s = set(range(5))
+while s:
+    l.append(s.pop())
+l.sort()
+print l
+
+s = set([1])
+s.discard(1)
+print s
+s.discard(1)
+print s
+
+s = set(range(5))
+for i in xrange(10):
+    s2 = set(range(i))
+    print s.issubset(s2), s.issuperset(s2), s == s2, s != s2

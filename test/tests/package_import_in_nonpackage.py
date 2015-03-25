@@ -1,7 +1,4 @@
-# expected: fail
-# - crashes rather than throws an error
-
 try:
     from . import doesnt_exist
-except ImportError, e:
+except ValueError, e:
     print e

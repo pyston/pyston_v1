@@ -66,14 +66,15 @@ struct ArgPassSpec {
 
     int totalPassed() { return num_args + num_keywords + (has_starargs ? 1 : 0) + (has_kwargs ? 1 : 0); }
 
-    uintptr_t asInt() const { return *reinterpret_cast<const uintptr_t*>(this); }
+    uint32_t asInt() const { return *reinterpret_cast<const uint32_t*>(this); }
 
     void dump() {
         printf("(has_starargs=%s, has_kwargs=%s, num_keywords=%d, num_args=%d)\n", has_starargs ? "true" : "false",
                has_kwargs ? "true" : "false", num_keywords, num_args);
     }
 };
-static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register!");
+static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in register! (CC is probably wrong)");
+static_assert(sizeof(ArgPassSpec) == sizeof(uint32_t), "ArgPassSpec::asInt needs to be updated");
 
 namespace gc {
 
@@ -156,14 +157,11 @@ public:
 struct FunctionSpecialization {
     ConcreteCompilerType* rtn_type;
     std::vector<ConcreteCompilerType*> arg_types;
+    bool boxed_return_value;
+    bool accepts_all_inputs;
 
-    FunctionSpecialization(ConcreteCompilerType* rtn_type) : rtn_type(rtn_type) {}
-
-    FunctionSpecialization(ConcreteCompilerType* rtn_type, ConcreteCompilerType* arg1, ConcreteCompilerType* arg2)
-        : rtn_type(rtn_type), arg_types({ arg1, arg2 }) {}
-
-    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types)
-        : rtn_type(rtn_type), arg_types(arg_types) {}
+    FunctionSpecialization(ConcreteCompilerType* rtn_type);
+    FunctionSpecialization(ConcreteCompilerType* rtn_type, const std::vector<ConcreteCompilerType*>& arg_types);
 };
 
 class BoxedClosure;
@@ -261,6 +259,8 @@ public:
     const std::string getName();
     InternedString mangleName(InternedString id);
 
+    Box* getDocString();
+
     SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
 };
 
@@ -277,6 +277,7 @@ public:
 
     FunctionList
         versions; // any compiled versions along with their type parameters; in order from most preferred to least
+    CompiledFunction* always_use_version; // if this version is set, always use it (for unboxed cases)
     std::unordered_map<const OSREntryDescriptor*, CompiledFunction*> osr_versions;
 
     // Functions can provide an "internal" version, which will get called instead
@@ -289,12 +290,12 @@ public:
 
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(source), param_names(source->ast) {
+          source(source), param_names(source->ast), always_use_version(NULL) {
         assert(num_args >= num_defaults);
     }
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(NULL), param_names(param_names) {
+          source(NULL), param_names(param_names), always_use_version(NULL) {
         assert(num_args >= num_defaults);
     }
 
@@ -307,7 +308,12 @@ public:
         assert(compiled->is_interpreted == (compiled->code == NULL));
         assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
         compiled->clfunc = this;
+
         if (compiled->entry_descriptor == NULL) {
+            if (versions.size() == 0 && compiled->effort == EffortLevel::MAXIMAL && compiled->spec->accepts_all_inputs
+                && compiled->spec->boxed_return_value)
+                always_use_version = compiled;
+
             assert(compiled->spec->arg_types.size() == num_args + (takes_varargs ? 1 : 0) + (takes_kwargs ? 1 : 0));
             versions.push_back(compiled);
         } else {
@@ -348,38 +354,6 @@ class BinopIC;
 
 class Box;
 
-class BoxIteratorImpl {
-public:
-    BoxIteratorImpl(Box* container) {}
-    virtual ~BoxIteratorImpl() = default;
-    virtual void next() = 0;
-    virtual Box* getValue() = 0;
-    virtual void gcHandler(GCVisitor* v) {}
-    virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
-};
-
-class BoxIterator {
-public:
-    std::shared_ptr<BoxIteratorImpl> impl;
-
-    BoxIterator(std::shared_ptr<BoxIteratorImpl> impl) : impl(impl) {}
-    ~BoxIterator() = default;
-
-    static llvm::iterator_range<BoxIterator> getRange(Box* container);
-    bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl.get()); }
-    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
-
-    BoxIterator& operator++() {
-        impl->next();
-        return *this;
-    }
-
-    Box* operator*() const { return impl->getValue(); }
-    Box* operator*() { return impl->getValue(); }
-
-    void gcHandler(GCVisitor* v) { impl->gcHandler(v); }
-};
-
 namespace gc {
 
 enum class GCKind : uint8_t {
@@ -391,12 +365,43 @@ enum class GCKind : uint8_t {
 };
 
 extern "C" void* gc_alloc(size_t nbytes, GCKind kind);
+extern "C" void gc_free(void* ptr);
 }
 
 template <gc::GCKind gc_kind> class GCAllocated {
 public:
-    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc_alloc(size, gc_kind); }
-    void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
+    void* operator new(size_t size) __attribute__((visibility("default"))) { return gc::gc_alloc(size, gc_kind); }
+    void operator delete(void* ptr) __attribute__((visibility("default"))) { gc::gc_free(ptr); }
+};
+
+class BoxIteratorImpl : public GCAllocated<gc::GCKind::CONSERVATIVE> {
+public:
+    virtual ~BoxIteratorImpl() = default;
+    virtual void next() = 0;
+    virtual Box* getValue() = 0;
+    virtual bool isSame(const BoxIteratorImpl* rhs) = 0;
+};
+
+class BoxIterator {
+public:
+    BoxIteratorImpl* impl;
+
+    BoxIterator(BoxIteratorImpl* impl) : impl(impl) {}
+    ~BoxIterator() = default;
+
+    static llvm::iterator_range<BoxIterator> getRange(Box* container);
+    bool operator==(BoxIterator const& rhs) const { return impl->isSame(rhs.impl); }
+    bool operator!=(BoxIterator const& rhs) const { return !(*this == rhs); }
+
+    BoxIterator& operator++() {
+        impl->next();
+        return *this;
+    }
+
+    Box* operator*() const { return impl->getValue(); }
+    Box* operator*() { return impl->getValue(); }
+
+    void gcHandler(GCVisitor* v) { v->visitPotential(impl); }
 };
 
 class HiddenClass;
@@ -408,7 +413,7 @@ struct DelattrRewriteArgs;
 
 struct HCAttrs {
 public:
-    struct AttrList : public GCAllocated<gc::GCKind::PRECISE> {
+    struct AttrList {
         Box* attrs[0];
     };
 
@@ -422,6 +427,9 @@ class BoxedDict;
 class BoxedString;
 
 class Box {
+private:
+    BoxedDict** getDictPtr();
+
 public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
     Box() {}
@@ -435,6 +443,7 @@ public:
     llvm::iterator_range<BoxIterator> pyElements();
 
     HCAttrs* getHCAttrsPtr();
+    void setDict(BoxedDict* d);
     BoxedDict* getDict();
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
@@ -515,7 +524,7 @@ class BoxedClass;
 void setupRuntime();
 void teardownRuntime();
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn);
-BoxedModule* createModule(const std::string& name, const std::string& fn);
+BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc = NULL);
 
 // TODO where to put this
 void appendToSysPath(const std::string& path);

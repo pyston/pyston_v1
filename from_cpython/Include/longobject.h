@@ -69,7 +69,7 @@ PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLongMask(PyObject *) PYST
 PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLongAndOverflow(PyObject *, int *) PYSTON_NOEXCEPT;
 #endif /* HAVE_LONG_LONG */
 
-PyAPI_FUNC(PyObject *) PyLong_FromString(char *, char **, int) PYSTON_NOEXCEPT;
+PyAPI_FUNC(PyObject *) PyLong_FromString(const char *, char **, int) PYSTON_NOEXCEPT;
 #ifdef Py_USING_UNICODE
 PyAPI_FUNC(PyObject *) PyLong_FromUnicode(Py_UNICODE*, Py_ssize_t, int) PYSTON_NOEXCEPT;
 #endif

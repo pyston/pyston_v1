@@ -57,6 +57,7 @@
 #ifndef WITHOUT_COMPLEX
 #include "complexobject.h"
 #endif
+#include "memoryobject.h"
 #include "stringobject.h"
 #include "bufferobject.h"
 #include "bytesobject.h"
@@ -109,7 +110,14 @@ PyObject* PyModule_GetDict(PyObject*) PYSTON_NOEXCEPT;
 // Pyston addition:
 // Our goal is to not make exception modules declare their static memory.  But until we can identify
 // that in an automated way, we have to modify extension modules to call this:
-void PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
+PyObject* PyGC_AddRoot(PyObject*) PYSTON_NOEXCEPT;
+// PyGC_AddRoot returns its argument, with the intention that you do something like
+//      static PyObject* obj = PyGC_AddRoot(foo());
+// rather than
+//      static PyObject* obj = foo();
+//      PyGC_AddRoot(obj);
+// to reduce any chances of compiler reorderings or a GC somehow happening between the assignment
+// to the static slot and the call to PyGC_AddRoot.
 
 #define PyDoc_VAR(name) static char name[]
 #define PyDoc_STRVAR(name, str) PyDoc_VAR(name) = PyDoc_STR(str)

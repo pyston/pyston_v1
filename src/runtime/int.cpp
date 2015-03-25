@@ -32,7 +32,15 @@
 
 namespace pyston {
 
+extern "C" long PyInt_GetMax() noexcept {
+    return LONG_MAX; /* To initialize sys.maxint */
+}
+
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
+    if (op && PyInt_Check(op))
+        return PyInt_AS_LONG((PyIntObject*)op);
+    if (op && PyLong_Check(op))
+        return PyLong_AsUnsignedLongMask(op);
     Py_FatalError("unimplemented");
 }
 
@@ -67,8 +75,87 @@ extern "C" PyObject* PyInt_FromLong(long n) noexcept {
     return boxInt(n);
 }
 
+/* Convert an integer to a decimal string.  On many platforms, this
+   will be significantly faster than the general arbitrary-base
+   conversion machinery in _PyInt_Format, thanks to optimization
+   opportunities offered by division by a compile-time constant. */
+static Box* int_to_decimal_string(BoxedInt* v) noexcept {
+    char buf[sizeof(long) * CHAR_BIT / 3 + 6], *p, *bufend;
+    long n = v->n;
+    unsigned long absn;
+    p = bufend = buf + sizeof(buf);
+    absn = n < 0 ? 0UL - n : n;
+    do {
+        *--p = '0' + (char)(absn % 10);
+        absn /= 10;
+    } while (absn);
+    if (n < 0)
+        *--p = '-';
+    return PyString_FromStringAndSize(p, bufend - p);
+}
+
 extern "C" PyAPI_FUNC(PyObject*) _PyInt_Format(PyIntObject* v, int base, int newstyle) noexcept {
-    Py_FatalError("unimplemented");
+    BoxedInt* bint = reinterpret_cast<BoxedInt*>(v);
+    RELEASE_ASSERT(isSubclass(bint->cls, int_cls), "");
+
+    /* There are no doubt many, many ways to optimize this, using code
+       similar to _PyLong_Format */
+    long n = bint->n;
+    int negative = n < 0;
+    int is_zero = n == 0;
+
+    /* For the reasoning behind this size, see
+       http://c-faq.com/misc/hexio.html. Then, add a few bytes for
+       the possible sign and prefix "0[box]" */
+    char buf[sizeof(n) * CHAR_BIT + 6];
+
+    /* Start by pointing to the end of the buffer.  We fill in from
+       the back forward. */
+    char* p = &buf[sizeof(buf)];
+
+    assert(base >= 2 && base <= 36);
+
+    /* Special case base 10, for speed */
+    if (base == 10)
+        return int_to_decimal_string(bint);
+
+    do {
+        /* I'd use i_divmod, except it doesn't produce the results
+           I want when n is negative.  So just duplicate the salient
+           part here. */
+        long div = n / base;
+        long mod = n - div * base;
+
+        /* convert abs(mod) to the right character in [0-9, a-z] */
+        char cdigit = (char)(mod < 0 ? -mod : mod);
+        cdigit += (cdigit < 10) ? '0' : 'a' - 10;
+        *--p = cdigit;
+
+        n = div;
+    } while (n);
+
+    if (base == 2) {
+        *--p = 'b';
+        *--p = '0';
+    } else if (base == 8) {
+        if (newstyle) {
+            *--p = 'o';
+            *--p = '0';
+        } else if (!is_zero)
+            *--p = '0';
+    } else if (base == 16) {
+        *--p = 'x';
+        *--p = '0';
+    } else {
+        *--p = '#';
+        *--p = '0' + base % 10;
+        if (base > 10)
+            *--p = '0' + base / 10;
+    }
+    if (negative)
+        *--p = '-';
+
+    return PyString_FromStringAndSize(p, &buf[sizeof(buf)] - p);
 }
 
 extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
@@ -81,6 +168,68 @@ extern "C" int _PyInt_AsInt(PyObject* obj) noexcept {
     }
     return (int)result;
 }
+
+extern "C" PyObject* PyInt_FromString(const char* s, char** pend, int base) noexcept {
+    char* end;
+    long x;
+    Py_ssize_t slen;
+    PyObject* sobj, *srepr;
+
+    if ((base != 0 && base < 2) || base > 36) {
+        PyErr_SetString(PyExc_ValueError, "int() base must be >= 2 and <= 36");
+        return NULL;
+    }
+
+    while (*s && isspace(Py_CHARMASK(*s)))
+        s++;
+    errno = 0;
+    if (base == 0 && s[0] == '0') {
+        x = (long)strtoul(s, &end, base);
+        if (x < 0)
+            return PyLong_FromString(s, pend, base);
+    } else
+        x = strtoul(s, &end, base);
+    if (end == s || !isalnum(Py_CHARMASK(end[-1])))
+        goto bad;
+    while (*end && isspace(Py_CHARMASK(*end)))
+        end++;
+    if (*end != '\0') {
+    bad:
+        slen = strlen(s) < 200 ? strlen(s) : 200;
+        sobj = PyString_FromStringAndSize(s, slen);
+        if (sobj == NULL)
+            return NULL;
+        srepr = PyObject_Repr(sobj);
+        Py_DECREF(sobj);
+        if (srepr == NULL)
+            return NULL;
+        PyErr_Format(PyExc_ValueError, "invalid literal for int() with base %d: %s", base, PyString_AS_STRING(srepr));
+        Py_DECREF(srepr);
+        return NULL;
+    } else if (errno != 0)
+        return PyLong_FromString(s, pend, base);
+    if (pend)
+        *pend = end;
+    return PyInt_FromLong(x);
+}
+
+#ifdef Py_USING_UNICODE
+PyObject* PyInt_FromUnicode(Py_UNICODE* s, Py_ssize_t length, int base) noexcept {
+    PyObject* result;
+    char* buffer = (char*)PyMem_MALLOC(length + 1);
+
+    if (buffer == NULL)
+        return PyErr_NoMemory();
+
+    if (PyUnicode_EncodeDecimal(s, length, buffer, NULL)) {
+        PyMem_FREE(buffer);
+        return NULL;
+    }
+    result = PyInt_FromString(buffer, NULL, base);
+    PyMem_FREE(buffer);
+    return result;
+}
+#endif
 
 BoxedInt* interned_ints[NUM_INTERNED_INTS];
 
@@ -520,6 +669,9 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
+    if (rhs->cls == long_cls)
+        return longLshift(boxLong(lhs->n), rhs);
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -636,6 +788,9 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
+    if (rhs->cls == long_cls)
+        return longRshift(boxLong(lhs->n), rhs);
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -706,7 +861,7 @@ extern "C" Box* intNeg(BoxedInt* v) {
 
 extern "C" Box* intNonzero(BoxedInt* v) {
     if (!isSubclass(v->cls, int_cls))
-        raiseExcHelper(TypeError, "descriptor '__nonzer__' requires a 'int' object but received a '%s'",
+        raiseExcHelper(TypeError, "descriptor '__nonzero__' requires a 'int' object but received a '%s'",
                        getTypeName(v));
 
     return boxBool(v->n != 0);
@@ -737,7 +892,12 @@ extern "C" Box* intHex(BoxedInt* self) {
                        getTypeName(self));
 
     char buf[80];
-    int len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
+    int len = 0;
+    bool is_negative = self->n < 0;
+    if (is_negative)
+        len = snprintf(buf, sizeof(buf), "-0x%lx", std::abs(self->n));
+    else
+        len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
     return new BoxedString(std::string(buf, len));
 }
 
@@ -747,27 +907,65 @@ extern "C" Box* intOct(BoxedInt* self) {
                        getTypeName(self));
 
     char buf[80];
-    int len = snprintf(buf, sizeof(buf), "%#lo", self->n);
+    int len = 0;
+    bool is_negative = self->n < 0;
+    if (is_negative)
+        len = snprintf(buf, sizeof(buf), "-%#lo", std::abs(self->n));
+    else
+        len = snprintf(buf, sizeof(buf), "%#lo", self->n);
     return new BoxedString(std::string(buf, len));
 }
 
-Box* _intNew(Box* val) {
+extern "C" Box* intTrunc(BoxedInt* self) {
+    if (!isSubclass(self->cls, int_cls))
+        raiseExcHelper(TypeError, "descriptor '__trunc__' requires a 'int' object but received a '%s'",
+                       getTypeName(self));
+
+    return self;
+}
+
+static Box* _intNew(Box* val, Box* base) {
     if (isSubclass(val->cls, int_cls)) {
+        RELEASE_ASSERT(!base, "");
         BoxedInt* n = static_cast<BoxedInt*>(val);
         if (val->cls == int_cls)
             return n;
         return new BoxedInt(n->n);
     } else if (val->cls == str_cls) {
+        int base_n;
+        if (!base)
+            base_n = 10;
+        else {
+            RELEASE_ASSERT(base->cls == int_cls, "");
+            base_n = static_cast<BoxedInt*>(base)->n;
+        }
+
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        std::istringstream ss(s->s);
-        int64_t n;
-        ss >> n;
-        return new BoxedInt(n);
+        RELEASE_ASSERT(s->s.size() == strlen(s->s.c_str()), "");
+        Box* r = PyInt_FromString(s->s.c_str(), NULL, base_n);
+        if (!r)
+            throwCAPIException();
+        return r;
+    } else if (val->cls == unicode_cls) {
+        int base_n;
+        if (!base)
+            base_n = 10;
+        else {
+            RELEASE_ASSERT(base->cls == int_cls, "");
+            base_n = static_cast<BoxedInt*>(base)->n;
+        }
+
+        Box* r = PyInt_FromUnicode(PyUnicode_AS_UNICODE(val), PyUnicode_GET_SIZE(val), base_n);
+        if (!r)
+            throwCAPIException();
+        return r;
     } else if (val->cls == float_cls) {
+        RELEASE_ASSERT(!base, "");
         double d = static_cast<BoxedFloat*>(val)->d;
         return new BoxedInt(d);
     } else {
+        RELEASE_ASSERT(!base, "");
         static const std::string int_str("__int__");
         Box* r = callattr(val, &int_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
                           ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
@@ -784,7 +982,7 @@ Box* _intNew(Box* val) {
     }
 }
 
-extern "C" Box* intNew(Box* _cls, Box* val) {
+extern "C" Box* intNew(Box* _cls, Box* val, Box* base) {
     if (!isSubclass(_cls->cls, type_cls))
         raiseExcHelper(TypeError, "int.__new__(X): X is not a type object (%s)", getTypeName(_cls));
 
@@ -794,9 +992,9 @@ extern "C" Box* intNew(Box* _cls, Box* val) {
                        getNameOfClass(cls));
 
     if (cls == int_cls)
-        return _intNew(val);
+        return _intNew(val, base);
 
-    BoxedInt* n = (BoxedInt*)_intNew(val);
+    BoxedInt* n = (BoxedInt*)_intNew(val, base);
     if (n->cls == long_cls) {
         if (cls == int_cls)
             return n;
@@ -869,7 +1067,7 @@ void setupInt() {
     _addFuncIntUnknown("__ge__", BOXED_BOOL, (void*)intGeInt, (void*)intGe);
 
     _addFuncIntUnknown("__lshift__", UNKNOWN, (void*)intLShiftInt, (void*)intLShift);
-    _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
+    _addFuncIntUnknown("__rshift__", UNKNOWN, (void*)intRShiftInt, (void*)intRShift);
 
     int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1)));
     int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1)));
@@ -882,8 +1080,10 @@ void setupInt() {
     int_cls->giveAttr("__hex__", new BoxedFunction(boxRTFunction((void*)intHex, STR, 1)));
     int_cls->giveAttr("__oct__", new BoxedFunction(boxRTFunction((void*)intOct, STR, 1)));
 
-    int_cls->giveAttr("__new__",
-                      new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 2, 1, false, false), { boxInt(0) }));
+    int_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)intTrunc, BOXED_INT, 1)));
+
+    int_cls->giveAttr(
+        "__new__", new BoxedFunction(boxRTFunction((void*)intNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));
 
     int_cls->giveAttr("__init__",
                       new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));

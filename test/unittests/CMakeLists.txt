@@ -9,7 +9,7 @@ add_custom_target(unittests)
 
 macro(add_unittest unittest)
   add_executable(${unittest}_unittest EXCLUDE_FROM_ALL ${unittest}.cpp $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
-  target_link_libraries(${unittest}_unittest stdlib gmp readline pypa double-conversion unwind gtest gtest_main ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
+  target_link_libraries(${unittest}_unittest stdlib sqlite3 gmp ssl crypto readline pypa double-conversion unwind gtest gtest_main ${LLVM_LIBS} ${LIBLZMA_LIBRARIES})
   add_dependencies(${unittest}_unittest gtest gtest_main)
   add_dependencies(unittests ${unittest}_unittest)
 endmacro()

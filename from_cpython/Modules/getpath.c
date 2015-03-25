@@ -117,8 +117,9 @@
 #endif
 
 #ifndef PYTHONPATH
-#define PYTHONPATH PREFIX "/lib/python" VERSION ":" \
-              EXEC_PREFIX "/lib/python" VERSION "/lib-dynload"
+// Pyston change
+#define PYTHONPATH PREFIX "/from_cpython/Lib:" \
+              EXEC_PREFIX "/from_cpython/Lib/lib-dynload"
 #endif
 
 #ifndef LANDMARK
@@ -129,7 +130,7 @@ static char prefix[MAXPATHLEN+1];
 static char exec_prefix[MAXPATHLEN+1];
 static char progpath[MAXPATHLEN+1];
 static char *module_search_path = NULL;
-static char lib_python[] = "lib/python" VERSION;
+static char lib_python[] = "from_cpython/Lib"; // Pyston change
 
 static void
 reduce(char *dir)
@@ -205,7 +206,7 @@ isdir(char *filename)                   /* Is directory */
    stuff as fits will be appended.
 */
 static void
-joinpath(char *buffer, char *stuff)
+joinpath(char *buffer, const char *stuff)
 {
     size_t n, k;
     if (stuff[0] == SEP)
@@ -385,7 +386,7 @@ search_for_exec_prefix(char *argv0_path, char *home)
 static void
 calculate_path(void)
 {
-    extern char *Py_GetProgramName(void);
+    extern const char *Py_GetProgramName(void);
 
     static char delimiter[2] = {DELIM, '\0'};
     static char separator[2] = {SEP, '\0'};
@@ -393,9 +394,10 @@ calculate_path(void)
     char *rtpypath = Py_GETENV("PYTHONPATH");
     char *home = Py_GetPythonHome();
     char *path = getenv("PATH");
-    char *prog = Py_GetProgramName();
+    const char *prog = Py_GetProgramName();
     char argv0_path[MAXPATHLEN+1];
     char zip_path[MAXPATHLEN+1];
+    char lib_pyston_path[MAXPATHLEN+1]; // Pyston change
     int pfound, efound; /* 1 if found; -1 if found build directory */
     char *buf;
     size_t bufsz;
@@ -589,6 +591,16 @@ calculate_path(void)
     bufsz += strlen(zip_path) + 1;
     bufsz += strlen(exec_prefix) + 1;
 
+    // Pyston change: add from_cpython/Lib and lib_pyston
+    // Prefix contains at this point the full path to 'from_cpython/Lib'
+    strcpy(lib_pyston_path, prefix);
+    // go from ./from_cpython/Lib to ./lib_pyston
+    reduce(lib_pyston_path);
+    reduce(lib_pyston_path);
+    joinpath(lib_pyston_path, "lib_pyston");
+    bufsz += strlen(lib_pyston_path) + 1;
+    bufsz += strlen(prefix) + 1;
+
     /* This is the only malloc call in this file */
     buf = (char *)PyMem_Malloc(bufsz);
 
@@ -609,7 +621,17 @@ calculate_path(void)
 
         /* Next is the default zip path */
         strcat(buf, zip_path);
+
+        // Pyston change
+        // add from_cpython/Lib
         strcat(buf, delimiter);
+        strcat(buf, prefix);
+
+        // add lib_pyston
+        strcat(buf, delimiter);
+        strcat(buf, lib_pyston_path);
+        strcat(buf, delimiter);
+
 
         /* Next goes merge of compile-time $PYTHONPATH with
          * dynamically located prefix.
@@ -641,6 +663,7 @@ calculate_path(void)
         strcat(buf, exec_prefix);
 
         /* And publish the results */
+        PyGC_AddRoot((void*)buf);
         module_search_path = buf;
     }
 

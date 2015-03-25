@@ -22,5 +22,11 @@ class C(object):
         return self.n
 
 print len(C(1))
-print len(1)
-print len(C("hello world"))
+try:
+    print len(1)
+except TypeError, e:
+    print e
+try:
+    print len(C("hello world"))
+except TypeError, e:
+    print e

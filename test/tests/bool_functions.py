@@ -30,6 +30,12 @@ print hash(1) == hash(True)
 print isinstance(True, int)
 print isinstance(False, int)
 
+for lhs in (True, False):
+    for rhs in (True, False):
+        print lhs | rhs
+        print lhs & rhs
+        print lhs ^ rhs
+
 print range(False, True, True)
 
 print abs(True), abs(False)

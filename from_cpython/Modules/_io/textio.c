@@ -305,8 +305,9 @@ _PyIncrementalNewlineDecoder_decode(PyObject *_self,
     if (!final) {
         if (output_len > 0
             && PyUnicode_AS_UNICODE(output)[output_len - 1] == '\r') {
-
-            if (Py_REFCNT(output) == 1) {
+            // Pyston change:
+            // if (Py_REFCNT(output) == 1) {
+            if (0) {
                 if (PyUnicode_Resize(&output, output_len - 1) < 0)
                     goto error;
             }
@@ -405,7 +406,9 @@ _PyIncrementalNewlineDecoder_decode(PyObject *_self,
             PyObject *translated = NULL;
             Py_UNICODE *out_str;
             Py_UNICODE *in, *out, *end;
-            if (Py_REFCNT(output) != 1) {
+            // Pyston change
+            // if (Py_REFCNT(output) != 1) {
+            if (1) {
                 /* We could try to optimize this so that we only do a copy
                    when there is something to translate. On the other hand,
                    most decoders should only output non-shared strings, i.e.
@@ -413,7 +416,7 @@ _PyIncrementalNewlineDecoder_decode(PyObject *_self,
                 translated = PyUnicode_FromUnicode(NULL, len);
                 if (translated == NULL)
                     goto error;
-                assert(Py_REFCNT(translated) == 1);
+                // assert(Py_REFCNT(translated) == 1); Pyston change
                 memcpy(PyUnicode_AS_UNICODE(translated),
                        PyUnicode_AS_UNICODE(output),
                        len * sizeof(Py_UNICODE));
@@ -1798,7 +1801,9 @@ _textiowrapper_readline(textio *self, Py_ssize_t limit)
         /* Our line ends in the current buffer */
         self->decoded_chars_used = endpos - offset_to_buffer;
         if (start > 0 || endpos < PyUnicode_GET_SIZE(line)) {
-            if (start == 0 && Py_REFCNT(line) == 1) {
+            // Pyston change:
+            // if (start == 0 && Py_REFCNT(line) == 1) {
+            if (0) {
                 if (PyUnicode_Resize(&line, endpos) < 0)
                     goto error;
             }

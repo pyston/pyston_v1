@@ -792,6 +792,22 @@ void* AST_Set::accept_expr(ExprVisitor* v) {
     return v->visit_set(this);
 }
 
+void AST_SetComp::accept(ASTVisitor* v) {
+    bool skip = v->visit_setcomp(this);
+    if (skip)
+        return;
+
+    for (auto c : generators) {
+        c->accept(v);
+    }
+
+    elt->accept(v);
+}
+
+void* AST_SetComp::accept_expr(ExprVisitor* v) {
+    return v->visit_setcomp(this);
+}
+
 void AST_Slice::accept(ASTVisitor* v) {
     bool skip = v->visit_slice(this);
     if (skip)
@@ -937,7 +953,6 @@ void AST_Branch::accept_stmt(StmtVisitor* v) {
     v->visit_branch(this);
 }
 
-
 void AST_Jump::accept(ASTVisitor* v) {
     bool skip = v->visit_jump(this);
     if (skip)
@@ -960,7 +975,29 @@ void* AST_ClsAttribute::accept_expr(ExprVisitor* v) {
     return v->visit_clsattribute(this);
 }
 
+void AST_MakeFunction::accept(ASTVisitor* v) {
+    bool skip = v->visit_makefunction(this);
+    if (skip)
+        return;
 
+    function_def->accept(v);
+}
+
+void* AST_MakeFunction::accept_expr(ExprVisitor* v) {
+    return v->visit_makefunction(this);
+}
+
+void AST_MakeClass::accept(ASTVisitor* v) {
+    bool skip = v->visit_makeclass(this);
+    if (skip)
+        return;
+
+    class_def->accept(v);
+}
+
+void* AST_MakeClass::accept_expr(ExprVisitor* v) {
+    return v->visit_makeclass(this);
+}
 
 void print_ast(AST* ast) {
     PrintVisitor v;
@@ -1465,6 +1502,9 @@ bool PrintVisitor::visit_langprimitive(AST_LangPrimitive* node) {
         case AST_LangPrimitive::UNCACHE_EXC_INFO:
             printf("UNCACHE_EXC_INFO");
             break;
+        case AST_LangPrimitive::HASNEXT:
+            printf("HASNEXT");
+            break;
         default:
             RELEASE_ASSERT(0, "%d", node->opcode);
     }
@@ -1606,6 +1646,17 @@ bool PrintVisitor::visit_set(AST_Set* node) {
         e->accept(this);
     }
 
+    printf("}");
+    return true;
+}
+
+bool PrintVisitor::visit_setcomp(AST_SetComp* node) {
+    printf("{");
+    node->elt->accept(this);
+    for (auto c : node->generators) {
+        printf(" ");
+        c->accept(this);
+    }
     printf("}");
     return true;
 }
@@ -1821,6 +1872,16 @@ bool PrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
     return true;
 }
 
+bool PrintVisitor::visit_makefunction(AST_MakeFunction* node) {
+    printf("make_");
+    return false;
+}
+
+bool PrintVisitor::visit_makeclass(AST_MakeClass* node) {
+    printf("make_");
+    return false;
+}
+
 class FlattenVisitor : public ASTVisitor {
 private:
     std::vector<AST*>* output;
@@ -2011,6 +2072,10 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_setcomp(AST_SetComp* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_slice(AST_Slice* node) {
         output->push_back(node);
         return false;
@@ -2061,6 +2126,15 @@ public:
         return false;
     }
     virtual bool visit_clsattribute(AST_ClsAttribute* node) {
+        output->push_back(node);
+        return false;
+    }
+
+    virtual bool visit_makeclass(AST_MakeClass* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_makefunction(AST_MakeFunction* node) {
         output->push_back(node);
         return false;
     }

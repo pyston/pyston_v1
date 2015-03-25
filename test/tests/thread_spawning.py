@@ -1,5 +1,3 @@
-# allow-warning: converting unicode literal to str
-
 # Make sure we can spawn a bunch of threads
 
 import threading
@@ -21,6 +19,8 @@ for i in xrange(400):
     with cv:
         while nworkers >= MAX_WORKERS:
             cv.wait()
+
+        nworkers += 1
 
     t = threading.Thread(target=worker)
     t.start()

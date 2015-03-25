@@ -15,6 +15,8 @@ print "  test  ".rsplit()
 print "  test  ".rsplit(' ')
 print "  test  ".rsplit(None)
 print "1<>2<>3".rsplit('<>')
+print "1<>2<>3".rsplit('<>', 1)
+print "1<>2<>3".split('<>', 1)
 
 print map(bool, ["hello", "", "world"])
 
@@ -36,6 +38,8 @@ for c in "hello world":
 
 for c in "hello world":
     print c, "hello world".count(c)
+    print c, "hello world".count(c, 1, 2)
+    print c, "hello world".count(c, 2, 5)
 
 for i in xrange(1, 10):
     for j in xrange(1, 4):
@@ -78,7 +82,8 @@ print "hello world".translate(translation_map, "llo")
 print "hello world".translate(None, "llo")
 
 for i in xrange(-10, 10):
-    print i, "aaaaa".find("a", i)
+    print i, "aaaaa".find("a", i), "aaaa".find("a", 2, i)
+    print i, "aaaaa".rfind("a", i), "aaaa".rfind("a", 2, i)
 
 print "hello world".partition("hi")
 print "hello world".partition("hello")
@@ -129,8 +134,28 @@ for c in "hello world":
     gc.collect()
 
 print "hello world".index("world")
+print "hello world".index("world", 1, 30)
+print "hello world".index("l", 3)
+print "hello world".rindex("world")
+print "hello world".rindex("world", 1, 30)
+print "hello world".rindex("l", 3)
 try:
     print "hello world".index("goodbye")
-except:
-    print "threw exception"
+except Exception as e:
+    print e
 
+print repr("hello\tworld\t".expandtabs())
+print repr("hello\tworld\t".expandtabs(12))
+
+print "hello world".startswith(("x", "h"))
+print "hello world".endswith(("x", "h"))
+
+print "partition:", "a.b.c.d".partition('.')
+print "rpartition:", "a.b.c.d".rpartition('.')
+print "partition:", "abcd".partition('.')
+print "rpartition:", "abcd".rpartition('.')
+
+print 'ab c\n\nde fg\rkl\r\n'.splitlines()
+print 'ab c\n\nde fg\rkl\r\n'.splitlines(True)
+
+print "1".zfill(3), "+1".zfill(3), "-1".zfill(3), "0".zfill(3)

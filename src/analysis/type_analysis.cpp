@@ -376,6 +376,7 @@ private:
             case AST_LangPrimitive::SET_EXC_INFO:
             case AST_LangPrimitive::UNCACHE_EXC_INFO:
                 return NONE;
+            case AST_LangPrimitive::HASNEXT:
             case AST_LangPrimitive::NONZERO:
                 return BOOL;
             default:
@@ -452,7 +453,13 @@ private:
 
     void* visit_slice(AST_Slice* node) override { return SLICE; }
 
-    void* visit_str(AST_Str* node) override { return STR; }
+    void* visit_str(AST_Str* node) override {
+        if (node->str_type == AST_Str::STR)
+            return STR;
+        else if (node->str_type == AST_Str::UNICODE)
+            return typeFromClass(unicode_cls);
+        RELEASE_ASSERT(0, "Unknown string type %d", (int)node->str_type);
+    }
 
     void* visit_subscript(AST_Subscript* node) override {
         CompilerType* val = getType(node->value);
@@ -504,7 +511,9 @@ private:
         }
     }
 
-    void visit_classdef(AST_ClassDef* node) override {
+    void* visit_makeclass(AST_MakeClass* mkclass) override {
+        AST_ClassDef* node = mkclass->class_def;
+
         for (auto d : node->decorator_list) {
             getType(d);
         }
@@ -514,9 +523,8 @@ private:
         }
 
         // TODO should we speculate that classdefs will generally return a class?
-        // CompilerType* t = typeFromClass(type_cls);
-        CompilerType* t = UNKNOWN;
-        _doSet(node->name, t);
+        // return typeFromClass(type_cls);
+        return UNKNOWN;
     }
 
     void visit_delete(AST_Delete* node) override {
@@ -544,7 +552,9 @@ private:
         }
     }
 
-    void visit_functiondef(AST_FunctionDef* node) override {
+    void* visit_makefunction(AST_MakeFunction* mkfn) override {
+        AST_FunctionDef* node = mkfn->function_def;
+
         for (auto d : node->decorator_list) {
             getType(d);
         }
@@ -553,7 +563,10 @@ private:
             getType(d);
         }
 
-        _doSet(node->name, typeFromClass(function_cls));
+        CompilerType* t = UNKNOWN;
+        if (node->decorator_list.empty())
+            t = typeFromClass(function_cls);
+        return t;
     }
 
     void visit_global(AST_Global* node) override {}

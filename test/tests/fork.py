@@ -1,5 +1,4 @@
 # no-collect-stats
-# allow-warning: converting unicode literal to str
 
 from thread import start_new_thread
 import time

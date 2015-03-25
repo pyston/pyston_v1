@@ -628,10 +628,13 @@ init_io(void)
     if (m == NULL)
         return;
 
+    // Pyston change: we don't support importing os during init, but it looks like it works without it...
+#if 0
     /* put os in the module state */
     _PyIO_os_module = PyImport_ImportModule("os");
     if (_PyIO_os_module == NULL)
         goto fail;
+#endif
 
 #define ADD_TYPE(type, name) \
     if (PyType_Ready(type) < 0) \
@@ -647,9 +650,13 @@ init_io(void)
         goto fail;
 
     /* UnsupportedOperation inherits from ValueError and IOError */
-    _PyIO_unsupported_operation = PyObject_CallFunction(
-        (PyObject *)&PyType_Type, "s(OO){}",
-        "UnsupportedOperation", PyExc_ValueError, PyExc_IOError);
+    // Pyston change: during init we have to supply the module name by ourself.
+    _PyIO_unsupported_operation = PyObject_CallFunction((PyObject *)&PyType_Type, "s(OO){s:s}",
+          "UnsupportedOperation", PyExc_ValueError, PyExc_IOError, "__module__", "io");
+    // _PyIO_unsupported_operation = PyObject_CallFunction(
+    //    (PyObject *)&PyType_Type, "s(OO){}",
+    //    "UnsupportedOperation", PyExc_ValueError, PyExc_IOError);
+
     if (_PyIO_unsupported_operation == NULL)
         goto fail;
     Py_INCREF(_PyIO_unsupported_operation);
@@ -705,59 +712,61 @@ init_io(void)
     /* IncrementalNewlineDecoder */
     ADD_TYPE(&PyIncrementalNewlineDecoder_Type, "IncrementalNewlineDecoder");
 
+    // Pyston change: register with gc
+    // TODO: automatically register static variables as roots
     /* Interned strings */
-    if (!(_PyIO_str_close = PyString_InternFromString("close")))
+    if (!(_PyIO_str_close = PyGC_AddRoot(PyString_InternFromString("close"))))
         goto fail;
-    if (!(_PyIO_str_closed = PyString_InternFromString("closed")))
+    if (!(_PyIO_str_closed = PyGC_AddRoot(PyString_InternFromString("closed"))))
         goto fail;
-    if (!(_PyIO_str_decode = PyString_InternFromString("decode")))
+    if (!(_PyIO_str_decode = PyGC_AddRoot(PyString_InternFromString("decode"))))
         goto fail;
-    if (!(_PyIO_str_encode = PyString_InternFromString("encode")))
+    if (!(_PyIO_str_encode = PyGC_AddRoot(PyString_InternFromString("encode"))))
         goto fail;
-    if (!(_PyIO_str_fileno = PyString_InternFromString("fileno")))
+    if (!(_PyIO_str_fileno = PyGC_AddRoot(PyString_InternFromString("fileno"))))
         goto fail;
-    if (!(_PyIO_str_flush = PyString_InternFromString("flush")))
+    if (!(_PyIO_str_flush = PyGC_AddRoot(PyString_InternFromString("flush"))))
         goto fail;
-    if (!(_PyIO_str_getstate = PyString_InternFromString("getstate")))
+    if (!(_PyIO_str_getstate = PyGC_AddRoot(PyString_InternFromString("getstate"))))
         goto fail;
-    if (!(_PyIO_str_isatty = PyString_InternFromString("isatty")))
+    if (!(_PyIO_str_isatty = PyGC_AddRoot(PyString_InternFromString("isatty"))))
         goto fail;
-    if (!(_PyIO_str_newlines = PyString_InternFromString("newlines")))
+    if (!(_PyIO_str_newlines = PyGC_AddRoot(PyString_InternFromString("newlines"))))
         goto fail;
-    if (!(_PyIO_str_nl = PyString_InternFromString("\n")))
+    if (!(_PyIO_str_nl = PyGC_AddRoot(PyString_InternFromString("\n"))))
         goto fail;
-    if (!(_PyIO_str_read = PyString_InternFromString("read")))
+    if (!(_PyIO_str_read = PyGC_AddRoot(PyString_InternFromString("read"))))
         goto fail;
-    if (!(_PyIO_str_read1 = PyString_InternFromString("read1")))
+    if (!(_PyIO_str_read1 = PyGC_AddRoot(PyString_InternFromString("read1"))))
         goto fail;
-    if (!(_PyIO_str_readable = PyString_InternFromString("readable")))
+    if (!(_PyIO_str_readable = PyGC_AddRoot(PyString_InternFromString("readable"))))
         goto fail;
-    if (!(_PyIO_str_readinto = PyString_InternFromString("readinto")))
+    if (!(_PyIO_str_readinto = PyGC_AddRoot(PyString_InternFromString("readinto"))))
         goto fail;
-    if (!(_PyIO_str_readline = PyString_InternFromString("readline")))
+    if (!(_PyIO_str_readline = PyGC_AddRoot(PyString_InternFromString("readline"))))
         goto fail;
-    if (!(_PyIO_str_reset = PyString_InternFromString("reset")))
+    if (!(_PyIO_str_reset = PyGC_AddRoot(PyString_InternFromString("reset"))))
         goto fail;
-    if (!(_PyIO_str_seek = PyString_InternFromString("seek")))
+    if (!(_PyIO_str_seek = PyGC_AddRoot(PyString_InternFromString("seek"))))
         goto fail;
-    if (!(_PyIO_str_seekable = PyString_InternFromString("seekable")))
+    if (!(_PyIO_str_seekable = PyGC_AddRoot(PyString_InternFromString("seekable"))))
         goto fail;
-    if (!(_PyIO_str_setstate = PyString_InternFromString("setstate")))
+    if (!(_PyIO_str_setstate = PyGC_AddRoot(PyString_InternFromString("setstate"))))
         goto fail;
-    if (!(_PyIO_str_tell = PyString_InternFromString("tell")))
+    if (!(_PyIO_str_tell = PyGC_AddRoot(PyString_InternFromString("tell"))))
         goto fail;
-    if (!(_PyIO_str_truncate = PyString_InternFromString("truncate")))
+    if (!(_PyIO_str_truncate = PyGC_AddRoot(PyString_InternFromString("truncate"))))
         goto fail;
-    if (!(_PyIO_str_write = PyString_InternFromString("write")))
+    if (!(_PyIO_str_write = PyGC_AddRoot(PyString_InternFromString("write"))))
         goto fail;
-    if (!(_PyIO_str_writable = PyString_InternFromString("writable")))
+    if (!(_PyIO_str_writable = PyGC_AddRoot(PyString_InternFromString("writable"))))
         goto fail;
     
-    if (!(_PyIO_empty_str = PyUnicode_FromStringAndSize(NULL, 0)))
+    if (!(_PyIO_empty_str = PyGC_AddRoot(PyUnicode_FromStringAndSize(NULL, 0))))
         goto fail;
-    if (!(_PyIO_empty_bytes = PyBytes_FromStringAndSize(NULL, 0)))
+    if (!(_PyIO_empty_bytes = PyGC_AddRoot(PyBytes_FromStringAndSize(NULL, 0))))
         goto fail;
-    if (!(_PyIO_zero = PyLong_FromLong(0L)))
+    if (!(_PyIO_zero = PyGC_AddRoot(PyLong_FromLong(0L))))
         goto fail;
 
     return;

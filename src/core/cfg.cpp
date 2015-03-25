@@ -172,6 +172,8 @@ private:
     std::vector<ContInfo> continuations;
     std::vector<ExcBlockInfo> exc_handlers;
 
+    friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
+
 public:
     CFGVisitor(SourceInfo* source, AST_TYPE::AST_TYPE root_type, FutureFlags future_flags,
                ScopingAnalysis* scoping_analysis, CFG* cfg)
@@ -182,8 +184,10 @@ public:
     }
 
     ~CFGVisitor() {
-        assert(continuations.size() == 0);
-        assert(exc_handlers.size() == 0);
+        // if we're being destroyed due to an exception, our internal invariants may be violated, but that's okay; the
+        // CFG isn't going to get used anyway. (Maybe we should check that it won't be used somehow?)
+        assert(continuations.size() == 0 || std::uncaught_exception());
+        assert(exc_handlers.size() == 0 || std::uncaught_exception());
     }
 
     // ---------- private methods ----------
@@ -213,6 +217,7 @@ private:
 
     void doReturn(AST_expr* value) {
         assert(value);
+        assert(curblock);
 
         for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
             if (cont.return_dest) {
@@ -236,6 +241,7 @@ private:
     }
 
     void doContinue() {
+        assert(curblock);
         for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
             if (cont.continue_dest) {
                 if (cont.say_why) {
@@ -252,6 +258,7 @@ private:
     }
 
     void doBreak() {
+        assert(curblock);
         for (auto& cont : llvm::make_range(continuations.rbegin(), continuations.rend())) {
             if (cont.break_dest) {
                 if (cont.say_why) {
@@ -285,18 +292,14 @@ private:
 
     AST_Name* remapName(AST_Name* name) { return name; }
 
-    AST_expr* applyComprehensionCall(AST_DictComp* node, AST_Name* name) {
-        AST_expr* key = remapExpr(node->key);
-        AST_expr* value = remapExpr(node->value);
-        return makeCall(makeLoadAttribute(name, internString("__setitem__"), true), key, value);
-    }
-
     AST_expr* applyComprehensionCall(AST_ListComp* node, AST_Name* name) {
         AST_expr* elt = remapExpr(node->elt);
         return makeCall(makeLoadAttribute(name, internString("append"), true), elt);
     }
 
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
+        assert(curblock);
+
         InternedString rtn_name = nodeName(node);
         pushAssign(rtn_name, new ResultASTType());
         std::vector<CFGBlock*> exit_blocks;
@@ -317,8 +320,6 @@ private:
             InternedString iter_name = nodeName(node, "lc_iter", i);
             pushAssign(iter_name, iter_call);
 
-            // TODO bad to save these like this?
-            AST_expr* hasnext_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("__hasnext__"), true);
             AST_expr* next_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("next"), true);
 
             CFGBlock* test_block = cfg->addBlock();
@@ -327,7 +328,9 @@ private:
             pushJump(test_block);
 
             curblock = test_block;
-            AST_expr* test_call = callNonzero(remapExpr(makeCall(hasnext_attr)));
+            AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+            test_call->args.push_back(makeName(iter_name, AST_TYPE::Load, node->lineno));
+            AST_expr* test = remapExpr(test_call);
 
             CFGBlock* body_block = cfg->addBlock();
             body_block->info = "comprehension_body";
@@ -339,7 +342,7 @@ private:
             AST_Branch* br = new AST_Branch();
             br->col_offset = node->col_offset;
             br->lineno = node->lineno;
-            br->test = test_call;
+            br->test = test;
             br->iftrue = body_block;
             br->iffalse = exit_block;
             curblock->connectTo(body_block);
@@ -693,6 +696,8 @@ private:
     }
 
     AST_expr* remapBoolOp(AST_BoolOp* node) {
+        assert(curblock);
+
         InternedString name = nodeName(node);
 
         CFGBlock* starting_block = curblock;
@@ -781,6 +786,8 @@ private:
     }
 
     AST_expr* remapCompare(AST_Compare* node) {
+        assert(curblock);
+
         // special case unchained comparisons to avoid generating a unnecessary complex cfg.
         if (node->ops.size() == 1) {
             AST_Compare* rtn = new AST_Compare();
@@ -854,40 +861,37 @@ private:
         }
 
         return rtn;
-    };
+    }
 
-    AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
-        assert(node->generators.size());
-
-        AST_expr* first = remapExpr(node->generators[0]->iter);
-
+    // This is a helper function used for generators expressions and comprehensions.
+    //
+    // Generates a FunctionDef which produces scope for `node'. The function produced is empty, so you'd better fill it.
+    // `node' had better be a kind of node that scoping_analysis thinks can carry scope (see the switch (node->type)
+    // block in ScopingAnalysis::processNameUsages in analysis/scoping_analysis.cpp); e.g. a Lambda or GeneratorExp.
+    AST_MakeFunction* makeFunctionForScope(AST* node) {
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
-        InternedString func_name(nodeName(func));
+        InternedString func_name = nodeName(func);
         func->name = func_name;
-
-        scoping_analysis->registerScopeReplacement(node, func);
-
         func->args = new AST_arguments();
         func->args->vararg = internString("");
         func->args->kwarg = internString("");
+        scoping_analysis->registerScopeReplacement(node, func); // critical bit
+        return new AST_MakeFunction(func);
+    }
 
-        InternedString first_generator_name = nodeName(node->generators[0]);
-        func->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
-
-        std::vector<AST_stmt*>* insert_point = &func->body;
-        for (int i = 0; i < node->generators.size(); i++) {
-            AST_comprehension* c = node->generators[i];
+    // This is a helper function used for generator expressions and comprehensions.
+    // TODO(rntz): use this to handle unscoped (i.e. list) comprehensions as well?
+    void emitComprehensionLoops(std::vector<AST_stmt*>* insert_point,
+                                const std::vector<AST_comprehension*>& comprehensions, AST_expr* first_generator,
+                                std::function<void(std::vector<AST_stmt*>*)> do_yield) {
+        for (int i = 0; i < comprehensions.size(); i++) {
+            AST_comprehension* c = comprehensions[i];
 
             AST_For* loop = new AST_For();
             loop->target = c->target;
-
-            if (i == 0) {
-                loop->iter = makeLoad(first_generator_name, node);
-            } else {
-                loop->iter = c->iter;
-            }
+            loop->iter = (i == 0) ? first_generator : c->iter;
 
             insert_point->push_back(loop);
             insert_point = &loop->body;
@@ -904,23 +908,76 @@ private:
             }
         }
 
-        AST_Yield* y = new AST_Yield();
-        y->value = node->elt;
-        insert_point->push_back(makeExpr(y));
+        do_yield(insert_point);
+    }
 
-        push_back(func);
-        AST_Call* call = new AST_Call();
-        call->lineno = node->lineno;
-        call->col_offset = node->col_offset;
+    AST_expr* remapGeneratorExp(AST_GeneratorExp* node) {
+        assert(node->generators.size());
 
-        call->starargs = NULL;
-        call->kwargs = NULL;
-        call->func = makeLoad(func_name, node);
-        call->args.push_back(first);
-        return call;
-    };
+        // We need to evaluate the first for-expression immediately, as the PEP dictates; so we pass it in as an
+        // argument to the function we create. See
+        // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
+        AST_expr* first = remapExpr(node->generators[0]->iter);
+        InternedString first_generator_name = nodeName(node->generators[0]);
+
+        AST_MakeFunction* func = makeFunctionForScope(node);
+        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        emitComprehensionLoops(&func->function_def->body, node->generators,
+                               makeName(first_generator_name, AST_TYPE::Load, node->lineno),
+                               [this, node](std::vector<AST_stmt*>* insert_point) {
+                                   auto y = new AST_Yield();
+                                   y->value = node->elt;
+                                   insert_point->push_back(makeExpr(y));
+                               });
+        pushAssign(func->function_def->name, func);
+
+        return makeCall(makeLoad(func->function_def->name, node), first);
+    }
+
+    void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
+        // add entry to the dictionary
+        AST_expr* setitem
+            = makeLoadAttribute(makeName(dict_name, AST_TYPE::Load, node->lineno), internString("__setitem__"), true);
+        insert_point->push_back(makeExpr(makeCall(setitem, node->key, node->value)));
+    }
+
+    void emitComprehensionYield(AST_SetComp* node, InternedString set_name, std::vector<AST_stmt*>* insert_point) {
+        // add entry to the dictionary
+        AST_expr* add = makeLoadAttribute(makeName(set_name, AST_TYPE::Load, node->lineno), internString("add"), true);
+        insert_point->push_back(makeExpr(makeCall(add, node->elt)));
+    }
+
+    template <typename ResultType, typename CompType> AST_expr* remapScopedComprehension(CompType* node) {
+        // See comment in remapGeneratorExp re early vs. late binding.
+        AST_expr* first = remapExpr(node->generators[0]->iter);
+        InternedString first_generator_name = nodeName(node->generators[0]);
+
+        AST_MakeFunction* func = makeFunctionForScope(node);
+        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+
+        InternedString rtn_name = nodeName(node);
+        auto asgn = new AST_Assign();
+        asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
+        asgn->value = new ResultType();
+        func->function_def->body.push_back(asgn);
+
+        auto lambda =
+            [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
+        AST_Name* first_name = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
+        emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
+
+        auto rtn = new AST_Return();
+        rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
+        func->function_def->body.push_back(rtn);
+
+        pushAssign(func->function_def->name, func);
+
+        return makeCall(makeName(func->function_def->name, AST_TYPE::Load, node->lineno), first);
+    }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
+        assert(curblock);
+
         InternedString rtn_name = nodeName(node);
         CFGBlock* iftrue = cfg->addDeferredBlock();
         CFGBlock* iffalse = cfg->addDeferredBlock();
@@ -957,14 +1014,25 @@ private:
         return rtn;
     }
 
+    AST_arguments* remapArguments(AST_arguments* args) {
+        auto rtn = new AST_arguments();
+        rtn = new AST_arguments();
+        // don't remap args, they're not evaluated. NB. expensive vector copy.
+        rtn->args = args->args;
+        rtn->kwarg = args->kwarg;
+        rtn->vararg = args->vararg;
+        for (auto expr : args->defaults)
+            rtn->defaults.push_back(remapExpr(expr));
+        return rtn;
+    }
+
     AST_expr* remapLambda(AST_Lambda* node) {
-        // Remap in place: see note in visit_functiondef for why.
-
-        for (int i = 0; i < node->args->defaults.size(); i++) {
-            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
-        }
-
-        return node;
+        auto rtn = new AST_Lambda();
+        rtn->body = node->body; // don't remap now; will be CFG'ed later
+        rtn->args = remapArguments(node->args);
+        // lambdas create scope, need to register as replacement
+        scoping_analysis->registerScopeReplacement(node, rtn);
+        return rtn;
     }
 
     AST_expr* remapLangPrimitive(AST_LangPrimitive* node) {
@@ -1104,7 +1172,7 @@ private:
                 rtn = remapDict(ast_cast<AST_Dict>(node));
                 break;
             case AST_TYPE::DictComp:
-                rtn = remapComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
+                rtn = remapScopedComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
                 break;
             case AST_TYPE::GeneratorExp:
                 rtn = remapGeneratorExp(ast_cast<AST_GeneratorExp>(node));
@@ -1139,6 +1207,9 @@ private:
                 break;
             case AST_TYPE::Set:
                 rtn = remapSet(ast_cast<AST_Set>(node));
+                break;
+            case AST_TYPE::SetComp:
+                rtn = remapScopedComprehension<AST_Set>(ast_cast<AST_SetComp>(node));
                 break;
             case AST_TYPE::Slice:
                 rtn = remapSlice(ast_cast<AST_Slice>(node));
@@ -1331,42 +1402,46 @@ public:
     }
 
     bool visit_classdef(AST_ClassDef* node) override {
-        // Remap in place: see note in visit_functiondef for why.
+        // waitaminute, who deallocates `node'?
+        auto def = new AST_ClassDef();
+        def->lineno = node->lineno;
+        def->col_offset = node->col_offset;
+        def->name = node->name;
+        def->body = node->body; // expensive vector copy
 
-        // Decorators are evaluated before the defaults:
-        for (int i = 0; i < node->decorator_list.size(); i++) {
-            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
-        }
+        // Decorators are evaluated before bases:
+        for (auto expr : node->decorator_list)
+            def->decorator_list.push_back(remapExpr(expr));
+        for (auto expr : node->bases)
+            def->bases.push_back(remapExpr(expr));
 
-        for (int i = 0; i < node->bases.size(); i++) {
-            node->bases[i] = remapExpr(node->bases[i]);
-        }
+        scoping_analysis->registerScopeReplacement(node, def);
 
-        push_back(node);
+        auto tmp = nodeName(node);
+        pushAssign(tmp, new AST_MakeClass(def));
+        // is this name mangling correct?
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
+
         return true;
     }
 
     bool visit_functiondef(AST_FunctionDef* node) override {
-        // As much as I don't like it, for now we're remapping these in place.
-        // This is because we do certain analyses pre-remapping, and associate the
-        // results with the node.  We can either do some refactoring and have a way
-        // of associating the new node with the same results, or just do the remapping
-        // in-place.
-        // Doing it in-place seems ugly, but I can't think of anything it should break,
-        // so just do that for now.
-        // TODO If we remap these (functiondefs, lambdas, classdefs) in place, we should probably
-        // remap everything in place?
+        auto def = new AST_FunctionDef();
+        def->name = node->name;
+        def->body = node->body; // expensive vector copy
+        // Decorators are evaluated before the defaults, so this *must* go before remapArguments().
+        // TODO(rntz): do we have a test for this
+        for (auto expr : node->decorator_list)
+            def->decorator_list.push_back(remapExpr(expr));
+        def->args = remapArguments(node->args);
 
-        // Decorators are evaluated before the defaults:
-        for (int i = 0; i < node->decorator_list.size(); i++) {
-            node->decorator_list[i] = remapExpr(node->decorator_list[i]);
-        }
+        scoping_analysis->registerScopeReplacement(node, def);
 
-        for (int i = 0; i < node->args->defaults.size(); i++) {
-            node->args->defaults[i] = remapExpr(node->args->defaults[i]);
-        }
+        auto tmp = nodeName(node);
+        pushAssign(tmp, new AST_MakeFunction(def));
+        // is this name mangling correct?
+        pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
 
-        push_back(node);
         return true;
     }
 
@@ -1392,7 +1467,16 @@ public:
 
             import->args.push_back(new AST_Num());
             static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
-            static_cast<AST_Num*>(import->args[0])->n_int = -1;
+
+            // level == 0 means only check sys path for imports, nothing package-relative,
+            // level == -1 means check both sys path and relative for imports.
+            // so if `from __future__ import absolute_import` was used in the file, set level to 0
+            int level;
+            if (!(future_flags & FF_ABSOLUTE_IMPORT))
+                level = -1;
+            else
+                level = 0;
+            static_cast<AST_Num*>(import->args[0])->n_int = level;
             import->args.push_back(new AST_LangPrimitive(AST_LangPrimitive::NONE));
             import->args.push_back(new AST_Str(a->name.str()));
 
@@ -1417,7 +1501,7 @@ public:
                         continue;
                     }
                     pushAssign(tmpname, new AST_Attribute(makeLoad(tmpname, node), AST_TYPE::Load,
-                                                          internString(a->name.str().substr(l, r))));
+                                                          internString(a->name.str().substr(l, r - l))));
                     l = r + 1;
                 } while (l < a->name.str().size());
                 pushAssign(a->asname, makeLoad(tmpname, node));
@@ -1428,8 +1512,6 @@ public:
     }
 
     bool visit_importfrom(AST_ImportFrom* node) override {
-        RELEASE_ASSERT(node->level == 0, "");
-
         AST_LangPrimitive* import = new AST_LangPrimitive(AST_LangPrimitive::IMPORT_NAME);
         import->lineno = node->lineno;
         import->col_offset = node->col_offset;
@@ -1437,7 +1519,9 @@ public:
         import->args.push_back(new AST_Num());
         static_cast<AST_Num*>(import->args[0])->num_type = AST_Num::INT;
 
-        // I don't quite understand this but this is what CPython does:
+        // level == 0 means only check sys path for imports, nothing package-relative,
+        // level == -1 means check both sys path and relative for imports.
+        // so if `from __future__ import absolute_import` was used in the file, set level to 0
         int level;
         if (node->level == 0 && !(future_flags & FF_ABSOLUTE_IMPORT))
             level = -1;
@@ -1465,6 +1549,8 @@ public:
 
                 AST_Expr* import_star_expr = new AST_Expr();
                 import_star_expr->value = import_star;
+                import_star_expr->lineno = node->lineno;
+                import_star_expr->col_offset = node->col_offset;
 
                 push_back(import_star_expr);
             } else {
@@ -1486,6 +1572,8 @@ public:
     bool visit_pass(AST_Pass* node) override { return true; }
 
     bool visit_assert(AST_Assert* node) override {
+        assert(curblock);
+
         AST_Branch* br = new AST_Branch();
         br->test = callNonzero(remapExpr(node->test));
         push_back(br);
@@ -1744,6 +1832,8 @@ public:
     bool visit_return(AST_Return* node) override {
         // returns are allowed in functions (of course), and also in eval("...") strings - basically, eval strings get
         // an implicit `return'. root_type is AST_TYPE::Expression when we're compiling an eval string.
+        assert(curblock);
+
         if (root_type != AST_TYPE::FunctionDef && root_type != AST_TYPE::Lambda && root_type != AST_TYPE::Expression) {
             raiseExcHelper(SyntaxError, "'return' outside function");
         }
@@ -1756,8 +1846,7 @@ public:
     }
 
     bool visit_if(AST_If* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         AST_Branch* br = new AST_Branch();
         br->col_offset = node->col_offset;
@@ -1776,6 +1865,8 @@ public:
         curblock = iftrue;
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             pushJump(exit);
@@ -1789,6 +1880,8 @@ public:
         curblock = iffalse;
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock) {
             pushJump(exit);
@@ -1805,8 +1898,7 @@ public:
     }
 
     bool visit_break(AST_Break* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         doBreak();
         assert(!curblock);
@@ -1814,8 +1906,7 @@ public:
     }
 
     bool visit_continue(AST_Continue* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         doContinue();
         assert(!curblock);
@@ -1825,8 +1916,7 @@ public:
     bool visit_exec(AST_Exec* node) override { raiseExcHelper(SyntaxError, "'exec' currently not supported"); }
 
     bool visit_while(AST_While* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         CFGBlock* test_block = cfg->addBlock();
         test_block->info = "while_test";
@@ -1851,6 +1941,8 @@ public:
         curblock = body;
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock)
             pushJump(test_block, true);
@@ -1863,19 +1955,25 @@ public:
         curblock = orelse;
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock)
             pushJump(end);
-        curblock = end;
 
-        cfg->placeBlock(end);
+        if (end->predecessors.size() == 0) {
+            delete end;
+            curblock = NULL;
+        } else {
+            curblock = end;
+            cfg->placeBlock(end);
+        }
 
         return true;
     }
 
     bool visit_for(AST_For* node) override {
-        if (!curblock)
-            return true;
+        assert(curblock);
 
         // TODO this is so complicated because I tried doing loop inversion;
         // is it really worth it?  It got so bad because all the edges became
@@ -1890,15 +1988,14 @@ public:
         InternedString itername = internString(itername_buf);
         pushAssign(itername, iter_call);
 
-        auto hasnext_attr =
-            [&]() { return makeLoadAttribute(makeLoad(itername, node), internString("__hasnext__"), true); };
         AST_expr* next_attr = makeLoadAttribute(makeLoad(itername, node), internString("next"), true);
 
         CFGBlock* test_block = cfg->addBlock();
         pushJump(test_block);
         curblock = test_block;
 
-        AST_expr* test_call = makeCall(hasnext_attr());
+        AST_LangPrimitive* test_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+        test_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
         AST_Branch* test_br = makeBranch(remapExpr(test_call));
 
         push_back(test_br);
@@ -1929,11 +2026,14 @@ public:
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
         popContinuation();
 
         if (curblock) {
-            AST_expr* end_call = makeCall((hasnext_attr()));
+            AST_LangPrimitive* end_call = new AST_LangPrimitive(AST_LangPrimitive::HASNEXT);
+            end_call->args.push_back(makeName(itername, AST_TYPE::Load, node->lineno));
             AST_Branch* end_br = makeBranch(remapExpr(end_call));
             push_back(end_br);
 
@@ -1956,17 +2056,26 @@ public:
 
         for (int i = 0; i < node->orelse.size(); i++) {
             node->orelse[i]->accept(this);
+            if (!curblock)
+                break;
         }
         if (curblock)
             pushJump(end_block);
 
-        cfg->placeBlock(end_block);
-        curblock = end_block;
+        if (end_block->predecessors.size() == 0) {
+            delete end_block;
+            curblock = NULL;
+        } else {
+            cfg->placeBlock(end_block);
+            curblock = end_block;
+        }
 
         return true;
     }
 
     bool visit_raise(AST_Raise* node) override {
+        assert(curblock);
+
         AST_Raise* remapped = new AST_Raise();
         remapped->col_offset = node->col_offset;
         remapped->lineno = node->lineno;
@@ -1988,6 +2097,8 @@ public:
     }
 
     bool visit_tryexcept(AST_TryExcept* node) override {
+        assert(curblock);
+
         // The pypa parser will generate a tryexcept node inside a try-finally block with
         // no except clauses
         if (node->handlers.size() == 0) {
@@ -1996,6 +2107,8 @@ public:
 
             for (AST_stmt* subnode : node->body) {
                 subnode->accept(this);
+                if (!curblock)
+                    break;
             }
             return true;
         }
@@ -2010,12 +2123,18 @@ public:
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
+            if (!curblock)
+                break;
         }
 
         exc_handlers.pop_back();
 
-        for (AST_stmt* subnode : node->orelse) {
-            subnode->accept(this);
+        if (curblock) {
+            for (AST_stmt* subnode : node->orelse) {
+                subnode->accept(this);
+                if (!curblock)
+                    break;
+            }
         }
 
         CFGBlock* join_block = cfg->addDeferredBlock();
@@ -2073,6 +2192,8 @@ public:
 
                 for (AST_stmt* subnode : exc_handler->body) {
                     subnode->accept(this);
+                    if (!curblock)
+                        break;
                 }
 
                 if (curblock) {
@@ -2109,6 +2230,8 @@ public:
     }
 
     bool visit_tryfinally(AST_TryFinally* node) override {
+        assert(curblock);
+
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
         InternedString exc_type_name = nodeName(node, "type");
         InternedString exc_value_name = nodeName(node, "value");
@@ -2121,6 +2244,8 @@ public:
 
         for (AST_stmt* subnode : node->body) {
             subnode->accept(this);
+            if (!curblock)
+                break;
         }
 
         exc_handlers.pop_back();
@@ -2149,6 +2274,8 @@ public:
 
         for (AST_stmt* subnode : node->finalbody) {
             subnode->accept(this);
+            if (!curblock)
+                break;
         }
 
         if (curblock) {
@@ -2197,6 +2324,7 @@ public:
         // See https://docs.python.org/2/reference/datamodel.html#new-style-special-lookup. This is one reason we can't
         // just translate this into AST_Try{Except,Finally} nodes and recursively visit those. (If there are other
         // reasons, I've forgotten them.)
+        assert(curblock);
         InternedString ctxmgrname = nodeName(node, "ctxmgr");
         InternedString exitname = nodeName(node, "exit");
         InternedString whyname = nodeName(node, "why");
@@ -2234,6 +2362,8 @@ public:
 
         for (int i = 0; i < node->body.size(); i++) {
             node->body[i]->accept(this);
+            if (!curblock)
+                break;
         }
 
         exc_handlers.pop_back();
@@ -2353,6 +2483,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     }
 
     for (int i = (skip_first ? 1 : 0); i < body.size(); i++) {
+        if (!visitor.curblock)
+            break;
         body[i]->accept(&visitor);
     }
 
@@ -2402,8 +2534,13 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                    || terminator->type == AST_TYPE::Raise);
         }
 
-        if (b->predecessors.size() == 0)
-            assert(b == rtn->getStartingBlock());
+        if (b->predecessors.size() == 0) {
+            if (b != rtn->getStartingBlock()) {
+                rtn->print();
+                printf("%s\n", source->getName().c_str());
+            }
+            ASSERT(b == rtn->getStartingBlock(), "%d", b->idx);
+        }
     }
 
     // We need to generate the CFG in a way that doesn't have any critical edges,

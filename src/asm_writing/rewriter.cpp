@@ -952,18 +952,20 @@ void Rewriter::commit() {
         return;
     }
 
+    rewrite->commit(this);
+
+    if (assembler->hasFailed()) {
+        on_assemblyfail();
+        return;
+    }
+
     finished = true;
 
     static StatCounter rewriter_commits("rewriter_commits");
     rewriter_commits.log();
-
-    // TODO: have to check that we have enough room to write the final jmp
-    rewrite->commit(this);
-
-    assert(!assembler->hasFailed());
 }
 
-void Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
+bool Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
     if (marked_inside_ic) {
         void* mark_addr = &picked_slot->num_inside;
 
@@ -977,6 +979,8 @@ void Rewriter::finishAssembly(ICSlotInfo* picked_slot, int continue_offset) {
     assembler->jmp(assembler::JumpDestination::fromStart(continue_offset));
 
     assembler->fillWithNops();
+
+    return !assembler->hasFailed();
 }
 
 void Rewriter::commitReturning(RewriterVar* var) {
@@ -995,14 +999,14 @@ void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
 Location Rewriter::allocScratch() {
     assertPhaseEmitting();
 
-    int scratch_bytes = rewrite->getScratchBytes();
-    for (int i = 0; i < scratch_bytes; i += 8) {
+    int scratch_size = rewrite->getScratchSize();
+    for (int i = 0; i < scratch_size; i += 8) {
         Location l(Location::Scratch, i);
         if (vars_by_location.count(l) == 0) {
             return l;
         }
     }
-    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_bytes);
+    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_size);
 }
 
 RewriterVar* Rewriter::add(RewriterVar* a, int64_t b, Location dest) {
@@ -1042,9 +1046,9 @@ RewriterVar* Rewriter::allocate(int n) {
 int Rewriter::_allocate(RewriterVar* result, int n) {
     assert(n >= 1);
 
-    int scratch_bytes = rewrite->getScratchBytes();
+    int scratch_size = rewrite->getScratchSize();
     int consec = 0;
-    for (int i = 0; i < scratch_bytes; i += 8) {
+    for (int i = 0; i < scratch_size; i += 8) {
         Location l(Location::Scratch, i);
         if (vars_by_location.count(l) == 0) {
             consec++;
@@ -1056,8 +1060,8 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
                 // TODO should be a LEA instruction
                 // In fact, we could do something like we do for constants and only load
                 // this when necessary, so it won't spill. Is that worth?
-                assembler->mov(assembler::RBP, r);
-                assembler->add(assembler::Immediate(8 * a + rewrite->getScratchRbpOffset()), r);
+                assembler->mov(assembler::RSP, r);
+                assembler->add(assembler::Immediate(8 * a + rewrite->getScratchRspOffset()), r);
 
                 // Put placeholders in so the array space doesn't get re-allocated.
                 // This won't get collected, but that's fine.
@@ -1074,7 +1078,7 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
             consec = 0;
         }
     }
-    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_bytes);
+    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_size);
 }
 
 RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
@@ -1094,7 +1098,7 @@ void Rewriter::_allocateAndCopy(RewriterVar* result, RewriterVar* array_ptr, int
 
     for (int i = 0; i < n; i++) {
         assembler->mov(assembler::Indirect(src_ptr, 8 * i), tmp);
-        assembler->mov(tmp, assembler::Indirect(assembler::RBP, 8 * (offset + i) + rewrite->getScratchRbpOffset()));
+        assembler->mov(tmp, assembler::Indirect(assembler::RSP, 8 * (offset + i) + rewrite->getScratchRspOffset()));
     }
 
     array_ptr->bumpUse();
@@ -1121,7 +1125,7 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
     int offset = _allocate(result, n_rest + 1);
 
     assembler::Register tmp = first_elem->getInReg();
-    assembler->mov(tmp, assembler::Indirect(assembler::RBP, 8 * offset + rewrite->getScratchRbpOffset()));
+    assembler->mov(tmp, assembler::Indirect(assembler::RSP, 8 * offset + rewrite->getScratchRspOffset()));
 
     if (n_rest > 0) {
         assembler::Register src_ptr = rest_ptr->getInReg();
@@ -1131,7 +1135,7 @@ void Rewriter::_allocateAndCopyPlus1(RewriterVar* result, RewriterVar* first_ele
         for (int i = 0; i < n_rest; i++) {
             assembler->mov(assembler::Indirect(src_ptr, 8 * i), tmp);
             assembler->mov(tmp,
-                           assembler::Indirect(assembler::RBP, 8 * (offset + i + 1) + rewrite->getScratchRbpOffset()));
+                           assembler::Indirect(assembler::RSP, 8 * (offset + i + 1) + rewrite->getScratchRspOffset()));
         }
         rest_ptr->bumpUse();
     }
@@ -1146,8 +1150,7 @@ assembler::Indirect Rewriter::indirectFor(Location l) {
     assert(l.type == Location::Scratch || l.type == Location::Stack);
 
     if (l.type == Location::Scratch)
-        // TODO it can sometimes be more efficient to do RSP-relative addressing?
-        return assembler::Indirect(assembler::RBP, rewrite->getScratchRbpOffset() + l.scratch_offset);
+        return assembler::Indirect(assembler::RSP, rewrite->getScratchRspOffset() + l.scratch_offset);
     else
         return assembler::Indirect(assembler::RSP, l.stack_offset);
 }
@@ -1414,10 +1417,30 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
         this->live_outs.push_back(var);
         this->live_out_regs.push_back(dwarf_regnum);
     }
+
+    // Getting the scratch space location/size wrong could be disastrous and hard to track down,
+    // so here's a "forcefully check it" mode, which starts every inline cache by overwriting
+    // the entire scratch space.
+    bool VALIDATE_SCRATCH_SPACE = false;
+    if (VALIDATE_SCRATCH_SPACE) {
+        int scratch_size = rewrite->getScratchSize();
+        for (int i = 0; i < scratch_size; i += 8) {
+            assembler->movq(assembler::Immediate(0x12345678UL),
+                            assembler::Indirect(assembler::RSP, i + rewrite->getScratchRspOffset()));
+        }
+    }
 }
 
 Rewriter* Rewriter::createRewriter(void* rtn_addr, int num_args, const char* debug_name) {
-    ICInfo* ic = getICInfo(rtn_addr);
+    ICInfo* ic = NULL;
+
+    // Horrible non-robust optimization: addresses below this address are probably in the binary (ex the interpreter),
+    // so don't do the more-expensive hash table lookup to find it.
+    if (rtn_addr > (void*)0x1000000) {
+        ic = getICInfo(rtn_addr);
+    } else {
+        assert(!getICInfo(rtn_addr));
+    }
 
     static StatCounter rewriter_attempts("rewriter_attempts");
     rewriter_attempts.log();

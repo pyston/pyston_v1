@@ -25,6 +25,9 @@
 #include "cache.h"
 #include <limits.h>
 
+// Pyston change: cpython supplies this as a cpp flag
+#define MODULE_NAME "sqlite3"
+
 /* only used internally */
 pysqlite_Node* pysqlite_new_node(PyObject* key, PyObject* data)
 {

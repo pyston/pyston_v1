@@ -1816,7 +1816,7 @@ cache_struct(PyObject *fmt)
     PyObject * s_object;
 
     if (cache == NULL) {
-        cache = PyDict_New();
+        cache = PyGC_AddRoot(PyDict_New());
         if (cache == NULL)
             return NULL;
     }

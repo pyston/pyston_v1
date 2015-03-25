@@ -70,8 +70,8 @@ static void* thread_start(Box* target, Box* varargs, Box* kwargs) {
 }
 
 // TODO this should take kwargs, which defaults to empty
-Box* startNewThread(Box* target, Box* args) {
-    intptr_t thread_id = start_thread(&thread_start, target, args, NULL);
+Box* startNewThread(Box* target, Box* args, Box* kw) {
+    intptr_t thread_id = start_thread(&thread_start, target, args, kw);
     return boxInt(thread_id ^ 0x12345678901L);
 }
 
@@ -155,6 +155,37 @@ class BoxedThreadLocal : public Box {
 public:
     BoxedThreadLocal() {}
 
+    static Box* getThreadLocalObject(Box* obj) {
+        BoxedDict* dict = static_cast<BoxedDict*>(PyThreadState_GetDict());
+        Box* tls_obj = dict->getOrNull(obj);
+        if (tls_obj == NULL) {
+            tls_obj = new BoxedDict();
+            setitem(dict, obj, tls_obj);
+        }
+        return tls_obj;
+    }
+
+    static int setattr(Box* obj, char* name, Box* val) {
+        Box* tls_obj = getThreadLocalObject(obj);
+        setitem(tls_obj, boxString(name), val);
+        return 0;
+    }
+
+    static Box* getattr(Box* obj, char* name) {
+        Box* tls_obj = getThreadLocalObject(obj);
+        if (!strcmp(name, "__dict__"))
+            return tls_obj;
+
+        try {
+            return getitem(tls_obj, boxString(name));
+        } catch (ExcInfo e) {
+            raiseExcHelper(AttributeError, "'%.50s' object has no attribute '%.400s'", obj->cls->tp_name, name);
+        }
+    }
+
+    static Box* hash(Box* obj) { return boxInt(PyThread_get_thread_ident()); }
+
+
     DEFAULT_CLASS(thread_local_cls);
 };
 
@@ -169,9 +200,9 @@ Box* stackSize() {
 void setupThread() {
     thread_module = createModule("thread", "__builtin__");
 
-    thread_module->giveAttr(
-        "start_new_thread",
-        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)startNewThread, BOXED_INT, 2), "start_new_thread"));
+    thread_module->giveAttr("start_new_thread", new BoxedBuiltinFunctionOrMethod(
+                                                    boxRTFunction((void*)startNewThread, BOXED_INT, 3, 1, false, false),
+                                                    "start_new_thread", { NULL }));
     thread_module->giveAttr("allocate_lock", new BoxedBuiltinFunctionOrMethod(
                                                  boxRTFunction((void*)allocateLock, UNKNOWN, 0), "allocate_lock"));
     thread_module->giveAttr(
@@ -179,7 +210,7 @@ void setupThread() {
     thread_module->giveAttr(
         "stack_size", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)stackSize, BOXED_INT, 0), "stack_size"));
 
-    thread_lock_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedThreadLock), false, "lock");
+    thread_lock_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLock), false, "lock");
     thread_lock_cls->giveAttr("__module__", boxStrConstant("thread"));
     thread_lock_cls->giveAttr(
         "acquire", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::acquire, BOXED_BOOL, 2, 1, false, false),
@@ -191,13 +222,20 @@ void setupThread() {
     thread_lock_cls->giveAttr("__exit__", new BoxedFunction(boxRTFunction((void*)BoxedThreadLock::exit, NONE, 4)));
     thread_lock_cls->freeze();
 
-    thread_local_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, sizeof(BoxedThreadLocal), false, "_local");
+    thread_local_cls
+        = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedThreadLocal), false, "_local");
     thread_local_cls->giveAttr("__module__", boxStrConstant("thread"));
+    thread_local_cls->giveAttr("__hash__",
+                               new BoxedFunction(boxRTFunction((void*)BoxedThreadLocal::hash, BOXED_INT, 1)));
     thread_local_cls->freeze();
     thread_module->giveAttr("_local", thread_local_cls);
 
-    BoxedClass* ThreadError = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset,
-                                                     Exception->tp_basicsize, false, "error");
+    thread_local_cls->tp_setattr = BoxedThreadLocal::setattr;
+    thread_local_cls->tp_getattr = BoxedThreadLocal::getattr;
+
+    BoxedClass* ThreadError
+        = BoxedHeapClass::create(type_cls, Exception, NULL, Exception->attrs_offset, Exception->tp_weaklistoffset,
+                                 Exception->tp_basicsize, false, "error");
     ThreadError->giveAttr("__module__", boxStrConstant("thread"));
     ThreadError->freeze();
 

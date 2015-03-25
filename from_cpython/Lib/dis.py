@@ -3,8 +3,10 @@
 import sys
 import types
 
-from opcode import *
-from opcode import __all__ as _opcodes_all
+# Pyston change: we don't have the opcode module
+# from opcode import *
+# from opcode import __all__ as _opcodes_all
+_opcodes_all = []
 
 __all__ = ["dis", "disassemble", "distb", "disco",
            "findlinestarts", "findlabels"] + _opcodes_all

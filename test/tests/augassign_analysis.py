@@ -114,4 +114,7 @@ def f10():
     # This should error: the lhs is evaluated first
     x += [x for x in xrange(5)][0]
     print x
-f10()
+try:
+    f10()
+except UnboundLocalError, e:
+    print e

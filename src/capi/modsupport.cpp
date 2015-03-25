@@ -83,7 +83,7 @@ static int _ustrlen(Py_UNICODE* u) {
 
 static PyObject* do_mktuple(const char**, va_list*, int, int, int) noexcept;
 static PyObject* do_mklist(const char**, va_list*, int, int, int) noexcept;
-// static PyObject *do_mkdict(const char**, va_list *, int, int, int) noexcept;
+static PyObject* do_mkdict(const char**, va_list*, int, int, int) noexcept;
 static PyObject* do_mkvalue(const char**, va_list*, int) noexcept;
 
 static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noexcept {
@@ -95,10 +95,8 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case '[':
                 return do_mklist(p_format, p_va, ']', countformat(*p_format, ']'), flags);
 
-#if 0
             case '{':
                 return do_mkdict(p_format, p_va, '}', countformat(*p_format, '}'), flags);
-#endif
 
             case 'b':
             case 'B':
@@ -109,6 +107,15 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             case 'H':
                 return PyInt_FromLong((long)va_arg(*p_va, unsigned int));
 
+            case 'I': {
+                unsigned int n;
+                n = va_arg(*p_va, unsigned int);
+                if (n > (unsigned long)PyInt_GetMax())
+                    return PyLong_FromUnsignedLong((unsigned long)n);
+                else
+                    return PyInt_FromLong(n);
+            }
+
             case 'n':
 #if SIZEOF_SIZE_T != SIZEOF_LONG
                 return PyInt_FromSsize_t(va_arg(*p_va, Py_ssize_t));
@@ -116,6 +123,9 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
             /* Fall through from 'n' to 'l' if Py_ssize_t is long */
             case 'l':
                 return PyInt_FromLong(va_arg(*p_va, long));
+
+            case 'd':
+                return PyFloat_FromDouble(va_arg(*p_va, double));
 
             case 'N':
             case 'S':
@@ -198,6 +208,13 @@ static PyObject* do_mkvalue(const char** p_format, va_list* p_va, int flags) noe
                 return v;
             }
 #endif
+
+            case ':':
+            case ',':
+            case ' ':
+            case '\t':
+                break;
+
             default:
                 RELEASE_ASSERT(0, "%c", *((*p_format) - 1));
         }
@@ -237,6 +254,48 @@ static PyObject* do_mktuple(const char** p_format, va_list* p_va, int endchar, i
     if (endchar)
         ++*p_format;
     return v;
+}
+
+static PyObject* do_mkdict(const char** p_format, va_list* p_va, int endchar, int n, int flags) noexcept {
+    PyObject* d;
+    int i;
+    int itemfailed = 0;
+    if (n < 0)
+        return NULL;
+    if ((d = PyDict_New()) == NULL)
+        return NULL;
+    /* Note that we can't bail immediately on error as this will leak
+       refcounts on any 'N' arguments. */
+    for (i = 0; i < n; i += 2) {
+        PyObject* k, *v;
+        int err;
+        k = do_mkvalue(p_format, p_va, flags);
+        if (k == NULL) {
+            itemfailed = 1;
+            Py_INCREF(Py_None);
+            k = Py_None;
+        }
+        v = do_mkvalue(p_format, p_va, flags);
+        if (v == NULL) {
+            itemfailed = 1;
+            Py_INCREF(Py_None);
+            v = Py_None;
+        }
+        err = PyDict_SetItem(d, k, v);
+        Py_DECREF(k);
+        Py_DECREF(v);
+        if (err < 0 || itemfailed) {
+            Py_DECREF(d);
+            return NULL;
+        }
+    }
+    if (d != NULL && **p_format != endchar) {
+        Py_DECREF(d);
+        d = NULL;
+        PyErr_SetString(PyExc_SystemError, "Unmatched paren in format");
+    } else if (endchar)
+        ++*p_format;
+    return d;
 }
 
 static PyObject* do_mklist(const char** p_format, va_list* p_va, int endchar, int n, int flags) noexcept {
@@ -324,24 +383,18 @@ extern "C" PyObject* Py_BuildValue(const char* fmt, ...) noexcept {
 
 extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
                                     int apiver) noexcept {
-    BoxedModule* module = createModule(name, "__builtin__");
+    BoxedModule* module = createModule(name, "__builtin__", doc);
 
     // Pass self as is, even if NULL we are not allowed to change it to None
     Box* passthrough = static_cast<Box*>(self);
 
     while (methods && methods->ml_name) {
-        if (VERBOSITY())
-            printf("Loading method %s\n", methods->ml_name);
-
-        assert((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0);
+        RELEASE_ASSERT((methods->ml_flags & (~(METH_VARARGS | METH_KEYWORDS | METH_NOARGS | METH_O))) == 0, "%d",
+                       methods->ml_flags);
         module->giveAttr(methods->ml_name,
                          new BoxedCApiFunction(methods->ml_flags, passthrough, methods->ml_name, methods->ml_meth));
 
         methods++;
-    }
-
-    if (doc) {
-        module->setattr("__doc__", boxStrConstant(doc), NULL);
     }
 
     return module;
@@ -374,6 +427,57 @@ extern "C" int PyModule_AddStringConstant(PyObject* m, const char* name, const c
 
 extern "C" int PyModule_AddIntConstant(PyObject* _m, const char* name, long value) noexcept {
     return PyModule_AddObject(_m, name, boxInt(value));
+}
+
+extern "C" PyObject* PyEval_CallMethod(PyObject* obj, const char* methodname, const char* format, ...) noexcept {
+    va_list vargs;
+    PyObject* meth;
+    PyObject* args;
+    PyObject* res;
+
+    meth = PyObject_GetAttrString(obj, methodname);
+    if (meth == NULL)
+        return NULL;
+
+    va_start(vargs, format);
+
+    args = Py_VaBuildValue(format, vargs);
+    va_end(vargs);
+
+    if (args == NULL) {
+        Py_DECREF(meth);
+        return NULL;
+    }
+
+    res = PyEval_CallObject(meth, args);
+    Py_DECREF(meth);
+    Py_DECREF(args);
+
+    return res;
+}
+
+extern "C" PyObject* PyEval_CallObjectWithKeywords(PyObject* func, PyObject* arg, PyObject* kw) noexcept {
+    PyObject* result;
+
+    if (arg == NULL) {
+        arg = PyTuple_New(0);
+        if (arg == NULL)
+            return NULL;
+    } else if (!PyTuple_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "argument list must be a tuple");
+        return NULL;
+    } else
+        Py_INCREF(arg);
+
+    if (kw != NULL && !PyDict_Check(kw)) {
+        PyErr_SetString(PyExc_TypeError, "keyword list must be a dictionary");
+        Py_DECREF(arg);
+        return NULL;
+    }
+
+    result = PyObject_Call(func, arg, kw);
+    Py_DECREF(arg);
+    return result;
 }
 
 

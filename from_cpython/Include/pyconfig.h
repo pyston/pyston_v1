@@ -27,6 +27,7 @@
 #define SIZEOF_INT 4
 #define SIZEOF_LONG 8
 #define SIZEOF_LONG_LONG 8
+#define SIZEOF_OFF_T 8
 #define SIZEOF_PTHREAD_T 8
 #define HAVE_COPYSIGN 1
 #define HAVE_ROUND 1
@@ -53,6 +54,8 @@
 #define HAVE_SOCKADDR_STORAGE 1
 #define HAVE_SOCKETPAIR 1
 #define HAVE_GETPEERNAME 1
+#define HAVE_STRFTIME 1
+#define HAVE_TIMES 1
 
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"

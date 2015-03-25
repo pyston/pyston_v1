@@ -42,25 +42,29 @@ namespace pyston {
 //
 // This template is generated from this C++ file:
 //
-// extern void foo();
+// extern void foo(void*);
 // int bar() {
-//   foo();
+//   char buf[N];
+//   foo(&buf);
 //   return 1;
 // }
+//
+// (where N is the extra bytes of stack to allocate)
 //
 // objdump -s -j .eh_frame test
 // readelf -w test
 //
 
 #if RUNTIMEICS_OMIT_FRAME_PTR
-// clang++ test.cpp -o test -O3 -fomit-frame-pointer -c
+// clang++ test.cpp -o test -O3 -fomit-frame-pointer -c -DN=40
 // The generated assembly is:
 //
-//  0:   50                      push   %rax
-//  1:   e8 00 00 00 00          callq  6 <_Z3barv+0x6>
-//  6:   b8 01 00 00 00          mov    $0x1,%eax
-//  b:   5a                      pop    %rdx
-//  c:   c3                      retq
+//  0:   48 83 ec 28             sub    $0x28,%rsp
+//  4:   48 8d 3c 24             lea    (%rsp),%rdi
+//  8:   e8 00 00 00 00          callq  d <_Z3barv+0xd>
+//  d:   b8 01 00 00 00          mov    $0x1,%eax
+// 12:   48 83 c4 28             add    $0x28,%rsp
+// 16:   c3                      retq
 //
 //  (I believe the push/pop are for stack alignment)
 //
@@ -84,24 +88,26 @@ static const char _eh_frame_template[] =
     "\x00\x00\x00\x00" // prcel offset to function address [to be filled in]
     "\x0d\x00\x00\x00" // function size [to be filled in]
     "\x00"             // augmentation data (none)
-    "\x41\x0e\x10"
+    "\x44\x0e\x30"
     // Instructions:
-    // - DW_CFA_advance_loc: 1 to 00000001
-    // - DW_CFA_def_cfa_offset: 16
+    // - DW_CFA_advance_loc: 4 to 00000004
+    // - DW_CFA_def_cfa_offset: 48
     "\x00\x00\x00\x00" // padding
 
     "\x00\x00\x00\x00" // terminator
     ;
 #else
-// clang++ test.cpp -o test -O3 -fno-omit-frame-pointer -c
+// clang++ test.cpp -o test -O3 -fno-omit-frame-pointer -c -DN=40
 // The generated assembly is:
-//
 //  0:   55                      push   %rbp
 //  1:   48 89 e5                mov    %rsp,%rbp
-//  4:   e8 00 00 00 00          callq  9 <_Z3barv+0x9>
-//  9:   b8 01 00 00 00          mov    $0x1,%eax
-//  e:   5d                      pop    %rbp
-//  f:   c3                      retq
+//  4:   48 83 ec 30             sub    $0x30,%rsp
+//  8:   48 8d 7d d0             lea    -0x30(%rbp),%rdi
+//  c:   e8 00 00 00 00          callq  11 <_Z3barv+0x11>
+// 11:   b8 01 00 00 00          mov    $0x1,%eax
+// 16:   48 83 c4 30             add    $0x30,%rsp
+// 1a:   5d                      pop    %rbp
+// 1b:   c3                      retq
 //
 static const char _eh_frame_template[] =
     // CIE
@@ -152,31 +158,53 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
     *size_ptr = func_size;
 }
 
+#if RUNTIMEICS_OMIT_FRAME_PTR
+// If you change this, you *must* update the value in _eh_frame_template
+// (set the -9'th byte to this value plus 8)
+#define SCRATCH_BYTES 0x28
+#else
+#define SCRATCH_BYTES 0x30
+#endif
+
 RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
     static StatCounter sc("runtime_ics_num");
     sc.log();
 
     if (ENABLE_RUNTIME_ICS) {
+        assert(SCRATCH_BYTES >= 0);
+        assert(SCRATCH_BYTES < 0x80); // This would break both the instruction encoding and the dwarf encoding
+        assert(SCRATCH_BYTES % 8 == 0);
+
 #if RUNTIMEICS_OMIT_FRAME_PTR
-        static const int PROLOGUE_SIZE = 1;
-#else
         /*
-         * We emit a prologue since we want to align the stack pointer,
-         * and also use RBP.
-         * It's not clear if we need to use RBP or not, since we emit the .eh_frame section anyway.
+         * prologue:
+         * sub $0x28, %rsp  # 48 83 ec 28
          *
-         * The prologue looks like:
-         * push %rbp # 55
-         * mov %rsp, %rbp # 48 89 e5
+         * epilogue:
+         * add $0x28, %rsp  # 48 83 c4 28
+         * retq             # c3
          *
-         * The epilogue is:
-         * pop %rbp # 5d
-         * retq # c3
          */
         static const int PROLOGUE_SIZE = 4;
+        static const int EPILOGUE_SIZE = 5;
+        assert(SCRATCH_BYTES % 16 == 8);
+#else
+        /*
+         * The prologue looks like:
+         * push %rbp        # 55
+         * mov %rsp, %rbp   # 48 89 e5
+         * sub $0x30, %rsp  # 48 83 ec 30
+         *
+         * The epilogue is:
+         * add $0x30, %rsp  # 48 83 c4 30
+         * pop %rbp         # 5d
+         * retq             # c3
+         */
+        static const int PROLOGUE_SIZE = 8;
+        static const int EPILOGUE_SIZE = 6;
+        assert(SCRATCH_BYTES % 16 == 0);
 #endif
         static const int CALL_SIZE = 13;
-        static const int EPILOGUE_SIZE = 2;
 
         int patchable_size = num_slots * slot_size;
         int total_size = PROLOGUE_SIZE + patchable_size + CALL_SIZE + EPILOGUE_SIZE;
@@ -198,23 +226,28 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
         assert(p.first == pp_start + patchable_size);
         assert(p.second == pp_end);
 
+        StackInfo stack_info(SCRATCH_BYTES, 0);
         icinfo = registerCompiledPatchpoint(pp_start, pp_start + patchable_size, pp_end, pp_end, setup_info.get(),
-                                            StackInfo(), std::unordered_set<int>());
+                                            stack_info, std::unordered_set<int>());
 
         assembler::Assembler prologue_assem((uint8_t*)addr, PROLOGUE_SIZE);
 #if RUNTIMEICS_OMIT_FRAME_PTR
-        prologue_assem.push(assembler::RAX);
+        // If SCRATCH_BYTES is 8 or less, we could use more compact instruction encodings
+        // (push instead of sub), but it doesn't seem worth it for now.
+        prologue_assem.sub(assembler::Immediate(SCRATCH_BYTES), assembler::RSP);
 #else
         prologue_assem.push(assembler::RBP);
         prologue_assem.mov(assembler::RSP, assembler::RBP);
+        prologue_assem.sub(assembler::Immediate(SCRATCH_BYTES), assembler::RSP);
 #endif
         assert(!prologue_assem.hasFailed());
         assert(prologue_assem.isExactlyFull());
 
         assembler::Assembler epilogue_assem(pp_end, EPILOGUE_SIZE);
 #if RUNTIMEICS_OMIT_FRAME_PTR
-        epilogue_assem.pop(assembler::RDX);
+        epilogue_assem.add(assembler::Immediate(SCRATCH_BYTES), assembler::RSP);
 #else
+        epilogue_assem.add(assembler::Immediate(SCRATCH_BYTES), assembler::RSP);
         epilogue_assem.pop(assembler::RBP);
 #endif
         epilogue_assem.retq();

@@ -1,4 +1,3 @@
-# allow-warning: converting unicode literal to str
 # expected: fail
 # - we don't stop tracebacks at the catching except handler.  this is hard do the way it gets added to
 # (ie a bare "raise" statement will add more traceback entries to the traceback it raises)

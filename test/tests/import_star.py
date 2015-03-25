@@ -1,7 +1,7 @@
-# import_target defines __all__ to be ['x']
+# import_target defines __all__ to be ['x', u'z']
 from import_target import *
 
-print x
+print x, z
 try:
     print foo
     assert 0

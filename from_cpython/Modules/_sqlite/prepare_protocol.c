@@ -24,6 +24,9 @@
 #include "sqlitecompat.h"
 #include "prepare_protocol.h"
 
+// Pyston change: cpython supplies this as a cpp flag
+#define MODULE_NAME "sqlite3"
+
 int pysqlite_prepare_protocol_init(pysqlite_PrepareProtocol* self, PyObject* args, PyObject* kwargs)
 {
     return 0;

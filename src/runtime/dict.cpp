@@ -87,6 +87,8 @@ Box* dictValues(BoxedDict* self) {
 }
 
 Box* dictKeys(BoxedDict* self) {
+    RELEASE_ASSERT(isSubclass(self->cls, dict_cls), "");
+
     BoxedList* rtn = new BoxedList();
     for (const auto& p : self->d) {
         listAppendInternal(rtn, p.first);
@@ -174,6 +176,15 @@ Box* dictGetitem(BoxedDict* self, Box* k) {
 
     auto it = self->d.find(k);
     if (it == self->d.end()) {
+        // Try calling __missing__ if this is a subclass
+        if (self->cls != dict_cls) {
+            static const std::string missing("__missing__");
+            Box* r = callattr(self, &missing, CallattrFlags({.cls_only = true, .null_on_nonexistent = true }),
+                              ArgPassSpec(1), k, NULL, NULL, NULL, NULL);
+            if (r)
+                return r;
+        }
+
         raiseExcHelper(KeyError, k);
     }
 
@@ -191,7 +202,7 @@ extern "C" PyObject* PyDict_New() noexcept {
 // The performance should hopefully be comparable to the CPython fast case, since we can use
 // runtimeICs.
 extern "C" int PyDict_SetItem(PyObject* mp, PyObject* _key, PyObject* _item) noexcept {
-    ASSERT(mp->cls == dict_cls || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
+    ASSERT(isSubclass(mp->cls, dict_cls) || mp->cls == attrwrapper_cls, "%s", getTypeName(mp));
 
     assert(mp);
     Box* b = static_cast<Box*>(mp);
@@ -219,18 +230,20 @@ extern "C" int PyDict_SetItemString(PyObject* mp, const char* key, PyObject* ite
 }
 
 extern "C" PyObject* PyDict_GetItem(PyObject* dict, PyObject* key) noexcept {
-    ASSERT(dict->cls == dict_cls || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
+    ASSERT(isSubclass(dict->cls, dict_cls) || dict->cls == attrwrapper_cls, "%s", getTypeName(dict));
     try {
         return getitem(dict, key);
     } catch (ExcInfo e) {
-        if (e.matches(KeyError))
-            return NULL;
-        abort();
+        // PyDict_GetItem has special error behavior in CPython for backwards-compatibility reasons,
+        // and apparently it's important enough that we have to follow that.
+        // The behavior is that all errors get suppressed, and in fact I think it's supposed to
+        // restore the previous exception afterwards (we don't do that yet).
+        return NULL;
     }
 }
 
 extern "C" int PyDict_Next(PyObject* op, Py_ssize_t* ppos, PyObject** pkey, PyObject** pvalue) noexcept {
-    assert(op->cls == dict_cls);
+    assert(isSubclass(op->cls, dict_cls));
     BoxedDict* self = static_cast<BoxedDict*>(op);
 
     // Callers of PyDict_New() provide a pointer to some storage for this function to use, in
@@ -310,14 +323,14 @@ Box* dictDelitem(BoxedDict* self, Box* k) {
 }
 
 extern "C" int PyDict_DelItem(PyObject* op, PyObject* key) noexcept {
+    ASSERT(isSubclass(op->cls, dict_cls) || op->cls == attrwrapper_cls, "%s", getTypeName(op));
     try {
-        dictDelitem((BoxedDict*)op, key);
+        delitem(op, key);
+        return 0;
     } catch (ExcInfo e) {
         setCAPIException(e);
         return -1;
     }
-
-    return 0;
 }
 
 extern "C" int PyDict_DelItemString(PyObject* v, const char* key) noexcept {
@@ -402,11 +415,7 @@ Box* dictNonzero(BoxedDict* self) {
     return boxBool(self->d.size());
 }
 
-Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
-    if (!isSubclass(self->cls, dict_cls))
-        raiseExcHelper(TypeError, "descriptor 'fromkeys' requires a 'dict' object but received a '%s'",
-                       getTypeName(self));
-
+Box* dictFromkeys(Box* cls, Box* iterable, Box* default_value) {
     auto rtn = new BoxedDict();
     for (Box* e : iterable->pyElements()) {
         dictSetitem(rtn, e, default_value);
@@ -415,6 +424,38 @@ Box* dictFromkeys(BoxedDict* self, Box* iterable, Box* default_value) {
     return rtn;
 }
 
+Box* dictEq(BoxedDict* self, Box* _rhs) {
+    if (!isSubclass(self->cls, dict_cls))
+        raiseExcHelper(TypeError, "descriptor '__eq__' requires a 'dict' object but received a '%s'",
+                       getTypeName(self));
+
+    if (!isSubclass(_rhs->cls, dict_cls))
+        return NotImplemented;
+
+    BoxedDict* rhs = static_cast<BoxedDict*>(_rhs);
+
+    if (self->d.size() != rhs->d.size())
+        return False;
+
+    for (const auto& p : self->d) {
+        auto it = rhs->d.find(p.first);
+        if (it == rhs->d.end())
+            return False;
+        if (!nonzero(compare(p.second, it->second, AST_TYPE::Eq)))
+            return False;
+    }
+
+    return True;
+}
+
+Box* dictNe(BoxedDict* self, Box* _rhs) {
+    Box* eq = dictEq(self, _rhs);
+    if (eq == NotImplemented)
+        return eq;
+    if (eq == True)
+        return False;
+    return True;
+}
 
 
 extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
@@ -430,7 +471,7 @@ extern "C" Box* dictNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 void dictMerge(BoxedDict* self, Box* other) {
-    if (other->cls == dict_cls) {
+    if (isSubclass(other->cls, dict_cls)) {
         for (const auto& p : static_cast<BoxedDict*>(other)->d)
             self->d[p.first] = p.second;
         return;
@@ -572,20 +613,23 @@ static Box* dict_repr(PyObject* self) noexcept {
 }
 
 void setupDict() {
-    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &dictIteratorGCHandler, 0, sizeof(BoxedDict),
+    dict_iterator_cls = BoxedHeapClass::create(type_cls, object_cls, &dictIteratorGCHandler, 0, 0, sizeof(BoxedDict),
                                                false, "dictionary-itemiterator");
 
-    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false,
+    dict_keys_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView), false,
                                            "dict_keys");
-    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false,
-                                             "dict_values");
-    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, sizeof(BoxedDictView), false,
-                                            "dict_items");
+    dict_values_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView),
+                                             false, "dict_values");
+    dict_items_cls = BoxedHeapClass::create(type_cls, object_cls, &dictViewGCHandler, 0, 0, sizeof(BoxedDictView),
+                                            false, "dict_items");
 
     dict_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)dictLen, BOXED_INT, 1)));
     dict_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)dictNew, UNKNOWN, 1, 0, true, true)));
     dict_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)dictInit, NONE, 1, 0, true, true)));
     dict_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)dictRepr, STR, 1)));
+
+    dict_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)dictEq, UNKNOWN, 2)));
+    dict_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)dictNe, UNKNOWN, 2)));
 
     dict_cls->giveAttr("__iter__",
                        new BoxedFunction(boxRTFunction((void*)dictIterKeys, typeFromClass(dict_iterator_cls), 1)));
@@ -596,8 +640,6 @@ void setupDict() {
     dict_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)dictCopy, DICT, 1)));
 
     dict_cls->giveAttr("has_key", new BoxedFunction(boxRTFunction((void*)dictContains, BOXED_BOOL, 2)));
-    dict_cls->giveAttr("fromkeys",
-                       new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None }));
     dict_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)dictItems, LIST, 1)));
     dict_cls->giveAttr("iteritems",
                        new BoxedFunction(boxRTFunction((void*)dictIterItems, typeFromClass(dict_iterator_cls), 1)));
@@ -612,6 +654,8 @@ void setupDict() {
     dict_cls->giveAttr("pop", new BoxedFunction(boxRTFunction((void*)dictPop, UNKNOWN, 3, 1, false, false), { NULL }));
     dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));
 
+    auto* fromkeys_func = new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None });
+    dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func));
 
     dict_cls->giveAttr("viewkeys", new BoxedFunction(boxRTFunction((void*)dictViewKeys, UNKNOWN, 1)));
     dict_cls->giveAttr("viewvalues", new BoxedFunction(boxRTFunction((void*)dictViewValues, UNKNOWN, 1)));

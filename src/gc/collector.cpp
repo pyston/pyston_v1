@@ -35,6 +35,12 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+#ifndef NDEBUG
+#define DEBUG 1
+#else
+#define DEBUG 0
+#endif
+
 namespace pyston {
 namespace gc {
 
@@ -76,7 +82,7 @@ private:
 
 public:
     TraceStack() { get_chunk(); }
-    TraceStack(const std::vector<void*>& rhs) {
+    TraceStack(const std::unordered_set<void*>& rhs) {
         get_chunk();
         for (void* p : rhs) {
             assert(!isMarked(GCAllocation::fromUserData(p)));
@@ -119,21 +125,24 @@ public:
 std::vector<void**> TraceStack::free_chunks;
 
 
-static std::vector<void*> roots;
-void registerPermanentRoot(void* obj) {
+static std::unordered_set<void*> roots;
+void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
-    roots.push_back(obj);
 
-#ifndef NDEBUG
     // Check for double-registers.  Wouldn't cause any problems, but we probably shouldn't be doing them.
-    static std::unordered_set<void*> roots;
-    ASSERT(roots.count(obj) == 0, "Please only register roots once");
+    if (!allow_duplicates)
+        ASSERT(roots.count(obj) == 0, "Please only register roots once");
+
     roots.insert(obj);
-#endif
 }
 
-extern "C" void PyGC_AddRoot(PyObject* obj) noexcept {
-    registerPermanentRoot(obj);
+extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
+    if (obj) {
+        // Allow duplicates from CAPI code since they shouldn't have to know
+        // which objects we already registered as roots:
+        registerPermanentRoot(obj, /* allow_duplicates */ true);
+    }
+    return obj;
 }
 
 static std::unordered_set<void*> nonheap_roots;
@@ -219,7 +228,7 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     }
 }
 
-static void markPhase() {
+void markPhase() {
 #ifndef NVALGRIND
     // Have valgrind close its eyes while we do the conservative stack and data scanning,
     // since we'll be looking at potentially-uninitialized values:
@@ -260,6 +269,12 @@ static void markPhase() {
             continue;
         } else if (kind_id == GCKind::CONSERVATIVE) {
             uint32_t bytes = al->kind_data;
+            if (DEBUG >= 2) {
+                if (global_heap.small_arena.contains(p)) {
+                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
+                    assert(b->size >= bytes);
+                }
+            }
             visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
         } else if (kind_id == GCKind::PRECISE) {
             uint32_t bytes = al->kind_data;
@@ -325,6 +340,7 @@ void runCollection() {
     for (auto o : weakly_referenced) {
         PyWeakReference** list = (PyWeakReference**)PyObject_GET_WEAKREFS_LISTPTR(o);
         while (PyWeakReference* head = *list) {
+            assert(isValidGCObject(head));
             if (head->wr_object != Py_None) {
                 _PyWeakref_ClearRef(head);
                 if (head->wr_callback) {

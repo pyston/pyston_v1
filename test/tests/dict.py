@@ -127,11 +127,9 @@ print d
 
 # fromkeys
 
-d = {1:2, 3:4}
-
-print sorted(d.fromkeys([1,2]).items())
-print sorted(d.fromkeys([]).items())
-print sorted(d.fromkeys([3,4], 5).items())
+print sorted(dict.fromkeys([1,2]).items())
+print sorted(dict.fromkeys([]).items())
+print sorted(dict.fromkeys([3,4], 5).items())
 
 try:
     print d.fromkeys()
@@ -213,3 +211,11 @@ print list(d.viewvalues())
 print list(d.viewitems())
 print 'keys of d: ', keys
 print 'viewkeys of d: ', list(viewkeys)
+
+print {} == {}
+d1 = {}
+d2 = {}
+for i in xrange(6):
+    d1[i] = 5 - i
+    d2[5 - i] = i
+    print d1 == d2, d1 != d2

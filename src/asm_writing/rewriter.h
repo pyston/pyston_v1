@@ -123,7 +123,7 @@ template <class T> class LocMap {
 private:
     static const int N_REGS = 16;
     static const int N_XMM = 16;
-    static const int N_SCRATCH = 16;
+    static const int N_SCRATCH = 32;
     static const int N_STACK = 16;
 
     T map_reg[N_REGS];
@@ -384,7 +384,7 @@ private:
     // Do the bookkeeping to say that var is no longer in location l
     void removeLocationFromVar(RewriterVar* var, Location l);
 
-    void finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
+    bool finishAssembly(ICSlotInfo* picked_slot, int continue_offset) override;
 
     void _trap();
     void _loadConst(RewriterVar* result, int64_t val, Location loc);

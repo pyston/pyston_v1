@@ -42,6 +42,12 @@
 #include "runtime/set.h"
 #include "runtime/types.h"
 
+#ifndef NDEBUG
+#define DEBUG 1
+#else
+#define DEBUG 0
+#endif
+
 namespace pyston {
 
 namespace {
@@ -55,7 +61,10 @@ union Value {
     Value(bool b) : b(b) {}
     Value(int64_t n = 0) : n(n) {}
     Value(double d) : d(d) {}
-    Value(Box* o) : o(o) {}
+    Value(Box* o) : o(o) {
+        if (DEBUG >= 2)
+            assert(gc::isValidGCObject(o));
+    }
 };
 
 class ASTInterpreter {
@@ -79,10 +88,8 @@ private:
     Value visit_assign(AST_Assign* node);
     Value visit_binop(AST_BinOp* node);
     Value visit_call(AST_Call* node);
-    Value visit_classDef(AST_ClassDef* node);
     Value visit_compare(AST_Compare* node);
     Value visit_delete(AST_Delete* node);
-    Value visit_functionDef(AST_FunctionDef* node);
     Value visit_global(AST_Global* node);
     Value visit_module(AST_Module* node);
     Value visit_print(AST_Print* node);
@@ -108,6 +115,8 @@ private:
     Value visit_tuple(AST_Tuple* node);
     Value visit_yield(AST_Yield* node);
 
+    Value visit_makeClass(AST_MakeClass* node);
+    Value visit_makeFunction(AST_MakeFunction* node);
 
     // pseudo
     Value visit_augBinOp(AST_AugBinOp* node);
@@ -176,6 +185,7 @@ ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
         source_info->cfg = computeCFG(f->source, f->source->body);
 
     scope_info = source_info->getScopeInfo();
+    assert(scope_info);
 }
 
 void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGenerator* _generator, Box* arg1, Box* arg2,
@@ -186,7 +196,7 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     if (scope_info->createsClosure())
         created_closure = createClosure(passed_closure);
 
-    std::vector<Box*> argsArray{ arg1, arg2, arg3 };
+    std::vector<Box*, StlCompatAllocator<Box*>> argsArray{ arg1, arg2, arg3 };
     for (int i = 3; i < nargs; ++i)
         argsArray.push_back(args[i - 3]);
 
@@ -444,7 +454,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
             OSRExit exit(compiled_func, found_entry);
 
-            std::vector<Box*> arg_array;
+            std::vector<Box*, StlCompatAllocator<Box*>> arg_array;
             for (auto& it : sorted_symbol_table) {
                 arg_array.push_back(it.second);
             }
@@ -569,8 +579,12 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.empty());
         getFrameInfo()->exc = ExcInfo(NULL, NULL, NULL);
         v = None;
+    } else if (node->opcode == AST_LangPrimitive::HASNEXT) {
+        assert(node->args.size() == 1);
+        Value obj = visit_expr(node->args[0]);
+        v = boxBool(hasnext(obj.o));
     } else
-        RELEASE_ASSERT(0, "not implemented");
+        RELEASE_ASSERT(0, "unknown opcode %d", node->opcode);
     return v;
 }
 
@@ -592,14 +606,10 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
             return visit_assert((AST_Assert*)node);
         case AST_TYPE::Assign:
             return visit_assign((AST_Assign*)node);
-        case AST_TYPE::ClassDef:
-            return visit_classDef((AST_ClassDef*)node);
         case AST_TYPE::Delete:
             return visit_delete((AST_Delete*)node);
         case AST_TYPE::Expr:
             return visit_expr((AST_Expr*)node);
-        case AST_TYPE::FunctionDef:
-            return visit_functionDef((AST_FunctionDef*)node);
         case AST_TYPE::Pass:
             return Value(); // nothing todo
         case AST_TYPE::Print:
@@ -633,7 +643,7 @@ Value ASTInterpreter::visit_return(AST_Return* node) {
 Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::vector<AST_stmt*>& body) {
     CLFunction* cl = wrapFunction(node, args, body, source_info);
 
-    std::vector<Box*> defaults;
+    std::vector<Box*, StlCompatAllocator<Box*>> defaults;
     for (AST_expr* d : args->defaults)
         defaults.push_back(visit_expr(d).o);
     defaults.push_back(0);
@@ -674,14 +684,14 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         }
         assert(closure);
     }
-
     return boxCLFunction(cl, closure, is_generator, u.il);
 }
 
-Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {
+Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
+    AST_FunctionDef* node = mkfn->function_def;
     AST_arguments* args = node->args;
 
-    std::vector<Box*> decorators;
+    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -690,11 +700,11 @@ Value ASTInterpreter::visit_functionDef(AST_FunctionDef* node) {
     for (int i = decorators.size() - 1; i >= 0; i--)
         func = runtimeCall(decorators[i], ArgPassSpec(1), func, 0, 0, 0, 0);
 
-    doStore(source_info->mangleName(node->name), func);
-    return Value();
+    return Value(func);
 }
 
-Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
+Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
+    AST_ClassDef* node = mkclass->class_def;
     ScopeInfo* scope_info = source_info->scoping->getScopeInfoForNode(node);
     assert(scope_info);
 
@@ -704,7 +714,7 @@ Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
 
     BoxedTuple* basesTuple = new BoxedTuple(std::move(bases));
 
-    std::vector<Box*> decorators;
+    std::vector<Box*, StlCompatAllocator<Box*>> decorators;
     for (AST_expr* d : node->decorator_list)
         decorators.push_back(visit_expr(d).o);
 
@@ -717,8 +727,7 @@ Value ASTInterpreter::visit_classDef(AST_ClassDef* node) {
     for (int i = decorators.size() - 1; i >= 0; i--)
         classobj = runtimeCall(decorators[i], ArgPassSpec(1), classobj, 0, 0, 0, 0);
 
-    doStore(source_info->mangleName(node->name), classobj);
-    return Value();
+    return Value(classobj);
 }
 
 Value ASTInterpreter::visit_raise(AST_Raise* node) {
@@ -884,6 +893,10 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_clsAttribute((AST_ClsAttribute*)node);
         case AST_TYPE::LangPrimitive:
             return visit_langPrimitive((AST_LangPrimitive*)node);
+        case AST_TYPE::MakeClass:
+            return visit_makeClass((AST_MakeClass*)node);
+        case AST_TYPE::MakeFunction:
+            return visit_makeFunction((AST_MakeFunction*)node);
         default:
             RELEASE_ASSERT(0, "");
     };
@@ -915,7 +928,7 @@ Value ASTInterpreter::visit_call(AST_Call* node) {
         func = visit_expr(node->func);
     }
 
-    std::vector<Box*> args;
+    std::vector<Box*, StlCompatAllocator<Box*>> args;
     for (AST_expr* e : node->args)
         args.push_back(visit_expr(e).o);
 

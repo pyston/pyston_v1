@@ -194,6 +194,7 @@ public:
 
     BoxedSysFlags() {
         auto zero = boxInt(0);
+        assert(zero);
         division_warning = zero;
         bytes_warning = zero;
         no_user_site = zero;
@@ -274,9 +275,12 @@ void setupSys() {
                          new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetFilesystemEncoding, STR, 0),
                                                           "getfilesystemencoding"));
 
-    // TODO: should configure this in a better way
-    sys_module->giveAttr("prefix", boxStrConstant("/usr"));
-    sys_module->giveAttr("exec_prefix", boxStrConstant("/usr"));
+    sys_module->giveAttr("meta_path", new BoxedList());
+    sys_module->giveAttr("path_hooks", new BoxedList());
+    sys_module->giveAttr("path_importer_cache", new BoxedDict());
+
+    sys_module->giveAttr("prefix", boxStrConstant(Py_GetPrefix()));
+    sys_module->giveAttr("exec_prefix", boxStrConstant(Py_GetExecPrefix()));
 
     sys_module->giveAttr("copyright",
                          boxStrConstant("Copyright 2014-2015 Dropbox.\nAll Rights Reserved.\n\nCopyright (c) 2001-2014 "
@@ -294,8 +298,8 @@ void setupSys() {
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
 
-    sys_flags_cls = BoxedHeapClass::create(type_cls, object_cls, BoxedSysFlags::gcHandler, 0, sizeof(BoxedSysFlags),
-                                           false, "flags");
+    sys_flags_cls = new BoxedHeapClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false,
+                                       new BoxedString("flags"));
     sys_flags_cls->giveAttr("__new__",
                             new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, 0, true, true)));
 #define ADD(name)                                                                                                      \
@@ -306,6 +310,7 @@ void setupSys() {
     ADD(no_user_site);
 #undef ADD
 
+    sys_flags_cls->tp_mro = new BoxedTuple({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 
     sys_module->giveAttr("flags", new BoxedSysFlags());
@@ -321,5 +326,6 @@ void setupSysEnd() {
                                                               PyLt());
 
     sys_module->giveAttr("builtin_module_names", new BoxedTuple(std::move(builtin_module_names)));
+    sys_flags_cls->finishInitialization();
 }
 }

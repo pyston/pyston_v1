@@ -413,6 +413,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.double_->getPointerTo());
                 } else if (p.second == GENERATOR) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
+                } else if (p.second == CLOSURE) {
+                    ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
                 } else {
                     assert(p.second->llvmType() == g.llvm_value_type_ptr);
                 }
@@ -657,44 +659,20 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // analysis frameworks can't (yet) support the idea of a block flowing differently to its different
                 // successors.
                 //
-                // AST statements which can set a name:
+                // There are four kinds of AST statements which can set a name:
                 // - Assign
                 // - ClassDef
                 // - FunctionDef
-                // - Import, ImportFrom: these get translated into Assigns by our CFG pass.
+                // - Import, ImportFrom
+                //
+                // However, all of these get translated away into Assigns, so we only need to worry about those. Also,
+                // as an invariant, all assigns that can fail assign to a temporary rather than a python name. This
+                // ensures that we interoperate properly with definedness analysis.
                 //
                 // We only need to do this in the case that we have exactly one predecessor, because:
                 // - a block ending in an invoke will have multiple successors
                 // - critical edges (block with multiple successors -> block with multiple predecessors)
                 //   are disallowed
-
-                // FIXME: this doesn't work if we're over-writing a local name that's already been defined.
-                // see with_class_redefine.py
-                //
-                // There isn't any great solution to this except to fundamentally change the way we handle this problem.
-                //
-                // One solution:
-                // - make "create-class" & "create-function" expressions, and translate classdefs into:
-                //
-                //   Assign(temporary, CreateClass(....))
-                //   Assign(classname, temporary)
-                //
-                // Then the Assign(temporary, CreateClass(...)) will go in an invoke, which is fine because we never
-                // reuse temporary names.
-
-                // FIXME: Unfortunately, doing this will create heisenbugs unless the name we're removing is a
-                // temporary.
-                //
-                // The reason being, our definedness analysis passes don't know *anything* about how invoke statements
-                // don't actually define anything on the exception pass. Which means that their information and our
-                // symbol tables will disagree. This manifests in various ways, such as `sameKeyset()` asserts tripping.
-                // The only good solutions to this are:
-                //
-                //     1. making our analysis passes understand invokes
-                //     2. making assignments inside invokes always be to temporary variables
-                //        (and never referring to those temporary variables on the exception path)
-                //
-                // TODO(rntz): implement #2. This would also solve the above FIXME in this file.
 
                 auto pred = block->predecessors[0];
                 auto last_inst = pred->body.back();
@@ -703,41 +681,31 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 bool created_new_sym_table = false;
                 if (last_inst->type == AST_TYPE::Invoke && ast_cast<AST_Invoke>(last_inst)->exc_dest == block) {
                     AST_stmt* stmt = ast_cast<AST_Invoke>(last_inst)->stmt;
-                    bool remove_name = false;
-                    InternedString name;
+
+                    // The CFG pass translates away these statements, so we should never encounter them.
+                    // If we did, we'd need to remove a name here.
+                    assert(stmt->type != AST_TYPE::ClassDef);
+                    assert(stmt->type != AST_TYPE::FunctionDef);
+                    assert(stmt->type != AST_TYPE::Import);
+                    assert(stmt->type != AST_TYPE::ImportFrom);
 
                     if (stmt->type == AST_TYPE::Assign) {
                         auto asgn = ast_cast<AST_Assign>(stmt);
                         assert(asgn->targets.size() == 1);
                         if (asgn->targets[0]->type == AST_TYPE::Name) {
-                            name = ast_cast<AST_Name>(asgn->targets[0])->id;
-                            remove_name = true;
+                            InternedString name = ast_cast<AST_Name>(asgn->targets[0])->id;
+                            assert(name.c_str()[0] == '#'); // it must be a temporary
                             // You might think I need to check whether `name' is being assigned globally or locally,
                             // since a global assign doesn't affect the symbol table. However, the CFG pass only
                             // generates invoke-assigns to temporary variables. Just to be sure, we assert:
                             assert(!source->getScopeInfo()->refersToGlobal(name));
-                        }
-                    } else if (stmt->type == AST_TYPE::ClassDef) {
-                        // However, here we *do* have to check for global scope. :(
-                        name = ast_cast<AST_ClassDef>(stmt)->name;
-                        remove_name = !source->getScopeInfo()->refersToGlobal(name);
-                    } else if (stmt->type == AST_TYPE::FunctionDef) {
-                        // and here, as well.
-                        name = ast_cast<AST_FunctionDef>(stmt)->name;
-                        remove_name = !source->getScopeInfo()->refersToGlobal(name);
-                    }
-                    // The CFG pass translates away these statements, so we should never encounter them. If we did, we
-                    // would need to remove a name here.
-                    assert(stmt->type != AST_TYPE::Import);
-                    assert(stmt->type != AST_TYPE::ImportFrom);
 
-                    if (remove_name) {
-                        // TODO: inefficient
-                        sym_table = new SymbolTable(*sym_table);
-                        // FIXME: is getting tripped sometimes by classdef
-                        ASSERT(sym_table->count(name), "%d %s\n", block->idx, name.c_str());
-                        sym_table->erase(name);
-                        created_new_sym_table = true;
+                            // TODO: inefficient
+                            sym_table = new SymbolTable(*sym_table);
+                            ASSERT(sym_table->count(name), "%d %s\n", block->idx, name.c_str());
+                            sym_table->erase(name);
+                            created_new_sym_table = true;
+                        }
                     }
                 }
 

@@ -1,5 +1,3 @@
-# __bases__ and __name__ not supported yet -- need to add a custom getattr() method for old style classes
-
 class C():
     pass
 
@@ -52,6 +50,11 @@ class E():
         print "len"
         return self.n
 
+    def __call__(self):
+        def f(a):
+            print "f", a
+        return f
+
 e = E(1)
 print e
 print e.n
@@ -59,6 +62,7 @@ print e.foo()
 print e[1]
 print e[1:2]
 print len(e)
+print e()("test")
 
 def str2():
     return "str2"
@@ -126,3 +130,96 @@ print g.b
 print g.__class__
 print g.__dict__.items()
 print bool(g)
+
+class SetattrTest:
+    def __setattr__(self, attr, value):
+        print "setattr", attr, value
+
+s = SetattrTest()
+s.b = 2
+print g.__dict__.items()
+
+class MappingTest:
+    def __getitem__(self, key):
+        print "getitem", key
+        return 1
+    def __setitem__(self, key, value):
+        print "setitem", key, value
+    def __delitem__(self, key):
+        print "delitem", key
+
+m = MappingTest()
+m[1] = 2
+del m[2]
+print m[3]
+
+class Hashable:
+    def __hash__(self):
+        return 5
+print hash(Hashable())
+del Hashable.__hash__
+print type(hash(Hashable()))
+
+class C():
+    def foo(self):
+        pass
+
+    @classmethod
+    def bar(cls):
+        print cls
+
+c = C()
+print type(C.foo)
+print type(getattr(C, "foo"))
+print type(getattr(C, "foo").im_func)
+c.bar()
+C.bar()
+try:
+    C.doesnt_exist
+except AttributeError as e:
+    print e
+
+
+class C():
+    pass
+print type(C) # classobj
+
+class D(C):
+    pass
+print type(D) # classobj
+
+# Inheriting from old + new style classes gives a new-style class
+class E(C, object):
+    pass
+print type(E) # type
+class F(object, C):
+    pass
+print type(F) # type
+
+print type("aoeu", (str, object), {})
+# ClassType has to defer to calling type(b) for the first non-oldstyle base
+print type(ClassType("aoeu", (str, object), {}))
+
+# Even if that is not a new-style class!
+class MyCustomClass(object):
+    def __init__(self, *args, **kw):
+        print "init", args[:-1], kw
+
+    def __repr__(self):
+        return "<MCC>"
+
+# type(MyCustomClass()) is MyCustomClass, which is callable, leading to another call to __init__
+print ClassType("aoeu", (MyCustomClass(), ), {})
+
+class D():
+    def test(self):
+        return "D.test"
+
+class LateSubclassing():
+    def __init__(self):
+        LateSubclassing.__bases__ = (C, D)
+print LateSubclassing().test()
+print issubclass(LateSubclassing, C)
+print issubclass(LateSubclassing, D)
+print issubclass(LateSubclassing, E)
+
