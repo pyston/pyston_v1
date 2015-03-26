@@ -410,24 +410,8 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
             HCAttrs* attrs = b->getHCAttrsPtr();
 
             v->visit(attrs->hcls);
-            switch (attrs->hcls->type) {
-                case HiddenClass::NORMAL: {
-                    int nattrs = attrs->hcls->getAttrOffsets().size();
-                    if (nattrs) {
-                        HCAttrs::AttrList* attr_list = attrs->attr_list;
-                        assert(attr_list);
-                        v->visit(attr_list);
-                        v->visitRange((void**)&attr_list->attrs[0], (void**)&attr_list->attrs[nattrs]);
-                    }
-                    break;
-                }
-                case HiddenClass::DICT_BACKED: {
-                    HCAttrs::AttrList* attr_list = attrs->attr_list;
-                    v->visit(attrs->attr_list);
-                    v->visit(attrs->attr_list->attrs[0]);
-                    break;
-                }
-            }
+            if (attrs->attr_list)
+                v->visit(attrs->attr_list);
         }
 
         if (b->cls->instancesHaveDictAttrs()) {
@@ -480,7 +464,7 @@ static void typeSetDict(Box* obj, Box* val, void* context) {
         RELEASE_ASSERT(val->cls == dict_cls || val->cls == attrwrapper_cls, "");
 
         auto new_attr_list
-            = (HCAttrs::AttrList*)gc_alloc(sizeof(HCAttrs::AttrList) + sizeof(Box*), gc::GCKind::UNTRACKED);
+            = (HCAttrs::AttrList*)gc_alloc(sizeof(HCAttrs::AttrList) + sizeof(Box*), gc::GCKind::PRECISE);
         new_attr_list->attrs[0] = val;
 
         HCAttrs* hcattrs = obj->getHCAttrsPtr();

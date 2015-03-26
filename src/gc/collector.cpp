@@ -190,7 +190,7 @@ void GCVisitor::visit(void* p) {
     if (isNonheapRoot(p)) {
         return;
     } else {
-        assert(global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
+        ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
         stack->push(p);
     }
 }
@@ -272,12 +272,18 @@ void markPhase() {
             if (DEBUG >= 2) {
                 if (global_heap.small_arena.contains(p)) {
                     SmallArena::Block* b = SmallArena::Block::forPointer(p);
-                    assert(b->size >= bytes);
+                    assert(b->size >= bytes + sizeof(GCAllocation));
                 }
             }
             visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
         } else if (kind_id == GCKind::PRECISE) {
             uint32_t bytes = al->kind_data;
+            if (DEBUG >= 2) {
+                if (global_heap.small_arena.contains(p)) {
+                    SmallArena::Block* b = SmallArena::Block::forPointer(p);
+                    assert(b->size >= bytes + sizeof(GCAllocation));
+                }
+            }
             visitor.visitRange((void**)p, (void**)((char*)p + bytes));
         } else if (kind_id == GCKind::PYTHON) {
             Box* b = reinterpret_cast<Box*>(p);

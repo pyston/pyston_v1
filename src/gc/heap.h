@@ -484,13 +484,6 @@ public:
             rtn = small_arena.realloc(alloc, bytes);
         }
 
-        // We keep track of the size of conservative objects in the "kind_data" field,
-        // so with a realloc we have to update that:
-        if (rtn->kind_id == GCKind::CONSERVATIVE) {
-            // Round up to a multiple of sizeof(void*):
-            rtn->kind_data = (bytes + sizeof(void*) - 1) & (~(sizeof(void*) - 1));
-        }
-
         return rtn;
     }
 

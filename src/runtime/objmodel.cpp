@@ -724,11 +724,10 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         RewriterVar* r_new_array2 = NULL;
         int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
         if (numattrs == 0) {
-            attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::UNTRACKED);
+            attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::PRECISE);
             if (rewrite_args) {
                 RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-                RewriterVar* r_kind
-                    = rewrite_args->rewriter->loadConst((int)gc::GCKind::UNTRACKED, Location::forArg(1));
+                RewriterVar* r_kind = rewrite_args->rewriter->loadConst((int)gc::GCKind::PRECISE, Location::forArg(1));
                 r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_alloc, r_newsize, r_kind);
             }
         } else {
@@ -2228,6 +2227,11 @@ extern "C" void dump(void* p) {
     gc::GCAllocation* al = gc::GCAllocation::fromUserData(p);
     if (al->kind_id == gc::GCKind::UNTRACKED) {
         printf("gc-untracked object\n");
+        return;
+    }
+
+    if (al->kind_id == gc::GCKind::PRECISE) {
+        printf("precise gc array\n");
         return;
     }
 

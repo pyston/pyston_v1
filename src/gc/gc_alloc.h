@@ -52,7 +52,7 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     alloc->kind_id = kind_id;
     alloc->gc_flags = 0;
 
-    if (kind_id == GCKind::CONSERVATIVE) {
+    if (kind_id == GCKind::CONSERVATIVE || kind_id == GCKind::PRECISE) {
         // Round the size up to the nearest multiple of the pointer width, so that
         // we have an integer number of pointers to scan.
         // TODO We can probably this better; we could round down when we scan, or even
@@ -99,24 +99,36 @@ extern "C" inline void* gc_realloc(void* ptr, size_t bytes) {
     // Normal realloc() supports receiving a NULL pointer, but we need to know what the GCKind is:
     assert(ptr);
 
-    bytes += sizeof(GCAllocation);
+    size_t alloc_bytes = bytes + sizeof(GCAllocation);
+
+    GCAllocation* alloc;
+    void* rtn;
 
 #ifndef NVALGRIND
-    void* rtn;
     if (ENABLE_REDZONES) {
         void* base = (char*)ptr - REDZONE_SIZE;
-        void* rtn_base = global_heap.realloc(GCAllocation::fromUserData(base), bytes + 2 * REDZONE_SIZE)->user_data;
+        alloc = global_heap.realloc(GCAllocation::fromUserData(base), alloc_bytes + 2 * REDZONE_SIZE);
+        void* rtn_base = alloc->user_data;
         rtn = (char*)rtn_base + REDZONE_SIZE;
     } else {
-        rtn = global_heap.realloc(GCAllocation::fromUserData(ptr), bytes)->user_data;
+        alloc = global_heap.realloc(GCAllocation::fromUserData(ptr), alloc_bytes);
+        rtn = alloc->user_data;
     }
 
     VALGRIND_FREELIKE_BLOCK(ptr, REDZONE_SIZE);
-    VALGRIND_MALLOCLIKE_BLOCK(rtn, bytes, REDZONE_SIZE, true);
-    return rtn;
+    VALGRIND_MALLOCLIKE_BLOCK(rtn, alloc_bytes, REDZONE_SIZE, true);
 #else
-    return global_heap.realloc(GCAllocation::fromUserData(ptr), bytes)->user_data;
+    alloc = global_heap.realloc(GCAllocation::fromUserData(ptr), alloc_bytes);
+    rtn = alloc->user_data;
 #endif
+
+    if (alloc->kind_id == GCKind::CONSERVATIVE || alloc->kind_id == GCKind::PRECISE) {
+        bytes = (bytes + sizeof(void*) - 1) & (~(sizeof(void*) - 1));
+        assert(bytes < (1 << 31));
+        alloc->kind_data = bytes;
+    }
+
+    return rtn;
 }
 
 extern "C" inline void gc_free(void* ptr) {
