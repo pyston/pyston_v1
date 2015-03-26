@@ -1,12 +1,19 @@
 # Make sure __exit__ gets called in various exit scenarios:
 
-class C(object):
+class NewC(object):
     def __enter__(self):
         print "__enter__"
     def __exit__(self, type, val, tb):
         print "__exit__"
 
-def f():
+
+class OldC:
+    def __enter__(self):
+        print "__enter__"
+    def __exit__(self, type, val, tb):
+        print "__exit__"
+
+def f(C):
     with C():
         pass
     with C() as n:
@@ -42,9 +49,10 @@ def f():
         with C() as o:
             return
 
-f()
+f(NewC)
+f(OldC)
 
-def f2(b):
+def f2(b, C):
     n = 2
     while n:
         print n
@@ -56,6 +64,6 @@ def f2(b):
                 else:
                     return "b false"
 
-print f2(False)
-print f2(True)
+print f2(False, NewC), f2(False, OldC)
+print f2(True, NewC), f2(True, OldC)
 

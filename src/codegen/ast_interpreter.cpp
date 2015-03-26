@@ -484,7 +484,7 @@ Value ASTInterpreter::visit_invoke(AST_Invoke* node) {
 }
 
 Value ASTInterpreter::visit_clsAttribute(AST_ClsAttribute* node) {
-    return getattr(visit_expr(node->value).o, node->attr.c_str());
+    return getclsattr(visit_expr(node->value).o, node->attr.c_str());
 }
 
 Value ASTInterpreter::visit_augBinOp(AST_AugBinOp* node) {
