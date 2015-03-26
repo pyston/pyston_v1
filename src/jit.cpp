@@ -109,7 +109,7 @@ static int main(int argc, char** argv) {
         } else if (code == 'b') {
             USE_REGALLOC_BASIC = false;
         } else if (code == 'x') {
-            ENABLE_PYPA_PARSER = true;
+            ENABLE_PYPA_PARSER = false;
         } else if (code == 'c') {
             command = optarg;
             // no more option parsing; the rest of our arguments go into sys.argv.

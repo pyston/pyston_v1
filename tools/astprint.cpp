@@ -15,7 +15,7 @@ int main(int argc, char const ** argv) {
     initCodegen();
 
     if(argc > 2 && argv[1][0] == '-' && argv[1][1] == 'x') {
-        ENABLE_PYPA_PARSER = true;
+        ENABLE_PYPA_PARSER = false;
     }
 
     std::string fn = argv[1 + int(argc > 2)];

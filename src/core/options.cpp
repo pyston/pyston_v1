@@ -37,7 +37,7 @@ bool DUMPJIT = false;
 bool TRAP = false;
 bool USE_STRIPPED_STDLIB = true; // always true
 bool ENABLE_INTERPRETER = true;
-bool ENABLE_PYPA_PARSER = false;
+bool ENABLE_PYPA_PARSER = true;
 bool USE_REGALLOC_BASIC = true;
 
 int OSR_THRESHOLD_INTERPRETER = 200;
