@@ -7,3 +7,4 @@ print sys.copyright[-200:]
 print sys.byteorder
 print sys.getdefaultencoding()
 print sys.getfilesystemencoding()
+print type(sys.maxsize)

@@ -297,6 +297,7 @@ void setupSys() {
                                           boxInt(PYTHON_VERSION_MICRO), boxStrConstant("beta"), boxInt(0) }));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
+    sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
     sys_flags_cls = new BoxedHeapClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false,
                                        new BoxedString("flags"));

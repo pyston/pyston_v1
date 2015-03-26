@@ -1384,6 +1384,10 @@ _pypy_sys_version_parser = re.compile(
     '\(#?([^,]+),\s*([\w ]+),\s*([\w :]+)\)\s*'
     '\[PyPy [^\]]+\]?')
 
+_pyston_sys_version_parser = re.compile(
+    r'([\w.+]+)\s*'
+    '\[Pyston ([^\]]+)\]?')
+
 _sys_version_cache = {}
 
 def _sys_version(sys_version=None):
@@ -1452,6 +1456,17 @@ def _sys_version(sys_version=None):
             raise ValueError("failed to parse PyPy sys.version: %s" %
                              repr(sys_version))
         version, buildno, builddate, buildtime = match.groups()
+        compiler = ""
+
+    elif "Pyston" in sys_version:
+        # Pyston
+        name = "Pyston"
+        match = _pyston_sys_version_parser.match(sys_version)
+        if match is None:
+            raise ValueError("failed to parse Pyston sys.version: %s" %
+                             repr(sys_version))
+        version, buildno = match.groups()
+        builddate = ""
         compiler = ""
 
     else:
