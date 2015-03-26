@@ -1,5 +1,6 @@
 # expected: fail
-# - this particular check isn't implemented yet
+# - binop ordering is wrong, 
+#   should prefer executing a operation on the subclass first
 
 class M(type):
     def __instancecheck__(self, rhs):

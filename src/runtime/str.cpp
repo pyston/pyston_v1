@@ -2394,6 +2394,84 @@ static PyObject* string_zfill(PyObject* self, PyObject* args) {
     return (PyObject*)s;
 }
 
+static int string_print(PyObject* _op, FILE* fp, int flags) noexcept {
+    BoxedString* op = (BoxedString*)_op;
+
+    Py_ssize_t i, str_len;
+    char c;
+    int quote;
+
+    /* XXX Ought to check for interrupts when writing long strings */
+    if (!PyString_CheckExact(op)) {
+        int ret;
+        /* A str subclass may have its own __str__ method. */
+        op = (BoxedString*)PyObject_Str((PyObject*)op);
+        if (op == NULL)
+            return -1;
+        ret = string_print(op, fp, flags);
+        Py_DECREF(op);
+        return ret;
+    }
+    if (flags & Py_PRINT_RAW) {
+        // Pyston change
+        // char *data = op->ob_sval;
+        // Py_ssize_t size = Py_SIZE(op);
+        const char* data = op->s.c_str();
+        Py_ssize_t size = op->s.size();
+        Py_BEGIN_ALLOW_THREADS while (size > INT_MAX) {
+            /* Very long strings cannot be written atomically.
+             * But don't write exactly INT_MAX bytes at a time
+             * to avoid memory aligment issues.
+             */
+            const int chunk_size = INT_MAX & ~0x3FFF;
+            fwrite(data, 1, chunk_size, fp);
+            data += chunk_size;
+            size -= chunk_size;
+        }
+#ifdef __VMS
+        if (size)
+            fwrite(data, (size_t)size, 1, fp);
+#else
+        fwrite(data, 1, (size_t)size, fp);
+#endif
+        Py_END_ALLOW_THREADS return 0;
+    }
+
+    /* figure out which quote to use; single is preferred */
+    quote = '\'';
+    // Pyston change
+    // if (memchr(op->ob_sval, '\'', Py_SIZE(op)) && !memchr(op->ob_sval, '"', Py_SIZE(op)))
+    if (memchr(op->s.c_str(), '\'', Py_SIZE(op)) && !memchr(op->s.c_str(), '"', Py_SIZE(op)))
+        quote = '"';
+
+    // Pyston change
+    // str_len = Py_SIZE(op);
+    str_len = op->s.size();
+    Py_BEGIN_ALLOW_THREADS fputc(quote, fp);
+    for (i = 0; i < str_len; i++) {
+        /* Since strings are immutable and the caller should have a
+        reference, accessing the interal buffer should not be an issue
+        with the GIL released. */
+        // Pyston change:
+        // c = op->ob_sval[i];
+        c = op->s[i];
+        if (c == quote || c == '\\')
+            fprintf(fp, "\\%c", c);
+        else if (c == '\t')
+            fprintf(fp, "\\t");
+        else if (c == '\n')
+            fprintf(fp, "\\n");
+        else if (c == '\r')
+            fprintf(fp, "\\r");
+        else if (c < ' ' || c >= 0x7f)
+            fprintf(fp, "\\x%02x", c & 0xff);
+        else
+            fputc(c, fp);
+    }
+    fputc(quote, fp);
+    Py_END_ALLOW_THREADS return 0;
+}
+
 static Py_ssize_t string_buffer_getreadbuf(PyObject* self, Py_ssize_t index, const void** ptr) noexcept {
     RELEASE_ASSERT(index == 0, "");
     // I think maybe this can just be a non-release assert?  shouldn't be able to call this with
@@ -2469,6 +2547,7 @@ void setupStr() {
     str_iterator_cls->tpp_hasnext = (BoxedClass::pyston_inquiry)BoxedStringIterator::hasnextUnboxed;
 
     str_cls->tp_as_buffer = &string_as_buffer;
+    str_cls->tp_print = string_print;
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));

@@ -346,12 +346,12 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
             return -1;
     }
     */
-    PyObject* __class__ = boxStrConstant("__class__");
 
     if (PyClass_Check(cls) && PyInstance_Check(inst)) {
         PyObject* inclass = static_cast<BoxedInstance*>(inst)->inst_cls;
         retval = PyClass_IsSubclass(inclass, cls);
     } else if (PyType_Check(cls)) {
+        PyObject* __class__ = boxStrConstant("__class__");
         retval = PyObject_TypeCheck(inst, (PyTypeObject*)cls);
         if (retval == 0) {
             PyObject* c = PyObject_GetAttr(inst, __class__);
@@ -364,6 +364,7 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
             }
         }
     } else {
+        PyObject* __class__ = boxStrConstant("__class__");
         if (!check_class(cls, "isinstance() arg 2 must be a class, type,"
                               " or tuple of classes and types"))
             return -1;
@@ -378,6 +379,10 @@ static int recursive_isinstance(PyObject* inst, PyObject* cls) noexcept {
     }
 
     return retval;
+}
+
+extern "C" int _PyObject_RealIsInstance(PyObject* inst, PyObject* cls) noexcept {
+    return recursive_isinstance(inst, cls);
 }
 
 extern "C" int PyObject_IsInstance(PyObject* inst, PyObject* cls) noexcept {
@@ -671,6 +676,10 @@ static int recursive_issubclass(PyObject* derived, PyObject* cls) noexcept {
     }
 
     return retval;
+}
+
+extern "C" int _PyObject_RealIsSubclass(PyObject* derived, PyObject* cls) noexcept {
+    return recursive_issubclass(derived, cls);
 }
 
 extern "C" int PyObject_IsSubclass(PyObject* derived, PyObject* cls) noexcept {

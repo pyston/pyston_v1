@@ -2082,11 +2082,9 @@ public:
                 if (exc_handler->type) {
                     AST_expr* handled_type = remapExpr(exc_handler->type);
 
-                    // TODO: this should be an EXCEPTION_MATCHES(exc_type_name)
-                    AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::ISINSTANCE);
+                    AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::CHECK_EXC_MATCH);
                     is_caught_here->args.push_back(_dup(exc_obj));
                     is_caught_here->args.push_back(handled_type);
-                    is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
 
                     AST_Branch* br = new AST_Branch();
                     br->test = callNonzero(remapExpr(is_caught_here));

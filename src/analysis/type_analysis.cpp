@@ -361,7 +361,7 @@ private:
 
     void* visit_langprimitive(AST_LangPrimitive* node) override {
         switch (node->opcode) {
-            case AST_LangPrimitive::ISINSTANCE:
+            case AST_LangPrimitive::CHECK_EXC_MATCH:
                 return BOOL;
             case AST_LangPrimitive::LOCALS:
                 return DICT;

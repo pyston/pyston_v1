@@ -994,6 +994,39 @@ Box* typeHash(BoxedClass* self) {
     return boxInt(reinterpret_cast<intptr_t>(self) >> 4);
 }
 
+static PyObject* type_subclasses(PyTypeObject* type, PyObject* args_ignored) noexcept {
+    PyObject* list, *raw, *ref;
+    Py_ssize_t i, n;
+
+    list = PyList_New(0);
+    if (list == NULL)
+        return NULL;
+    raw = type->tp_subclasses;
+    if (raw == NULL)
+        return list;
+    assert(PyList_Check(raw));
+    n = PyList_GET_SIZE(raw);
+    for (i = 0; i < n; i++) {
+        ref = PyList_GET_ITEM(raw, i);
+        assert(PyWeakref_CheckRef(ref));
+        ref = PyWeakref_GET_OBJECT(ref);
+        if (ref != Py_None) {
+            if (PyList_Append(list, ref) < 0) {
+                Py_DECREF(list);
+                return NULL;
+            }
+        }
+    }
+    return list;
+}
+
+Box* typeSubclasses(BoxedClass* self) {
+    assert(isSubclass(self->cls, type_cls));
+    Box* rtn = type_subclasses(self, 0);
+    checkAndThrowCAPIException();
+    return rtn;
+}
+
 Box* typeMro(BoxedClass* self) {
     assert(isSubclass(self->cls, type_cls));
 
@@ -1376,6 +1409,10 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value) {
     BoxedString* attr_str = static_cast<BoxedString*>(attr);
     setattrGeneric(obj, attr_str->s, value, NULL);
     return None;
+}
+
+Box* objectSubclasshook(Box* cls, Box* a) {
+    return NotImplemented;
 }
 
 static PyObject* import_copyreg(void) noexcept {
@@ -1778,6 +1815,7 @@ void setupRuntime() {
     mem = gc_alloc(sizeof(BoxedHeapClass), gc::GCKind::PYTHON);
     type_cls = ::new (mem) BoxedHeapClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs),
                                           offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, NULL);
+    type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
 
@@ -1790,6 +1828,7 @@ void setupRuntime() {
     basestring_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
 
     str_cls = new BoxedHeapClass(basestring_cls, NULL, 0, 0, sizeof(BoxedString), false, NULL);
+    str_cls->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
 
     // Hold off on assigning names until str_cls is ready
     object_cls->tp_name = "object";
@@ -1818,21 +1857,26 @@ void setupRuntime() {
 
     tuple_cls
         = new BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple), false, boxStrConstant("tuple"));
+    tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     EmptyTuple = new BoxedTuple({});
     gc::registerPermanentRoot(EmptyTuple);
     list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+    list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
     pyston_getset_cls
         = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
     attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
                                          new BoxedString("attrwrapper"));
     dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false, new BoxedString("dict"));
+    dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
     file_cls = new BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
                                   sizeof(BoxedFile), false, new BoxedString("file"));
     int_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false, new BoxedString("int"));
+    int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
     bool_cls = new BoxedHeapClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false, new BoxedString("bool"));
     complex_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedComplex), false, new BoxedString("complex"));
     long_cls = new BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, 0, sizeof(BoxedLong), false,
                                   new BoxedString("long"));
+    long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
     float_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedFloat), false, new BoxedString("float"));
     function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
                                       offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false,
@@ -1978,6 +2022,9 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
+    object_cls->giveAttr(
+        "__subclasshook__",
+        boxInstanceMethod(object_cls, new BoxedFunction(boxRTFunction((void*)objectSubclasshook, UNKNOWN, 2))));
     // __setattr__ was already set to a WrapperDescriptor; it'd be nice to set this to a faster BoxedFunction
     // object_cls->setattr("__setattr__", new BoxedFunction(boxRTFunction((void*)objectSetattr, UNKNOWN, 3)), NULL);
     // but unfortunately that will set tp_setattro to slot_tp_setattro on object_cls and all already-made subclasses!
@@ -1997,6 +2044,7 @@ void setupRuntime() {
     type_cls->giveAttr("__module__", new (pyston_getset_cls) BoxedGetsetDescriptor(typeModule, typeSetModule, NULL));
     type_cls->giveAttr("__mro__",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedClass, tp_mro)));
+    type_cls->giveAttr("__subclasses__", new BoxedFunction(boxRTFunction((void*)typeSubclasses, UNKNOWN, 1)));
     type_cls->giveAttr("mro", new BoxedFunction(boxRTFunction((void*)typeMro, UNKNOWN, 1)));
     type_cls->freeze();
 

@@ -2177,7 +2177,32 @@ static int mro_internal(PyTypeObject* type) noexcept {
     return 0;
 }
 extern "C" int PyType_IsSubtype(PyTypeObject* a, PyTypeObject* b) noexcept {
-    return isSubclass(a, b);
+    PyObject* mro;
+
+    if (!(a->tp_flags & Py_TPFLAGS_HAVE_CLASS))
+        return b == a || b == &PyBaseObject_Type;
+
+    mro = a->tp_mro;
+    if (mro != NULL) {
+        /* Deal with multiple inheritance without recursion
+           by walking the MRO tuple */
+        Py_ssize_t i, n;
+        assert(PyTuple_Check(mro));
+        n = PyTuple_GET_SIZE(mro);
+        for (i = 0; i < n; i++) {
+            if (PyTuple_GET_ITEM(mro, i) == (PyObject*)b)
+                return 1;
+        }
+        return 0;
+    } else {
+        /* a is not completely initilized yet; follow tp_base */
+        do {
+            if (a == b)
+                return 1;
+            a = a->tp_base;
+        } while (a != NULL);
+        return b == &PyBaseObject_Type;
+    }
 }
 
 #define BUFFER_FLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
@@ -2254,8 +2279,6 @@ static void inherit_special(PyTypeObject* type, PyTypeObject* base) noexcept {
         COPYVAL(tp_dictoffset);
     }
 
-// Pyston change: are not using these for now:
-#if 0
     /* Setup fast subclass flags */
     if (PyType_IsSubtype(base, (PyTypeObject*)PyExc_BaseException))
         type->tp_flags |= Py_TPFLAGS_BASE_EXC_SUBCLASS;
@@ -2277,7 +2300,6 @@ static void inherit_special(PyTypeObject* type, PyTypeObject* base) noexcept {
         type->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
     else if (PyType_IsSubtype(base, &PyDict_Type))
         type->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-#endif
 }
 
 static int overrides_name(PyTypeObject* type, const char* name) noexcept {
@@ -2577,6 +2599,9 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
 
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
                           | Py_TPFLAGS_HAVE_NEWBUFFER;
+    ALLOWABLE_FLAGS |= Py_TPFLAGS_INT_SUBCLASS | Py_TPFLAGS_LONG_SUBCLASS | Py_TPFLAGS_LIST_SUBCLASS
+                       | Py_TPFLAGS_TUPLE_SUBCLASS | Py_TPFLAGS_STRING_SUBCLASS | Py_TPFLAGS_UNICODE_SUBCLASS
+                       | Py_TPFLAGS_DICT_SUBCLASS | Py_TPFLAGS_BASE_EXC_SUBCLASS | Py_TPFLAGS_TYPE_SUBCLASS;
     RELEASE_ASSERT((cls->tp_flags & ~ALLOWABLE_FLAGS) == 0, "");
     if (cls->tp_as_number) {
         RELEASE_ASSERT(cls->tp_flags & Py_TPFLAGS_CHECKTYPES, "Pyston doesn't yet support non-checktypes behavior");
@@ -2592,8 +2617,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     RELEASE_ASSERT(cls->tp_weaklist == NULL, "");
     RELEASE_ASSERT(cls->tp_del == NULL, "");
     RELEASE_ASSERT(cls->tp_version_tag == 0, "");
-
-// Pyston doesn't handle tp_print, but it looks like it's just for optimization so it should be ok to skip for now?
 
 // I think it is safe to ignore these for for now:
 // RELEASE_ASSERT(cls->tp_weaklistoffset == 0, "");

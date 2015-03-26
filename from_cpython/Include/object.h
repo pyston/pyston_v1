@@ -503,13 +503,8 @@ PyAPI_DATA(PyTypeObject*) type_cls;
 PyAPI_DATA(PyTypeObject*) object_cls;
 #define PyBaseObject_Type (*object_cls)
 
-// Pyston changes: these aren't direct macros any more [they potentially could be though]
-PyAPI_FUNC(bool) _PyType_Check(PyObject*) PYSTON_NOEXCEPT;
-#define PyType_Check(op) _PyType_Check((PyObject*)(op))
-#if 0
 #define PyType_Check(op) \
     PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS)
-#endif
 #define PyType_CheckExact(op) (Py_TYPE(op) == &PyType_Type)
 
 PyAPI_FUNC(int) PyType_Ready(PyTypeObject *) PYSTON_NOEXCEPT;
@@ -691,8 +686,6 @@ manually remove this flag though!
 #define Py_TPFLAGS_HAVE_NEWBUFFER (1L<<21)
 
 /* These flags are used to determine if a type is a subclass. */
-// Pyston change: we're not setting any of these, so let's comment them out
-#if 0
 #define Py_TPFLAGS_INT_SUBCLASS         (1L<<23)
 #define Py_TPFLAGS_LONG_SUBCLASS        (1L<<24)
 #define Py_TPFLAGS_LIST_SUBCLASS        (1L<<25)
@@ -702,7 +695,6 @@ manually remove this flag though!
 #define Py_TPFLAGS_DICT_SUBCLASS        (1L<<29)
 #define Py_TPFLAGS_BASE_EXC_SUBCLASS    (1L<<30)
 #define Py_TPFLAGS_TYPE_SUBCLASS        (1L<<31)
-#endif
 
 #define Py_TPFLAGS_DEFAULT_EXTERNAL ( \
                  Py_TPFLAGS_HAVE_GETCHARBUFFER | \

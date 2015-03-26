@@ -1014,13 +1014,11 @@ public:
 
 // "LangPrimitive" represents operations that "primitive" to the language,
 // but aren't directly *exactly* representable as normal Python.
-// ClsAttribute would fall into this category, as would isinstance (which
-// is not the same as the "isinstance" name since that could get redefined).
+// ClsAttribute would fall into this category.
 // These are basically bytecodes, framed as pseudo-AST-nodes.
 class AST_LangPrimitive : public AST_expr {
 public:
     enum Opcodes {
-        ISINSTANCE,
         LANDINGPAD,
         LOCALS,
         GET_ITER,
@@ -1029,6 +1027,7 @@ public:
         IMPORT_STAR,
         NONE,
         NONZERO,
+        CHECK_EXC_MATCH,
         SET_EXC_INFO,
         UNCACHE_EXC_INFO,
         HASNEXT,

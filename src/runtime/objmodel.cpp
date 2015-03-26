@@ -212,18 +212,17 @@ extern "C" void my_assert(bool b) {
 }
 
 bool isInstance(Box* obj, BoxedClass* cls) {
-    return isSubclass(obj->cls, cls);
+    int rtn = _PyObject_RealIsInstance(obj, cls);
+    if (rtn < 0)
+        checkAndThrowCAPIException();
+    return rtn;
 }
 
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
-    // TODO the class is allowed to override this using __subclasscheck__
-    assert(child->tp_mro);
-    assert(child->tp_mro->cls == tuple_cls);
-    for (auto b : static_cast<BoxedTuple*>(child->tp_mro)->elts) {
-        if (b == parent)
-            return true;
-    }
-    return false;
+    int rtn = _PyObject_RealIsSubclass(child, parent);
+    if (rtn < 0)
+        checkAndThrowCAPIException();
+    return rtn;
 }
 
 extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
@@ -2067,36 +2066,10 @@ extern "C" BoxedString* strOrNull(Box* obj) {
     }
 }
 
-extern "C" bool isinstance(Box* obj, Box* cls, int64_t flags) {
-    bool false_on_noncls = (flags & 0x1);
-
-    if (cls->cls == tuple_cls) {
-        auto t = static_cast<BoxedTuple*>(cls);
-        for (auto c : t->elts) {
-            if (isinstance(obj, c, flags))
-                return true;
-        }
-        return false;
-    }
-
-    if (cls->cls == classobj_cls) {
-        if (!isSubclass(obj->cls, instance_cls))
-            return false;
-
-        return instanceIsinstance(static_cast<BoxedInstance*>(obj), static_cast<BoxedClassobj*>(cls));
-    }
-
-    if (!false_on_noncls) {
-        assert(isSubclass(cls->cls, type_cls));
-    } else {
-        if (!isSubclass(cls->cls, type_cls))
-            return false;
-    }
-
-    BoxedClass* ccls = static_cast<BoxedClass*>(cls);
-
-    // TODO the class is allowed to override this using __instancecheck__
-    return isSubclass(obj->cls, ccls);
+extern "C" bool exceptionMatches(Box* obj, Box* cls) {
+    int rtn = PyErr_GivenExceptionMatches(obj, cls);
+    RELEASE_ASSERT(rtn >= 0, "");
+    return rtn;
 }
 
 extern "C" BoxedInt* hash(Box* obj) {

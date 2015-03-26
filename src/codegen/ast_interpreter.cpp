@@ -540,13 +540,12 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         Box* traceback = last_exception.traceback ? last_exception.traceback : None;
         v = new BoxedTuple({ type, value, traceback });
         last_exception = ExcInfo(NULL, NULL, NULL);
-    } else if (node->opcode == AST_LangPrimitive::ISINSTANCE) {
-        assert(node->args.size() == 3);
+    } else if (node->opcode == AST_LangPrimitive::CHECK_EXC_MATCH) {
+        assert(node->args.size() == 2);
         Value obj = visit_expr(node->args[0]);
         Value cls = visit_expr(node->args[1]);
-        Value flags = visit_expr(node->args[2]);
 
-        v = boxBool(isinstance(obj.o, cls.o, unboxInt(flags.o)));
+        v = boxBool(exceptionMatches(obj.o, cls.o));
 
     } else if (node->opcode == AST_LangPrimitive::LOCALS) {
         assert(node->args.size() == 0);
