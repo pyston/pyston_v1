@@ -450,7 +450,7 @@ Box* notimplementedRepr(Box* self) {
     return boxStrConstant("NotImplemented");
 }
 
-Box* sorted(Box* obj, Box* key, Box* cmp, Box** args) {
+Box* sorted(Box* obj, Box* cmp, Box* key, Box** args) {
     Box* reverse = args[0];
 
     BoxedList* rtn = new BoxedList();
@@ -458,7 +458,7 @@ Box* sorted(Box* obj, Box* key, Box* cmp, Box** args) {
         listAppendInternal(rtn, e);
     }
 
-    listSort(rtn, key, cmp, reverse);
+    listSort(rtn, cmp, key, reverse);
     return rtn;
 }
 
