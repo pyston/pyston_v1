@@ -31,10 +31,9 @@ for a in [-5, -1, 1, 5, -2L, -1L, 1L, 2L, 15L]:
 test(1L, 2.0)
 test(3.0, 2L)
 
-print (2L).__rdiv__(-1)
-print (2L).__rdiv__(-1L)
-print (-2L).__rdiv__(1L)
-print (-2L).__rdiv__(1)
+for lhs in [2L, -2L]:
+    for rhs in [-1, -1L, 1, 2L]:
+        print lhs.__rdiv__(rhs), lhs.__truediv__(rhs), lhs.__rtruediv__(rhs)
 
 print (1L) << (2L)
 print (1L) << (2)
