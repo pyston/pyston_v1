@@ -36,6 +36,7 @@ stdlib*.ll
 oprofile_data
 pprof.jit
 tags
+TAGS
 *.pyc
 
 perf.data

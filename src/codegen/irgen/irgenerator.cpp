@@ -291,6 +291,7 @@ private:
 
     llvm::BasicBlock* curblock;
     IREmitterImpl emitter;
+    // symbol_table tracks which (non-global) python variables are bound to which CompilerVariables
     SymbolTable symbol_table;
     std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks;
     CFGBlock* myblock;
@@ -882,6 +883,7 @@ private:
 
             return closure->getattr(emitter, getEmptyOpInfo(unw_info), &node->id.str(), false);
         } else {
+            // vst is one of {FAST, CLOSURE, NAME}
             if (symbol_table.find(node->id) == symbol_table.end()) {
                 // classdefs have different scoping rules than functions:
                 if (vst == ScopeInfo::VarScopeType::NAME) {
@@ -1087,6 +1089,133 @@ private:
         return new ConcreteCompilerVariable(UNKNOWN, rtn, true);
     }
 
+    CompilerVariable* evalMakeClass(AST_MakeClass* mkclass, UnwindInfo unw_info) {
+        assert(mkclass->type == AST_TYPE::MakeClass && mkclass->class_def->type == AST_TYPE::ClassDef);
+        AST_ClassDef* node = mkclass->class_def;
+        ScopeInfo* scope_info = irstate->getScopeInfoForNode(node);
+        assert(scope_info);
+
+        std::vector<CompilerVariable*> bases;
+        for (auto b : node->bases) {
+            CompilerVariable* base = evalExpr(b, unw_info);
+            bases.push_back(base);
+        }
+
+        CompilerVariable* _bases_tuple = makeTuple(bases);
+        for (auto b : bases) {
+            b->decvref(emitter);
+        }
+
+        ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
+        _bases_tuple->decvref(emitter);
+
+        std::vector<CompilerVariable*> decorators;
+        for (auto d : node->decorator_list) {
+            decorators.push_back(evalExpr(d, unw_info));
+        }
+
+        CLFunction* cl = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
+
+        // TODO duplication with _createFunction:
+        CompilerVariable* created_closure = NULL;
+        if (scope_info->takesClosure()) {
+            created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+            assert(created_closure);
+        }
+
+        // TODO kind of silly to create the function just to usually-delete it afterwards;
+        // one reason to do this is to pass the closure through if necessary,
+        // but since the classdef can't create its own closure, shouldn't need to explicitly
+        // create that scope to pass the closure through.
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, {});
+
+        CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
+
+        func->decvref(emitter);
+
+        ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
+        attr_dict->decvref(emitter);
+
+        llvm::Value* classobj = emitter.createCall3(unw_info, g.funcs.createUserClass,
+                                                    embedConstantPtr(&node->name.str(), g.llvm_str_type_ptr),
+                                                    bases_tuple->getValue(), converted_attr_dict->getValue());
+
+        // Note: createuserClass is free to manufacture non-class objects
+        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
+
+        for (int i = decorators.size() - 1; i >= 0; i--) {
+            cls = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { cls }, NULL);
+            decorators[i]->decvref(emitter);
+        }
+
+        // do we need to decvref this?
+        return cls;
+    }
+
+    CompilerVariable* _createFunction(AST* node, UnwindInfo unw_info, AST_arguments* args,
+                                      const std::vector<AST_stmt*>& body) {
+        CLFunction* cl = wrapFunction(node, args, body, irstate->getSourceInfo());
+
+        std::vector<ConcreteCompilerVariable*> defaults;
+        for (auto d : args->defaults) {
+            CompilerVariable* e = evalExpr(d, unw_info);
+            ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
+            e->decvref(emitter);
+            defaults.push_back(converted);
+        }
+
+        CompilerVariable* created_closure = NULL;
+
+        bool takes_closure;
+        // Optimization: when compiling a module, it's nice to not have to run analyses into the
+        // entire module's source code.
+        // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
+        // but we're only using it here to figure out if that function takes a closure.
+        // Top level functions never take a closure, so we can skip the analysis.
+        if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
+            takes_closure = false;
+        else {
+            takes_closure = irstate->getScopeInfoForNode(node)->takesClosure();
+        }
+
+        bool is_generator = cl->source->is_generator;
+
+        if (takes_closure) {
+            if (irstate->getScopeInfo()->createsClosure()) {
+                created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+            } else {
+                assert(irstate->getScopeInfo()->passesThroughClosure());
+                created_closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
+            }
+            assert(created_closure);
+        }
+
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, defaults);
+
+        for (auto d : defaults) {
+            d->decvref(emitter);
+        }
+
+        return func;
+    }
+
+    CompilerVariable* evalMakeFunction(AST_MakeFunction* mkfn, UnwindInfo unw_info) {
+        AST_FunctionDef* node = mkfn->function_def;
+        std::vector<CompilerVariable*> decorators;
+        for (auto d : node->decorator_list) {
+            decorators.push_back(evalExpr(d, unw_info));
+        }
+
+        CompilerVariable* func = _createFunction(node, unw_info, node->args, node->body);
+
+        for (int i = decorators.size() - 1; i >= 0; i--) {
+            func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
+            decorators[i]->decvref(emitter);
+        }
+
+        return func;
+    }
+
     ConcreteCompilerVariable* unboxVar(ConcreteCompilerType* t, llvm::Value* v, bool grabbed) {
         if (t == BOXED_INT) {
             llvm::Value* unboxed = emitter.getBuilder()->CreateCall(g.funcs.unboxInt, v);
@@ -1172,11 +1301,18 @@ private:
                 rtn = evalYield(ast_cast<AST_Yield>(node), unw_info);
                 break;
 
+            // pseudo-nodes
             case AST_TYPE::ClsAttribute:
                 rtn = evalClsAttribute(ast_cast<AST_ClsAttribute>(node), unw_info);
                 break;
             case AST_TYPE::LangPrimitive:
                 rtn = evalLangPrimitive(ast_cast<AST_LangPrimitive>(node), unw_info);
+                break;
+            case AST_TYPE::MakeClass:
+                rtn = evalMakeClass(ast_cast<AST_MakeClass>(node), unw_info);
+                break;
+            case AST_TYPE::MakeFunction:
+                rtn = evalMakeFunction(ast_cast<AST_MakeFunction>(node), unw_info);
                 break;
             default:
                 printf("Unhandled expr type: %d (irgenerator.cpp:" STRINGIFY(__LINE__) ")\n", node->type);
@@ -1225,6 +1361,12 @@ private:
         cur = val;
     }
 
+    // whether a Python variable FOO might be undefined or not is determined by whether the corresponding is_defined_FOO
+    // variable is present in our symbol table. If it is, then it *might* be undefined. If it isn't, then it either is
+    // definitely defined, or definitely isn't.
+    //
+    // to check whether a variable is in our symbol table, call _getFake with allow_missing = true and check whether the
+    // result is NULL.
     CompilerVariable* _getFake(InternedString name, bool allow_missing = false) {
         assert(name.str()[0] == '!');
         auto it = symbol_table.find(name);
@@ -1243,6 +1385,7 @@ private:
         return rtn;
     }
 
+    // only updates symbol_table if we're *not* setting a global
     void _doSet(InternedString name, CompilerVariable* val, UnwindInfo unw_info) {
         assert(name.str() != "None");
 
@@ -1390,69 +1533,6 @@ private:
         val->decvref(emitter);
     }
 
-    void doClassDef(AST_ClassDef* node, UnwindInfo unw_info) {
-        assert(node->type == AST_TYPE::ClassDef);
-        ScopeInfo* scope_info = irstate->getScopeInfoForNode(node);
-        assert(scope_info);
-
-        std::vector<CompilerVariable*> bases;
-        for (auto b : node->bases) {
-            CompilerVariable* base = evalExpr(b, unw_info);
-            bases.push_back(base);
-        }
-
-        CompilerVariable* _bases_tuple = makeTuple(bases);
-        for (auto b : bases) {
-            b->decvref(emitter);
-        }
-
-        ConcreteCompilerVariable* bases_tuple = _bases_tuple->makeConverted(emitter, _bases_tuple->getBoxType());
-        _bases_tuple->decvref(emitter);
-
-        std::vector<CompilerVariable*> decorators;
-        for (auto d : node->decorator_list) {
-            decorators.push_back(evalExpr(d, unw_info));
-        }
-
-        CLFunction* cl = wrapFunction(node, nullptr, node->body, irstate->getSourceInfo());
-
-        // TODO duplication with _createFunction:
-        CompilerVariable* created_closure = NULL;
-        if (scope_info->takesClosure()) {
-            created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
-            assert(created_closure);
-        }
-
-        // TODO kind of silly to create the function just to usually-delete it afterwards;
-        // one reason to do this is to pass the closure through if necessary,
-        // but since the classdef can't create its own closure, shouldn't need to explicitly
-        // create that scope to pass the closure through.
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, {});
-
-        CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
-
-        func->decvref(emitter);
-
-        ConcreteCompilerVariable* converted_attr_dict = attr_dict->makeConverted(emitter, attr_dict->getBoxType());
-        attr_dict->decvref(emitter);
-
-
-        llvm::Value* classobj = emitter.createCall3(unw_info, g.funcs.createUserClass,
-                                                    embedConstantPtr(&node->name.str(), g.llvm_str_type_ptr),
-                                                    bases_tuple->getValue(), converted_attr_dict->getValue());
-
-        // Note: createuserClass is free to manufacture non-class objects
-        CompilerVariable* cls = new ConcreteCompilerVariable(UNKNOWN, classobj, true);
-
-        for (int i = decorators.size() - 1; i >= 0; i--) {
-            cls = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { cls }, NULL);
-            decorators[i]->decvref(emitter);
-        }
-
-        _doSet(irstate->getSourceInfo()->mangleName(node->name), cls, unw_info);
-        cls->decvref(emitter);
-    }
-
     void doDelete(AST_Delete* node, UnwindInfo unw_info) {
         for (AST_expr* target : node->targets) {
             switch (target->type) {
@@ -1542,70 +1622,6 @@ private:
         }
 
         symbol_table.erase(target->id);
-    }
-
-    CompilerVariable* _createFunction(AST* node, UnwindInfo unw_info, AST_arguments* args,
-                                      const std::vector<AST_stmt*>& body) {
-        CLFunction* cl = wrapFunction(node, args, body, irstate->getSourceInfo());
-
-        std::vector<ConcreteCompilerVariable*> defaults;
-        for (auto d : args->defaults) {
-            CompilerVariable* e = evalExpr(d, unw_info);
-            ConcreteCompilerVariable* converted = e->makeConverted(emitter, e->getBoxType());
-            e->decvref(emitter);
-            defaults.push_back(converted);
-        }
-
-        CompilerVariable* created_closure = NULL;
-
-        bool takes_closure;
-        // Optimization: when compiling a module, it's nice to not have to run analyses into the
-        // entire module's source code.
-        // If we call getScopeInfoForNode, that will trigger an analysis of that function tree,
-        // but we're only using it here to figure out if that function takes a closure.
-        // Top level functions never take a closure, so we can skip the analysis.
-        if (irstate->getSourceInfo()->ast->type == AST_TYPE::Module)
-            takes_closure = false;
-        else {
-            takes_closure = irstate->getScopeInfoForNode(node)->takesClosure();
-        }
-
-        bool is_generator = cl->source->is_generator;
-
-        if (takes_closure) {
-            if (irstate->getScopeInfo()->createsClosure()) {
-                created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
-            } else {
-                assert(irstate->getScopeInfo()->passesThroughClosure());
-                created_closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
-            }
-            assert(created_closure);
-        }
-
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, defaults);
-
-        for (auto d : defaults) {
-            d->decvref(emitter);
-        }
-
-        return func;
-    }
-
-    void doFunctionDef(AST_FunctionDef* node, UnwindInfo unw_info) {
-        std::vector<CompilerVariable*> decorators;
-        for (auto d : node->decorator_list) {
-            decorators.push_back(evalExpr(d, unw_info));
-        }
-
-        CompilerVariable* func = _createFunction(node, unw_info, node->args, node->body);
-
-        for (int i = decorators.size() - 1; i >= 0; i--) {
-            func = decorators[i]->call(emitter, getOpInfoForNode(node, unw_info), ArgPassSpec(1), { func }, NULL);
-            decorators[i]->decvref(emitter);
-        }
-
-        _doSet(irstate->getSourceInfo()->mangleName(node->name), func, unw_info);
-        func->decvref(emitter);
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
@@ -1702,7 +1718,7 @@ private:
         // that case asking it to convert to itself ends up just being an incvref
         // and doesn't end up emitting an incref+decref pair.
         // This could also be handled by casting from the CompilerVariable to
-        // ConcreteCOmpilerVariable, but this way feels a little more robust to me.
+        // ConcreteCompilerVariable, but this way feels a little more robust to me.
         ConcreteCompilerType* opt_rtn_type = irstate->getReturnType();
         if (irstate->getReturnType()->llvmType() == val->getConcreteType()->llvmType())
             opt_rtn_type = val->getConcreteType();
@@ -1976,17 +1992,11 @@ private:
             case AST_TYPE::Assign:
                 doAssign(ast_cast<AST_Assign>(node), unw_info);
                 break;
-            case AST_TYPE::ClassDef:
-                doClassDef(ast_cast<AST_ClassDef>(node), unw_info);
-                break;
             case AST_TYPE::Delete:
                 doDelete(ast_cast<AST_Delete>(node), unw_info);
                 break;
             case AST_TYPE::Expr:
                 doExpr(ast_cast<AST_Expr>(node), unw_info);
-                break;
-            case AST_TYPE::FunctionDef:
-                doFunctionDef(ast_cast<AST_FunctionDef>(node), unw_info);
                 break;
             // case AST_TYPE::If:
             // doIf(ast_cast<AST_If>(node));
@@ -2065,9 +2075,9 @@ private:
         SourceInfo* source = irstate->getSourceInfo();
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
-        // Additional names to remove; remove them after iteration is done to new mess up the iterators
+        // Additional names to remove; remove them after iteration is done to not mess up the iterators
         std::vector<InternedString> also_remove;
-        for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
+        for (auto it = symbol_table.begin(); it != symbol_table.end();) {
             if (allowableFakeEndingSymbol(it->first)) {
                 ++it;
                 continue;
@@ -2078,7 +2088,7 @@ private:
 
             if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
                 // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", it->first.c_str(), myblock->idx,
-                // it->second->isGrabbed(), it->second->getVrefs());
+                //        it->second->isGrabbed(), it->second->getVrefs());
                 also_remove.push_back(getIsDefinedName(it->first));
 
                 it->second->decvref(emitter);
@@ -2213,6 +2223,8 @@ public:
             return EndingState(st, phi_st, curblock);
         }
 
+        // We have one successor, but they have more than one predecessor.
+        // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
             if (allowableFakeEndingSymbol(it->first) || source->phis->isRequiredAfter(it->first, myblock)) {
                 ASSERT(it->second->isGrabbed(), "%s", it->first.c_str());
@@ -2350,11 +2362,23 @@ public:
     }
 
     void run(const CFGBlock* block) override {
+        if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
+            printf("  %d init:", block->idx);
+            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
+                printf(" %s", it->first.c_str());
+            printf("\n");
+        }
         for (int i = 0; i < block->body.size(); i++) {
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
+        }
+        if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
+            printf("  %d fini:", block->idx);
+            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
+                printf(" %s", it->first.c_str());
+            printf("\n");
         }
     }
 

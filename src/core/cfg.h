@@ -56,6 +56,7 @@ public:
     void unconnectFrom(CFGBlock* successor);
 
     void push_back(AST_stmt* node) { body.push_back(node); }
+    void print();
 };
 
 // Control Flow Graph
@@ -79,6 +80,9 @@ public:
         return block;
     }
 
+    // Creates a block which must be placed later, using placeBlock().
+    // Must be placed on same CFG it was created on.
+    // You can also safely delete it without placing it.
     CFGBlock* addDeferredBlock() {
         CFGBlock* block = new CFGBlock(this, -1);
         return block;

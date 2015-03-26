@@ -511,7 +511,9 @@ private:
         }
     }
 
-    void visit_classdef(AST_ClassDef* node) override {
+    void* visit_makeclass(AST_MakeClass* mkclass) override {
+        AST_ClassDef* node = mkclass->class_def;
+
         for (auto d : node->decorator_list) {
             getType(d);
         }
@@ -521,9 +523,8 @@ private:
         }
 
         // TODO should we speculate that classdefs will generally return a class?
-        // CompilerType* t = typeFromClass(type_cls);
-        CompilerType* t = UNKNOWN;
-        _doSet(scope_info->mangleName(node->name), t);
+        // return typeFromClass(type_cls);
+        return UNKNOWN;
     }
 
     void visit_delete(AST_Delete* node) override {
@@ -551,7 +552,9 @@ private:
         }
     }
 
-    void visit_functiondef(AST_FunctionDef* node) override {
+    void* visit_makefunction(AST_MakeFunction* mkfn) override {
+        AST_FunctionDef* node = mkfn->function_def;
+
         for (auto d : node->decorator_list) {
             getType(d);
         }
@@ -563,7 +566,7 @@ private:
         CompilerType* t = UNKNOWN;
         if (node->decorator_list.empty())
             t = typeFromClass(function_cls);
-        _doSet(scope_info->mangleName(node->name), t);
+        return t;
     }
 
     void visit_global(AST_Global* node) override {}

@@ -953,7 +953,6 @@ void AST_Branch::accept_stmt(StmtVisitor* v) {
     v->visit_branch(this);
 }
 
-
 void AST_Jump::accept(ASTVisitor* v) {
     bool skip = v->visit_jump(this);
     if (skip)
@@ -976,7 +975,29 @@ void* AST_ClsAttribute::accept_expr(ExprVisitor* v) {
     return v->visit_clsattribute(this);
 }
 
+void AST_MakeFunction::accept(ASTVisitor* v) {
+    bool skip = v->visit_makefunction(this);
+    if (skip)
+        return;
 
+    function_def->accept(v);
+}
+
+void* AST_MakeFunction::accept_expr(ExprVisitor* v) {
+    return v->visit_makefunction(this);
+}
+
+void AST_MakeClass::accept(ASTVisitor* v) {
+    bool skip = v->visit_makeclass(this);
+    if (skip)
+        return;
+
+    class_def->accept(v);
+}
+
+void* AST_MakeClass::accept_expr(ExprVisitor* v) {
+    return v->visit_makeclass(this);
+}
 
 void print_ast(AST* ast) {
     PrintVisitor v;
@@ -1851,6 +1872,16 @@ bool PrintVisitor::visit_clsattribute(AST_ClsAttribute* node) {
     return true;
 }
 
+bool PrintVisitor::visit_makefunction(AST_MakeFunction* node) {
+    printf("make_");
+    return false;
+}
+
+bool PrintVisitor::visit_makeclass(AST_MakeClass* node) {
+    printf("make_");
+    return false;
+}
+
 class FlattenVisitor : public ASTVisitor {
 private:
     std::vector<AST*>* output;
@@ -2095,6 +2126,15 @@ public:
         return false;
     }
     virtual bool visit_clsattribute(AST_ClsAttribute* node) {
+        output->push_back(node);
+        return false;
+    }
+
+    virtual bool visit_makeclass(AST_MakeClass* node) {
+        output->push_back(node);
+        return false;
+    }
+    virtual bool visit_makefunction(AST_MakeFunction* node) {
         output->push_back(node);
         return false;
     }

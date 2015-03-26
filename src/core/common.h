@@ -39,6 +39,8 @@
 #define _CAT(A, B) A##B
 #define CAT(A, B) _CAT(A, B)
 
+#define ARRAY_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 // GCC and clang handle always_inline very differently;
 // we mostly only care about it for the stdlib, so just remove the attributes
 // if we're not in clang

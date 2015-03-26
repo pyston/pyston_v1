@@ -358,8 +358,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         llvm_entry_blocks[block] = llvm::BasicBlock::Create(g.context, buf, irstate->getLLVMFunction());
     }
 
-    llvm::BasicBlock* osr_entry_block
-        = NULL; // the function entry block, where we add the type guards [no guards anymore]
+    // the function entry block, where we add the type guards [no guards anymore]
+    llvm::BasicBlock* osr_entry_block = NULL;
     llvm::BasicBlock* osr_unbox_block_end = NULL; // the block after type guards where we up/down-convert things
     ConcreteSymbolTable* osr_syms = NULL;         // syms after conversion
     if (entry_descriptor != NULL) {
@@ -518,6 +518,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         created_phis[block] = phis;
 
         // Set initial symbol table:
+        // If we're in the starting block, no phis or symbol table changes for us.
+        // Generate function entry code instead.
         if (block == source->cfg->getStartingBlock()) {
             assert(entry_descriptor == NULL);
 
@@ -596,7 +598,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ConcreteCompilerType* analyzed_type = getTypeAtBlockStart(types, p.first, block);
 
                 // printf("For %s, given %s, analyzed for %s\n", p.first.c_str(), p.second->debugName().c_str(),
-                // analyzed_type->debugName().c_str());
+                //        analyzed_type->debugName().c_str());
 
                 llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(analyzed_type->llvmType(),
                                                                       block->predecessors.size() + 1, p.first.str());
@@ -652,28 +654,56 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ASSERT(phi_ending_symbol_tables[pred]->size() == 0, "%d %d", block->idx, pred->idx);
                 assert(ending_symbol_tables.count(pred));
 
-                // Filter out any names set by an invoke statement at the end
-                // of the previous block, if we're in the unwind path.
-                // This definitely doesn't seem like the most elegant way to do this,
-                // but the rest of the analysis frameworks can't (yet) support the idea of
-                // a block flowing differently to its different predecessors.
+                // Filter out any names set by an invoke statement at the end of the previous block, if we're in the
+                // unwind path. This definitely doesn't seem like the most elegant way to do this, but the rest of the
+                // analysis frameworks can't (yet) support the idea of a block flowing differently to its different
+                // successors.
+                //
+                // There are four kinds of AST statements which can set a name:
+                // - Assign
+                // - ClassDef
+                // - FunctionDef
+                // - Import, ImportFrom
+                //
+                // However, all of these get translated away into Assigns, so we only need to worry about those. Also,
+                // as an invariant, all assigns that can fail assign to a temporary rather than a python name. This
+                // ensures that we interoperate properly with definedness analysis.
+                //
+                // We only need to do this in the case that we have exactly one predecessor, because:
+                // - a block ending in an invoke will have multiple successors
+                // - critical edges (block with multiple successors -> block with multiple predecessors)
+                //   are disallowed
+
                 auto pred = block->predecessors[0];
                 auto last_inst = pred->body.back();
 
                 SymbolTable* sym_table = ending_symbol_tables[pred];
                 bool created_new_sym_table = false;
-                if (last_inst->type == AST_TYPE::Invoke) {
-                    auto invoke = ast_cast<AST_Invoke>(last_inst);
-                    if (invoke->exc_dest == block && invoke->stmt->type == AST_TYPE::Assign) {
-                        auto asgn = ast_cast<AST_Assign>(invoke->stmt);
+                if (last_inst->type == AST_TYPE::Invoke && ast_cast<AST_Invoke>(last_inst)->exc_dest == block) {
+                    AST_stmt* stmt = ast_cast<AST_Invoke>(last_inst)->stmt;
+
+                    // The CFG pass translates away these statements, so we should never encounter them.
+                    // If we did, we'd need to remove a name here.
+                    assert(stmt->type != AST_TYPE::ClassDef);
+                    assert(stmt->type != AST_TYPE::FunctionDef);
+                    assert(stmt->type != AST_TYPE::Import);
+                    assert(stmt->type != AST_TYPE::ImportFrom);
+
+                    if (stmt->type == AST_TYPE::Assign) {
+                        auto asgn = ast_cast<AST_Assign>(stmt);
                         assert(asgn->targets.size() == 1);
                         if (asgn->targets[0]->type == AST_TYPE::Name) {
-                            auto name = ast_cast<AST_Name>(asgn->targets[0]);
+                            InternedString name = ast_cast<AST_Name>(asgn->targets[0])->id;
+                            assert(name.c_str()[0] == '#'); // it must be a temporary
+                            // You might think I need to check whether `name' is being assigned globally or locally,
+                            // since a global assign doesn't affect the symbol table. However, the CFG pass only
+                            // generates invoke-assigns to temporary variables. Just to be sure, we assert:
+                            assert(!source->getScopeInfo()->refersToGlobal(name));
 
-                            // TODO: inneficient
+                            // TODO: inefficient
                             sym_table = new SymbolTable(*sym_table);
-                            ASSERT(sym_table->count(name->id), "%d %s\n", block->idx, name->id.c_str());
-                            sym_table->erase(name->id);
+                            ASSERT(sym_table->count(name), "%d %s\n", block->idx, name.c_str());
+                            sym_table->erase(name);
                             created_new_sym_table = true;
                         }
                     }
@@ -691,21 +721,25 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // Start off with the non-phi ones:
                 generator->copySymbolsFrom(ending_symbol_tables[pred]);
 
+                // NB. This is where most `typical' phi nodes get added.
                 // And go through and add phi nodes:
                 ConcreteSymbolTable* pred_st = phi_ending_symbol_tables[pred];
-                for (ConcreteSymbolTable::iterator it = pred_st->begin(); it != pred_st->end(); ++it) {
-                    // printf("adding phi for %s\n", it->first.c_str());
-                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(it->second->getType()->llvmType(),
-                                                                          block->predecessors.size(), it->first.str());
+                for (auto it = pred_st->begin(); it != pred_st->end(); ++it) {
+                    InternedString name = it->first;
+                    ConcreteCompilerVariable* cv = it->second; // incoming CCV from predecessor block
+                    // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
+                    llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
+                                                                          block->predecessors.size(), name.str());
                     // emitter->getBuilder()->CreateCall(g.funcs.dump, phi);
-                    ConcreteCompilerVariable* var = new ConcreteCompilerVariable(it->second->getType(), phi, true);
-                    generator->giveLocalSymbol(it->first, var);
+                    ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi, true);
+                    generator->giveLocalSymbol(name, var);
 
                     (*phis)[it->first] = std::make_pair(it->second->getType(), phi);
                 }
             }
         }
 
+        // Generate loop safepoints on backedges.
         for (CFGBlock* predecessor : block->predecessors) {
             if (predecessor->idx > block->idx) {
                 // Loop safepoint:
@@ -715,6 +749,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
         }
 
+        // Generate the IR for the block.
         generator->run(block);
 
         const IRGenerator::EndingState& ending_st = generator->getEndingSymbolTable();
@@ -727,7 +762,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     }
 
     ////
-    // Phi generation.
+    // Phi population.
     // We don't know the exact ssa values to back-propagate to the phi nodes until we've generated
     // the relevant IR, so after we have done all of it, go back through and populate the phi nodes.
     // Also, do some checking to make sure that the phi analysis stuff worked out, and that all blocks
@@ -739,19 +774,23 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
         bool this_is_osr_entry = (entry_descriptor && b == entry_descriptor->backedge->target);
 
+#ifndef NDEBUG
+        // Check to see that all blocks agree on what symbols + types they should be propagating for phis.
         for (int j = 0; j < b->predecessors.size(); j++) {
-            CFGBlock* b2 = b->predecessors[j];
-            if (blocks.count(b2) == 0)
+            CFGBlock* bpred = b->predecessors[j];
+            if (blocks.count(bpred) == 0)
                 continue;
 
-            // printf("(%d %ld) -> (%d %ld)\n", b2->idx, phi_ending_symbol_tables[b2]->size(), b->idx, phis->size());
-            compareKeyset(phi_ending_symbol_tables[b2], phis);
-            assert(phi_ending_symbol_tables[b2]->size() == phis->size());
+            // printf("(%d %ld) -> (%d %ld)\n", bpred->idx, phi_ending_symbol_tables[bpred]->size(), b->idx,
+            // phis->size());
+            assert(sameKeyset(phi_ending_symbol_tables[bpred], phis));
+            assert(phi_ending_symbol_tables[bpred]->size() == phis->size());
         }
 
         if (this_is_osr_entry) {
-            compareKeyset(osr_syms, phis);
+            assert(sameKeyset(osr_syms, phis));
         }
+#endif // end checking phi agreement.
 
         // Can't always add the phi incoming value right away, since we may have to create more
         // basic blocks as part of type coercion.
@@ -759,21 +798,22 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         // which we won't read until after all new BBs have been added.
         std::vector<std::tuple<llvm::PHINode*, llvm::Value*, llvm::BasicBlock*&>> phi_args;
 
-        for (PHITable::iterator it = phis->begin(); it != phis->end(); ++it) {
+        for (auto it = phis->begin(); it != phis->end(); ++it) {
             llvm::PHINode* llvm_phi = it->second.second;
             for (int j = 0; j < b->predecessors.size(); j++) {
-                CFGBlock* b2 = b->predecessors[j];
-                if (blocks.count(b2) == 0)
+                CFGBlock* bpred = b->predecessors[j];
+                if (blocks.count(bpred) == 0)
                     continue;
 
-                ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[b2])[it->first];
+                ConcreteCompilerVariable* v = (*phi_ending_symbol_tables[bpred])[it->first];
                 assert(v);
                 assert(v->isGrabbed());
 
                 // Make sure they all prepared for the same type:
-                ASSERT(it->second.first == v->getType(), "%d %d: %s %s %s", b->idx, b2->idx, it->first.c_str(),
+                ASSERT(it->second.first == v->getType(), "%d %d: %s %s %s", b->idx, bpred->idx, it->first.c_str(),
                        it->second.first->debugName().c_str(), v->getType()->debugName().c_str());
 
+                llvm::Value* val = v->getValue();
                 llvm_phi->addIncoming(v->getValue(), llvm_exit_blocks[b->predecessors[j]]);
             }
 
@@ -785,14 +825,13 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 ASSERT(it->second.first == v->getType(), "");
                 llvm_phi->addIncoming(v->getValue(), osr_unbox_block_end);
             }
-
-            InternedString is_defined_name = getIsDefinedName(it->first, source->getInternedStrings());
         }
         for (auto t : phi_args) {
             std::get<0>(t)->addIncoming(std::get<1>(t), std::get<2>(t));
         }
     }
 
+    // deallocate/dereference memory
     for (CFGBlock* b : source->cfg->blocks) {
         if (ending_symbol_tables[b] == NULL)
             continue;
