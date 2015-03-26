@@ -20,3 +20,10 @@ print list(reversed(RevIterTest()))
 # xrange and list have __reversed__ methods
 print list(xrange(0,9).__reversed__())
 print list([1,2,3,4,5,6].__reversed__())
+
+r = reversed((1, 2, 3))
+try:
+    while True:
+        print r.next(),
+except StopIteration:
+    print ""

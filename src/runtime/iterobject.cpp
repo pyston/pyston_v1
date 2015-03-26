@@ -91,7 +91,13 @@ Box* seqiterNext(Box* s) {
     BoxedSeqIter* self = static_cast<BoxedSeqIter*>(s);
 
     if (!self->next) {
-        Box* hasnext = seqiterHasnext(s);
+        Box* hasnext = NULL;
+        if (s->cls == seqiter_cls)
+            hasnext = seqiterHasnext(s);
+        else if (s->cls == seqreviter_cls)
+            hasnext = seqreviterHasnext(s);
+        else
+            RELEASE_ASSERT(0, "");
         if (hasnext == False)
             raiseExcHelper(StopIteration, "");
     }

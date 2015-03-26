@@ -12,3 +12,5 @@ for i in xrange(10):
     for it in its:
         print it.next(),
     print
+
+print list(itertools.dropwhile(lambda x: x == 0, reversed((1, 2, 3))))
