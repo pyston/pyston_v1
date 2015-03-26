@@ -37,7 +37,7 @@ PyAPI_DATA(PyTypeObject*) int_cls;
 #define PyInt_Type (*int_cls)
 
 // Pyston change: (op)->ob_type --> Py_TYPE(op)
-// #define PyInt_Check(op) \
+// #define PyInt_Check(op)
 // 		 PyType_FastSubclass((op)->ob_type, Py_TPFLAGS_INT_SUBCLASS)
 #define PyInt_Check(op) \
         PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_INT_SUBCLASS)

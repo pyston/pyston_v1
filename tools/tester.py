@@ -36,7 +36,7 @@ IMAGE = "pyston_dbg"
 KEEP_GOING = False
 FN_JUST_SIZE = 20
 EXTRA_JIT_ARGS = []
-TIME_LIMIT = 15
+TIME_LIMIT = 25
 
 # For fun, can test pypy.
 # Tough because the tester will check to see if the error messages are exactly the
