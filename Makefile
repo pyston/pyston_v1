@@ -482,17 +482,23 @@ check:
 	$(MAKE) check_format
 	$(MAKE) ext_python ext_pyston pyston_dbg
 
-	$(MAKE) check_dbg
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
+	@# skip -O for dbg
 
 	$(MAKE) run_unittests
 
+	@# Building in gcc mode is helpful to find various compiler-specific warnings.
+	@# We've also discovered UB in our code from running in gcc mode, so try running it as well.
 	$(MAKE) pyston_gcc
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_gcc -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
 
+	$(MAKE) pyston_release
 	@# It can be useful to test release mode, since it actually exposes different functionality
 	@# since we can make different decisions about which internal functions to inline or not.
-	@# Doing the full check_release is probably overkill though.
-	$(MAKE) check_release
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
+	@# skip -n for dbg
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-O -a=-x -a=-S $(TESTS_DIR) $(ARGS)
 
 	echo "All tests passed"
 
