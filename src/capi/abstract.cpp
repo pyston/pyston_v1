@@ -1218,8 +1218,13 @@ extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) noexcept {
     Py_FatalError("unimplemented");
 }
 
-extern "C" PyObject* PyNumber_TrueDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+extern "C" PyObject* PyNumber_TrueDivide(PyObject* lhs, PyObject* rhs) noexcept {
+    try {
+        return binop(lhs, rhs, AST_TYPE::TrueDiv);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {

@@ -1206,6 +1206,13 @@ extern "C" Box* getclsattr(Box* obj, const char* attr) {
 
     Box* gotten;
 
+    if (attr[0] == '_' && attr[1] == '_' && PyInstance_Check(obj)) {
+        // __enter__ and __exit__ need special treatment.
+        static std::string enter_str("__enter__"), exit_str("__exit__");
+        if (attr == enter_str || attr == exit_str)
+            return getattr(obj, attr);
+    }
+
 #if 0
     std::unique_ptr<Rewriter> rewriter(Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 2, 1, "getclsattr"));
 
@@ -2481,6 +2488,12 @@ extern "C" Box* callattr(Box* obj, const std::string* attr, CallattrFlags flags,
     Box* rtn;
 
     LookupScope scope = flags.cls_only ? CLASS_ONLY : CLASS_OR_INST;
+
+    if ((*attr)[0] == '_' && (*attr)[1] == '_' && PyInstance_Check(obj)) {
+        // __enter__ and __exit__ need special treatment.
+        if (*attr == "__enter__" || *attr == "__exit__")
+            scope = CLASS_OR_INST;
+    }
 
     if (rewriter.get()) {
         // TODO feel weird about doing this; it either isn't necessary
