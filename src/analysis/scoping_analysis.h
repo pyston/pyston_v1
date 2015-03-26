@@ -98,8 +98,8 @@ public:
     virtual DerefInfo getDerefInfo(InternedString name) = 0;
 
     // Gets the DerefInfo for each DEREF variable accessible in the scope.
-    // The returned vector is in SORTED ORDER by the `num_parents_from_passed_closure` field.
-    // This allows the caller to iterate through the vector while also walking up
+    // The returned vector is in SORTED ORDER by the `num_parents_from_passed_closure` field
+    // (ascending). This allows the caller to iterate through the vector while also walking up
     // the closure chain to collect all the DEREF variable values. This is useful, for example,
     // in the implementation of locals().
     //

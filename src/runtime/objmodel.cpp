@@ -1277,7 +1277,6 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
         *bind_obj_out = NULL;
     }
 
-    // TODO this should be a custom getattr
     assert(obj->cls != closure_cls);
 
     // Handle descriptor logic here.
