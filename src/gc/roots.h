@@ -24,8 +24,9 @@ namespace pyston {
 
 template <class T> class StackRoot {
 public:
-    StackRoot(T* t) : t(t) {}
+    explicit StackRoot(T* t) : t(t) {}
     StackRoot(const StackRoot& other) : t(other.t) {}
+    template <class... Args> StackRoot(Args&&... args) : t(new T(std::forward(args...))) {}
     ~StackRoot() { GC_KEEP_ALIVE(t); }
 
     T& operator*() const { return *t; }
@@ -44,13 +45,14 @@ typedef StackRoot<Box> RootedBox;
 typedef StackRoot<BoxedString> RootedBoxedString;
 
 //
-// the above types can be used whenever we need to explicitly root a Box subclass within some lexical scope.
+// the above types can be used whenever we want to explicitly root a Box subclass within some lexical scope.
 //
 // {
-//     RootedBoxedString sub(new BoxedString("hello world"));
+//     RootedBoxedString sub("hello world");
 //     for (auto c : sub->s) {
 //       doSomethingThatCouldTriggerACollection();
 //     }
+//     callWithString(sub); // pass RootedBoxedString to a function taking BoxedString*
 //     // sub will be rooted conservatively until here
 // }
 //
