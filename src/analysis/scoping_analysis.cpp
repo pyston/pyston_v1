@@ -622,7 +622,10 @@ static void raiseNameForcingSyntaxError(const char* msg, ScopingAnalysis::ScopeN
         syntaxElemMsg = "import * is not allowed in function '%s' because it %s";
         lineno = usage->nameForcingNodeImportStar->lineno;
     } else {
-        syntaxElemMsg = "unqualified exec is not allowed in function '%.100s' it %s";
+        if (PYTHON_VERSION_MAJOR == 2 && PYTHON_VERSION_MINOR == 7 && PYTHON_VERSION_MICRO < 8)
+            syntaxElemMsg = "unqualified exec is not allowed in function '%.100s' it %s";
+        else
+            syntaxElemMsg = "unqualified exec is not allowed in function '%.100s' because it %s";
         lineno = usage->nameForcingNodeBareExec->lineno;
     }
 

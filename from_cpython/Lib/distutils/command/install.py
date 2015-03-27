@@ -41,8 +41,11 @@ else:
 
 INSTALL_SCHEMES = {
     'unix_prefix': {
-        'purelib': '$base/lib/python$py_version_short/site-packages',
-        'platlib': '$platbase/lib/python$py_version_short/site-packages',
+        # Pyston change
+        # 'purelib': '$base/lib/python$py_version_short/site-packages',
+        # 'platlib': '$platbase/lib/python$py_version_short/site-packages',
+        'purelib': '$base/site-packages',
+        'platlib': '$base/site-packages',
         'headers': '$base/include/python$py_version_short/$dist_name',
         'scripts': '$base/bin',
         'data'   : '$base',
