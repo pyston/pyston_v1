@@ -84,7 +84,6 @@ extern "C" Box* importStar(Box* from_module, BoxedModule* to_module);
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size);
 extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
-extern "C" bool isInstance(Box* obj, BoxedClass* parent);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
 extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
 

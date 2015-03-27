@@ -669,7 +669,7 @@ void checkAndThrowCAPIException() {
 
     if (_type) {
         BoxedClass* type = static_cast<BoxedClass*>(_type);
-        assert(isInstance(_type, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
+        assert(isSubclass(_type->cls, type_cls) && isSubclass(static_cast<BoxedClass*>(type), BaseException)
                && "Only support throwing subclass of BaseException for now");
 
         Box* value = cur_thread_state.curexc_value;
@@ -686,7 +686,7 @@ void checkAndThrowCAPIException() {
         PyErr_Clear();
 
         // This is similar to PyErr_NormalizeException:
-        if (!isInstance(value, type)) {
+        if (!isSubclass(value->cls, type)) {
             if (value->cls == tuple_cls) {
                 value = runtimeCall(type, ArgPassSpec(0, 0, true, false), value, NULL, NULL, NULL, NULL);
             } else if (value == None) {
