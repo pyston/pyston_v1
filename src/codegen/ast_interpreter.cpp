@@ -888,12 +888,12 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
 }
 
 Value ASTInterpreter::visit_exec(AST_Exec* node) {
-    RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
-    assert(!node->locals);
-
     // TODO implement the locals and globals arguments
     Box* code = visit_expr(node->body).o;
-    exec(code);
+    Box* globals = node->globals == NULL ? NULL : visit_expr(node->globals).o;
+    Box* locals = node->locals == NULL ? NULL : visit_expr(node->locals).o;
+
+    exec(code, globals, locals);
 
     return Value();
 }

@@ -1711,15 +1711,29 @@ private:
     }
 
     void doExec(AST_Exec* node, UnwindInfo unw_info) {
-        // TODO locals and globals
-        RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
-        assert(!node->locals);
-
         CompilerVariable* body = evalExpr(node->body, unw_info);
-        ConcreteCompilerVariable* cbody = body->makeConverted(emitter, body->getBoxType());
+        llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
         body->decvref(emitter);
 
-        emitter.createCall(unw_info, g.funcs.exec, cbody->getValue());
+        llvm::Value* vglobals;
+        if (node->globals) {
+            CompilerVariable* globals = evalExpr(node->globals, unw_info);
+            vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
+            globals->decvref(emitter);
+        } else {
+            vglobals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+
+        llvm::Value* vlocals;
+        if (node->locals) {
+            CompilerVariable* locals = evalExpr(node->locals, unw_info);
+            vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
+            locals->decvref(emitter);
+        } else {
+            vlocals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+
+        emitter.createCall3(unw_info, g.funcs.exec, vbody, vglobals, vlocals);
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {

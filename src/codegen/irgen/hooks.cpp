@@ -379,8 +379,17 @@ Box* eval(Box* boxedCode) {
     return evalOrExec<AST_Expression>(parsedExpr, body, module, boxedLocals);
 }
 
-Box* exec(Box* boxedCode) {
-    Box* boxedLocals = fastLocalsToBoxedLocals();
+Box* exec(Box* boxedCode, Box* globals, Box* locals) {
+    // TODO boxedCode is allowed to be a tuple
+    // TODO need to handle passing in globals
+    if (locals == NULL) {
+        locals = globals;
+    }
+
+    if (locals == NULL) {
+        locals = fastLocalsToBoxedLocals();
+    }
+
     BoxedModule* module = getCurrentModule();
 
     // TODO same issues as in `eval`
@@ -390,7 +399,7 @@ Box* exec(Box* boxedCode) {
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;
 
-    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, boxedLocals);
+    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it
