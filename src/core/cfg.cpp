@@ -1913,7 +1913,16 @@ public:
         return true;
     }
 
-    bool visit_exec(AST_Exec* node) override { raiseExcHelper(SyntaxError, "'exec' currently not supported"); }
+    bool visit_exec(AST_Exec* node) override {
+        AST_Exec* astexec = new AST_Exec();
+        astexec->lineno = node->lineno;
+        astexec->col_offset = node->col_offset;
+        astexec->body = remapExpr(node->body);
+        astexec->globals = remapExpr(node->globals);
+        astexec->locals = remapExpr(node->locals);
+        push_back(astexec);
+        return true;
+    }
 
     bool visit_while(AST_While* node) override {
         assert(curblock);

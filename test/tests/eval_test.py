@@ -84,7 +84,14 @@ print eval("eval('3 + 2342')")
 o = 300
 print 'eval eval o', eval("eval('o')")
 
-#print eval("[(lambda p : p + o)(5) for o in range(5)]")
+# This works in the global scope but not in the local scope, because o1 is a global:
+#print eval("[(lambda p1 : p1 + o1)(5) for o1 in range(5)]")
+def lambda_func():
+    try:
+        pass #print eval("[(lambda p2 : p2 + o2)(5) for o2 in range(5)]")
+    except NameError as e:
+        print e.message
+lambda_func()
 
 shadow1 = 1000
 shadow2 = 1000

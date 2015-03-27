@@ -167,5 +167,9 @@ inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int
     Box** argtuple = num_args >= 4 ? &args[3] : nullptr;
     return std::make_tuple(arg1, arg2, arg3, argtuple);
 }
+
+extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val);
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module);
+extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr);
 }
 #endif

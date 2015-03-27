@@ -643,6 +643,7 @@ struct stmt_dispatcher {
             ptr->locals = readItem(e.locals, interned_strings);
         else
             ptr->locals = NULL;
+        assert(ptr->globals || !ptr->locals);
         return ptr;
     }
 

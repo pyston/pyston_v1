@@ -26,14 +26,14 @@ TEST_F(AnalysisTest, augassign) {
     AST_Module* module = caching_parse_file(fn.c_str());
     assert(module);
 
-    ScopingAnalysis *scoping = runScopingAnalysis(module);
+    ScopingAnalysis *scoping = new ScopingAnalysis(module);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
-    ASSERT_FALSE(scope_info->refersToGlobal(module->interned_strings->get("a")));
-    ASSERT_FALSE(scope_info->refersToGlobal(module->interned_strings->get("b")));
+    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
+    ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
     SourceInfo* si = new SourceInfo(createModule("__main__", fn), scoping, func, func->body);
 

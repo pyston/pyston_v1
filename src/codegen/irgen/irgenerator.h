@@ -46,6 +46,7 @@ typedef std::unordered_map<InternedString, ConcreteCompilerVariable*> ConcreteSy
 extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
 extern const std::string PASSED_GENERATOR_NAME;
+extern const std::string FRAME_INFO_PTR_NAME;
 
 
 // Class that holds state of the current IR generation, that might not be local
@@ -61,13 +62,16 @@ private:
 
     llvm::AllocaInst* scratch_space;
     llvm::Value* frame_info;
+    llvm::Value* boxed_locals;
+    llvm::Value* frame_info_arg;
     int scratch_size;
+
 
 public:
     IRGenState(CompiledFunction* cf, SourceInfo* source_info, ParamNames* param_names, GCBuilder* gc,
                llvm::MDNode* func_dbg_info)
         : cf(cf), source_info(source_info), param_names(param_names), gc(gc), func_dbg_info(func_dbg_info),
-          scratch_space(NULL), frame_info(NULL), scratch_size(0) {
+          scratch_space(NULL), frame_info(NULL), frame_info_arg(NULL), scratch_size(0) {
         assert(cf->func);
         assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
     }
@@ -82,6 +86,7 @@ public:
 
     llvm::Value* getScratchSpace(int min_bytes);
     llvm::Value* getFrameInfoVar();
+    llvm::Value* getBoxedLocalsVar();
 
     ConcreteCompilerType* getReturnType() { return cf->getReturnType(); }
 
@@ -93,6 +98,8 @@ public:
     llvm::MDNode* getFuncDbgInfo() { return func_dbg_info; }
 
     ParamNames* getParamNames() { return param_names; }
+
+    void setFrameInfoArgument(llvm::Value* v) { frame_info_arg = v; }
 };
 
 // turns CFGBlocks into LLVM IR

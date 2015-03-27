@@ -590,6 +590,14 @@ private:
             _visit_alias(alias);
     }
 
+    void visit_exec(AST_Exec* node) override {
+        getType(node->body);
+        if (node->globals)
+            getType(node->globals);
+        if (node->locals)
+            getType(node->locals);
+    }
+
     void visit_invoke(AST_Invoke* node) override { node->stmt->accept_stmt(this); }
 
     void visit_jump(AST_Jump* node) override {}

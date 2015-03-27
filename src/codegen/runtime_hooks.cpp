@@ -150,8 +150,8 @@ void initGlobalFuncs(GlobalState& g) {
     g.llvm_excinfo_type = g.stdlib_module->getTypeByName("struct.pyston::ExcInfo");
     assert(g.llvm_excinfo_type);
 
-    g.frame_info_type = g.stdlib_module->getTypeByName("struct.pyston::FrameInfo");
-    assert(g.frame_info_type);
+    g.llvm_frame_info_type = g.stdlib_module->getTypeByName("struct.pyston::FrameInfo");
+    assert(g.llvm_frame_info_type);
 
 #define GET(N) g.funcs.N = getFunc((void*)N, STRINGIFY(N))
 
@@ -221,6 +221,11 @@ void initGlobalFuncs(GlobalState& g) {
     GET(printFloat);
     GET(listAppendInternal);
     GET(getSysStdout);
+
+    GET(exec);
+    GET(boxedLocalsSet);
+    GET(boxedLocalsGet);
+    GET(boxedLocalsDel);
 
     g.funcs.runtimeCall = getFunc((void*)runtimeCall, "runtimeCall");
     g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);

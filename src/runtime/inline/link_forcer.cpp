@@ -15,6 +15,7 @@
 // This file is for forcing the inclusion of function declarations into the stdlib.
 // This is so that the types of the functions are available to the compiler.
 
+#include "codegen/irgen/hooks.h"
 #include "core/types.h"
 #include "gc/heap.h"
 #include "runtime/complex.h"
@@ -119,6 +120,8 @@ void force() {
     FORCE(mod_float_float);
     FORCE(pow_float_float);
 
+    FORCE(exec);
+
     FORCE(dump);
 
     FORCE(boxFloat);
@@ -126,6 +129,10 @@ void force() {
     FORCE(createModule);
 
     FORCE(gc::sizes);
+
+    FORCE(boxedLocalsSet);
+    FORCE(boxedLocalsGet);
+    FORCE(boxedLocalsDel);
 
     // FORCE(listIter);
 }
