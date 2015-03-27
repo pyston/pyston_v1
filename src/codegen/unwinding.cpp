@@ -638,12 +638,20 @@ Box* fastLocalsToBoxedLocals() {
     for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
         BoxedDict* d;
         BoxedClosure* closure;
-        CompiledFunction* cf;
         FrameInfo* frame_info;
+
+        CompiledFunction* cf = frame_iter.getCF();
+        ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+
+        if (scope_info->areLocalsFromModule()) {
+            // TODO we should cache this in frame_info->locals or something so that locals()
+            // (and globals() too) will always return the same dict
+            return makeAttrWrapper(getCurrentModule());
+        }
+
         if (frame_iter.getId().type == PythonFrameId::COMPILED) {
             d = new BoxedDict();
 
-            cf = frame_iter.getCF();
             uint64_t ip = frame_iter.getId().ip;
 
             assert(ip > cf->code_start);
@@ -727,7 +735,6 @@ Box* fastLocalsToBoxedLocals() {
         } else if (frame_iter.getId().type == PythonFrameId::INTERPRETED) {
             d = localsForInterpretedFrame((void*)frame_iter.getId().bp, true);
             closure = passedClosureForInterpretedFrame((void*)frame_iter.getId().bp);
-            cf = getCFForInterpretedFrame((void*)frame_iter.getId().bp);
             frame_info = getFrameInfoForInterpretedFrame((void*)frame_iter.getId().bp);
         } else {
             abort();
@@ -747,7 +754,6 @@ Box* fastLocalsToBoxedLocals() {
                 const std::string& name = attr_offset.first();
                 int offset = attr_offset.second;
                 Box* val = closure->attrs.attr_list->attrs[offset];
-                ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
                 if (val != NULL && scope_info->isPassedToViaClosure(scope_info->internString(name))) {
                     Box* boxedName = boxString(name);
                     if (d->d.count(boxedName) == 0) {

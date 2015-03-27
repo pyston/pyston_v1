@@ -4441,20 +4441,34 @@ Box* coerceUnicodeToStr(Box* unicode) {
     return r;
 }
 
+// TODO Make these fast, do inline caches and stuff
+
 extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val) {
     setitem(boxedLocals, boxString(attr), val);
 }
 
 extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module) {
     assert(parent_module->cls == module_cls);
-
     assert(boxedLocals != NULL);
-    RELEASE_ASSERT(boxedLocals->cls == dict_cls, "we don't support non-dict here yet");
-    auto& d = static_cast<BoxedDict*>(boxedLocals)->d;
-    auto it = d.find(boxString(attr));
-    if (it != d.end()) {
-        Box* value = it->second;
-        return value;
+
+    if (boxedLocals->cls == dict_cls) {
+        auto& d = static_cast<BoxedDict*>(boxedLocals)->d;
+        auto it = d.find(boxString(attr));
+        if (it != d.end()) {
+            Box* value = it->second;
+            return value;
+        }
+    } else {
+        try {
+            return getitem(boxedLocals, boxString(attr));
+        } catch (ExcInfo e) {
+            // TODO should check the exact semantic here but it's something like:
+            // If it throws a KeyError, then the variable doesn't exist so move on
+            // and check the globals (below); otherwise, just propogate the exception.
+            if (!isInstance(e.value, KeyError)) {
+                throw;
+            }
+        }
     }
 
     // TODO exception name?

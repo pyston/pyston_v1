@@ -114,6 +114,8 @@ public:
     // `exec` or `eval` scope.
     virtual bool usesNameLookup() = 0;
 
+    virtual bool areLocalsFromModule() = 0;
+
     virtual InternedString mangleName(InternedString id) = 0;
     virtual InternedString internString(llvm::StringRef) = 0;
 };

@@ -1094,15 +1094,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             return Value();
         }
         case ScopeInfo::VarScopeType::NAME: {
-            assert(frame_info.boxedLocals->cls == dict_cls);
-            auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
-            auto it = d.find(boxString(node->id.str()));
-            if (it != d.end()) {
-                Box* value = it->second;
-                return value;
-            }
-
-            return getGlobal(source_info->parent_module, &node->id.str());
+            return boxedLocalsGet(frame_info.boxedLocals, node->id.c_str(), source_info->parent_module);
         }
         default:
             abort();
@@ -1169,7 +1161,6 @@ Box* astInterpretFunctionEval(CompiledFunction* cf, Box* boxedLocals) {
 
     ASTInterpreter interpreter(cf);
     interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
-    RELEASE_ASSERT(boxedLocals->cls == dict_cls, "we don't support non-dicts here yet");
     interpreter.setBoxedLocals(boxedLocals);
     Value v = ASTInterpreter::execute(interpreter);
 

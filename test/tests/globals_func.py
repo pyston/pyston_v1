@@ -18,3 +18,8 @@ except NameError:
 # You're allowed to assign through globals and have it affect the module:
 globals()['x'] = 1
 print x
+
+# locals should do the same as globals
+print locals()['x']
+locals()['x'] = 2
+print x

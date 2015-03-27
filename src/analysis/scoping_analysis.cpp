@@ -105,6 +105,70 @@ public:
 
     bool isPassedToViaClosure(InternedString name) override { return false; }
 
+    bool areLocalsFromModule() override { return true; }
+
+    InternedString mangleName(InternedString id) override { return id; }
+    InternedString internString(llvm::StringRef s) override { abort(); }
+};
+
+typedef llvm::DenseSet<InternedString> StrSet;
+
+// Handles the scope in eval or exec
+// For example for exec, if you write
+// exec "global a ; print a ; print b"
+// It will give `a` the GLOBAL scope type and `b` the NAME type.
+// (For eval, you can't have global statements, so it will just
+// mark everything NAME.)
+class EvalExprScopeInfo : public ScopeInfo {
+private:
+    StrSet forced_globals;
+
+    struct GlobalStmtVisitor : NoopASTVisitor {
+        StrSet& result;
+        GlobalStmtVisitor(StrSet& result) : result(result) {}
+
+        bool visit_functiondef(AST_FunctionDef*) override { return true; }
+        bool visit_classdef(AST_ClassDef*) override { return true; }
+
+        bool visit_global(AST_Global* global_stmt) override {
+            for (InternedString name : global_stmt->names) {
+                result.insert(name);
+            }
+            return true;
+        }
+    };
+
+public:
+    EvalExprScopeInfo() {}
+
+    EvalExprScopeInfo(AST* node) {
+        // Find all the global statements in the node's scope (not delving into FuncitonDefs
+        // or ClassDefs) and put the names in `forced_globals`.
+        GlobalStmtVisitor visitor(forced_globals);
+        node->accept(&visitor);
+    }
+
+    ScopeInfo* getParent() override { return NULL; }
+
+    bool createsClosure() override { return false; }
+    bool takesClosure() override { return false; }
+    bool passesThroughClosure() override { return false; }
+
+    VarScopeType getScopeTypeOfName(InternedString name) override {
+        if (isCompilerCreatedName(name))
+            return VarScopeType::FAST;
+        else if (forced_globals.find(name) != forced_globals.end())
+            return VarScopeType::GLOBAL;
+        else
+            return VarScopeType::NAME;
+    }
+
+    bool usesNameLookup() override { return true; }
+
+    bool isPassedToViaClosure(InternedString name) override { return false; }
+
+    bool areLocalsFromModule() override { return false; }
+
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
 };
@@ -114,8 +178,6 @@ struct ScopingAnalysis::ScopeNameUsage {
     ScopeNameUsage* parent;
     const std::string* private_name;
     ScopingAnalysis* scoping;
-
-    typedef llvm::DenseSet<InternedString> StrSet;
 
     // Properties determined from crawling the scope:
     StrSet read;
@@ -244,6 +306,8 @@ public:
 
         return usage->got_from_closure.count(name) > 0 || usage->passthrough_accesses.count(name) > 0;
     }
+
+    bool areLocalsFromModule() override { return false; }
 
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());
@@ -644,8 +708,6 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         ScopeInfo* parent_info = this->scopes[(usage->parent == NULL) ? this->parent_module : usage->parent->node];
 
         switch (node->type) {
-            case AST_TYPE::Expression:
-            case AST_TYPE::Suite:
             case AST_TYPE::ClassDef: {
                 ScopeInfoBase* scopeInfo
                     = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */);
@@ -719,12 +781,11 @@ ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_str
 }
 
 ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
-    auto scope_info = getScopeInfoForNode(e);
-    scopes[e] = scope_info;
+    // It's an expression, so it can't have a `global` statement
+    scopes[e] = new EvalExprScopeInfo();
 }
 
 ScopingAnalysis::ScopingAnalysis(AST_Suite* s) : interned_strings(*s->interned_strings.get()) {
-    auto scope_info = getScopeInfoForNode(s);
-    scopes[s] = scope_info;
+    scopes[s] = new EvalExprScopeInfo(s);
 }
 }
