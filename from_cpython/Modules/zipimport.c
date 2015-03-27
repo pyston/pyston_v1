@@ -1177,8 +1177,7 @@ get_module_code(ZipImporter *self, char *fullname,
             if (isbytecode) {
                 // Pyston change: We don't support bytecode archives currently
                 // mtime = get_mtime_of_source(self, path);
-                PyErr_Format(ZipImportError, "Pyston can't load bytecode from archives yet. ' '%.200s'", fullname);
-                return NULL;
+                continue;
             }
 
             if (p_ispackage != NULL)
