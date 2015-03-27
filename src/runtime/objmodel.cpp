@@ -211,18 +211,8 @@ extern "C" void my_assert(bool b) {
     assert(b);
 }
 
-bool isInstance(Box* obj, BoxedClass* cls) {
-    int rtn = _PyObject_RealIsInstance(obj, cls);
-    if (rtn < 0)
-        checkAndThrowCAPIException();
-    return rtn;
-}
-
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
-    int rtn = _PyObject_RealIsSubclass(child, parent);
-    if (rtn < 0)
-        checkAndThrowCAPIException();
-    return rtn;
+    return PyType_IsSubtype(child, parent);
 }
 
 extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
@@ -4465,7 +4455,7 @@ extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* 
             // TODO should check the exact semantic here but it's something like:
             // If it throws a KeyError, then the variable doesn't exist so move on
             // and check the globals (below); otherwise, just propogate the exception.
-            if (!isInstance(e.value, KeyError)) {
+            if (!isSubclass(e.value->cls, KeyError)) {
                 throw;
             }
         }
