@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <langinfo.h>
 #include <sstream>
 
 #include "llvm/Support/FileSystem.h"
@@ -230,6 +231,120 @@ static bool isLittleEndian() {
     char* s = (char*)&number;
     return s[0] != 0;
 }
+
+void setEncodingAndErrors() {
+    // Adapted from pythonrun.c in CPython, with modifications for Pyston.
+
+    char* p;
+    char* icodeset = nullptr;
+    char* codeset = nullptr;
+    char* errors = nullptr;
+    int free_codeset = 0;
+    int overridden = 0;
+    PyObject* sys_stream, *sys_isatty;
+    char* saved_locale, *loc_codeset;
+
+    if ((p = Py_GETENV("PYTHONIOENCODING")) && *p != '\0') {
+        p = icodeset = codeset = strdup(p);
+        free_codeset = 1;
+        errors = strchr(p, ':');
+        if (errors) {
+            *errors = '\0';
+            errors++;
+        }
+        overridden = 1;
+    }
+
+#if defined(Py_USING_UNICODE) && defined(HAVE_LANGINFO_H) && defined(CODESET)
+    /* On Unix, set the file system encoding according to the
+       user's preference, if the CODESET names a well-known
+       Python codec, and Py_FileSystemDefaultEncoding isn't
+       initialized by other means. Also set the encoding of
+       stdin and stdout if these are terminals, unless overridden.  */
+
+    if (!overridden || !Py_FileSystemDefaultEncoding) {
+        saved_locale = strdup(setlocale(LC_CTYPE, NULL));
+        setlocale(LC_CTYPE, "");
+        loc_codeset = nl_langinfo(CODESET);
+        if (loc_codeset && *loc_codeset) {
+            PyObject* enc = PyCodec_Encoder(loc_codeset);
+            if (enc) {
+                loc_codeset = strdup(loc_codeset);
+                Py_DECREF(enc);
+            } else {
+                if (PyErr_ExceptionMatches(PyExc_LookupError)) {
+                    PyErr_Clear();
+                    loc_codeset = NULL;
+                } else {
+                    PyErr_Print();
+                    exit(1);
+                }
+            }
+        } else
+            loc_codeset = NULL;
+        setlocale(LC_CTYPE, saved_locale);
+        free(saved_locale);
+
+        if (!overridden) {
+            codeset = icodeset = loc_codeset;
+            free_codeset = 1;
+        }
+
+        /* Initialize Py_FileSystemDefaultEncoding from
+           locale even if PYTHONIOENCODING is set. */
+        if (!Py_FileSystemDefaultEncoding) {
+            Py_FileSystemDefaultEncoding = loc_codeset;
+            if (!overridden)
+                free_codeset = 0;
+        }
+    }
+#endif
+
+#ifdef MS_WINDOWS
+    if (!overridden) {
+        icodeset = ibuf;
+        codeset = buf;
+        sprintf(ibuf, "cp%d", GetConsoleCP());
+        sprintf(buf, "cp%d", GetConsoleOutputCP());
+    }
+#endif
+
+    if (codeset) {
+        sys_stream = PySys_GetObject("stdin");
+        sys_isatty = PyObject_CallMethod(sys_stream, "isatty", "");
+        if (!sys_isatty)
+            PyErr_Clear();
+        if ((overridden || (sys_isatty && PyObject_IsTrue(sys_isatty))) && PyFile_Check(sys_stream)) {
+            if (!PyFile_SetEncodingAndErrors(sys_stream, icodeset, errors))
+                Py_FatalError("Cannot set codeset of stdin");
+        }
+        Py_XDECREF(sys_isatty);
+
+        sys_stream = PySys_GetObject("stdout");
+        sys_isatty = PyObject_CallMethod(sys_stream, "isatty", "");
+        if (!sys_isatty)
+            PyErr_Clear();
+        if ((overridden || (sys_isatty && PyObject_IsTrue(sys_isatty))) && PyFile_Check(sys_stream)) {
+            if (!PyFile_SetEncodingAndErrors(sys_stream, codeset, errors))
+                Py_FatalError("Cannot set codeset of stdout");
+        }
+        Py_XDECREF(sys_isatty);
+
+        sys_stream = PySys_GetObject("stderr");
+        sys_isatty = PyObject_CallMethod(sys_stream, "isatty", "");
+        if (!sys_isatty)
+            PyErr_Clear();
+        if ((overridden || (sys_isatty && PyObject_IsTrue(sys_isatty))) && PyFile_Check(sys_stream)) {
+            if (!PyFile_SetEncodingAndErrors(sys_stream, codeset, errors))
+                Py_FatalError("Cannot set codeset of stderr");
+        }
+        Py_XDECREF(sys_isatty);
+
+        if (free_codeset)
+            free(codeset);
+    }
+}
+
 
 void setupSys() {
     sys_modules_dict = new BoxedDict();

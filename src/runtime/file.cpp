@@ -1113,6 +1113,38 @@ extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) noexcept {
     }
 }
 
+/* Set the encoding used to output Unicode strings.
+   Return 1 on success, 0 on failure. */
+
+extern "C" int PyFile_SetEncoding(PyObject* f, const char* enc) noexcept {
+    return PyFile_SetEncodingAndErrors(f, enc, NULL);
+}
+
+extern "C" int PyFile_SetEncodingAndErrors(PyObject* f, const char* enc, char* errors) noexcept {
+    BoxedFile* file = static_cast<BoxedFile*>(f);
+    PyObject* str, *oerrors;
+
+    assert(PyFile_Check(f));
+    str = PyString_FromString(enc);
+    if (!str)
+        return 0;
+    if (errors) {
+        oerrors = PyString_FromString(errors);
+        if (!oerrors) {
+            Py_DECREF(str);
+            return 0;
+        }
+    } else {
+        oerrors = Py_None;
+        Py_INCREF(Py_None);
+    }
+    Py_DECREF(file->f_encoding);
+    file->f_encoding = str;
+    Py_DECREF(file->f_errors);
+    file->f_errors = oerrors;
+    return 1;
+}
+
 extern "C" int _PyFile_SanitizeMode(char* mode) noexcept {
     char* upos;
     size_t len = strlen(mode);
@@ -1364,7 +1396,7 @@ extern "C" size_t Py_UniversalNewlineFread(char* buf, size_t n, FILE* stream, Py
     return dst - buf;
 }
 
-static PyObject* file_isatty(BoxedFile* f) noexcept {
+PyObject* file_isatty(BoxedFile* f) noexcept {
     long res;
     if (f->f_fp == NULL)
         return err_closed();

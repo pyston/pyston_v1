@@ -50,6 +50,8 @@
 
 namespace pyston {
 
+extern void setEncodingAndErrors();
+
 // returns true iff we got a request to exit, i.e. SystemExit, placing the
 // return code in `*retcode`. does not touch `*retcode* if it returns false.
 static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
@@ -172,6 +174,11 @@ static int main(int argc, char** argv) {
             return 1;
         }
     }
+
+    // Set encoding for standard streams. This needs to be done after
+    // sys.path is properly set up, so that we can import the
+    // encodings module.
+    setEncodingAndErrors();
 
     // end of argument parsing
 
