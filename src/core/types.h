@@ -567,8 +567,9 @@ struct FrameInfo {
     ExcInfo exc;
 
     Box* boxedLocals;
+    BoxedDict* globals;
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL) {}
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), globals(NULL) {}
 };
 
 struct CallattrFlags {

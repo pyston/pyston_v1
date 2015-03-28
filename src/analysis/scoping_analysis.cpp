@@ -104,6 +104,7 @@ public:
     bool usesNameLookup() override { return false; }
 
     bool areLocalsFromModule() override { return true; }
+    bool areGlobalsFromModule() override { return true; }
 
     DerefInfo getDerefInfo(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
     size_t getClosureOffset(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
@@ -142,10 +143,12 @@ private:
         }
     };
 
-public:
-    EvalExprScopeInfo() {}
+    bool globals_from_module;
 
-    EvalExprScopeInfo(AST* node) {
+public:
+    EvalExprScopeInfo(bool globals_from_module) : globals_from_module(globals_from_module) {}
+
+    EvalExprScopeInfo(AST* node, bool globals_from_module) : globals_from_module(globals_from_module) {
         // Find all the global statements in the node's scope (not delving into FuncitonDefs
         // or ClassDefs) and put the names in `forced_globals`.
         GlobalStmtVisitor visitor(forced_globals);
@@ -170,6 +173,7 @@ public:
     bool usesNameLookup() override { return true; }
 
     bool areLocalsFromModule() override { return false; }
+    bool areGlobalsFromModule() override { return globals_from_module; }
 
     DerefInfo getDerefInfo(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
     size_t getClosureOffset(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
@@ -321,6 +325,7 @@ public:
     bool usesNameLookup() override { return usesNameLookup_; }
 
     bool areLocalsFromModule() override { return false; }
+    bool areGlobalsFromModule() override { return true; }
 
     DerefInfo getDerefInfo(InternedString name) override {
         assert(getScopeTypeOfName(name) == VarScopeType::DEREF);
@@ -881,12 +886,12 @@ ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_str
     scopes[m] = new ModuleScopeInfo();
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
+ScopingAnalysis::ScopingAnalysis(AST_Expression* e, bool globals_from_module) : interned_strings(*e->interned_strings.get()) {
     // It's an expression, so it can't have a `global` statement
-    scopes[e] = new EvalExprScopeInfo();
+    scopes[e] = new EvalExprScopeInfo(globals_from_module);
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Suite* s) : interned_strings(*s->interned_strings.get()) {
-    scopes[s] = new EvalExprScopeInfo(s);
+ScopingAnalysis::ScopingAnalysis(AST_Suite* s, bool globals_from_module) : interned_strings(*s->interned_strings.get()) {
+    scopes[s] = new EvalExprScopeInfo(s, globals_from_module);
 }
 }

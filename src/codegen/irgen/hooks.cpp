@@ -327,7 +327,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 }
 
 template <typename AST_Type>
-Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, Box* boxedLocals) {
+Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, BoxedDict* globals, Box* boxedLocals) {
     CompiledFunction* cf;
 
     { // scope for limiting the locked region:
@@ -335,7 +335,7 @@ Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm,
 
         Timer _t("for evalOrExec()");
 
-        ScopingAnalysis* scoping = new ScopingAnalysis(source);
+        ScopingAnalysis* scoping = new ScopingAnalysis(source, globals == NULL);
 
         SourceInfo* si = new SourceInfo(bm, scoping, source, body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
@@ -352,7 +352,7 @@ Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm,
         assert(cf->clfunc->versions.size());
     }
 
-    return astInterpretFunctionEval(cf, boxedLocals);
+    return astInterpretFunctionEval(cf, globals, boxedLocals);
 }
 
 // Main entrypoints for eval and exec.
@@ -376,7 +376,7 @@ Box* eval(Box* boxedCode) {
     stmt->value = parsedExpr->body;
     std::vector<AST_stmt*> body = { stmt };
 
-    return evalOrExec<AST_Expression>(parsedExpr, body, module, boxedLocals);
+    return evalOrExec<AST_Expression>(parsedExpr, body, module, NULL, boxedLocals);
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
@@ -392,6 +392,8 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
 
     BoxedModule* module = getCurrentModule();
 
+    assert(!globals || globals->cls == dict_cls);
+
     // TODO same issues as in `eval`
     RELEASE_ASSERT(boxedCode->cls == str_cls, "");
     const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
@@ -399,7 +401,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;
 
-    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, locals);
+    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, static_cast<BoxedDict*>(globals), locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

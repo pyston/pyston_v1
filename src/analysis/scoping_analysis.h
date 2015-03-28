@@ -92,6 +92,7 @@ public:
     virtual bool usesNameLookup() = 0;
 
     virtual bool areLocalsFromModule() = 0;
+    virtual bool areGlobalsFromModule() = 0;
 
     // For a variable with DEREF lookup, return the DerefInfo used to lookup
     // the variable in a passed closure.
@@ -169,8 +170,8 @@ public:
     void registerScopeReplacement(AST* original_node, AST* new_node);
 
     ScopingAnalysis(AST_Module* m);
-    ScopingAnalysis(AST_Expression* e);
-    ScopingAnalysis(AST_Suite* s);
+    ScopingAnalysis(AST_Expression* e, bool globals_from_module);
+    ScopingAnalysis(AST_Suite* s, bool globals_from_module);
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();

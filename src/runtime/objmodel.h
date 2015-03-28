@@ -72,8 +72,6 @@ extern "C" BoxedInt* len(Box* obj);
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
-extern "C" Box* getGlobal(BoxedModule* m, const std::string* name);
-extern "C" void delGlobal(BoxedModule* m, const std::string* name);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);
@@ -168,8 +166,13 @@ inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int
     return std::make_tuple(arg1, arg2, arg3, argtuple);
 }
 
+// The `globals` argument can be either a BoxedModule or a BoxedDict
+
+extern "C" Box* getGlobal(Box* globals, const std::string* name);
+extern "C" void delGlobal(Box* globals, const std::string* name);
+
 extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val);
-extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module);
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, Box* globals);
 extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr);
 }
 #endif

@@ -4245,14 +4245,24 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, true), arg1, arg2, arg3, args, NULL);
 }
 
-extern "C" void delGlobal(BoxedModule* m, const std::string* name) {
-    if (!m->getattr(*name)) {
-        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+extern "C" void delGlobal(Box* globals, const std::string* name) {
+    if (globals->cls == module_cls) {
+        BoxedModule* m = static_cast<BoxedModule*>(globals);
+        if (!m->getattr(*name)) {
+            raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+        }
+        m->delattr(*name, NULL);
+    } else {
+        assert(globals->cls == dict_cls);
+        BoxedDict* d = static_cast<BoxedDict*>(globals);
+
+        auto it = d->d.find(boxString(*name));
+        assertNameDefined(it != d->d.end(), name->c_str(), NameError, false /* local_var_msg */);
+        d->d.erase(it);
     }
-    m->delattr(*name, NULL);
 }
 
-extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
+extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -4270,25 +4280,44 @@ extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "getGlobal"));
 
         Box* r;
-        if (rewriter.get()) {
-            // rewriter->trap();
+        if (globals->cls == module_cls) {
+            BoxedModule* m = static_cast<BoxedModule*>(globals);
+            if (rewriter.get()) {
+                RewriterVar* r_mod = rewriter->getArg(0);
 
-            GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-            r = m->getattr(*name, &rewrite_args);
-            if (!rewrite_args.out_success) {
-                rewriter.reset(NULL);
-            }
-            if (r) {
-                if (rewriter.get()) {
-                    rewriter->commitReturning(rewrite_args.out_rtn);
+                // Guard on it being a module rather than a dict
+                // TODO is this guard necessary? I'm being conservative now, but I think we can just
+                // insist that the type passed in is fixed for any given instance of a getGlobal call.
+                r_mod->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)module_cls);
+
+                GetattrRewriteArgs rewrite_args(rewriter.get(), r_mod, rewriter->getReturnDestination());
+                r = m->getattr(*name, &rewrite_args);
+                if (!rewrite_args.out_success) {
+                    rewriter.reset(NULL);
                 }
-                return r;
+                if (r) {
+                    if (rewriter.get()) {
+                        rewriter->commitReturning(rewrite_args.out_rtn);
+                    }
+                    return r;
+                }
+            } else {
+                r = m->getattr(*name, NULL);
+                nopatch_getglobal.log();
+                if (r) {
+                    return r;
+                }
             }
         } else {
-            r = m->getattr(*name, NULL);
-            nopatch_getglobal.log();
-            if (r) {
-                return r;
+            assert(globals->cls == dict_cls);
+            BoxedDict* d = static_cast<BoxedDict*>(globals);
+
+            rewriter.reset(NULL);
+            REWRITE_ABORTED("Rewriting not implemented for getGlobals with a dict globals yet");
+
+            auto it = d->d.find(boxString(*name));
+            if (it != d->d.end()) {
+                return it->second;
             }
         }
 
@@ -4408,8 +4437,7 @@ extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val) {
     setitem(boxedLocals, boxString(attr), val);
 }
 
-extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module) {
-    assert(parent_module->cls == module_cls);
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, Box* globals) {
     assert(boxedLocals != NULL);
 
     if (boxedLocals->cls == dict_cls) {
@@ -4434,7 +4462,7 @@ extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* 
 
     // TODO exception name?
     std::string attr_string(attr);
-    return getGlobal(parent_module, &attr_string);
+    return getGlobal(globals, &attr_string);
 }
 
 extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr) {
