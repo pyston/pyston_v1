@@ -159,6 +159,8 @@ private:
     ScopeInfo* analyzeSubtree(AST* node);
     void processNameUsages(NameUsageMap* usages);
 
+    bool globals_from_module;
+
 public:
     // The scope-analysis is done before any CFG-ization is done,
     // but many of the queries will be done post-CFG-ization.

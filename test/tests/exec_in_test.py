@@ -37,3 +37,16 @@ def f():
     c = 20
 f()
 """ in g, {}
+
+print 'Test global access in comprehensions'
+
+g = {'a' : 4, 'b': 5, 'c': 6}
+exec """
+global a
+global b
+global c
+print [a for i in xrange(1)]
+print {b for i in xrange(1)}
+print {i : b for i in xrange(1)}
+print 
+""" in g, {}

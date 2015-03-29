@@ -321,7 +321,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
     }
 
     if (cf->is_interpreted)
-        astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL);
+        astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     else
         ((void (*)())cf->code)();
 }
