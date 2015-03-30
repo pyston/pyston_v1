@@ -859,7 +859,7 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
 cmake_check:
-	@clang --version >/dev/null || (echo "clang not available"; false)
+	@$(CLANG_EXE) --version >/dev/null || (echo "clang not available"; false)
 	@cmake --version >/dev/null || (echo "cmake not available"; false)
 	@ninja --version >/dev/null || (echo "ninja not available"; false)
 
