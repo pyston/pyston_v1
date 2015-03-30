@@ -126,6 +126,10 @@ def canonicalize_stderr(stderr):
 failed = []
 def run_test(fn, check_stats, run_memcheck):
     r = os.path.basename(fn).rjust(FN_JUST_SIZE)
+    test_base_name = os.path.basename(fn).split('.')[0]
+
+    if test_base_name in TESTS_TO_SKIP:
+        return r + "    (skipped due to command line option)"
 
     statchecks = []
     jit_args = ["-rq"] + EXTRA_JIT_ARGS
@@ -386,6 +390,8 @@ parser.add_argument('-a', '--extra-args', default=[], action='append',
                     help="additional arguments to pyston (must be invoked with equal sign: -a=-ARG)")
 parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
                     help='set time limit in seconds for each test')
+parser.add_argument('-s', '--skip-tests', type=str, default='',
+                    help='tests to skip (comma-separated)')
 
 parser.add_argument('test_dir')
 parser.add_argument('patterns', nargs='*')
@@ -397,6 +403,7 @@ def main(orig_dir):
     global TIME_LIMIT
     global TEST_DIR
     global FN_JUST_SIZE
+    global TESTS_TO_SKIP
 
     run_memcheck = False
     start = 1
@@ -408,6 +415,7 @@ def main(orig_dir):
     KEEP_GOING = opts.keep_going
     EXTRA_JIT_ARGS += opts.extra_args
     TIME_LIMIT = opts.time_limit
+    TESTS_TO_SKIP = opts.skip_tests.split(',')
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     patterns = opts.patterns
