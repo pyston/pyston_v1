@@ -645,7 +645,11 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
         case AST_TYPE::Exec:
             return visit_exec((AST_Exec*)node);
         case AST_TYPE::Expr:
-            return visit_expr((AST_Expr*)node);
+            // docstrings are str constant expression statements.
+            // ignore those while interpreting.
+            if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str)
+                return visit_expr((AST_Expr*)node);
+            break;
         case AST_TYPE::Pass:
             return Value(); // nothing todo
         case AST_TYPE::Print:
@@ -1066,7 +1070,7 @@ Value ASTInterpreter::visit_set(AST_Set* node) {
 
 Value ASTInterpreter::visit_str(AST_Str* node) {
     if (node->str_type == AST_Str::STR) {
-        return boxString(node->str_data);
+        return source_info->parent_module->getStringConstant(node->str_data);
     } else if (node->str_type == AST_Str::UNICODE) {
         return decodeUTF8StringPtr(&node->str_data);
     } else {

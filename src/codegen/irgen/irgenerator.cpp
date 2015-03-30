@@ -1020,7 +1020,11 @@ private:
 
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
-            return makeStr(&node->str_data);
+            llvm::Value* rtn = embedConstantPtr(
+                irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
+
+            return new ConcreteCompilerVariable(STR, rtn, true);
+
         } else if (node->str_type == AST_Str::UNICODE) {
             return makeUnicode(emitter, &node->str_data);
         } else {
@@ -2039,7 +2043,8 @@ private:
                 doExec(ast_cast<AST_Exec>(node), unw_info);
                 break;
             case AST_TYPE::Expr:
-                doExpr(ast_cast<AST_Expr>(node), unw_info);
+                if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str)
+                    doExpr(ast_cast<AST_Expr>(node), unw_info);
                 break;
             // case AST_TYPE::If:
             // doIf(ast_cast<AST_If>(node));
