@@ -183,6 +183,7 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet read;
     StrSet written;
     StrSet forced_globals;
+    std::vector<AST_Name*> del_name_nodes;
 
     // Properties determined by looking at other scopes as well:
     StrSet referenced_from_nested;
@@ -190,7 +191,7 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet passthrough_accesses; // what names a child scope accesses a name from a parent scope
 
     // `import *` and `exec` both force the scope to use the NAME lookup
-    // However, this is not allowed to happen (a SyntaxError) if the scope
+    // However, this is not allowed to happen (a SyntaxError) if the scope has
     // "free variables", variables read but not written (and not forced to be global)
     // Furthermore, no child of the scope can have any free variables either
     // (not even if the variables would refer to a closure in an in-between child).
@@ -341,6 +342,8 @@ public:
         cur->read.insert(name);
     }
 
+    void doDel(AST_Name* node) { cur->del_name_nodes.push_back(node); }
+
     void doImportStar(AST_ImportFrom* node) {
         if (cur->nameForcingNodeImportStar == NULL)
             cur->nameForcingNodeImportStar = node;
@@ -358,9 +361,11 @@ public:
             case AST_TYPE::Load:
                 doRead(node->id);
                 break;
+            case AST_TYPE::Del:
+                doDel(node);
+            // fallthrough
             case AST_TYPE::Param:
             case AST_TYPE::Store:
-            case AST_TYPE::Del:
                 doWrite(node->id);
                 break;
             default:
@@ -698,6 +703,21 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
                 raiseNameForcingSyntaxError("contains a nested function with free variables", usage);
             else if (usage->free)
                 raiseNameForcingSyntaxError("is a nested function", usage);
+        }
+
+        // Trying to `del` a varaible in the closure in a SyntaxError.
+        // NOTE(travis): I'm not sure why this is a syntax error;
+        // it doesn't seem like there is anything intrinisically difficult about supporting
+        // `del` for closure variables. But it is, so, there you go:
+        for (AST_Name* name_node : usage->del_name_nodes) {
+            InternedString name = name_node->id;
+            if (usage->referenced_from_nested.count(name) > 0) {
+                char buf[1024];
+                snprintf(buf, sizeof(buf), "can not delete variable '%s' referenced in nested scope", name.c_str());
+                assert(usage->node->type == AST_TYPE::FunctionDef);
+                AST_FunctionDef* funcNode = static_cast<AST_FunctionDef*>(usage->node);
+                raiseSyntaxError(buf, name_node->lineno, 0, "" /* file?? */, funcNode->name.str());
+            }
         }
     }
 
