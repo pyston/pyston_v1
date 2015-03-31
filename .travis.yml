@@ -1,19 +1,38 @@
 language: cpp
+
 compiler:
   - clang
 # - gcc
 
-cache:
-  apt: true
+# use travis-ci docker based infrastructure
+sudo: false
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - autoconf
+    - clang-3.4
+    - cmake
+    - g++-4.8
+    - libgmp3-dev
+    - liblzma-dev
+    - libncurses5-dev
+    - libreadline-dev
+    - libsqlite3-dev
+    - libtool
+    - ninja-build
+    - python-dev
+    - texlive-extra-utils
+
+before_install:
+  - wget http://www.cmake.org/files/v3.2/cmake-3.2.1-Linux-x86_64.tar.gz
+  - tar zxf cmake-3.2.1-Linux-x86_64.tar.gz
+  - export PATH=`pwd`/cmake-3.2.1-Linux-x86_64/bin:$PATH
+  - if [ "$CXX" = "g++" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi
 
 install:
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-  - sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
-  - sudo apt-get -qq update
-  - sudo apt-get install -yqq git cmake ninja-build libsqlite3-dev libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils
-  - if [ "$CXX" = "clang++" ]; then sudo apt-get install -qq clang-3.4 libstdc++-4.8-dev; fi
-  - if [ "$CXX" = "g++" ]; then sudo apt-get install -qq g++-4.8; fi
-  - if [ "$CXX" = "g++" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi
   - git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
   - git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
   - git config --global user.email "you@example.com"
