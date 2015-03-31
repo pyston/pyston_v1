@@ -1396,7 +1396,7 @@ extern "C" size_t Py_UniversalNewlineFread(char* buf, size_t n, FILE* stream, Py
     return dst - buf;
 }
 
-PyObject* file_isatty(BoxedFile* f) noexcept {
+static PyObject* file_isatty(BoxedFile* f) noexcept {
     long res;
     if (f->f_fp == NULL)
         return err_closed();
