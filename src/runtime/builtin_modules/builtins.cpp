@@ -70,119 +70,11 @@ extern "C" Box* trap() {
    Return 0 on success, -1 on error.
 */
 
-static int merge_class_dict(PyObject* dict, PyObject* aclass) {
-    PyObject* classdict;
-    PyObject* bases;
-
-    assert(PyDict_Check(dict));
-    assert(aclass);
-
-    /* Merge in the type's dict (if any). */
-    classdict = PyObject_GetAttrString(aclass, "__dict__");
-    if (classdict == NULL)
-        PyErr_Clear();
-    else {
-        int status = PyDict_Update(dict, classdict);
-        Py_DECREF(classdict);
-        if (status < 0)
-            return -1;
-    }
-
-    /* Recursively merge in the base types' (if any) dicts. */
-    bases = PyObject_GetAttrString(aclass, "__bases__");
-    if (bases == NULL)
-        PyErr_Clear();
-    else {
-        /* We have no guarantee that bases is a real tuple */
-        Py_ssize_t i, n;
-        n = PySequence_Size(bases); /* This better be right */
-        if (n < 0)
-            PyErr_Clear();
-        else {
-            for (i = 0; i < n; i++) {
-                int status;
-                PyObject* base = PySequence_GetItem(bases, i);
-                if (base == NULL) {
-                    Py_DECREF(bases);
-                    return -1;
-                }
-                status = merge_class_dict(dict, base);
-                Py_DECREF(base);
-                if (status < 0) {
-                    Py_DECREF(bases);
-                    return -1;
-                }
-            }
-        }
-        Py_DECREF(bases);
-    }
-    return 0;
-}
-/* Helper for PyObject_Dir of type objects: returns __dict__ and __bases__.
-   We deliberately don't suck up its __class__, as methods belonging to the
-   metaclass would probably be more confusing than helpful.
-*/
-static PyObject* _specialized_dir_type(PyObject* obj) {
-    PyObject* result = NULL;
-    PyObject* dict = PyDict_New();
-
-    if (dict != NULL && merge_class_dict(dict, obj) == 0)
-        result = PyDict_Keys(dict);
-
-    Py_XDECREF(dict);
-    return result;
-}
-
 extern "C" Box* dir(Box* obj) {
-    if (obj == NULL) {
-        // TODO: This should actually return the elements in the current local
-        // scope not the content of the builtins_module
-        obj = builtins_module;
-    }
-
-    // TODO: Recursive class traversal for lookup of types and eliminating
-    // duplicates afterwards
-    BoxedList* result = nullptr;
-    // If __dir__ is present just call it and return what it returns
-    static std::string attr_dir = "__dir__";
-    Box* dir_result = callattrInternal(obj, &attr_dir, CLASS_ONLY, nullptr, ArgPassSpec(0), nullptr, nullptr, nullptr,
-                                       nullptr, nullptr);
-    if (dir_result && dir_result->cls == list_cls) {
-        return dir_result;
-    }
-
-    if (isSubclass(obj->cls, type_cls)) {
-        Box* r = _specialized_dir_type(obj);
-        checkAndThrowCAPIException();
-        assert(r);
-        return r;
-    }
-
-    // If __dict__ is present use its keys and add the reset below
-    Box* obj_dict = getattrInternal(obj, "__dict__", nullptr);
-    if (obj_dict && obj_dict->cls == dict_cls) {
-        result = new BoxedList();
-        for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
-            listAppend(result, kv.first);
-        }
-    }
-    if (!result) {
-        result = new BoxedList();
-    }
-
-    for (auto const& kv : obj->cls->attrs.hcls->getAttrOffsets()) {
-        listAppend(result, boxString(kv.first()));
-    }
-    if (obj->cls->instancesHaveHCAttrs()) {
-        HCAttrs* attrs = obj->getHCAttrsPtr();
-        for (auto const& kv : attrs->hcls->getAttrOffsets()) {
-            listAppend(result, boxString(kv.first()));
-        }
-    }
-    if (obj->cls->instancesHaveDictAttrs()) {
-        Py_FatalError("unimplemented");
-    }
-    return result;
+    Box* r = PyObject_Dir(obj);
+    if (!r)
+        throwCAPIException();
+    return r;
 }
 
 extern "C" Box* vars(Box* obj) {
@@ -840,6 +732,15 @@ Box* globals() {
 
 Box* locals() {
     return fastLocalsToBoxedLocals();
+}
+
+extern "C" PyObject* PyEval_GetLocals(void) noexcept {
+    try {
+        return locals();
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* divmod(Box* lhs, Box* rhs) {

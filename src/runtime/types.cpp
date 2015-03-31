@@ -1386,6 +1386,10 @@ Box* makeAttrWrapper(Box* b) {
     return new AttrWrapper(b);
 }
 
+Box* attrwrapperKeys(Box* b) {
+    return AttrWrapper::keys(b);
+}
+
 Box* objectNewNoArgs(BoxedClass* cls) {
     assert(isSubclass(cls->cls, type_cls));
     assert(typeLookup(cls, "__new__", NULL) == typeLookup(object_cls, "__new__", NULL)

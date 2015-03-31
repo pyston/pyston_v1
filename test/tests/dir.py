@@ -42,7 +42,7 @@ dir(int())
 dir(dir)
 dir(fake)
 dir(None)
-dir()
+# dir()
 
 dir(TestClass)
 dir(TestClass2)
@@ -97,3 +97,16 @@ print l
 c = C1()
 c.__dict__.update(dict(a=1, b=5))
 print sorted(c.__dict__.items())
+
+class TestClass3: # old-style
+    def __init__(self):
+        self.a = 1
+
+    def foo(self):
+        pass
+
+    def bar(self):
+        pass
+
+print sorted([d for d in dir(TestClass3) if not d.startswith('_')])
+print sorted([d for d in dir(TestClass3()) if not d.startswith('_')])

@@ -1239,6 +1239,11 @@ extern "C" void PyEval_InitThreads(void) noexcept {
     // nothing to do here
 }
 
+extern "C" char* PyModule_GetName(PyObject* m) noexcept {
+    assert(m->cls == module_cls);
+    return &static_cast<BoxedModule*>(m)->fn[0];
+}
+
 BoxedModule* importTestExtension(const std::string& name) {
     llvm::SmallString<128> pathname_str;
     // TODO supposed to pass argv0, main_addr to this function:
