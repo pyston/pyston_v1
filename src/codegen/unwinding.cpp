@@ -758,18 +758,21 @@ Box* fastLocalsToBoxedLocals() {
 
         // Add the locals from the closure
         // TODO in a ClassDef scope, we aren't supposed to add these
-        for (; closure != NULL; closure = closure->parent) {
-            assert(closure->cls == closure_cls);
-            for (auto& attr_offset : closure->attrs.hcls->getAttrOffsets()) {
-                const std::string& name = attr_offset.first();
-                int offset = attr_offset.second;
-                Box* val = closure->attrs.attr_list->attrs[offset];
-                if (val != NULL && scope_info->isPassedToViaClosure(scope_info->internString(name))) {
-                    Box* boxedName = boxString(name);
-                    if (d->d.count(boxedName) == 0) {
-                        d->d[boxString(name)] = val;
-                    }
-                }
+        size_t depth = 0;
+        for (auto& p : scope_info->getAllDerefVarsAndInfo()) {
+            InternedString name = p.first;
+            DerefInfo derefInfo = p.second;
+            while (depth < derefInfo.num_parents_from_passed_closure) {
+                depth++;
+                closure = closure->parent;
+            }
+            assert(closure != NULL);
+            Box* val = closure->elts[derefInfo.offset];
+            Box* boxedName = boxString(name.str());
+            if (val != NULL) {
+                d->d[boxedName] = val;
+            } else {
+                d->d.erase(boxedName);
             }
         }
 

@@ -1781,15 +1781,17 @@ public:
 
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) override {
+        RELEASE_ASSERT(0, "should not be called\n");
+        /*
         assert(!cls_only);
         llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(var->getValue(), g.llvm_value_type_ptr);
         return ConcreteCompilerVariable(UNKNOWN, bitcast, true).getattr(emitter, info, attr, cls_only);
+        */
     }
 
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
                  CompilerVariable* v) override {
-        llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(var->getValue(), g.llvm_value_type_ptr);
-        ConcreteCompilerVariable(UNKNOWN, bitcast, true).setattr(emitter, info, attr, v);
+        RELEASE_ASSERT(0, "should not be called\n");
     }
 
     ConcreteCompilerType* getConcreteType() override { return this; }

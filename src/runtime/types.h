@@ -623,15 +623,27 @@ public:
     DEFAULT_CLASS_SIMPLE(classmethod_cls);
 };
 
-// TODO is there any particular reason to make this a Box, ie a python-level object?
+// TODO is there any particular reason to make this a Box, i.e. a python-level object?
 class BoxedClosure : public Box {
 public:
-    HCAttrs attrs;
     BoxedClosure* parent;
+    size_t nelts;
+    Box* elts[0];
 
     BoxedClosure(BoxedClosure* parent) : parent(parent) {}
 
-    DEFAULT_CLASS(closure_cls);
+    void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
+        /*
+        BoxedClosure* rtn
+            = static_cast<BoxedClosure*>(gc_alloc(_PyObject_VAR_SIZE(closure_cls, nelts), gc::GCKind::PYTHON));
+            */
+        BoxedClosure* rtn
+            = static_cast<BoxedClosure*>(gc_alloc(sizeof(BoxedClosure) + nelts * sizeof(Box*), gc::GCKind::PYTHON));
+        rtn->nelts = nelts;
+        rtn->cls = closure_cls;
+        memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
+        return rtn;
+    }
 };
 
 class BoxedGenerator : public Box {

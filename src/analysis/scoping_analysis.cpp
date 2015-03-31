@@ -103,9 +103,13 @@ public:
 
     bool usesNameLookup() override { return false; }
 
-    bool isPassedToViaClosure(InternedString name) override { return false; }
-
     bool areLocalsFromModule() override { return true; }
+
+    DerefInfo getDerefInfo(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
+    size_t getClosureOffset(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
+    size_t getClosureSize() override { RELEASE_ASSERT(0, "This should never get called"); }
+    std::vector<std::pair<InternedString, DerefInfo>> v;
+    const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() override { return v; }
 
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
@@ -165,9 +169,13 @@ public:
 
     bool usesNameLookup() override { return true; }
 
-    bool isPassedToViaClosure(InternedString name) override { return false; }
-
     bool areLocalsFromModule() override { return false; }
+
+    DerefInfo getDerefInfo(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
+    size_t getClosureOffset(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
+    size_t getClosureSize() override { RELEASE_ASSERT(0, "This should never get called"); }
+    std::vector<std::pair<InternedString, DerefInfo>> v;
+    const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() override { return v; }
 
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
@@ -258,11 +266,22 @@ private:
     AST* ast;
     bool usesNameLookup_;
 
+    llvm::DenseMap<InternedString, size_t> closure_offsets;
+
+    std::vector<std::pair<InternedString, DerefInfo>> allDerefVarsAndInfo;
+    bool allDerefVarsAndInfoCached;
+
 public:
     ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
-        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup) {
+        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup), allDerefVarsAndInfoCached(false) {
         assert(usage);
         assert(ast);
+
+        int i = 0;
+        for (auto& p : usage->referenced_from_nested) {
+            closure_offsets[p] = i;
+            i++;
+        }
     }
 
     ~ScopeInfoBase() override { delete this->usage; }
@@ -301,20 +320,79 @@ public:
 
     bool usesNameLookup() override { return usesNameLookup_; }
 
-    bool isPassedToViaClosure(InternedString name) override {
-        if (isCompilerCreatedName(name))
-            return false;
+    bool areLocalsFromModule() override { return false; }
 
-        return usage->got_from_closure.count(name) > 0 || usage->passthrough_accesses.count(name) > 0;
+    DerefInfo getDerefInfo(InternedString name) override {
+        assert(getScopeTypeOfName(name) == VarScopeType::DEREF);
+
+        // TODO pre-compute this?
+
+        size_t parentCounter = 0;
+        // Casting to a ScopeInfoBase* is okay because only a ScopeInfoBase can have a closure.
+        // We just walk up the scopes until we find the scope with this name. Count the number
+        // of parent links we follow, and then get the offset of the name.
+        for (ScopeInfoBase* parent = static_cast<ScopeInfoBase*>(this->parent); parent != NULL;
+             parent = static_cast<ScopeInfoBase*>(parent->parent)) {
+            if (parent->createsClosure()) {
+                auto it = parent->closure_offsets.find(name);
+                if (it != parent->closure_offsets.end()) {
+                    return DerefInfo{.num_parents_from_passed_closure = parentCounter, .offset = it->second };
+                }
+                parentCounter++;
+            }
+        }
+
+        RELEASE_ASSERT(0, "Should not get here");
     }
 
-    bool areLocalsFromModule() override { return false; }
+    size_t getClosureOffset(InternedString name) override {
+        assert(getScopeTypeOfName(name) == VarScopeType::CLOSURE);
+        return closure_offsets[name];
+    }
+
+    size_t getClosureSize() override {
+        assert(createsClosure());
+        return closure_offsets.size();
+    }
 
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());
     }
 
     InternedString internString(llvm::StringRef s) override { return usage->scoping->getInternedStrings().get(s); }
+
+    const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() override {
+        if (!allDerefVarsAndInfoCached) {
+            allDerefVarsAndInfoCached = true;
+
+            // TODO this could probably be implemented faster
+
+            // Get all the variables that we need to return: any variable from the
+            // passed-in closure that is accessed in this scope or in a child scope.
+            StrSet allDerefs = usage->got_from_closure;
+            for (InternedString name : usage->passthrough_accesses) {
+                if (allDerefs.find(name) != allDerefs.end()) {
+                    allDerefs.insert(name);
+                }
+            }
+
+            // Call `getDerefInfo` on all of these variables and put the results in
+            // `allDerefVarsAndInfo`
+            for (InternedString name : allDerefs) {
+                allDerefVarsAndInfo.push_back({ name, getDerefInfo(name) });
+            }
+
+            // Sort in order of `num_parents_from_passed_closure`
+            std::sort(allDerefVarsAndInfo.begin(), allDerefVarsAndInfo.end(), derefComparator);
+        }
+        return allDerefVarsAndInfo;
+    }
+
+private:
+    static bool derefComparator(const std::pair<InternedString, DerefInfo>& p1,
+                                const std::pair<InternedString, DerefInfo>& p2) {
+        return p1.second.num_parents_from_passed_closure < p2.second.num_parents_from_passed_closure;
+    };
 };
 
 class NameCollectorVisitor : public ASTVisitor {

@@ -25,6 +25,16 @@ class AST_Module;
 class AST_Expression;
 class AST_Suite;
 
+// Each closure has an array (fixed-size for that particular scope) of variables
+// and a parent pointer to a parent closure. To look up a variable from the passed-in
+// closure (i.e., DEREF), you just need to know (i) how many parents up to go and
+// (ii) what offset into the array to find the variable. This struct stores that
+// information. You can query the ScopeInfo with a name to get this info.
+struct DerefInfo {
+    size_t num_parents_from_passed_closure;
+    size_t offset;
+};
+
 class ScopeInfo {
 public:
     ScopeInfo() {}
@@ -75,11 +85,28 @@ public:
     };
     virtual VarScopeType getScopeTypeOfName(InternedString name) = 0;
 
-    // Returns true if the variable should be passed via a closure to this scope.
+    // Returns true if the scope may contain NAME variables.
+    // In particular, it returns true for ClassDef scope, for any scope
+    // with an `exec` statement or `import *` statement in it, or for any
+    // `exec` or `eval` scope.
+    virtual bool usesNameLookup() = 0;
+
+    virtual bool areLocalsFromModule() = 0;
+
+    // For a variable with DEREF lookup, return the DerefInfo used to lookup
+    // the variable in a passed closure.
+    virtual DerefInfo getDerefInfo(InternedString name) = 0;
+
+    // Gets the DerefInfo for each DEREF variable accessible in the scope.
+    // The returned vector is in SORTED ORDER by the `num_parents_from_passed_closure` field
+    // (ascending). This allows the caller to iterate through the vector while also walking up
+    // the closure chain to collect all the DEREF variable values. This is useful, for example,
+    // in the implementation of locals().
+    //
     // Note that:
-    //      (a) This can be false even if there is an entry in the closure object
-    //          passed to the scope, if the variable is not actually used in this
-    //          scope or any child scopes. This can happen, because the variable
+    //      (a) This may not return a variable even if it is in the passed-in scope,
+    //          if the variable is not actually used in this scope or any child
+    //          scopes. This can happen, because the variable
     //          could be in the closure to be accessed by a different function, e.g.
     //
     //                  def f();
@@ -93,8 +120,8 @@ public:
     //                           # passed a closure object with `a` in it
     //                           print locals()
     //
-    //      (b) This can be true even if it is not used in this scope, if it
-    //          is used in a child scope. For example:
+    //      (b) This can contain a variable even if it is not access in this scope,
+    //          if it used in a child scope instead. For example:
     //
     //                  def f():
     //                       a = 0
@@ -102,19 +129,15 @@ public:
     //                           def h():
     //                               print a
     //                           print locals() # should contain `a`
-    //
-    // This is useful because it determines whether a variable from a closure
-    // into the locals() dictionary.
+    virtual const std::vector<std::pair<InternedString, DerefInfo>>& getAllDerefVarsAndInfo() = 0;
 
-    virtual bool isPassedToViaClosure(InternedString name) = 0;
+    // For a variable with CLOSURE lookup, returns the offset within the `elts`
+    // array of a closure that this variable is stored.
+    virtual size_t getClosureOffset(InternedString name) = 0;
 
-    // Returns true if the scope may contain NAME variables.
-    // In particular, it returns true for ClassDef scope, for any scope
-    // with an `exec` statement or `import *` statement in it, or for any
-    // `exec` or `eval` scope.
-    virtual bool usesNameLookup() = 0;
-
-    virtual bool areLocalsFromModule() = 0;
+    // Returns the size of the `elts` array for a closure created by this scope.
+    // Should only be called if this scope creates a closure.
+    virtual size_t getClosureSize() = 0;
 
     virtual InternedString mangleName(InternedString id) = 0;
     virtual InternedString internString(llvm::StringRef) = 0;

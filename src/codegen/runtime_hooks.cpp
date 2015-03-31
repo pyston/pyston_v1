@@ -216,6 +216,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(raiseAttributeErrorStr);
     GET(raiseNotIterableError);
     GET(assertNameDefined);
+    GET(assertFailDerefNameDefined);
     GET(assertFail);
 
     GET(printFloat);

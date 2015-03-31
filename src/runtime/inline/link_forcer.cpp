@@ -98,6 +98,7 @@ void force() {
     FORCE(raiseAttributeErrorStr);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
+    FORCE(assertFailDerefNameDefined);
     FORCE(assertFail);
 
     FORCE(printFloat);

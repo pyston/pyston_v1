@@ -162,6 +162,8 @@ def run_test(fn, check_stats, run_memcheck):
             skip = eval(skip_if)
             if skip:
                 return r + "    (skipped due to 'skip-if: %s')" % skip_if[:30]
+        elif fn.split('.')[0] in TESTS_TO_SKIP:
+                return r + "    (skipped due to command line option)"
         elif l.startswith("# allow-warning:"):
             allow_warnings.append("Warning: " + l.split(':', 1)[1].strip())
         elif l.startswith("# no-collect-stats"):

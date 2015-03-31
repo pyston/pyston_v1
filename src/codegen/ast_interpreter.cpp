@@ -228,7 +228,7 @@ void ASTInterpreter::initArguments(int nargs, BoxedClosure* _closure, BoxedGener
     generator = _generator;
 
     if (scope_info->createsClosure())
-        created_closure = createClosure(passed_closure);
+        created_closure = createClosure(passed_closure, scope_info->getClosureSize());
 
     std::vector<Box*, StlCompatAllocator<Box*>> argsArray{ arg1, arg2, arg3 };
     for (int i = 3; i < nargs; ++i)
@@ -354,8 +354,9 @@ void ASTInterpreter::doStore(InternedString name, Value value) {
         setitem(frame_info.boxedLocals, boxString(name.str()), value.o);
     } else {
         sym_table[name] = value.o;
-        if (vst == ScopeInfo::VarScopeType::CLOSURE)
-            setattr(created_closure, name.c_str(), value.o);
+        if (vst == ScopeInfo::VarScopeType::CLOSURE) {
+            created_closure->elts[scope_info->getClosureOffset(name)] = value.o;
+        }
     }
 }
 
@@ -1086,8 +1087,20 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
     switch (node->lookup_type) {
         case ScopeInfo::VarScopeType::GLOBAL:
             return getGlobal(source_info->parent_module, &node->id.str());
-        case ScopeInfo::VarScopeType::DEREF:
-            return getattr(passed_closure, node->id.c_str());
+        case ScopeInfo::VarScopeType::DEREF: {
+            DerefInfo deref_info = scope_info->getDerefInfo(node->id);
+            assert(passed_closure);
+            BoxedClosure* closure = passed_closure;
+            for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
+                closure = closure->parent;
+            }
+            Box* val = closure->elts[deref_info.offset];
+            if (val == NULL) {
+                raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope",
+                               node->id.c_str());
+            }
+            return val;
+        }
         case ScopeInfo::VarScopeType::FAST:
         case ScopeInfo::VarScopeType::CLOSURE: {
             SymMap::iterator it = sym_table.find(node->id);

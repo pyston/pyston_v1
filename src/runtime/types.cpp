@@ -636,6 +636,11 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
     BoxedClosure* c = (BoxedClosure*)b;
     if (c->parent)
         v->visit(c->parent);
+
+    for (int i = 0; i < c->nelts; i++) {
+        if (c->elts[i])
+            v->visit(c->elts[i]);
+    }
 }
 
 extern "C" {
@@ -849,10 +854,12 @@ extern "C" Box* createSlice(Box* start, Box* stop, Box* step) {
     return rtn;
 }
 
-extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure) {
+extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure, size_t n) {
     if (parent_closure)
         assert(parent_closure->cls == closure_cls);
-    return new BoxedClosure(parent_closure);
+    BoxedClosure* closure = new (n) BoxedClosure(parent_closure);
+    assert(closure->cls == closure_cls);
+    return closure;
 }
 
 extern "C" Box* sliceNew(Box* cls, Box* start, Box* stop, Box** args) {
@@ -2021,8 +2028,8 @@ void setupRuntime() {
                                            sizeof(BoxedSet), false, "frozenset");
     capi_getset_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, "getset");
-    closure_cls = BoxedHeapClass::create(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs), 0,
-                                         sizeof(BoxedClosure), false, "closure");
+    closure_cls
+        = BoxedHeapClass::create(type_cls, object_cls, &closureGCHandler, 0, 0, sizeof(BoxedClosure), false, "closure");
     property_cls = BoxedHeapClass::create(type_cls, object_cls, &propertyGCHandler, 0, 0, sizeof(BoxedProperty), false,
                                           "property");
     staticmethod_cls = BoxedHeapClass::create(type_cls, object_cls, &staticmethodGCHandler, 0, 0,
