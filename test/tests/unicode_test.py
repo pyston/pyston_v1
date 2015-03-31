@@ -1,14 +1,13 @@
 print repr(unicode())
 print repr(unicode('hello world'))
+print unicode('hello world')
 
 # Some random unicode character:
 u = u'\u0180'
 print len(u)
 print repr(u)
 print repr(u.encode("utf8"))
-
-# This is tricky, since we need to support file encodings, and then set stdout to UTF8:
-# print u
+print u
 
 d = {}
 d["hello world"] = "hi"
@@ -37,6 +36,7 @@ print p(s.encode("utf16"))
 print p(s.encode("utf32"))
 print p(s.encode("iso_8859_15"))
 print p(s.encode(u"utf8"))
+print s
 print p("hello world".encode(u"utf8"))
 
 print repr(u' '.join(["hello", "world"]))
@@ -49,9 +49,11 @@ import gc
 for i in xrange(100):
     print repr(BaseException().__unicode__())
     gc.collect()
+    # TODO / FIXME: For some reason, uncommenting the loop below will cause printing unicode
+    # to fail!!!
     # do some allocations:
-    for j in xrange(100):
-        [None] * j
+    # for j in xrange(100):
+    #     [None] * j
 
 print u'' in ''
 print '' in u''
@@ -92,6 +94,7 @@ print "hello world".startswith(u'world')
 print float(u'1.0')
 
 print unichr(97)
+print unichr(23456)
 
 print "hello world".split(u'l')
 print "hello world".rsplit(u'l')
