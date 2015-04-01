@@ -1478,10 +1478,20 @@ failed:
     return NULL;
 }
 
+extern "C" size_t unicodeHashUnboxed(PyUnicodeObject* self) {
+    if (self->hash != -1)
+        return self->hash;
+
+    Py_ssize_t len = PyUnicode_GET_SIZE(self);
+    Py_UNICODE* p = PyUnicode_AS_UNICODE(self);
+    pyston::StringHash<Py_UNICODE> H;
+    return H(p, len);
+}
+
 extern "C" Box* strHash(BoxedString* self) {
     assert(isSubclass(self->cls, str_cls));
 
-    std::hash<std::string> H;
+    StringHash<std::string> H;
     return boxInt(H(self->s));
 }
 

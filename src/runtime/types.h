@@ -385,6 +385,37 @@ class BoxedUnicode : public Box {
     // TODO implementation
 };
 
+template <typename T> struct StringHash {
+    size_t operator()(const T* str) {
+        size_t hash = 5381;
+        T c;
+
+        while ((c = *str++))
+            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+        return hash;
+    }
+    size_t operator()(const T* str, int len) {
+        size_t hash = 5381;
+        T c;
+
+        while (--len >= 0) {
+            c = *str++;
+            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        }
+
+        return hash;
+    }
+};
+
+template <> struct StringHash<std::string> {
+    size_t operator()(const std::string& str) {
+        StringHash<char> H;
+        return H(&str[0], str.size());
+    }
+};
+
+
 class BoxedInstanceMethod : public Box {
 public:
     Box** in_weakreflist;

@@ -6598,14 +6598,12 @@ unicode_getitem(PyUnicodeObject *self, Py_ssize_t index)
     return (PyObject*) PyUnicode_FromUnicode(&self->str[index], 1);
 }
 
+extern size_t unicodeHashUnboxed(PyUnicodeObject* obj);
+
 static long
 unicode_hash(PyUnicodeObject *self)
 {
-    // Pyston change: just convert to a str and hash, since we use std::hash and not
-    // CPython's hashing algorithm they duplicated here:
-    PyObject* str = PyUnicode_AsEncodedString((PyObject*)self, "utf8", "replace");
-    return str->ob_type->tp_hash(str);
-
+    return unicodeHashUnboxed(self);
 #if 0
     /* Since Unicode objects compare equal to their ASCII string
        counterparts, they should use the individual character values

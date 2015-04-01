@@ -128,7 +128,7 @@ static Box* (*callattrInternal3)(Box*, const std::string*, LookupScope, CallRewr
 
 size_t PyHasher::operator()(Box* b) const {
     if (b->cls == str_cls) {
-        std::hash<std::string> H;
+        StringHash<std::string> H;
         return H(static_cast<BoxedString*>(b)->s);
     }
 
