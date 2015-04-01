@@ -32,7 +32,7 @@ BoxedModule* getCurrentModule();
 BoxedTraceback* getTraceback();
 
 // Adds stack locals and closure locals into the locals dict, and returns it.
-Box* fastLocalsToBoxedLocals();
+Box* fastLocalsToBoxedLocals(int framesToSkip = 0);
 
 // Fetches a writeable pointer to the frame-local excinfo object,
 // calculating it if necessary (from previous frames).
@@ -43,6 +43,7 @@ struct ExecutionPoint {
     AST_stmt* current_stmt;
 };
 ExecutionPoint getExecutionPoint();
+std::unique_ptr<ExecutionPoint> getExecutionPoint(int framesToSkip);
 
 struct FrameStackState {
     // This includes all # variables (but not the ! ones).

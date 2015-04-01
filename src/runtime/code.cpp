@@ -39,6 +39,16 @@ public:
         boxGCHandler(v, b);
     }
 
+    static Box* name(Box* b, void*) {
+        RELEASE_ASSERT(b->cls == code_cls, "");
+        return boxString(static_cast<BoxedCode*>(b)->f->source->getName());
+    }
+
+    static Box* filename(Box* b, void*) {
+        RELEASE_ASSERT(b->cls == code_cls, "");
+        return boxString(static_cast<BoxedCode*>(b)->f->source->parent_module->fn);
+    }
+
     static Box* argcount(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
 
@@ -80,12 +90,18 @@ Box* codeForFunction(BoxedFunction* f) {
     return new BoxedCode(f->f);
 }
 
+Box* codeForCLFunction(CLFunction* f) {
+    return new BoxedCode(f);
+}
+
 void setupCode() {
     code_cls
         = BoxedHeapClass::create(type_cls, object_cls, &BoxedCode::gcHandler, 0, 0, sizeof(BoxedCode), false, "code");
 
     code_cls->giveAttr("__new__", None); // Hacky way of preventing users from instantiating this
 
+    code_cls->giveAttr("co_name", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::name, NULL, NULL));
+    code_cls->giveAttr("co_filename", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::filename, NULL, NULL));
     code_cls->giveAttr("co_argcount", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::argcount, NULL, NULL));
     code_cls->giveAttr("co_varnames", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::varnames, NULL, NULL));
     code_cls->giveAttr("co_flags", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::flags, NULL, NULL));

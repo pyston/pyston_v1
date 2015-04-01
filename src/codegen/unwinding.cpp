@@ -644,8 +644,11 @@ FrameStackState getFrameStackState() {
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }
 
-Box* fastLocalsToBoxedLocals() {
+Box* fastLocalsToBoxedLocals(int framesToSkip) {
     for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+        if (--framesToSkip >= 0)
+            continue;
+
         BoxedDict* d;
         BoxedClosure* closure;
         FrameInfo* frame_info;
@@ -796,6 +799,25 @@ ExecutionPoint getExecutionPoint() {
     auto cf = frame->getCF();
     auto current_stmt = frame->getCurrentStatement();
     return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
+}
+
+std::unique_ptr<ExecutionPoint> getExecutionPoint(int framesToSkip) {
+    CompiledFunction* cf = NULL;
+    AST_stmt* stmt = NULL;
+
+    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+        // skip depth frames
+        if (--framesToSkip >= 0)
+            continue;
+
+        cf = frame_iter.getCF();
+        stmt = frame_iter.getCurrentStatement();
+        break;
+    }
+    if (!cf)
+        return std::unique_ptr<ExecutionPoint>();
+
+    return std::unique_ptr<ExecutionPoint>(new ExecutionPoint({.cf = cf, .current_stmt = stmt }));
 }
 
 llvm::JITEventListener* makeTracebacksListener() {

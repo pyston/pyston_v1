@@ -99,6 +99,22 @@ Box* getSysStdout() {
     return sys_stdout;
 }
 
+Box* sysGetFrame(Box* val) {
+    int depth = 0;
+    if (val) {
+        if (!isSubclass(val->cls, int_cls)) {
+            raiseExcHelper(TypeError, "TypeError: an integer is required");
+        }
+        depth = static_cast<BoxedInt*>(val)->n;
+    }
+
+    Box* frame = getFrame(depth);
+    if (!frame) {
+        raiseExcHelper(ValueError, "call stack is not deep enough");
+    }
+    return frame;
+}
+
 Box* sysGetDefaultEncoding() {
     return boxStrConstant(PyUnicode_GetDefaultEncoding());
 }
@@ -267,6 +283,8 @@ void setupSys() {
     main_fn = llvm::sys::fs::getMainExecutable(NULL, NULL);
     sys_module->giveAttr("executable", boxString(main_fn.str()));
 
+    sys_module->giveAttr("_getframe",
+                         new BoxedFunction(boxRTFunction((void*)sysGetFrame, UNKNOWN, 1, 1, false, false), { NULL }));
     sys_module->giveAttr(
         "getdefaultencoding",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetDefaultEncoding, STR, 0), "getdefaultencoding"));

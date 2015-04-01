@@ -2121,6 +2121,7 @@ void setupRuntime() {
     setupDescr();
     setupTraceback();
     setupCode();
+    setupFrame();
 
     function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
