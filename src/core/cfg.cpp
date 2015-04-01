@@ -172,6 +172,8 @@ private:
     std::vector<ContInfo> continuations;
     std::vector<ExcBlockInfo> exc_handlers;
 
+    unsigned int next_var_index = 0;
+
     friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
 
 public:
@@ -194,6 +196,11 @@ public:
 private:
     template <typename T> InternedString internString(T&& s) {
         return source->getInternedStrings().get(std::forward<T>(s));
+    }
+
+    InternedString createUniqueName(llvm::Twine prefix) {
+        std::string name = (prefix + llvm::Twine(next_var_index++)).str();
+        return source->getInternedStrings().get(std::move(name));
     }
 
     AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
@@ -600,36 +607,14 @@ private:
         return stmt;
     }
 
-    InternedString nodeName(AST* node) {
-        char buf[40];
-        int bytes = snprintf(buf, 40, "#%p", node);
-        assert(bytes < 40); // double-check
-// Uncomment this line to check to make sure we never reuse the same nodeName() accidentally.
-// This check is potentially too expensive for even debug mode, since it never frees any memory.
-// #define VALIDATE_FAKE_NAMES
-#ifdef VALIDATE_FAKE_NAMES
-        std::string r(buf);
-        static std::unordered_set<std::string> made;
-        assert(made.count(r) == 0);
-        made.insert(r);
-        return internString(std::move(r));
-#else
-        return internString(buf);
-#endif
-    }
+    InternedString nodeName(AST* node) { return createUniqueName("#"); }
 
     InternedString nodeName(AST* node, const std::string& suffix) {
-        char buf[50];
-        int bytes = snprintf(buf, 50, "#%p_%s", node, suffix.c_str());
-        assert(bytes < 50); // double-check
-        return internString(std::string(buf));
+        return createUniqueName(llvm::Twine("#") + suffix + "_");
     }
 
     InternedString nodeName(AST* node, const std::string& suffix, int idx) {
-        char buf[50];
-        int bytes = snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
-        assert(bytes < 50); // double-check
-        return internString(std::string(buf));
+        return createUniqueName(llvm::Twine("#") + suffix + "_" + llvm::Twine(idx) + "_");
     }
 
     AST_expr* remapAttribute(AST_Attribute* node) {
@@ -2005,9 +1990,7 @@ public:
         AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
         iter_call->args.push_back(remapped_iter);
 
-        char itername_buf[80];
-        snprintf(itername_buf, 80, "#iter_%p", node);
-        InternedString itername = internString(itername_buf);
+        InternedString itername = createUniqueName("#iter_");
         pushAssign(itername, iter_call);
 
         AST_expr* next_attr = makeLoadAttribute(makeLoad(itername, node), internString("next"), true);

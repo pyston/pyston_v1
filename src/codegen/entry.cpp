@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <openssl/evp.h>
 #include <unordered_map>
 
 #include "llvm/Analysis/Passes.h"
@@ -31,6 +32,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -118,54 +120,130 @@ static llvm::Module* loadStdlib() {
     return m;
 }
 
-class MyObjectCache : public llvm::ObjectCache {
+class PystonObjectCache : public llvm::ObjectCache {
 private:
-    bool loaded;
+    // Stream which calculates the SHA256 hash of the data writen to.
+    class HashOStream : public llvm::raw_ostream {
+        EVP_MD_CTX* md_ctx;
+
+        void write_impl(const char* ptr, size_t size) override { EVP_DigestUpdate(md_ctx, ptr, size); }
+        uint64_t current_pos() const override { return 0; }
+
+    public:
+        HashOStream() {
+            md_ctx = EVP_MD_CTX_create();
+            RELEASE_ASSERT(md_ctx, "");
+            int ret = EVP_DigestInit_ex(md_ctx, EVP_sha256(), NULL);
+            RELEASE_ASSERT(ret == 1, "");
+        }
+        ~HashOStream() { EVP_MD_CTX_destroy(md_ctx); }
+
+        std::string getHash() {
+            flush();
+            unsigned char md_value[EVP_MAX_MD_SIZE];
+            unsigned int md_len = 0;
+            int ret = EVP_DigestFinal_ex(md_ctx, md_value, &md_len);
+            RELEASE_ASSERT(ret == 1, "");
+
+            std::string str;
+            str.reserve(md_len * 2 + 1);
+            llvm::raw_string_ostream stream(str);
+            for (int i = 0; i < md_len; ++i)
+                stream.write_hex(md_value[i]);
+            return stream.str();
+        }
+    };
+
+
+    llvm::SmallString<128> cache_dir;
+    std::string module_identifier;
+    std::string hash_before_codegen;
 
 public:
-    MyObjectCache() : loaded(false) {}
+    PystonObjectCache() {
+        llvm::sys::fs::current_path(cache_dir);
+        llvm::sys::path::append(cache_dir, "pyston_object_cache");
+    }
+
 
 #if LLVMREV < 216002
-    virtual void notifyObjectCompiled(const llvm::Module* M, const llvm::MemoryBuffer* Obj) {}
+    virtual void notifyObjectCompiled(const llvm::Module* M, const llvm::MemoryBuffer* Obj)
 #else
-    virtual void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) {}
+    virtual void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj)
 #endif
+    {
+        RELEASE_ASSERT(module_identifier == M->getModuleIdentifier(), "");
+        RELEASE_ASSERT(!hash_before_codegen.empty(), "");
+
+        llvm::SmallString<128> cache_file = cache_dir;
+        llvm::sys::path::append(cache_file, hash_before_codegen);
+        if (!llvm::sys::fs::exists(cache_dir.str()) && llvm::sys::fs::create_directory(cache_dir.str())) {
+            fprintf(stderr, "Unable to create cache directory\n");
+            return;
+        }
+        std::error_code error_code;
+        llvm::raw_fd_ostream IRObjectFile(cache_file.c_str(), error_code, llvm::sys::fs::F_RW);
+        RELEASE_ASSERT(!error_code, "");
+        IRObjectFile << Obj.getBuffer();
+    }
 
 #if LLVMREV < 215566
-    virtual llvm::MemoryBuffer* getObject(const llvm::Module* M){
+    virtual llvm::MemoryBuffer* getObject(const llvm::Module* M)
 #else
-    virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) {
+    virtual std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M)
 #endif
-        assert(!loaded);
-    loaded = true;
-    g.engine->setObjectCache(NULL);
-    std::unique_ptr<MyObjectCache> del_at_end(this);
+    {
+        static StatCounter jit_objectcache_hits("num_jit_objectcache_hits");
+        static StatCounter jit_objectcache_misses("num_jit_objectcache_misses");
 
+        module_identifier = M->getModuleIdentifier();
+
+        // Generate a hash for the module
+        HashOStream hash_stream;
+        M->print(hash_stream, 0);
+        hash_before_codegen = hash_stream.getHash();
+
+        llvm::SmallString<128> cache_file = cache_dir;
+        llvm::sys::path::append(cache_file, hash_before_codegen);
+        if (!llvm::sys::fs::exists(cache_file.str())) {
 #if 0
-            if (!USE_STRIPPED_STDLIB) {
-                stajt = STDLIB_CACHE_START;
-                size = (intptr_t)&STDLIB_CACHE_SIZE;
-            } else {
-                start = STRIPPED_STDLIB_CACHE_START;
-                size = (intptr_t)&STRIPPED_STDLIB_CACHE_SIZE;
-            }
-#else
-        RELEASE_ASSERT(0, "");
-        char* start = NULL;
-        intptr_t size = 0;
+            // This code helps with identifying why we got a cache miss for a file.
+            // - clear the cache directory
+            // - run pyston
+            // - run pyston a second time
+            // - Now look for "*_second" files in the cache directory and compare them to the "*_first" IR dump
+            std::string llvm_ir;
+            llvm::raw_string_ostream sstr(llvm_ir);
+            M->print(sstr, 0);
+            sstr.flush();
+
+            std::string filename = cache_dir.str().str() + "/" + module_identifier + "_first";
+            if (llvm::sys::fs::exists(filename))
+                filename = cache_dir.str().str() + "/" + module_identifier + "_second";
+            FILE* f = fopen(filename.c_str(), "wt");
+            fwrite(llvm_ir.c_str(), 1, llvm_ir.size(), f);
+            fclose(f);
 #endif
 
-    // Make sure the stdlib got linked in correctly; check the magic number at the beginning:
-    assert(start[0] == 0x7f);
-    assert(start[1] == 'E');
-    assert(start[2] == 'L');
-    assert(start[3] == 'F');
+            // This file isn't in our cache
+            jit_objectcache_misses.log();
+            return NULL;
+        }
 
-    assert(size > 0 && size < 1 << 30); // make sure the size is being loaded correctly
+        auto rtn = llvm::MemoryBuffer::getFile(cache_file.str(), -1, false);
+        if (!rtn) {
+            jit_objectcache_misses.log();
+            return NULL;
+        }
 
-    llvm::StringRef data(start, size);
-    return llvm::MemoryBuffer::getMemBufferCopy(data, "");
-}
+        jit_objectcache_hits.log();
+
+        // MCJIT will want to write into this buffer, and we don't want that
+        // because the file has probably just been mmapped.  Instead we make
+        // a copy.  The filed-based buffer will be released when it goes
+        // out of scope.
+        return llvm::MemoryBuffer::getMemBufferCopy((*rtn)->getBuffer());
+    }
 };
 
 static void handle_sigusr1(int signum) {
@@ -223,7 +301,8 @@ void initCodegen() {
     g.engine = eb.create(g.tm);
     assert(g.engine && "engine creation failed?");
 
-    // g.engine->setObjectCache(new MyObjectCache());
+    if (ENABLE_JIT_OBJECT_CACHE)
+        g.engine->setObjectCache(new PystonObjectCache());
 
     g.i1 = llvm::Type::getInt1Ty(g.context);
     g.i8 = llvm::Type::getInt8Ty(g.context);

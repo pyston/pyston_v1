@@ -53,10 +53,12 @@ private:
     int num_frame_stackmap_args;
 
     std::vector<FrameVarInfo> frame_vars;
+    unsigned int id;
 
     PatchpointInfo(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args)
-        : parent_cf(parent_cf), icinfo(icinfo), num_ic_stackmap_args(num_ic_stackmap_args),
-          num_frame_stackmap_args(-1) {}
+        : parent_cf(parent_cf), icinfo(icinfo), num_ic_stackmap_args(num_ic_stackmap_args), num_frame_stackmap_args(-1),
+          id(0) {}
+
 
 public:
     const ICSetupInfo* getICInfo() { return icinfo; }
@@ -84,11 +86,14 @@ public:
         return num_frame_stackmap_args;
     }
 
+    unsigned int getId() const { return id; }
+
     void parseLocationMap(StackMap::Record* r, LocationMap* map);
 
     int totalStackmapArgs() { return frameStackmapArgsStart() + numFrameStackmapArgs(); }
 
-    static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args);
+    static PatchpointInfo* create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args,
+                                  void* func_addr);
 };
 
 class ICSetupInfo {

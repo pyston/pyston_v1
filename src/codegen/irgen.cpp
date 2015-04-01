@@ -541,7 +541,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 llvm::BasicBlock* reopt_bb = llvm::BasicBlock::Create(g.context, "reopt", irstate->getLLVMFunction());
                 emitter->getBuilder()->SetInsertPoint(preentry_bb);
 
-                llvm::Value* call_count_ptr = embedConstantPtr(&cf->times_called, g.i64->getPointerTo());
+                llvm::Value* call_count_ptr = embedRelocatablePtr(&cf->times_called, g.i64->getPointerTo());
                 llvm::Value* cur_call_count = emitter->getBuilder()->CreateLoad(call_count_ptr);
                 llvm::Value* new_call_count
                     = emitter->getBuilder()->CreateAdd(cur_call_count, getConstantInt(1, g.i64));
@@ -569,7 +569,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 emitter->getBuilder()->SetInsertPoint(reopt_bb);
                 // emitter->getBuilder()->CreateCall(g.funcs.my_assert, getConstantInt(0, g.i1));
                 llvm::Value* r = emitter->getBuilder()->CreateCall(g.funcs.reoptCompiledFunc,
-                                                                   embedConstantPtr(cf, g.i8->getPointerTo()));
+                                                                   embedRelocatablePtr(cf, g.i8->getPointerTo()));
                 assert(r);
                 assert(r->getType() == g.i8->getPointerTo());
 
@@ -739,6 +739,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // NB. This is where most `typical' phi nodes get added.
                 // And go through and add phi nodes:
                 ConcreteSymbolTable* pred_st = phi_ending_symbol_tables[pred];
+
                 for (auto it = pred_st->begin(); it != pred_st->end(); ++it) {
                     InternedString name = it->first;
                     ConcreteCompilerVariable* cv = it->second; // incoming CCV from predecessor block
@@ -959,6 +960,9 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         source->cfg->print();
 
     assert(g.cur_module == NULL);
+
+    clearRelocatableSymsMap();
+
     std::string name = getUniqueFunctionName(nameprefix, effort, entry_descriptor);
     g.cur_module = new llvm::Module(name, g.context);
 #if LLVMREV < 217070 // not sure if this is the right rev
@@ -1010,7 +1014,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
 
     CompiledFunction* cf
-        = new CompiledFunction(NULL, spec, (effort == EffortLevel::INTERPRETED), NULL, NULL, effort, entry_descriptor);
+        = new CompiledFunction(NULL, spec, (effort == EffortLevel::INTERPRETED), NULL, effort, entry_descriptor);
 
     llvm::FunctionType* ft = llvm::FunctionType::get(cf->getReturnType()->llvmType(), llvm_arg_types, false /*vararg*/);
 

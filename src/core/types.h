@@ -188,7 +188,6 @@ public:
         uintptr_t code_start;
     };
     int code_size;
-    llvm::Value* llvm_code; // the llvm callable.
 
     EffortLevel effort;
 
@@ -200,10 +199,9 @@ public:
     std::vector<ICInfo*> ics;
 
     CompiledFunction(llvm::Function* func, FunctionSpecialization* spec, bool is_interpreted, void* code,
-                     llvm::Value* llvm_code, EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
+                     EffortLevel effort, const OSREntryDescriptor* entry_descriptor)
         : clfunc(NULL), func(func), spec(spec), entry_descriptor(entry_descriptor), is_interpreted(is_interpreted),
-          code(code), llvm_code(llvm_code), effort(effort), times_called(0), times_speculation_failed(0),
-          location_map(nullptr) {
+          code(code), effort(effort), times_called(0), times_speculation_failed(0), location_map(nullptr) {
         assert((spec != NULL) + (entry_descriptor != NULL) == 1);
     }
 
@@ -307,7 +305,6 @@ public:
         assert((compiled->spec != NULL) + (compiled->entry_descriptor != NULL) == 1);
         assert(compiled->clfunc == NULL);
         assert(compiled->is_interpreted == (compiled->code == NULL));
-        assert(compiled->is_interpreted == (compiled->llvm_code == NULL));
         compiled->clfunc = this;
 
         if (compiled->entry_descriptor == NULL) {

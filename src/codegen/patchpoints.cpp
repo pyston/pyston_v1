@@ -20,6 +20,7 @@
 #include "asm_writing/icinfo.h"
 #include "asm_writing/rewriter.h"
 #include "codegen/compvars.h"
+#include "codegen/irgen/util.h"
 #include "codegen/stackmaps.h"
 #include "core/common.h"
 #include "core/options.h"
@@ -41,7 +42,7 @@ int ICSetupInfo::totalSize() const {
     return num_slots * slot_size + call_size;
 }
 
-static std::vector<PatchpointInfo*> new_patchpoints;
+static std::vector<std::pair<PatchpointInfo*, void* /* addr of func to call */>> new_patchpoints;
 
 ICSetupInfo* ICSetupInfo::initialize(bool has_return_value, int num_slots, int slot_size, ICType type,
                                      TypeRecorder* type_recorder) {
@@ -165,9 +166,12 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         const StackMap::StackSizeRecord& stack_size_record = stackmap->stack_size_records[0];
         int stack_size = stack_size_record.stack_size;
 
-        PatchpointInfo* pp = reinterpret_cast<PatchpointInfo*>(r->id);
+
+        RELEASE_ASSERT(new_patchpoints.size() > r->id, "");
+        PatchpointInfo* pp = new_patchpoints[r->id].first;
         assert(pp);
 
+        void* dst_func = new_patchpoints[r->id].second;
         if (VERBOSITY() >= 2) {
             printf("Processing pp %ld; [%d, %d)\n", reinterpret_cast<int64_t>(pp), r->offset,
                    r->offset + pp->patchpointSize());
@@ -182,6 +186,9 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
 
         uint8_t* start_addr = (uint8_t*)pp->parentFunction()->code + r->offset;
         uint8_t* end_addr = start_addr + pp->patchpointSize();
+
+        if (ENABLE_JIT_OBJECT_CACHE)
+            setSlowpathFunc(start_addr, dst_func);
 
         // TODO shouldn't have to do it this way
         void* slowpath_func = extractSlowpathFunc(start_addr);
@@ -270,7 +277,8 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
         cf->ics.push_back(icinfo.release());
     }
 
-    for (PatchpointInfo* pp : new_patchpoints) {
+    for (auto& e : new_patchpoints) {
+        PatchpointInfo* pp = e.first;
         const ICSetupInfo* ic = pp->getICInfo();
         if (ic)
             delete ic;
@@ -279,13 +287,14 @@ void processStackmap(CompiledFunction* cf, StackMap* stackmap) {
     new_patchpoints.clear();
 }
 
-PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo,
-                                       int num_ic_stackmap_args) {
+PatchpointInfo* PatchpointInfo::create(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args,
+                                       void* func_addr) {
     if (icinfo == NULL)
         assert(num_ic_stackmap_args == 0);
 
     auto* r = new PatchpointInfo(parent_cf, icinfo, num_ic_stackmap_args);
-    new_patchpoints.push_back(r);
+    r->id = new_patchpoints.size();
+    new_patchpoints.push_back(std::make_pair(r, func_addr));
     return r;
 }
 

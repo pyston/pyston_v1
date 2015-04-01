@@ -24,7 +24,7 @@
 
 namespace pyston {
 
-#ifndef NDEBUG
+#ifdef DEBUG_LINE_NUMBERS
 int AST::next_lineno = 100000;
 
 AST::AST(AST_TYPE::AST_TYPE type) : type(type), lineno(++next_lineno) {
