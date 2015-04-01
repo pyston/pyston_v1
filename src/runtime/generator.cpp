@@ -71,13 +71,6 @@ static void freeGeneratorStack(BoxedGenerator* g) {
         available_addrs.pop_front();
         int r = munmap((void*)(addr - MAX_STACK_SIZE), MAX_STACK_SIZE);
         assert(r == 0);
-// also unmap the redzone
-#if STACK_GROWS_DOWN
-        r = munmap((void*)addr, STACK_REDZONE_SIZE);
-        assert(r == 0);
-#else
-#error "implement me"
-#endif
     }
 
     g->stack_begin = NULL;
@@ -111,7 +104,6 @@ void generatorEntry(BoxedGenerator* g) {
     // we returned from the body of the generator. next/send/throw will notify the caller
     g->entryExited = true;
     threading::popGenerator();
-    freeGeneratorStack(g);
     swapContext(&g->context, g->returnContext, 0);
 }
 
@@ -127,8 +119,10 @@ Box* generatorSend(Box* s, Box* v) {
         raiseExcHelper(ValueError, "generator already executing");
 
     // check if the generator already exited
-    if (self->entryExited)
+    if (self->entryExited) {
+        freeGeneratorStack(self);
         raiseExcHelper(StopIteration, "");
+    }
 
     self->returnValue = v;
     self->running = true;
@@ -136,12 +130,16 @@ Box* generatorSend(Box* s, Box* v) {
     self->running = false;
 
     // propagate exception to the caller
-    if (self->exception.type)
+    if (self->exception.type) {
+        freeGeneratorStack(self);
         raiseRaw(self->exception);
+    }
 
     // throw StopIteration if the generator exited
-    if (self->entryExited)
+    if (self->entryExited) {
+        freeGeneratorStack(self);
         raiseExcHelper(StopIteration, "");
+    }
 
     return self->returnValue;
 }
