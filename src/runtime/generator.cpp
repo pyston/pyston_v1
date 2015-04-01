@@ -60,6 +60,22 @@ public:
     }
 };
 
+static void freeGeneratorStack(BoxedGenerator* g) {
+    if (g->stack_begin == NULL)
+        return;
+
+    available_addrs.push_back((uint64_t)g->stack_begin);
+    // Limit the number of generator stacks we keep around:
+    if (available_addrs.size() > 5) {
+        uint64_t addr = available_addrs.front();
+        available_addrs.pop_front();
+        int r = munmap((void*)(addr - MAX_STACK_SIZE), MAX_STACK_SIZE);
+        assert(r == 0);
+    }
+
+    g->stack_begin = NULL;
+}
+
 Context* getReturnContextForGeneratorFrame(void* frame_addr) {
     BoxedGenerator* generator = s_generator_map[frame_addr];
     assert(generator);
@@ -103,8 +119,10 @@ Box* generatorSend(Box* s, Box* v) {
         raiseExcHelper(ValueError, "generator already executing");
 
     // check if the generator already exited
-    if (self->entryExited)
+    if (self->entryExited) {
+        freeGeneratorStack(self);
         raiseExcHelper(StopIteration, "");
+    }
 
     self->returnValue = v;
     self->running = true;
@@ -112,12 +130,16 @@ Box* generatorSend(Box* s, Box* v) {
     self->running = false;
 
     // propagate exception to the caller
-    if (self->exception.type)
+    if (self->exception.type) {
+        freeGeneratorStack(self);
         raiseRaw(self->exception);
+    }
 
     // throw StopIteration if the generator exited
-    if (self->entryExited)
+    if (self->entryExited) {
+        freeGeneratorStack(self);
         raiseExcHelper(StopIteration, "");
+    }
 
     return self->returnValue;
 }
@@ -220,7 +242,12 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #error "implement me"
 #endif
 
-        gc::registerGCManagedBytes(MAX_STACK_SIZE);
+        // we're registering memory that isn't in the gc heap here,
+        // which may sound wrong.  Generators, however, can represent
+        // a larger tax on system resources than just their GC
+        // allocation, so we try to encode that here as additional gc
+        // heap pressure.
+        gc::registerGCManagedBytes(INITIAL_STACK_SIZE);
     } else {
         generator_stack_reused.log();
 
@@ -290,18 +317,7 @@ Box* generatorName(Box* _self, void* context) {
 void generatorDestructor(Box* b) {
     assert(isSubclass(b->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
-
-    if (self->stack_begin) {
-        available_addrs.push_back((uint64_t)self->stack_begin);
-        // Limit the number of generator stacks we keep around:
-        if (available_addrs.size() > 5) {
-            uint64_t addr = available_addrs.front();
-            available_addrs.pop_front();
-            int r = munmap((void*)(addr - MAX_STACK_SIZE), MAX_STACK_SIZE);
-            assert(r == 0);
-        }
-    }
-    self->stack_begin = NULL;
+    freeGeneratorStack(self);
 }
 
 void setupGenerator() {
