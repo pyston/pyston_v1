@@ -51,8 +51,9 @@ install:
 
 script:
   - ccache -z
-  - ninja -j4 check-pyston
+  - ninja -j4 pyston
   - ccache -s
+  - ninja check-pyston
 
 os:
   - linux
