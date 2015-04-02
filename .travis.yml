@@ -7,12 +7,17 @@ compiler:
 # use travis-ci docker based infrastructure
 sudo: false
 
+cache:
+  directories:
+    - $HOME/.ccache
+
 addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
     packages:
     - autoconf
+    - ccache
     - clang-3.4
     - cmake
     - g++-4.8
@@ -43,7 +48,9 @@ install:
   - ninja libunwind ext_cpython
 
 script:
+  - ccache -z
   - ninja -j4 check-pyston
+  - ccache -s
 
 os:
   - linux
