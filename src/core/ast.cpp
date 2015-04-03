@@ -1655,7 +1655,12 @@ bool PrintVisitor::visit_return(AST_Return* node) {
 }
 
 bool PrintVisitor::visit_set(AST_Set* node) {
-    assert(node->elts.size());
+    // An empty set literal is not writeable in Python (it's a dictionary),
+    // but we sometimes generate it (ex in set comprehension lowering).
+    // Just to make it clear when printing, print empty set literals as "SET{}".
+    if (!node->elts.size())
+        printf("SET");
+
     printf("{");
 
     bool first = true;

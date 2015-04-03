@@ -867,7 +867,8 @@ private:
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
-        InternedString func_name = nodeName(func);
+        // TODO this should be set off the type of the comprehension (ie <setcomp> or <dictcomp> or <genexpr>)
+        InternedString func_name = internString("<comprehension>");
         func->name = func_name;
         func->args = new AST_arguments();
         func->args->vararg = internString("");
@@ -913,20 +914,22 @@ private:
         // argument to the function we create. See
         // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
         AST_expr* first = remapExpr(node->generators[0]->iter);
-        InternedString first_generator_name = nodeName(node->generators[0]);
+        InternedString arg_name = internString("#arg");
 
         AST_MakeFunction* func = makeFunctionForScope(node);
-        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
         emitComprehensionLoops(&func->function_def->body, node->generators,
-                               makeName(first_generator_name, AST_TYPE::Load, node->lineno),
+                               makeName(arg_name, AST_TYPE::Load, node->lineno),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
                                    insert_point->push_back(makeExpr(y));
                                });
-        pushAssign(func->function_def->name, func);
 
-        return makeCall(makeLoad(func->function_def->name, node), first);
+        InternedString func_var_name = nodeName(func->function_def);
+        pushAssign(func_var_name, func);
+
+        return makeCall(makeLoad(func_var_name, node), first);
     }
 
     void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
@@ -945,12 +948,12 @@ private:
     template <typename ResultType, typename CompType> AST_expr* remapScopedComprehension(CompType* node) {
         // See comment in remapGeneratorExp re early vs. late binding.
         AST_expr* first = remapExpr(node->generators[0]->iter);
-        InternedString first_generator_name = nodeName(node->generators[0]);
+        InternedString arg_name = internString("#arg");
 
         AST_MakeFunction* func = makeFunctionForScope(node);
-        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
 
-        InternedString rtn_name = nodeName(node);
+        InternedString rtn_name = internString("#comp_rtn");
         auto asgn = new AST_Assign();
         asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
         asgn->value = new ResultType();
@@ -958,16 +961,17 @@ private:
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
-        AST_Name* first_name = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
+        AST_Name* first_name = makeName(internString("#arg"), AST_TYPE::Load, node->lineno);
         emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
         rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
         func->function_def->body.push_back(rtn);
 
-        pushAssign(func->function_def->name, func);
+        InternedString func_var_name = nodeName(func->function_def);
+        pushAssign(func_var_name, func);
 
-        return makeCall(makeName(func->function_def->name, AST_TYPE::Load, node->lineno), first);
+        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno), first);
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
