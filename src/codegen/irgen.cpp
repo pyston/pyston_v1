@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <stdint.h>
 
@@ -632,7 +633,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             }
 
 
-            std::unordered_set<InternedString> names;
+            std::set<InternedString> names;
             for (const auto& s : source->phis->getAllRequiredFor(block)) {
                 names.insert(s);
                 if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
@@ -740,9 +741,16 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                 // And go through and add phi nodes:
                 ConcreteSymbolTable* pred_st = phi_ending_symbol_tables[pred];
 
-                for (auto it = pred_st->begin(); it != pred_st->end(); ++it) {
-                    InternedString name = it->first;
-                    ConcreteCompilerVariable* cv = it->second; // incoming CCV from predecessor block
+                // We have to sort the phi table by name in order to a get a deterministic ordering for the JIT object
+                // cache.
+                typedef std::pair<InternedString, ConcreteCompilerVariable*> Entry;
+                std::vector<Entry> sorted_pred_st(pred_st->begin(), pred_st->end());
+                std::sort(sorted_pred_st.begin(), sorted_pred_st.end(),
+                          [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
+
+                for (auto& entry : sorted_pred_st) {
+                    InternedString name = entry.first;
+                    ConcreteCompilerVariable* cv = entry.second; // incoming CCV from predecessor block
                     // printf("block %d: adding phi for %s from pred %d\n", block->idx, name.c_str(), pred->idx);
                     llvm::PHINode* phi = emitter->getBuilder()->CreatePHI(cv->getType()->llvmType(),
                                                                           block->predecessors.size(), name.str());
@@ -750,7 +758,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     ConcreteCompilerVariable* var = new ConcreteCompilerVariable(cv->getType(), phi, true);
                     generator->giveLocalSymbol(name, var);
 
-                    (*phis)[it->first] = std::make_pair(it->second->getType(), phi);
+                    (*phis)[name] = std::make_pair(cv->getType(), phi);
                 }
             }
         }
