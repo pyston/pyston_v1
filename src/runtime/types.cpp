@@ -22,6 +22,8 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+#include "..//Modules/socketmodule.h"
+
 #include "capi/typeobject.h"
 #include "capi/types.h"
 #include "codegen/unwinding.h"
@@ -625,6 +627,11 @@ static void proxy_to_tp_traverse(GCVisitor* v, Box* b) {
 static void proxy_to_tp_clear(Box* b) {
     assert(b->cls->tp_clear);
     b->cls->tp_clear(b);
+}
+
+static void proxy_to_tp_dealloc(Box* b) {
+    assert(b->cls->tp_free);
+    b->cls->tp_dealloc(b);
 }
 
 // This probably belongs in tuple.cpp?
@@ -2567,6 +2574,15 @@ void setupRuntime() {
     weakref_callableproxy->gc_visit = proxy_to_tp_traverse;
     weakref_callableproxy->simple_destructor = proxy_to_tp_clear;
     weakref_callableproxy->is_pyston_class = true;
+
+    // additional patching to get sockets to close
+    RELEASE_ASSERT(PySocketModule_ImportModuleAndAPI() == 0, "couldn't initialize socket module");
+    BoxedClass* socket_cls = PySocketModule.Sock_Type;
+    socket_cls->tp_alloc = PystonType_GenericAlloc;
+    socket_cls->simple_destructor = socket_cls->tp_dealloc;
+    socket_cls->tp_dealloc = NULL;
+    socket_cls->tp_free = NULL;
+    socket_cls->is_pyston_class = true;
 
     assert(object_cls->tp_setattro == PyObject_GenericSetAttr);
     assert(none_cls->tp_setattro == PyObject_GenericSetAttr);

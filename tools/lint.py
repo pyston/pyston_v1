@@ -46,8 +46,9 @@ def verify_license(_, dir, files):
 
 PYSTON_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
 PYSTON_SRC_SUBDIRS = [bn for bn in os.listdir(PYSTON_SRC_DIR) if os.path.isdir(os.path.join(PYSTON_SRC_DIR, bn))]
-CAPI_HEADER_DIR = os.path.join(PYSTON_SRC_DIR, "../from_cpython/Include")
-CAPI_HEADERS = [bn for bn in os.listdir(CAPI_HEADER_DIR) if bn.endswith(".h")]
+CAPI_DIR = os.path.join(PYSTON_SRC_DIR, "../from_cpython")
+CAPI_INCLUDE_DIR = os.path.join(CAPI_DIR, "Include")
+CAPI_HEADERS = [bn for bn in os.listdir(CAPI_INCLUDE_DIR) if bn.endswith(".h")]
 
 def verify_include_order(_, dir, files):
     for bn in files:
@@ -115,6 +116,14 @@ def verify_include_order(_, dir, files):
                 return False
             return True
 
+        def is_relative_include_section(section):
+            for incl in section:
+                if incl.startswith('#include "..'):
+                    continue
+
+                return False
+            return True
+
         def is_pyston_section(section):
             # TODO generate this
             include_dirs = PYSTON_SRC_SUBDIRS
@@ -146,6 +155,10 @@ def verify_include_order(_, dir, files):
             check_sorted(sections[0])
             del sections[0]
 
+        while sections and is_relative_include_section(sections[0]):
+            dbg.append("relativeinclude")
+            del sections[0]
+
         if sections and is_pyston_section(sections[0]):
             dbg.append("pyston")
             check_sorted(sections[0])
@@ -162,6 +175,7 @@ def verify_include_order(_, dir, files):
             print >>sys.stderr, "- Corresponding header"
             print >>sys.stderr, "- System headers"
             print >>sys.stderr, "- Third party headers"
+            print >>sys.stderr, "- Relative includes (usually to ../../from_cpython headers)"
             print >>sys.stderr, "- Pyston headers"
             print >>sys.stderr, "There should be an extra line between sections but not within sections"
             print >>sys.stderr, "\ndbg: %s" % dbg

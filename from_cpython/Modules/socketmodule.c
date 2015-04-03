@@ -3119,7 +3119,8 @@ sock_dealloc(PySocketSockObject *s)
 {
     if (s->sock_fd != -1)
         (void) SOCKETCLOSE(s->sock_fd);
-    Py_TYPE(s)->tp_free((PyObject *)s);
+    // Pyston change: the gc takes care of this
+    //Py_TYPE(s)->tp_free((PyObject *)s);
 }
 
 
