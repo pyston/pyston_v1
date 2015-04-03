@@ -111,10 +111,19 @@ void setupFrame() {
                                        "frame");
 
     frame_cls->giveAttr("f_code", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::code, NULL, NULL));
+// until we can determine if there's code in the wild that depends
+// on f_locals boxing up fast locals when it's called, add methods
+// getLocals() and getLineno() that we can modify code to use.
+#ifdef expose_f_locals
     frame_cls->giveAttr("f_locals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::locals, NULL, NULL));
+    frame_cls->giveAttr("f_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::lineno, NULL, NULL));
+#else
+    frame_cls->giveAttr("getLocals", new BoxedFunction(boxRTFunction((void*)BoxedFrame::locals, UNKNOWN, 1)));
+    frame_cls->giveAttr("getLineno", new BoxedFunction(boxRTFunction((void*)BoxedFrame::lineno, BOXED_INT, 1)));
+#endif
+
     frame_cls->giveAttr("f_globals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::globals, NULL, NULL));
 
-    frame_cls->giveAttr("f_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::lineno, NULL, NULL));
 
     frame_cls->freeze();
 }

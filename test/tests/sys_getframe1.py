@@ -5,9 +5,15 @@ Frame Hack Recipe #1: Ruby-style string interpolation (version 1)
 import sys
 from string import Template
 
+def getLocals(frame):
+    try:
+        return frame.f_locals
+    except AttributeError:
+        return frame.getLocals()
+
 def interpolate(templateStr):
     frame = sys._getframe(1)
-    framedict = frame.f_locals
+    framedict = getLocals(frame)
 
     t = Template(templateStr)
     return t.substitute(**framedict)
