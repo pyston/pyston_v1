@@ -16,6 +16,7 @@
 #define PYSTON_RUNTIME_TYPES_H
 
 #include <llvm/ADT/StringMap.h>
+#include <llvm/ADT/Twine.h>
 #include <ucontext.h>
 
 #include "Python.h"
@@ -110,6 +111,9 @@ extern "C" Box* boxUnboundInstanceMethod(Box* func);
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
 Box* boxString(std::string&& s);
+Box* boxStringRef(llvm::StringRef s);
+Box* boxStringTwine(const llvm::Twine& s);
+
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
 extern "C" Box* decodeUTF8StringPtr(const std::string* s);
@@ -371,14 +375,34 @@ public:
 
 class BoxedString : public Box {
 public:
-    // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
-    std::string s;
+    llvm::StringRef s;
 
+    char* data() { return const_cast<char*>(s.data()); }
+    size_t size() { return s.size(); }
+
+    void* operator new(size_t size, size_t ssize) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(gc_alloc(str_cls->tp_basicsize + ssize + 1, gc::GCKind::PYTHON));
+        rtn->cls = str_cls;
+        return rtn;
+    }
+
+    void* operator new(size_t size, BoxedClass* cls, size_t ssize) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, ssize + 1));
+        rtn->cls = cls;
+        return rtn;
+    }
+
+    // these should be private, but strNew needs them
     BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
-    BoxedString(std::string&& s) __attribute__((visibility("default")));
-    BoxedString(const std::string& s) __attribute__((visibility("default")));
+    explicit BoxedString(size_t n, char c) __attribute__((visibility("default")));
+    explicit BoxedString(llvm::StringRef s) __attribute__((visibility("default")));
+    explicit BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) __attribute__((visibility("default")));
 
-    DEFAULT_CLASS_SIMPLE(str_cls);
+private:
+    // used only in ctors to give our llvm::StringRef the proper pointer
+    char* storage() { return (char*)this + cls->tp_basicsize; }
+
+    void* operator new(size_t size) = delete;
 };
 
 class BoxedUnicode : public Box {
@@ -464,14 +488,65 @@ public:
 class BoxedTuple : public Box {
 public:
     typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
-    GCVector elts;
 
-    BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : elts(elts) {}
-    BoxedTuple(GCVector&& elts) __attribute__((visibility("default"))) : elts(std::move(elts)) {}
+    Box** elts;
 
-    DEFAULT_CLASS_SIMPLE(tuple_cls);
+    void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(gc_alloc(_PyObject_VAR_SIZE(tuple_cls, nelts + 1), gc::GCKind::PYTHON));
+        rtn->cls = tuple_cls;
+        return rtn;
+    }
+
+    void* operator new(size_t size, BoxedClass* cls, size_t nelts) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, nelts));
+        rtn->cls = cls;
+        return rtn;
+    }
+
+    static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t nelts, Box** elts) {
+        BoxedTuple* rtn = new (nelts) BoxedTuple(nelts);
+        memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
+        return rtn;
+    }
+    static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
+
+    static BoxedTuple* create(int64_t size, BoxedClass* cls) { return new (cls, size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t nelts, Box** elts, BoxedClass* cls) {
+        BoxedTuple* rtn = new (cls, nelts) BoxedTuple(nelts);
+        memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
+        return rtn;
+    }
+    static BoxedTuple* create(std::initializer_list<Box*> members, BoxedClass* cls) {
+        return new (cls, members.size()) BoxedTuple(members);
+    }
+
+    static int Resize(BoxedTuple** pt, size_t newsize) noexcept;
+
+    Box** begin() const { return &elts[0]; }
+    Box** end() const { return &elts[nelts]; }
+
+    size_t size() const { return nelts; }
+
+private:
+    size_t nelts;
+
+    BoxedTuple(size_t size) : elts(reinterpret_cast<Box**>((char*)this + this->cls->tp_basicsize)), nelts(size) {
+        memset(elts, 0, sizeof(Box*) * size);
+    }
+
+    BoxedTuple(std::initializer_list<Box*>& members)
+        : elts(reinterpret_cast<Box**>((char*)this + this->cls->tp_basicsize)), nelts(members.size()) {
+        // by the time we make it here elts[] is big enough to contain members
+        Box** p = &elts[0];
+        for (auto b : members) {
+            *p++ = b;
+        }
+    }
 };
+
 extern "C" BoxedTuple* EmptyTuple;
+extern "C" BoxedString* EmptyString;
 
 struct PyHasher {
     size_t operator()(Box*) const;
@@ -735,4 +810,5 @@ extern Box* dict_descr;
 
 Box* codeForFunction(BoxedFunction*);
 }
+
 #endif

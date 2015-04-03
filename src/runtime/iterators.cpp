@@ -80,11 +80,11 @@ private:
     static bool hasnext(BoxedList* o, uint64_t i) { return i < o->size; }
     static Box* getValue(BoxedList* o, uint64_t i) { return o->elts->elts[i]; }
 
-    static bool hasnext(BoxedTuple* o, uint64_t i) { return i < o->elts.size(); }
+    static bool hasnext(BoxedTuple* o, uint64_t i) { return i < o->size(); }
     static Box* getValue(BoxedTuple* o, uint64_t i) { return o->elts[i]; }
 
-    static bool hasnext(BoxedString* o, uint64_t i) { return i < o->s.size(); }
-    static Box* getValue(BoxedString* o, uint64_t i) { return new BoxedString(std::string(1, o->s[i])); }
+    static bool hasnext(BoxedString* o, uint64_t i) { return i < o->size(); }
+    static Box* getValue(BoxedString* o, uint64_t i) { return boxString(llvm::StringRef(o->data() + i, 1)); }
 
 public:
     BoxIteratorIndex(T* obj) : obj(obj), index(0) {

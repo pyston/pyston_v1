@@ -166,7 +166,7 @@ static int main(int argc, char** argv) {
     if (!Py_NoSiteFlag) {
         try {
             std::string module_name = "site";
-            importModuleLevel(&module_name, None, None, 0);
+            importModuleLevel(module_name, None, None, 0);
         } catch (ExcInfo e) {
             e.printExcAndTraceback();
             return 1;

@@ -15,7 +15,8 @@
 #include "runtime/tuple.h"
 
 #include <algorithm>
-#include <sstream>
+
+#include "llvm/Support/raw_ostream.h"
 
 #include "core/ast.h"
 #include "core/common.h"
@@ -29,13 +30,12 @@
 namespace pyston {
 
 extern "C" Box* createTuple(int64_t nelts, Box** elts) {
-    BoxedTuple::GCVector velts(elts, elts + nelts);
-    return new BoxedTuple(std::move(velts));
+    return BoxedTuple::create(nelts, elts);
 }
 
 Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
 
-    i64 size = self->elts.size();
+    i64 size = self->size();
     assert(step != 0);
     if (step > 0) {
         assert(0 <= start);
@@ -45,15 +45,15 @@ Box* _tupleSlice(BoxedTuple* self, i64 start, i64 stop, i64 step, i64 length) {
         assert(-1 <= stop);
     }
 
-    // FIXME: No need to initialize with 0.
-    BoxedTuple::GCVector velts(length, 0);
+    // FIXME: No need to initialize with NULL, since we're going to fill it in
+    auto rtn = BoxedTuple::create(length);
     if (length > 0)
-        copySlice(&velts[0], &self->elts[0], start, step, length);
-    return new BoxedTuple(std::move(velts));
+        copySlice(&rtn->elts[0], &self->elts[0], start, step, length);
+    return rtn;
 }
 
 Box* tupleGetitemUnboxed(BoxedTuple* self, i64 n) {
-    i64 size = self->elts.size();
+    i64 size = self->size();
 
     if (n < 0)
         n = size + n;
@@ -89,7 +89,7 @@ Box* tupleGetitemSlice(BoxedTuple* self, BoxedSlice* slice) {
     assert(slice->cls == slice_cls);
 
     i64 start, stop, step, length;
-    parseSlice(slice, self->elts.size(), &start, &stop, &step, &length);
+    parseSlice(slice, self->size(), &start, &stop, &step, &length);
     return _tupleSlice(self, start, stop, step, length);
 }
 
@@ -97,7 +97,7 @@ extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t hi
     RELEASE_ASSERT(isSubclass(p->cls, tuple_cls), "");
     BoxedTuple* t = static_cast<BoxedTuple*>(p);
 
-    Py_ssize_t n = t->elts.size();
+    Py_ssize_t n = t->size();
     if (low < 0)
         low = 0;
     if (high > n)
@@ -108,7 +108,39 @@ extern "C" PyObject* PyTuple_GetSlice(PyObject* p, Py_ssize_t low, Py_ssize_t hi
     if (low == 0 && high == n)
         return p;
 
-    return new BoxedTuple(BoxedTuple::GCVector(&t->elts[low], &t->elts[high]));
+    return BoxedTuple::create(high - low, &t->elts[low]);
+}
+
+extern "C" int _PyTuple_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
+    // This is only allowed to be called when there is only one user of the tuple (ie a refcount of 1 in CPython)
+    assert(pv);
+    return BoxedTuple::Resize((BoxedTuple**)pv, newsize);
+}
+
+int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
+    assert(isSubclass((*pv)->cls, tuple_cls));
+
+    BoxedTuple* t = static_cast<BoxedTuple*>(*pv);
+
+    if (newsize == t->size())
+        return 0;
+
+    if (newsize < t->size()) {
+        // XXX resize the box (by reallocating) smaller if it makes sense
+        t->nelts = newsize;
+        return 0;
+    }
+
+    BoxedTuple* resized;
+
+    if (t->cls == tuple_cls)
+        resized = new (newsize) BoxedTuple(newsize); // we want an uninitialized tuple, but this will memset it with 0.
+    else
+        resized = new (t->cls, newsize) BoxedTuple(newsize); // we need an uninitialized string, but this will memset
+    memmove(resized->elts, t->elts, t->size());
+
+    *pv = resized;
+    return 0;
 }
 
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
@@ -128,10 +160,11 @@ Box* tupleAdd(BoxedTuple* self, Box* rhs) {
     }
 
     BoxedTuple* _rhs = static_cast<BoxedTuple*>(rhs);
-    BoxedTuple::GCVector velts;
-    velts.insert(velts.end(), self->elts.begin(), self->elts.end());
-    velts.insert(velts.end(), _rhs->elts.begin(), _rhs->elts.end());
-    return new BoxedTuple(std::move(velts));
+
+    BoxedTuple* rtn = BoxedTuple::create(self->size() + _rhs->size());
+    memmove(&rtn->elts[0], &self->elts[0], self->size() * sizeof(Box*));
+    memmove(&rtn->elts[self->size()], &_rhs->elts[0], _rhs->size() * sizeof(Box*));
+    return rtn;
 }
 
 Box* tupleMul(BoxedTuple* self, Box* rhs) {
@@ -140,7 +173,7 @@ Box* tupleMul(BoxedTuple* self, Box* rhs) {
     }
 
     int n = static_cast<BoxedInt*>(rhs)->n;
-    int s = self->elts.size();
+    int s = self->size();
 
     if (n < 0)
         n = 0;
@@ -148,33 +181,34 @@ Box* tupleMul(BoxedTuple* self, Box* rhs) {
     if (s == 0 || n == 1) {
         return self;
     } else {
-        BoxedTuple::GCVector velts(n * s);
-        auto iter = velts.begin();
+        BoxedTuple* rtn = BoxedTuple::create(n * s);
+        int rtn_i = 0;
         for (int i = 0; i < n; ++i) {
-            std::copy(self->elts.begin(), self->elts.end(), iter);
-            iter += s;
+            memmove(&rtn->elts[rtn_i], &self->elts[0], sizeof(Box*) * s);
+            rtn_i += s;
         }
-        return new BoxedTuple(std::move(velts));
+        return rtn;
     }
 }
 
 Box* tupleLen(BoxedTuple* t) {
     assert(isSubclass(t->cls, tuple_cls));
-    return boxInt(t->elts.size());
+    return boxInt(t->size());
 }
 
 extern "C" Py_ssize_t PyTuple_Size(PyObject* op) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
-    return static_cast<BoxedTuple*>(op)->elts.size();
+    return static_cast<BoxedTuple*>(op)->size();
 }
 
 Box* tupleRepr(BoxedTuple* t) {
     assert(isSubclass(t->cls, tuple_cls));
 
-    std::ostringstream os("");
+    std::string O("");
+    llvm::raw_string_ostream os(O);
     os << "(";
 
-    int n = t->elts.size();
+    int n = t->size();
     for (int i = 0; i < n; i++) {
         if (i)
             os << ", ";
@@ -190,8 +224,8 @@ Box* tupleRepr(BoxedTuple* t) {
 }
 
 Box* _tupleCmp(BoxedTuple* lhs, BoxedTuple* rhs, AST_TYPE::AST_TYPE op_type) {
-    int lsz = lhs->elts.size();
-    int rsz = rhs->elts.size();
+    int lsz = lhs->size();
+    int rsz = rhs->size();
 
     bool is_order
         = (op_type == AST_TYPE::Lt || op_type == AST_TYPE::LtE || op_type == AST_TYPE::Gt || op_type == AST_TYPE::GtE);
@@ -274,11 +308,11 @@ Box* tupleNe(BoxedTuple* self, Box* rhs) {
 
 Box* tupleNonzero(BoxedTuple* self) {
     RELEASE_ASSERT(isSubclass(self->cls, tuple_cls), "");
-    return boxBool(self->elts.size() != 0);
+    return boxBool(self->size() != 0);
 }
 
 Box* tupleContains(BoxedTuple* self, Box* elt) {
-    int size = self->elts.size();
+    int size = self->size();
     for (int i = 0; i < size; i++) {
         Box* e = self->elts[i];
         Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
@@ -290,7 +324,7 @@ Box* tupleContains(BoxedTuple* self, Box* elt) {
 }
 
 Box* tupleIndex(BoxedTuple* self, Box* elt) {
-    int size = self->elts.size();
+    int size = self->size();
     for (int i = 0; i < size; i++) {
         Box* e = self->elts[i];
         Box* cmp = compareInternal(e, elt, AST_TYPE::Eq, NULL);
@@ -306,7 +340,7 @@ Box* tupleHash(BoxedTuple* self) {
     assert(isSubclass(self->cls, tuple_cls));
 
     int64_t rtn = 3527539;
-    for (Box* e : self->elts) {
+    for (auto e : *self) {
         BoxedInt* h = hash(e);
         assert(isSubclass(h->cls, int_cls));
         rtn ^= h->n + 0x9e3779b9 + (rtn << 6) + (rtn >> 2);
@@ -324,16 +358,14 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
         raiseExcHelper(TypeError, "tuple.__new__(%s): %s is not a subtype of tuple", getNameOfClass(cls),
                        getNameOfClass(cls));
 
-    int args_sz = args->elts.size();
+    int args_sz = args->size();
     int kwargs_sz = kwargs->d.size();
 
     if (args_sz + kwargs_sz > 1)
         raiseExcHelper(TypeError, "tuple() takes at most 1 argument (%d given)", args_sz + kwargs_sz);
 
-    BoxedTuple::GCVector velts;
-    Box* elements;
-
     if (args_sz || kwargs_sz) {
+        Box* elements;
         // if initializing from iterable argument, check common case positional args first
         if (args_sz) {
             elements = args->elts[0];
@@ -345,21 +377,24 @@ extern "C" Box* tupleNew(Box* _cls, BoxedTuple* args, BoxedDict* kwargs) {
             if (kw->s == "sequence")
                 elements = seq.second;
             else
-                raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->s.c_str());
+                raiseExcHelper(TypeError, "'%s' is an invalid keyword argument for this function", kw->data());
         }
 
+        std::vector<Box*, StlCompatAllocator<Box*>> elts;
         for (auto e : elements->pyElements())
-            velts.push_back(e);
-    }
+            elts.push_back(e);
 
-    return new (cls) BoxedTuple(std::move(velts));
+        return BoxedTuple::create(elts.size(), &elts[0], cls);
+    } else {
+        return BoxedTuple::create(0, cls);
+    }
 }
 
 extern "C" int PyTuple_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
     RELEASE_ASSERT(PyTuple_Check(op), "");
 
     BoxedTuple* t = static_cast<BoxedTuple*>(op);
-    RELEASE_ASSERT(i >= 0 && i < t->elts.size(), "");
+    RELEASE_ASSERT(i >= 0 && i < t->size(), "");
     t->elts[i] = newitem;
     return 0;
 }
@@ -386,7 +421,7 @@ extern "C" PyObject* PyTuple_Pack(Py_ssize_t n, ...) noexcept {
 extern "C" PyObject* PyTuple_New(Py_ssize_t size) noexcept {
     RELEASE_ASSERT(size >= 0, "");
 
-    return new BoxedTuple(BoxedTuple::GCVector(size, NULL));
+    return BoxedTuple::create(size);
 }
 
 

@@ -2203,20 +2203,20 @@ public:
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == numFrameArgs());
 
-        BoxedTuple::GCVector elts;
+        BoxedTuple* rtn = BoxedTuple::create(elt_types.size());
+        int rtn_idx = 0;
         int cur_idx = 0;
         for (auto e : elt_types) {
             int num_args = e->numFrameArgs();
             // TODO: inefficient to make these copies
             FrameVals sub_vals(vals.begin() + cur_idx, vals.begin() + cur_idx + num_args);
 
-            elts.push_back(e->deserializeFromFrame(sub_vals));
+            rtn->elts[rtn_idx++] = e->deserializeFromFrame(sub_vals);
 
             cur_idx += num_args;
         }
         assert(cur_idx == vals.size());
-
-        return new BoxedTuple(std::move(elts));
+        return rtn;
     }
 
     int numFrameArgs() override {

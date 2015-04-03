@@ -33,7 +33,7 @@ static Box* classLookup(BoxedClassobj* cls, const std::string& attr) {
     if (r)
         return r;
 
-    for (auto b : cls->bases->elts) {
+    for (auto b : *cls->bases) {
         RELEASE_ASSERT(b->cls == classobj_cls, "");
         Box* r = classLookup(static_cast<BoxedClassobj*>(b), attr);
         if (r)
@@ -88,7 +88,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
         raiseExcHelper(TypeError, "PyClass_New: bases must be a tuple");
     BoxedTuple* bases = static_cast<BoxedTuple*>(_bases);
 
-    for (auto base : bases->elts) {
+    for (auto base : *bases) {
         if (!PyClass_Check(base) && PyCallable_Check(base->cls)) {
             Box* r = PyObject_CallFunctionObjArgs(base->cls, name, bases, dict, NULL);
             if (!r)
@@ -104,7 +104,7 @@ Box* classobjNew(Box* _cls, Box* _name, Box* _bases, Box** _args) {
 
     for (auto& p : dict->d) {
         RELEASE_ASSERT(p.first->cls == str_cls, "");
-        made->setattr(static_cast<BoxedString*>(p.first)->s, p.second, NULL);
+        made->setattr(std::string(static_cast<BoxedString*>(p.first)->s), p.second, NULL);
     }
 
     // Note: make sure to do this after assigning the attrs, since it will overwrite any defined __name__
@@ -134,7 +134,7 @@ Box* classobjCall(Box* _cls, Box* _args, Box* _kwargs) {
         if (init_rtn != None)
             raiseExcHelper(TypeError, "__init__() should return None");
     } else {
-        if (args->elts.size() || kwargs->d.size())
+        if (args->size() || kwargs->d.size())
             raiseExcHelper(TypeError, "this constructor takes no arguments");
     }
     return made;
@@ -162,9 +162,9 @@ static Box* classobjGetattribute(Box* _cls, Box* _attr) {
         }
     }
 
-    Box* r = classLookup(cls, attr->s);
+    Box* r = classLookup(cls, std::string(attr->s));
     if (!r)
-        raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->s.c_str(), attr->s.c_str());
+        raiseExcHelper(AttributeError, "class %s has no attribute '%s'", cls->name->data(), attr->data());
 
     r = processDescriptor(r, None, cls);
     return r;
@@ -242,7 +242,7 @@ Box* classobjStr(Box* _obj) {
     Box* _mod = cls->getattr("__module__");
     RELEASE_ASSERT(_mod, "");
     RELEASE_ASSERT(_mod->cls == str_cls, "");
-    return boxString(static_cast<BoxedString*>(_mod)->s + "." + cls->name->s);
+    return boxStringTwine(llvm::Twine(static_cast<BoxedString*>(_mod)->s) + "." + cls->name->s);
 }
 
 static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing) {
@@ -282,8 +282,7 @@ static Box* _instanceGetattribute(Box* _inst, Box* _attr, bool raise_on_missing)
     if (!raise_on_missing)
         return NULL;
 
-    raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->s.c_str(),
-                   attr->s.c_str());
+    raiseExcHelper(AttributeError, "%s instance has no attribute '%s'", inst->inst_cls->name->data(), attr->data());
 }
 
 Box* instanceGetattribute(Box* _inst, Box* _attr) {
@@ -361,7 +360,7 @@ Box* instanceRepr(Box* _inst) {
         assert(class_str->cls == str_cls);
 
         char buf[80];
-        snprintf(buf, 80, "<%s instance at %p>", static_cast<BoxedString*>(class_str)->s.c_str(), inst);
+        snprintf(buf, 80, "<%s instance at %p>", static_cast<BoxedString*>(class_str)->data(), inst);
         return boxStrConstant(buf);
     }
 }
@@ -495,7 +494,7 @@ Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
 
     Box* call_func = _instanceGetattribute(inst, boxStrConstant("__call__"), false);
     if (!call_func)
-        raiseExcHelper(AttributeError, "%s instance has no __call__ method", inst->inst_cls->name->s.c_str());
+        raiseExcHelper(AttributeError, "%s instance has no __call__ method", inst->inst_cls->name->data());
 
     return runtimeCall(call_func, ArgPassSpec(0, 0, true, true), _args, _kwargs, NULL, NULL, NULL);
 }

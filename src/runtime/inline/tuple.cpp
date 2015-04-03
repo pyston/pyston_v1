@@ -40,14 +40,14 @@ i1 tupleiterHasnextUnboxed(Box* s) {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 
-    return self->pos < self->t->elts.size();
+    return self->pos < self->t->size();
 }
 
 Box* tupleiterNext(Box* s) {
     assert(s->cls == tuple_iterator_cls);
     BoxedTupleIterator* self = static_cast<BoxedTupleIterator*>(s);
 
-    if (!(self->pos >= 0 && self->pos < self->t->elts.size())) {
+    if (!(self->pos >= 0 && self->pos < self->t->size())) {
         raiseExcHelper(StopIteration, "");
     }
 

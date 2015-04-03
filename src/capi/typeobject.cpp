@@ -1577,7 +1577,7 @@ bool update_slot(BoxedClass* type, const std::string& attr) noexcept {
     }
     if (ptrs[0] == NULL)
         return false; /* Not an attribute that affects any slots */
-    int r = update_subclasses(type, new BoxedString(attr), update_slots_callback, (void*)ptrs);
+    int r = update_subclasses(type, boxString(attr), update_slots_callback, (void*)ptrs);
 
     // TODO this is supposed to be a CAPI function!
     if (r)
@@ -1634,13 +1634,13 @@ static PyObject* tp_new_wrapper(PyTypeObject* self, BoxedTuple* args, Box* kwds)
 
     RELEASE_ASSERT(args->cls == tuple_cls, "");
     RELEASE_ASSERT(kwds->cls == dict_cls, "");
-    RELEASE_ASSERT(args->elts.size() >= 1, "");
+    RELEASE_ASSERT(args->size() >= 1, "");
 
     BoxedClass* subtype = static_cast<BoxedClass*>(args->elts[0]);
     RELEASE_ASSERT(isSubclass(subtype->cls, type_cls), "");
     RELEASE_ASSERT(isSubclass(subtype, self), "");
 
-    BoxedTuple* new_args = new BoxedTuple(BoxedTuple::GCVector(args->elts.begin() + 1, args->elts.end()));
+    BoxedTuple* new_args = BoxedTuple::create(args->size() - 1, &args->elts[1]);
 
     return self->tp_new(subtype, new_args, kwds);
 }
@@ -2553,13 +2553,13 @@ static void remove_subclass(PyTypeObject* base, PyTypeObject* type) noexcept {
 void commonClassSetup(BoxedClass* cls) {
     if (cls->tp_bases == NULL) {
         if (cls->tp_base)
-            cls->tp_bases = new BoxedTuple({ cls->tp_base });
+            cls->tp_bases = BoxedTuple::create({ cls->tp_base });
         else
-            cls->tp_bases = new BoxedTuple({});
+            cls->tp_bases = BoxedTuple::create({});
     }
 
     /* Link into each base class's list of subclasses */
-    for (PyObject* b : static_cast<BoxedTuple*>(cls->tp_bases)->elts) {
+    for (PyObject* b : *static_cast<BoxedTuple*>(cls->tp_bases)) {
         if (PyType_Check(b) && add_subclass((PyTypeObject*)b, cls) < 0)
             throwCAPIException();
     }
@@ -2573,7 +2573,8 @@ void commonClassSetup(BoxedClass* cls) {
 
     assert(cls->tp_mro);
     assert(cls->tp_mro->cls == tuple_cls);
-    for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+
+    for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
         if (b == cls)
             continue;
         if (PyType_Check(b))

@@ -14,6 +14,8 @@
 
 #include "runtime/inline/boxing.h"
 
+#include "llvm/ADT/SmallString.h"
+
 #include "runtime/int.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
@@ -28,24 +30,42 @@ extern "C" Box* createList() {
     return new BoxedList();
 }
 
+BoxedString* _boxStrConstant(const char* chars) {
+    size_t len = strlen(chars);
+    return new (len) BoxedString(chars, len);
+}
 extern "C" BoxedString* boxStrConstant(const char* chars) {
-    return new BoxedString(chars);
+    return _boxStrConstant(chars);
+}
+
+BoxedString* _boxStrConstantSize(const char* chars, size_t n) {
+    return new (n) BoxedString(chars, n);
 }
 
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n) {
-    return new BoxedString(chars, n);
+    return _boxStrConstantSize(chars, n);
 }
 
 extern "C" Box* boxStringPtr(const std::string* s) {
-    return new BoxedString(*s);
+    return new (s->size()) BoxedString(s->c_str(), s->size());
+}
+
+Box* boxStringRef(llvm::StringRef s) {
+    return new (s.size()) BoxedString(s);
 }
 
 Box* boxString(const std::string& s) {
-    return new BoxedString(s);
+    return new (s.size()) BoxedString(s.c_str(), s.size());
 }
 Box* boxString(std::string&& s) {
-    return new BoxedString(std::move(s));
+    return new (s.size()) BoxedString(s.c_str(), s.size());
 }
+
+Box* boxStringTwine(const llvm::Twine& t) {
+    llvm::SmallString<256> Vec;
+    return boxString(t.toStringRef(Vec));
+}
+
 
 extern "C" double unboxFloat(Box* b) {
     ASSERT(b->cls == float_cls, "%s", getTypeName(b));

@@ -873,7 +873,7 @@ extern "C" BoxedString* intRepr(BoxedInt* v) {
 
     char buf[80];
     int len = snprintf(buf, 80, "%ld", v->n);
-    return new BoxedString(std::string(buf, len));
+    return static_cast<BoxedString*>(boxString(llvm::StringRef(buf, len)));
 }
 
 extern "C" Box* intHash(BoxedInt* self) {
@@ -898,7 +898,7 @@ extern "C" Box* intHex(BoxedInt* self) {
         len = snprintf(buf, sizeof(buf), "-0x%lx", std::abs(self->n));
     else
         len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
-    return new BoxedString(std::string(buf, len));
+    return boxStringRef(llvm::StringRef(buf, len));
 }
 
 extern "C" Box* intOct(BoxedInt* self) {
@@ -913,7 +913,7 @@ extern "C" Box* intOct(BoxedInt* self) {
         len = snprintf(buf, sizeof(buf), "-%#lo", std::abs(self->n));
     else
         len = snprintf(buf, sizeof(buf), "%#lo", self->n);
-    return new BoxedString(std::string(buf, len));
+    return boxString(llvm::StringRef(buf, len));
 }
 
 extern "C" Box* intTrunc(BoxedInt* self) {
@@ -942,8 +942,8 @@ static Box* _intNew(Box* val, Box* base) {
 
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        RELEASE_ASSERT(s->s.size() == strlen(s->s.c_str()), "");
-        Box* r = PyInt_FromString(s->s.c_str(), NULL, base_n);
+        RELEASE_ASSERT(s->size() == strlen(s->data()), "");
+        Box* r = PyInt_FromString(s->data(), NULL, base_n);
         if (!r)
             throwCAPIException();
         return r;

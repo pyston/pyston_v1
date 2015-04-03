@@ -43,7 +43,7 @@ Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, Boxe
 
     Box* rtn;
     if (call_flags == METH_NOARGS) {
-        assert(varargs->elts.size() == 0);
+        assert(varargs->size() == 0);
         assert(kwargs->d.size() == 0);
         rtn = (Box*)self->method->ml_meth(obj, NULL);
     } else if (call_flags == METH_VARARGS) {
@@ -53,7 +53,7 @@ Box* BoxedMethodDescriptor::__call__(BoxedMethodDescriptor* self, Box* obj, Boxe
         rtn = (Box*)((PyCFunctionWithKeywords)self->method->ml_meth)(obj, varargs, kwargs);
     } else if (call_flags == METH_O) {
         assert(kwargs->d.size() == 0);
-        assert(varargs->elts.size() == 1);
+        assert(varargs->size() == 1);
         rtn = (Box*)self->method->ml_meth(obj, varargs->elts[0]);
     } else {
         RELEASE_ASSERT(0, "0x%x", call_flags);

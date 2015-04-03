@@ -66,8 +66,7 @@ Box* dictIterNext(Box* s) {
     } else if (self->type == BoxedDictIterator::ValueIterator) {
         rtn = self->it->second;
     } else if (self->type == BoxedDictIterator::ItemIterator) {
-        BoxedTuple::GCVector elts{ self->it->first, self->it->second };
-        rtn = new BoxedTuple(std::move(elts));
+        rtn = BoxedTuple::create({ self->it->first, self->it->second });
     }
     ++self->it;
     return rtn;

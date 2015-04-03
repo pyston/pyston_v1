@@ -364,7 +364,7 @@ Box* eval(Box* boxedCode) {
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
     RELEASE_ASSERT(boxedCode->cls == str_cls, "");
-    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
     AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
@@ -385,7 +385,7 @@ Box* exec(Box* boxedCode) {
 
     // TODO same issues as in `eval`
     RELEASE_ASSERT(boxedCode->cls == str_cls, "");
-    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;

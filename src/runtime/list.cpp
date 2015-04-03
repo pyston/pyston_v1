@@ -16,7 +16,8 @@
 
 #include <algorithm>
 #include <cstring>
-#include <sstream>
+
+#include "llvm/Support/raw_ostream.h"
 
 #include "capi/types.h"
 #include "core/ast.h"
@@ -55,14 +56,16 @@ extern "C" PyObject* PyList_AsTuple(PyObject* v) noexcept {
     }
 
     auto l = static_cast<BoxedList*>(v);
-    return new BoxedTuple(BoxedTuple::GCVector(l->elts->elts, l->elts->elts + l->size));
+    return BoxedTuple::create(l->size, &l->elts->elts[0]);
 }
 
 extern "C" Box* listRepr(BoxedList* self) {
     LOCK_REGION(self->lock.asRead());
 
     // TODO highly inefficient with all the string copying
-    std::ostringstream os;
+
+    std::string O("");
+    llvm::raw_string_ostream os(O);
     os << '[';
     for (int i = 0; i < self->size; i++) {
         if (i > 0)
@@ -75,7 +78,7 @@ extern "C" Box* listRepr(BoxedList* self) {
         os << s->s;
     }
     os << ']';
-    return new BoxedString(os.str());
+    return boxString(os.str());
 }
 
 extern "C" Box* listNonzero(BoxedList* self) {
@@ -282,7 +285,7 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     if (!v) {
         v_size = 0;
         v_elts = NULL;
-    } else if (isSubclass(v->cls, list_cls)) {
+    } else if (v->cls == list_cls || isSubclass(v->cls, list_cls)) {
         BoxedList* lv = static_cast<BoxedList*>(v);
         v_size = lv->size;
         // If lv->size is 0, lv->elts->elts is garbage
@@ -290,9 +293,9 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
             v_elts = lv->elts->elts;
         else
             v_elts = NULL;
-    } else if (isSubclass(v->cls, tuple_cls)) {
+    } else if (v->cls == tuple_cls || isSubclass(v->cls, tuple_cls)) {
         BoxedTuple* tv = static_cast<BoxedTuple*>(v);
-        v_size = tv->elts.size();
+        v_size = tv->size();
         v_elts = &tv->elts[0];
     } else {
         RELEASE_ASSERT(0, "unsupported type for list slice assignment: '%s'", getTypeName(v));
@@ -517,7 +520,7 @@ void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
                 // original object.
                 // TODO we could potentially make this faster by copying the CPython approach of
                 // creating special sortwrapper objects that compare only based on the key.
-                Box* new_obj = new BoxedTuple({ key_val, boxInt(i), *obj_loc });
+                Box* new_obj = BoxedTuple::create({ key_val, boxInt(i), *obj_loc });
 
                 *obj_loc = new_obj;
                 num_keys_added++;
@@ -629,7 +632,7 @@ Box* listIndex(BoxedList* self, Box* elt, BoxedInt* _start, Box** args) {
     }
 
     BoxedString* tostr = static_cast<BoxedString*>(repr(elt));
-    raiseExcHelper(ValueError, "%s is not in list", tostr->s.c_str());
+    raiseExcHelper(ValueError, "%s is not in list", tostr->data());
 }
 
 Box* listRemove(BoxedList* self, Box* elt) {

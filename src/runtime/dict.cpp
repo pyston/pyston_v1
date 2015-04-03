@@ -44,7 +44,7 @@ Box* dictRepr(BoxedDict* self) {
         chars.insert(chars.end(), v->s.begin(), v->s.end());
     }
     chars.push_back('}');
-    return boxString(std::string(chars.begin(), chars.end()));
+    return boxString(llvm::StringRef(&chars[0], chars.size()));
 }
 
 Box* dictClear(BoxedDict* self) {
@@ -69,10 +69,7 @@ Box* dictItems(BoxedDict* self) {
 
     rtn->ensure(self->d.size());
     for (const auto& p : self->d) {
-        BoxedTuple::GCVector elts;
-        elts.push_back(p.first);
-        elts.push_back(p.second);
-        BoxedTuple* t = new BoxedTuple(std::move(elts));
+        BoxedTuple* t = BoxedTuple::create({ p.first, p.second });
         listAppendInternal(rtn, t);
     }
 
@@ -378,7 +375,7 @@ Box* dictPopitem(BoxedDict* self) {
     Box* value = it->second;
     self->d.erase(it);
 
-    auto rtn = new BoxedTuple({ key, value });
+    auto rtn = BoxedTuple::create({ key, value });
     return rtn;
 }
 
@@ -506,9 +503,9 @@ void dictMergeFromSeq2(BoxedDict* self, Box* other) {
             self->d[list->elts->elts[0]] = list->elts->elts[1];
         } else if (element->cls == tuple_cls) {
             BoxedTuple* tuple = static_cast<BoxedTuple*>(element);
-            if (tuple->elts.size() != 2)
+            if (tuple->size() != 2)
                 raiseExcHelper(ValueError, "dictionary update sequence element #%d has length %d; 2 is required", idx,
-                               tuple->elts.size());
+                               tuple->size());
 
             self->d[tuple->elts[0]] = tuple->elts[1];
         } else
@@ -541,8 +538,8 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
     assert(kwargs);
     assert(kwargs->cls == dict_cls);
 
-    RELEASE_ASSERT(args->elts.size() <= 1, ""); // should throw a TypeError
-    if (args->elts.size()) {
+    RELEASE_ASSERT(args->size() <= 1, ""); // should throw a TypeError
+    if (args->size()) {
         Box* arg = args->elts[0];
         if (getattrInternal(arg, "keys", NULL)) {
             dictMerge(self, arg);
@@ -558,7 +555,7 @@ Box* dictUpdate(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
 }
 
 extern "C" Box* dictInit(BoxedDict* self, BoxedTuple* args, BoxedDict* kwargs) {
-    int args_sz = args->elts.size();
+    int args_sz = args->size();
     int kwargs_sz = kwargs->d.size();
 
     // CPython accepts a single positional and keyword arguments, in any combination

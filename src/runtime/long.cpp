@@ -268,7 +268,7 @@ extern "C" PyAPI_FUNC(PyObject*) _PyLong_Format(PyObject* aa, int base, int addL
         os << "L";
 
     os.flush();
-    auto rtn = new BoxedString(std::move(str));
+    auto rtn = boxString(str);
     free(buf);
     return rtn;
 }
@@ -451,7 +451,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             raiseExcHelper(TypeError, "long() arg2 must be >= 2 and <= 36");
         }
 
-        int r = mpz_init_set_str(rtn->n, s->s.c_str(), base);
+        int r = mpz_init_set_str(rtn->n, s->data(), base);
         RELEASE_ASSERT(r == 0, "");
     } else {
         if (isSubclass(val->cls, long_cls)) {
@@ -936,7 +936,7 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
         mpz_init(q->n);
         mpz_init(r->n);
         mpz_fdiv_qr(q->n, r->n, lhs->n, rhs->n);
-        return new BoxedTuple({ q, r });
+        return BoxedTuple::create({ q, r });
     } else if (isSubclass(_rhs->cls, int_cls)) {
         BoxedInt* rhs = static_cast<BoxedInt*>(_rhs);
 
@@ -948,7 +948,7 @@ extern "C" Box* longDivmod(BoxedLong* lhs, Box* _rhs) {
         mpz_init(q->n);
         mpz_init_set_si(r->n, rhs->n);
         mpz_fdiv_qr(q->n, r->n, lhs->n, r->n);
-        return new BoxedTuple({ q, r });
+        return BoxedTuple::create({ q, r });
     } else {
         return NotImplemented;
     }
