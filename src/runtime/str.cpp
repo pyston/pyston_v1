@@ -47,6 +47,7 @@ extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noe
 namespace pyston {
 
 BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n) {
+    RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     if (s) {
         memmove(data(), s, n);
         data()[n] = 0;
@@ -56,17 +57,20 @@ BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n) {
 }
 
 BoxedString::BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) : s(storage(), lhs.size() + rhs.size()) {
+    RELEASE_ASSERT(lhs.size() + rhs.size() != llvm::StringRef::npos, "");
     memmove(data(), lhs.data(), lhs.size());
     memmove(data() + lhs.size(), rhs.data(), rhs.size());
     data()[lhs.size() + rhs.size()] = 0;
 }
 
 BoxedString::BoxedString(llvm::StringRef s) : s(storage(), s.size()) {
+    RELEASE_ASSERT(s.size() != llvm::StringRef::npos, "");
     memmove(data(), s.data(), s.size());
     data()[s.size()] = 0;
 }
 
 BoxedString::BoxedString(size_t n, char c) : s(storage(), n) {
+    RELEASE_ASSERT(n != llvm::StringRef::npos, "");
     memset(data(), c, n);
     data()[n] = 0;
 }
@@ -1694,6 +1698,9 @@ Box* strJoin(BoxedString* self, Box* rhs) {
     int i = 0;
     if (rhs->cls == str_cls) {
         BoxedString* srhs = static_cast<BoxedString*>(rhs);
+        if (srhs->size() == 0)
+            return EmptyString;
+
         size_t rtn_len = self->size() * (srhs->size() - 1) + srhs->size();
         BoxedString* rtn = new (rtn_len) BoxedString(nullptr, rtn_len);
         char* p = rtn->data();
@@ -1708,6 +1715,9 @@ Box* strJoin(BoxedString* self, Box* rhs) {
         return rtn;
     } else if (rhs->cls == list_cls) {
         BoxedList* lrhs = static_cast<BoxedList*>(rhs);
+        if (lrhs->size == 0)
+            return EmptyString;
+
         size_t rtn_len = self->size() * (lrhs->size - 1);
 
         for (int l = 0; l < lrhs->size; l++) {
