@@ -2,7 +2,7 @@ language: cpp
 
 compiler:
   - clang
-# - gcc
+  - gcc
 
 # use travis-ci docker based infrastructure
 sudo: false
