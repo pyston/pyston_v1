@@ -422,6 +422,13 @@ def namedtuple(name, fields):
             for i in xrange(len(fields)):
                 setattr(self, fields[i], args[i])
 
+        @classmethod
+        def _make(cls, iterable):
+            t = tuple(iterable)
+            if len(t) != len(fields):
+                raise TypeError('Expected %d arguments, got %d' % (len(fields), len(t)))
+            return cls(*t)
+
         def __getitem__(self, idx):
             assert 0 <= idx < len(fields)
             return getattr(self, fields[idx])
