@@ -2513,7 +2513,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         visitor.push_back(return_stmt);
     }
 
-    if (VERBOSITY("cfg") >= 2) {
+    if (VERBOSITY("cfg") >= 3) {
         printf("Before cfg checking and transformations:\n");
         rtn->print();
     }
@@ -2634,7 +2634,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                 break;
             }
 
-            if (VERBOSITY()) {
+            if (VERBOSITY("cfg") >= 2) {
                 // rtn->print();
                 printf("Joining blocks %d and %d\n", b->idx, b2->idx);
             }
@@ -2653,7 +2653,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         }
     }
 
-    if (VERBOSITY("cfg") >= 1) {
+    if (VERBOSITY("cfg") >= 2) {
         printf("Final cfg:\n");
         rtn->print();
     }

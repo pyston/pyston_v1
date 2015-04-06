@@ -132,7 +132,7 @@ private:
         void* raw_rtn = node->accept_expr(this);
         CompilerType* rtn = static_cast<CompilerType*>(raw_rtn);
 
-        if (VERBOSITY() >= 2) {
+        if (VERBOSITY() >= 3) {
             print_ast(node);
             printf(" %s\n", rtn->debugName().c_str());
         }
@@ -735,10 +735,10 @@ public:
 
             TypeMap ending;
 
-            if (VERBOSITY("types")) {
+            if (VERBOSITY("types") >= 3) {
                 printf("processing types for block %d\n", block->idx);
             }
-            if (VERBOSITY("types") >= 2) {
+            if (VERBOSITY("types") >= 3) {
                 printf("before:\n");
                 TypeMap& starting = starting_types[block];
                 for (const auto& p : starting) {
@@ -750,7 +750,7 @@ public:
             BasicBlockTypePropagator::propagate(block, starting_types[block], ending, expr_types, type_speculations,
                                                 speculation, scope_info);
 
-            if (VERBOSITY("types") >= 2) {
+            if (VERBOSITY("types") >= 3) {
                 printf("before (after):\n");
                 TypeMap& starting = starting_types[block];
                 for (const auto& p : starting) {
@@ -775,11 +775,11 @@ public:
         }
 
         if (VERBOSITY("types")) {
-            printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
-                   1.0 * num_evaluations / cfg->blocks.size());
+            printf("Type analysis: %ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(),
+                   num_evaluations, 1.0 * num_evaluations / cfg->blocks.size());
         }
 
-        if (VERBOSITY("types") >= 2) {
+        if (VERBOSITY("types") >= 3) {
             for (CFGBlock* b : cfg->blocks) {
                 printf("Types at beginning of block %d:\n", b->idx);
 
