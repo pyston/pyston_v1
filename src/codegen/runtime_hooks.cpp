@@ -206,6 +206,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(importStar);
     GET(repr);
     GET(str);
+    GET(strOrUnicode);
     GET(exceptionMatches);
     GET(yield);
     GET(getiterHelper);

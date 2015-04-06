@@ -49,11 +49,9 @@ import gc
 for i in xrange(100):
     print repr(BaseException().__unicode__())
     gc.collect()
-    # TODO / FIXME: For some reason, uncommenting the loop below will cause printing unicode
-    # to fail!!!
     # do some allocations:
-    # for j in xrange(100):
-    #     [None] * j
+    for j in xrange(100):
+        [None] * j
 
 print u'' in ''
 print '' in u''
