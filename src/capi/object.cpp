@@ -499,7 +499,8 @@ extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexce
 
 // I'm not sure how we can support this one:
 extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 /* These methods are used to control infinite recursion in repr, str, print,
@@ -564,6 +565,9 @@ extern "C" void Py_ReprLeave(PyObject* obj) noexcept {
 }
 
 extern "C" int PyObject_Compare(PyObject* o1, PyObject* o2) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    // 'On error, the value returned is undefined; use PyErr_Occurred() to detect an error.'
+    // - https://docs.python.org/2/c-api/object.html
+    return 0xdeadbeef;
 }
 }
