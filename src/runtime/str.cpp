@@ -44,6 +44,7 @@ extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
 // from cpython's stringobject.c:
 #define LEFTSTRIP 0
@@ -2653,6 +2654,7 @@ static PyMethodDef string_methods[] = {
     { "expandtabs", (PyCFunction)string_expandtabs, METH_VARARGS, NULL },
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
+    { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
 };
 
 void setupStr() {
