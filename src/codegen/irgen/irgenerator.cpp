@@ -2478,24 +2478,24 @@ public:
     }
 
     void run(const CFGBlock* block) override {
-        if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
-            printf("  %d init:", block->idx);
-            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
-                printf(" %s", it->first.c_str());
-            printf("\n");
-        }
+        // if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
+        //     printf("  %d init:", block->idx);
+        //     for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
+        //         printf(" %s", it->first.c_str());
+        //     printf("\n");
+        // }
         for (int i = 0; i < block->body.size(); i++) {
             if (state == DEAD)
                 break;
             assert(state != FINISHED);
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
-        if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
-            printf("  %d fini:", block->idx);
-            for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
-                printf(" %s", it->first.c_str());
-            printf("\n");
-        }
+        // if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
+        //     printf("  %d fini:", block->idx);
+        //     for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
+        //         printf(" %s", it->first.c_str());
+        //     printf("\n");
+        // }
     }
 
     void doSafePoint() override { emitter.getBuilder()->CreateCall(g.funcs.allowGLReadPreemption); }
