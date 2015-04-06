@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 2.8)
 project(pyston C CXX ASM)
 
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
+include(CheckTypeSize)
 include(ExternalProject)
 
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(DEPS_DIR $ENV{HOME}/pyston_deps)
 
 # set build type to release by default
@@ -159,6 +161,17 @@ include_directories(from_cpython/Include)
 find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
+
+
+# generate config.h - must be after LLVM is configured
+set(CMAKE_EXTRA_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/src/runtime/types.h)
+set(CMAKE_REQUIRED_DEFINITIONS "-DNVALGRIND -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS")
+set(CMAKE_REQUIRED_INCLUDES ${DEPS_DIR}/llvm-trunk/include
+                            ${CMAKE_BINARY_DIR}/llvm/include
+                            ${CMAKE_SOURCE_DIR}/from_cpython/Include
+                            ${CMAKE_SOURCE_DIR}/src)
+check_type_size("pyston::BoxedDict" SIZEOF_BOXEDDICT LANGUAGE CXX)
+configure_file(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_BINARY_DIR}/config.h)
 
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
