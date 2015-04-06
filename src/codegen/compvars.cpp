@@ -727,7 +727,7 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
 }
 
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure, bool isGenerator,
-                               const std::vector<ConcreteCompilerVariable*>& defaults) {
+                               BoxedDict* globals, const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
@@ -757,12 +757,15 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
 
     llvm::Value* isGenerator_v = llvm::ConstantInt::get(g.i1, isGenerator, false);
 
+    assert(globals == NULL);
+    llvm::Value* globals_v = embedConstantPtr(nullptr, g.llvm_dict_type_ptr);
+
     // We know this function call can't throw, so it's safe to use emitter.getBuilder()->CreateCall() rather than
     // emitter.createCall().
     llvm::Value* boxed = emitter.getBuilder()->CreateCall(
         g.funcs.boxCLFunction,
-        std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, isGenerator_v, scratch,
-                                   getConstantInt(defaults.size(), g.i64) });
+        std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, isGenerator_v, globals_v,
+                                   scratch, getConstantInt(defaults.size(), g.i64) });
 
     if (convertedClosure)
         convertedClosure->decvref(emitter);

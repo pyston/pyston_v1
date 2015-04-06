@@ -31,18 +31,19 @@ print 'Test global access in a function'
 g = {'a': 4, 'b': 5}
 l = {}
 exec """
-def f():
+def f(i):
     global a, b, c
-    print 'a =', a
+    print i, 'a =', a
     del b
     c = 20
-    for i in xrange(1000):
+    for i in xrange(100):
         pass
-f()
+f(-1)
 """ in g, l
-# Try to trigger a reopt or osr:
+# Try to trigger a reopt and osr:
 for i in xrange(1000):
-    l['f']()
+    g['b'] = 6
+    l['f'](i)
 
 print 'Test global access in comprehensions'
 
