@@ -208,7 +208,7 @@ extern "C" void exit(int code) {
     __builtin_unreachable();
 }
 
-void raise0() {
+extern "C" void raise0() {
     ExcInfo* exc_info = getFrameExcInfo();
     assert(exc_info->type);
 
@@ -238,38 +238,44 @@ bool ExcInfo::matches(BoxedClass* cls) const {
     return isSubclass(static_cast<BoxedClass*>(this->type), cls);
 }
 
-void raise3(Box* arg0, Box* arg1, Box* arg2) {
+// takes the three arguments of a `raise' and produces the ExcInfo to throw
+ExcInfo excInfoForRaise(Box* exc_cls, Box* exc_val, Box* exc_tb) {
+    assert(exc_cls && exc_val && exc_tb); // use None for default behavior, not nullptr
     // TODO switch this to PyErr_Normalize
 
-    if (arg2 == None)
-        arg2 = getTraceback();
+    if (exc_tb == None)
+        exc_tb = getTraceback();
 
-    if (isSubclass(arg0->cls, type_cls)) {
-        BoxedClass* c = static_cast<BoxedClass*>(arg0);
+    if (isSubclass(exc_cls->cls, type_cls)) {
+        BoxedClass* c = static_cast<BoxedClass*>(exc_cls);
         if (isSubclass(c, BaseException)) {
             Box* exc_obj;
 
-            if (isSubclass(arg1->cls, BaseException)) {
-                exc_obj = arg1;
+            if (isSubclass(exc_val->cls, BaseException)) {
+                exc_obj = exc_val;
                 c = exc_obj->cls;
-            } else if (arg1 != None) {
-                exc_obj = runtimeCall(c, ArgPassSpec(1), arg1, NULL, NULL, NULL, NULL);
+            } else if (exc_val != None) {
+                exc_obj = runtimeCall(c, ArgPassSpec(1), exc_val, NULL, NULL, NULL, NULL);
             } else {
                 exc_obj = runtimeCall(c, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
             }
 
-            raiseRaw(ExcInfo(c, exc_obj, arg2));
+            return ExcInfo(c, exc_obj, exc_tb);
         }
     }
 
-    if (isSubclass(arg0->cls, BaseException)) {
-        if (arg1 != None)
+    if (isSubclass(exc_cls->cls, BaseException)) {
+        if (exc_val != None)
             raiseExcHelper(TypeError, "instance exception may not have a separate value");
-        raiseRaw(ExcInfo(arg0->cls, arg0, arg2));
+        return ExcInfo(exc_cls->cls, exc_cls, exc_tb);
     }
 
     raiseExcHelper(TypeError, "exceptions must be old-style classes or derived from BaseException, not %s",
-                   getTypeName(arg0));
+                   getTypeName(exc_cls));
+}
+
+extern "C" void raise3(Box* arg0, Box* arg1, Box* arg2) {
+    raiseRaw(excInfoForRaise(arg0, arg1, arg2));
 }
 
 void raiseExcHelper(BoxedClass* cls, Box* arg) {
