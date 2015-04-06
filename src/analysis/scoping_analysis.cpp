@@ -278,8 +278,10 @@ private:
     bool globals_from_module;
 
 public:
-    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup, bool globals_from_module)
-        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup), allDerefVarsAndInfoCached(false), globals_from_module(globals_from_module) {
+    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup,
+                  bool globals_from_module)
+        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup), allDerefVarsAndInfoCached(false),
+          globals_from_module(globals_from_module) {
         assert(usage);
         assert(ast);
 
@@ -817,8 +819,8 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
         switch (node->type) {
             case AST_TYPE::ClassDef: {
-                ScopeInfoBase* scopeInfo
-                    = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */, globals_from_module);
+                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */,
+                                                             globals_from_module);
                 this->scopes[node] = scopeInfo;
                 break;
             }
@@ -827,10 +829,11 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::GeneratorExp:
             case AST_TYPE::DictComp:
             case AST_TYPE::SetComp: {
-                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node,
-                                                             usage->hasNameForcingSyntax() /* usesNameLookup */,
-                                                             globals_from_module);
-                this->scopes[node] = scopeInfo; break;
+                ScopeInfoBase* scopeInfo
+                    = new ScopeInfoBase(parent_info, usage, usage->node,
+                                        usage->hasNameForcingSyntax() /* usesNameLookup */, globals_from_module);
+                this->scopes[node] = scopeInfo;
+                break;
             }
             default:
                 RELEASE_ASSERT(0, "%d", usage->node->type);
@@ -884,16 +887,19 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
     return analyzeSubtree(node);
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_strings(*m->interned_strings.get()), globals_from_module(true) {
+ScopingAnalysis::ScopingAnalysis(AST_Module* m)
+    : parent_module(m), interned_strings(*m->interned_strings.get()), globals_from_module(true) {
     scopes[m] = new ModuleScopeInfo();
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Expression* e, bool globals_from_module) : interned_strings(*e->interned_strings.get()), globals_from_module(globals_from_module) {
+ScopingAnalysis::ScopingAnalysis(AST_Expression* e, bool globals_from_module)
+    : interned_strings(*e->interned_strings.get()), globals_from_module(globals_from_module) {
     // It's an expression, so it can't have a `global` statement
     scopes[e] = new EvalExprScopeInfo(globals_from_module);
 }
 
-ScopingAnalysis::ScopingAnalysis(AST_Suite* s, bool globals_from_module) : interned_strings(*s->interned_strings.get()), globals_from_module(globals_from_module) {
+ScopingAnalysis::ScopingAnalysis(AST_Suite* s, bool globals_from_module)
+    : interned_strings(*s->interned_strings.get()), globals_from_module(globals_from_module) {
     scopes[s] = new EvalExprScopeInfo(s, globals_from_module);
 }
 }

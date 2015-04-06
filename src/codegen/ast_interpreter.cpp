@@ -742,7 +742,8 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         }
         assert(closure);
     }
-    return boxCLFunction(cl, closure, is_generator, globals->cls == dict_cls ? static_cast<BoxedDict*>(globals) : NULL, u.il);
+    return boxCLFunction(cl, closure, is_generator, globals->cls == dict_cls ? static_cast<BoxedDict*>(globals) : NULL,
+                         u.il);
 }
 
 Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
@@ -778,7 +779,9 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
 
     BoxedClosure* closure = scope_info->takesClosure() ? created_closure : 0;
     CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
-    Box* attrDict = runtimeCall(boxCLFunction(cl, closure, false, globals->cls == dict_cls ? static_cast<BoxedDict*>(globals) : NULL, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
+    Box* attrDict = runtimeCall(
+        boxCLFunction(cl, closure, false, globals->cls == dict_cls ? static_cast<BoxedDict*>(globals) : NULL, {}),
+        ArgPassSpec(0), 0, 0, 0, 0, 0);
 
     Box* classobj = createUserClass(&node->name.str(), basesTuple, attrDict);
 
@@ -1164,8 +1167,8 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
 
 const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
 
-Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, BoxedDict* globals, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args) {
+Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, BoxedDict* globals, Box* arg1,
+                          Box* arg2, Box* arg3, Box** args) {
     if (unlikely(cf->times_called > REOPT_THRESHOLD_INTERPRETER && ENABLE_REOPT && !FORCE_INTERPRETER)) {
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
