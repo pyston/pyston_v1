@@ -2543,6 +2543,9 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     }
 
     EffortLevel new_effort = initialEffort();
+    // Only the interpreter currently supports non-module-globals:
+    if (!f->source->scoping->areGlobalsFromModule())
+        new_effort = EffortLevel::INTERPRETED;
 
     std::vector<ConcreteCompilerType*> arg_types;
     for (int i = 0; i < num_output_args; i++) {
@@ -2939,6 +2942,8 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
         return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
                                     oargs);
     }
+
+    ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
 
     if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);

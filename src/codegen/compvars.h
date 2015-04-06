@@ -399,7 +399,7 @@ ConcreteCompilerVariable* makePureImaginary(IREmitter& emitter, double imag);
 CompilerVariable* makeStr(const std::string*);
 CompilerVariable* makeUnicode(IREmitter& emitter, const std::string*);
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction*, CompilerVariable* closure, bool isGenerator,
-                               const std::vector<ConcreteCompilerVariable*>& defaults);
+                               BoxedDict* globals, const std::vector<ConcreteCompilerVariable*>& defaults);
 ConcreteCompilerVariable* undefVariable();
 CompilerVariable* makeTuple(const std::vector<CompilerVariable*>& elts);
 

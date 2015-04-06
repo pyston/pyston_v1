@@ -104,7 +104,6 @@ public:
     bool usesNameLookup() override { return false; }
 
     bool areLocalsFromModule() override { return true; }
-    bool areGlobalsFromModule() override { return true; }
 
     DerefInfo getDerefInfo(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
     size_t getClosureOffset(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
@@ -173,7 +172,6 @@ public:
     bool usesNameLookup() override { return true; }
 
     bool areLocalsFromModule() override { return false; }
-    bool areGlobalsFromModule() override { return globals_from_module; }
 
     DerefInfo getDerefInfo(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
     size_t getClosureOffset(InternedString) override { RELEASE_ASSERT(0, "This should never get called"); }
@@ -329,7 +327,6 @@ public:
     bool usesNameLookup() override { return usesNameLookup_; }
 
     bool areLocalsFromModule() override { return false; }
-    bool areGlobalsFromModule() override { return globals_from_module; }
 
     DerefInfo getDerefInfo(InternedString name) override {
         assert(getScopeTypeOfName(name) == VarScopeType::DEREF);

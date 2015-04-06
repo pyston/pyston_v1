@@ -13,6 +13,7 @@ l = {}
 exec """global a
 a = 1
 b = 2""" in g, l
+del g['__builtins__']
 print g
 print l
 
@@ -23,20 +24,28 @@ l = {'b': 2}
 exec """global a
 del a
 del b""" in g, l
+del g['__builtins__']
 print g
 print l
 
 print 'Test global access in a function'
 
 g = {'a': 4, 'b': 5}
+l = {}
 exec """
-def f():
+def f(i):
     global a, b, c
-    print 'a =', a
+    print i, 'a =', a
     del b
     c = 20
-f()
-""" in g, {}
+    for i in xrange(100):
+        pass
+f(-1)
+""" in g, l
+# Try to trigger a reopt and osr:
+for i in xrange(1000):
+    g['b'] = 6
+    l['f'](i)
 
 print 'Test global access in comprehensions'
 
@@ -50,3 +59,18 @@ print {b for i in xrange(1)}
 print {i : b for i in xrange(1)}
 print 
 """ in g, {}
+
+a = 0
+exec "a = 1" in None, None
+print a
+
+# Adapted from six.py:
+def exec_(_code_, _globs_, _locs_):
+    exec("""exec _code_ in _globs_, _locs_""")
+
+g = {'a': 1}
+l = {'b': 2}
+exec_("""global a
+print a
+print b""", g, l)
+

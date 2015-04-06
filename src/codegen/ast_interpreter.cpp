@@ -201,9 +201,6 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 
 void ASTInterpreter::setGlobals(Box* globals) {
     this->globals = globals;
-    if (globals->cls == dict_cls) {
-        frame_info.globals = static_cast<BoxedDict*>(globals);
-    }
 }
 
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
@@ -216,8 +213,7 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
         visitor->visit(generator);
     if (frame_info.boxedLocals)
         visitor->visit(frame_info.boxedLocals);
-    if (frame_info.globals)
-        visitor->visit(frame_info.globals);
+    visitor->visit(globals);
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
@@ -445,9 +441,9 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (backedge)
         threading::allowGLReadPreemption();
 
-    if (ENABLE_OSR && backedge) {
-        ++edgecount;
-        if (edgecount > OSR_THRESHOLD_INTERPRETER && !FORCE_INTERPRETER) {
+    if (ENABLE_OSR && backedge && (globals->cls == module_cls)) {
+        bool can_osr = !FORCE_INTERPRETER && (globals->cls == module_cls);
+        if (can_osr && edgecount++ > OSR_THRESHOLD_INTERPRETER) {
             eraseDeadSymbols();
 
             const OSREntryDescriptor* found_entry = nullptr;
@@ -1169,7 +1165,9 @@ const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
 
 Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, BoxedDict* globals, Box* arg1,
                           Box* arg2, Box* arg3, Box** args) {
-    if (unlikely(cf->times_called > REOPT_THRESHOLD_INTERPRETER && ENABLE_REOPT && !FORCE_INTERPRETER)) {
+    bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER && (globals == NULL);
+    if (unlikely(can_reopt && cf->times_called > REOPT_THRESHOLD_INTERPRETER)) {
+        assert(!globals);
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
             return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
@@ -1190,7 +1188,7 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
         interpreter.setBoxedLocals(new BoxedDict());
     }
 
-    assert((!globals) == scope_info->areGlobalsFromModule());
+    assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
     if (globals) {
         interpreter.setGlobals(globals);
     } else {
@@ -1212,7 +1210,7 @@ Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* globals, Box* box
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
     SourceInfo* source_info = cf->clfunc->source;
-    if (scope_info->areGlobalsFromModule()) {
+    if (cf->clfunc->source->scoping->areGlobalsFromModule()) {
         assert(!globals);
         interpreter.setGlobals(source_info->parent_module);
     } else {
@@ -1237,12 +1235,8 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
     SourceInfo* source_info = cf->clfunc->source;
-    if (scope_info->areGlobalsFromModule()) {
-        interpreter.setGlobals(source_info->parent_module);
-    } else {
-        assert(frame_state.frame_info->globals);
-        interpreter.setGlobals(frame_state.frame_info->globals);
-    }
+    assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+    interpreter.setGlobals(source_info->parent_module);
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
