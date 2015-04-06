@@ -8,6 +8,8 @@
 #include "stringlib/count.h"
 #include "stringlib/find.h"
 #include "stringlib/split.h"
+#define STRINGLIB_MUTABLE 1
+#include "stringlib/partition.h"
 
 #define _Py_InsertThousandsGrouping _PyString_InsertThousandsGrouping
 #include "stringlib/localeutil.h"
@@ -363,6 +365,54 @@ PyObject *string_join(PyStringObject *self, PyObject *orig)
 
     Py_DECREF(seq);
     return res;
+}
+
+PyObject *
+string_partition(PyStringObject *self, PyObject *sep_obj)
+{
+    const char *sep;
+    Py_ssize_t sep_len;
+
+    if (PyString_Check(sep_obj)) {
+        sep = PyString_AS_STRING(sep_obj);
+        sep_len = PyString_GET_SIZE(sep_obj);
+    }
+#ifdef Py_USING_UNICODE
+    else if (PyUnicode_Check(sep_obj))
+        return PyUnicode_Partition((PyObject *) self, sep_obj);
+#endif
+    else if (PyObject_AsCharBuffer(sep_obj, &sep, &sep_len))
+        return NULL;
+
+    return stringlib_partition(
+        (PyObject*) self,
+        PyString_AS_STRING(self), PyString_GET_SIZE(self),
+        sep_obj, sep, sep_len
+        );
+}
+
+PyObject *
+string_rpartition(PyStringObject *self, PyObject *sep_obj)
+{
+    const char *sep;
+    Py_ssize_t sep_len;
+
+    if (PyString_Check(sep_obj)) {
+        sep = PyString_AS_STRING(sep_obj);
+        sep_len = PyString_GET_SIZE(sep_obj);
+    }
+#ifdef Py_USING_UNICODE
+    else if (PyUnicode_Check(sep_obj))
+        return PyUnicode_RPartition((PyObject *) self, sep_obj);
+#endif
+    else if (PyObject_AsCharBuffer(sep_obj, &sep, &sep_len))
+        return NULL;
+
+    return stringlib_rpartition(
+        (PyObject*) self,
+        PyString_AS_STRING(self), PyString_GET_SIZE(self),
+        sep_obj, sep, sep_len
+        );
 }
 
 PyObject*

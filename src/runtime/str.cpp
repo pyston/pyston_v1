@@ -44,6 +44,8 @@ extern "C" PyObject* string_index(PyStringObject* self, PyObject* args) noexcept
 extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_partition(PyStringObject* self, PyObject* args) noexcept;
+extern "C" PyObject* string_rpartition(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string__format__(PyObject* self, PyObject* args) noexcept;
 
 // from cpython's stringobject.c:
@@ -1779,33 +1781,6 @@ Box* strReplace(Box* _self, Box* _old, Box* _new, Box** _args) {
     return boxString(s);
 }
 
-Box* strPartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
-
-    size_t found_idx = self->s.find(sep->s);
-    if (found_idx == std::string::npos)
-        return BoxedTuple::create({ self, EmptyString, EmptyString });
-
-
-    return BoxedTuple::create(
-        { boxStrConstantSize(self->data(), found_idx), boxStrConstantSize(self->data() + found_idx, sep->size()),
-          boxStrConstantSize(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size()) });
-}
-
-Box* strRpartition(BoxedString* self, BoxedString* sep) {
-    RELEASE_ASSERT(isSubclass(self->cls, str_cls), "");
-    RELEASE_ASSERT(isSubclass(sep->cls, str_cls), "");
-
-    size_t found_idx = self->s.rfind(sep->s);
-    if (found_idx == std::string::npos)
-        return BoxedTuple::create({ EmptyString, EmptyString, self });
-
-    return BoxedTuple::create(
-        { boxStrConstantSize(self->data(), found_idx), boxStrConstantSize(self->data() + found_idx, sep->size()),
-          boxStrConstantSize(self->data() + found_idx + sep->size(), self->size() - found_idx - sep->size()) });
-}
-
 extern "C" PyObject* _do_string_format(PyObject* self, PyObject* args, PyObject* kwargs);
 
 Box* strFormat(BoxedString* self, BoxedTuple* args, BoxedDict* kwargs) {
@@ -2655,6 +2630,8 @@ static PyMethodDef string_methods[] = {
     { "splitlines", (PyCFunction)string_splitlines, METH_VARARGS, NULL },
     { "zfill", (PyCFunction)string_zfill, METH_VARARGS, NULL },
     { "__format__", (PyCFunction)string__format__, METH_VARARGS, NULL },
+    { "partition", (PyCFunction)string_partition, METH_O, NULL },
+    { "rpartition", (PyCFunction)string_rpartition, METH_O, NULL },
 };
 
 void setupStr() {
@@ -2715,9 +2692,6 @@ void setupStr() {
                       new BoxedFunction(boxRTFunction((void*)strStartswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
     str_cls->giveAttr("endswith",
                       new BoxedFunction(boxRTFunction((void*)strEndswith, BOXED_BOOL, 4, 2, 0, 0), { NULL, NULL }));
-
-    str_cls->giveAttr("partition", new BoxedFunction(boxRTFunction((void*)strPartition, UNKNOWN, 2)));
-    str_cls->giveAttr("rpartition", new BoxedFunction(boxRTFunction((void*)strRpartition, UNKNOWN, 2)));
 
     str_cls->giveAttr("format", new BoxedFunction(boxRTFunction((void*)strFormat, UNKNOWN, 1, 0, true, true)));
 
