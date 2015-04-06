@@ -380,6 +380,12 @@ Box* eval(Box* boxedCode) {
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
+    if (globals == None)
+        globals = NULL;
+
+    if (locals == None)
+        locals = NULL;
+
     // TODO boxedCode is allowed to be a tuple
     // TODO need to handle passing in globals
     if (locals == NULL) {

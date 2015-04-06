@@ -2940,6 +2940,8 @@ Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_arg
                                     oargs);
     }
 
+    ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
+
     if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
 
