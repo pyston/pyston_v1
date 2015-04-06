@@ -53,7 +53,7 @@ long Timer::end() {
         long us = 1000000L * (end.tv_sec - start_time.tv_sec) + (end.tv_usec - start_time.tv_usec);
 
         Timer::level--;
-        if (VERBOSITY("time") >= 1 && desc) {
+        if (VERBOSITY("time") >= 2 && desc) {
             if (us > min_usec) {
                 for (int i = 0; i < Timer::level; i++) {
                     putchar(' ');
@@ -116,7 +116,7 @@ void removeDirectoryIfExists(const std::string& path) {
         if (llvm::sys::fs::is_directory(status)) {
             removeDirectoryIfExists(it->path());
         } else {
-            if (VERBOSITY())
+            if (VERBOSITY() >= 2)
                 llvm::errs() << "Removing file " << it->path() << '\n';
             code = llvm::sys::fs::remove(it->path(), false);
             assert(!code);
@@ -126,7 +126,7 @@ void removeDirectoryIfExists(const std::string& path) {
         assert(!code);
     }
 
-    if (VERBOSITY())
+    if (VERBOSITY() >= 2)
         llvm::errs() << "Removing directory " << path << '\n';
     code = llvm::sys::fs::remove(path, false);
     assert(!code);

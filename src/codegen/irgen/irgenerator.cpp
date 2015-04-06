@@ -1399,7 +1399,7 @@ private:
             assert(rtn);
 
             ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
-            if (VERBOSITY("irgen") >= 1) {
+            if (VERBOSITY("irgen") >= 2) {
                 printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 PrintVisitor printer;
@@ -2495,7 +2495,7 @@ public:
     }
 
     void run(const CFGBlock* block) override {
-        if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
+        if (VERBOSITY("irgenerator") >= 2) { // print starting symbol table
             printf("  %d init:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
                 printf(" %s", it->first.c_str());
@@ -2507,7 +2507,7 @@ public:
             assert(state != FINISHED);
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
-        if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
+        if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
                 printf(" %s", it->first.c_str());

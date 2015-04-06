@@ -500,7 +500,7 @@ BoxedTraceback* getTraceback() {
         return new BoxedTraceback();
     }
 
-    Timer _t("getTraceback");
+    Timer _t("getTraceback", 1000);
 
     std::vector<const LineInfo*> entries;
     for (auto& frame_iter : unwindPythonFrames()) {

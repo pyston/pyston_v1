@@ -183,7 +183,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
 // The codegen_lock needs to be held in W mode before calling this function:
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry_descriptor) {
-    Timer _t("for compileFunction()");
+    Timer _t("for compileFunction()", 1000);
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
