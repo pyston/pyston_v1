@@ -453,6 +453,8 @@ public:
         this->setattr(attr, val, NULL);
     }
 
+    // getattr() does the equivalent of PyDict_GetItem(obj->dict, attr): it looks up the attribute's value on the
+    // object's attribute storage. it doesn't look at other objects or do any descriptor logic.
     Box* getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args);
     Box* getattr(const std::string& attr) { return getattr(attr, NULL); }
     bool hasattr(const std::string& attr) { return getattr(attr) != NULL; }
