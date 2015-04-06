@@ -1440,7 +1440,7 @@ public:
     CompilerType* getattrType(const std::string* attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = cls->getattr(*attr);
+            Box* rtattr = typeLookup(cls, *attr, nullptr);
             if (rtattr == NULL)
                 return UNDEF;
 
@@ -1466,7 +1466,7 @@ public:
                               const std::string* attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = cls->getattr(*attr);
+            Box* rtattr = typeLookup(cls, *attr, nullptr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(std::string(getNameOfClass(cls)) + "\0"),
