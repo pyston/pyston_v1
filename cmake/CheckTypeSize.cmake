@@ -2,6 +2,11 @@
 # CheckTypeSize
 # -------------
 #
+# Pyston: This file is included from cmake 3 for compatability
+# downloaded 2015-04-03
+# https://github.com/Kitware/CMake/blob/master/Modules/CheckTypeSize.cmake
+#
+#
 # Check sizeof a type
 #
 # ::
