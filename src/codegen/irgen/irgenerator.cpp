@@ -1832,8 +1832,8 @@ private:
 
         endBlock(DEAD);
 
-        // This is tripping in test/tests/return_selfreferential.py
-        ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
+        // This is tripping in test/tests/return_selfreferential.py. kmod says it should be removed.
+        // ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
         assert(rtn->getValue());
         emitter.getBuilder()->CreateRet(rtn->getValue());
     }

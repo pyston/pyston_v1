@@ -1,5 +1,4 @@
-# fail-if: ('-n' in EXTRA_JIT_ARGS) or ('-O' in EXTRA_JIT_ARGS)
-# trips an assert about vref counts in irgenerator.cpp: IrGeneratorImpl::doReturn()
+# used to trip an assert about vref counts in irgenerator.cpp: IrGeneratorImpl::doReturn()
 def f1():
     def bar(x):
         print 'bar(%s)' % x
