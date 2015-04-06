@@ -2154,21 +2154,28 @@ public:
             assert(v->getType() == g.i64);
             if (llvm::ConstantInt* ci = llvm::dyn_cast<llvm::ConstantInt>(v)) {
                 int64_t i = ci->getSExtValue();
-                if (i >= 0 && i < var->getValue()->size()) {
-                    CompilerVariable* rtn = (*var->getValue())[i];
+                auto elts = var->getValue();
+                if (i >= 0 && i < elts->size()) {
+                    CompilerVariable* rtn = (*elts)[i];
+                    rtn->incvref();
+                    return rtn;
+                } else if (i < 0 && -i <= elts->size()) {
+                    CompilerVariable* rtn = (*elts)[elts->size() + i];
                     rtn->incvref();
                     return rtn;
                 } else {
-                    llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
-                                                              getStringConstantPtr(debugName() + '\0'),
-                                                              getStringConstantPtr("__getitem__\0"));
+                    llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
+                                                             getStringConstantPtr("tuple\0"));
                     call.setDoesNotReturn();
                     return undefVariable();
                 }
             }
         }
-        RELEASE_ASSERT(0, "");
-        // return getConstantInt(var->getValue()->size(), g.i64);
+
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_TUPLE);
+        CompilerVariable* rtn = converted->getitem(emitter, info, slice);
+        converted->decvref(emitter);
+        return rtn;
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {

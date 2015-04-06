@@ -132,6 +132,7 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
+extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);

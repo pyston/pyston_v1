@@ -252,6 +252,10 @@ extern "C" void raiseAttributeError(Box* obj, const char* attr) {
     }
 }
 
+extern "C" void raiseIndexErrorStr(const char* typeName) {
+    raiseExcHelper(IndexError, "%s index out of range", typeName);
+}
+
 extern "C" void raiseNotIterableError(const char* typeName) {
     raiseExcHelper(TypeError, "'%s' object is not iterable", typeName);
 }

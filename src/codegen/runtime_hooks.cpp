@@ -214,6 +214,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(unpackIntoArray);
     GET(raiseAttributeError);
     GET(raiseAttributeErrorStr);
+    GET(raiseIndexErrorStr);
     GET(raiseNotIterableError);
     GET(assertNameDefined);
     GET(assertFailDerefNameDefined);
