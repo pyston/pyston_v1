@@ -1,3 +1,4 @@
+# expected: fail
 from __future__ import nested_scopes    # Backward compat for 2.1
 from unittest import TestCase
 from wsgiref.util import setup_testing_defaults

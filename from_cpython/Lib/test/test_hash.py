@@ -1,3 +1,4 @@
+# expected: fail
 # test the invariant that
 #   iff a==b then hash(a)==hash(b)
 #

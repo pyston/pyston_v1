@@ -1,3 +1,5 @@
+# expected: fail
+# needs exec and (foo[:] = bar)
 "Test the functionality of Python classes implementing operators."
 
 import unittest

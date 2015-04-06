@@ -1,3 +1,4 @@
+# expected: fail
 # Check every path through every method of UserDict
 
 from test import test_support, mapping_tests

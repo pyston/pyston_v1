@@ -1,3 +1,4 @@
+# expected: fail
 # Test packages (dotted-name import)
 
 import sys

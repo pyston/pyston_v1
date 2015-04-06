@@ -1,3 +1,4 @@
+# expected: fail
 # Test the module type
 import unittest
 from test.test_support import run_unittest, gc_collect

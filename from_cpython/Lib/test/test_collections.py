@@ -1,3 +1,4 @@
+# expected: fail
 
 import unittest, doctest, operator
 import inspect

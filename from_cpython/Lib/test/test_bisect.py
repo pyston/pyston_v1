@@ -1,3 +1,6 @@
+# expected: fail
+#
+# fails b/c of a problem in bisect.py. see that.
 import sys
 import unittest
 from test import test_support

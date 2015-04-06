@@ -1,3 +1,6 @@
+# expected: fail
+# fails because capifunc's don't have __name__ attributes,
+# which causes from_cpython/Lib/fractions.py to error
 import unittest
 from test import test_support
 from itertools import *

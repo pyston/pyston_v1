@@ -1,3 +1,4 @@
+# expected: fail
 tutorial_tests = """
 Let's try a simple generator:
 

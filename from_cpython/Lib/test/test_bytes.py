@@ -1,3 +1,6 @@
+# expected: fail
+# this trips an assert in pypa-parser.cpp
+
 """Unit tests for the bytes and bytearray types.
 
 XXX This is a mess.  Common tests should be moved to buffer_tests.py,

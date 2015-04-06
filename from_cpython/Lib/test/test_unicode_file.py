@@ -1,3 +1,4 @@
+# expected: fail
 # Test some Unicode file name semantics
 # We dont test many operations on files other than
 # that their names can be used with Unicode characters.

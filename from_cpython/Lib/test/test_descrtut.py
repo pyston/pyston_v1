@@ -1,3 +1,4 @@
+# expected: fail
 # This contains most of the executable examples from Guido's descr
 # tutorial, once at
 #

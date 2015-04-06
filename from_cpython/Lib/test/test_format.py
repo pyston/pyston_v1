@@ -1,3 +1,4 @@
+# expected: fail
 import sys
 from test.test_support import verbose, have_unicode, TestFailed
 import test.test_support as test_support

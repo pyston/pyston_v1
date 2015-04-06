@@ -1,3 +1,4 @@
+# expected: fail
 # Test iterators.
 
 import unittest

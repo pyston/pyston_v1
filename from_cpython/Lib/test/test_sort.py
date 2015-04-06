@@ -1,3 +1,4 @@
+# expected: fail
 from test import test_support
 import random
 import sys

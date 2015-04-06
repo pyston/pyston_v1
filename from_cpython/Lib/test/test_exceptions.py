@@ -1,3 +1,4 @@
+# expected: fail
 # Python test set -- part 5, built-in exceptions
 
 import os

@@ -1,3 +1,4 @@
+# expected: fail
 from collections import deque
 import unittest
 from test import test_support, seq_tests

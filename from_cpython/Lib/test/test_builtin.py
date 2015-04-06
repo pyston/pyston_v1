@@ -1,3 +1,4 @@
+# expected: fail
 # Python test set -- built-in functions
 
 import platform

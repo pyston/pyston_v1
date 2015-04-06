@@ -1,3 +1,5 @@
+# expected: fail
+
 """ Test Iterator Length Transparency
 
 Some functions or methods which accept general iterable arguments have

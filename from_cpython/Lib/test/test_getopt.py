@@ -1,3 +1,4 @@
+# expected: fail
 # test_getopt.py
 # David Goodger <dgoodger@bigfoot.com> 2000-08-19
 

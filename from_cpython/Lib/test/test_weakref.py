@@ -1,3 +1,4 @@
+# expected: fail
 import gc
 import sys
 import unittest

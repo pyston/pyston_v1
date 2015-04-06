@@ -1,3 +1,4 @@
+# expected: fail
 # Test case for property
 # more tests are in test_descr
 

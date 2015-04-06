@@ -1,3 +1,4 @@
+# expected: fail
 """Test date/time type.
 
 See http://www.zope.org/Members/fdrake/DateTimeWiki/TestCases

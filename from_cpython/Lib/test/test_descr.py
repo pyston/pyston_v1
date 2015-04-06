@@ -1,3 +1,4 @@
+# expected: fail
 import __builtin__
 import gc
 import sys

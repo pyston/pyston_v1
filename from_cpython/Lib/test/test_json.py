@@ -1,3 +1,4 @@
+# expected: fail
 """Tests for json.
 
 The tests for json are defined in the json.tests package;

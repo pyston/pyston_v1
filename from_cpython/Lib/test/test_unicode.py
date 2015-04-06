@@ -1,3 +1,4 @@
+# expected: fail
 """ Test script for the Unicode implementation.
 
 Written by Marc-Andre Lemburg (mal@lemburg.com).

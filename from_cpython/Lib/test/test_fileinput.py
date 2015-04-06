@@ -1,3 +1,4 @@
+# expected: fail
 '''
 Tests for fileinput module.
 Nick Mathewson

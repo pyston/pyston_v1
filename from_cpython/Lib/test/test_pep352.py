@@ -1,3 +1,4 @@
+# expected: fail
 import unittest
 import __builtin__
 import exceptions

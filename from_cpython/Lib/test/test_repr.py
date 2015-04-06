@@ -1,3 +1,4 @@
+# expected: fail
 """
   Test cases for the repr module
   Nick Mathewson

@@ -1,3 +1,4 @@
+# expected: fail
 # Test the Unicode versions of normal file functions
 # open, os.open, os.stat. os.listdir, os.rename, os.remove, os.mkdir, os.chdir, os.rmdir
 import sys, os, unittest

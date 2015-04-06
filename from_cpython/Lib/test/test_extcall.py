@@ -1,3 +1,4 @@
+# expected: fail
 # -*- coding: utf-8 -*-
 
 """Doctest for method/function calls.

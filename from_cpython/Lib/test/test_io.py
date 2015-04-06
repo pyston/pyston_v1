@@ -1,3 +1,4 @@
+# expected: fail
 """Unit tests for the io module."""
 
 # Tests of io are scattered over the test suite:

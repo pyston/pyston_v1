@@ -1,3 +1,5 @@
+# expected: fail
+# need `exec' support
 """Tests for binary operators on subtypes of built-in types."""
 
 import unittest

@@ -1,3 +1,4 @@
+# expected: fail
 doctests = """
 
 Unpack tuple

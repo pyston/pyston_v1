@@ -1,3 +1,4 @@
+# expected: fail
 #
 # Test suite for Optik.  Supplied by Johannes Gijsbers
 # (taradino@softhome.net) -- translated from the original Optik

@@ -1,3 +1,4 @@
+# expected: fail
 doctests = """
 
 Test simple loop with conditional

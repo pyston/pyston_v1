@@ -1,3 +1,4 @@
+# expected: fail
 from test.test_support import verbose, TESTFN
 import random
 import os

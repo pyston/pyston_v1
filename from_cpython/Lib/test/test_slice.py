@@ -1,3 +1,4 @@
+# expected: fail
 # tests for slice objects; in particular the indices method.
 
 import unittest

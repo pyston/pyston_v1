@@ -1,3 +1,4 @@
+# expected: fail
 import functools
 import sys
 import unittest

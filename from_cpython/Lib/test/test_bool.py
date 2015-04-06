@@ -1,3 +1,4 @@
+# expected: fail
 # Test properties of bool promised by PEP 285
 
 import unittest

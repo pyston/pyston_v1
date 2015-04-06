@@ -1,3 +1,4 @@
+# expected: fail
 """Test compiler changes for unary ops (+, -, ~) introduced in Python 2.2"""
 
 import unittest

@@ -1,3 +1,4 @@
+# expected: fail
 # Check every path through every method of UserList
 
 from UserList import UserList

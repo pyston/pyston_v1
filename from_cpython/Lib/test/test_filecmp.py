@@ -1,3 +1,4 @@
+# expected: fail
 
 import os, filecmp, shutil, tempfile
 import unittest

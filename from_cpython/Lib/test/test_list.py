@@ -1,3 +1,4 @@
+# expected: fail
 import sys
 from test import test_support, list_tests
 

@@ -1,3 +1,4 @@
+# expected: fail
 # Python test set -- math module
 # XXXX Should not do tests around zero only
 
