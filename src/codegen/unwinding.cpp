@@ -300,6 +300,17 @@ public:
         abort();
     }
 
+    Box* getGlobals() {
+        if (id.type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = getCF();
+            assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+            return cf->clfunc->source->parent_module;
+        } else if (id.type == PythonFrameId::INTERPRETED) {
+            return getGlobalsForInterpretedFrame((void*)id.bp);
+        }
+        abort();
+    }
+
     FrameInfo* getFrameInfo() {
         if (id.type == PythonFrameId::COMPILED) {
             CompiledFunction* cf = getCF();
@@ -561,6 +572,21 @@ CompiledFunction* getTopCompiledFunction() {
     return getTopPythonFrame()->getCF();
 }
 
+Box* getGlobals() {
+    auto it = getTopPythonFrame();
+    return it->getGlobals();
+}
+
+Box* getGlobalsDict() {
+    Box* globals = getGlobals();
+    if (!globals)
+        return NULL;
+
+    if (isSubclass(globals->cls, module_cls))
+        return makeAttrWrapper(globals);
+    return globals;
+}
+
 BoxedModule* getCurrentModule() {
     CompiledFunction* compiledFunction = getTopCompiledFunction();
     if (!compiledFunction)
@@ -656,7 +682,7 @@ Box* fastLocalsToBoxedLocals() {
         if (scope_info->areLocalsFromModule()) {
             // TODO we should cache this in frame_info->locals or something so that locals()
             // (and globals() too) will always return the same dict
-            return makeAttrWrapper(getCurrentModule());
+            return getGlobalsDict();
         }
 
         if (frame_iter.getId().type == PythonFrameId::COMPILED) {

@@ -46,6 +46,7 @@ f(-1)
 for i in xrange(1000):
     g['b'] = 6
     l['f'](i)
+print l['f'].__module__
 
 print 'Test global access in comprehensions'
 
@@ -74,3 +75,46 @@ exec_("""global a
 print a
 print b""", g, l)
 
+
+exec """print __name__"""
+exec """print __name__""" in {}, {}
+
+
+# Test classdefs in execs:
+b = 3
+a = 2
+s = """class C(object):
+    print "b =", b
+    if b:
+        c = 2
+    else:
+        a = -1
+    print a, b
+print C.__module__, C.__name__, repr(C)
+"""
+exec s in {'a': 1, 'b': 5}, {'b': 2}
+exec s
+
+
+# Test old-style classdefs in execs:
+b = 3
+a = 2
+s = """class C():
+    print "b =", b
+    if b:
+        c = 2
+    else:
+        a = -1
+    print a, b
+print C.__module__
+"""
+exec s in {'a': 1, 'b': 5}, {'b': 2}
+exec s
+
+
+
+
+# test eval+exec in exec:
+a = 5
+exec """print eval('a')""" in {'a': 6}, {}
+exec """exec 'print a' """ in {'a': 6}, {}

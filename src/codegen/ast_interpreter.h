@@ -40,6 +40,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
                       FrameStackState frame_state);
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
+Box* getGlobalsForInterpretedFrame(void* frame_ptr);
 CompiledFunction* getCFForInterpretedFrame(void* frame_ptr);
 struct FrameInfo;
 FrameInfo* getFrameInfoForInterpretedFrame(void* frame_ptr);

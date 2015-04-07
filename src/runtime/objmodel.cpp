@@ -3917,8 +3917,12 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made->setattr(static_cast<BoxedString*>(k)->s, p.second, NULL);
     }
 
-    if (!made->hasattr("__module__"))
-        made->giveAttr("__module__", boxString(getCurrentModule()->name()));
+    if (!made->hasattr("__module__")) {
+        Box* gl = getGlobalsDict();
+        Box* attr = PyDict_GetItemString(gl, "__name__");
+        if (attr)
+            made->giveAttr("__module__", attr);
+    }
     if (!made->hasattr("__doc__"))
         made->giveAttr("__doc__", None);
 
@@ -4375,6 +4379,10 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
 }
 
 extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
+    // TODO(kmod): it doesn't seem too bad to update this to take custom globals;
+    // it looks like mostly a matter of changing the getattr calls to getitem.
+    RELEASE_ASSERT(getGlobals() == to_module, "importStar doesn't support custom globals yet");
+
     assert(_from_module->cls == module_cls);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
