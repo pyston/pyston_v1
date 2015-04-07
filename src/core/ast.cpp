@@ -462,6 +462,10 @@ void AST_Exec::accept(ASTVisitor* v) {
 
     if (body)
         body->accept(v);
+    if (globals)
+        globals->accept(v);
+    if (locals)
+        locals->accept(v);
 }
 
 void AST_Exec::accept_stmt(StmtVisitor* v) {

@@ -118,3 +118,10 @@ exec s
 a = 5
 exec """print eval('a')""" in {'a': 6}, {}
 exec """exec 'print a' """ in {'a': 6}, {}
+
+
+# test ordering:
+def show(obj, msg):
+    print msg
+    return obj
+exec show("print 'in exec'", "body") in show(None, "globals"), show(None, "locals")
