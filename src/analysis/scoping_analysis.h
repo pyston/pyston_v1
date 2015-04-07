@@ -158,6 +158,8 @@ private:
     ScopeInfo* analyzeSubtree(AST* node);
     void processNameUsages(NameUsageMap* usages);
 
+    bool globals_from_module;
+
 public:
     // The scope-analysis is done before any CFG-ization is done,
     // but many of the queries will be done post-CFG-ization.
@@ -169,11 +171,12 @@ public:
     void registerScopeReplacement(AST* original_node, AST* new_node);
 
     ScopingAnalysis(AST_Module* m);
-    ScopingAnalysis(AST_Expression* e);
-    ScopingAnalysis(AST_Suite* s);
+    ScopingAnalysis(AST_Expression* e, bool globals_from_module);
+    ScopingAnalysis(AST_Suite* s, bool globals_from_module);
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();
+    bool areGlobalsFromModule() { return globals_from_module; }
 };
 
 bool containsYield(AST* ast);

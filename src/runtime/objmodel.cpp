@@ -2544,6 +2544,9 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     }
 
     EffortLevel new_effort = initialEffort();
+    // Only the interpreter currently supports non-module-globals:
+    if (!f->source->scoping->areGlobalsFromModule())
+        new_effort = EffortLevel::INTERPRETED;
 
     std::vector<ConcreteCompilerType*> arg_types;
     for (int i = 0; i < num_output_args; i++) {
@@ -2668,7 +2671,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (!func->isGenerator) {
         if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
             && !f->takes_varargs && !f->takes_kwargs) {
-            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, arg1, arg2, arg3, args);
+            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, func->globals, arg1, arg2, arg3, args);
         }
     }
     slowpath_callfunc_slowpath.log();
@@ -2925,20 +2928,23 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (func->isGenerator) {
         res = createGenerator(func, oarg1, oarg2, oarg3, oargs);
     } else {
-        res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, oarg1, oarg2, oarg3, oargs);
+        res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);
     }
 
     return res;
 }
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
+                BoxedGenerator* generator, BoxedDict* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return astInterpretFunction(chosen_cf, num_output_args, closure, generator, oarg1, oarg2, oarg3, oargs);
+        return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
+                                    oargs);
     }
+
+    ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
 
     if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
@@ -3913,8 +3919,12 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made->setattr(static_cast<BoxedString*>(k)->s, p.second, NULL);
     }
 
-    if (!made->hasattr("__module__"))
-        made->giveAttr("__module__", boxString(getCurrentModule()->name()));
+    if (!made->hasattr("__module__")) {
+        Box* gl = getGlobalsDict();
+        Box* attr = PyDict_GetItemString(gl, "__name__");
+        if (attr)
+            made->giveAttr("__module__", attr);
+    }
     if (!made->hasattr("__doc__"))
         made->giveAttr("__doc__", None);
 
@@ -4247,14 +4257,24 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, true), arg1, arg2, arg3, args, NULL);
 }
 
-extern "C" void delGlobal(BoxedModule* m, const std::string* name) {
-    if (!m->getattr(*name)) {
-        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+extern "C" void delGlobal(Box* globals, const std::string* name) {
+    if (globals->cls == module_cls) {
+        BoxedModule* m = static_cast<BoxedModule*>(globals);
+        if (!m->getattr(*name)) {
+            raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+        }
+        m->delattr(*name, NULL);
+    } else {
+        assert(globals->cls == dict_cls);
+        BoxedDict* d = static_cast<BoxedDict*>(globals);
+
+        auto it = d->d.find(boxString(*name));
+        assertNameDefined(it != d->d.end(), name->c_str(), NameError, false /* local_var_msg */);
+        d->d.erase(it);
     }
-    m->delattr(*name, NULL);
 }
 
-extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
+extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -4272,25 +4292,44 @@ extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "getGlobal"));
 
         Box* r;
-        if (rewriter.get()) {
-            // rewriter->trap();
+        if (globals->cls == module_cls) {
+            BoxedModule* m = static_cast<BoxedModule*>(globals);
+            if (rewriter.get()) {
+                RewriterVar* r_mod = rewriter->getArg(0);
 
-            GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-            r = m->getattr(*name, &rewrite_args);
-            if (!rewrite_args.out_success) {
-                rewriter.reset(NULL);
-            }
-            if (r) {
-                if (rewriter.get()) {
-                    rewriter->commitReturning(rewrite_args.out_rtn);
+                // Guard on it being a module rather than a dict
+                // TODO is this guard necessary? I'm being conservative now, but I think we can just
+                // insist that the type passed in is fixed for any given instance of a getGlobal call.
+                r_mod->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)module_cls);
+
+                GetattrRewriteArgs rewrite_args(rewriter.get(), r_mod, rewriter->getReturnDestination());
+                r = m->getattr(*name, &rewrite_args);
+                if (!rewrite_args.out_success) {
+                    rewriter.reset(NULL);
                 }
-                return r;
+                if (r) {
+                    if (rewriter.get()) {
+                        rewriter->commitReturning(rewrite_args.out_rtn);
+                    }
+                    return r;
+                }
+            } else {
+                r = m->getattr(*name, NULL);
+                nopatch_getglobal.log();
+                if (r) {
+                    return r;
+                }
             }
         } else {
-            r = m->getattr(*name, NULL);
-            nopatch_getglobal.log();
-            if (r) {
-                return r;
+            assert(globals->cls == dict_cls);
+            BoxedDict* d = static_cast<BoxedDict*>(globals);
+
+            rewriter.reset(NULL);
+            REWRITE_ABORTED("Rewriting not implemented for getGlobals with a dict globals yet");
+
+            auto it = d->d.find(boxString(*name));
+            if (it != d->d.end()) {
+                return it->second;
             }
         }
 
@@ -4342,6 +4381,10 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
 }
 
 extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
+    // TODO(kmod): it doesn't seem too bad to update this to take custom globals;
+    // it looks like mostly a matter of changing the getattr calls to getitem.
+    RELEASE_ASSERT(getGlobals() == to_module, "importStar doesn't support custom globals yet");
+
     assert(_from_module->cls == module_cls);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
@@ -4410,8 +4453,7 @@ extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val) {
     setitem(boxedLocals, boxString(attr), val);
 }
 
-extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module) {
-    assert(parent_module->cls == module_cls);
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, Box* globals) {
     assert(boxedLocals != NULL);
 
     if (boxedLocals->cls == dict_cls) {
@@ -4436,7 +4478,7 @@ extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* 
 
     // TODO exception name?
     std::string attr_string(attr);
-    return getGlobal(parent_module, &attr_string);
+    return getGlobal(globals, &attr_string);
 }
 
 extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr) {

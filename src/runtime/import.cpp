@@ -442,6 +442,7 @@ static bool loadNext(Box* mod, Box* altmod, std::string& name, std::string& buf,
 
 static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive);
 Box* importModuleLevel(const std::string& name, Box* globals, Box* from_imports, int level) {
+    assert(!globals || globals == None || isSubclass(globals->cls, module_cls));
     bool return_first = from_imports == None;
 
     static StatCounter slowpath_import("slowpath_import");

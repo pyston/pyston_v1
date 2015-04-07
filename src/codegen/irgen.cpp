@@ -507,11 +507,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         CFGBlock* block = traversal_order[_i].first;
         CFGBlock* pred = traversal_order[_i].second;
 
-        if (VERBOSITY("irgen") >= 1)
+        if (VERBOSITY("irgen") >= 2)
             printf("processing block %d\n", block->idx);
 
         if (!blocks.count(block)) {
-            if (VERBOSITY("irgen") >= 1)
+            if (VERBOSITY("irgen") >= 2)
                 printf("Skipping this block\n");
             // created_phis[block] = NULL;
             // ending_symbol_tables[block] = NULL;
@@ -955,7 +955,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
-    if (VERBOSITY("irgen") >= 1)
+    if (VERBOSITY("irgen") >= 2)
         source->cfg->print();
 
     assert(g.cur_module == NULL);
@@ -1056,7 +1056,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
 
     delete types;
 
-    if (VERBOSITY("irgen") >= 1) {
+    if (VERBOSITY("irgen") >= 2) {
         printf("generated IR:\n");
         printf("\033[33m");
         fflush(stdout);

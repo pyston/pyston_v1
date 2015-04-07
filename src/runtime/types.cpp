@@ -24,6 +24,7 @@
 
 #include "capi/typeobject.h"
 #include "capi/types.h"
+#include "codegen/unwinding.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -272,7 +273,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
       name(NULL), doc(NULL) {
     if (f->source) {
-        this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
@@ -295,7 +296,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
     }
 
     if (f->source) {
-        this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
@@ -309,8 +310,10 @@ BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
 }
 
 BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                             bool isGenerator)
+                             bool isGenerator, BoxedDict* globals)
     : BoxedFunctionBase(f, defaults, closure, isGenerator) {
+
+    this->globals = globals;
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
     // some builtin functions that are BoxedFunctions but really ought to be a type that
@@ -353,6 +356,9 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
 
     if (f->closure)
         v->visit(f->closure);
+
+    if (f->globals)
+        v->visit(f->globals);
 
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunctionBase constructor
@@ -411,12 +417,14 @@ extern "C" void moduleGCHandler(GCVisitor* v, Box* b) {
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
 // TODO: should we use C++11 `noexcept' here?
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, BoxedDict* globals,
                               std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
+    if (globals)
+        assert(globals->cls == dict_cls);
 
-    return new BoxedFunction(f, defaults, closure, isGenerator);
+    return new BoxedFunction(f, defaults, closure, isGenerator, globals);
 }
 
 extern "C" CLFunction* unboxCLFunction(Box* b) {
@@ -669,8 +677,8 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         // an error, then look up ob_type (aka cls)
         metaclass = bases->elts[0]->cls;
     } else {
-        BoxedModule* m = getCurrentModule();
-        metaclass = m->getattr("__metaclass__");
+        Box* gl = getGlobalsDict();
+        metaclass = PyDict_GetItemString(gl, "__metaclass__");
 
         if (!metaclass) {
             metaclass = classobj_cls;
@@ -972,7 +980,8 @@ Box* typeRepr(BoxedClass* self) {
     Box* m = self->getattr("__module__");
     if (m && m->cls == str_cls) {
         BoxedString* sm = static_cast<BoxedString*>(m);
-        os << sm->s << '.';
+        if (sm->s != "__builtin__")
+            os << sm->s << '.';
     }
 
     os << self->tp_name;

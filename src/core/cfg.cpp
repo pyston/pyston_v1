@@ -2465,12 +2465,18 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     if (source->ast->type == AST_TYPE::ClassDef) {
         // A classdef always starts with "__module__ = __name__"
-        Box* module_name = source->parent_module->getattr("__name__", NULL);
-        assert(module_name->cls == str_cls);
         AST_Assign* module_assign = new AST_Assign();
         module_assign->targets.push_back(
             new AST_Name(source->getInternedStrings().get("__module__"), AST_TYPE::Store, source->ast->lineno));
-        module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
+
+        if (source->scoping->areGlobalsFromModule()) {
+            Box* module_name = source->parent_module->getattr("__name__", NULL);
+            assert(module_name->cls == str_cls);
+            module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
+        } else {
+            module_assign->value
+                = new AST_Name(source->getInternedStrings().get("__name__"), AST_TYPE::Load, source->ast->lineno);
+        }
         module_assign->lineno = 0;
         visitor.push_back(module_assign);
 
@@ -2513,7 +2519,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         visitor.push_back(return_stmt);
     }
 
-    if (VERBOSITY("cfg") >= 2) {
+    if (VERBOSITY("cfg") >= 3) {
         printf("Before cfg checking and transformations:\n");
         rtn->print();
     }
@@ -2634,7 +2640,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                 break;
             }
 
-            if (VERBOSITY()) {
+            if (VERBOSITY("cfg") >= 2) {
                 // rtn->print();
                 printf("Joining blocks %d and %d\n", b->idx, b2->idx);
             }
@@ -2653,7 +2659,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         }
     }
 
-    if (VERBOSITY("cfg") >= 1) {
+    if (VERBOSITY("cfg") >= 2) {
         printf("Final cfg:\n");
         rtn->print();
     }

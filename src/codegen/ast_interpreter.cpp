@@ -141,10 +141,18 @@ private:
     unsigned edgecount;
     FrameInfo frame_info;
 
+    // This is either a module or a dict
+    Box* globals;
+
 public:
     AST_stmt* getCurrentStatement() {
         assert(current_inst);
         return current_inst;
+    }
+
+    Box* getGlobals() {
+        assert(globals);
+        return globals;
     }
 
     CompiledFunction* getCF() { return compiled_func; }
@@ -159,6 +167,7 @@ public:
     void setCreatedClosure(Box* closure);
     void setBoxedLocals(Box*);
     void setFrameInfo(const FrameInfo* frame_info);
+    void setGlobals(Box* globals);
 
     void gcVisit(GCVisitor* visitor);
 };
@@ -195,6 +204,10 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
     this->frame_info = *frame_info;
 }
 
+void ASTInterpreter::setGlobals(Box* globals) {
+    this->globals = globals;
+}
+
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
     visitor->visitRange((void* const*)&sym_table.vector()[0], (void* const*)&sym_table.vector()[sym_table.size()]);
     if (passed_closure)
@@ -205,6 +218,7 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
         visitor->visit(generator);
     if (frame_info.boxedLocals)
         visitor->visit(frame_info.boxedLocals);
+    visitor->visit(globals);
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
@@ -217,6 +231,7 @@ ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
         source_info->cfg = computeCFG(f->source, f->source->body);
 
     scope_info = source_info->getScopeInfo();
+
     assert(scope_info);
 }
 
@@ -345,7 +360,12 @@ Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type
 void ASTInterpreter::doStore(InternedString name, Value value) {
     ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
     if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-        setattr(source_info->parent_module, name.c_str(), value.o);
+        if (globals->cls == module_cls) {
+            setattr(static_cast<BoxedModule*>(globals), name.c_str(), value.o);
+        } else {
+            assert(globals->cls == dict_cls);
+            static_cast<BoxedDict*>(globals)->d[boxString(name.str())] = value.o;
+        }
     } else if (vst == ScopeInfo::VarScopeType::NAME) {
         assert(frame_info.boxedLocals != NULL);
         // TODO should probably pre-box the names when it's a scope that usesNameLookup
@@ -426,9 +446,9 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
     if (backedge)
         threading::allowGLReadPreemption();
 
-    if (ENABLE_OSR && backedge) {
-        ++edgecount;
-        if (edgecount > OSR_THRESHOLD_INTERPRETER && !FORCE_INTERPRETER) {
+    if (ENABLE_OSR && backedge && (globals->cls == module_cls)) {
+        bool can_osr = !FORCE_INTERPRETER && (globals->cls == module_cls);
+        if (can_osr && edgecount++ > OSR_THRESHOLD_INTERPRETER) {
             eraseDeadSymbols();
 
             const OSREntryDescriptor* found_entry = nullptr;
@@ -569,9 +589,13 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
 
-        RELEASE_ASSERT(source_info->ast->type == AST_TYPE::Module, "import * not supported in functions");
+        RELEASE_ASSERT(source_info->ast->type == AST_TYPE::Module || source_info->ast->type == AST_TYPE::Suite,
+                       "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
+
+        RELEASE_ASSERT(globals == source_info->parent_module,
+                       "'import *' currently not supported with overridden globals");
         v = importStar(module.o, source_info->parent_module);
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = None;
@@ -723,7 +747,8 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         }
         assert(closure);
     }
-    return boxCLFunction(cl, closure, is_generator, u.il);
+    return boxCLFunction(cl, closure, is_generator, globals->cls == dict_cls ? static_cast<BoxedDict*>(globals) : NULL,
+                         u.il);
 }
 
 Value ASTInterpreter::visit_makeFunction(AST_MakeFunction* mkfn) {
@@ -759,7 +784,9 @@ Value ASTInterpreter::visit_makeClass(AST_MakeClass* mkclass) {
 
     BoxedClosure* closure = scope_info->takesClosure() ? created_closure : 0;
     CLFunction* cl = wrapFunction(node, nullptr, node->body, source_info);
-    Box* attrDict = runtimeCall(boxCLFunction(cl, closure, false, {}), ArgPassSpec(0), 0, 0, 0, 0, 0);
+    Box* attrDict = runtimeCall(
+        boxCLFunction(cl, closure, false, globals->cls == dict_cls ? static_cast<BoxedDict*>(globals) : NULL, {}),
+        ArgPassSpec(0), 0, 0, 0, 0, 0);
 
     Box* classobj = createUserClass(&node->name.str(), basesTuple, attrDict);
 
@@ -819,7 +846,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                 ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
                 if (vst == ScopeInfo::VarScopeType::GLOBAL) {
                     // Can't use delattr since the errors are different:
-                    delGlobal(source_info->parent_module, &target->id.str());
+                    delGlobal(globals, &target->id.str());
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
                     assert(frame_info.boxedLocals != NULL);
@@ -888,12 +915,12 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
 }
 
 Value ASTInterpreter::visit_exec(AST_Exec* node) {
-    RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
-    assert(!node->locals);
-
     // TODO implement the locals and globals arguments
     Box* code = visit_expr(node->body).o;
-    exec(code);
+    Box* globals = node->globals == NULL ? NULL : visit_expr(node->globals).o;
+    Box* locals = node->locals == NULL ? NULL : visit_expr(node->locals).o;
+
+    exec(code, globals, locals);
 
     return Value();
 }
@@ -1084,7 +1111,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
     switch (node->lookup_type) {
         case ScopeInfo::VarScopeType::GLOBAL:
-            return getGlobal(source_info->parent_module, &node->id.str());
+            return getGlobal(globals, &node->id.str());
         case ScopeInfo::VarScopeType::DEREF: {
             DerefInfo deref_info = scope_info->getDerefInfo(node->id);
             assert(passed_closure);
@@ -1109,7 +1136,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             return Value();
         }
         case ScopeInfo::VarScopeType::NAME: {
-            return boxedLocalsGet(frame_info.boxedLocals, node->id.c_str(), source_info->parent_module);
+            return boxedLocalsGet(frame_info.boxedLocals, node->id.c_str(), globals);
         }
         default:
             abort();
@@ -1146,9 +1173,11 @@ Value ASTInterpreter::visit_attribute(AST_Attribute* node) {
 
 const void* interpreter_instr_addr = (void*)&ASTInterpreter::execute;
 
-Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, Box* arg1, Box* arg2,
-                          Box* arg3, Box** args) {
-    if (unlikely(cf->times_called > REOPT_THRESHOLD_INTERPRETER && ENABLE_REOPT && !FORCE_INTERPRETER)) {
+Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* generator, BoxedDict* globals, Box* arg1,
+                          Box* arg2, Box* arg3, Box** args) {
+    bool can_reopt = ENABLE_REOPT && !FORCE_INTERPRETER && (globals == NULL);
+    if (unlikely(can_reopt && cf->times_called > REOPT_THRESHOLD_INTERPRETER)) {
+        assert(!globals);
         CompiledFunction* optimized = reoptCompiledFuncInternal(cf);
         if (closure && generator)
             return optimized->closure_generator_call((BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2,
@@ -1162,8 +1191,18 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
 
     ++cf->times_called;
     ASTInterpreter interpreter(cf);
-    if (unlikely(cf->clfunc->source->getScopeInfo()->usesNameLookup())) {
+
+    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+    SourceInfo* source_info = cf->clfunc->source;
+    if (unlikely(scope_info->usesNameLookup())) {
         interpreter.setBoxedLocals(new BoxedDict());
+    }
+
+    assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
+    if (globals) {
+        interpreter.setGlobals(globals);
+    } else {
+        interpreter.setGlobals(source_info->parent_module);
     }
 
     interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
@@ -1172,12 +1211,23 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFunctionEval(CompiledFunction* cf, Box* boxedLocals) {
+Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* globals, Box* boxedLocals) {
     ++cf->times_called;
 
     ASTInterpreter interpreter(cf);
     interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
     interpreter.setBoxedLocals(boxedLocals);
+
+    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+    SourceInfo* source_info = cf->clfunc->source;
+    if (cf->clfunc->source->scoping->areGlobalsFromModule()) {
+        assert(!globals);
+        interpreter.setGlobals(source_info->parent_module);
+    } else {
+        assert(globals);
+        interpreter.setGlobals(globals);
+    }
+
     Value v = ASTInterpreter::execute(interpreter);
 
     return v.o ? v.o : None;
@@ -1192,6 +1242,11 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
     assert(expr_val);
 
     ASTInterpreter interpreter(cf);
+
+    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+    SourceInfo* source_info = cf->clfunc->source;
+    assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+    interpreter.setGlobals(source_info->parent_module);
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
@@ -1267,6 +1322,12 @@ AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
     return interpreter->getCurrentStatement();
+}
+
+Box* getGlobalsForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getGlobals();
 }
 
 CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {

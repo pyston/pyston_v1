@@ -147,7 +147,7 @@ public:
 };
 
 LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
-    Timer _t("LivenessAnalysis()", 10);
+    Timer _t("LivenessAnalysis()", 100);
 
     for (CFGBlock* b : cfg->blocks) {
         auto visitor = new LivenessBBVisitor(this); // livenessCache unique_ptr will delete it.
@@ -361,7 +361,7 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
         block->body[i]->accept(&visitor);
     }
 
-    if (VERBOSITY("analysis") >= 2) {
+    if (VERBOSITY("analysis") >= 3) {
         printf("At end of block %d:\n", block->idx);
         for (const auto& p : starting) {
             printf("%s: %d\n", p.first.c_str(), p.second);

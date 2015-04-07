@@ -254,6 +254,9 @@ private:
 public:
     explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator)
         : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock), irgenerator(irgenerator) {
+
+        ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(), "jit doesn't support custom globals yet");
+
         builder->setEmitter(this);
         builder->SetInsertPoint(curblock);
     }
@@ -1196,7 +1199,8 @@ private:
         // one reason to do this is to pass the closure through if necessary,
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, {});
+        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, NULL, {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1259,7 +1263,8 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, defaults);
+        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, NULL, defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
@@ -1396,7 +1401,7 @@ private:
             assert(rtn);
 
             ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
-            if (VERBOSITY("irgen") >= 1) {
+            if (VERBOSITY("irgen") >= 2) {
                 printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 PrintVisitor printer;
@@ -1711,15 +1716,29 @@ private:
     }
 
     void doExec(AST_Exec* node, UnwindInfo unw_info) {
-        // TODO locals and globals
-        RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
-        assert(!node->locals);
-
         CompilerVariable* body = evalExpr(node->body, unw_info);
-        ConcreteCompilerVariable* cbody = body->makeConverted(emitter, body->getBoxType());
+        llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
         body->decvref(emitter);
 
-        emitter.createCall(unw_info, g.funcs.exec, cbody->getValue());
+        llvm::Value* vglobals;
+        if (node->globals) {
+            CompilerVariable* globals = evalExpr(node->globals, unw_info);
+            vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
+            globals->decvref(emitter);
+        } else {
+            vglobals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+
+        llvm::Value* vlocals;
+        if (node->locals) {
+            CompilerVariable* locals = evalExpr(node->locals, unw_info);
+            vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
+            locals->decvref(emitter);
+        } else {
+            vlocals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+
+        emitter.createCall3(unw_info, g.funcs.exec, vbody, vglobals, vlocals);
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
@@ -2478,7 +2497,7 @@ public:
     }
 
     void run(const CFGBlock* block) override {
-        if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
+        if (VERBOSITY("irgenerator") >= 2) { // print starting symbol table
             printf("  %d init:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
                 printf(" %s", it->first.c_str());
@@ -2490,7 +2509,7 @@ public:
             assert(state != FINISHED);
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
-        if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
+        if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
                 printf(" %s", it->first.c_str());

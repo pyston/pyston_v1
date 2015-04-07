@@ -127,7 +127,7 @@ char* getWriteableStringContents(BoxedString* s);
 
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, BoxedDict* globals,
                               std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
@@ -584,7 +584,13 @@ public:
     Box** in_weakreflist;
 
     CLFunction* f;
+
+    // TODO these should really go in BoxedFunction but it's annoying because they don't get
+    // initializd until after BoxedFunctionBase's constructor is run which means they could have
+    // garbage values when the GC is run (BoxedFunctionBase's constructor might call the GC).
+    // So ick... needs to be fixed.
     BoxedClosure* closure;
+    BoxedDict* globals;
 
     bool isGenerator;
     int ndefaults;
@@ -608,7 +614,7 @@ public:
 
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false);
+                  bool isGenerator = false, BoxedDict* globals = NULL);
 
     DEFAULT_CLASS(function_cls);
 };

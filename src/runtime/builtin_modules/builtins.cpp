@@ -727,9 +727,8 @@ public:
 };
 
 Box* globals() {
-    BoxedModule* m = getCurrentModule();
     // TODO is it ok that we don't return a real dict here?
-    return makeAttrWrapper(m);
+    return getGlobalsDict();
 }
 
 Box* locals() {
@@ -776,6 +775,8 @@ Box* execfile(Box* _fn) {
 
     // Run directly inside the current module:
     AST_Module* ast = caching_parse_file(fn->s.data());
+
+    ASSERT(getExecutionPoint().cf->clfunc->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
     compileAndRunModule(ast, getCurrentModule());
 
     return None;

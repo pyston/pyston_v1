@@ -1483,7 +1483,7 @@ bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst
 
             auto it = remapped.find(ru);
             if (it != remapped.end()) {
-                if (VERBOSITY()) {
+                if (VERBOSITY() >= 3) {
                     printf("Already spilled ");
                     ru.dump();
                 }
@@ -1491,7 +1491,7 @@ bool spillFrameArgumentIfNecessary(StackMap::Record::Location& l, uint8_t*& inst
                 return false;
             }
 
-            if (VERBOSITY()) {
+            if (VERBOSITY() >= 3) {
                 printf("Spilling reg ");
                 ru.dump();
             }
@@ -1595,7 +1595,7 @@ std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t
             abort();
     }
 
-    if (VERBOSITY())
+    if (VERBOSITY() >= 3)
         printf("Have to spill %ld regs around the slowpath\n", regs_to_spill.size());
 
     // TODO: some of these registers could already have been pushed via the frame saving code
