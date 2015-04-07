@@ -274,7 +274,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
       name(NULL), doc(NULL) {
     if (f->source) {
-        this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
@@ -297,7 +297,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
     }
 
     if (f->source) {
-        this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);

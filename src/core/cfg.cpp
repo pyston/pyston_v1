@@ -2474,7 +2474,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
             assert(module_name->cls == str_cls);
             module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
         } else {
-            module_assign->value = new AST_Name(source->getInternedStrings().get("__name__"), AST_TYPE::Load, source->ast->lineno);
+            module_assign->value
+                = new AST_Name(source->getInternedStrings().get("__name__"), AST_TYPE::Load, source->ast->lineno);
         }
         module_assign->lineno = 0;
         visitor.push_back(module_assign);

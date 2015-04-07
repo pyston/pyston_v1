@@ -593,9 +593,13 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         assert(node->args.size() == 1);
         assert(node->args[0]->type == AST_TYPE::Name);
 
-        RELEASE_ASSERT(source_info->ast->type == AST_TYPE::Module, "import * not supported in functions");
+        RELEASE_ASSERT(source_info->ast->type == AST_TYPE::Module || source_info->ast->type == AST_TYPE::Suite,
+                       "import * not supported in functions");
 
         Value module = visit_expr(node->args[0]);
+
+        RELEASE_ASSERT(globals == source_info->parent_module,
+                       "'import *' currently not supported with overridden globals");
         v = importStar(module.o, source_info->parent_module);
     } else if (node->opcode == AST_LangPrimitive::NONE) {
         v = None;

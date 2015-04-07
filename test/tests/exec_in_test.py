@@ -46,6 +46,7 @@ f(-1)
 for i in xrange(1000):
     g['b'] = 6
     l['f'](i)
+print l['f'].__module__
 
 print 'Test global access in comprehensions'
 
