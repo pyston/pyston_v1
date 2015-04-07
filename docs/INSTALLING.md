@@ -347,7 +347,7 @@ ninja check-pyston # run the test suite
 
 **Ubuntu 14.04**
 ```
-sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.5 libssl-dev libsqlite3-dev
+sudo apt-get install -yq git cmake ninja-build ccache libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils clang-3.4 libssl-dev libsqlite3-dev
 
 git clone --recursive https://github.com/dropbox/pyston.git ~/pyston
 
