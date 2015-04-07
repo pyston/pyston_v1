@@ -92,7 +92,6 @@ public:
     virtual bool usesNameLookup() = 0;
 
     virtual bool areLocalsFromModule() = 0;
-    virtual bool areGlobalsFromModule() = 0;
 
     // For a variable with DEREF lookup, return the DerefInfo used to lookup
     // the variable in a passed closure.
@@ -177,6 +176,7 @@ public:
     ScopeInfo* getScopeInfoForNode(AST* node);
 
     InternedStringPool& getInternedStrings();
+    bool areGlobalsFromModule() { return globals_from_module; }
 };
 
 bool containsYield(AST* ast);

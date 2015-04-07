@@ -255,7 +255,7 @@ public:
     explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator)
         : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock), irgenerator(irgenerator) {
 
-        ASSERT(irstate->getScopeInfo()->areGlobalsFromModule(), "jit doesn't support custom globals yet");
+        ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(), "jit doesn't support custom globals yet");
 
         builder->setEmitter(this);
         builder->SetInsertPoint(curblock);
@@ -1199,7 +1199,7 @@ private:
         // one reason to do this is to pass the closure through if necessary,
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
-        assert(irstate->getScopeInfo()->areGlobalsFromModule());
+        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
         CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, NULL, {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
@@ -1263,7 +1263,7 @@ private:
             assert(created_closure);
         }
 
-        assert(irstate->getScopeInfo()->areGlobalsFromModule());
+        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
         CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, NULL, defaults);
 
         for (auto d : defaults) {

@@ -13,6 +13,7 @@ l = {}
 exec """global a
 a = 1
 b = 2""" in g, l
+del g['__builtins__']
 print g
 print l
 
@@ -23,6 +24,7 @@ l = {'b': 2}
 exec """global a
 del a
 del b""" in g, l
+del g['__builtins__']
 print g
 print l
 

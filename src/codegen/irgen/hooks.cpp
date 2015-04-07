@@ -316,6 +316,8 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         EffortLevel effort = initialEffort();
 
+        assert(scoping->areGlobalsFromModule());
+
         cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
         assert(cf->clfunc->versions.size());
     }

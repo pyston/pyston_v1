@@ -1192,7 +1192,7 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
         interpreter.setBoxedLocals(new BoxedDict());
     }
 
-    assert((!globals) == scope_info->areGlobalsFromModule());
+    assert((!globals) == cf->clfunc->source->scoping->areGlobalsFromModule());
     if (globals) {
         interpreter.setGlobals(globals);
     } else {
@@ -1214,7 +1214,7 @@ Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* globals, Box* box
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
     SourceInfo* source_info = cf->clfunc->source;
-    if (scope_info->areGlobalsFromModule()) {
+    if (cf->clfunc->source->scoping->areGlobalsFromModule()) {
         assert(!globals);
         interpreter.setGlobals(source_info->parent_module);
     } else {
@@ -1239,7 +1239,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
     SourceInfo* source_info = cf->clfunc->source;
-    if (scope_info->areGlobalsFromModule()) {
+    if (cf->clfunc->source->scoping->areGlobalsFromModule()) {
         interpreter.setGlobals(source_info->parent_module);
     } else {
         assert(frame_state.frame_info->globals);

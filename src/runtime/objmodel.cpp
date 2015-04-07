@@ -2543,6 +2543,9 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     }
 
     EffortLevel new_effort = initialEffort();
+    // We currently only support non-module-globals in the interpreter:
+    if (!f->source->scoping->areGlobalsFromModule())
+        new_effort = EffortLevel::INTERPRETED;
 
     std::vector<ConcreteCompilerType*> arg_types;
     for (int i = 0; i < num_output_args; i++) {
