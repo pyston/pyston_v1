@@ -657,7 +657,7 @@ public:
     }
 
     bool visit_exec(AST_Exec* node) override {
-        if (node->locals == NULL) {
+        if (node->globals == NULL) {
             doBareExec(node);
         }
         return false;
