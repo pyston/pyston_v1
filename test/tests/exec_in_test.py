@@ -74,3 +74,43 @@ exec_("""global a
 print a
 print b""", g, l)
 
+
+exec """print __name__"""
+exec """print __name__""" in {}, {}
+
+
+# Test classdefs in execs:
+g = {'a': 1, 'b': 5}
+l = {'b': 2}
+exec """class C(object):
+    print "b =", b
+    if b:
+        c = 2
+    else:
+        a = -1
+    print a, b
+""" in g, l
+del g['__builtins__']
+print sorted(g.items())
+print sorted(l.items())
+
+# Test old-style classdefs in execs:
+g = {'a': 1, 'b': 5}
+l = {'b': 2}
+exec """class C():
+    print "b =", b
+    if b:
+        c = 2
+    else:
+        a = -1
+    print a, b
+""" in g, l
+del g['__builtins__']
+print sorted(g.items())
+print sorted(l.items())
+
+
+# test eval+exec in exec:
+a = 5
+exec """print eval('a')""" in {'a': 6}, {}
+exec """exec 'print a' """ in {'a': 6}, {}

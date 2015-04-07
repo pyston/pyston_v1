@@ -332,6 +332,8 @@ template <typename AST_Type>
 Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, BoxedDict* globals, Box* boxedLocals) {
     CompiledFunction* cf;
 
+    assert(!globals || globals->cls == dict_cls);
+
     { // scope for limiting the locked region:
         LOCK_REGION(codegen_rwlock.asWrite());
 
@@ -361,6 +363,10 @@ Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm,
 Box* eval(Box* boxedCode) {
     Box* boxedLocals = fastLocalsToBoxedLocals();
     BoxedModule* module = getCurrentModule();
+    Box* globals = getGlobals();
+
+    if (globals == module)
+        globals = NULL;
 
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
@@ -378,7 +384,9 @@ Box* eval(Box* boxedCode) {
     stmt->value = parsedExpr->body;
     std::vector<AST_stmt*> body = { stmt };
 
-    return evalOrExec<AST_Expression>(parsedExpr, body, module, NULL, boxedLocals);
+    assert(!globals || globals->cls == dict_cls);
+
+    return evalOrExec<AST_Expression>(parsedExpr, body, module, static_cast<BoxedDict*>(globals), boxedLocals);
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
@@ -398,9 +406,21 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
         locals = fastLocalsToBoxedLocals();
     }
 
+    if (globals == NULL)
+        globals = getGlobals();
+
     BoxedModule* module = getCurrentModule();
 
+    if (globals == module)
+        globals = NULL;
+
     assert(!globals || globals->cls == dict_cls);
+
+    if (globals) {
+        // From CPython (they set it to be f->f_builtins):
+        if (PyDict_GetItemString(globals, "__builtins__") == NULL)
+            PyDict_SetItemString(globals, "__builtins__", builtins_module);
+    }
 
     // TODO same issues as in `eval`
     RELEASE_ASSERT(boxedCode->cls == str_cls, "");

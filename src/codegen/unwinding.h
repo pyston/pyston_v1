@@ -28,6 +28,8 @@ class BoxedTraceback;
 struct FrameInfo;
 
 BoxedModule* getCurrentModule();
+Box* getGlobals(); // returns either the module or a globals dict
+Box* getGlobalsDict(); // always returns a dict-like object
 
 BoxedTraceback* getTraceback();
 

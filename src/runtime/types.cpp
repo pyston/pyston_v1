@@ -23,6 +23,7 @@
 
 #include "capi/typeobject.h"
 #include "capi/types.h"
+#include "codegen/unwinding.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"
@@ -676,8 +677,8 @@ extern "C" Box* createUserClass(const std::string* name, Box* _bases, Box* _attr
         // an error, then look up ob_type (aka cls)
         metaclass = bases->elts[0]->cls;
     } else {
-        BoxedModule* m = getCurrentModule();
-        metaclass = m->getattr("__metaclass__");
+        Box* gl = getGlobalsDict();
+        metaclass = PyDict_GetItemString(gl, "__metaclass__");
 
         if (!metaclass) {
             metaclass = classobj_cls;
