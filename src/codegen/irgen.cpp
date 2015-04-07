@@ -507,11 +507,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         CFGBlock* block = traversal_order[_i].first;
         CFGBlock* pred = traversal_order[_i].second;
 
-        if (VERBOSITY("irgen") >= 1)
+        if (VERBOSITY("irgen") >= 2)
             printf("processing block %d\n", block->idx);
 
         if (!blocks.count(block)) {
-            if (VERBOSITY("irgen") >= 1)
+            if (VERBOSITY("irgen") >= 2)
                 printf("Skipping this block\n");
             // created_phis[block] = NULL;
             // ending_symbol_tables[block] = NULL;

@@ -147,7 +147,7 @@ public:
 };
 
 LivenessAnalysis::LivenessAnalysis(CFG* cfg) : cfg(cfg) {
-    Timer _t("LivenessAnalysis()", 10);
+    Timer _t("LivenessAnalysis()", 100);
 
     for (CFGBlock* b : cfg->blocks) {
         auto visitor = new LivenessBBVisitor(this); // livenessCache unique_ptr will delete it.

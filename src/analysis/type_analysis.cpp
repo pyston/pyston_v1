@@ -735,7 +735,7 @@ public:
 
             TypeMap ending;
 
-            if (VERBOSITY("types") >= 2) {
+            if (VERBOSITY("types") >= 3) {
                 printf("processing types for block %d\n", block->idx);
             }
             if (VERBOSITY("types") >= 3) {
