@@ -206,9 +206,6 @@ void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
 
 void ASTInterpreter::setGlobals(Box* globals) {
     this->globals = globals;
-    if (globals->cls == dict_cls) {
-        frame_info.globals = static_cast<BoxedDict*>(globals);
-    }
 }
 
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
@@ -221,8 +218,7 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
         visitor->visit(generator);
     if (frame_info.boxedLocals)
         visitor->visit(frame_info.boxedLocals);
-    if (frame_info.globals)
-        visitor->visit(frame_info.globals);
+    visitor->visit(globals);
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
@@ -1248,12 +1244,8 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
     SourceInfo* source_info = cf->clfunc->source;
-    if (cf->clfunc->source->scoping->areGlobalsFromModule()) {
-        interpreter.setGlobals(source_info->parent_module);
-    } else {
-        assert(frame_state.frame_info->globals);
-        interpreter.setGlobals(frame_state.frame_info->globals);
-    }
+    assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+    interpreter.setGlobals(source_info->parent_module);
 
     for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
