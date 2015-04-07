@@ -300,6 +300,17 @@ public:
         abort();
     }
 
+    Box* getGlobals() {
+        if (id.type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = getCF();
+            assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+            return cf->clfunc->source->parent_module;
+        } else if (id.type == PythonFrameId::INTERPRETED) {
+            return getGlobalsForInterpretedFrame((void*)id.bp);
+        }
+        abort();
+    }
+
     FrameInfo* getFrameInfo() {
         if (id.type == PythonFrameId::COMPILED) {
             CompiledFunction* cf = getCF();
@@ -562,9 +573,8 @@ CompiledFunction* getTopCompiledFunction() {
 }
 
 Box* getGlobals() {
-    assert(getTopCompiledFunction());
-    assert(getTopCompiledFunction()->clfunc->source->scoping->areGlobalsFromModule());
-    return getCurrentModule();
+    auto it = getTopPythonFrame();
+    return it->getGlobals();
 }
 
 Box* getGlobalsDict() {

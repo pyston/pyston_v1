@@ -150,6 +150,11 @@ public:
         return current_inst;
     }
 
+    Box* getGlobals() {
+        assert(globals);
+        return globals;
+    }
+
     CompiledFunction* getCF() { return compiled_func; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return passed_closure; }
@@ -1320,6 +1325,12 @@ AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
     return interpreter->getCurrentStatement();
+}
+
+Box* getGlobalsForInterpretedFrame(void* frame_ptr) {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getGlobals();
 }
 
 CompiledFunction* getCFForInterpretedFrame(void* frame_ptr) {

@@ -979,7 +979,8 @@ Box* typeRepr(BoxedClass* self) {
     Box* m = self->getattr("__module__");
     if (m && m->cls == str_cls) {
         BoxedString* sm = static_cast<BoxedString*>(m);
-        os << sm->s << '.';
+        if (sm->s != "__builtin__")
+            os << sm->s << '.';
     }
 
     os << self->tp_name;

@@ -80,34 +80,37 @@ exec """print __name__""" in {}, {}
 
 
 # Test classdefs in execs:
-g = {'a': 1, 'b': 5}
-l = {'b': 2}
-exec """class C(object):
+b = 3
+a = 2
+s = """class C(object):
     print "b =", b
     if b:
         c = 2
     else:
         a = -1
     print a, b
-""" in g, l
-del g['__builtins__']
-print sorted(g.items())
-print sorted(l.items())
+print C.__module__, C.__name__, repr(C)
+"""
+exec s in {'a': 1, 'b': 5}, {'b': 2}
+exec s
+
 
 # Test old-style classdefs in execs:
-g = {'a': 1, 'b': 5}
-l = {'b': 2}
-exec """class C():
+b = 3
+a = 2
+s = """class C():
     print "b =", b
     if b:
         c = 2
     else:
         a = -1
     print a, b
-""" in g, l
-del g['__builtins__']
-print sorted(g.items())
-print sorted(l.items())
+print C.__module__
+"""
+exec s in {'a': 1, 'b': 5}, {'b': 2}
+exec s
+
+
 
 
 # test eval+exec in exec:
