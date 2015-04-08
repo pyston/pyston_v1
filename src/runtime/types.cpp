@@ -132,7 +132,10 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
     Box* rtn = static_cast<Box*>(mem);
 
-    PyObject_Init(rtn, cls);
+    if (cls->tp_itemsize != 0)
+        static_cast<BoxVar*>(rtn)->ob_size = nitems + 1;
+
+    PyObject_INIT(rtn, cls);
     assert(rtn->cls);
 
     return rtn;
@@ -175,14 +178,18 @@ extern "C" PyObject* _PyObject_New(PyTypeObject* tp) noexcept {
 }
 
 // Analogue of PyType_GenericNew
-void* Box::operator new(size_t size, BoxedClass* cls) {
+void* Box::operator new(size_t size, BoxedClass* cls, size_t nitems) {
     assert(cls);
     ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
     assert(cls->tp_alloc);
 
-    void* mem = cls->tp_alloc(cls, 0);
+    void* mem = cls->tp_alloc(cls, nitems);
     RELEASE_ASSERT(mem, "");
     return mem;
+}
+
+void* Box::operator new(size_t size, BoxedClass* cls) {
+    return Box::operator new(size, cls, 0);
 }
 
 Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
@@ -447,6 +454,14 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
 
         if (b->cls->instancesHaveDictAttrs()) {
             RELEASE_ASSERT(0, "Shouldn't all of these objects be conservatively scanned?");
+        }
+
+        if (b->cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+            BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(b->cls);
+            BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
+            for (int i = 0; i < heap_cls->nslots; i++) {
+                v->visit(*((Box**)((char*)b + slotOffsets[i])));
+            }
         }
     } else {
         assert(type_cls == NULL || b == type_cls);
@@ -1958,6 +1973,17 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     // initUserAttrs themselves, though.
     initUserAttrs(op, tp);
 
+    // Initialize the variables declared in __slots__ to NULL.
+    if (tp->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+        BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(tp);
+        if (heap_cls->nslots > 0) {
+            BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
+            for (int i = 0; i < heap_cls->nslots; i++) {
+                *(Box**)((char*)op + slotOffsets[i]) = NULL;
+            }
+        }
+    }
+
     return op;
 }
 
@@ -1987,6 +2013,7 @@ void setupRuntime() {
     type_cls = ::new (mem) BoxedHeapClass(object_cls, &typeGCHandler, offsetof(BoxedClass, attrs),
                                           offsetof(BoxedClass, tp_weaklist), sizeof(BoxedHeapClass), false, NULL);
     type_cls->tp_flags |= Py_TPFLAGS_TYPE_SUBCLASS;
+    type_cls->tp_itemsize = sizeof(BoxedHeapClass::SlotOffset);
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
 

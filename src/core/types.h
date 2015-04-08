@@ -440,6 +440,7 @@ public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
     Box() {}
 
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
@@ -448,9 +449,11 @@ public:
 
     llvm::iterator_range<BoxIterator> pyElements();
 
+    size_t getHCAttrsOffset();
     HCAttrs* getHCAttrsPtr();
     void setDict(BoxedDict* d);
     BoxedDict* getDict();
+
 
     void setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
     void giveAttr(const std::string& attr, Box* val) {
@@ -481,10 +484,15 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 #define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
-        return Box::operator new(size, cls);                                                                           \
+        return Box::operator new(size, cls, 0);                                                                        \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
-        return Box::operator new(size, default_cls);                                                                   \
+        return Box::operator new(size, default_cls, 0);                                                                \
+    }
+
+#define ALLOCATABLE_WITH_ITEMS                                                                                         \
+    void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
+        return Box::operator new(size, cls, nitems);                                                                   \
     }
 
 // The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
@@ -522,6 +530,7 @@ class BoxVar : public Box {
 public:
     Py_ssize_t ob_size;
 
+    BoxVar() {}
     BoxVar(Py_ssize_t ob_size) : ob_size(ob_size) {}
 };
 static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
