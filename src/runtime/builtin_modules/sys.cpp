@@ -231,6 +231,20 @@ static bool isLittleEndian() {
     return s[0] != 0;
 }
 
+extern "C" const char* Py_GetPlatform() noexcept {
+// cpython does this check in their configure script
+#if defined(__linux__)
+    return "linux2";
+#elif defined(__APPLE__) && defined(__MACH__)
+    return "darwin";
+#else
+    // cpython also supports returning "atheos", "irix6", "win32", or
+    // whatever the user can get PLATFORM to be #defined as at
+    // build-time.
+    return "unknown";
+#endif
+}
+
 void setupSys() {
     sys_modules_dict = new BoxedDict();
     gc::registerPermanentRoot(sys_modules_dict);
@@ -260,7 +274,7 @@ void setupSys() {
     sys_module->giveAttr("py3kwarning", False);
     sys_module->giveAttr("byteorder", boxStrConstant(isLittleEndian() ? "little" : "big"));
 
-    sys_module->giveAttr("platform", boxStrConstant("unknown")); // seems like a reasonable, if poor, default
+    sys_module->giveAttr("platform", boxStrConstant(Py_GetPlatform()));
 
     llvm::SmallString<128> main_fn;
     // TODO supposed to pass argv0, main_addr to this function:
