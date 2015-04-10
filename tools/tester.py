@@ -38,6 +38,8 @@ FN_JUST_SIZE = 20
 EXTRA_JIT_ARGS = []
 TIME_LIMIT = 25
 
+PYTHONIOENCODING = 'utf-8'
+
 # For fun, can test pypy.
 # Tough because the tester will check to see if the error messages are exactly the
 # same as the system CPython, but the error messages change over micro CPython versions.
@@ -90,6 +92,7 @@ def get_expected_output(fn):
     # TODO don't suppress warnings globally:
     env = dict(os.environ)
     env["PYTHONPATH"] = EXTMODULE_DIR
+    env["PYTHONIOENCODING"] = PYTHONIOENCODING
     p = subprocess.Popen(["python", "-Wignore", fn], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, err = p.communicate()
     code = p.wait()
@@ -176,9 +179,11 @@ def run_test(fn, check_stats, run_memcheck):
         check_stats = False
         expected = "success"
 
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = PYTHONIOENCODING
     run_args = [os.path.abspath(IMAGE)] + jit_args + [fn]
     start = time.time()
-    p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
+    p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, stderr = p.communicate()
     last_stderr_line = stderr.strip().split('\n')[-1]
 
