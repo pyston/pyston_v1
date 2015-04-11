@@ -946,7 +946,7 @@ Box* rawInput(Box* prompt) {
 
 Box* input(Box* prompt) {
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    throwCAPIException();
 }
 
 Box* builtinRound(Box* _number, Box* _ndigits) {
@@ -963,12 +963,12 @@ Box* builtinRound(Box* _number, Box* _ndigits) {
     }
 
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    throwCAPIException();
 }
 
 Box* builtinCmp(Box* lhs, Box* rhs) {
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    throwCAPIException();
 }
 
 void setupBuiltins() {
