@@ -32,6 +32,7 @@ class BoxedGenerator;
 class BoxedTuple;
 
 // user-level raise functions that implement python-level semantics
+ExcInfo excInfoForRaise(Box*, Box*, Box*);
 extern "C" void raise0() __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
@@ -73,8 +74,6 @@ extern "C" BoxedInt* len(Box* obj);
 extern "C" i64 unboxedLen(Box* obj);
 extern "C" Box* binop(Box* lhs, Box* rhs, int op_type);
 extern "C" Box* augbinop(Box* lhs, Box* rhs, int op_type);
-extern "C" Box* getGlobal(BoxedModule* m, const std::string* name);
-extern "C" void delGlobal(BoxedModule* m, const std::string* name);
 extern "C" Box* getitem(Box* value, Box* slice);
 extern "C" void setitem(Box* target, Box* slice, Box* value);
 extern "C" void delitem(Box* target, Box* slice);
@@ -84,9 +83,10 @@ extern "C" Box* importFrom(Box* obj, const std::string* attr);
 extern "C" Box* importStar(Box* from_module, BoxedModule* to_module);
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size);
 extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls, bool local_var_msg);
+extern "C" void assertFailDerefNameDefined(const char* name);
 extern "C" void assertFail(BoxedModule* inModule, Box* msg);
 extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent);
-extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure);
+extern "C" BoxedClosure* createClosure(BoxedClosure* parent_closure, size_t size);
 
 Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
@@ -123,15 +123,25 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
                                  DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
+
+// This is the equivalent of PyObject_GetAttr. Unlike getattrInternalGeneric, it checks for custom __getattr__ or
+// __getattribute__ methods.
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args);
+
+// This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for
+// data descriptor, check for instance attribute, check for non-data descriptor). It does not check for __getattr__ or
+// __getattribute__.
 Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
+// This is the equivalent of _PyType_Lookup(), which calls Box::getattr() on each item in the object's MRO in the
+// appropriate order. It does not do any descriptor logic.
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
+extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);
@@ -140,7 +150,7 @@ bool isUserDefined(BoxedClass* cls);
 Box* processDescriptor(Box* obj, Box* inst, Box* owner);
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
+                BoxedGenerator* generator, BoxedDict* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
 static const char* objectNewParameterTypeErrorMsg() {
     if (PYTHON_VERSION_HEX >= version_hex(2, 7, 4)) {
@@ -168,8 +178,13 @@ inline std::tuple<Box*, Box*, Box*, Box**> getTupleFromArgsArray(Box** args, int
     return std::make_tuple(arg1, arg2, arg3, argtuple);
 }
 
+// The `globals` argument can be either a BoxedModule or a BoxedDict
+
+extern "C" Box* getGlobal(Box* globals, const std::string* name);
+extern "C" void delGlobal(Box* globals, const std::string* name);
+
 extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val);
-extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module);
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, Box* globals);
 extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr);
 }
 #endif

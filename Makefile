@@ -490,6 +490,8 @@ check:
 	$(MAKE) ext_python ext_pyston pyston_dbg
 
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
+	@# we pass -I to cpython tests & skip failing ones because they are sloooow otherwise
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-S -a=-I --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
 	@# skip -O for dbg
 
@@ -504,6 +506,8 @@ check:
 	@# It can be useful to test release mode, since it actually exposes different functionality
 	@# since we can make different decisions about which internal functions to inline or not.
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S $(TESTS_DIR) $(ARGS)
+	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-S -a=-I --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
 	@# skip -n for dbg
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_release -j$(TEST_THREADS) -k -a=-O -a=-x -a=-S $(TESTS_DIR) $(ARGS)
 
@@ -858,8 +862,10 @@ pyston_profile: $(PROFILE_OBJS) $(LLVM_PROFILE_DEPS)
 	$(ECHO) Linking $@
 	$(VERB) $(CXX) $(PROFILE_OBJS) $(LDFLAGS_PROFILE) -o $@
 
-cmake_check:
+clang_check:
 	@clang --version >/dev/null || (echo "clang not available"; false)
+
+cmake_check:
 	@cmake --version >/dev/null || (echo "cmake not available"; false)
 	@ninja --version >/dev/null || (echo "ninja not available"; false)
 
@@ -873,13 +879,15 @@ CMAKE_DIR_DBG := $(HOME)/pyston-build-dbg
 CMAKE_DIR_RELEASE := $(HOME)/pyston-build-release
 CMAKE_SETUP_DBG := $(CMAKE_DIR_DBG)/build.ninja
 CMAKE_SETUP_RELEASE := $(CMAKE_DIR_RELEASE)/build.ninja
-.PHONY: cmake_check
+.PHONY: cmake_check clang_check
 $(CMAKE_SETUP_DBG):
 	@$(MAKE) cmake_check
+	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_DBG)
 	cd $(CMAKE_DIR_DBG); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Debug
 $(CMAKE_SETUP_RELEASE):
 	@$(MAKE) cmake_check
+	@$(MAKE) clang_check
 	@mkdir -p $(CMAKE_DIR_RELEASE)
 	cd $(CMAKE_DIR_RELEASE); CC='clang' CXX='clang++' cmake -GNinja $(HOME)/pyston -DCMAKE_BUILD_TYPE=Release
 
@@ -916,7 +924,8 @@ clean:
 # ex instead of saying "make tests/run_1", I can just write "make run_1"
 define make_search
 $(eval \
-$1: $(TEST_DIR)/tests/$1 ;
+$1: $(TESTS_DIR)/$1 ;
+$1: $(TEST_DIR)/cpython/$1 ;
 $1: ./microbenchmarks/$1 ;
 $1: ./minibenchmarks/$1 ;
 $1: ./benchmarks/$1 ;
@@ -932,6 +941,8 @@ $(eval \
 .PHONY: test$1 check$1
 check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -k $(TESTS_DIR) $(ARGS)
+	@# we pass -I to cpython tests and skip failing ones because they are sloooow otherwise
+	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-S -a=-I -k --exit-code-only --skip-failing $(TEST_DIR)/cpython $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -a=-x -R pyston$1 -j$(TEST_THREADS) -a=-n -a=-S -k $(TESTS_DIR) $(ARGS)
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston$1 -j$(TEST_THREADS) -a=-O -a=-S -k $(TESTS_DIR) $(ARGS)
 

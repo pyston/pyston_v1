@@ -87,6 +87,10 @@ def bisect_left(a, x, lo=0, hi=None):
 
 # Overwrite above definitions with a fast C implementation
 try:
+    # Pyston FIXME: somehow sys.modules['_bisect'] is being bound to 0, which is tripping an assert in importStar.
+    # import sys
+    # print '_bisect' in sys.modules
+    # print sys.modules['_bisect']
     from _bisect import *
 except ImportError:
     pass

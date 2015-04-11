@@ -1,3 +1,5 @@
+# skip-if: True
+
 # I was worried about using a recursive parser for obscenely-nested source code,
 # but based off this example it looks like that's what cPython and pypy both use as well.
 

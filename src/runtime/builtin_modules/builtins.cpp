@@ -70,119 +70,11 @@ extern "C" Box* trap() {
    Return 0 on success, -1 on error.
 */
 
-static int merge_class_dict(PyObject* dict, PyObject* aclass) {
-    PyObject* classdict;
-    PyObject* bases;
-
-    assert(PyDict_Check(dict));
-    assert(aclass);
-
-    /* Merge in the type's dict (if any). */
-    classdict = PyObject_GetAttrString(aclass, "__dict__");
-    if (classdict == NULL)
-        PyErr_Clear();
-    else {
-        int status = PyDict_Update(dict, classdict);
-        Py_DECREF(classdict);
-        if (status < 0)
-            return -1;
-    }
-
-    /* Recursively merge in the base types' (if any) dicts. */
-    bases = PyObject_GetAttrString(aclass, "__bases__");
-    if (bases == NULL)
-        PyErr_Clear();
-    else {
-        /* We have no guarantee that bases is a real tuple */
-        Py_ssize_t i, n;
-        n = PySequence_Size(bases); /* This better be right */
-        if (n < 0)
-            PyErr_Clear();
-        else {
-            for (i = 0; i < n; i++) {
-                int status;
-                PyObject* base = PySequence_GetItem(bases, i);
-                if (base == NULL) {
-                    Py_DECREF(bases);
-                    return -1;
-                }
-                status = merge_class_dict(dict, base);
-                Py_DECREF(base);
-                if (status < 0) {
-                    Py_DECREF(bases);
-                    return -1;
-                }
-            }
-        }
-        Py_DECREF(bases);
-    }
-    return 0;
-}
-/* Helper for PyObject_Dir of type objects: returns __dict__ and __bases__.
-   We deliberately don't suck up its __class__, as methods belonging to the
-   metaclass would probably be more confusing than helpful.
-*/
-static PyObject* _specialized_dir_type(PyObject* obj) {
-    PyObject* result = NULL;
-    PyObject* dict = PyDict_New();
-
-    if (dict != NULL && merge_class_dict(dict, obj) == 0)
-        result = PyDict_Keys(dict);
-
-    Py_XDECREF(dict);
-    return result;
-}
-
 extern "C" Box* dir(Box* obj) {
-    if (obj == NULL) {
-        // TODO: This should actually return the elements in the current local
-        // scope not the content of the builtins_module
-        obj = builtins_module;
-    }
-
-    // TODO: Recursive class traversal for lookup of types and eliminating
-    // duplicates afterwards
-    BoxedList* result = nullptr;
-    // If __dir__ is present just call it and return what it returns
-    static std::string attr_dir = "__dir__";
-    Box* dir_result = callattrInternal(obj, &attr_dir, CLASS_ONLY, nullptr, ArgPassSpec(0), nullptr, nullptr, nullptr,
-                                       nullptr, nullptr);
-    if (dir_result && dir_result->cls == list_cls) {
-        return dir_result;
-    }
-
-    if (isSubclass(obj->cls, type_cls)) {
-        Box* r = _specialized_dir_type(obj);
-        checkAndThrowCAPIException();
-        assert(r);
-        return r;
-    }
-
-    // If __dict__ is present use its keys and add the reset below
-    Box* obj_dict = getattrInternal(obj, "__dict__", nullptr);
-    if (obj_dict && obj_dict->cls == dict_cls) {
-        result = new BoxedList();
-        for (auto& kv : static_cast<BoxedDict*>(obj_dict)->d) {
-            listAppend(result, kv.first);
-        }
-    }
-    if (!result) {
-        result = new BoxedList();
-    }
-
-    for (auto const& kv : obj->cls->attrs.hcls->getAttrOffsets()) {
-        listAppend(result, boxString(kv.first()));
-    }
-    if (obj->cls->instancesHaveHCAttrs()) {
-        HCAttrs* attrs = obj->getHCAttrsPtr();
-        for (auto const& kv : attrs->hcls->getAttrOffsets()) {
-            listAppend(result, boxString(kv.first()));
-        }
-    }
-    if (obj->cls->instancesHaveDictAttrs()) {
-        Py_FatalError("unimplemented");
-    }
-    return result;
+    Box* r = PyObject_Dir(obj);
+    if (!r)
+        throwCAPIException();
+    return r;
 }
 
 extern "C" Box* vars(Box* obj) {
@@ -256,7 +148,7 @@ extern "C" Box* min(Box* arg0, BoxedTuple* args) {
 
     Box* minElement;
     Box* container;
-    if (args->elts.size() == 0) {
+    if (args->size() == 0) {
         minElement = nullptr;
         container = arg0;
     } else {
@@ -286,7 +178,7 @@ extern "C" Box* max(Box* arg0, BoxedTuple* args) {
 
     Box* maxElement;
     Box* container;
-    if (args->elts.size() == 0) {
+    if (args->size() == 0) {
         maxElement = nullptr;
         container = arg0;
     } else {
@@ -358,7 +250,8 @@ extern "C" Box* chr(Box* arg) {
         raiseExcHelper(ValueError, "chr() arg not in range(256)");
     }
 
-    return boxString(std::string(1, (char)n));
+    char c = (char)n;
+    return boxStringRef(llvm::StringRef(&c, 1));
 }
 
 extern "C" Box* unichr(Box* arg) {
@@ -490,7 +383,8 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    return importModuleLevel(&static_cast<BoxedString*>(name)->s, globals, fromlist, ((BoxedInt*)level)->n);
+    std::string _name = static_cast<BoxedString*>(name)->s;
+    return importModuleLevel(_name, globals, fromlist, ((BoxedInt*)level)->n);
 }
 
 Box* delattrFunc(Box* obj, Box* _str) {
@@ -499,7 +393,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
-    delattr(obj, str->s.c_str());
+    delattr(obj, str->s.data());
     return None;
 }
 
@@ -514,7 +408,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattr(obj, str->s.c_str());
+        rtn = getattr(obj, str->s.data());
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -524,7 +418,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         if (default_value)
             return default_value;
         else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.c_str());
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.data());
     }
 
     return rtn;
@@ -538,7 +432,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattr(obj, str->s.c_str(), value);
+    setattr(obj, str->s.data(), value);
     return None;
 }
 
@@ -573,7 +467,7 @@ Box* map2(Box* f, Box* container) {
 
 Box* map(Box* f, BoxedTuple* args) {
     assert(args->cls == tuple_cls);
-    auto num_iterable = args->elts.size();
+    auto num_iterable = args->size();
     if (num_iterable < 1)
         raiseExcHelper(TypeError, "map() requires at least two args");
 
@@ -583,7 +477,8 @@ Box* map(Box* f, BoxedTuple* args) {
 
     std::vector<BoxIterator> args_it;
     std::vector<BoxIterator> args_end;
-    for (auto& e : args->elts) {
+
+    for (auto e : *args) {
         auto range = e->pyElements();
         args_it.emplace_back(range.begin());
         args_end.emplace_back(range.end());
@@ -667,8 +562,7 @@ Box* zip2(Box* container1, Box* container2) {
     BoxIterator it2 = range2.begin();
 
     for (; it1 != range1.end() && it2 != range2.end(); ++it1, ++it2) {
-        BoxedTuple::GCVector elts{ *it1, *it2 };
-        listAppendInternal(rtn, new BoxedTuple(std::move(elts)));
+        listAppendInternal(rtn, BoxedTuple::create({ *it1, *it2 }));
     }
     return rtn;
 }
@@ -691,7 +585,7 @@ public:
         RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
         BoxedException* exc = static_cast<BoxedException*>(self);
 
-        return new BoxedTuple({ self->cls, EmptyTuple, makeAttrWrapper(self) });
+        return BoxedTuple::create({ self->cls, EmptyTuple, makeAttrWrapper(self) });
     }
 };
 
@@ -706,7 +600,7 @@ Box* exceptionNew(BoxedClass* cls, BoxedTuple* args) {
     BoxedException* rtn = new (cls) BoxedException();
 
     // TODO: this should be a MemberDescriptor and set during init
-    if (args->elts.size() == 1)
+    if (args->size() == 1)
         rtn->giveAttr("message", args->elts[0]);
     else
         rtn->giveAttr("message", boxStrConstant(""));
@@ -731,7 +625,7 @@ Box* exceptionRepr(Box* b) {
     assert(message->cls == str_cls);
 
     BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxString(std::string(getTypeName(b)) + "(" + message_s->s + ",)");
+    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s + ",)");
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
@@ -775,7 +669,7 @@ extern "C" PyObject* PyErr_NewException(char* name, PyObject* _base, PyObject* d
         }
         checkAndThrowCAPIException();
 
-        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, new BoxedTuple({ base }), dict, NULL, NULL);
+        Box* cls = runtimeCall(type_cls, ArgPassSpec(3), boxedName, BoxedTuple::create({ base }), dict, NULL, NULL);
         return cls;
     } catch (ExcInfo e) {
         abort();
@@ -814,7 +708,7 @@ public:
         BoxedEnumerate* self = static_cast<BoxedEnumerate*>(_self);
         Box* val = *self->iterator;
         ++self->iterator;
-        return new BoxedTuple({ boxInt(self->idx++), val });
+        return BoxedTuple::create({ boxInt(self->idx++), val });
     }
 
     static Box* hasnext(Box* _self) {
@@ -833,13 +727,21 @@ public:
 };
 
 Box* globals() {
-    BoxedModule* m = getCurrentModule();
     // TODO is it ok that we don't return a real dict here?
-    return makeAttrWrapper(m);
+    return getGlobalsDict();
 }
 
 Box* locals() {
     return fastLocalsToBoxedLocals();
+}
+
+extern "C" PyObject* PyEval_GetLocals(void) noexcept {
+    try {
+        return locals();
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
 }
 
 Box* divmod(Box* lhs, Box* rhs) {
@@ -865,14 +767,16 @@ Box* execfile(Box* _fn) {
 #endif
 
 #else
-    bool exists = llvm::sys::fs::exists(fn->s);
+    bool exists = llvm::sys::fs::exists(std::string(fn->s));
 #endif
 
     if (!exists)
-        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.c_str());
+        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.data());
 
     // Run directly inside the current module:
-    AST_Module* ast = caching_parse_file(fn->s.c_str());
+    AST_Module* ast = caching_parse_file(fn->s.data());
+
+    ASSERT(getExecutionPoint().cf->clfunc->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
     compileAndRunModule(ast, getCurrentModule());
 
     return None;
@@ -884,7 +788,7 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
 
     Box* dest, *end;
 
-    auto it = kwargs->d.find(new BoxedString("file"));
+    auto it = kwargs->d.find(boxStrConstant("file"));
     if (it != kwargs->d.end()) {
         dest = it->second;
         kwargs->d.erase(it);
@@ -892,23 +796,23 @@ Box* print(BoxedTuple* args, BoxedDict* kwargs) {
         dest = getSysStdout();
     }
 
-    it = kwargs->d.find(new BoxedString("end"));
+    it = kwargs->d.find(boxStrConstant("end"));
     if (it != kwargs->d.end()) {
         end = it->second;
         kwargs->d.erase(it);
     } else {
-        end = new BoxedString("\n");
+        end = boxStrConstant("\n");
     }
 
     RELEASE_ASSERT(kwargs->d.size() == 0, "print() got unexpected keyword arguments");
 
     static const std::string write_str("write");
 
-    Box* space_box = new BoxedString(" ");
+    Box* space_box = boxStrConstant(" ");
 
     // TODO softspace handling?
     bool first = true;
-    for (auto e : args->elts) {
+    for (auto e : *args) {
         BoxedString* s = str(e);
 
         if (!first) {
@@ -1042,7 +946,8 @@ Box* rawInput(Box* prompt) {
 }
 
 Box* input(Box* prompt) {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    throwCAPIException();
 }
 
 Box* builtinRound(Box* _number, Box* _ndigits) {
@@ -1058,11 +963,13 @@ Box* builtinRound(Box* _number, Box* _ndigits) {
             return boxFloat(round(number->d));
     }
 
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    throwCAPIException();
 }
 
 Box* builtinCmp(Box* lhs, Box* rhs) {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    throwCAPIException();
 }
 
 void setupBuiltins() {

@@ -58,7 +58,7 @@ public:
         end -= start;
         start = 0;
         end += fread(buf + end, 1, BUFSIZE - end, fp);
-        if (VERBOSITY("parsing") >= 2)
+        if (VERBOSITY("parsing") >= 3)
             printf("filled, now at %d-%d\n", start, end);
     }
 
@@ -118,7 +118,7 @@ InternedString BufferedReader::readAndInternString() {
 
 void BufferedReader::readAndInternStringVector(std::vector<InternedString>& v) {
     int num_elts = readShort();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
         v.push_back(readAndInternString());
@@ -127,7 +127,7 @@ void BufferedReader::readAndInternStringVector(std::vector<InternedString>& v) {
 
 static void readStringVector(std::vector<std::string>& vec, BufferedReader* reader) {
     int num_elts = reader->readShort();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
         vec.push_back(readString(reader));
@@ -136,7 +136,7 @@ static void readStringVector(std::vector<std::string>& vec, BufferedReader* read
 
 static void readStmtVector(std::vector<AST_stmt*>& vec, BufferedReader* reader) {
     int num_elts = reader->readShort();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
         vec.push_back(readASTStmt(reader));
@@ -145,7 +145,7 @@ static void readStmtVector(std::vector<AST_stmt*>& vec, BufferedReader* reader) 
 
 static void readExprVector(std::vector<AST_expr*>& vec, BufferedReader* reader) {
     int num_elts = reader->readShort();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
         vec.push_back(readASTExpr(reader));
@@ -154,7 +154,7 @@ static void readExprVector(std::vector<AST_expr*>& vec, BufferedReader* reader) 
 
 template <class T> static void readMiscVector(std::vector<T*>& vec, BufferedReader* reader) {
     int num_elts = reader->readShort();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("%d elts to read\n", num_elts);
     for (int i = 0; i < num_elts; i++) {
         AST* read = readASTMisc(reader);
@@ -182,7 +182,7 @@ AST_alias* read_alias(BufferedReader* reader) {
 }
 
 AST_arguments* read_arguments(BufferedReader* reader) {
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("reading arguments\n");
 
     AST_arguments* rtn = new AST_arguments();
@@ -416,7 +416,7 @@ AST_For* read_for(BufferedReader* reader) {
 }
 
 AST_FunctionDef* read_functiondef(BufferedReader* reader) {
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("reading functiondef\n");
     AST_FunctionDef* rtn = new AST_FunctionDef();
 
@@ -541,7 +541,7 @@ AST_ListComp* read_listcomp(BufferedReader* reader) {
 }
 
 AST_Module* read_module(BufferedReader* reader) {
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("reading module\n");
 
     AST_Module* rtn = new AST_Module(reader->createInternedPool());
@@ -775,7 +775,7 @@ AST_Yield* read_yield(BufferedReader* reader) {
 
 AST_expr* readASTExpr(BufferedReader* reader) {
     uint8_t type = reader->readByte();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("type = %d\n", type);
     if (type == 0)
         return NULL;
@@ -841,7 +841,7 @@ AST_expr* readASTExpr(BufferedReader* reader) {
 
 AST_stmt* readASTStmt(BufferedReader* reader) {
     uint8_t type = reader->readByte();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("type = %d\n", type);
     if (type == 0)
         return NULL;
@@ -905,7 +905,7 @@ AST_stmt* readASTStmt(BufferedReader* reader) {
 
 AST* readASTMisc(BufferedReader* reader) {
     uint8_t type = reader->readByte();
-    if (VERBOSITY("parsing") >= 2)
+    if (VERBOSITY("parsing") >= 3)
         printf("type = %d\n", type);
     if (type == 0)
         return NULL;
@@ -953,7 +953,7 @@ AST_Module* parse_string(const char* code) {
     char* tmpdir = mkdtemp(buf);
     assert(tmpdir);
     std::string tmp = std::string(tmpdir) + "/in.py";
-    if (VERBOSITY() >= 1) {
+    if (VERBOSITY() >= 3) {
         printf("writing %d bytes to %s\n", size, tmp.c_str());
     }
 

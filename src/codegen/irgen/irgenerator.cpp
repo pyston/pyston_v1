@@ -72,6 +72,21 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     return scratch_space;
 }
 
+static llvm::Value* getClosureParentGep(IREmitter& emitter, llvm::Value* closure) {
+    static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
+    static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
+    return emitter.getBuilder()->CreateConstInBoundsGEP2_32(closure, 0, 1);
+}
+
+static llvm::Value* getClosureElementGep(IREmitter& emitter, llvm::Value* closure, size_t index) {
+    static_assert(sizeof(Box) == offsetof(BoxedClosure, parent), "");
+    static_assert(offsetof(BoxedClosure, parent) + sizeof(BoxedClosure*) == offsetof(BoxedClosure, nelts), "");
+    static_assert(offsetof(BoxedClosure, nelts) + sizeof(size_t) == offsetof(BoxedClosure, elts), "");
+    return emitter.getBuilder()->CreateGEP(
+        closure,
+        { llvm::ConstantInt::get(g.i32, 0), llvm::ConstantInt::get(g.i32, 3), llvm::ConstantInt::get(g.i32, index) });
+}
+
 static llvm::Value* getBoxedLocalsGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
     static_assert(offsetof(FrameInfo, exc) == 0, "");
     static_assert(sizeof(ExcInfo) == 24, "");
@@ -239,6 +254,9 @@ private:
 public:
     explicit IREmitterImpl(IRGenState* irstate, llvm::BasicBlock*& curblock, IRGenerator* irgenerator)
         : irstate(irstate), builder(new IRBuilder(g.context)), curblock(curblock), irgenerator(irgenerator) {
+
+        ASSERT(irstate->getSourceInfo()->scoping->areGlobalsFromModule(), "jit doesn't support custom globals yet");
+
         builder->setEmitter(this);
         builder->SetInsertPoint(curblock);
     }
@@ -898,10 +916,51 @@ private:
             assert(!is_kill);
             assert(scope_info->takesClosure());
 
-            CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
-            assert(closure);
+            // This is the information on how to look up the variable in the closure object.
+            DerefInfo deref_info = scope_info->getDerefInfo(node->id);
 
-            return closure->getattr(emitter, getEmptyOpInfo(unw_info), &node->id.str(), false);
+            // This code is basically:
+            // closure = created_closure;
+            // closure = closure->parent;
+            // [...]
+            // closure = closure->parent;
+            // closure->elts[deref_info.offset]
+            // Where the parent lookup is done `deref_info.num_parents_from_passed_closure` times
+            CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
+            llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
+            closure->decvref(emitter);
+            for (int i = 0; i < deref_info.num_parents_from_passed_closure; i++) {
+                closureValue = emitter.getBuilder()->CreateLoad(getClosureParentGep(emitter, closureValue));
+            }
+            llvm::Value* lookupResult
+                = emitter.getBuilder()->CreateLoad(getClosureElementGep(emitter, closureValue, deref_info.offset));
+
+            // If the value is NULL, the variable is undefined.
+            // Create a branch on if the value is NULL.
+            llvm::BasicBlock* success_bb
+                = llvm::BasicBlock::Create(g.context, "deref_defined", irstate->getLLVMFunction());
+            success_bb->moveAfter(curblock);
+            llvm::BasicBlock* fail_bb
+                = llvm::BasicBlock::Create(g.context, "deref_undefined", irstate->getLLVMFunction());
+
+            llvm::Value* check_val
+                = emitter.getBuilder()->CreateICmpEQ(lookupResult, embedConstantPtr(NULL, g.llvm_value_type_ptr));
+            llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
+
+            // Case that it is undefined: call the assert fail function.
+            curblock = fail_bb;
+            emitter.getBuilder()->SetInsertPoint(curblock);
+
+            llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFailDerefNameDefined,
+                                                     getStringConstantPtr(node->id.str() + '\0'));
+            call.setDoesNotReturn();
+            emitter.getBuilder()->CreateUnreachable();
+
+            // Case that it is defined: carry on in with the retrieved value.
+            curblock = success_bb;
+            emitter.getBuilder()->SetInsertPoint(curblock);
+
+            return new ConcreteCompilerVariable(UNKNOWN, lookupResult, true);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = getStringConstantPtr(node->id.str() + '\0');
@@ -1020,7 +1079,11 @@ private:
 
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
-            return makeStr(&node->str_data);
+            llvm::Value* rtn = embedConstantPtr(
+                irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
+
+            return new ConcreteCompilerVariable(STR, rtn, true);
+
         } else if (node->str_type == AST_Str::UNICODE) {
             return makeUnicode(emitter, &node->str_data);
         } else {
@@ -1136,7 +1199,8 @@ private:
         // one reason to do this is to pass the closure through if necessary,
         // but since the classdef can't create its own closure, shouldn't need to explicitly
         // create that scope to pass the closure through.
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, {});
+        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, false, NULL, {});
 
         CompilerVariable* attr_dict = func->call(emitter, getEmptyOpInfo(unw_info), ArgPassSpec(0), {}, NULL);
 
@@ -1199,7 +1263,8 @@ private:
             assert(created_closure);
         }
 
-        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, defaults);
+        assert(irstate->getSourceInfo()->scoping->areGlobalsFromModule());
+        CompilerVariable* func = makeFunction(emitter, cl, created_closure, is_generator, NULL, defaults);
 
         for (auto d : defaults) {
             d->decvref(emitter);
@@ -1336,7 +1401,7 @@ private:
             assert(rtn);
 
             ConcreteCompilerType* speculated_type = typeFromClass(speculated_class);
-            if (VERBOSITY("irgen") >= 1) {
+            if (VERBOSITY("irgen") >= 2) {
                 printf("Speculating that %s is actually %s, at ", rtn->getConcreteType()->debugName().c_str(),
                        speculated_type->debugName().c_str());
                 PrintVisitor printer;
@@ -1431,10 +1496,14 @@ private:
             _popFake(defined_name, true);
 
             if (vst == ScopeInfo::VarScopeType::CLOSURE) {
-                CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
-                assert(closure);
+                size_t offset = scope_info->getClosureOffset(name);
 
-                closure->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
+                // This is basically `closure->elts[offset] = val;`
+                CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
+                llvm::Value* closureValue = closure->makeConverted(emitter, CLOSURE)->getValue();
+                closure->decvref(emitter);
+                llvm::Value* gep = getClosureElementGep(emitter, closureValue, offset);
+                emitter.getBuilder()->CreateStore(val->makeConverted(emitter, UNKNOWN)->getValue(), gep);
             }
         }
     }
@@ -1647,15 +1716,29 @@ private:
     }
 
     void doExec(AST_Exec* node, UnwindInfo unw_info) {
-        // TODO locals and globals
-        RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
-        assert(!node->locals);
-
         CompilerVariable* body = evalExpr(node->body, unw_info);
-        ConcreteCompilerVariable* cbody = body->makeConverted(emitter, body->getBoxType());
+        llvm::Value* vbody = body->makeConverted(emitter, body->getBoxType())->getValue();
         body->decvref(emitter);
 
-        emitter.createCall(unw_info, g.funcs.exec, cbody->getValue());
+        llvm::Value* vglobals;
+        if (node->globals) {
+            CompilerVariable* globals = evalExpr(node->globals, unw_info);
+            vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
+            globals->decvref(emitter);
+        } else {
+            vglobals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+
+        llvm::Value* vlocals;
+        if (node->locals) {
+            CompilerVariable* locals = evalExpr(node->locals, unw_info);
+            vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
+            locals->decvref(emitter);
+        } else {
+            vlocals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+
+        emitter.createCall3(unw_info, g.funcs.exec, vbody, vglobals, vlocals);
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
@@ -1768,7 +1851,8 @@ private:
 
         endBlock(DEAD);
 
-        ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
+        // This is tripping in test/tests/return_selfreferential.py. kmod says it should be removed.
+        // ASSERT(rtn->getVrefs() == 1, "%d", rtn->getVrefs());
         assert(rtn->getValue());
         emitter.getBuilder()->CreateRet(rtn->getValue());
     }
@@ -1893,7 +1977,8 @@ private:
             assert(var->getType() != BOXED_FLOAT
                    && "should probably unbox it, but why is it boxed in the first place?");
 
-            // This line can never get hit right now for the same reason that the variables must already be concrete,
+            // This line can never get hit right now for the same reason that the variables must already be
+            // concrete,
             // because we're over-generating phis.
             ASSERT(var->isGrabbed(), "%s", p.first.c_str());
             // var->ensureGrabbed(emitter);
@@ -2039,7 +2124,8 @@ private:
                 doExec(ast_cast<AST_Exec>(node), unw_info);
                 break;
             case AST_TYPE::Expr:
-                doExpr(ast_cast<AST_Expr>(node), unw_info);
+                if ((((AST_Expr*)node)->value)->type != AST_TYPE::Str)
+                    doExpr(ast_cast<AST_Expr>(node), unw_info);
                 break;
             // case AST_TYPE::If:
             // doIf(ast_cast<AST_If>(node));
@@ -2152,7 +2238,8 @@ private:
             } else {
 #ifndef NDEBUG
                 if (myblock->successors.size()) {
-                    // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't want
+                    // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
+                    // want
                     // here, but this is just for debugging so I guess let it happen for now:
                     ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                     ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
@@ -2352,7 +2439,8 @@ public:
             if (!passed_closure)
                 passed_closure = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
 
-            llvm::Value* new_closure = emitter.getBuilder()->CreateCall(g.funcs.createClosure, passed_closure);
+            llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
+                g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));
             symbol_table[internString(CREATED_CLOSURE_NAME)]
                 = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
         }
@@ -2410,7 +2498,7 @@ public:
     }
 
     void run(const CFGBlock* block) override {
-        if (VERBOSITY("irgenerator") >= 1) { // print starting symbol table
+        if (VERBOSITY("irgenerator") >= 2) { // print starting symbol table
             printf("  %d init:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
                 printf(" %s", it->first.c_str());
@@ -2422,7 +2510,7 @@ public:
             assert(state != FINISHED);
             doStmt(block->body[i], UnwindInfo(block->body[i], NULL));
         }
-        if (VERBOSITY("irgenerator") >= 1) { // print ending symbol table
+        if (VERBOSITY("irgenerator") >= 2) { // print ending symbol table
             printf("  %d fini:", block->idx);
             for (auto it = symbol_table.begin(); it != symbol_table.end(); ++it)
                 printf(" %s", it->first.c_str());

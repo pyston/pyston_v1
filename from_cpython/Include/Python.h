@@ -66,6 +66,7 @@
 #include "dictobject.h"
 #include "tupleobject.h"
 #include "methodobject.h"
+#include "moduleobject.h"
 #include "classobject.h"
 #include "fileobject.h"
 #include "pycapsule.h"

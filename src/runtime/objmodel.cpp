@@ -128,8 +128,9 @@ static Box* (*callattrInternal3)(Box*, const std::string*, LookupScope, CallRewr
 
 size_t PyHasher::operator()(Box* b) const {
     if (b->cls == str_cls) {
-        std::hash<std::string> H;
-        return H(static_cast<BoxedString*>(b)->s);
+        StringHash<char> H;
+        auto s = static_cast<BoxedString*>(b);
+        return H(s->data(), s->size());
     }
 
     BoxedInt* i = hash(b);
@@ -218,7 +219,7 @@ extern "C" bool isSubclass(BoxedClass* child, BoxedClass* parent) {
 extern "C" void assertFail(BoxedModule* inModule, Box* msg) {
     if (msg) {
         BoxedString* tostr = str(msg);
-        raiseExcHelper(AssertionError, "%s", tostr->s.c_str());
+        raiseExcHelper(AssertionError, "%s", tostr->data());
     } else {
         raiseExcHelper(AssertionError, "");
     }
@@ -233,6 +234,10 @@ extern "C" void assertNameDefined(bool b, const char* name, BoxedClass* exc_cls,
     }
 }
 
+extern "C" void assertFailDerefNameDefined(const char* name) {
+    raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", name);
+}
+
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) {
     raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", typeName, attr);
 }
@@ -245,6 +250,10 @@ extern "C" void raiseAttributeError(Box* obj, const char* attr) {
     } else {
         raiseAttributeErrorStr(getTypeName(obj), attr);
     }
+}
+
+extern "C" void raiseIndexErrorStr(const char* typeName) {
+    raiseExcHelper(IndexError, "%s index out of range", typeName);
 }
 
 extern "C" void raiseNotIterableError(const char* typeName) {
@@ -268,7 +277,7 @@ static void _checkUnpackingLength(i64 expected, i64 given) {
 extern "C" Box** unpackIntoArray(Box* obj, int64_t expected_size) {
     if (obj->cls == tuple_cls) {
         BoxedTuple* t = static_cast<BoxedTuple*>(obj);
-        _checkUnpackingLength(expected_size, t->elts.size());
+        _checkUnpackingLength(expected_size, t->size());
         return &t->elts[0];
     }
 
@@ -409,7 +418,7 @@ BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attr
     if (!ht_name)
         assert(str_cls == NULL);
     else
-        tp_name = ht_name->s.c_str();
+        tp_name = ht_name->data();
 
     memset(&as_number, 0, sizeof(as_number));
     memset(&as_mapping, 0, sizeof(as_mapping));
@@ -421,7 +430,7 @@ BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, 
                                        int weaklist_offset, int instance_size, bool is_user_defined,
                                        const std::string& name) {
     return create(metaclass, base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined,
-                  new BoxedString(name), NULL);
+                  static_cast<BoxedString*>(boxString(name)), NULL);
 }
 
 BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
@@ -454,7 +463,7 @@ std::string getFullNameOfClass(BoxedClass* cls) {
 
     BoxedString* module = static_cast<BoxedString*>(b);
 
-    return module->s + "." + cls->tp_name;
+    return (llvm::Twine(module->s) + "." + cls->tp_name).str();
 }
 
 std::string getFullTypeName(Box* o) {
@@ -474,7 +483,7 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
 
     auto it = children.find(attr);
     if (it != children.end())
-        return it->second;
+        return children.getMapped(it->second);
 
     static StatCounter num_hclses("num_hidden_classes");
     num_hclses.log();
@@ -778,7 +787,7 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
         // address.
         obj_saved->addAttrGuard(offsetof(BoxedClass, tp_mro), (intptr_t)mro);
 
-        for (auto base : mro->elts) {
+        for (auto base : *mro) {
             rewrite_args->out_success = false;
             if (base == cls) {
                 // Small optimization: don't have to load the class again since it was given to us in
@@ -797,7 +806,7 @@ Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* re
     } else {
         assert(cls->tp_mro);
         assert(cls->tp_mro->cls == tuple_cls);
-        for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+        for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
             val = b->getattr(attr, NULL);
             if (val)
                 return val;
@@ -948,7 +957,7 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
 Box* boxChar(char c) {
     char d[1];
     d[0] = c;
-    return new BoxedString(std::string(d, 1));
+    return boxStringRef(llvm::StringRef(d, 1));
 }
 
 static Box* noneIfNull(Box* b) {
@@ -963,12 +972,12 @@ static Box* boxStringOrNone(const char* s) {
     if (s == NULL) {
         return None;
     } else {
-        return boxString(std::string(s));
+        return boxStrConstant(s);
     }
 }
 
 static Box* boxStringFromCharPtr(const char* s) {
-    return boxString(std::string(s));
+    return boxStrConstant(s);
 }
 
 Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const std::string& attr_name, Box* obj,
@@ -1096,7 +1105,7 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
                 rewrite_args = NULL;
                 REWRITE_ABORTED("");
                 char* rtn = reinterpret_cast<char*>((char*)obj + member_desc->offset);
-                return boxString(std::string(rtn));
+                return boxStringRef(llvm::StringRef(rtn));
             }
 
             default:
@@ -1160,7 +1169,7 @@ Box* getattrInternalEx(Box* obj, const std::string& attr, GetattrRewriteArgs* re
     if (!cls_only) {
         BoxedClass* cls = obj->cls;
         if (obj->cls->tp_getattro && obj->cls->tp_getattro != PyObject_GenericGetAttr) {
-            Box* r = obj->cls->tp_getattro(obj, new BoxedString(attr));
+            Box* r = obj->cls->tp_getattro(obj, boxString(attr));
             if (!r)
                 throwCAPIException();
             return r;
@@ -1273,40 +1282,7 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
         *bind_obj_out = NULL;
     }
 
-    // TODO this should be a custom getattr
-    if (obj->cls == closure_cls) {
-        Box* val = NULL;
-        if (rewrite_args) {
-            GetattrRewriteArgs hrewrite_args(rewrite_args->rewriter, rewrite_args->obj, rewrite_args->destination);
-            val = obj->getattr(attr, &hrewrite_args);
-
-            if (!hrewrite_args.out_success) {
-                rewrite_args = NULL;
-            } else if (val) {
-                rewrite_args->out_rtn = hrewrite_args.out_rtn;
-                rewrite_args->out_success = true;
-                return val;
-            }
-        } else {
-            val = obj->getattr(attr, NULL);
-            if (val) {
-                return val;
-            }
-        }
-
-        // If val doesn't exist, then we move up to the parent closure
-        // TODO closures should get their own treatment, but now just piggy-back on the
-        // normal hidden-class IC logic.
-        // Can do better since we don't need to guard on the cls (always going to be closure)
-        BoxedClosure* closure = static_cast<BoxedClosure*>(obj);
-        if (closure->parent) {
-            if (rewrite_args) {
-                rewrite_args->obj = rewrite_args->obj->getAttr(offsetof(BoxedClosure, parent));
-            }
-            return getattrInternal(closure->parent, attr, rewrite_args);
-        }
-        raiseExcHelper(NameError, "free variable '%s' referenced before assignment in enclosing scope", attr.c_str());
-    }
+    assert(obj->cls != closure_cls);
 
     // Handle descriptor logic here.
     // A descriptor is either a data descriptor or a non-data descriptor.
@@ -2242,7 +2218,7 @@ extern "C" void dump(void* p) {
 
             if (cls->tp_mro && cls->tp_mro->cls == tuple_cls) {
                 bool first = true;
-                for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+                for (auto b : *static_cast<BoxedTuple*>(cls->tp_mro)) {
                     if (!first)
                         printf(" ->");
                     first = false;
@@ -2253,11 +2229,11 @@ extern "C" void dump(void* p) {
         }
 
         if (isSubclass(b->cls, str_cls)) {
-            printf("String value: %s\n", static_cast<BoxedString*>(b)->s.c_str());
+            printf("String value: %s\n", static_cast<BoxedString*>(b)->data());
         }
 
         if (isSubclass(b->cls, tuple_cls)) {
-            printf("%ld elements\n", static_cast<BoxedTuple*>(b)->elts.size());
+            printf("%ld elements\n", static_cast<BoxedTuple*>(b)->size());
         }
 
         if (isSubclass(b->cls, int_cls)) {
@@ -2580,6 +2556,9 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
     }
 
     EffortLevel new_effort = initialEffort();
+    // Only the interpreter currently supports non-module-globals:
+    if (!f->source->scoping->areGlobalsFromModule())
+        new_effort = EffortLevel::INTERPRETED;
 
     std::vector<ConcreteCompilerType*> arg_types;
     for (int i = 0; i < num_output_args; i++) {
@@ -2704,7 +2683,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (!func->isGenerator) {
         if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
             && !f->takes_varargs && !f->takes_kwargs) {
-            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, arg1, arg2, arg3, args);
+            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, func->globals, arg1, arg2, arg3, args);
         }
     }
     slowpath_callfunc_slowpath.log();
@@ -2797,7 +2776,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), emptyTupleConst);
         }
 
-        Box* ovarargs = new BoxedTuple(BoxedTuple::GCVector(unused_positional.begin(), unused_positional.end()));
+        Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
         getArg(varargs_idx, oarg1, oarg2, oarg3, oargs) = ovarargs;
     } else if (unused_positional.size()) {
         raiseExcHelper(TypeError, "%s() takes at most %d argument%s (%d given)", getFunctionName(f).c_str(),
@@ -2888,7 +2867,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                 Box*& v = okwargs->d[p.first];
                 if (v) {
                     raiseExcHelper(TypeError, "%s() got multiple values for keyword argument '%s'",
-                                   getFunctionName(f).c_str(), s->s.c_str());
+                                   getFunctionName(f).c_str(), s->data());
                 }
                 v = p.second;
             }
@@ -2961,20 +2940,23 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (func->isGenerator) {
         res = createGenerator(func, oarg1, oarg2, oarg3, oargs);
     } else {
-        res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, oarg1, oarg2, oarg3, oargs);
+        res = callCLFunc(f, rewrite_args, num_output_args, closure, NULL, func->globals, oarg1, oarg2, oarg3, oargs);
     }
 
     return res;
 }
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                BoxedGenerator* generator, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
+                BoxedGenerator* generator, BoxedDict* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));
     if (chosen_cf->is_interpreted) {
-        return astInterpretFunction(chosen_cf, num_output_args, closure, generator, oarg1, oarg2, oarg3, oargs);
+        return astInterpretFunction(chosen_cf, num_output_args, closure, generator, globals, oarg1, oarg2, oarg3,
+                                    oargs);
     }
+
+    ASSERT(!globals, "need to update the calling conventions if we want to pass globals");
 
     if (rewrite_args) {
         rewrite_args->rewriter->addDependenceOn(chosen_cf->dependent_callsites);
@@ -3877,14 +3859,15 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     RELEASE_ASSERT(arg1->cls == str_cls, "");
     BoxedString* name = static_cast<BoxedString*>(arg1);
 
-    if (bases->elts.size() == 0) {
-        bases = new BoxedTuple({ object_cls });
+    if (bases->size() == 0) {
+        bases = BoxedTuple::create({ object_cls });
     }
 
     // Ported from CPython:
-    int nbases = bases->elts.size();
+    int nbases = bases->size();
     BoxedClass* winner = metatype;
-    for (auto tmp : bases->elts) {
+
+    for (auto tmp : *bases) {
         auto tmptype = tmp->cls;
         if (tmptype == classobj_cls)
             continue;
@@ -3948,8 +3931,12 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made->setattr(static_cast<BoxedString*>(k)->s, p.second, NULL);
     }
 
-    if (!made->hasattr("__module__"))
-        made->giveAttr("__module__", boxString(getCurrentModule()->name()));
+    if (!made->hasattr("__module__")) {
+        Box* gl = getGlobalsDict();
+        Box* attr = PyDict_GetItemString(gl, "__name__");
+        if (attr)
+            made->giveAttr("__module__", attr);
+    }
     if (!made->hasattr("__doc__"))
         made->giveAttr("__doc__", None);
 
@@ -3963,7 +3950,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         made->tp_alloc = PyType_GenericAlloc;
 
     assert(!made->simple_destructor);
-    for (auto b : bases->elts) {
+    for (auto b : *bases) {
         if (!isSubclass(b->cls, type_cls))
             continue;
         BoxedClass* b_cls = static_cast<BoxedClass*>(b);
@@ -4265,7 +4252,7 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
 Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     assert(vararg->cls == tuple_cls);
 
-    int n = vararg->elts.size();
+    int n = vararg->size();
     int args_to_pass = n + 2; // 1 for obj, 1 for kwargs
 
     Box** args = NULL;
@@ -4282,14 +4269,24 @@ Box* typeCall(Box* obj, BoxedTuple* vararg, BoxedDict* kwargs) {
     return typeCallInternal(NULL, NULL, ArgPassSpec(n + 1, 0, false, true), arg1, arg2, arg3, args, NULL);
 }
 
-extern "C" void delGlobal(BoxedModule* m, const std::string* name) {
-    if (!m->getattr(*name)) {
-        raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+extern "C" void delGlobal(Box* globals, const std::string* name) {
+    if (globals->cls == module_cls) {
+        BoxedModule* m = static_cast<BoxedModule*>(globals);
+        if (!m->getattr(*name)) {
+            raiseExcHelper(NameError, "name '%s' is not defined", name->c_str());
+        }
+        m->delattr(*name, NULL);
+    } else {
+        assert(globals->cls == dict_cls);
+        BoxedDict* d = static_cast<BoxedDict*>(globals);
+
+        auto it = d->d.find(boxString(*name));
+        assertNameDefined(it != d->d.end(), name->c_str(), NameError, false /* local_var_msg */);
+        d->d.erase(it);
     }
-    m->delattr(*name, NULL);
 }
 
-extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
+extern "C" Box* getGlobal(Box* globals, const std::string* name) {
     static StatCounter slowpath_getglobal("slowpath_getglobal");
     slowpath_getglobal.log();
     static StatCounter nopatch_getglobal("nopatch_getglobal");
@@ -4307,25 +4304,44 @@ extern "C" Box* getGlobal(BoxedModule* m, const std::string* name) {
             Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "getGlobal"));
 
         Box* r;
-        if (rewriter.get()) {
-            // rewriter->trap();
+        if (globals->cls == module_cls) {
+            BoxedModule* m = static_cast<BoxedModule*>(globals);
+            if (rewriter.get()) {
+                RewriterVar* r_mod = rewriter->getArg(0);
 
-            GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getReturnDestination());
-            r = m->getattr(*name, &rewrite_args);
-            if (!rewrite_args.out_success) {
-                rewriter.reset(NULL);
-            }
-            if (r) {
-                if (rewriter.get()) {
-                    rewriter->commitReturning(rewrite_args.out_rtn);
+                // Guard on it being a module rather than a dict
+                // TODO is this guard necessary? I'm being conservative now, but I think we can just
+                // insist that the type passed in is fixed for any given instance of a getGlobal call.
+                r_mod->addAttrGuard(BOX_CLS_OFFSET, (intptr_t)module_cls);
+
+                GetattrRewriteArgs rewrite_args(rewriter.get(), r_mod, rewriter->getReturnDestination());
+                r = m->getattr(*name, &rewrite_args);
+                if (!rewrite_args.out_success) {
+                    rewriter.reset(NULL);
                 }
-                return r;
+                if (r) {
+                    if (rewriter.get()) {
+                        rewriter->commitReturning(rewrite_args.out_rtn);
+                    }
+                    return r;
+                }
+            } else {
+                r = m->getattr(*name, NULL);
+                nopatch_getglobal.log();
+                if (r) {
+                    return r;
+                }
             }
         } else {
-            r = m->getattr(*name, NULL);
-            nopatch_getglobal.log();
-            if (r) {
-                return r;
+            assert(globals->cls == dict_cls);
+            BoxedDict* d = static_cast<BoxedDict*>(globals);
+
+            rewriter.reset(NULL);
+            REWRITE_ABORTED("Rewriting not implemented for getGlobals with a dict globals yet");
+
+            auto it = d->d.find(boxString(*name));
+            if (it != d->d.end()) {
+                return it->second;
             }
         }
 
@@ -4377,6 +4393,10 @@ extern "C" Box* importFrom(Box* _m, const std::string* name) {
 }
 
 extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
+    // TODO(kmod): it doesn't seem too bad to update this to take custom globals;
+    // it looks like mostly a matter of changing the getattr calls to getitem.
+    RELEASE_ASSERT(getGlobals() == to_module, "importStar doesn't support custom globals yet");
+
     assert(_from_module->cls == module_cls);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
@@ -4408,7 +4428,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
             Box* attr_value = from_module->getattr(casted_attr_name->s);
 
             if (!attr_value)
-                raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->s.c_str());
+                raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->data());
 
             to_module->setattr(casted_attr_name->s, attr_value, NULL);
         }
@@ -4445,8 +4465,7 @@ extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val) {
     setitem(boxedLocals, boxString(attr), val);
 }
 
-extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module) {
-    assert(parent_module->cls == module_cls);
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, Box* globals) {
     assert(boxedLocals != NULL);
 
     if (boxedLocals->cls == dict_cls) {
@@ -4471,7 +4490,7 @@ extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* 
 
     // TODO exception name?
     std::string attr_string(attr);
-    return getGlobal(parent_module, &attr_string);
+    return getGlobal(globals, &attr_string);
 }
 
 extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr) {

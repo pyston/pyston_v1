@@ -250,7 +250,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
     }
 
     try {
-        return getattr(o, static_cast<BoxedString*>(attr_name)->s.c_str());
+        return getattr(o, static_cast<BoxedString*>(attr_name)->data());
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
@@ -258,7 +258,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 }
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
-    Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->s.c_str(), NULL, false, false, NULL, NULL);
+    Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->data(), NULL, false, false, NULL, NULL);
     if (!r)
         PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
                      PyString_AS_STRING(name));
@@ -266,12 +266,14 @@ extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexce
 }
 
 extern "C" PyObject* _PyObject_GenericGetAttrWithDict(PyObject* obj, PyObject* name, PyObject* dict) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" int _PyObject_GenericSetAttrWithDict(PyObject* obj, PyObject* name, PyObject* value,
                                                 PyObject* dict) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 
@@ -295,7 +297,8 @@ extern "C" int PyObject_SetItem(PyObject* o, PyObject* key, PyObject* v) noexcep
 }
 
 extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) noexcept {
@@ -320,7 +323,8 @@ extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) 
             translated_op = AST_TYPE::GtE;
             break;
         default:
-            Py_FatalError("unimplemented");
+            fatalOrError(PyExc_NotImplementedError, "unimplemented");
+            return nullptr;
     };
 
     try {
@@ -339,7 +343,8 @@ extern "C" long PyObject_Hash(PyObject* o) noexcept {
     try {
         return hash(o)->n;
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return -1;
     }
 }
 
@@ -369,13 +374,15 @@ extern "C" int PyObject_IsTrue(PyObject* o) noexcept {
     try {
         return nonzero(o);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return -1;
     }
 }
 
 
 extern "C" int PyObject_Not(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* PyObject_Call(PyObject* callable_object, PyObject* args, PyObject* kw) noexcept {
@@ -449,15 +456,18 @@ extern "C" int PyObject_Print(PyObject* obj, FILE* fp, int flags) noexcept {
 };
 
 extern "C" PyObject* PySequence_Repeat(PyObject* o, Py_ssize_t count) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PySequence_InPlaceConcat(PyObject* o1, PyObject* o2) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PySequence_InPlaceRepeat(PyObject* o, Py_ssize_t count) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PySequence_GetItem(PyObject* o, Py_ssize_t i) noexcept {
@@ -475,32 +485,39 @@ extern "C" PyObject* PySequence_GetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t 
         // Not sure if this is really the same:
         return getitem(o, createSlice(boxInt(i1), boxInt(i2), None));
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
 extern "C" int PySequence_SetItem(PyObject* o, Py_ssize_t i, PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" int PySequence_DelItem(PyObject* o, Py_ssize_t i) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" int PySequence_SetSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2, PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" int PySequence_DelSlice(PyObject* o, Py_ssize_t i1, Py_ssize_t i2) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" Py_ssize_t PySequence_Count(PyObject* o, PyObject* value) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" Py_ssize_t PySequence_Index(PyObject* o, PyObject* value) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
@@ -509,7 +526,8 @@ extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
     if (PyList_Check(o))
         return PyList_AsTuple(o);
 
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
@@ -746,7 +764,8 @@ extern "C" int PyErr_BadArgument() noexcept {
 }
 
 extern "C" PyObject* PyErr_NoMemory() noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" int PyExceptionClass_Check(PyObject* o) noexcept {
@@ -871,7 +890,8 @@ extern "C" int PyErr_WarnEx(PyObject* category, const char* text, Py_ssize_t sta
     if (category == PyExc_DeprecationWarning)
         return 0;
 
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
@@ -879,9 +899,11 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
     RELEASE_ASSERT(module_name->cls == str_cls, "");
 
     try {
-        return importModuleLevel(&static_cast<BoxedString*>(module_name)->s, None, None, -1);
+        std::string _module_name = static_cast<BoxedString*>(module_name)->s;
+        return importModuleLevel(_module_name, None, None, -1);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
@@ -1124,7 +1146,8 @@ extern "C" PyOS_sighandler_t PyOS_setsig(int sig, PyOS_sighandler_t handler) noe
 }
 
 extern "C" int Py_AddPendingCall(int (*func)(void*), void* arg) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* _PyImport_FixupExtension(char* name, char* filename) noexcept {
@@ -1134,7 +1157,8 @@ extern "C" PyObject* _PyImport_FixupExtension(char* name, char* filename) noexce
 }
 
 extern "C" PyObject* _PyImport_FindExtension(char* name, char* filename) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 static PyObject* listmethodchain(PyMethodChain* chain) noexcept {
@@ -1237,6 +1261,11 @@ extern "C" int PyEval_GetRestricted(void) noexcept {
 
 extern "C" void PyEval_InitThreads(void) noexcept {
     // nothing to do here
+}
+
+extern "C" char* PyModule_GetName(PyObject* m) noexcept {
+    assert(m->cls == module_cls);
+    return &static_cast<BoxedModule*>(m)->fn[0];
 }
 
 BoxedModule* importTestExtension(const std::string& name) {
@@ -1345,5 +1374,12 @@ void setupCAPI() {
 }
 
 void teardownCAPI() {
+}
+
+void fatalOrError(PyObject* exception, const char* message) noexcept {
+    if (CONTINUE_AFTER_FATAL)
+        PyErr_SetString(exception, message);
+    else
+        Py_FatalError(message);
 }
 }

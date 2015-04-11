@@ -183,7 +183,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
 // The codegen_lock needs to be held in W mode before calling this function:
 CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, EffortLevel effort,
                                   const OSREntryDescriptor* entry_descriptor) {
-    Timer _t("for compileFunction()");
+    Timer _t("for compileFunction()", 1000);
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
@@ -316,26 +316,30 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         EffortLevel effort = initialEffort();
 
+        assert(scoping->areGlobalsFromModule());
+
         cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
         assert(cf->clfunc->versions.size());
     }
 
     if (cf->is_interpreted)
-        astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL);
+        astInterpretFunction(cf, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     else
         ((void (*)())cf->code)();
 }
 
 template <typename AST_Type>
-Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, Box* boxedLocals) {
+Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, BoxedDict* globals, Box* boxedLocals) {
     CompiledFunction* cf;
+
+    assert(!globals || globals->cls == dict_cls);
 
     { // scope for limiting the locked region:
         LOCK_REGION(codegen_rwlock.asWrite());
 
         Timer _t("for evalOrExec()");
 
-        ScopingAnalysis* scoping = new ScopingAnalysis(source);
+        ScopingAnalysis* scoping = new ScopingAnalysis(source, globals == NULL);
 
         SourceInfo* si = new SourceInfo(bm, scoping, source, body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
@@ -352,19 +356,23 @@ Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm,
         assert(cf->clfunc->versions.size());
     }
 
-    return astInterpretFunctionEval(cf, boxedLocals);
+    return astInterpretFunctionEval(cf, globals, boxedLocals);
 }
 
 // Main entrypoints for eval and exec.
 Box* eval(Box* boxedCode) {
     Box* boxedLocals = fastLocalsToBoxedLocals();
     BoxedModule* module = getCurrentModule();
+    Box* globals = getGlobals();
+
+    if (globals == module)
+        globals = NULL;
 
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
     RELEASE_ASSERT(boxedCode->cls == str_cls, "");
-    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
     AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
@@ -376,21 +384,52 @@ Box* eval(Box* boxedCode) {
     stmt->value = parsedExpr->body;
     std::vector<AST_stmt*> body = { stmt };
 
-    return evalOrExec<AST_Expression>(parsedExpr, body, module, boxedLocals);
+    assert(!globals || globals->cls == dict_cls);
+
+    return evalOrExec<AST_Expression>(parsedExpr, body, module, static_cast<BoxedDict*>(globals), boxedLocals);
 }
 
-Box* exec(Box* boxedCode) {
-    Box* boxedLocals = fastLocalsToBoxedLocals();
+Box* exec(Box* boxedCode, Box* globals, Box* locals) {
+    if (globals == None)
+        globals = NULL;
+
+    if (locals == None)
+        locals = NULL;
+
+    // TODO boxedCode is allowed to be a tuple
+    // TODO need to handle passing in globals
+    if (locals == NULL) {
+        locals = globals;
+    }
+
+    if (locals == NULL) {
+        locals = fastLocalsToBoxedLocals();
+    }
+
+    if (globals == NULL)
+        globals = getGlobals();
+
     BoxedModule* module = getCurrentModule();
+
+    if (globals == module)
+        globals = NULL;
+
+    assert(!globals || globals->cls == dict_cls);
+
+    if (globals) {
+        // From CPython (they set it to be f->f_builtins):
+        if (PyDict_GetItemString(globals, "__builtins__") == NULL)
+            PyDict_SetItemString(globals, "__builtins__", builtins_module);
+    }
 
     // TODO same issues as in `eval`
     RELEASE_ASSERT(boxedCode->cls == str_cls, "");
-    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;
 
-    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, boxedLocals);
+    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, static_cast<BoxedDict*>(globals), locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

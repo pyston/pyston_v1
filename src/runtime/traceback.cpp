@@ -96,8 +96,9 @@ Box* BoxedTraceback::getLines(Box* b) {
 
     if (!tb->py_lines) {
         BoxedList* lines = new BoxedList();
+        lines->ensure(tb->lines.size());
         for (auto line : tb->lines) {
-            auto l = new BoxedTuple({ boxString(line->file), boxString(line->func), boxInt(line->line) });
+            auto l = BoxedTuple::create({ boxString(line->file), boxString(line->func), boxInt(line->line) });
             listAppendInternal(lines, l);
         }
         tb->py_lines = lines;

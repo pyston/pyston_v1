@@ -55,12 +55,12 @@ public:
 
         BoxedTuple::GCVector elts;
         for (auto sr : param_names.args)
-            elts.push_back(new BoxedString(sr));
+            elts.push_back(boxString(sr));
         if (param_names.vararg.size())
-            elts.push_back(new BoxedString(param_names.vararg));
+            elts.push_back(boxString(param_names.vararg));
         if (param_names.kwarg.size())
-            elts.push_back(new BoxedString(param_names.kwarg));
-        return new BoxedTuple(std::move(elts));
+            elts.push_back(boxString(param_names.kwarg));
+        return BoxedTuple::create(elts.size(), &elts[0]);
     }
 
     static Box* flags(Box* b, void*) {

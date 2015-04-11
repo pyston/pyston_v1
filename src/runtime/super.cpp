@@ -51,7 +51,7 @@ public:
     }
 };
 
-static const std::string class_str("__class__");
+static const char* class_str = "__class__";
 
 Box* superGetattribute(Box* _s, Box* _attr) {
     RELEASE_ASSERT(_s->cls == super_cls, "");
@@ -101,7 +101,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
                 continue;
             res = PyDict_GetItem(dict, name);
 #endif
-            res = tmp->getattr(attr->s);
+            res = tmp->getattr(std::string(attr->s));
 
             if (res != NULL) {
 // Pyston change:
@@ -128,7 +128,7 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, attr->s, NULL);
+    Box* r = typeLookup(s->cls, std::string(attr->s), NULL);
     // TODO implement this
     RELEASE_ASSERT(r, "should call the equivalent of objectGetattr here");
     return processDescriptor(r, s, s->cls);
@@ -139,10 +139,11 @@ Box* superRepr(Box* _s) {
     BoxedSuper* s = static_cast<BoxedSuper*>(_s);
 
     if (s->obj_type) {
-        return boxString("<super: <class '" + std::string(s->type ? getNameOfClass(s->type) : "NULL") + "'>, <"
-                         + std::string(getNameOfClass(s->obj_type)) + " object>>");
+        return boxStringTwine(llvm::Twine("<super: <class '") + (s->type ? getNameOfClass(s->type) : "NULL") + "'>, <"
+                              + getNameOfClass(s->obj_type) + " object>>");
     } else {
-        return boxString("<super: <class '" + std::string(s->type ? getNameOfClass(s->type) : "NULL") + "'>, <NULL>>");
+        return boxStringTwine(llvm::Twine("<super: <class '") + (s->type ? getNameOfClass(s->type) : "NULL")
+                              + "'>, <NULL>>");
     }
 }
 

@@ -16,12 +16,14 @@
 #define PYSTON_RUNTIME_TYPES_H
 
 #include <llvm/ADT/StringMap.h>
+#include <llvm/ADT/Twine.h>
 #include <ucontext.h>
 
 #include "Python.h"
 #include "structmember.h"
 
 #include "codegen/irgen/future.h"
+#include "core/contiguous_map.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "gc/gc_alloc.h"
@@ -109,6 +111,9 @@ extern "C" Box* boxUnboundInstanceMethod(Box* func);
 extern "C" Box* boxStringPtr(const std::string* s);
 Box* boxString(const std::string& s);
 Box* boxString(std::string&& s);
+Box* boxStringRef(llvm::StringRef s);
+Box* boxStringTwine(const llvm::Twine& s);
+
 extern "C" BoxedString* boxStrConstant(const char* chars);
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n);
 extern "C" Box* decodeUTF8StringPtr(const std::string* s);
@@ -122,7 +127,7 @@ char* getWriteableStringContents(BoxedString* s);
 
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, BoxedDict* globals,
                               std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
@@ -286,7 +291,7 @@ private:
 
     // Only makes sense for NORMAL hidden classes.  Clients should access through getAttrOffsets():
     llvm::StringMap<int> attr_offsets;
-    llvm::StringMap<HiddenClass*> children;
+    ContiguousMap<llvm::StringRef, HiddenClass*, llvm::StringMap<int>> children;
 
 public:
     static HiddenClass* makeRoot() {
@@ -308,11 +313,8 @@ public:
 
     void gc_visit(GCVisitor* visitor) {
         // Visit children even for the dict-backed case, since children will just be empty
-        for (const auto& p : children) {
-            visitor->visit(p.second);
-        }
+        visitor->visitRange((void* const*)&children.vector()[0], (void* const*)&children.vector()[children.size()]);
     }
-
 
     // Only makes sense for NORMAL hidden classes:
     const llvm::StringMap<int>& getAttrOffsets() {
@@ -373,19 +375,70 @@ public:
 
 class BoxedString : public Box {
 public:
-    // const std::basic_string<char, std::char_traits<char>, StlCompatAllocator<char> > s;
-    std::string s;
+    llvm::StringRef s;
 
+    char* data() { return const_cast<char*>(s.data()); }
+    size_t size() { return s.size(); }
+
+    void* operator new(size_t size, size_t ssize) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(gc_alloc(str_cls->tp_basicsize + ssize + 1, gc::GCKind::PYTHON));
+        rtn->cls = str_cls;
+        return rtn;
+    }
+
+    void* operator new(size_t size, BoxedClass* cls, size_t ssize) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, ssize + 1));
+        rtn->cls = cls;
+        return rtn;
+    }
+
+    // these should be private, but strNew needs them
     BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
-    BoxedString(std::string&& s) __attribute__((visibility("default")));
-    BoxedString(const std::string& s) __attribute__((visibility("default")));
+    explicit BoxedString(size_t n, char c) __attribute__((visibility("default")));
+    explicit BoxedString(llvm::StringRef s) __attribute__((visibility("default")));
+    explicit BoxedString(llvm::StringRef lhs, llvm::StringRef rhs) __attribute__((visibility("default")));
 
-    DEFAULT_CLASS_SIMPLE(str_cls);
+private:
+    // used only in ctors to give our llvm::StringRef the proper pointer
+    char* storage() { return (char*)this + cls->tp_basicsize; }
+
+    void* operator new(size_t size) = delete;
 };
 
 class BoxedUnicode : public Box {
     // TODO implementation
 };
+
+template <typename T> struct StringHash {
+    size_t operator()(const T* str) {
+        size_t hash = 5381;
+        T c;
+
+        while ((c = *str++))
+            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+        return hash;
+    }
+    size_t operator()(const T* str, int len) {
+        size_t hash = 5381;
+        T c;
+
+        while (--len >= 0) {
+            c = *str++;
+            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        }
+
+        return hash;
+    }
+};
+
+template <> struct StringHash<std::string> {
+    size_t operator()(const std::string& str) {
+        StringHash<char> H;
+        return H(&str[0], str.size());
+    }
+};
+
 
 class BoxedInstanceMethod : public Box {
 public:
@@ -435,14 +488,65 @@ public:
 class BoxedTuple : public Box {
 public:
     typedef std::vector<Box*, StlCompatAllocator<Box*>> GCVector;
-    GCVector elts;
 
-    BoxedTuple(GCVector& elts) __attribute__((visibility("default"))) : elts(elts) {}
-    BoxedTuple(GCVector&& elts) __attribute__((visibility("default"))) : elts(std::move(elts)) {}
+    Box** elts;
 
-    DEFAULT_CLASS_SIMPLE(tuple_cls);
+    void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(gc_alloc(_PyObject_VAR_SIZE(tuple_cls, nelts + 1), gc::GCKind::PYTHON));
+        rtn->cls = tuple_cls;
+        return rtn;
+    }
+
+    void* operator new(size_t size, BoxedClass* cls, size_t nelts) __attribute__((visibility("default"))) {
+        Box* rtn = static_cast<Box*>(cls->tp_alloc(cls, nelts));
+        rtn->cls = cls;
+        return rtn;
+    }
+
+    static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t nelts, Box** elts) {
+        BoxedTuple* rtn = new (nelts) BoxedTuple(nelts);
+        memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
+        return rtn;
+    }
+    static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
+
+    static BoxedTuple* create(int64_t size, BoxedClass* cls) { return new (cls, size) BoxedTuple(size); }
+    static BoxedTuple* create(int64_t nelts, Box** elts, BoxedClass* cls) {
+        BoxedTuple* rtn = new (cls, nelts) BoxedTuple(nelts);
+        memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
+        return rtn;
+    }
+    static BoxedTuple* create(std::initializer_list<Box*> members, BoxedClass* cls) {
+        return new (cls, members.size()) BoxedTuple(members);
+    }
+
+    static int Resize(BoxedTuple** pt, size_t newsize) noexcept;
+
+    Box** begin() const { return &elts[0]; }
+    Box** end() const { return &elts[nelts]; }
+
+    size_t size() const { return nelts; }
+
+private:
+    size_t nelts;
+
+    BoxedTuple(size_t size) : elts(reinterpret_cast<Box**>((char*)this + this->cls->tp_basicsize)), nelts(size) {
+        memset(elts, 0, sizeof(Box*) * size);
+    }
+
+    BoxedTuple(std::initializer_list<Box*>& members)
+        : elts(reinterpret_cast<Box**>((char*)this + this->cls->tp_basicsize)), nelts(members.size()) {
+        // by the time we make it here elts[] is big enough to contain members
+        Box** p = &elts[0];
+        for (auto b : members) {
+            *p++ = b;
+        }
+    }
 };
+
 extern "C" BoxedTuple* EmptyTuple;
+extern "C" BoxedString* EmptyString;
 
 struct PyHasher {
     size_t operator()(Box*) const;
@@ -480,7 +584,13 @@ public:
     Box** in_weakreflist;
 
     CLFunction* f;
+
+    // TODO these should really go in BoxedFunction but it's annoying because they don't get
+    // initializd until after BoxedFunctionBase's constructor is run which means they could have
+    // garbage values when the GC is run (BoxedFunctionBase's constructor might call the GC).
+    // So ick... needs to be fixed.
     BoxedClosure* closure;
+    BoxedDict* globals;
 
     bool isGenerator;
     int ndefaults;
@@ -504,7 +614,7 @@ public:
 
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false);
+                  bool isGenerator = false, BoxedDict* globals = NULL);
 
     DEFAULT_CLASS(function_cls);
 };
@@ -528,6 +638,11 @@ public:
 
     BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
     std::string name();
+
+    Box* getStringConstant(const std::string& ast_str);
+
+    llvm::StringMap<int> str_const_index;
+    std::vector<Box*> str_constants;
 
     DEFAULT_CLASS(module_cls);
 };
@@ -618,15 +733,27 @@ public:
     DEFAULT_CLASS_SIMPLE(classmethod_cls);
 };
 
-// TODO is there any particular reason to make this a Box, ie a python-level object?
+// TODO is there any particular reason to make this a Box, i.e. a python-level object?
 class BoxedClosure : public Box {
 public:
-    HCAttrs attrs;
     BoxedClosure* parent;
+    size_t nelts;
+    Box* elts[0];
 
     BoxedClosure(BoxedClosure* parent) : parent(parent) {}
 
-    DEFAULT_CLASS(closure_cls);
+    void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
+        /*
+        BoxedClosure* rtn
+            = static_cast<BoxedClosure*>(gc_alloc(_PyObject_VAR_SIZE(closure_cls, nelts), gc::GCKind::PYTHON));
+            */
+        BoxedClosure* rtn
+            = static_cast<BoxedClosure*>(gc_alloc(sizeof(BoxedClosure) + nelts * sizeof(Box*), gc::GCKind::PYTHON));
+        rtn->nelts = nelts;
+        rtn->cls = closure_cls;
+        memset((void*)rtn->elts, 0, sizeof(Box*) * nelts);
+        return rtn;
+    }
 };
 
 class BoxedGenerator : public Box {
@@ -656,6 +783,7 @@ Box* objectNewNoArgs(BoxedClass* cls);
 Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* makeAttrWrapper(Box* b);
+Box* attrwrapperKeys(Box* b);
 
 #define SystemError ((BoxedClass*)PyExc_SystemError)
 #define StopIteration ((BoxedClass*)PyExc_StopIteration)
@@ -688,4 +816,5 @@ extern Box* dict_descr;
 
 Box* codeForFunction(BoxedFunction*);
 }
+
 #endif

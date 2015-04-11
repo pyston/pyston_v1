@@ -195,7 +195,7 @@ BoxedFile::BoxedFile(FILE* f, std::string fname, const char* fmode, int (*close)
       f_bufptr(0),
       f_setbuf(0),
       unlocked_count(0) {
-    Box* r = fill_file_fields(this, f, new BoxedString(fname), fmode, close);
+    Box* r = fill_file_fields(this, f, boxString(fname), fmode, close);
     checkAndThrowCAPIException();
     assert(r == this);
 }
@@ -823,17 +823,17 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
         raiseExcHelper(TypeError, "");
     }
 
-    const std::string& fn = static_cast<BoxedString*>(s)->s;
-    const std::string& mode = static_cast<BoxedString*>(m)->s;
+    auto fn = static_cast<BoxedString*>(s);
+    auto mode = static_cast<BoxedString*>(m);
 
-    FILE* f = fopen(fn.c_str(), mode.c_str());
+    FILE* f = fopen(fn->data(), mode->data());
     if (!f) {
-        PyErr_SetFromErrnoWithFilename(IOError, fn.c_str());
+        PyErr_SetFromErrnoWithFilename(IOError, fn->data());
         throwCAPIException();
         abort(); // unreachable;
     }
 
-    return new BoxedFile(f, fn, PyString_AsString(m));
+    return new BoxedFile(f, fn->s, PyString_AsString(m));
 }
 
 static PyObject* file_readlines(BoxedFile* f, PyObject* args) noexcept {

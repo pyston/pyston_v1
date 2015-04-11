@@ -850,12 +850,12 @@ pypa::String pypaUnicodeEscapeDecoder(pypa::String s, bool raw_prefix, bool& err
         checkAndThrowCAPIException();
         BoxedString* str_utf8 = (BoxedString*)PyUnicode_AsUTF8String(unicode);
         checkAndThrowCAPIException();
-        return str_utf8->s;
+        return std::string(str_utf8->s);
     } catch (ExcInfo e) {
         error = true;
         BoxedString* error_message = str(e.value);
         if (error_message && error_message->cls == str_cls)
-            return error_message->s;
+            return std::string(error_message->s);
         return "Encountered an unknown error inside pypaUnicodeEscapeDecoder";
     }
 }

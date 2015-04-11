@@ -88,19 +88,55 @@ void parseEhFrame(uint64_t start_addr, uint64_t size, uint64_t* out_data, uint64
 
 class CFRegistry {
 private:
-    // TODO use a binary search tree
     std::vector<CompiledFunction*> cfs;
 
-public:
-    void registerCF(CompiledFunction* cf) { cfs.push_back(cf); }
-
+    // similar to Java's Array.binarySearch:
+    // return values are either:
+    //   >= 0 : the index where a given item was found
+    //   < 0  : a negative number that can be transformed (using "-num-1") into the insertion point
+    //
     // addr is the return address of the callsite, so we will check it against
     // the region (start, end] (opposite-endedness of normal half-open regions)
-    CompiledFunction* getCFForAddress(uint64_t addr) {
-        for (auto* cf : cfs) {
-            if (cf->code_start < addr && addr <= cf->code_start + cf->code_size)
-                return cf;
+    //
+    int find_cf(uint64_t addr) {
+        int l = 0;
+        int r = cfs.size() - 1;
+        while (l <= r) {
+            int mid = l + (r - l) / 2;
+            auto mid_cf = cfs[mid];
+            if (addr <= mid_cf->code_start) {
+                r = mid - 1;
+            } else if (addr > mid_cf->code_start + mid_cf->code_size) {
+                l = mid + 1;
+            } else {
+                return mid;
+            }
         }
+        return -(l + 1);
+    }
+
+public:
+    void registerCF(CompiledFunction* cf) {
+        if (cfs.empty()) {
+            cfs.push_back(cf);
+            return;
+        }
+
+        int idx = find_cf((uint64_t)cf->code_start);
+        if (idx >= 0)
+            RELEASE_ASSERT(0, "CompiledFunction registered twice?");
+
+        cfs.insert(cfs.begin() + (-idx - 1), cf);
+    }
+
+    CompiledFunction* getCFForAddress(uint64_t addr) {
+        if (cfs.empty())
+            return NULL;
+
+        int idx = find_cf(addr);
+        if (idx >= 0)
+            return cfs[idx];
+
         return NULL;
     }
 };
@@ -296,6 +332,17 @@ public:
             abort();
         } else if (id.type == PythonFrameId::INTERPRETED) {
             return getCurrentStatementForInterpretedFrame((void*)id.bp);
+        }
+        abort();
+    }
+
+    Box* getGlobals() {
+        if (id.type == PythonFrameId::COMPILED) {
+            CompiledFunction* cf = getCF();
+            assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+            return cf->clfunc->source->parent_module;
+        } else if (id.type == PythonFrameId::INTERPRETED) {
+            return getGlobalsForInterpretedFrame((void*)id.bp);
         }
         abort();
     }
@@ -500,7 +547,7 @@ BoxedTraceback* getTraceback() {
         return new BoxedTraceback();
     }
 
-    Timer _t("getTraceback");
+    Timer _t("getTraceback", 1000);
 
     std::vector<const LineInfo*> entries;
     for (auto& frame_iter : unwindPythonFrames()) {
@@ -559,6 +606,21 @@ CompiledFunction* getTopCompiledFunction() {
     if (!rtn)
         return NULL;
     return getTopPythonFrame()->getCF();
+}
+
+Box* getGlobals() {
+    auto it = getTopPythonFrame();
+    return it->getGlobals();
+}
+
+Box* getGlobalsDict() {
+    Box* globals = getGlobals();
+    if (!globals)
+        return NULL;
+
+    if (isSubclass(globals->cls, module_cls))
+        return makeAttrWrapper(globals);
+    return globals;
 }
 
 BoxedModule* getCurrentModule() {
@@ -656,7 +718,7 @@ Box* fastLocalsToBoxedLocals() {
         if (scope_info->areLocalsFromModule()) {
             // TODO we should cache this in frame_info->locals or something so that locals()
             // (and globals() too) will always return the same dict
-            return makeAttrWrapper(getCurrentModule());
+            return getGlobalsDict();
         }
 
         if (frame_iter.getId().type == PythonFrameId::COMPILED) {
@@ -758,18 +820,21 @@ Box* fastLocalsToBoxedLocals() {
 
         // Add the locals from the closure
         // TODO in a ClassDef scope, we aren't supposed to add these
-        for (; closure != NULL; closure = closure->parent) {
-            assert(closure->cls == closure_cls);
-            for (auto& attr_offset : closure->attrs.hcls->getAttrOffsets()) {
-                const std::string& name = attr_offset.first();
-                int offset = attr_offset.second;
-                Box* val = closure->attrs.attr_list->attrs[offset];
-                if (val != NULL && scope_info->isPassedToViaClosure(scope_info->internString(name))) {
-                    Box* boxedName = boxString(name);
-                    if (d->d.count(boxedName) == 0) {
-                        d->d[boxString(name)] = val;
-                    }
-                }
+        size_t depth = 0;
+        for (auto& p : scope_info->getAllDerefVarsAndInfo()) {
+            InternedString name = p.first;
+            DerefInfo derefInfo = p.second;
+            while (depth < derefInfo.num_parents_from_passed_closure) {
+                depth++;
+                closure = closure->parent;
+            }
+            assert(closure != NULL);
+            Box* val = closure->elts[derefInfo.offset];
+            Box* boxedName = boxString(name.str());
+            if (val != NULL) {
+                d->d[boxedName] = val;
+            } else {
+                d->d.erase(boxedName);
             }
         }
 

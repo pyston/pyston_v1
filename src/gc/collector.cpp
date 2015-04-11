@@ -150,6 +150,7 @@ static std::unordered_set<void*> nonheap_roots;
 // typically all have lower addresses than the heap roots, so this can serve as a cheap
 // way to verify it's not a nonheap root (the full check requires a hashtable lookup).
 static void* max_nonheap_root = 0;
+static void* min_nonheap_root = (void*)~0;
 void registerNonheapRootObject(void* obj) {
     // I suppose that things could work fine even if this were true, but why would it happen?
     assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
@@ -158,10 +159,13 @@ void registerNonheapRootObject(void* obj) {
     nonheap_roots.insert(obj);
 
     max_nonheap_root = std::max(obj, max_nonheap_root);
+    min_nonheap_root = std::min(obj, min_nonheap_root);
 }
 
 bool isNonheapRoot(void* p) {
-    return p <= max_nonheap_root && nonheap_roots.count(p) != 0;
+    if (p > max_nonheap_root || p < min_nonheap_root)
+        return false;
+    return nonheap_roots.count(p) != 0;
 }
 
 bool isValidGCObject(void* p) {
@@ -187,6 +191,9 @@ bool GCVisitor::isValid(void* p) {
 }
 
 void GCVisitor::visit(void* p) {
+    if (!p)
+        return;
+
     if (isNonheapRoot(p)) {
         return;
     } else {
@@ -252,7 +259,7 @@ void markPhase() {
     }
 
     for (auto h : *getRootHandles()) {
-        visitor.visitPotential(h->value);
+        visitor.visit(h->value);
     }
 
     // if (VERBOSITY()) printf("Found %d roots\n", stack.size());

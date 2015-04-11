@@ -727,7 +727,7 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
 }
 
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure, bool isGenerator,
-                               const std::vector<ConcreteCompilerVariable*>& defaults) {
+                               BoxedDict* globals, const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
@@ -757,12 +757,15 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
 
     llvm::Value* isGenerator_v = llvm::ConstantInt::get(g.i1, isGenerator, false);
 
+    assert(globals == NULL);
+    llvm::Value* globals_v = embedConstantPtr(nullptr, g.llvm_dict_type_ptr);
+
     // We know this function call can't throw, so it's safe to use emitter.getBuilder()->CreateCall() rather than
     // emitter.createCall().
     llvm::Value* boxed = emitter.getBuilder()->CreateCall(
         g.funcs.boxCLFunction,
-        std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, isGenerator_v, scratch,
-                                   getConstantInt(defaults.size(), g.i64) });
+        std::vector<llvm::Value*>{ embedConstantPtr(f, g.llvm_clfunction_type_ptr), closure_v, isGenerator_v, globals_v,
+                                   scratch, getConstantInt(defaults.size(), g.i64) });
 
     if (convertedClosure)
         convertedClosure->decvref(emitter);
@@ -1440,7 +1443,7 @@ public:
     CompilerType* getattrType(const std::string* attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattr()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = cls->getattr(*attr);
+            Box* rtattr = typeLookup(cls, *attr, nullptr);
             if (rtattr == NULL)
                 return UNDEF;
 
@@ -1466,7 +1469,7 @@ public:
                               const std::string* attr, bool cls_only) override {
         // Any changes here need to be mirrored in getattrType()
         if (canStaticallyResolveGetattrs()) {
-            Box* rtattr = cls->getattr(*attr);
+            Box* rtattr = typeLookup(cls, *attr, nullptr);
             if (rtattr == NULL) {
                 llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
                                                           getStringConstantPtr(std::string(getNameOfClass(cls)) + "\0"),
@@ -1781,15 +1784,17 @@ public:
 
     CompilerVariable* getattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var,
                               const std::string* attr, bool cls_only) override {
+        RELEASE_ASSERT(0, "should not be called\n");
+        /*
         assert(!cls_only);
         llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(var->getValue(), g.llvm_value_type_ptr);
         return ConcreteCompilerVariable(UNKNOWN, bitcast, true).getattr(emitter, info, attr, cls_only);
+        */
     }
 
     void setattr(IREmitter& emitter, const OpInfo& info, ConcreteCompilerVariable* var, const std::string* attr,
                  CompilerVariable* v) override {
-        llvm::Value* bitcast = emitter.getBuilder()->CreateBitCast(var->getValue(), g.llvm_value_type_ptr);
-        ConcreteCompilerVariable(UNKNOWN, bitcast, true).setattr(emitter, info, attr, v);
+        RELEASE_ASSERT(0, "should not be called\n");
     }
 
     ConcreteCompilerType* getConcreteType() override { return this; }
@@ -2152,21 +2157,28 @@ public:
             assert(v->getType() == g.i64);
             if (llvm::ConstantInt* ci = llvm::dyn_cast<llvm::ConstantInt>(v)) {
                 int64_t i = ci->getSExtValue();
-                if (i >= 0 && i < var->getValue()->size()) {
-                    CompilerVariable* rtn = (*var->getValue())[i];
+                auto elts = var->getValue();
+                if (i >= 0 && i < elts->size()) {
+                    CompilerVariable* rtn = (*elts)[i];
+                    rtn->incvref();
+                    return rtn;
+                } else if (i < 0 && -i <= elts->size()) {
+                    CompilerVariable* rtn = (*elts)[elts->size() + i];
                     rtn->incvref();
                     return rtn;
                 } else {
-                    llvm::CallSite call = emitter.createCall2(info.unw_info, g.funcs.raiseAttributeErrorStr,
-                                                              getStringConstantPtr(debugName() + '\0'),
-                                                              getStringConstantPtr("__getitem__\0"));
+                    llvm::CallSite call = emitter.createCall(info.unw_info, g.funcs.raiseIndexErrorStr,
+                                                             getStringConstantPtr("tuple\0"));
                     call.setDoesNotReturn();
                     return undefVariable();
                 }
             }
         }
-        RELEASE_ASSERT(0, "");
-        // return getConstantInt(var->getValue()->size(), g.i64);
+
+        ConcreteCompilerVariable* converted = var->makeConverted(emitter, BOXED_TUPLE);
+        CompilerVariable* rtn = converted->getitem(emitter, info, slice);
+        converted->decvref(emitter);
+        return rtn;
     }
 
     ConcreteCompilerVariable* len(IREmitter& emitter, const OpInfo& info, VAR* var) override {
@@ -2201,20 +2213,20 @@ public:
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == numFrameArgs());
 
-        BoxedTuple::GCVector elts;
+        BoxedTuple* rtn = BoxedTuple::create(elt_types.size());
+        int rtn_idx = 0;
         int cur_idx = 0;
         for (auto e : elt_types) {
             int num_args = e->numFrameArgs();
             // TODO: inefficient to make these copies
             FrameVals sub_vals(vals.begin() + cur_idx, vals.begin() + cur_idx + num_args);
 
-            elts.push_back(e->deserializeFromFrame(sub_vals));
+            rtn->elts[rtn_idx++] = e->deserializeFromFrame(sub_vals);
 
             cur_idx += num_args;
         }
         assert(cur_idx == vals.size());
-
-        return new BoxedTuple(std::move(elts));
+        return rtn;
     }
 
     int numFrameArgs() override {

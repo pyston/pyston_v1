@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 2.8)
 project(pyston C CXX ASM)
 
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
+include(CheckTypeSize)
 include(ExternalProject)
 
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(DEPS_DIR $ENV{HOME}/pyston_deps)
 
 # set build type to release by default
@@ -160,6 +162,17 @@ find_package(LibLZMA REQUIRED)
 link_directories(${CMAKE_BINARY_DIR}/libunwind/lib)
 link_directories(${LLVM_LIBRARY_DIRS})
 
+
+# generate config.h - must be after LLVM is configured
+set(CMAKE_EXTRA_INCLUDE_FILES ${CMAKE_SOURCE_DIR}/src/runtime/types.h)
+set(CMAKE_REQUIRED_DEFINITIONS "-DNVALGRIND -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS")
+set(CMAKE_REQUIRED_INCLUDES ${DEPS_DIR}/llvm-trunk/include
+                            ${CMAKE_BINARY_DIR}/llvm/include
+                            ${CMAKE_SOURCE_DIR}/from_cpython/Include
+                            ${CMAKE_SOURCE_DIR}/src)
+check_type_size("pyston::BoxedDict" SIZEOF_BOXEDDICT LANGUAGE CXX)
+configure_file(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_BINARY_DIR}/config.h)
+
 add_subdirectory(lib_pyston)
 add_subdirectory(from_cpython)
 add_subdirectory(src)
@@ -188,6 +201,8 @@ add_test(NAME check-format COMMAND ${CMAKE_SOURCE_DIR}/tools/check_format.sh ${L
 add_test(NAME gc_unittest COMMAND gc_unittest)
 add_test(NAME analysis_unittest COMMAND analysis_unittest)
 add_test(NAME pyston_defaults COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
+# we pass -I to cpython tests and skip failing ones b/c they are slooow otherwise
+add_test(NAME pyston_defaults_cpython_tests COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-S -a=-I -k --exit-code-only --skip-failing ${CMAKE_SOURCE_DIR}/test/cpython)
 add_test(NAME pyston_max_compilation_tier COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -R ./pyston -j${TEST_THREADS} -a=-O -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 add_test(NAME pyston_experimental_pypa_parser COMMAND ${PYTHON_EXE} ${CMAKE_SOURCE_DIR}/tools/tester.py -a=-x -R ./pyston -j${TEST_THREADS} -a=-n -a=-S -k ${CMAKE_SOURCE_DIR}/test/tests)
 

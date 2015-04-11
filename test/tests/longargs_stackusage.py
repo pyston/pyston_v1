@@ -1,3 +1,5 @@
+# skip-if: True
+
 # This is a test to make sure that the stack space we allocate
 # for "long arg" calls (ie calls that take more than 4 arguments)
 # gets restored.

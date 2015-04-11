@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// See https://docs.python.org/2/reference/expressions.html#yieldexpr for the relevant Python language reference
+// documentation on generators.
+
 #include "runtime/generator.h"
 
 #include <algorithm>
@@ -60,6 +63,22 @@ public:
     }
 };
 
+static void freeGeneratorStack(BoxedGenerator* g) {
+    if (g->stack_begin == NULL)
+        return;
+
+    available_addrs.push_back((uint64_t)g->stack_begin);
+    // Limit the number of generator stacks we keep around:
+    if (available_addrs.size() > 5) {
+        uint64_t addr = available_addrs.front();
+        available_addrs.pop_front();
+        int r = munmap((void*)(addr - MAX_STACK_SIZE), MAX_STACK_SIZE);
+        assert(r == 0);
+    }
+
+    g->stack_begin = NULL;
+}
+
 Context* getReturnContextForGeneratorFrame(void* frame_addr) {
     BoxedGenerator* generator = s_generator_map[frame_addr];
     assert(generator);
@@ -79,7 +98,8 @@ void generatorEntry(BoxedGenerator* g) {
         BoxedFunctionBase* func = g->function;
 
         Box** args = g->args ? &g->args->elts[0] : nullptr;
-        callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, g->arg1, g->arg2, g->arg3, args);
+        callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, func->globals, g->arg1, g->arg2,
+                   g->arg3, args);
     } catch (ExcInfo e) {
         // unhandled exception: propagate the exception to the caller
         g->exception = e;
@@ -103,8 +123,10 @@ Box* generatorSend(Box* s, Box* v) {
         raiseExcHelper(ValueError, "generator already executing");
 
     // check if the generator already exited
-    if (self->entryExited)
+    if (self->entryExited) {
+        freeGeneratorStack(self);
         raiseExcHelper(StopIteration, "");
+    }
 
     self->returnValue = v;
     self->running = true;
@@ -112,22 +134,29 @@ Box* generatorSend(Box* s, Box* v) {
     self->running = false;
 
     // propagate exception to the caller
-    if (self->exception.type)
+    if (self->exception.type) {
+        freeGeneratorStack(self);
         raiseRaw(self->exception);
+    }
 
     // throw StopIteration if the generator exited
-    if (self->entryExited)
+    if (self->entryExited) {
+        freeGeneratorStack(self);
         raiseExcHelper(StopIteration, "");
+    }
 
     return self->returnValue;
 }
 
-Box* generatorThrow(Box* s, BoxedClass* e) {
+Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** args = nullptr) {
     assert(s->cls == generator_cls);
-    assert(isSubclass(e, Exception));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
-    Box* ex = runtimeCall(e, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    self->exception = ExcInfo(ex->cls, ex, None);
+    Box* exc_tb = args ? nullptr : args[0];
+    if (!exc_val)
+        exc_val = None;
+    if (!exc_tb)
+        exc_tb = None;
+    self->exception = excInfoForRaise(exc_cls, exc_val, exc_tb);
     return generatorSend(self, None);
 }
 
@@ -139,7 +168,7 @@ Box* generatorClose(Box* s) {
     if (self->entryExited)
         return None;
 
-    return generatorThrow(self, GeneratorExit);
+    return generatorThrow(self, GeneratorExit, nullptr, nullptr);
 }
 
 Box* generatorNext(Box* s) {
@@ -220,7 +249,12 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunctionBase* function, Box* arg1
 #error "implement me"
 #endif
 
-        gc::registerGCManagedBytes(MAX_STACK_SIZE);
+        // we're registering memory that isn't in the gc heap here,
+        // which may sound wrong.  Generators, however, can represent
+        // a larger tax on system resources than just their GC
+        // allocation, so we try to encode that here as additional gc
+        // heap pressure.
+        gc::registerGCManagedBytes(INITIAL_STACK_SIZE);
     } else {
         generator_stack_reused.log();
 
@@ -290,18 +324,7 @@ Box* generatorName(Box* _self, void* context) {
 void generatorDestructor(Box* b) {
     assert(isSubclass(b->cls, generator_cls));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(b);
-
-    if (self->stack_begin) {
-        available_addrs.push_back((uint64_t)self->stack_begin);
-        // Limit the number of generator stacks we keep around:
-        if (available_addrs.size() > 5) {
-            uint64_t addr = available_addrs.front();
-            available_addrs.pop_front();
-            int r = munmap((void*)(addr - MAX_STACK_SIZE), MAX_STACK_SIZE);
-            assert(r == 0);
-        }
-    }
-    self->stack_begin = NULL;
+    freeGeneratorStack(self);
 }
 
 void setupGenerator() {
@@ -315,7 +338,8 @@ void setupGenerator() {
     generator_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)generatorClose, UNKNOWN, 1)));
     generator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)generatorNext, UNKNOWN, 1)));
     generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend, UNKNOWN, 2)));
-    generator_cls->giveAttr("throw", new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 2)));
+    auto gthrow = new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 4, 2, false, false), { NULL, NULL });
+    generator_cls->giveAttr("throw", gthrow);
 
     generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));
 

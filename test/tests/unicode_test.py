@@ -23,6 +23,7 @@ print u'a' in c.__dict__
 print u'' == ''
 print '' == u''
 print hash(u'') == hash('')
+print hash(u'hello world') == hash('hello world')
 print "Hello " + u" World"
 print u"Hello " + " World"
 

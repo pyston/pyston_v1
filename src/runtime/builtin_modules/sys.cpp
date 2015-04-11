@@ -44,7 +44,7 @@ Box* sysExcInfo() {
     assert(exc->type);
     assert(exc->value);
     assert(exc->traceback);
-    return new BoxedTuple({ exc->type, exc->value, exc->traceback });
+    return BoxedTuple::create({ exc->type, exc->value, exc->traceback });
 }
 
 Box* sysExcClear() {
@@ -185,7 +185,7 @@ void prependToSysPath(const std::string& path) {
     BoxedList* sys_path = getSysPath();
     static std::string attr = "insert";
     callattr(sys_path, &attr, CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(2),
-             boxInt(0), new BoxedString(path), NULL, NULL, NULL);
+             boxInt(0), boxString(path), NULL, NULL, NULL);
 }
 
 static BoxedClass* sys_flags_cls;
@@ -345,6 +345,19 @@ void setEncodingAndErrors() {
     }
 }
 
+extern "C" const char* Py_GetPlatform() noexcept {
+// cpython does this check in their configure script
+#if defined(__linux__)
+    return "linux2";
+#elif defined(__APPLE__) && defined(__MACH__)
+    return "darwin";
+#else
+    // cpython also supports returning "atheos", "irix6", "win32", or
+    // whatever the user can get PLATFORM to be #defined as at
+    // build-time.
+    return "unknown";
+#endif
+}
 
 void setupSys() {
     sys_modules_dict = new BoxedDict();
@@ -373,9 +386,9 @@ void setupSys() {
 
     sys_module->giveAttr("warnoptions", new BoxedList());
     sys_module->giveAttr("py3kwarning", False);
-    sys_module->giveAttr("byteorder", new BoxedString(isLittleEndian() ? "little" : "big"));
+    sys_module->giveAttr("byteorder", boxStrConstant(isLittleEndian() ? "little" : "big"));
 
-    sys_module->giveAttr("platform", boxStrConstant("unknown")); // seems like a reasonable, if poor, default
+    sys_module->giveAttr("platform", boxStrConstant(Py_GetPlatform()));
 
     llvm::SmallString<128> main_fn;
     // TODO supposed to pass argv0, main_addr to this function:
@@ -408,14 +421,14 @@ void setupSys() {
     sys_module->giveAttr("hexversion", boxInt(PY_VERSION_HEX));
     // TODO: this should be a "sys.version_info" object, not just a tuple (ie can access fields by name)
     sys_module->giveAttr("version_info",
-                         new BoxedTuple({ boxInt(PYTHON_VERSION_MAJOR), boxInt(PYTHON_VERSION_MINOR),
-                                          boxInt(PYTHON_VERSION_MICRO), boxStrConstant("beta"), boxInt(0) }));
+                         BoxedTuple::create({ boxInt(PYTHON_VERSION_MAJOR), boxInt(PYTHON_VERSION_MINOR),
+                                              boxInt(PYTHON_VERSION_MICRO), boxStrConstant("beta"), boxInt(0) }));
 
     sys_module->giveAttr("maxint", boxInt(PYSTON_INT_MAX));
     sys_module->giveAttr("maxsize", boxInt(PY_SSIZE_T_MAX));
 
     sys_flags_cls = new BoxedHeapClass(object_cls, BoxedSysFlags::gcHandler, 0, 0, sizeof(BoxedSysFlags), false,
-                                       new BoxedString("flags"));
+                                       static_cast<BoxedString*>(boxString("flags")));
     sys_flags_cls->giveAttr("__new__",
                             new BoxedFunction(boxRTFunction((void*)BoxedSysFlags::__new__, UNKNOWN, 1, 0, true, true)));
 #define ADD(name)                                                                                                      \
@@ -426,7 +439,7 @@ void setupSys() {
     ADD(no_user_site);
 #undef ADD
 
-    sys_flags_cls->tp_mro = new BoxedTuple({ sys_flags_cls, object_cls });
+    sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });
     sys_flags_cls->freeze();
 
     sys_module->giveAttr("flags", new BoxedSysFlags());
@@ -441,7 +454,8 @@ void setupSysEnd() {
     std::sort<decltype(builtin_module_names)::iterator, PyLt>(builtin_module_names.begin(), builtin_module_names.end(),
                                                               PyLt());
 
-    sys_module->giveAttr("builtin_module_names", new BoxedTuple(std::move(builtin_module_names)));
+    sys_module->giveAttr("builtin_module_names",
+                         BoxedTuple::create(builtin_module_names.size(), &builtin_module_names[0]));
     sys_flags_cls->finishInitialization();
 }
 }

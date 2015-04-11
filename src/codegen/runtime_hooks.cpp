@@ -135,6 +135,10 @@ void initGlobalFuncs(GlobalState& g) {
 
     g.llvm_str_type_ptr = lookupFunction("boxStringPtr")->arg_begin()->getType();
 
+    g.llvm_dict_type_ptr = g.stdlib_module->getTypeByName("class.pyston::BoxedDict");
+    assert(g.llvm_dict_type_ptr);
+    g.llvm_dict_type_ptr = g.llvm_dict_type_ptr->getPointerTo();
+
     // The LLVM vector type for the arguments that we pass to runtimeCall and related functions.
     // It will be a pointer to a type named something like class.std::vector or
     // class.std::vector.##. We can figure out exactly what it is by looking at the last
@@ -215,8 +219,10 @@ void initGlobalFuncs(GlobalState& g) {
     GET(unpackIntoArray);
     GET(raiseAttributeError);
     GET(raiseAttributeErrorStr);
+    GET(raiseIndexErrorStr);
     GET(raiseNotIterableError);
     GET(assertNameDefined);
+    GET(assertFailDerefNameDefined);
     GET(assertFail);
 
     GET(printFloat);
