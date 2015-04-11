@@ -1,5 +1,5 @@
 # run_args: -n
-# statcheck: noninit_count("slowpath_runtimecall") <= 5
+# statcheck: noninit_count("slowpath_runtimecall") <= 10
 # statcheck: stats.get("slowpath_callclfunc", 0) <= 5
 # Simple patchpoint test:
 
