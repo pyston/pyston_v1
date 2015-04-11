@@ -94,7 +94,7 @@ bool IN_SHUTDOWN = false;
 extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems) noexcept {
     assert(cls);
 
-    const size_t size = _PyObject_VAR_SIZE(cls, nitems + 1);
+    const size_t size = _PyObject_VAR_SIZE(cls, nitems);
 
 #ifndef NDEBUG
 #if 0
@@ -133,7 +133,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     Box* rtn = static_cast<Box*>(mem);
 
     if (cls->tp_itemsize != 0)
-        static_cast<BoxVar*>(rtn)->ob_size = nitems + 1;
+        static_cast<BoxVar*>(rtn)->ob_size = nitems;
 
     PyObject_INIT(rtn, cls);
     assert(rtn->cls);
@@ -143,7 +143,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 extern "C" PyObject* PyType_GenericAlloc(PyTypeObject* type, Py_ssize_t nitems) noexcept {
     PyObject* obj;
-    const size_t size = _PyObject_VAR_SIZE(type, nitems + 1);
+    const size_t size = _PyObject_VAR_SIZE(type, nitems);
     /* note that we need to add one, for the sentinel */
 
     if (PyType_IS_GC(type))
@@ -2017,15 +2017,15 @@ void setupRuntime() {
     PyObject_Init(object_cls, type_cls);
     PyObject_Init(type_cls, type_cls);
 
-    none_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
+    none_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
     None = new (none_cls) Box();
     assert(None->cls);
     gc::registerPermanentRoot(None);
 
     // You can't actually have an instance of basestring
-    basestring_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
+    basestring_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(Box), false, NULL);
 
-    str_cls = new BoxedHeapClass(basestring_cls, NULL, 0, 0, sizeof(BoxedString), false, NULL);
+    str_cls = new (0) BoxedHeapClass(basestring_cls, NULL, 0, 0, sizeof(BoxedString), false, NULL);
     str_cls->tp_flags |= Py_TPFLAGS_STRING_SUBCLASS;
     str_cls->tp_itemsize = sizeof(char);
 
@@ -2054,58 +2054,60 @@ void setupRuntime() {
     object_cls->giveAttr("__base__", None);
 
 
-    tuple_cls
-        = new BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple), false, boxStrConstant("tuple"));
+    tuple_cls = new (0)
+        BoxedHeapClass(object_cls, &tupleGCHandler, 0, 0, sizeof(BoxedTuple), false, boxStrConstant("tuple"));
     tuple_cls->tp_flags |= Py_TPFLAGS_TUPLE_SUBCLASS;
     tuple_cls->tp_itemsize = sizeof(Box*);
     tuple_cls->tp_mro = BoxedTuple::create({ tuple_cls, object_cls });
     EmptyTuple = BoxedTuple::create({});
     gc::registerPermanentRoot(EmptyTuple);
-    list_cls = new BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
+    list_cls = new (0)
+        BoxedHeapClass(object_cls, &listGCHandler, 0, 0, sizeof(BoxedList), false, boxStrConstant("list"));
     list_cls->tp_flags |= Py_TPFLAGS_LIST_SUBCLASS;
-    pyston_getset_cls
-        = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
-    attrwrapper_cls = new BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
-                                         static_cast<BoxedString*>(boxStrConstant("attrwrapper")));
-    dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
-                                  static_cast<BoxedString*>(boxStrConstant("dict")));
+    pyston_getset_cls = new (0)
+        BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedGetsetDescriptor), false, boxStrConstant("getset"));
+    attrwrapper_cls = new (0) BoxedHeapClass(object_cls, &AttrWrapper::gcHandler, 0, 0, sizeof(AttrWrapper), false,
+                                             static_cast<BoxedString*>(boxStrConstant("attrwrapper")));
+    dict_cls = new (0) BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
+                                      static_cast<BoxedString*>(boxStrConstant("dict")));
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-    file_cls = new BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
-                                  sizeof(BoxedFile), false, static_cast<BoxedString*>(boxStrConstant("file")));
-    int_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false,
-                                 static_cast<BoxedString*>(boxStrConstant("int")));
+    file_cls = new (0) BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
+                                      sizeof(BoxedFile), false, static_cast<BoxedString*>(boxStrConstant("file")));
+    int_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false,
+                                     static_cast<BoxedString*>(boxStrConstant("int")));
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
-    bool_cls = new BoxedHeapClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false,
-                                  static_cast<BoxedString*>(boxStrConstant("bool")));
-    complex_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedComplex), false,
-                                     static_cast<BoxedString*>(boxStrConstant("complex")));
-    long_cls = new BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, 0, sizeof(BoxedLong), false,
-                                  static_cast<BoxedString*>(boxStrConstant("long")));
+    bool_cls = new (0) BoxedHeapClass(int_cls, NULL, 0, 0, sizeof(BoxedBool), false,
+                                      static_cast<BoxedString*>(boxStrConstant("bool")));
+    complex_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedComplex), false,
+                                         static_cast<BoxedString*>(boxStrConstant("complex")));
+    long_cls = new (0) BoxedHeapClass(object_cls, &BoxedLong::gchandler, 0, 0, sizeof(BoxedLong), false,
+                                      static_cast<BoxedString*>(boxStrConstant("long")));
     long_cls->tp_flags |= Py_TPFLAGS_LONG_SUBCLASS;
-    float_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedFloat), false,
-                                   static_cast<BoxedString*>(boxStrConstant("float")));
-    function_cls = new BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
-                                      offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false,
-                                      static_cast<BoxedString*>(boxStrConstant("function")));
-    builtin_function_or_method_cls
-        = new BoxedHeapClass(object_cls, &functionGCHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
-                             sizeof(BoxedBuiltinFunctionOrMethod), false,
-                             static_cast<BoxedString*>(boxStrConstant("builtin_function_or_method")));
+    float_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedFloat), false,
+                                       static_cast<BoxedString*>(boxStrConstant("float")));
+    function_cls = new (0) BoxedHeapClass(object_cls, &functionGCHandler, offsetof(BoxedFunction, attrs),
+                                          offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false,
+                                          static_cast<BoxedString*>(boxStrConstant("function")));
+    builtin_function_or_method_cls = new (0)
+        BoxedHeapClass(object_cls, &functionGCHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
+                       sizeof(BoxedBuiltinFunctionOrMethod), false,
+                       static_cast<BoxedString*>(boxStrConstant("builtin_function_or_method")));
     function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
 
 
-    module_cls = new BoxedHeapClass(object_cls, &moduleGCHandler, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule),
-                                    false, static_cast<BoxedString*>(boxStrConstant("module")));
-    member_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
-                                    static_cast<BoxedString*>(boxStrConstant("member")));
-    capifunc_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedCApiFunction), false,
-                                      static_cast<BoxedString*>(boxStrConstant("capifunc")));
-    method_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMethodDescriptor), false,
-                                    static_cast<BoxedString*>(boxStrConstant("method")));
-    wrapperobject_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperObject), false,
-                                           static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
-    wrapperdescr_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperDescriptor), false,
-                                          static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
+    module_cls = new (0)
+        BoxedHeapClass(object_cls, &moduleGCHandler, offsetof(BoxedModule, attrs), 0, sizeof(BoxedModule), false,
+                       static_cast<BoxedString*>(boxStrConstant("module")));
+    member_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMemberDescriptor), false,
+                                        static_cast<BoxedString*>(boxStrConstant("member")));
+    capifunc_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedCApiFunction), false,
+                                          static_cast<BoxedString*>(boxStrConstant("capifunc")));
+    method_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedMethodDescriptor), false,
+                                        static_cast<BoxedString*>(boxStrConstant("method")));
+    wrapperobject_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperObject), false,
+                                               static_cast<BoxedString*>(boxStrConstant("method-wrapper")));
+    wrapperdescr_cls = new (0) BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedWrapperDescriptor), false,
+                                              static_cast<BoxedString*>(boxStrConstant("wrapper_descriptor")));
 
     EmptyString = boxStrConstant("");
     gc::registerPermanentRoot(EmptyString);

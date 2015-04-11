@@ -258,8 +258,7 @@ private:
     friend void setupRuntime();
     friend void setupSys();
 
-    DEFAULT_CLASS(type_cls);
-    ALLOCATABLE_WITH_ITEMS;
+    DEFAULT_CLASS_VAR(type_cls, sizeof(SlotOffset));
 };
 
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
@@ -417,19 +416,7 @@ public:
     char* data() { return const_cast<char*>(s.data()); }
     size_t size() { return s.size(); }
 
-    void* operator new(size_t size, size_t ssize) __attribute__((visibility("default"))) {
-        BoxVar* rtn = static_cast<BoxVar*>(gc_alloc(str_cls->tp_basicsize + ssize + 1, gc::GCKind::PYTHON));
-        // TODO need to initialize ob_size for other objects as well
-        rtn->ob_size = ssize + 1;
-        rtn->cls = str_cls;
-        return rtn;
-    }
-
-    void* operator new(size_t size, BoxedClass* cls, size_t ssize) __attribute__((visibility("default"))) {
-        BoxVar* rtn = static_cast<BoxVar*>(cls->tp_alloc(cls, ssize + 1));
-        rtn->cls = cls;
-        return rtn;
-    }
+    DEFAULT_CLASS_VAR_SIMPLE(str_cls, sizeof(char));
 
     // these should be private, but strNew needs them
     BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
@@ -530,18 +517,7 @@ public:
 
     Box** elts;
 
-    void* operator new(size_t size, size_t nelts) __attribute__((visibility("default"))) {
-        BoxVar* rtn = static_cast<BoxVar*>(gc_alloc(_PyObject_VAR_SIZE(tuple_cls, nelts + 1), gc::GCKind::PYTHON));
-        rtn->ob_size = nelts;
-        rtn->cls = tuple_cls;
-        return rtn;
-    }
-
-    void* operator new(size_t size, BoxedClass* cls, size_t nelts) __attribute__((visibility("default"))) {
-        BoxVar* rtn = static_cast<BoxVar*>(cls->tp_alloc(cls, nelts));
-        rtn->cls = cls;
-        return rtn;
-    }
+    DEFAULT_CLASS_VAR_SIMPLE(tuple_cls, sizeof(Box*));
 
     static BoxedTuple* create(int64_t size) { return new (size) BoxedTuple(size); }
     static BoxedTuple* create(int64_t nelts, Box** elts) {

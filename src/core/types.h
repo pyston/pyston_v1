@@ -484,15 +484,12 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 
 #define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
+        assert(cls->tp_itemsize == 0);                                                                                 \
         return Box::operator new(size, cls, 0);                                                                        \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
+        assert(default_cls->tp_itemsize == 0);                                                                         \
         return Box::operator new(size, default_cls, 0);                                                                \
-    }
-
-#define ALLOCATABLE_WITH_ITEMS                                                                                         \
-    void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
-        return Box::operator new(size, cls, nitems);                                                                   \
     }
 
 // The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
@@ -523,6 +520,48 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         rtn->cls = default_cls;                                                                                        \
         return rtn;                                                                                                    \
         /* TODO: there should be a way to not have to do this nested inlining by hand */                               \
+    }
+
+#define DEFAULT_CLASS_VAR(default_cls, itemsize)                                                                       \
+    static_assert(itemsize > 0, "");                                                                                   \
+    /* asserts that the class in question is a subclass of BoxVar */                                                   \
+    inline void _base_check() {                                                                                        \
+        static_assert(std::is_base_of<BoxVar, std::remove_pointer<decltype(this)>::type>::value, "");                  \
+    }                                                                                                                  \
+                                                                                                                       \
+    void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
+        assert(cls->tp_itemsize == itemsize);                                                                          \
+        return Box::operator new(size, cls, nitems);                                                                   \
+    }                                                                                                                  \
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
+        assert(default_cls->tp_itemsize == itemsize);                                                                  \
+        return Box::operator new(size, default_cls, nitems);                                                           \
+    }
+
+#define DEFAULT_CLASS_VAR_SIMPLE(default_cls, itemsize)                                                                \
+    static_assert(itemsize > 0, "");                                                                                   \
+    inline void _base_check() {                                                                                        \
+        static_assert(std::is_base_of<BoxVar, std::remove_pointer<decltype(this)>::type>::value, "");                  \
+    }                                                                                                                  \
+                                                                                                                       \
+    void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
+        assert(cls->tp_itemsize == itemsize);                                                                          \
+        return Box::operator new(size, cls, nitems);                                                                   \
+    }                                                                                                                  \
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
+        assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
+        assert(default_cls->tp_itemsize == itemsize);                                                                  \
+        assert(default_cls->tp_basicsize == size);                                                                     \
+        assert(default_cls->is_pyston_class);                                                                          \
+        assert(default_cls->attrs_offset == 0);                                                                        \
+                                                                                                                       \
+        void* mem = gc_alloc(size + nitems * itemsize, gc::GCKind::PYTHON);                                            \
+        assert(mem);                                                                                                   \
+                                                                                                                       \
+        BoxVar* rtn = static_cast<BoxVar*>(mem);                                                                       \
+        rtn->cls = default_cls;                                                                                        \
+        rtn->ob_size = nitems;                                                                                         \
+        return rtn;                                                                                                    \
     }
 
 // CPython C API compatibility class:
