@@ -153,15 +153,18 @@ class TestResult(object):
         """Converts a sys.exc_info()-style tuple of values into a string."""
         exctype, value, tb = err
         # Skip test runner traceback levels
-        while tb and self._is_relevant_tb_level(tb):
-            tb = tb.tb_next
+        # Pyston change: I've commented this out for now. - rntz
+        # TODO(rntz): needs traceback stuff to work
+        # while tb and self._is_relevant_tb_level(tb):
+        #     tb = tb.tb_next
 
-        if exctype is test.failureException:
-            # Skip assert*() traceback levels
-            length = self._count_relevant_tb_levels(tb)
-            msgLines = traceback.format_exception(exctype, value, tb, length)
-        else:
-            msgLines = traceback.format_exception(exctype, value, tb)
+        # if exctype is test.failureException:
+        #     # Skip assert*() traceback levels
+        #     length = self._count_relevant_tb_levels(tb)
+        #     msgLines = traceback.format_exception(exctype, value, tb, length)
+        # else:
+        #     msgLines = traceback.format_exception(exctype, value, tb)
+        msgLines = traceback.format_exception(exctype, value, tb)
 
         if self.buffer:
             output = sys.stdout.getvalue()

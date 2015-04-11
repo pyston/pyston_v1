@@ -1,0 +1,150 @@
+These are rntz's notes from trying to get the CPython testing framework to run,
+for future reference.
+
+* getting regrtest to work is hard
+regrtest works by __import__()ing the tests to be run and then doing some stuff.
+This means that if even a single test causes pyston to crash or assert(), the
+whole test-runner dies.
+
+The best fix for this would be to simply run each test in a separate pyston
+process. It's not clear to accomplish this without breaking the tests, however,
+because Python's test support is a big, gnarly piece of code. In particular, it
+will skip tests based on various criteria, which we probably want to support.
+But it's not clear how to disentangle that knowledge from the way it __import__s
+the tests.
+
+So instead I ran regrtest manually, looked at what tests it ran, and imported
+those. tester.py will run them separately.
+
+** Obsolete notes: Hacking regrtest to manually change directories
+Need to run test/regrtest.py for testing harness; The standard way to do this in
+CPython is `python -m test.regrtest` from Lib/. The -m is important because
+otherwise it can't find the tests properly. Turns out implementing the -m flag
+is hard, because the machinery for imports is pretty complicated and there's no
+easy way to ask it "which file *would* I load to import this module". So I
+hacked regrtest to manually change directories.
+
+** Obsolete FIXME for regrtest.py: CFG/analysis bug with osr
+test/regrtest.py trips an assert in PropagatingTypeAnalysis::getTypeAtBlockStart
+if not run with -I, looks like malformed CFG or bug in analysis
+* tests are slow
+CPython's tests are pretty slow for us. In particular, since we're not running
+with regrtest, we have to go through the set-up time of loading
+test.test_support for each test. On my machine it's that's about a half-second
+per test.
+
+To handle this, by default we don't run tests marked "expected: fail". To
+disable this, pass --all-cpython-tests to tester.py.
+
+* bugs uncovered
+The CPython tests I've included fail for various reasons. Recurring issues include:
+- Use of sys.flags.optimize, to test whether we kept docstrings around; I
+  commented these out, since we always keep docstrings around.
+- use of compile()
+- `exec' support
+- the doctest module imports bdb, which trips an ASTVisitor assert(0) for visit_extslice
+- missing __hash__ implementations for some builtin types
+- we don't have imp.get_magic()
+- segfaults
+- missing __name__ attributes on capifuncs
+- missing sys.__stdout__ attribute
+- serialize_ast.cpp: writeColOffset: assert(v < 100000 || v == -1) gets tripped
+- pypa-parser.cpp: readName: assert(e.type == pypa::AstType::Name)
+- src/runtime/util.cpp: parseSlice: assert(isSubclass(start->cls, int_cls) || start->cls == none_cls)
+
+** list of files & why they're failing
+FILE                    REASONS
+------------------------------------------------------
+test_abstract_numbers   missing .real attribute
+test_augassign          bugs in +=, compile()
+test_bisect             somehow sys.modules['_bisect'] is getting set to 0
+test_builtin            exec
+test_coercion           serialize_ast bug
+test_collections        extslice in bdb in doctest
+test_compare            segfault
+test_complex            serialize_ast assert
+test_complex_args       exec
+test_contains           TypeError not raised
+test_contextlib         file.closed, lock.locked attributes
+test_datetime           kwargs bug in BoxedMethodDescriptor
+test_decimal            float.__getformat__
+test_decorators         compile(), func_name attribute, and another bug in test_eval_order
+test_defaultdict        assert failure in nonzero
+test_deque              assert in _collectionsmodule.c
+test_descr              pypa assert
+test_descrtut           extslice in bdb in doctest
+test_dict               exec
+test_dictcomps          compile()
+test_dictviews          various unique bugs
+test_doctest            extslice in bdb in doctest
+test_doctest2           extslice in bdb in doctest
+test_enumerate          wrong assert in BoxedEnumerate
+test_exceptions         exec
+test_extcall            extslice in bdb in doctest
+test_file               segfaults
+test_file2k             "Someone called abort!"
+test_file_eintr         TypeError
+test_filecmp            extslice in filecmp
+test_fileinput          UnboundLocalError (try/finally bug?)
+test_float              capifunc.__name__ in fractions
+test_format             can't float(long)
+test_funcattrs          exec
+test_functools          segfault
+test_generators         extslice in bdb in doctest
+test_genexps            extslice in bdb in doctest
+test_getopt             extslice in bdb in doctest
+test_global             compile()
+test_grammar            bug in our tokenizer
+test_hash               float.__hash__
+test_index              parseSlice assert
+test_int                float.__getformat__
+test_io                 parseSlice assert
+test_isinstance         sys.getrecursionlimit
+test_json               extslice in bdb in doctest
+test_list               assert in sliceIndex to do with a[1L:2L]
+test_long               float.__getformat__
+test_math               float.__getformat__
+test_module             exec
+test_mutants            segfault
+test_opcodes            TypeError: exceptions must be old-style classes or derived from BaseException, not instance
+test_operator           BoxedCApiFunction::__call__: assert(varargs->elts.size() == 1)
+test_optparse           long.cpp: _longNew: assert(r == 0)
+test_pep277             segfaults
+test_pep352             various unique bugs
+test_pkg                exec
+test_popen              objmodel.cpp: callCLFunc: assert(chosen_cfg->spec->rtn_type->isFitBy(r->cls))
+test_pow                global name `pow' is not defined
+test_property           pypa assert
+test_random             floats unhashable
+test_repr               complex.__hash__
+test_richcmp            segfaults
+test_scope              exec
+test_set                list.__hash__
+test_setcomps           extslice in bdb in doctest
+test_sets               extslice in bdb in doctest
+test_slice              slice.__hash__
+test_sort               listSort(): cmp not supported
+test_stat               16384 != 40960; I guess we implement stat wrong or something?
+test_str                segfault
+test_string             infinite loops in test_replace
+test_subprocess         exit code 141, no error message
+test_tuple              parseSlice assert
+test_types              func_name attribute
+test_ucn                can't eval unicode objects
+test_unary              objmodel.cpp: unaryop: Assertion `attr_func' failed: str.__pos__
+test_undocumented_details   segfault
+test_unicode            sys.maxunicode
+test_unicode_file       exit code 139, no error message
+test_unittest           serialize_ast assert
+test_unpack             extslice in bdb in doctest
+test_urllib             'ascii' codec can't encode characters in position 2-3: ordinal not in range(128)
+test_urllib2            extslice in bdb in doctest
+test_userdict           segfault
+test_userlist           sliceIndex assert
+test_userstring         std::length_error
+test_uuid               long.cpp: _longNew: assert(r == 0)
+test_weakref            collector.cpp: runCollection: isValidGCObject(head) failed
+test_weakset            set.cpp: setIssubset: assert(container->cls == set_cls)
+test_with               objmodel.cpp: getclsattr: Assertion `gotten' failed: LacksExit:__exit__
+test_wsgiref            ast_interpreter.cpp: createFunction: Assertion `closure' failed.
+test_xrange             exit code 139, no error message

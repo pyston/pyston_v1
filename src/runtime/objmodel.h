@@ -32,6 +32,7 @@ class BoxedGenerator;
 class BoxedTuple;
 
 // user-level raise functions that implement python-level semantics
+ExcInfo excInfoForRaise(Box*, Box*, Box*);
 extern "C" void raise0() __attribute__((__noreturn__));
 extern "C" void raise3(Box*, Box*, Box*) __attribute__((__noreturn__));
 void raiseExc(Box* exc_obj) __attribute__((__noreturn__));
@@ -121,15 +122,25 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
                                  DelattrRewriteArgs* rewrite_args);
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
+
+// This is the equivalent of PyObject_GetAttr. Unlike getattrInternalGeneric, it checks for custom __getattr__ or
+// __getattribute__ methods.
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args);
+
+// This is the equivalent of PyObject_GenericGetAttr, which performs the default lookup rules for getattr() (check for
+// data descriptor, check for instance attribute, check for non-data descriptor). It does not check for __getattr__ or
+// __getattribute__.
 Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
+// This is the equivalent of _PyType_Lookup(), which calls Box::getattr() on each item in the object's MRO in the
+// appropriate order. It does not do any descriptor logic.
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
 
 extern "C" void raiseAttributeErrorStr(const char* typeName, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseAttributeError(Box* obj, const char* attr) __attribute__((__noreturn__));
 extern "C" void raiseNotIterableError(const char* typeName) __attribute__((__noreturn__));
+extern "C" void raiseIndexErrorStr(const char* typeName) __attribute__((__noreturn__));
 
 Box* typeCall(Box*, BoxedTuple*, BoxedDict*);
 Box* typeNew(Box* cls, Box* arg1, Box* arg2, Box** _args);

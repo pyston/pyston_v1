@@ -28,7 +28,8 @@
 namespace pyston {
 
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 static int _IsFortranContiguous(Py_buffer* view) {
@@ -147,10 +148,11 @@ extern "C" int PyBuffer_FillInfo(Py_buffer* view, PyObject* obj, void* buf, Py_s
     if (view == NULL)
         return 0;
     if (((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE) && (readonly == 1)) {
-        // Don't support PyErr_SetString yet:
-        assert(0);
-        // PyErr_SetString(PyExc_BufferError, "Object is not writable.");
-        // return -1;
+        // https://docs.python.org/3/c-api/buffer.html#c.PyBuffer_FillInfo
+        // '[On failure], raise PyExc_BufferError, set view->obj to NULL and return -1'
+        view->obj = NULL;
+        PyErr_SetString(PyExc_BufferError, "Object is not writable.");
+        return -1;
     }
 
     view->obj = obj;
@@ -467,7 +469,8 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept
             r = runtimeCall(obj, ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
         return r;
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
@@ -498,7 +501,8 @@ extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssiz
 }
 
 extern "C" int PyObject_AsReadBuffer(PyObject* obj, const void** buffer, Py_ssize_t* buffer_len) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 static PyObject* call_function_tail(PyObject* callable, PyObject* args) {
@@ -1155,19 +1159,23 @@ extern "C" Py_ssize_t PyMapping_Size(PyObject* o) noexcept {
 }
 
 extern "C" int PyMapping_HasKeyString(PyObject* o, char* key) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" int PyMapping_HasKey(PyObject* o, PyObject* key) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* PyMapping_GetItemString(PyObject* o, char* key) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" int PyMapping_SetItemString(PyObject* o, char* key, PyObject* v) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" int PyNumber_Check(PyObject* obj) noexcept {
@@ -1194,7 +1202,8 @@ extern "C" PyObject* PyNumber_Subtract(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Sub);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
@@ -1202,7 +1211,8 @@ extern "C" PyObject* PyNumber_Multiply(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mult);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
@@ -1210,12 +1220,14 @@ extern "C" PyObject* PyNumber_Divide(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Div);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
 extern "C" PyObject* PyNumber_FloorDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_TrueDivide(PyObject* lhs, PyObject* rhs) noexcept {
@@ -1231,7 +1243,8 @@ extern "C" PyObject* PyNumber_Remainder(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::Mod);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
@@ -1239,43 +1252,51 @@ extern "C" PyObject* PyNumber_Divmod(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::DivMod);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
 extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Negative(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Positive(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Absolute(PyObject* o) noexcept {
     try {
         return abs_(o);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
 extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::RShift);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
@@ -1283,76 +1304,94 @@ extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
     try {
         return binop(lhs, rhs, AST_TYPE::BitAnd);
     } catch (ExcInfo e) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
     }
 }
 
 extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Or(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceSubtract(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceMultiply(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceFloorDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceTrueDivide(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceRemainder(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlacePower(PyObject*, PyObject*, PyObject* o3) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceLshift(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceRshift(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceAnd(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceXor(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_InPlaceOr(PyObject*, PyObject*) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" int PyNumber_Coerce(PyObject**, PyObject**) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return -1;
 }
 
 extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const char* error_format) noexcept {
@@ -1383,7 +1422,8 @@ extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const ch
 
 non_integral_error:
     if (PyInstance_Check(integral)) {
-        Py_FatalError("unimplemented");
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
         /* cpython has this:
         type_name = PyString_AS_STRING(((PyInstanceObject *)integral)
                                        ->in_class->cl_name);
@@ -1437,7 +1477,9 @@ extern "C" PyObject* PyNumber_Int(PyObject* o) noexcept {
     PyErr_Clear(); /* It's not an error if  o.__trunc__ doesn't exist. */
 
     // the remainder of PyNumber_Int deals with converting from unicode/string to int
-    Py_FatalError("unimplemented string -> int conversion");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented string -> int conversion");
+    return nullptr;
+
 #if 0
     if (PyString_Check(o))
       return int_from_string(PyString_AS_STRING(o),
@@ -1465,11 +1507,13 @@ extern "C" PyObject* PyNumber_Long(PyObject* o) noexcept {
     if (o->cls == float_cls)
         return PyLong_FromDouble(PyFloat_AsDouble(o));
 
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Float(PyObject* o) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
@@ -1480,11 +1524,13 @@ extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
         return o;
     }
 
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    return nullptr;
 }
 
 extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {

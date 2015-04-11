@@ -79,7 +79,7 @@ static int main(int argc, char** argv) {
     bool force_repl = false;
     bool stats = false;
     const char* command = NULL;
-    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:")) != -1) {
+    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:F")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -110,6 +110,8 @@ static int main(int argc, char** argv) {
             USE_REGALLOC_BASIC = false;
         } else if (code == 'x') {
             ENABLE_PYPA_PARSER = false;
+        } else if (code == 'F') {
+            CONTINUE_AFTER_FATAL = true;
         } else if (code == 'c') {
             command = optarg;
             // no more option parsing; the rest of our arguments go into sys.argv.

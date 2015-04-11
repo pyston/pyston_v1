@@ -946,7 +946,8 @@ Box* rawInput(Box* prompt) {
 }
 
 Box* input(Box* prompt) {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    throwCAPIException();
 }
 
 Box* builtinRound(Box* _number, Box* _ndigits) {
@@ -962,11 +963,13 @@ Box* builtinRound(Box* _number, Box* _ndigits) {
             return boxFloat(round(number->d));
     }
 
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    throwCAPIException();
 }
 
 Box* builtinCmp(Box* lhs, Box* rhs) {
-    Py_FatalError("unimplemented");
+    fatalOrError(PyExc_NotImplementedError, "unimplemented");
+    throwCAPIException();
 }
 
 void setupBuiltins() {

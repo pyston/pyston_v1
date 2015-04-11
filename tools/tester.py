@@ -1,11 +1,11 @@
 # Copyright (c) 2014-2015 Dropbox, Inc.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,6 +37,9 @@ KEEP_GOING = False
 FN_JUST_SIZE = 20
 EXTRA_JIT_ARGS = []
 TIME_LIMIT = 25
+TESTS_TO_SKIP = []
+EXIT_CODE_ONLY = False
+SKIP_FAILING_TESTS = False
 
 # For fun, can test pypy.
 # Tough because the tester will check to see if the error messages are exactly the
@@ -55,6 +58,7 @@ def set_ulimits():
 
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
 THIS_FILE = os.path.abspath(__file__)
+
 _global_mtime = None
 def get_global_mtime():
     global _global_mtime
@@ -124,19 +128,39 @@ def canonicalize_stderr(stderr):
     return stderr
 
 failed = []
+
+class Options(object): pass
+
+# returns a single string, or a tuple of strings that are spliced together (with spaces between) by our caller
 def run_test(fn, check_stats, run_memcheck):
-    r = os.path.basename(fn).rjust(FN_JUST_SIZE)
-    test_base_name = os.path.basename(fn).split('.')[0]
+    opts = get_test_options(fn, check_stats, run_memcheck)
+    del check_stats, run_memcheck
 
-    if test_base_name in TESTS_TO_SKIP:
-        return r + "    (skipped due to command line option)"
+    if opts.skip:
+        return "(skipped: %s)" % opts.skip
 
-    statchecks = []
-    jit_args = ["-rq"] + EXTRA_JIT_ARGS
-    collect_stats = True
-    expected = "success"
-    should_error = False
-    allow_warnings = []
+    run_args = [os.path.abspath(IMAGE)] + opts.jit_args + [fn]
+    start = time.time()
+    p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
+    out, stderr = p.communicate()
+    code = p.wait()
+    elapsed = time.time() - start
+
+    return determine_test_result(fn, opts, code, out, stderr, elapsed)
+
+def get_test_options(fn, check_stats, run_memcheck):
+    opts = Options()
+
+    opts.check_stats = check_stats
+    opts.run_memcheck = run_memcheck
+    opts.statchecks = []
+    opts.jit_args = ["-rq"] + EXTRA_JIT_ARGS
+    opts.collect_stats = True
+    opts.expected = "success"
+    opts.should_error = False
+    opts.allow_warnings = []
+    opts.skip = None
+
     for l in open(fn):
         l = l.strip()
         if not l:
@@ -145,56 +169,54 @@ def run_test(fn, check_stats, run_memcheck):
             break
         if l.startswith("# statcheck:"):
             l = l[len("# statcheck:"):].strip()
-            statchecks.append(l)
+            opts.statchecks.append(l)
         elif l.startswith("# run_args:"):
             l = l[len("# run_args:"):].split()
-            jit_args += l
+            opts.jit_args += l
         elif l.startswith("# expected:"):
-            expected = l[len("# expected:"):].strip()
+            opts.expected = l[len("# expected:"):].strip()
         elif l.startswith("# should_error"):
-            should_error = True
+            opts.should_error = True
         elif l.startswith("# fail-if:"):
             condition = l.split(':', 1)[1].strip()
             if eval(condition):
-                expected = "fail"
+                opts.expected = "fail"
         elif l.startswith("# skip-if:"):
             skip_if = l[len("# skip-if:"):].strip()
-            skip = eval(skip_if)
-            if skip:
-                return r + "    (skipped due to 'skip-if: %s')" % skip_if[:30]
-        elif fn.split('.')[0] in TESTS_TO_SKIP:
-                return r + "    (skipped due to command line option)"
+            if eval(skip_if):
+                opts.skip = "skip-if: %s" % skip_if[:30]
         elif l.startswith("# allow-warning:"):
-            allow_warnings.append("Warning: " + l.split(':', 1)[1].strip())
+            opts.allow_warnings.append("Warning: " + l.split(':', 1)[1].strip())
         elif l.startswith("# no-collect-stats"):
-            collect_stats = False
+            opts.collect_stats = False
+
+    if not opts.skip:
+        # consider other reasons for skipping file
+        if SKIP_FAILING_TESTS and opts.expected == 'fail':
+            opts.skip = 'expected to fail'
+        elif os.path.basename(fn).split('.')[0] in TESTS_TO_SKIP:
+            opts.skip = 'command line option'
+
+    if opts.collect_stats:
+        opts.jit_args = ['-s'] + opts.jit_args
+
+    assert opts.expected in ("success", "fail", "statfail"), opts.expected
 
     if TEST_PYPY:
-        collect_stats = False
+        opts.jit_args = []
+        opts.collect_stats = False
+        opts.check_stats = False
+        opts.expected = "success"
 
-    if collect_stats:
-        jit_args = ['-s'] + jit_args
+    return opts
 
-    assert expected in ("success", "fail", "statfail"), expected
-
-    if TEST_PYPY:
-        jit_args = []
-        check_stats = False
-        expected = "success"
-
-    run_args = [os.path.abspath(IMAGE)] + jit_args + [fn]
-    start = time.time()
-    p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
-    out, stderr = p.communicate()
+def determine_test_result(fn, opts, code, out, stderr, elapsed):
     last_stderr_line = stderr.strip().split('\n')[-1]
 
-    code = p.wait()
-    elapsed = time.time() - start
-
-    if allow_warnings:
+    if opts.allow_warnings:
         out_lines = []
         for l in out.split('\n'):
-            for regex in allow_warnings:
+            for regex in opts.allow_warnings:
                 if re.match(regex, l):
                     break
             else:
@@ -202,7 +224,7 @@ def run_test(fn, check_stats, run_memcheck):
         out = "\n".join(out_lines)
 
     stats = None
-    if code >= 0 and collect_stats:
+    if code >= 0 and opts.collect_stats:
         stats = {}
         assert out.count("Stats:") == 1
         out, stats_str = out.split("Stats:")
@@ -210,7 +232,14 @@ def run_test(fn, check_stats, run_memcheck):
             k, v = l.split(':')
             stats[k.strip()] = int(v)
 
-    expected_code, expected_out, expected_err = get_expected_output(fn)
+    if EXIT_CODE_ONLY:
+        # fools the rest of this function into thinking the output is OK & just checking the exit code.
+        # there oughtta be a cleaner way to do this.
+        expected_code, expected_out, expected_err = 0, out, stderr
+    else:
+        # run CPython to get the expected output
+        expected_code, expected_out, expected_err = get_expected_output(fn)
+
     if code != expected_code:
         color = 31 # red
 
@@ -227,17 +256,15 @@ def run_test(fn, check_stats, run_memcheck):
         else:
             msg = "Exited with code %d (expected code %d)" % (code, expected_code)
 
-        if expected == "fail":
-            r += "    Expected failure (got code %d, should be %d)" % (code, expected_code)
-            return r
+        if opts.expected == "fail":
+            return "Expected failure (got code %d, should be %d)" % (code, expected_code)
         elif KEEP_GOING:
-            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
             failed.append(fn)
-            return r
+            return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
         else:
             raise Exception("%s\n%s\n%s" % (msg, err, stderr))
 
-    elif should_error == (code == 0):
+    elif opts.should_error == (code == 0):
         color = 31              # red
         if code == 0:
             msg = "Exited successfully; remove '# should_error' if this is expected"
@@ -245,23 +272,20 @@ def run_test(fn, check_stats, run_memcheck):
             msg = "Exited with code %d; add '# should_error' if this is expected" % code
 
         if KEEP_GOING:
-            r += "    \033[%dmFAILED\033[0m (%s)" % (color, msg)
             failed.append(fn)
-            return r
+            return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
         else:
             # show last line of stderr so we have some idea went wrong
             print "Last line of stderr: " + last_stderr_line
             raise Exception(msg)
 
     elif out != expected_out:
-        if expected == "fail":
-            r += "    Expected failure (bad output)"
-            return r
+        if opts.expected == "fail":
+            return "Expected failure (bad output)"
         else:
             if KEEP_GOING:
-                r += "    \033[31mFAILED\033[0m (bad output)"
                 failed.append(fn)
-                return r
+                return "\033[31mFAILED\033[0m (bad output)"
             exp_fd, exp_fn = tempfile.mkstemp(prefix="expected_")
             out_fd, out_fn = tempfile.mkstemp(prefix="received_")
             os.fdopen(exp_fd, 'w').write(expected_out)
@@ -273,38 +297,34 @@ def run_test(fn, check_stats, run_memcheck):
             os.unlink(out_fn)
             raise Exception("Failed on %s:\n%s" % (fn, diff))
     elif not TEST_PYPY and canonicalize_stderr(stderr) != canonicalize_stderr(expected_err):
-        if expected == "fail":
-            r += "    Expected failure (bad stderr)"
-            return r
+        if opts.expected == "fail":
+            return "Expected failure (bad stderr)"
         elif KEEP_GOING:
-            r += "    \033[31mFAILED\033[0m (bad stderr)"
             failed.append(fn)
-            return r
+            return "\033[31mFAILED\033[0m (bad stderr)"
         else:
             raise Exception((canonicalize_stderr(stderr), canonicalize_stderr(expected_err)))
-    elif expected == "fail":
+    elif opts.expected == "fail":
         if KEEP_GOING:
-            r += "    \033[31mFAILED\033[0m (unexpected success)"
             failed.append(fn)
-            return r
+            return "\033[31mFAILED\033[0m (unexpected success)"
         raise Exception("Unexpected success on %s" % fn)
 
-    r += "    Correct output (%5.1fms)" % (elapsed * 1000,)
+    r = ("Correct output (%5.1fms)" % (elapsed * 1000,),)
 
-    if check_stats:
+    if opts.check_stats:
         def noninit_count(s):
             return stats.get(s, 0) - stats.get("_init_" + s, 0)
 
-        for l in statchecks:
+        for l in opts.statchecks:
             test = eval(l)
             if not test:
-                if expected == "statfail":
-                    r += "    (expected statfailure)"
+                if opts.expected == "statfail":
+                    r += ("(expected statfailure)",)
                     break
                 elif KEEP_GOING:
-                    r += "    \033[31mFailed statcheck\033[0m"
                     failed.append(fn)
-                    return r
+                    return r + ("\033[31mFailed statcheck\033[0m",)
                 else:
                     m = re.match("""stats\[['"]([\w_]+)['"]]""", l)
                     if m:
@@ -319,17 +339,16 @@ def run_test(fn, check_stats, run_memcheck):
                     raise Exception((l, stats))
         else:
             # only can get here if all statchecks passed
-            if expected == "statfail":
+            if opts.expected == "statfail":
                 if KEEP_GOING:
-                    r += "    \033[31mUnexpected statcheck success\033[0m"
                     failed.append(fn)
-                    return r
+                    return r + ("\033[31mUnexpected statcheck success\033[0m",)
                 else:
                     raise Exception(("Unexpected statcheck success!", statchecks, stats))
     else:
-        r += "    (ignoring stats)"
+        r += ("(ignoring stats)",)
 
-    if run_memcheck:
+    if opts.run_memcheck:
         if code == 0:
             start = time.time()
             p = subprocess.Popen(["valgrind", "--tool=memcheck", "--leak-check=no"] + run_args, stdout=open("/dev/null", 'w'), stderr=subprocess.PIPE, stdin=open("/dev/null"))
@@ -337,16 +356,15 @@ def run_test(fn, check_stats, run_memcheck):
             assert p.wait() == 0
             if "Invalid read" not in err:
                 elapsed = (time.time() - start)
-                r += "    Memcheck passed (%4.1fs)" % (elapsed,)
+                r += ("Memcheck passed (%4.1fs)" % (elapsed,),)
             else:
                 if KEEP_GOING:
-                    r += "    \033[31mMEMCHECKS FAILED\033[0m"
                     failed.append(fn)
-                    return r
+                    return r + ("\033[31mMEMCHECKS FAILED\033[0m",)
                 else:
                     raise Exception(err)
         else:
-            r += "    (Skipping memchecks)   "
+            r += ("(Skipping memchecks)",)
 
     return r
 
@@ -394,9 +412,13 @@ parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
                     help='set time limit in seconds for each test')
 parser.add_argument('-s', '--skip-tests', type=str, default='',
                     help='tests to skip (comma-separated)')
+parser.add_argument('-e', '--exit-code-only', action='store_true',
+                    help="only check exit code; don't run CPython to get expected output to compare against")
+parser.add_argument('--skip-failing', action='store_true',
+                    help="skip tests expected to fail")
 
 parser.add_argument('test_dir')
-parser.add_argument('patterns', nargs='*')
+parser.add_argument('pattern', nargs='*')
 
 def main(orig_dir):
     global KEEP_GOING
@@ -406,6 +428,8 @@ def main(orig_dir):
     global TEST_DIR
     global FN_JUST_SIZE
     global TESTS_TO_SKIP
+    global EXIT_CODE_ONLY
+    global SKIP_FAILING_TESTS
 
     run_memcheck = False
     start = 1
@@ -418,47 +442,21 @@ def main(orig_dir):
     EXTRA_JIT_ARGS += opts.extra_args
     TIME_LIMIT = opts.time_limit
     TESTS_TO_SKIP = opts.skip_tests.split(',')
+    EXIT_CODE_ONLY = opts.exit_code_only
+    SKIP_FAILING_TESTS = opts.skip_failing
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
-    patterns = opts.patterns
+    patterns = opts.pattern
 
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
 
-    TOSKIP = ["%s/%s.py" % (TEST_DIR, i) for i in (
-        "tuple_depth",
-        "longargs_stackusage",
-            )]
+    if TEST_DIR.rstrip('/').endswith("cpython") and not EXIT_CODE_ONLY:
+        print >>sys.stderr, "Test directory name ends in cpython; are you sure you don't want --exit-code-only?"
 
-    IGNORE_STATS = ["%s/%d.py" % (TEST_DIR, i) for i in (
-        )] + [
-        ]
+    # do we need this any more?
+    IGNORE_STATS = ["%s/%d.py" % (TEST_DIR, i) for i in ()] + []
 
-    def _addto(l, tests):
-        if isinstance(tests, str):
-            tests = [tests]
-        for t in tests:
-            l.append("%s/%s.py" % (TEST_DIR, t))
-    skip = functools.partial(_addto, TOSKIP)
-
-    if not patterns:
-        skip(["t", "t2"])
-
-    def tryParse(s):
-        if s.isdigit():
-            return int(s)
-        return s
-    def key(name):
-        i = tryParse(name)
-        if i < start:
-            return i + 100000
-        return i
-
-    tests = sorted([t for t in glob.glob("%s/*.py" % TEST_DIR)], key=lambda t:key(t[6:-3]))
-    tests += [
-            ]
-    big_tests = [
-            ]
-    tests += big_tests
+    tests = [t for t in glob.glob("%s/*.py" % TEST_DIR)]
 
     LIB_DIR = os.path.join(sys.prefix, "lib/python2.7")
     for t in tests:
@@ -471,18 +469,16 @@ def main(orig_dir):
            module_name in sys.builtin_module_names:
             raise Exception("Error: %s hides builtin module '%s'" % (t, module_name))
 
-    for t in TOSKIP:
-        assert t in ("%s/t.py" % TEST_DIR, "%s/t2.py" % TEST_DIR) or t in tests, t
-
     if patterns:
         filtered_tests = []
         for t in tests:
-            if any(re.match("%s/%s.*\.py" % (TEST_DIR, p), t) for p in patterns):
+            if any(re.match(os.path.join(TEST_DIR, p) + ".*\.py", t) for p in patterns):
                 filtered_tests.append(t)
         tests = filtered_tests
     if not tests:
-        print >>sys.stderr, "No tests specified!"
-        sys.exit(1)
+        print >>sys.stderr, "No tests matched the given patterns. OK by me!"
+        # this can happen legitimately in e.g. `make check_test_foo` if test_foo.py is a CPython regression test.
+        sys.exit(0)
 
     FN_JUST_SIZE = max(20, 2 + max(len(os.path.basename(fn)) for fn in tests))
 
@@ -493,8 +489,6 @@ def main(orig_dir):
         tests.sort(key=fileSize)
 
     for fn in tests:
-        if fn in TOSKIP:
-            continue
         check_stats = fn not in IGNORE_STATS
         q.put((fn, check_stats, run_memcheck))
 
@@ -507,11 +501,6 @@ def main(orig_dir):
         q.put(None)
 
     for fn in tests:
-        if fn in TOSKIP:
-            print os.path.basename(fn).rjust(FN_JUST_SIZE),
-            print "   Skipping"
-            continue
-
         with cv:
             while fn not in results:
                 try:
@@ -527,7 +516,11 @@ def main(orig_dir):
                 print "(%s also failed)" % fn
             sys.exit(1)
             break
-        print results[fn]
+        name = os.path.basename(fn).rjust(FN_JUST_SIZE)
+        msgs = results[fn]
+        if isinstance(msgs,str):
+            msgs = [msgs]
+        print '    '.join([name] + list(msgs))
 
     for t in threads:
         t.join()

@@ -96,6 +96,7 @@ void force() {
     FORCE(unpackIntoArray);
     FORCE(raiseAttributeError);
     FORCE(raiseAttributeErrorStr);
+    FORCE(raiseIndexErrorStr);
     FORCE(raiseNotIterableError);
     FORCE(assertNameDefined);
     FORCE(assertFailDerefNameDefined);

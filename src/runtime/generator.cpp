@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// See https://docs.python.org/2/reference/expressions.html#yieldexpr for the relevant Python language reference
+// documentation on generators.
+
 #include "runtime/generator.h"
 
 #include <algorithm>
@@ -145,12 +148,15 @@ Box* generatorSend(Box* s, Box* v) {
     return self->returnValue;
 }
 
-Box* generatorThrow(Box* s, BoxedClass* e) {
+Box* generatorThrow(Box* s, BoxedClass* exc_cls, Box* exc_val = nullptr, Box** args = nullptr) {
     assert(s->cls == generator_cls);
-    assert(isSubclass(e, Exception));
     BoxedGenerator* self = static_cast<BoxedGenerator*>(s);
-    Box* ex = runtimeCall(e, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
-    self->exception = ExcInfo(ex->cls, ex, None);
+    Box* exc_tb = args ? nullptr : args[0];
+    if (!exc_val)
+        exc_val = None;
+    if (!exc_tb)
+        exc_tb = None;
+    self->exception = excInfoForRaise(exc_cls, exc_val, exc_tb);
     return generatorSend(self, None);
 }
 
@@ -162,7 +168,7 @@ Box* generatorClose(Box* s) {
     if (self->entryExited)
         return None;
 
-    return generatorThrow(self, GeneratorExit);
+    return generatorThrow(self, GeneratorExit, nullptr, nullptr);
 }
 
 Box* generatorNext(Box* s) {
@@ -332,7 +338,8 @@ void setupGenerator() {
     generator_cls->giveAttr("close", new BoxedFunction(boxRTFunction((void*)generatorClose, UNKNOWN, 1)));
     generator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)generatorNext, UNKNOWN, 1)));
     generator_cls->giveAttr("send", new BoxedFunction(boxRTFunction((void*)generatorSend, UNKNOWN, 2)));
-    generator_cls->giveAttr("throw", new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 2)));
+    auto gthrow = new BoxedFunction(boxRTFunction((void*)generatorThrow, UNKNOWN, 4, 2, false, false), { NULL, NULL });
+    generator_cls->giveAttr("throw", gthrow);
 
     generator_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(generatorName, NULL, NULL));
 

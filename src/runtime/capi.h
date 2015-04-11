@@ -19,6 +19,7 @@
 
 namespace pyston {
 
+class Box;
 class BoxedModule;
 BoxedModule* importTestExtension(const std::string&);
 
@@ -26,6 +27,9 @@ void checkAndThrowCAPIException();
 void throwCAPIException() __attribute__((noreturn));
 struct ExcInfo;
 void setCAPIException(const ExcInfo& e);
+
+// TODO: not sure whether this belongs here
+void fatalOrError(Box* object, const char* message) noexcept;
 }
 
 #endif
