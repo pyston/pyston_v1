@@ -46,7 +46,7 @@ ETAGS := ctags-exuberant -e
 # to disk space concerns.
 FORCE_TRUNK_BINARIES := 0
 
-USE_CMAKE := 0
+USE_CMAKE := 1
 NINJA := ninja
 
 # Put any overrides in here:
