@@ -387,7 +387,7 @@ public:
         return rtn;
     }
 
-    unw_word_t getFunctionEnd(unw_word_t ip) {
+    static unw_word_t getFunctionEnd(unw_word_t ip) {
         unw_proc_info_t pip;
         int ret = unw_get_proc_info_by_ip(unw_local_addr_space, ip, &pip, NULL);
         RELEASE_ASSERT(ret == 0 && pip.end_ip, "");
@@ -549,15 +549,79 @@ BoxedTraceback* getTraceback() {
 
     Timer _t("getTraceback", 1000);
 
+    struct FrameLayout {
+        FrameLayout* bp;
+        void* ip;
+    };
+
     std::vector<const LineInfo*> entries;
-    for (auto& frame_iter : unwindPythonFrames()) {
-        const LineInfo* line_info = lineInfoForFrame(frame_iter);
-        if (line_info)
-            entries.push_back(line_info);
+    for (FrameLayout* current_frame = (FrameLayout*)__builtin_frame_address(0); current_frame;) {
+        static unw_word_t interpreter_instr_end
+            = PythonFrameIterator::getFunctionEnd((unw_word_t)interpreter_instr_addr);
+        static unw_word_t generator_entry_end = PythonFrameIterator::getFunctionEnd((unw_word_t)generatorEntry);
+
+        unw_word_t ip = (unw_word_t)current_frame->ip;
+        unw_word_t bp = (unw_word_t)current_frame->bp;
+
+        AST_stmt* current_stmt = 0;
+        CompiledFunction* cf = getCFForAddress(ip);
+        if (cf) {
+            assert(ip > cf->code_start);
+            unsigned offset = ip - cf->code_start;
+
+            assert(cf->location_map);
+            const LocationMap::LocationTable& table = cf->location_map->names["!current_stmt"];
+            assert(table.locations.size());
+
+            // printf("Looking for something at offset %d (total ip: %lx)\n", offset, ip);
+            for (const LocationMap::LocationTable::LocationEntry& e : table.locations) {
+                // printf("(%d, %d]\n", e.offset, e.offset + e.length);
+                if (e.offset < offset && offset <= e.offset + e.length) {
+                    // printf("Found it\n");
+                    assert(e.locations.size() == 1);
+                    auto loc = e.locations[0];
+                    if (loc.type == StackMap::Record::Location::LocationType::Constant)
+                        current_stmt = (AST_stmt*)(uint64_t)loc.offset;
+                    else if (loc.type == StackMap::Record::Location::LocationType::ConstIndex)
+                        current_stmt = (AST_stmt*)cf->location_map->constants[loc.offset];
+                    else
+                        RELEASE_ASSERT(0, "");
+                }
+            }
+        } else if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
+            cf = getCFForInterpretedFrame((void*)bp);
+            current_stmt = getCurrentStatementForInterpretedFrame((void*)bp);
+        }
+
+        if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
+            // for generators continue unwinding in the context in which the generator got called
+            Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
+            current_frame = (FrameLayout*)remote_ctx->rbp;
+            continue;
+        }
+
+        if (current_stmt && cf) {
+            auto source = cf->clfunc->source;
+
+            // Hack: the "filename" for eval and exec statements is "<string>", not the filename
+            // of the parent module.  We can't currently represent this the same way that CPython does
+            // (but we probably should), so just check that here:
+            const std::string* fn = &source->parent_module->fn;
+            if (source->ast->type == AST_TYPE::Suite /* exec */
+                || source->ast->type == AST_TYPE::Expression /* eval */) {
+                static const std::string string_str("<string>");
+                fn = &string_str;
+            }
+            const LineInfo* line_info
+                = new LineInfo(current_stmt->lineno, current_stmt->col_offset, *fn, source->getName());
+            if (line_info)
+                entries.push_back(line_info);
+        }
+
+        current_frame = current_frame->bp;
     }
 
     std::reverse(entries.begin(), entries.end());
-
     long us = _t.end();
     us_gettraceback.log(us);
 
