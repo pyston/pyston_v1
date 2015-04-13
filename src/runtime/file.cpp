@@ -826,7 +826,14 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
     auto fn = static_cast<BoxedString*>(s);
     auto mode = static_cast<BoxedString*>(m);
 
-    FILE* f = fopen(fn->data(), mode->data());
+    // all characters in python mode specifiers are valid in fopen calls except 'U'.  we strip it out
+    // of the string we pass to fopen, but pass it along to the BoxedFile ctor.
+    auto file_mode = std::unique_ptr<char[]>(new char[mode->size() + 1]);
+    memmove(&file_mode[0], mode->data(), mode->size() + 1);
+    _PyFile_SanitizeMode(&file_mode[0]);
+    checkAndThrowCAPIException();
+
+    FILE* f = fopen(fn->data(), &file_mode[0]);
     if (!f) {
         PyErr_SetFromErrnoWithFilename(IOError, fn->data());
         throwCAPIException();
