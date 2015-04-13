@@ -91,7 +91,7 @@ There are a number of common flags you can pass to your make invocations:
 - `BR=breakpoint`: when running under gdb, automatically set a breakpoint at the given location.
 - `SELF_HOST=1`: run all of our Python scripts using pyston_dbg.
 
-For a full list, please check out the (Makefile)[https://github.com/dropbox/pyston/blob/master/Makefile].
+For a full list, please check out the [Makefile](https://github.com/dropbox/pyston/blob/master/Makefile).
 
 #### Pyston command-line options:
 
@@ -118,7 +118,7 @@ Pyston-specific flags:
   <dd>Use a stripped stdlib.  When running pyston_dbg, the default is to use a stdlib with full debugging symbols enabled.  Passing -r changes this behavior to load a slimmer, stripped stdlib.</dd>
 
 <dt>-x</dt>
-  <dd>Experimental: use the pypa parser.</dd>
+  <dd>Disable the pypa parser.</dd>
 
 Standard Python flags:
 <dt>-i</dt>
