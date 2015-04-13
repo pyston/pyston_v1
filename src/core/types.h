@@ -440,7 +440,6 @@ public:
     // Add a no-op constructor to make sure that we don't zero-initialize cls
     Box() {}
 
-    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
     void* operator new(size_t size, BoxedClass* cls) __attribute__((visibility("default")));
     void operator delete(void* ptr) __attribute__((visibility("default"))) { abort(); }
 
@@ -485,11 +484,11 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 #define DEFAULT_CLASS(default_cls)                                                                                     \
     void* operator new(size_t size, BoxedClass * cls) __attribute__((visibility("default"))) {                         \
         assert(cls->tp_itemsize == 0);                                                                                 \
-        return Box::operator new(size, cls, 0);                                                                        \
+        return Box::operator new(size, cls);                                                                           \
     }                                                                                                                  \
     void* operator new(size_t size) __attribute__((visibility("default"))) {                                           \
         assert(default_cls->tp_itemsize == 0);                                                                         \
-        return Box::operator new(size, default_cls, 0);                                                                \
+        return Box::operator new(size, default_cls);                                                                   \
     }
 
 // The restrictions on when you can use the SIMPLE (ie fast) variant are encoded as
@@ -531,11 +530,11 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
                                                                                                                        \
     void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
         assert(cls->tp_itemsize == itemsize);                                                                          \
-        return Box::operator new(size, cls, nitems);                                                                   \
+        return BoxVar::operator new(size, cls, nitems);                                                                \
     }                                                                                                                  \
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
         assert(default_cls->tp_itemsize == itemsize);                                                                  \
-        return Box::operator new(size, default_cls, nitems);                                                           \
+        return BoxVar::operator new(size, default_cls, nitems);                                                        \
     }
 
 #define DEFAULT_CLASS_VAR_SIMPLE(default_cls, itemsize)                                                                \
@@ -546,7 +545,7 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
                                                                                                                        \
     void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
         assert(cls->tp_itemsize == itemsize);                                                                          \
-        return Box::operator new(size, cls, nitems);                                                                   \
+        return BoxVar::operator new(size, cls, nitems);                                                                \
     }                                                                                                                  \
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
         assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
@@ -571,6 +570,8 @@ public:
 
     BoxVar() {}
     BoxVar(Py_ssize_t ob_size) : ob_size(ob_size) {}
+
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
 };
 static_assert(offsetof(BoxVar, ob_size) == offsetof(struct _varobject, ob_size), "");
 

@@ -3977,30 +3977,6 @@ static void assertInitNone(Box* obj) {
     }
 }
 
-// Modified from `valid_identifier` in CPython typeobject.c
-static int valid_identifier(PyObject* s) {
-    unsigned char* p;
-    Py_ssize_t i, n;
-
-    if (!PyString_Check(s)) {
-        PyErr_Format(PyExc_TypeError, "__slots__ items must be strings, not '%.200s'", Py_TYPE(s)->tp_name);
-        return 0;
-    }
-    p = (unsigned char*)PyString_AS_STRING(s);
-    n = PyString_GET_SIZE(s);
-    /* We must reject an empty name.  As a hack, we bump the
-       length to 1 so that the loop will balk on the trailing \0. */
-    if (n == 0)
-        n = 1;
-    for (i = 0; i < n; i++, p++) {
-        if (!(i == 0 ? isalpha(*p) : isalnum(*p)) && *p != '_') {
-            PyErr_SetString(PyExc_TypeError, "__slots__ must be identifiers");
-            return 0;
-        }
-    }
-    return 1;
-}
-
 void assertValidSlotIdentifier(Box* s) {
     // Ported from `valid_identifier` in cpython
 

@@ -178,9 +178,10 @@ extern "C" PyObject* _PyObject_New(PyTypeObject* tp) noexcept {
 }
 
 // Analogue of PyType_GenericNew
-void* Box::operator new(size_t size, BoxedClass* cls, size_t nitems) {
+void* BoxVar::operator new(size_t size, BoxedClass* cls, size_t nitems) {
     assert(cls);
     ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
+    assert(cls->tp_itemsize > 0);
     assert(cls->tp_alloc);
 
     void* mem = cls->tp_alloc(cls, nitems);
@@ -189,7 +190,14 @@ void* Box::operator new(size_t size, BoxedClass* cls, size_t nitems) {
 }
 
 void* Box::operator new(size_t size, BoxedClass* cls) {
-    return Box::operator new(size, cls, 0);
+    assert(cls);
+    ASSERT(cls->tp_basicsize >= size, "%s", cls->tp_name);
+    assert(cls->tp_itemsize == 0);
+    assert(cls->tp_alloc);
+
+    void* mem = cls->tp_alloc(cls, 0);
+    RELEASE_ASSERT(mem, "");
+    return mem;
 }
 
 Box* BoxedClass::callHasnextIC(Box* obj, bool null_on_nonexistent) {
