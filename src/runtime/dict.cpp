@@ -667,7 +667,7 @@ void setupDict() {
     dict_cls->giveAttr("popitem", new BoxedFunction(boxRTFunction((void*)dictPopitem, BOXED_TUPLE, 1)));
 
     auto* fromkeys_func = new BoxedFunction(boxRTFunction((void*)dictFromkeys, DICT, 3, 1, false, false), { None });
-    dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func));
+    dict_cls->giveAttr("fromkeys", boxInstanceMethod(dict_cls, fromkeys_func, dict_cls));
 
     dict_cls->giveAttr("viewkeys", new BoxedFunction(boxRTFunction((void*)dictViewKeys, UNKNOWN, 1)));
     dict_cls->giveAttr("viewvalues", new BoxedFunction(boxRTFunction((void*)dictViewValues, UNKNOWN, 1)));

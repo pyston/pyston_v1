@@ -117,3 +117,13 @@ print type(bound_instancemethod)
 unbound_instancemethod = C.l
 unbound_instancemethod(c2)
 print type(unbound_instancemethod)
+
+### Test instancemethod repr
+print 'test instancemethod repr'
+class C(object):
+    def f(self):
+        pass
+    def __repr__(self):
+        return '(alpacas are cool)'
+print repr(C.f)
+print repr(C().f)

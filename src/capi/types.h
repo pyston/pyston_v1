@@ -150,7 +150,7 @@ public:
         // CPython handles this differently: they create the equivalent of different BoxedMethodDescriptor
         // objects but with different class objects, which define different __get__ and __call__ methods.
         if (self->method->ml_flags & METH_CLASS)
-            return boxInstanceMethod(owner, self);
+            return boxInstanceMethod(owner, self, self->type);
 
         if (self->method->ml_flags & METH_STATIC)
             Py_FatalError("unimplemented");
@@ -160,7 +160,7 @@ public:
         if (inst == None)
             return self;
         else
-            return boxInstanceMethod(inst, self);
+            return boxInstanceMethod(inst, self, self->type);
     }
 
     static Box* __call__(BoxedMethodDescriptor* self, Box* obj, BoxedTuple* varargs, Box** _args);

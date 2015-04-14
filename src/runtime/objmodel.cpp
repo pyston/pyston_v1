@@ -860,8 +860,13 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
     if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls
         || (descr->cls == method_cls
             && (static_cast<BoxedMethodDescriptor*>(descr)->method->ml_flags & (METH_CLASS | METH_STATIC)) == 0)) {
-        Box* im_self = NULL, * im_func = NULL;
-        RewriterVar* r_im_self = NULL, * r_im_func = NULL;
+        Box* im_self = NULL, * im_func = NULL, * im_class = obj->cls;
+        RewriterVar* r_im_self = NULL, * r_im_func = NULL, * r_im_class = NULL;
+
+        if (rewrite_args) {
+            r_im_class = rewrite_args->obj->getAttr(BOX_CLS_OFFSET);
+        }
+
         if (descr->cls == function_cls) {
             im_self = obj;
             im_func = descr;
@@ -888,7 +893,7 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
             im_func = cm->cm_callable;
 
             if (rewrite_args) {
-                r_im_self = rewrite_args->obj->getAttr(BOX_CLS_OFFSET);
+                r_im_self = r_im_class;
                 r_im_func = r_descr->getAttr(offsetof(BoxedClassmethod, cm_callable));
                 r_im_func->addGuardNotEq(0);
             }
@@ -919,10 +924,10 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
         if (!for_call) {
             if (rewrite_args) {
                 rewrite_args->out_rtn
-                    = rewrite_args->rewriter->call(true, (void*)boxInstanceMethod, r_im_self, r_im_func);
+                    = rewrite_args->rewriter->call(true, (void*)boxInstanceMethod, r_im_self, r_im_func, r_im_class);
                 rewrite_args->out_success = true;
             }
-            return boxInstanceMethod(im_self, im_func);
+            return boxInstanceMethod(im_self, im_func, im_class);
         } else {
             *bind_obj_out = im_self;
             if (rewrite_args) {
@@ -966,10 +971,12 @@ Box* descriptorClsSpecialCases(GetattrRewriteArgs* rewrite_args, BoxedClass* cls
         if (!for_call && descr->cls == function_cls) {
             if (rewrite_args) {
                 // return an unbound instancemethod
-                rewrite_args->out_rtn = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr);
+                RewriterVar* r_cls = rewrite_args->obj;
+                rewrite_args->out_rtn
+                    = rewrite_args->rewriter->call(true, (void*)boxUnboundInstanceMethod, r_descr, r_cls);
                 rewrite_args->out_success = true;
             }
-            return boxUnboundInstanceMethod(descr);
+            return boxUnboundInstanceMethod(descr, cls);
         }
 
         if (rewrite_args) {
