@@ -1311,6 +1311,10 @@ static Box* long0(Box* b, void*) {
     return boxLong(0);
 }
 
+static Box* long1(Box* b, void*) {
+    return boxLong(1);
+}
+
 void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
@@ -1374,6 +1378,8 @@ void setupLong() {
     long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
     long_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)longLong, UNKNOWN, 1)));
+    long_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
+    long_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(long1, NULL, NULL));
 
     long_cls->freeze();
 

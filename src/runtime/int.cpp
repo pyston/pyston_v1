@@ -1076,6 +1076,10 @@ static Box* int0(Box*, void*) {
     return boxInt(0);
 }
 
+static Box* int1(Box*, void*) {
+    return boxInt(1);
+}
+
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
@@ -1128,6 +1132,8 @@ void setupInt() {
     int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
     int_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)intInt, BOXED_INT, 1)));
+    int_cls->giveAttr("numerator", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
+    int_cls->giveAttr("denominator", new (pyston_getset_cls) BoxedGetsetDescriptor(int1, NULL, NULL));
 
     int_cls->freeze();
 }
