@@ -1296,6 +1296,21 @@ static PyObject* long_pow(PyObject* v, PyObject* w, PyObject* x) noexcept {
     }
 }
 
+static Box* longLong(Box* b, void*) {
+    if (b->cls == long_cls) {
+        return b;
+    } else {
+        assert(PyLong_Check(b));
+        BoxedLong* l = new BoxedLong();
+        mpz_init_set(l->n, static_cast<BoxedLong*>(b)->n);
+        return l;
+    }
+}
+
+static Box* long0(Box* b, void*) {
+    return boxLong(0);
+}
+
 void setupLong() {
     mp_set_memory_functions(customised_allocation, customised_realloc, customised_free);
 
@@ -1355,6 +1370,9 @@ void setupLong() {
 
     long_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)longTrunc, UNKNOWN, 1)));
     long_cls->giveAttr("__index__", new BoxedFunction(boxRTFunction((void*)longIndex, LONG, 1)));
+
+    long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
+    long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
 
     long_cls->freeze();
 

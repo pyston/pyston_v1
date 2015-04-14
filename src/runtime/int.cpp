@@ -1063,6 +1063,19 @@ static void _addFuncIntUnknown(const char* name, ConcreteCompilerType* rtn_type,
     int_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
+static Box* intInt(Box* b, void*) {
+    if (b->cls == int_cls) {
+        return b;
+    } else {
+        assert(PyInt_Check(b));
+        return boxInt(static_cast<BoxedInt*>(b)->n);
+    }
+}
+
+static Box* int0(Box*, void*) {
+    return boxInt(0);
+}
+
 void setupInt() {
     for (int i = 0; i < NUM_INTERNED_INTS; i++) {
         interned_ints[i] = new BoxedInt(i);
@@ -1111,6 +1124,9 @@ void setupInt() {
 
     int_cls->giveAttr("__init__",
                       new BoxedFunction(boxRTFunction((void*)intInit, NONE, 2, 1, true, false), { boxInt(0) }));
+
+    int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
+    int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
 
     int_cls->freeze();
 }
