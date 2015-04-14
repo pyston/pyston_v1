@@ -410,7 +410,7 @@ parser.add_argument('-a', '--extra-args', default=[], action='append',
                     help="additional arguments to pyston (must be invoked with equal sign: -a=-ARG)")
 parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
                     help='set time limit in seconds for each test')
-parser.add_argument('-s', '--skip-tests', type=str, default='t,t2',
+parser.add_argument('-s', '--skip-tests', type=str, default='',
                     help='tests to skip (comma-separated)')
 parser.add_argument('-e', '--exit-code-only', action='store_true',
                     help="only check exit code; don't run CPython to get expected output to compare against")
@@ -442,11 +442,15 @@ def main(orig_dir):
     EXTRA_JIT_ARGS += opts.extra_args
     TIME_LIMIT = opts.time_limit
     TESTS_TO_SKIP = opts.skip_tests.split(',')
+    TESTS_TO_SKIP = filter(bool, TESTS_TO_SKIP) # "".split(',') == ['']
     EXIT_CODE_ONLY = opts.exit_code_only
     SKIP_FAILING_TESTS = opts.skip_failing
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     patterns = opts.pattern
+
+    if not patterns and not TESTS_TO_SKIP:
+        TESTS_TO_SKIP = ["t", "t2"]
 
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
 
