@@ -783,6 +783,7 @@ void setupFloat() {
 
     float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
     float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
+    float_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)floatFloat, BOXED_FLOAT, 1)));
 
     float_cls->freeze();
 }

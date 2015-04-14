@@ -1373,6 +1373,7 @@ void setupLong() {
 
     long_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(longLong, NULL, NULL));
     long_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(long0, NULL, NULL));
+    long_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)longLong, UNKNOWN, 1)));
 
     long_cls->freeze();
 

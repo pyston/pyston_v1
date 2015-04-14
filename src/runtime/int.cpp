@@ -1127,6 +1127,7 @@ void setupInt() {
 
     int_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(intInt, NULL, NULL));
     int_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(int0, NULL, NULL));
+    int_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)intInt, BOXED_INT, 1)));
 
     int_cls->freeze();
 }
