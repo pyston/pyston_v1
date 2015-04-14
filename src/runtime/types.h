@@ -434,10 +434,6 @@ private:
     void* operator new(size_t size) = delete;
 };
 
-class BoxedUnicode : public Box {
-    // TODO implementation
-};
-
 template <typename T> struct StringHash {
     size_t operator()(const T* str) {
         size_t hash = 5381;
