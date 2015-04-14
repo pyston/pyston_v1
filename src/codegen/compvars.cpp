@@ -371,8 +371,7 @@ public:
         }
 
         // We don't know the type so we have to check at runtime if __iter__ is implemented
-        llvm::Value* cmp
-            = emitter.getBuilder()->CreateICmpNE(converted_iter_call->getValue(), getNullPtr(g.llvm_value_type_ptr));
+        llvm::Value* cmp = emitter.getBuilder()->CreateIsNotNull(converted_iter_call->getValue());
 
         llvm::BasicBlock* bb_has_iter = emitter.createBasicBlock("has_iter");
         bb_has_iter->moveAfter(emitter.currentBasicBlock());
@@ -1638,8 +1637,13 @@ public:
                                const std::string* attr, CallattrFlags flags, ArgPassSpec argspec,
                                const std::vector<CompilerVariable*>& args,
                                const std::vector<const std::string*>* keyword_names) override {
+        bool no_attribute = false;
         ConcreteCompilerVariable* called_constant
-            = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, argspec, args, keyword_names);
+            = tryCallattrConstant(emitter, info, var, attr, flags.cls_only, argspec, args, keyword_names,
+                                  flags.null_on_nonexistent ? &no_attribute : NULL);
+        if (no_attribute)
+            return new ConcreteCompilerVariable(UNKNOWN, embedConstantPtr(0, g.llvm_value_type_ptr), true);
+
         if (called_constant)
             return called_constant;
 
