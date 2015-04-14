@@ -119,7 +119,7 @@ extern "C" int _PyTuple_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
 }
 
 int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
-    assert(isSubclass((*pv)->cls, tuple_cls));
+    assert((*pv)->cls == tuple_cls);
 
     BoxedTuple* t = static_cast<BoxedTuple*>(*pv);
 
@@ -132,12 +132,8 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
         return 0;
     }
 
-    BoxedTuple* resized;
-
-    if (t->cls == tuple_cls)
-        resized = new (newsize) BoxedTuple(newsize); // we want an uninitialized tuple, but this will memset it with 0.
-    else
-        resized = new (t->cls, newsize) BoxedTuple(newsize); // we need an uninitialized string, but this will memset
+    BoxedTuple* resized = new (newsize)
+        BoxedTuple(newsize); // we want an uninitialized tuple, but this will memset it with 0.
     memmove(resized->elts, t->elts, t->size());
 
     *pv = resized;
