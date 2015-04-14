@@ -410,7 +410,7 @@ parser.add_argument('-a', '--extra-args', default=[], action='append',
                     help="additional arguments to pyston (must be invoked with equal sign: -a=-ARG)")
 parser.add_argument('-t', '--time-limit', type=int, default=TIME_LIMIT,
                     help='set time limit in seconds for each test')
-parser.add_argument('-s', '--skip-tests', type=str, default='',
+parser.add_argument('-s', '--skip-tests', type=str, default='t,t2',
                     help='tests to skip (comma-separated)')
 parser.add_argument('-e', '--exit-code-only', action='store_true',
                     help="only check exit code; don't run CPython to get expected output to compare against")
