@@ -19,7 +19,7 @@
 namespace pyston {
 
 static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
-    RELEASE_ASSERT(self->cls == member_cls, "");
+    RELEASE_ASSERT(self->cls == member_descriptor_cls, "");
 
     if (inst == None)
         return self;
@@ -169,8 +169,8 @@ static Box* classmethodGet(Box* self, Box* obj, Box* type) {
 }
 
 void setupDescr() {
-    member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
-    member_cls->freeze();
+    member_descriptor_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
+    member_descriptor_cls->freeze();
 
     property_cls->giveAttr("__init__",
                            new BoxedFunction(boxRTFunction((void*)propertyInit, UNKNOWN, 5, 4, false, false,
