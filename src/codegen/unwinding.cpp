@@ -263,14 +263,29 @@ struct PythonFrameId {
 
 class PythonFrameIterator {
 private:
+    // Used for custom frame pointer based stack walking
+    struct FrameLayout {
+        FrameLayout* bp;
+        void* ip;
+    };
+
     PythonFrameId id;
 
+    const bool use_libunwind;
+    FrameLayout* current_frame; // used if use_libunwind == false
+
+    // used if use_libunwind == true
     unw_context_t ctx;
     unw_cursor_t cursor;
+
     CompiledFunction* cf;
     bool cur_is_osr;
 
-    PythonFrameIterator() : cf(NULL), cur_is_osr(false) {}
+    // If fast_and_skip_registers is true we use our own fast frame pointer based stack walking routines instead of
+    // libunwind.
+    // But you can't use the fast mode if you need to access registers inside the stack frame.
+    PythonFrameIterator(bool fast_and_skip_registers)
+        : use_libunwind(!fast_and_skip_registers), current_frame(NULL), cf(NULL), cur_is_osr(false) {}
 
     // not copyable or movable, since 'cursor' holds an internal pointer to 'ctx'
     PythonFrameIterator(const PythonFrameIterator&) = delete;
@@ -282,6 +297,24 @@ public:
     CompiledFunction* getCF() const {
         assert(cf);
         return cf;
+    }
+
+    unw_word_t getBP() {
+        unw_word_t bp;
+        if (use_libunwind)
+            unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
+        else
+            bp = (unw_word_t)current_frame->bp;
+        return bp;
+    }
+
+    unw_word_t getIP() {
+        unw_word_t ip;
+        if (use_libunwind)
+            unw_get_reg(&this->cursor, UNW_REG_IP, &ip);
+        else
+            ip = (unw_word_t)current_frame->ip;
+        return ip;
     }
 
     uint64_t readLocation(const StackMap::Record::Location& loc) {
@@ -364,11 +397,15 @@ public:
 
     static std::unique_ptr<PythonFrameIterator> end() { return std::unique_ptr<PythonFrameIterator>(nullptr); }
 
-    static std::unique_ptr<PythonFrameIterator> begin() {
-        std::unique_ptr<PythonFrameIterator> rtn(new PythonFrameIterator());
+    static std::unique_ptr<PythonFrameIterator> begin(bool fast_and_skip_registers) {
+        std::unique_ptr<PythonFrameIterator> rtn(new PythonFrameIterator(fast_and_skip_registers));
 
-        unw_getcontext(&rtn->ctx);
-        unw_init_local(&rtn->cursor, &rtn->ctx);
+        if (fast_and_skip_registers) {
+            rtn->current_frame = (FrameLayout*)__builtin_frame_address(0);
+        } else {
+            unw_getcontext(&rtn->ctx);
+            unw_init_local(&rtn->cursor, &rtn->ctx);
+        }
 
         bool found = rtn->incr();
         if (!found)
@@ -377,6 +414,11 @@ public:
     }
 
     uint64_t getReg(int dwarf_num) {
+        if (!use_libunwind) {
+            RELEASE_ASSERT(dwarf_num == 6, "We only support BP in fast mode");
+            return (uint64_t)current_frame;
+        }
+
         assert(0 <= dwarf_num && dwarf_num < 16);
 
         // for x86_64, at least, libunwind seems to use the dwarf numbering
@@ -387,7 +429,7 @@ public:
         return rtn;
     }
 
-    unw_word_t getFunctionEnd(unw_word_t ip) {
+    static unw_word_t getFunctionEnd(unw_word_t ip) {
         unw_proc_info_t pip;
         int ret = unw_get_proc_info_by_ip(unw_local_addr_space, ip, &pip, NULL);
         RELEASE_ASSERT(ret == 0 && pip.end_ip, "");
@@ -401,37 +443,36 @@ public:
         bool was_osr = cur_is_osr;
 
         while (true) {
-            int r = unw_step(&this->cursor);
-
-            if (r <= 0) {
-                return false;
+            if (use_libunwind) {
+                int r = unw_step(&this->cursor);
+                if (r <= 0) {
+                    return false;
+                }
+            } else {
+                if (!current_frame)
+                    return false;
             }
-
-            unw_word_t ip;
-            unw_get_reg(&this->cursor, UNW_REG_IP, &ip);
-
+            unw_word_t ip = getIP();
             cf = getCFForAddress(ip);
             if (cf) {
                 this->id.type = PythonFrameId::COMPILED;
                 this->id.ip = ip;
 
-                unw_word_t bp;
-                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-
                 cur_is_osr = (bool)cf->entry_descriptor;
                 if (was_osr) {
                     // Skip the frame we just found if the previous one was its OSR
                     // TODO this will break if we start collapsing the OSR frames
+                    if (!use_libunwind)
+                        current_frame = current_frame->bp;
                     return incr();
                 }
-
+                if (!use_libunwind)
+                    current_frame = current_frame->bp;
                 return true;
             }
 
             if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
-                unw_word_t bp;
-                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-
+                unw_word_t bp = getBP();
                 this->id.type = PythonFrameId::INTERPRETED;
                 this->id.bp = bp;
                 cf = getCFForInterpretedFrame((void*)bp);
@@ -440,31 +481,40 @@ public:
                 if (was_osr) {
                     // Skip the frame we just found if the previous one was its OSR
                     // TODO this will break if we start collapsing the OSR frames
+                    if (!use_libunwind)
+                        current_frame = current_frame->bp;
                     return incr();
                 }
-
+                if (!use_libunwind)
+                    current_frame = current_frame->bp;
                 return true;
             }
 
             if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
                 // for generators continue unwinding in the context in which the generator got called
-                unw_word_t bp;
-                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-
+                unw_word_t bp = getBP();
                 Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
-                // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
-                memset(&ctx, 0, sizeof(ctx));
-                ctx.uc_mcontext.gregs[REG_R12] = remote_ctx->r12;
-                ctx.uc_mcontext.gregs[REG_R13] = remote_ctx->r13;
-                ctx.uc_mcontext.gregs[REG_R14] = remote_ctx->r14;
-                ctx.uc_mcontext.gregs[REG_R15] = remote_ctx->r15;
-                ctx.uc_mcontext.gregs[REG_RBX] = remote_ctx->rbx;
-                ctx.uc_mcontext.gregs[REG_RBP] = remote_ctx->rbp;
-                ctx.uc_mcontext.gregs[REG_RIP] = remote_ctx->rip;
-                ctx.uc_mcontext.gregs[REG_RSP] = (greg_t)remote_ctx;
-                unw_init_local(&cursor, &ctx);
-            }
 
+                if (use_libunwind) {
+                    // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding
+                    // work.
+                    memset(&ctx, 0, sizeof(ctx));
+                    ctx.uc_mcontext.gregs[REG_R12] = remote_ctx->r12;
+                    ctx.uc_mcontext.gregs[REG_R13] = remote_ctx->r13;
+                    ctx.uc_mcontext.gregs[REG_R14] = remote_ctx->r14;
+                    ctx.uc_mcontext.gregs[REG_R15] = remote_ctx->r15;
+                    ctx.uc_mcontext.gregs[REG_RBX] = remote_ctx->rbx;
+                    ctx.uc_mcontext.gregs[REG_RBP] = remote_ctx->rbp;
+                    ctx.uc_mcontext.gregs[REG_RIP] = remote_ctx->rip;
+                    ctx.uc_mcontext.gregs[REG_RSP] = (greg_t)remote_ctx;
+                    unw_init_local(&cursor, &ctx);
+                } else {
+                    current_frame = (FrameLayout*)remote_ctx->rbp;
+                    continue;
+                }
+            }
+            if (!use_libunwind)
+                current_frame = current_frame->bp;
             // keep unwinding
         }
     }
@@ -473,6 +523,9 @@ public:
     // (Needed because we do more memory management than typical.)
     // TODO: maybe the memory management should be handled by the Manager?
     class Manager {
+    private:
+        bool fast_and_skip_registers;
+
     public:
         class Holder {
         public:
@@ -500,18 +553,24 @@ public:
             }
         };
 
-        Holder begin() { return PythonFrameIterator::begin(); }
+        Manager(bool fast_and_skip_registers) : fast_and_skip_registers(fast_and_skip_registers) {}
+
+        Holder begin() { return PythonFrameIterator::begin(fast_and_skip_registers); }
 
         Holder end() { return PythonFrameIterator::end(); }
     };
 };
 
-PythonFrameIterator::Manager unwindPythonFrames() {
-    return PythonFrameIterator::Manager();
+PythonFrameIterator::Manager unwindPythonFramesWithoutRegisters() {
+    return PythonFrameIterator::Manager(true);
+}
+
+PythonFrameIterator::Manager unwindPythonFramesWithRegisters() {
+    return PythonFrameIterator::Manager(false);
 }
 
 static std::unique_ptr<PythonFrameIterator> getTopPythonFrame() {
-    std::unique_ptr<PythonFrameIterator> fr = PythonFrameIterator::begin();
+    std::unique_ptr<PythonFrameIterator> fr = PythonFrameIterator::begin(true /*= fast_and_skip_registers*/);
     if (fr == PythonFrameIterator::end())
         return std::unique_ptr<PythonFrameIterator>();
     return fr;
@@ -550,14 +609,13 @@ BoxedTraceback* getTraceback() {
     Timer _t("getTraceback", 1000);
 
     std::vector<const LineInfo*> entries;
-    for (auto& frame_iter : unwindPythonFrames()) {
+    for (auto& frame_iter : unwindPythonFramesWithoutRegisters()) {
         const LineInfo* line_info = lineInfoForFrame(frame_iter);
         if (line_info)
             entries.push_back(line_info);
     }
 
     std::reverse(entries.begin(), entries.end());
-
     long us = _t.end();
     us_gettraceback.log(us);
 
@@ -568,7 +626,7 @@ ExcInfo* getFrameExcInfo() {
     std::vector<ExcInfo*> to_update;
     ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
-    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+    for (PythonFrameIterator& frame_iter : unwindPythonFramesWithoutRegisters()) {
         FrameInfo* frame_info = frame_iter.getFrameInfo();
 
         copy_from_exc = &frame_info->exc;
@@ -605,7 +663,7 @@ CompiledFunction* getTopCompiledFunction() {
     auto rtn = getTopPythonFrame();
     if (!rtn)
         return NULL;
-    return getTopPythonFrame()->getCF();
+    return rtn->getCF();
 }
 
 Box* getGlobals() {
@@ -634,7 +692,7 @@ BoxedModule* getCurrentModule() {
 // because they are pretty ugly but have a pretty repetitive pattern.
 
 FrameStackState getFrameStackState() {
-    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+    for (PythonFrameIterator& frame_iter : unwindPythonFramesWithRegisters()) {
         BoxedDict* d;
         BoxedClosure* closure;
         CompiledFunction* cf;
@@ -707,7 +765,7 @@ FrameStackState getFrameStackState() {
 }
 
 Box* fastLocalsToBoxedLocals() {
-    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+    for (PythonFrameIterator& frame_iter : unwindPythonFramesWithRegisters()) {
         BoxedDict* d;
         BoxedClosure* closure;
         FrameInfo* frame_info;

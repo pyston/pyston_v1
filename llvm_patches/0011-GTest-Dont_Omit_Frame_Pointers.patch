@@ -1,0 +1,25 @@
+From bcaeb275782a27a857bbad6d6d7d9bcf191c5f1e Mon Sep 17 00:00:00 2001
+From: Marius Wachtler <undingen@gmail.com>
+Date: Tue, 14 Apr 2015 00:26:48 +0200
+Subject: [PATCH] gtest: Don't omit frame pointers
+
+---
+ utils/unittest/CMakeLists.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/utils/unittest/CMakeLists.txt b/utils/unittest/CMakeLists.txt
+index b34e22a..1721bbd 100644
+--- a/utils/unittest/CMakeLists.txt
++++ b/utils/unittest/CMakeLists.txt
+@@ -28,6 +28,8 @@ endif()
+ set(LLVM_REQUIRES_RTTI 1)
+ add_definitions( -DGTEST_HAS_RTTI=0 )
+ 
++add_definitions("-fno-omit-frame-pointer")
++
+ if (NOT LLVM_ENABLE_THREADS)
+   add_definitions( -DGTEST_HAS_PTHREAD=0 )
+ endif()
+-- 
+2.1.0
+
