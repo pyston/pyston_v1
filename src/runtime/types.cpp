@@ -2576,7 +2576,8 @@ void setupRuntime() {
     weakref_callableproxy->is_pyston_class = true;
 
     // additional patching to get sockets to close
-    RELEASE_ASSERT(PySocketModule_ImportModuleAndAPI() == 0, "couldn't initialize socket module");
+    int init_socketmodule = PySocketModule_ImportModuleAndAPI();
+    RELEASE_ASSERT(init_socketmodule == 0, "couldn't initialize socket module");
     BoxedClass* socket_cls = PySocketModule.Sock_Type;
     socket_cls->tp_alloc = PystonType_GenericAlloc;
     socket_cls->simple_destructor = socket_cls->tp_dealloc;
