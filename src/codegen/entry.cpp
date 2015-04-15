@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <lz4frame.h>
 #include <openssl/evp.h>
 #include <unordered_map>
 
@@ -120,6 +121,71 @@ static llvm::Module* loadStdlib() {
     return m;
 }
 
+class CompressedFile {
+public:
+    static bool writeFile(llvm::StringRef file_name, llvm::StringRef data) {
+        std::error_code error_code;
+        llvm::raw_fd_ostream file(file_name, error_code, llvm::sys::fs::F_RW);
+        if (error_code)
+            return false;
+
+        LZ4F_preferences_t preferences;
+        memset(&preferences, 0, sizeof(preferences));
+        preferences.frameInfo.contentChecksumFlag = contentChecksumEnabled;
+        preferences.frameInfo.contentSize = data.size();
+
+        std::vector<char> compressed;
+        size_t max_size = LZ4F_compressFrameBound(data.size(), &preferences);
+        compressed.resize(max_size);
+        size_t compressed_size = LZ4F_compressFrame(&compressed[0], max_size, data.data(), data.size(), &preferences);
+        if (LZ4F_isError(compressed_size))
+            return false;
+        file.write(compressed.data(), compressed_size);
+        return true;
+    }
+
+    static std::unique_ptr<llvm::MemoryBuffer> getFile(llvm::StringRef file_name) {
+        auto compressed_content = llvm::MemoryBuffer::getFile(file_name, -1, false);
+        if (!compressed_content)
+            return std::unique_ptr<llvm::MemoryBuffer>();
+
+        LZ4F_decompressionContext_t context;
+        LZ4F_createDecompressionContext(&context, LZ4F_VERSION);
+
+        LZ4F_frameInfo_t frame_info;
+        memset(&frame_info, 0, sizeof(frame_info));
+
+        const char* start = (*compressed_content)->getBufferStart();
+        size_t pos = 0;
+        size_t compressed_size = (*compressed_content)->getBufferSize();
+        size_t remaining = compressed_size - pos;
+        LZ4F_getFrameInfo(context, &frame_info, start, &remaining);
+        pos += remaining;
+
+        std::vector<char> uncompressed;
+        uncompressed.reserve(frame_info.contentSize);
+        while (pos < compressed_size) {
+            unsigned char buff[4096];
+            size_t buff_size = sizeof(buff);
+            remaining = compressed_size - pos;
+            size_t error_code = LZ4F_decompress(context, buff, &buff_size, start + pos, &remaining, NULL);
+            if (LZ4F_isError(error_code)) {
+                LZ4F_freeDecompressionContext(context);
+                return std::unique_ptr<llvm::MemoryBuffer>();
+            }
+            pos += remaining;
+            if (buff_size != 0)
+                uncompressed.insert(uncompressed.end(), buff, buff + buff_size);
+        }
+
+        LZ4F_freeDecompressionContext(context);
+        if (uncompressed.size() != frame_info.contentSize)
+            return std::unique_ptr<llvm::MemoryBuffer>();
+
+        return llvm::MemoryBuffer::getMemBufferCopy(llvm::StringRef(uncompressed.data(), uncompressed.size()));
+    }
+};
+
 class PystonObjectCache : public llvm::ObjectCache {
 private:
     // Stream which calculates the SHA256 hash of the data writen to.
@@ -154,15 +220,18 @@ private:
         }
     };
 
-
     llvm::SmallString<128> cache_dir;
     std::string module_identifier;
     std::string hash_before_codegen;
 
 public:
     PystonObjectCache() {
-        llvm::sys::fs::current_path(cache_dir);
-        llvm::sys::path::append(cache_dir, "pyston_object_cache");
+        llvm::sys::path::home_directory(cache_dir);
+        llvm::sys::path::append(cache_dir, ".cache");
+        llvm::sys::path::append(cache_dir, "pyston");
+        llvm::sys::path::append(cache_dir, "object_cache");
+
+        cleanupCacheDirectory();
     }
 
 
@@ -177,14 +246,10 @@ public:
 
         llvm::SmallString<128> cache_file = cache_dir;
         llvm::sys::path::append(cache_file, hash_before_codegen);
-        if (!llvm::sys::fs::exists(cache_dir.str()) && llvm::sys::fs::create_directory(cache_dir.str())) {
-            fprintf(stderr, "Unable to create cache directory\n");
+        if (!llvm::sys::fs::exists(cache_dir.str()) && llvm::sys::fs::create_directories(cache_dir.str()))
             return;
-        }
-        std::error_code error_code;
-        llvm::raw_fd_ostream IRObjectFile(cache_file.c_str(), error_code, llvm::sys::fs::F_RW);
-        RELEASE_ASSERT(!error_code, "");
-        IRObjectFile << Obj.getBuffer();
+
+        CompressedFile::writeFile(cache_file, Obj.getBuffer());
     }
 
 #if LLVMREV < 215566
@@ -211,15 +276,15 @@ public:
             // - clear the cache directory
             // - run pyston
             // - run pyston a second time
-            // - Now look for "*_second" files in the cache directory and compare them to the "*_first" IR dump
+            // - Now look for "*_second.ll" files in the cache directory and compare them to the "*_first.ll" IR dump
             std::string llvm_ir;
             llvm::raw_string_ostream sstr(llvm_ir);
             M->print(sstr, 0);
             sstr.flush();
 
-            std::string filename = cache_dir.str().str() + "/" + module_identifier + "_first";
+            std::string filename = cache_dir.str().str() + "/" + module_identifier + "_first.ll";
             if (llvm::sys::fs::exists(filename))
-                filename = cache_dir.str().str() + "/" + module_identifier + "_second";
+                filename = cache_dir.str().str() + "/" + module_identifier + "_second.ll";
             FILE* f = fopen(filename.c_str(), "wt");
             fwrite(llvm_ir.c_str(), 1, llvm_ir.size(), f);
             fclose(f);
@@ -230,19 +295,40 @@ public:
             return NULL;
         }
 
-        auto rtn = llvm::MemoryBuffer::getFile(cache_file.str(), -1, false);
-        if (!rtn) {
+        std::unique_ptr<llvm::MemoryBuffer> mem_buff = CompressedFile::getFile(cache_file);
+        if (!mem_buff) {
             jit_objectcache_misses.log();
             return NULL;
         }
 
         jit_objectcache_hits.log();
+        return mem_buff;
+    }
 
-        // MCJIT will want to write into this buffer, and we don't want that
-        // because the file has probably just been mmapped.  Instead we make
-        // a copy.  The filed-based buffer will be released when it goes
-        // out of scope.
-        return llvm::MemoryBuffer::getMemBufferCopy((*rtn)->getBuffer());
+    void cleanupCacheDirectory() {
+        // Find all files inside the cache directory, if the number of files is larger than
+        // MAX_OBJECT_CACHE_ENTRIES,
+        // sort them by last modification time and remove the oldest excessive ones.
+        typedef std::pair<std::string, llvm::sys::TimeValue> CacheFileEntry;
+        std::vector<CacheFileEntry> cache_files;
+
+        std::error_code ec;
+        for (llvm::sys::fs::directory_iterator file(cache_dir.str(), ec), end; !ec && file != end; file.increment(ec)) {
+            llvm::sys::fs::file_status status;
+            if (file->status(status))
+                continue; // ignore files where we can't retrieve the file status.
+            cache_files.emplace_back(std::make_pair(file->path(), status.getLastModificationTime()));
+        }
+
+        int num_expired = cache_files.size() - MAX_OBJECT_CACHE_ENTRIES;
+        if (num_expired <= 0)
+            return;
+
+        std::stable_sort(cache_files.begin(), cache_files.end(),
+                         [](const CacheFileEntry& lhs, const CacheFileEntry& rhs) { return lhs.second < rhs.second; });
+
+        for (int i = 0; i < num_expired; ++i)
+            llvm::sys::fs::remove(cache_files[i].first);
     }
 };
 
