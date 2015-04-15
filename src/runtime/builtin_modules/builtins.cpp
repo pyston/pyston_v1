@@ -554,19 +554,36 @@ Box* filter2(Box* f, Box* container) {
     return rtn;
 }
 
-Box* zip2(Box* container1, Box* container2) {
+Box* zip(BoxedTuple* containers) {
+    assert(containers->cls == tuple_cls);
+
     BoxedList* rtn = new BoxedList();
+    if (containers->size() == 0)
+        return rtn;
 
-    llvm::iterator_range<BoxIterator> range1 = container1->pyElements();
-    llvm::iterator_range<BoxIterator> range2 = container2->pyElements();
-
-    BoxIterator it1 = range1.begin();
-    BoxIterator it2 = range2.begin();
-
-    for (; it1 != range1.end() && it2 != range2.end(); ++it1, ++it2) {
-        listAppendInternal(rtn, BoxedTuple::create({ *it1, *it2 }));
+    std::vector<llvm::iterator_range<BoxIterator>> ranges;
+    for (auto container : *containers) {
+        ranges.push_back(container->pyElements());
     }
-    return rtn;
+
+    std::vector<BoxIterator> iterators;
+    for (auto range : ranges) {
+        iterators.push_back(range.begin());
+    }
+
+    while (true) {
+        for (int i = 0; i < iterators.size(); i++) {
+            if (iterators[i] == ranges[i].end())
+                return rtn;
+        }
+
+        auto el = BoxedTuple::create(iterators.size());
+        for (int i = 0; i < iterators.size(); i++) {
+            el->elts[i] = *iterators[i];
+            ++(iterators[i]);
+        }
+        listAppendInternal(rtn, el);
+    }
 }
 
 static Box* callable(Box* obj) {
@@ -1170,7 +1187,8 @@ void setupBuiltins() {
                                                    { NULL }));
     builtins_module->giveAttr("filter",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)filter2, LIST, 2), "filter"));
-    builtins_module->giveAttr("zip", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)zip2, LIST, 2), "zip"));
+    builtins_module->giveAttr(
+        "zip", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)zip, LIST, 0, 0, true, false), "zip"));
     builtins_module->giveAttr(
         "dir", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dir, LIST, 1, 1, false, false), "dir", { NULL }));
     builtins_module->giveAttr("vars", new BoxedBuiltinFunctionOrMethod(
