@@ -185,16 +185,32 @@ struct HeapStatistics {
 
         void print(const char* name) const {
             if (nbytes > (1 << 20))
-                printf("%s: %ld allocations for %.1f MB\n", name, nallocs, nbytes * 1.0 / (1 << 20));
+                fprintf(stderr, "%s: %ld allocations for %.1f MB\n", name, nallocs, nbytes * 1.0 / (1 << 20));
             else if (nbytes > (1 << 10))
-                printf("%s: %ld allocations for %.1f KB\n", name, nallocs, nbytes * 1.0 / (1 << 10));
+                fprintf(stderr, "%s: %ld allocations for %.1f KB\n", name, nallocs, nbytes * 1.0 / (1 << 10));
             else
-                printf("%s: %ld allocations for %ld bytes\n", name, nallocs, nbytes);
+                fprintf(stderr, "%s: %ld allocations for %ld bytes\n", name, nallocs, nbytes);
         }
     };
+
+    bool collect_cls_stats, collect_hcls_stats;
+
+    // For use if collect_cls_stats == true:
     std::unordered_map<BoxedClass*, TypeStats> by_cls;
-    TypeStats conservative, untracked, hcls;
+
+    // For use if collect_hcls_stats == true:
+    std::unordered_map<HiddenClass*, int> hcls_uses;
+#define HCLS_ATTRS_STAT_MAX 20
+    int num_hcls_by_attrs[HCLS_ATTRS_STAT_MAX + 1];
+    int num_hcls_by_attrs_exceed;
+
+    TypeStats python, conservative, untracked, hcls, precise;
     TypeStats total;
+
+    HeapStatistics(bool collect_cls_stats, bool collect_hcls_stats)
+        : collect_cls_stats(collect_cls_stats), collect_hcls_stats(collect_hcls_stats) {
+        memset(num_hcls_by_attrs, 0, sizeof(num_hcls_by_attrs));
+    }
 };
 
 void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
@@ -202,11 +218,24 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
     stats->total.nbytes += nbytes;
 
     if (al->kind_id == GCKind::PYTHON) {
-        Box* b = (Box*)al->user_data;
-        auto& t = stats->by_cls[b->cls];
+        stats->python.nallocs++;
+        stats->python.nbytes += nbytes;
 
-        t.nallocs++;
-        t.nbytes += nbytes;
+        if (stats->collect_cls_stats) {
+            Box* b = (Box*)al->user_data;
+            auto& t = stats->by_cls[b->cls];
+
+            t.nallocs++;
+            t.nbytes += nbytes;
+        }
+
+        if (stats->collect_hcls_stats) {
+            Box* b = (Box*)al->user_data;
+            if (b->cls->instancesHaveHCAttrs()) {
+                HCAttrs* attrs = b->getHCAttrsPtr();
+                stats->hcls_uses[attrs->hcls]++;
+            }
+        }
     } else if (al->kind_id == GCKind::CONSERVATIVE) {
         stats->conservative.nallocs++;
         stats->conservative.nbytes += nbytes;
@@ -216,6 +245,18 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
     } else if (al->kind_id == GCKind::HIDDEN_CLASS) {
         stats->hcls.nallocs++;
         stats->hcls.nbytes += nbytes;
+
+        if (stats->collect_hcls_stats) {
+            HiddenClass* hcls = (HiddenClass*)al->user_data;
+            int numattrs = hcls->attributeArraySize();
+            if (numattrs <= HCLS_ATTRS_STAT_MAX)
+                stats->num_hcls_by_attrs[numattrs]++;
+            else
+                stats->num_hcls_by_attrs_exceed++;
+        }
+    } else if (al->kind_id == GCKind::PRECISE) {
+        stats->precise.nallocs++;
+        stats->precise.nbytes += nbytes;
     } else {
         RELEASE_ASSERT(0, "%d", (int)al->kind_id);
     }
@@ -223,27 +264,49 @@ void addStatistic(HeapStatistics* stats, GCAllocation* al, int nbytes) {
 
 
 
-void Heap::dumpHeapStatistics() {
+void Heap::dumpHeapStatistics(int level) {
+    bool collect_cls_stats = (level >= 1);
+    bool collect_hcls_stats = (level >= 1);
+
     threading::GLPromoteRegion _lock;
 
-    HeapStatistics stats;
+    fprintf(stderr, "\nCollecting heap stats for pid %d...\n", getpid());
+
+    HeapStatistics stats(collect_cls_stats, collect_hcls_stats);
 
     small_arena.getStatistics(&stats);
     large_arena.getStatistics(&stats);
     huge_arena.getStatistics(&stats);
 
+    stats.python.print("python");
     stats.conservative.print("conservative");
     stats.untracked.print("untracked");
     stats.hcls.print("hcls");
-    for (const auto& p : stats.by_cls) {
-        p.second.print(getFullNameOfClass(p.first).c_str());
+    stats.precise.print("precise");
+
+    if (collect_cls_stats) {
+        for (const auto& p : stats.by_cls) {
+            p.second.print(getFullNameOfClass(p.first).c_str());
+        }
     }
+
     stats.total.print("Total");
-    printf("\n");
+
+    if (collect_hcls_stats) {
+        fprintf(stderr, "%ld hidden classes currently alive\n", stats.hcls.nallocs);
+        fprintf(stderr, "%ld have at least one Box that uses them\n", stats.hcls_uses.size());
+
+        for (int i = 0; i <= HCLS_ATTRS_STAT_MAX; i++) {
+            fprintf(stderr, "With % 3d attributes: %d\n", i, stats.num_hcls_by_attrs[i]);
+        }
+        fprintf(stderr, "With >% 2d attributes: %d\n", HCLS_ATTRS_STAT_MAX, stats.num_hcls_by_attrs_exceed);
+    }
+
+    fprintf(stderr, "\n");
 }
 
-void dumpHeapStatistics() {
-    global_heap.dumpHeapStatistics();
+void dumpHeapStatistics(int level) {
+    global_heap.dumpHeapStatistics(level);
 }
 
 //////

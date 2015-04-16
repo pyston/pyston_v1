@@ -58,6 +58,7 @@ static int hackcheck(PyObject* self, setattrofunc func, const char* what) noexce
 }
 
 static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_setattr");
     setattrofunc func = (setattrofunc)wrapped;
     int res;
     PyObject* name, *value;
@@ -74,6 +75,7 @@ static PyObject* wrap_setattr(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_delattr(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_delattr");
     setattrofunc func = (setattrofunc)wrapped;
     int res;
     PyObject* name;
@@ -91,6 +93,7 @@ static PyObject* wrap_delattr(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_hashfunc");
     hashfunc func = (hashfunc)wrapped;
     long res;
 
@@ -103,12 +106,14 @@ static PyObject* wrap_hashfunc(PyObject* self, PyObject* args, void* wrapped) no
 }
 
 static PyObject* wrap_call(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_call");
     ternaryfunc func = (ternaryfunc)wrapped;
 
     return (*func)(self, args, kwds);
 }
 
 static PyObject* wrap_richcmpfunc(PyObject* self, PyObject* args, void* wrapped, int op) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_richcmpfunc");
     richcmpfunc func = (richcmpfunc)wrapped;
     PyObject* other;
 
@@ -132,6 +137,7 @@ RICHCMP_WRAPPER(gt, Py_GT)
 RICHCMP_WRAPPER(ge, Py_GE)
 
 static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
+    STAT_TIMER(t0, "us_timer_wrap_next");
     unaryfunc func = (unaryfunc)wrapped;
     PyObject* res;
 
@@ -144,6 +150,7 @@ static PyObject* wrap_next(PyObject* self, PyObject* args, void* wrapped) {
 }
 
 static PyObject* wrap_descr_get(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_descr_get");
     descrgetfunc func = (descrgetfunc)wrapped;
     PyObject* obj;
     PyObject* type = NULL;
@@ -162,6 +169,7 @@ static PyObject* wrap_descr_get(PyObject* self, PyObject* args, void* wrapped) n
 }
 
 static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_coercefunc");
     coercion func = (coercion)wrapped;
     PyObject* other, *res;
     int ok;
@@ -188,6 +196,7 @@ static PyObject* wrap_coercefunc(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_ternaryfunc");
     ternaryfunc func = (ternaryfunc)wrapped;
     PyObject* other;
     PyObject* third = Py_None;
@@ -200,6 +209,7 @@ static PyObject* wrap_ternaryfunc(PyObject* self, PyObject* args, void* wrapped)
 }
 
 static PyObject* wrap_ternaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_ternaryfunc_r");
     ternaryfunc func = (ternaryfunc)wrapped;
     PyObject* other;
     PyObject* third = Py_None;
@@ -212,6 +222,7 @@ static PyObject* wrap_ternaryfunc_r(PyObject* self, PyObject* args, void* wrappe
 }
 
 static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_unaryfunc");
     unaryfunc func = (unaryfunc)wrapped;
 
     if (!check_num_args(args, 0))
@@ -220,6 +231,7 @@ static PyObject* wrap_unaryfunc(PyObject* self, PyObject* args, void* wrapped) n
 }
 
 static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_inquirypred");
     inquiry func = (inquiry)wrapped;
     int res;
 
@@ -232,6 +244,7 @@ static PyObject* wrap_inquirypred(PyObject* self, PyObject* args, void* wrapped)
 }
 
 static PyObject* wrapInquirypred(PyObject* self, PyObject* args, void* wrapped) {
+    STAT_TIMER(t0, "us_timer_wrapInquirypred");
     inquiry func = (inquiry)wrapped;
     int res;
 
@@ -244,6 +257,7 @@ static PyObject* wrapInquirypred(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_binaryfunc");
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -254,6 +268,7 @@ static PyObject* wrap_binaryfunc(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_binaryfunc_l");
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -268,6 +283,7 @@ static PyObject* wrap_binaryfunc_l(PyObject* self, PyObject* args, void* wrapped
 }
 
 static PyObject* wrap_binaryfunc_r(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_binaryfunc_r");
     binaryfunc func = (binaryfunc)wrapped;
     PyObject* other;
 
@@ -300,6 +316,7 @@ static Py_ssize_t getindex(PyObject* self, PyObject* arg) noexcept {
 }
 
 static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_lenfunc");
     lenfunc func = (lenfunc)wrapped;
     Py_ssize_t res;
 
@@ -312,6 +329,7 @@ static PyObject* wrap_lenfunc(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_indexargfunc");
     ssizeargfunc func = (ssizeargfunc)wrapped;
     PyObject* o;
     Py_ssize_t i;
@@ -325,6 +343,7 @@ static PyObject* wrap_indexargfunc(PyObject* self, PyObject* args, void* wrapped
 }
 
 static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_sq_item");
     ssizeargfunc func = (ssizeargfunc)wrapped;
     PyObject* arg;
     Py_ssize_t i;
@@ -342,6 +361,7 @@ static PyObject* wrap_sq_item(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_ssizessizeargfunc");
     ssizessizeargfunc func = (ssizessizeargfunc)wrapped;
     Py_ssize_t i, j;
 
@@ -351,6 +371,7 @@ static PyObject* wrap_ssizessizeargfunc(PyObject* self, PyObject* args, void* wr
 }
 
 static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_sq_setitem");
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
@@ -369,6 +390,7 @@ static PyObject* wrap_sq_setitem(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_sq_delitem");
     ssizeobjargproc func = (ssizeobjargproc)wrapped;
     Py_ssize_t i;
     int res;
@@ -388,6 +410,7 @@ static PyObject* wrap_sq_delitem(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_ssizessizeobjargproc");
     ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
     Py_ssize_t i, j;
     int res;
@@ -403,6 +426,7 @@ static PyObject* wrap_ssizessizeobjargproc(PyObject* self, PyObject* args, void*
 }
 
 static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_delslice");
     ssizessizeobjargproc func = (ssizessizeobjargproc)wrapped;
     Py_ssize_t i, j;
     int res;
@@ -418,6 +442,7 @@ static PyObject* wrap_delslice(PyObject* self, PyObject* args, void* wrapped) no
 
 /* XXX objobjproc is a misnomer; should be objargpred */
 static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_objobjproc");
     objobjproc func = (objobjproc)wrapped;
     int res;
     PyObject* value;
@@ -433,6 +458,7 @@ static PyObject* wrap_objobjproc(PyObject* self, PyObject* args, void* wrapped) 
 }
 
 static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_objobjargproc");
     objobjargproc func = (objobjargproc)wrapped;
     int res;
     PyObject* key, *value;
@@ -447,6 +473,7 @@ static PyObject* wrap_objobjargproc(PyObject* self, PyObject* args, void* wrappe
 }
 
 static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_delitem");
     objobjargproc func = (objobjargproc)wrapped;
     int res;
     PyObject* key;
@@ -462,6 +489,7 @@ static PyObject* wrap_delitem(PyObject* self, PyObject* args, void* wrapped) noe
 }
 
 static PyObject* wrap_cmpfunc(PyObject* self, PyObject* args, void* wrapped) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_cmpfunc");
     cmpfunc func = (cmpfunc)wrapped;
     int res;
     PyObject* other;
@@ -482,6 +510,7 @@ static PyObject* wrap_cmpfunc(PyObject* self, PyObject* args, void* wrapped) noe
 
 
 static PyObject* wrap_init(PyObject* self, PyObject* args, void* wrapped, PyObject* kwds) noexcept {
+    STAT_TIMER(t0, "us_timer_wrap_init");
     initproc func = (initproc)wrapped;
 
     if (func(self, args, kwds) < 0)

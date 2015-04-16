@@ -42,6 +42,19 @@ extern "C" void dumpLLVM(llvm::Value* v) {
     v->dump();
 }
 
+IRGenState::IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<LivenessAnalysis> liveness,
+                       std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
+                       llvm::MDNode* func_dbg_info)
+    : cf(cf), source_info(source_info), liveness(std::move(liveness)), phis(std::move(phis)), param_names(param_names),
+      gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), frame_info(NULL), frame_info_arg(NULL),
+      scratch_size(0) {
+    assert(cf->func);
+    assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
+}
+
+IRGenState::~IRGenState() {
+}
+
 llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
 
@@ -944,7 +957,7 @@ private:
     CompilerVariable* evalName(AST_Name* node, UnwindInfo unw_info) {
         auto scope_info = irstate->getScopeInfo();
 
-        bool is_kill = irstate->getSourceInfo()->liveness->isKill(node, myblock);
+        bool is_kill = irstate->getLiveness()->isKill(node, myblock);
         assert(!is_kill || node->id.str()[0] == '#');
 
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
@@ -2271,7 +2284,7 @@ private:
             // ASSERT(p.first[0] != '!' || isIsDefinedName(p.first), "left a fake variable in the real
             // symbol table? '%s'", p.first.c_str());
 
-            if (!source->liveness->isLiveAtEnd(p.first, myblock)) {
+            if (!irstate->getLiveness()->isLiveAtEnd(p.first, myblock)) {
                 // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", p.first.c_str(), myblock->idx,
                 //        p.second->isGrabbed(), p.second->getVrefs());
 

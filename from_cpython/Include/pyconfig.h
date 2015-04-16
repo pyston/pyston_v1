@@ -59,6 +59,9 @@
 #define HAVE_STRUCT_TM_TM_ZONE 1
 #define HAVE_MKTIME 1
 
+#define TIME_WITH_SYS_TIME
+#define HAVE_GETTIMEOFDAY 1
+
 #define PY_FORMAT_LONG_LONG "ll"
 #define PY_FORMAT_SIZE_T "z"
 

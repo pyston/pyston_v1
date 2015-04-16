@@ -85,9 +85,9 @@ extern "C" Box* getSysStdout();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
-    *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
-    *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-    *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls;
+    *enumerate_cls, *xrange_cls, *member_descriptor_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls,
+    *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
+    *capi_getset_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
@@ -418,10 +418,37 @@ public:
 
     // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of the +1 for the null byte
     void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default"))) {
+#if STAT_ALLOCATIONS
+        static StatCounter alloc_str("alloc.str");
+        static StatCounter alloc_str1("alloc.str(1)");
+        static StatCounter allocsize_str("allocsize.str");
+
+        if (ssize == 1)
+            alloc_str1.log();
+        else
+            alloc_str.log();
+
+        allocsize_str.log(str_cls->tp_basicsize + ssize + 1);
+#endif
+
         assert(cls->tp_itemsize == sizeof(char));
         return BoxVar::operator new(size, cls, nitems);
     }
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
+#if STAT_ALLOCATIONS
+        static StatCounter alloc_str("alloc.str");
+        static StatCounter alloc_str1("alloc.str(1)");
+
+        static StatCounter allocsize_str("allocsize.str");
+
+        if (ssize == 1)
+            alloc_str1.log();
+        else
+            alloc_str.log();
+
+        allocsize_str.log(cls->tp_basicsize + ssize + 1);
+#endif
+
         assert(str_cls->tp_alloc == PystonType_GenericAlloc);
         assert(str_cls->tp_itemsize == 1);
         assert(str_cls->tp_basicsize == sizeof(BoxedString) + 1);
@@ -449,10 +476,6 @@ private:
     char* storage() { return (char*)this + sizeof(BoxedString); }
 
     void* operator new(size_t size) = delete;
-};
-
-class BoxedUnicode : public Box {
-    // TODO implementation
 };
 
 template <typename T> struct StringHash {
@@ -744,7 +767,7 @@ public:
     BoxedMemberDescriptor(PyMemberDef* member)
         : type((MemberType)member->type), offset(member->offset), readonly(member->flags & READONLY) {}
 
-    DEFAULT_CLASS_SIMPLE(member_cls);
+    DEFAULT_CLASS_SIMPLE(member_descriptor_cls);
 };
 
 class BoxedGetsetDescriptor : public Box {
@@ -828,6 +851,11 @@ public:
 
     struct Context* context, *returnContext;
     void* stack_begin;
+
+#if !DISABLE_STATS
+    StatTimer* statTimers;
+    uint64_t timer_time;
+#endif
 
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 

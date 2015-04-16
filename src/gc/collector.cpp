@@ -339,12 +339,12 @@ void runCollection() {
     static StatCounter sc("gc_collections");
     sc.log();
 
+    STAT_TIMER(t0, "us_timer_gc_collection");
+
     ncollections++;
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d\n", ncollections);
-
-    Timer _t("collecting", /*min_usec=*/10000);
 
     markPhase();
     std::list<Box*, StlCompatAllocator<Box*>> weakly_referenced;
@@ -368,10 +368,6 @@ void runCollection() {
 
     if (VERBOSITY("gc") >= 2)
         printf("Collection #%d done\n\n", ncollections);
-
-    long us = _t.end();
-    static StatCounter sc_us("gc_collections_us");
-    sc_us.log(us);
 
     // dumpHeapStatistics();
 }

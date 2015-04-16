@@ -542,6 +542,8 @@ extern "C" Box* listInsert(BoxedList* self, Box* idx, Box* v) {
 }
 
 Box* listMul(BoxedList* self, Box* rhs) {
+    STAT_TIMER(t0, "us_timer_listMul");
+
     if (rhs->cls != int_cls) {
         raiseExcHelper(TypeError, "can't multiply sequence by non-int of type '%s'", getTypeName(rhs));
     }
@@ -941,7 +943,7 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
 }
 
 Box* listEq(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -951,7 +953,7 @@ Box* listEq(BoxedList* self, Box* rhs) {
 }
 
 Box* listNe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -961,7 +963,7 @@ Box* listNe(BoxedList* self, Box* rhs) {
 }
 
 Box* listLt(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -971,7 +973,7 @@ Box* listLt(BoxedList* self, Box* rhs) {
 }
 
 Box* listLe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -981,7 +983,7 @@ Box* listLe(BoxedList* self, Box* rhs) {
 }
 
 Box* listGt(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -991,7 +993,7 @@ Box* listGt(BoxedList* self, Box* rhs) {
 }
 
 Box* listGe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 

@@ -728,6 +728,111 @@ static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* 
     float_cls->giveAttr(name, new BoxedFunction(cl, { None }));
 }
 
+static Box* floatFloat(Box* b, void*) {
+    if (b->cls == float_cls) {
+        return b;
+    } else {
+        assert(PyFloat_Check(b));
+        return boxFloat(static_cast<BoxedFloat*>(b)->d);
+    }
+}
+
+static Box* float0(Box*, void*) {
+    return boxFloat(0.0);
+}
+
+// __getformat__
+// ported pretty directly from cpython Objects/floatobject.c
+
+typedef enum { unknown_format, ieee_big_endian_format, ieee_little_endian_format } float_format_type;
+
+static float_format_type double_format, float_format;
+static float_format_type detected_double_format, detected_float_format;
+
+static void floatFormatInit() {
+    /* We attempt to determine if this machine is using IEEE
+       floating point formats by peering at the bits of some
+       carefully chosen values.  If it looks like we are on an
+       IEEE platform, the float packing/unpacking routines can
+       just copy bits, if not they resort to arithmetic & shifts
+       and masks.  The shifts & masks approach works on all finite
+       values, but what happens to infinities, NaNs and signed
+       zeroes on packing is an accident, and attempting to unpack
+       a NaN or an infinity will raise an exception.
+
+       Note that if we're on some whacked-out platform which uses
+       IEEE formats but isn't strictly little-endian or big-
+       endian, we will fall back to the portable shifts & masks
+       method. */
+
+    if (sizeof(double) == 8) {
+        double x = 9006104071832581.0;
+        if (memcmp(&x, "\x43\x3f\xff\x01\x02\x03\x04\x05", 8) == 0)
+            detected_double_format = ieee_big_endian_format;
+        else if (memcmp(&x, "\x05\x04\x03\x02\x01\xff\x3f\x43", 8) == 0)
+            detected_double_format = ieee_little_endian_format;
+        else
+            detected_double_format = unknown_format;
+    } else {
+        detected_double_format = unknown_format;
+    }
+
+    if (sizeof(float) == 4) {
+        float y = 16711938.0;
+        if (memcmp(&y, "\x4b\x7f\x01\x02", 4) == 0)
+            detected_float_format = ieee_big_endian_format;
+        else if (memcmp(&y, "\x02\x01\x7f\x4b", 4) == 0)
+            detected_float_format = ieee_little_endian_format;
+        else
+            detected_float_format = unknown_format;
+    } else {
+        detected_float_format = unknown_format;
+    }
+
+    double_format = detected_double_format;
+    float_format = detected_float_format;
+}
+
+// ported pretty directly from cpython
+Box* floatGetFormat(BoxedClass* v, Box* arg) {
+    char* s;
+    float_format_type r;
+
+    if (!PyString_Check(arg)) {
+        raiseExcHelper(TypeError, "__getformat__() argument must be string, not %s", arg->cls->tp_name);
+    }
+    s = PyString_AS_STRING(arg);
+    if (strcmp(s, "double") == 0) {
+        r = double_format;
+    } else if (strcmp(s, "float") == 0) {
+        r = float_format;
+    } else {
+        raiseExcHelper(ValueError, "__getformat__() argument 1 must be "
+                                   "'double' or 'float'");
+    }
+
+    switch (r) {
+        case unknown_format:
+            return boxString("unknown");
+        case ieee_little_endian_format:
+            return boxString("IEEE, little-endian");
+        case ieee_big_endian_format:
+            return boxString("IEEE, big-endian");
+        default:
+            RELEASE_ASSERT(false, "insane float_format or double_format");
+            return NULL;
+    }
+}
+
+const char* floatGetFormatDoc = "float.__getformat__(typestr) -> string\n"
+                                "\n"
+                                "You probably don't want to use this function.  It exists mainly to be\n"
+                                "used in Python's test suite.\n"
+                                "\n"
+                                "typestr must be 'double' or 'float'.  This function returns whichever of\n"
+                                "'unknown', 'IEEE, big-endian' or 'IEEE, little-endian' best describes the\n"
+                                "format of floating point numbers used by the C type named by typestr.";
+
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
@@ -768,7 +873,17 @@ void setupFloat() {
 
     float_cls->giveAttr("__trunc__", new BoxedFunction(boxRTFunction((void*)floatTrunc, BOXED_INT, 1)));
 
+    float_cls->giveAttr("real", new (pyston_getset_cls) BoxedGetsetDescriptor(floatFloat, NULL, NULL));
+    float_cls->giveAttr("imag", new (pyston_getset_cls) BoxedGetsetDescriptor(float0, NULL, NULL));
+    float_cls->giveAttr("conjugate", new BoxedFunction(boxRTFunction((void*)floatFloat, BOXED_FLOAT, 1)));
+
+    float_cls->giveAttr("__getformat__",
+                        new BoxedClassmethod(new BoxedBuiltinFunctionOrMethod(
+                            boxRTFunction((void*)floatGetFormat, STR, 2), "__getformat__", floatGetFormatDoc)));
+
     float_cls->freeze();
+
+    floatFormatInit();
 }
 
 void teardownFloat() {
