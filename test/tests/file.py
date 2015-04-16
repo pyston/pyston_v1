@@ -75,6 +75,8 @@ with open(fn) as f:
 with open(fn, "rU") as f:
     print len(f.readlines())
 
+with open(fn, "r", 1) as f:
+    print len(f.readlines())
 
 fd, fn = tempfile.mkstemp()
 try:

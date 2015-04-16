@@ -65,7 +65,6 @@ extern "C" BoxedString* strOrNull(Box* obj);  // similar to str, but returns NUL
 extern "C" bool exceptionMatches(Box* obj, Box* cls);
 extern "C" BoxedInt* hash(Box* obj);
 extern "C" Box* abs_(Box* obj);
-Box* open(Box* arg1, Box* arg2);
 // extern "C" Box* chr(Box* arg);
 extern "C" Box* compare(Box*, Box*, int);
 extern "C" BoxedInt* len(Box* obj);

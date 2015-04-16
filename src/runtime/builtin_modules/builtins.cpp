@@ -235,10 +235,11 @@ extern "C" Box* id(Box* arg) {
 }
 
 
-Box* open(Box* arg1, Box* arg2) {
+Box* open(Box* arg1, Box* arg2, Box* arg3) {
     assert(arg2);
+    assert(arg3);
     // This could be optimized quite a bit if it ends up being important:
-    return runtimeCall(file_cls, ArgPassSpec(2), arg1, arg2, NULL, NULL, NULL);
+    return runtimeCall(file_cls, ArgPassSpec(3), arg1, arg2, arg3, NULL, NULL);
 }
 
 extern "C" Box* chr(Box* arg) {
@@ -1108,9 +1109,9 @@ void setupBuiltins() {
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
-    open_obj = new BoxedBuiltinFunctionOrMethod(
-        boxRTFunction((void*)open, typeFromClass(file_cls), 2, 1, false, false, ParamNames({ "name", "mode" }, "", "")),
-        "open", { boxStrConstant("r") });
+    open_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)open, typeFromClass(file_cls), 3, 2, false, false,
+                                                              ParamNames({ "name", "mode", "buffering" }, "", "")),
+                                                "open", { boxStrConstant("r"), boxInt(-1) });
     builtins_module->giveAttr("open", open_obj);
 
     builtins_module->giveAttr("globals", new BoxedBuiltinFunctionOrMethod(
