@@ -341,7 +341,7 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     }
 
     BoxedString* rhs = static_cast<BoxedString*>(_rhs);
-    return new (lhs->size() + rhs->size() + 1) BoxedString(lhs->s, rhs->s);
+    return new (lhs->size() + rhs->size()) BoxedString(lhs->s, rhs->s);
 }
 
 static llvm::StringMap<Box*> interned_strings;
@@ -1547,7 +1547,7 @@ extern "C" Box* strNew(BoxedClass* cls, Box* obj) {
 
     BoxedString* _rtn = static_cast<BoxedString*>(rtn);
 
-    return new (cls, _rtn->size() + 1) BoxedString(_rtn->s);
+    return new (cls, _rtn->size()) BoxedString(_rtn->s);
 }
 
 extern "C" Box* basestringNew(BoxedClass* cls, Box* args, Box* kwargs) {
@@ -1571,7 +1571,7 @@ Box* _strSlice(BoxedString* self, i64 start, i64 stop, i64 step, i64 length) {
     if (length == 0)
         return EmptyString;
 
-    BoxedString* bs = new (length + 1) BoxedString(nullptr, length);
+    BoxedString* bs = new (length) BoxedString(nullptr, length);
     copySlice(bs->data(), s.data(), start, step, length);
     return bs;
 }
@@ -2289,7 +2289,7 @@ extern "C" int PyString_AsStringAndSize(register PyObject* obj, register char** 
 
 BoxedString* createUninitializedString(ssize_t n) {
     // I *think* this should avoid doing any copies, by using move constructors:
-    return new (n + 1) BoxedString(n, 0);
+    return new (n) BoxedString(n, 0);
 }
 
 char* getWriteableStringContents(BoxedString* s) {
@@ -2340,7 +2340,7 @@ extern "C" int _PyString_Resize(PyObject** pv, Py_ssize_t newsize) noexcept {
     BoxedString* resized;
 
     if (s->cls == str_cls)
-        resized = new (newsize + 1) BoxedString(newsize, 0); // we need an uninitialized string, but this will memset
+        resized = new (newsize) BoxedString(newsize, 0); // we need an uninitialized string, but this will memset
     else
         resized = new (s->cls, newsize)
             BoxedString(newsize, 0); // we need an uninitialized string, but this will memset

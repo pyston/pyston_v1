@@ -416,7 +416,26 @@ public:
     char* data() { return const_cast<char*>(s.data()); }
     size_t size() { return s.size(); }
 
-    DEFAULT_CLASS_VAR_SIMPLE(str_cls, sizeof(char));
+    // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of the +1 for the null byte
+    void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default"))) {
+        assert(cls->tp_itemsize == sizeof(char));
+        return BoxVar::operator new(size, cls, nitems);
+    }
+    void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
+        assert(str_cls->tp_alloc == PystonType_GenericAlloc);
+        assert(str_cls->tp_itemsize == 1);
+        assert(str_cls->tp_basicsize == sizeof(BoxedString) + 1);
+        assert(str_cls->is_pyston_class);
+        assert(str_cls->attrs_offset == 0);
+
+        void* mem = gc_alloc(sizeof(BoxedString) + 1 + nitems, gc::GCKind::PYTHON);
+        assert(mem);
+
+        BoxVar* rtn = static_cast<BoxVar*>(mem);
+        rtn->cls = str_cls;
+        rtn->ob_size = nitems;
+        return rtn;
+    }
 
     // these should be private, but strNew needs them
     BoxedString(const char* s, size_t n) __attribute__((visibility("default")));
@@ -426,6 +445,7 @@ public:
 
 private:
     // used only in ctors to give our llvm::StringRef the proper pointer
+    // Note: sizeof(BoxedString) = str_cls->tp_basicsize - 1
     char* storage() { return (char*)this + sizeof(BoxedString); }
 
     void* operator new(size_t size) = delete;

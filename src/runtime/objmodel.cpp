@@ -369,7 +369,6 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     if (base && cls && str_cls)
         giveAttr("__base__", base);
 
-    assert(tp_basicsize % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     if (attrs_offset) {
         assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug

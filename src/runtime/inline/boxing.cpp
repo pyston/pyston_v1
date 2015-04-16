@@ -32,14 +32,14 @@ extern "C" Box* createList() {
 
 BoxedString* _boxStrConstant(const char* chars) {
     size_t len = strlen(chars);
-    return new (len + 1) BoxedString(chars, len);
+    return new (len) BoxedString(chars, len);
 }
 extern "C" BoxedString* boxStrConstant(const char* chars) {
     return _boxStrConstant(chars);
 }
 
 BoxedString* _boxStrConstantSize(const char* chars, size_t n) {
-    return new (n + 1) BoxedString(chars, n);
+    return new (n) BoxedString(chars, n);
 }
 
 extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n) {
@@ -47,18 +47,18 @@ extern "C" BoxedString* boxStrConstantSize(const char* chars, size_t n) {
 }
 
 extern "C" Box* boxStringPtr(const std::string* s) {
-    return new (s->size() + 1) BoxedString(s->c_str(), s->size());
+    return new (s->size()) BoxedString(s->c_str(), s->size());
 }
 
 Box* boxStringRef(llvm::StringRef s) {
-    return new (s.size() + 1) BoxedString(s);
+    return new (s.size()) BoxedString(s);
 }
 
 Box* boxString(const std::string& s) {
-    return new (s.size() + 1) BoxedString(s.c_str(), s.size());
+    return new (s.size()) BoxedString(s.c_str(), s.size());
 }
 Box* boxString(std::string&& s) {
-    return new (s.size() + 1) BoxedString(s.c_str(), s.size());
+    return new (s.size()) BoxedString(s.c_str(), s.size());
 }
 
 Box* boxStringTwine(const llvm::Twine& t) {
