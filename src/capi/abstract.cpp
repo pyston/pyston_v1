@@ -469,8 +469,8 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept
             r = runtimeCall(obj, ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
         return r;
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
+        setCAPIException(e);
+        return NULL;
     }
 }
 
