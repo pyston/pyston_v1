@@ -27,6 +27,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/Object/ObjectFile.h"
 
+#include "asm_writing/types.h"
 #include "analysis/scoping_analysis.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/codegen.h"
@@ -255,30 +256,28 @@ struct PythonFrameId {
         INTERPRETED,
     } type;
 
-    union {
-        uint64_t ip; // if type == COMPILED
-        uint64_t bp; // if type == INTERPRETED
-    };
+    uint64_t ip;
+    uint64_t bp;
+
+    bool operator==(const PythonFrameId& rhs) const { return (this->type == rhs.type) && (this->ip == rhs.ip); }
 };
 
-class PythonFrameIterator {
-private:
-    PythonFrameId id;
-
-    unw_context_t ctx;
-    unw_cursor_t cursor;
-    CompiledFunction* cf;
-    bool cur_is_osr;
-
-    PythonFrameIterator() : cf(NULL), cur_is_osr(false) {}
-
-    // not copyable or movable, since 'cursor' holds an internal pointer to 'ctx'
-    PythonFrameIterator(const PythonFrameIterator&) = delete;
-    void operator=(const PythonFrameIterator&) = delete;
-    PythonFrameIterator(const PythonFrameIterator&&) = delete;
-    void operator=(const PythonFrameIterator&&) = delete;
-
+class PythonFrameIteratorImpl {
 public:
+    PythonFrameId id;
+    CompiledFunction* cf;
+    // We have to save a copy of the regs since it's very difficult to keep the unw_context_t
+    // structure valid.
+    intptr_t regs[16];
+    uint16_t regs_valid;
+
+    PythonFrameIteratorImpl(const PythonFrameIteratorImpl&) = delete;
+    void operator=(const PythonFrameIteratorImpl&) = delete;
+    PythonFrameIteratorImpl(const PythonFrameIteratorImpl&&) = delete;
+    void operator=(const PythonFrameIteratorImpl&&) = delete;
+
+    PythonFrameIteratorImpl() : regs_valid(0) {}
+
     CompiledFunction* getCF() const {
         assert(cf);
         return cf;
@@ -362,162 +361,138 @@ public:
 
     const PythonFrameId& getId() const { return id; }
 
-    static std::unique_ptr<PythonFrameIterator> end() { return std::unique_ptr<PythonFrameIterator>(nullptr); }
-
-    static std::unique_ptr<PythonFrameIterator> begin() {
-        std::unique_ptr<PythonFrameIterator> rtn(new PythonFrameIterator());
-
-        unw_getcontext(&rtn->ctx);
-        unw_init_local(&rtn->cursor, &rtn->ctx);
-
-        bool found = rtn->incr();
-        if (!found)
-            return NULL;
-        return rtn;
-    }
-
     uint64_t getReg(int dwarf_num) {
-        assert(0 <= dwarf_num && dwarf_num < 16);
-
         // for x86_64, at least, libunwind seems to use the dwarf numbering
 
-        unw_word_t rtn;
-        int code = unw_get_reg(&cursor, dwarf_num, &rtn);
-        assert(code == 0);
-        return rtn;
+        assert(0 <= dwarf_num && dwarf_num < 16);
+        assert(regs_valid & (1 << dwarf_num));
+        assert(id.type == PythonFrameId::COMPILED);
+
+        return regs[dwarf_num];
     }
 
-    unw_word_t getFunctionEnd(unw_word_t ip) {
-        unw_proc_info_t pip;
-        int ret = unw_get_proc_info_by_ip(unw_local_addr_space, ip, &pip, NULL);
-        RELEASE_ASSERT(ret == 0 && pip.end_ip, "");
-        return pip.end_ip;
+    bool pointsToTheSameAs(const PythonFrameIteratorImpl& rhs) const {
+        return this->id.type == rhs.id.type && this->id.bp == rhs.id.bp;
     }
-
-    bool incr() {
-        static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
-        static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
-
-        bool was_osr = cur_is_osr;
-
-        while (true) {
-            int r = unw_step(&this->cursor);
-
-            if (r <= 0) {
-                return false;
-            }
-
-            unw_word_t ip;
-            unw_get_reg(&this->cursor, UNW_REG_IP, &ip);
-
-            cf = getCFForAddress(ip);
-            if (cf) {
-                this->id.type = PythonFrameId::COMPILED;
-                this->id.ip = ip;
-
-                unw_word_t bp;
-                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-
-                cur_is_osr = (bool)cf->entry_descriptor;
-                if (was_osr) {
-                    // Skip the frame we just found if the previous one was its OSR
-                    // TODO this will break if we start collapsing the OSR frames
-                    return incr();
-                }
-
-                return true;
-            }
-
-            if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
-                unw_word_t bp;
-                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-
-                this->id.type = PythonFrameId::INTERPRETED;
-                this->id.bp = bp;
-                cf = getCFForInterpretedFrame((void*)bp);
-
-                cur_is_osr = (bool)cf->entry_descriptor;
-                if (was_osr) {
-                    // Skip the frame we just found if the previous one was its OSR
-                    // TODO this will break if we start collapsing the OSR frames
-                    return incr();
-                }
-
-                return true;
-            }
-
-            if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
-                // for generators continue unwinding in the context in which the generator got called
-                unw_word_t bp;
-                unw_get_reg(&this->cursor, UNW_TDEP_BP, &bp);
-
-                Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
-                // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
-                memset(&ctx, 0, sizeof(ctx));
-                ctx.uc_mcontext.gregs[REG_R12] = remote_ctx->r12;
-                ctx.uc_mcontext.gregs[REG_R13] = remote_ctx->r13;
-                ctx.uc_mcontext.gregs[REG_R14] = remote_ctx->r14;
-                ctx.uc_mcontext.gregs[REG_R15] = remote_ctx->r15;
-                ctx.uc_mcontext.gregs[REG_RBX] = remote_ctx->rbx;
-                ctx.uc_mcontext.gregs[REG_RBP] = remote_ctx->rbp;
-                ctx.uc_mcontext.gregs[REG_RIP] = remote_ctx->rip;
-                ctx.uc_mcontext.gregs[REG_RSP] = (greg_t)remote_ctx;
-                unw_init_local(&cursor, &ctx);
-            }
-
-            // keep unwinding
-        }
-    }
-
-    // Adapter classes to be able to use this in a C++11 range for loop.
-    // (Needed because we do more memory management than typical.)
-    // TODO: maybe the memory management should be handled by the Manager?
-    class Manager {
-    public:
-        class Holder {
-        public:
-            std::unique_ptr<PythonFrameIterator> it;
-
-            Holder(std::unique_ptr<PythonFrameIterator> it) : it(std::move(it)) {}
-
-            bool operator!=(const Holder& rhs) const {
-                assert(rhs.it.get() == NULL); // this is the only intended use case, for comparing to end()
-                return it != rhs.it;
-            }
-
-            Holder& operator++() {
-                assert(it.get());
-
-                bool found = it->incr();
-                if (!found)
-                    it.release();
-                return *this;
-            }
-
-            PythonFrameIterator& operator*() const {
-                assert(it.get());
-                return *it.get();
-            }
-        };
-
-        Holder begin() { return PythonFrameIterator::begin(); }
-
-        Holder end() { return PythonFrameIterator::end(); }
-    };
 };
 
-PythonFrameIterator::Manager unwindPythonFrames() {
-    return PythonFrameIterator::Manager();
+static unw_word_t getFunctionEnd(unw_word_t ip) {
+    unw_proc_info_t pip;
+    int ret = unw_get_proc_info_by_ip(unw_local_addr_space, ip, &pip, NULL);
+    RELEASE_ASSERT(ret == 0 && pip.end_ip, "");
+    return pip.end_ip;
 }
 
-static std::unique_ptr<PythonFrameIterator> getTopPythonFrame() {
-    std::unique_ptr<PythonFrameIterator> fr = PythonFrameIterator::begin();
-    if (fr == PythonFrameIterator::end())
-        return std::unique_ptr<PythonFrameIterator>();
-    return fr;
+// While I'm not a huge fan of the callback-passing style, libunwind cursors are only valid for
+// the stack frame that they were created in, so we need to use this approach (as opposed to
+// C++11 range loops, for example).
+// Return true from the handler to stop iteration at that frame.
+void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImpl>&&)> func) {
+    static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
+    static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
+
+    unw_context_t ctx;
+    unw_cursor_t cursor;
+    unw_getcontext(&ctx);
+    unw_init_local(&cursor, &ctx);
+
+    // If the previous (lower, ie newer) frame was a frame that got OSR'd into,
+    // we skip the previous frame, its OSR parent.
+    bool was_osr = false;
+
+    while (true) {
+        int r = unw_step(&cursor);
+
+        assert(r >= 0);
+        if (r == 0)
+            break;
+
+
+        unw_word_t ip;
+        unw_get_reg(&cursor, UNW_REG_IP, &ip);
+        unw_word_t bp;
+        unw_get_reg(&cursor, UNW_TDEP_BP, &bp);
+
+        CompiledFunction* cf = getCFForAddress(ip);
+        if (cf) {
+            std::unique_ptr<PythonFrameIteratorImpl> info(new PythonFrameIteratorImpl());
+            info->id.type = PythonFrameId::COMPILED;
+            info->id.ip = ip;
+            info->id.bp = bp;
+            info->cf = cf;
+
+            if (!was_osr) {
+                // Try getting all the callee-save registers, and save the ones we were able to get.
+                // Some of them may be inaccessible, I think because they weren't defined by that
+                // stack frame, which can show up as a -UNW_EBADREG return code.
+                for (int i = 0; i < 16; i++) {
+                    if (!assembler::Register::fromDwarf(i).isCalleeSave())
+                        continue;
+                    unw_word_t r;
+                    int code = unw_get_reg(&cursor, i, &r);
+                    ASSERT(code == 0 || code == -UNW_EBADREG, "%d %d", code, i);
+                    if (code == 0) {
+                        info->regs[i] = r;
+                        info->regs_valid |= (1 << i);
+                    }
+                }
+
+                bool stop = func(std::move(info));
+                if (stop)
+                    break;
+            }
+            was_osr = (bool)cf->entry_descriptor;
+            continue;
+        }
+
+        if ((unw_word_t)interpreter_instr_addr <= ip && ip < interpreter_instr_end) {
+            std::unique_ptr<PythonFrameIteratorImpl> info(new PythonFrameIteratorImpl());
+            info->id.type = PythonFrameId::INTERPRETED;
+            info->id.ip = ip;
+            info->id.bp = bp;
+            cf = info->cf = getCFForInterpretedFrame((void*)bp);
+            assert(cf);
+
+            if (!was_osr) {
+                bool stop = func(std::move(info));
+                if (stop)
+                    break;
+            }
+
+            was_osr = (bool)cf->entry_descriptor;
+            continue;
+        }
+
+        if ((unw_word_t)generatorEntry <= ip && ip < generator_entry_end) {
+            // for generators continue unwinding in the context in which the generator got called
+            Context* remote_ctx = getReturnContextForGeneratorFrame((void*)bp);
+            // setup unw_context_t struct from the infos we have, seems like this is enough to make unwinding work.
+            memset(&ctx, 0, sizeof(ctx));
+            ctx.uc_mcontext.gregs[REG_R12] = remote_ctx->r12;
+            ctx.uc_mcontext.gregs[REG_R13] = remote_ctx->r13;
+            ctx.uc_mcontext.gregs[REG_R14] = remote_ctx->r14;
+            ctx.uc_mcontext.gregs[REG_R15] = remote_ctx->r15;
+            ctx.uc_mcontext.gregs[REG_RBX] = remote_ctx->rbx;
+            ctx.uc_mcontext.gregs[REG_RBP] = remote_ctx->rbp;
+            ctx.uc_mcontext.gregs[REG_RIP] = remote_ctx->rip;
+            ctx.uc_mcontext.gregs[REG_RSP] = (greg_t)remote_ctx;
+            unw_init_local(&cursor, &ctx);
+        }
+
+        // keep unwinding
+    }
 }
 
-static const LineInfo* lineInfoForFrame(PythonFrameIterator& frame_it) {
+static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
+    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& iter) {
+        rtn = std::move(iter);
+        return true;
+    });
+    return rtn;
+}
+
+static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     AST_stmt* current_stmt = frame_it.getCurrentStatement();
     auto* cf = frame_it.getCF();
     assert(cf);
@@ -550,11 +525,12 @@ BoxedTraceback* getTraceback() {
     Timer _t("getTraceback", 1000);
 
     std::vector<const LineInfo*> entries;
-    for (auto& frame_iter : unwindPythonFrames()) {
-        const LineInfo* line_info = lineInfoForFrame(frame_iter);
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+        const LineInfo* line_info = lineInfoForFrame(*frame_iter.get());
         if (line_info)
             entries.push_back(line_info);
-    }
+        return false;
+    });
 
     std::reverse(entries.begin(), entries.end());
 
@@ -568,8 +544,9 @@ ExcInfo* getFrameExcInfo() {
     std::vector<ExcInfo*> to_update;
     ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
-    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
-        FrameInfo* frame_info = frame_iter.getFrameInfo();
+
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+        FrameInfo* frame_info = frame_iter->getFrameInfo();
 
         copy_from_exc = &frame_info->exc;
         if (!cur_exc)
@@ -577,11 +554,11 @@ ExcInfo* getFrameExcInfo() {
 
         if (!copy_from_exc->type) {
             to_update.push_back(copy_from_exc);
-            continue;
+            return false;
         }
 
-        break;
-    }
+        return true;
+    });
 
     assert(copy_from_exc); // Only way this could still be NULL is if there weren't any python frames
 
@@ -630,19 +607,49 @@ BoxedModule* getCurrentModule() {
     return compiledFunction->clfunc->source->parent_module;
 }
 
+PythonFrameIterator getPythonFrame(int depth) {
+    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+        if (depth == 0) {
+            rtn = std::move(frame_iter);
+            return true;
+        }
+        depth--;
+        return false;
+    });
+    return PythonFrameIterator(std::move(rtn));
+}
+
+PythonFrameIterator::~PythonFrameIterator() {
+}
+
+PythonFrameIterator::PythonFrameIterator(PythonFrameIterator&& rhs) {
+    std::swap(this->impl, rhs.impl);
+}
+
+void PythonFrameIterator::operator=(PythonFrameIterator&& rhs) {
+    std::swap(this->impl, rhs.impl);
+}
+
+PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl>&& impl) {
+    std::swap(this->impl, impl);
+}
+
 // TODO factor getStackLoclasIncludingUserHidden and fastLocalsToBoxedLocals
 // because they are pretty ugly but have a pretty repetitive pattern.
 
 FrameStackState getFrameStackState() {
-    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+    FrameStackState rtn(NULL, NULL);
+    bool found = false;
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
         BoxedDict* d;
         BoxedClosure* closure;
         CompiledFunction* cf;
-        if (frame_iter.getId().type == PythonFrameId::COMPILED) {
+        if (frame_iter->getId().type == PythonFrameId::COMPILED) {
             d = new BoxedDict();
 
-            cf = frame_iter.getCF();
-            uint64_t ip = frame_iter.getId().ip;
+            cf = frame_iter->getCF();
+            uint64_t ip = frame_iter->getId().ip;
 
             assert(ip > cf->code_start);
             unsigned offset = ip - cf->code_start;
@@ -663,7 +670,7 @@ FrameStackState getFrameStackState() {
                         const auto& locs = e.locations;
 
                         assert(locs.size() == 1);
-                        uint64_t v = frame_iter.readLocation(locs[0]);
+                        uint64_t v = frame_iter->readLocation(locs[0]);
                         if ((v & 1) == 0)
                             is_undefined.insert(p.first.substr(12));
 
@@ -687,7 +694,7 @@ FrameStackState getFrameStackState() {
                         // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
 
                         for (auto& loc : locs) {
-                            vals.push_back(frame_iter.readLocation(loc));
+                            vals.push_back(frame_iter->readLocation(loc));
                         }
 
                         Box* v = e.type->deserializeFromFrame(vals);
@@ -701,156 +708,168 @@ FrameStackState getFrameStackState() {
             abort();
         }
 
-        return FrameStackState(d, frame_iter.getFrameInfo());
-    }
-    RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
+        rtn = FrameStackState(d, frame_iter->getFrameInfo());
+        found = true;
+        return true;
+    });
+
+    RELEASE_ASSERT(found, "Internal error: unable to find any python frames");
+    return rtn;
 }
 
 Box* fastLocalsToBoxedLocals() {
-    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
-        BoxedDict* d;
-        BoxedClosure* closure;
-        FrameInfo* frame_info;
+    return getPythonFrame(0).fastLocalsToBoxedLocals();
+}
 
-        CompiledFunction* cf = frame_iter.getCF();
-        ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
+    assert(impl.get());
 
-        if (scope_info->areLocalsFromModule()) {
-            // TODO we should cache this in frame_info->locals or something so that locals()
-            // (and globals() too) will always return the same dict
-            return getGlobalsDict();
-        }
+    BoxedDict* d;
+    BoxedClosure* closure;
+    FrameInfo* frame_info;
 
-        if (frame_iter.getId().type == PythonFrameId::COMPILED) {
-            d = new BoxedDict();
+    CompiledFunction* cf = impl->getCF();
+    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
 
-            uint64_t ip = frame_iter.getId().ip;
-
-            assert(ip > cf->code_start);
-            unsigned offset = ip - cf->code_start;
-
-            assert(cf->location_map);
-
-            // We have to detect + ignore any entries for variables that
-            // could have been defined (so they have entries) but aren't (so the
-            // entries point to uninitialized memory).
-            std::unordered_set<std::string> is_undefined;
-
-            for (const auto& p : cf->location_map->names) {
-                if (!startswith(p.first, "!is_defined_"))
-                    continue;
-
-                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
-                    if (e.offset < offset && offset <= e.offset + e.length) {
-                        const auto& locs = e.locations;
-
-                        assert(locs.size() == 1);
-                        uint64_t v = frame_iter.readLocation(locs[0]);
-                        if ((v & 1) == 0)
-                            is_undefined.insert(p.first.substr(12));
-
-                        break;
-                    }
-                }
-            }
-
-            for (const auto& p : cf->location_map->names) {
-                if (p.first[0] == '!')
-                    continue;
-
-                if (p.first[0] == '#')
-                    continue;
-
-                if (is_undefined.count(p.first))
-                    continue;
-
-                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
-                    if (e.offset < offset && offset <= e.offset + e.length) {
-                        const auto& locs = e.locations;
-
-                        llvm::SmallVector<uint64_t, 1> vals;
-                        // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
-
-                        for (auto& loc : locs) {
-                            vals.push_back(frame_iter.readLocation(loc));
-                        }
-
-                        Box* v = e.type->deserializeFromFrame(vals);
-                        // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
-                        assert(gc::isValidGCObject(v));
-                        d->d[boxString(p.first)] = v;
-                    }
-                }
-            }
-
-            closure = NULL;
-            if (cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
-                for (const LocationMap::LocationTable::LocationEntry& e :
-                     cf->location_map->names[PASSED_CLOSURE_NAME].locations) {
-                    if (e.offset < offset && offset <= e.offset + e.length) {
-                        const auto& locs = e.locations;
-
-                        llvm::SmallVector<uint64_t, 1> vals;
-
-                        for (auto& loc : locs) {
-                            vals.push_back(frame_iter.readLocation(loc));
-                        }
-
-                        Box* v = e.type->deserializeFromFrame(vals);
-                        assert(gc::isValidGCObject(v));
-                        closure = static_cast<BoxedClosure*>(v);
-                    }
-                }
-            }
-
-            frame_info = frame_iter.getFrameInfo();
-        } else if (frame_iter.getId().type == PythonFrameId::INTERPRETED) {
-            d = localsForInterpretedFrame((void*)frame_iter.getId().bp, true);
-            closure = passedClosureForInterpretedFrame((void*)frame_iter.getId().bp);
-            frame_info = getFrameInfoForInterpretedFrame((void*)frame_iter.getId().bp);
-        } else {
-            abort();
-        }
-
-        assert(frame_info);
-        if (frame_info->boxedLocals == NULL) {
-            frame_info->boxedLocals = new BoxedDict();
-        }
-        assert(gc::isValidGCObject(frame_info->boxedLocals));
-
-        // Add the locals from the closure
-        // TODO in a ClassDef scope, we aren't supposed to add these
-        size_t depth = 0;
-        for (auto& p : scope_info->getAllDerefVarsAndInfo()) {
-            InternedString name = p.first;
-            DerefInfo derefInfo = p.second;
-            while (depth < derefInfo.num_parents_from_passed_closure) {
-                depth++;
-                closure = closure->parent;
-            }
-            assert(closure != NULL);
-            Box* val = closure->elts[derefInfo.offset];
-            Box* boxedName = boxString(name.str());
-            if (val != NULL) {
-                d->d[boxedName] = val;
-            } else {
-                d->d.erase(boxedName);
-            }
-        }
-
-        // Loop through all the values found above.
-        // TODO Right now d just has all the python variables that are *initialized*
-        // But we also need to loop through all the uninitialized variables that we have
-        // access to and delete them from the locals dict
-        for (const auto& p : d->d) {
-            Box* varname = p.first;
-            Box* value = p.second;
-            setitem(frame_info->boxedLocals, varname, value);
-        }
-
-        return frame_info->boxedLocals;
+    if (scope_info->areLocalsFromModule()) {
+        // TODO we should cache this in frame_info->locals or something so that locals()
+        // (and globals() too) will always return the same dict
+        RELEASE_ASSERT(cf->clfunc->source->scoping->areGlobalsFromModule(), "");
+        return makeAttrWrapper(cf->clfunc->source->parent_module);
     }
-    RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
+
+    if (impl->getId().type == PythonFrameId::COMPILED) {
+        d = new BoxedDict();
+
+        uint64_t ip = impl->getId().ip;
+
+        assert(ip > cf->code_start);
+        unsigned offset = ip - cf->code_start;
+
+        assert(cf->location_map);
+
+        // We have to detect + ignore any entries for variables that
+        // could have been defined (so they have entries) but aren't (so the
+        // entries point to uninitialized memory).
+        std::unordered_set<std::string> is_undefined;
+
+        for (const auto& p : cf->location_map->names) {
+            if (!startswith(p.first, "!is_defined_"))
+                continue;
+
+            for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
+                if (e.offset < offset && offset <= e.offset + e.length) {
+                    const auto& locs = e.locations;
+
+                    assert(locs.size() == 1);
+                    uint64_t v = impl->readLocation(locs[0]);
+                    if ((v & 1) == 0)
+                        is_undefined.insert(p.first.substr(12));
+
+                    break;
+                }
+            }
+        }
+
+        for (const auto& p : cf->location_map->names) {
+            if (p.first[0] == '!')
+                continue;
+
+            if (p.first[0] == '#')
+                continue;
+
+            if (is_undefined.count(p.first))
+                continue;
+
+            for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
+                if (e.offset < offset && offset <= e.offset + e.length) {
+                    const auto& locs = e.locations;
+
+                    llvm::SmallVector<uint64_t, 1> vals;
+                    // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
+                    // printf("%ld locs\n", locs.size());
+
+                    for (auto& loc : locs) {
+                        auto v = impl->readLocation(loc);
+                        vals.push_back(v);
+                        // printf("%d %d %d: 0x%lx\n", loc.type, loc.regnum, loc.offset, v);
+                        // dump((void*)v);
+                    }
+
+                    Box* v = e.type->deserializeFromFrame(vals);
+                    // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
+                    assert(gc::isValidGCObject(v));
+                    d->d[boxString(p.first)] = v;
+                }
+            }
+        }
+
+        closure = NULL;
+        if (cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
+            for (const LocationMap::LocationTable::LocationEntry& e :
+                 cf->location_map->names[PASSED_CLOSURE_NAME].locations) {
+                if (e.offset < offset && offset <= e.offset + e.length) {
+                    const auto& locs = e.locations;
+
+                    llvm::SmallVector<uint64_t, 1> vals;
+
+                    for (auto& loc : locs) {
+                        vals.push_back(impl->readLocation(loc));
+                    }
+
+                    Box* v = e.type->deserializeFromFrame(vals);
+                    assert(gc::isValidGCObject(v));
+                    closure = static_cast<BoxedClosure*>(v);
+                }
+            }
+        }
+
+        frame_info = impl->getFrameInfo();
+    } else if (impl->getId().type == PythonFrameId::INTERPRETED) {
+        d = localsForInterpretedFrame((void*)impl->getId().bp, true);
+        closure = passedClosureForInterpretedFrame((void*)impl->getId().bp);
+        frame_info = getFrameInfoForInterpretedFrame((void*)impl->getId().bp);
+    } else {
+        abort();
+    }
+
+    assert(frame_info);
+    if (frame_info->boxedLocals == NULL) {
+        frame_info->boxedLocals = new BoxedDict();
+    }
+    assert(gc::isValidGCObject(frame_info->boxedLocals));
+
+    // Add the locals from the closure
+    // TODO in a ClassDef scope, we aren't supposed to add these
+    size_t depth = 0;
+    for (auto& p : scope_info->getAllDerefVarsAndInfo()) {
+        InternedString name = p.first;
+        DerefInfo derefInfo = p.second;
+        while (depth < derefInfo.num_parents_from_passed_closure) {
+            depth++;
+            closure = closure->parent;
+        }
+        assert(closure != NULL);
+        Box* val = closure->elts[derefInfo.offset];
+        Box* boxedName = boxString(name.str());
+        if (val != NULL) {
+            d->d[boxedName] = val;
+        } else {
+            d->d.erase(boxedName);
+        }
+    }
+
+    // Loop through all the values found above.
+    // TODO Right now d just has all the python variables that are *initialized*
+    // But we also need to loop through all the uninitialized variables that we have
+    // access to and delete them from the locals dict
+    for (const auto& p : d->d) {
+        Box* varname = p.first;
+        Box* value = p.second;
+        setitem(frame_info->boxedLocals, varname, value);
+    }
+
+    return frame_info->boxedLocals;
 }
 
 ExecutionPoint getExecutionPoint() {
@@ -858,6 +877,34 @@ ExecutionPoint getExecutionPoint() {
     auto cf = frame->getCF();
     auto current_stmt = frame->getCurrentStatement();
     return ExecutionPoint({.cf = cf, .current_stmt = current_stmt });
+}
+
+std::unique_ptr<ExecutionPoint> PythonFrameIterator::getExecutionPoint() {
+    assert(impl.get());
+    auto cf = impl->getCF();
+    auto stmt = impl->getCurrentStatement();
+    return std::unique_ptr<ExecutionPoint>(new ExecutionPoint({.cf = cf, .current_stmt = stmt }));
+}
+
+CompiledFunction* PythonFrameIterator::getCF() {
+    return impl->getCF();
+}
+
+FrameInfo* PythonFrameIterator::getFrameInfo() {
+    return impl->getFrameInfo();
+}
+
+PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
+    std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
+    auto& impl = this->impl;
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+        if (frame_iter->pointsToTheSameAs(*impl.get())) {
+            rtn = std::move(frame_iter);
+            return true;
+        }
+        return false;
+    });
+    return PythonFrameIterator(std::move(rtn));
 }
 
 llvm::JITEventListener* makeTracebacksListener() {

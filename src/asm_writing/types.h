@@ -45,6 +45,8 @@ struct Register {
     bool operator!=(const Register& rhs) const { return !(*this == rhs); }
 
     void dump() const;
+
+    static Register fromDwarf(int dwarf_regnum);
 };
 
 const Register RAX(0);

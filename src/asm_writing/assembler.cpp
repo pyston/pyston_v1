@@ -54,6 +54,12 @@ const int dwarf_to_gp[] = {
     // 17-32: xmm0-xmm15
 };
 
+Register Register::fromDwarf(int dwarf_regnum) {
+    assert(dwarf_regnum >= 0 && dwarf_regnum <= 16);
+
+    return Register(dwarf_to_gp[dwarf_regnum]);
+}
+
 GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
     assert(dwarf_regnum >= 0);
 
