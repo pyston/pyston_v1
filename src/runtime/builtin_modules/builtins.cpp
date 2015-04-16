@@ -973,6 +973,18 @@ Box* builtinCmp(Box* lhs, Box* rhs) {
     throwCAPIException();
 }
 
+Box* builtinApply(Box* func, Box* args, Box* keywords) {
+    if (!PyTuple_Check(args)) {
+        if (!PySequence_Check(args))
+            raiseExcHelper(TypeError, "apply() arg 2 expected sequence, found %s", getTypeName(args));
+        args = PySequence_Tuple(args);
+        checkAndThrowCAPIException();
+    }
+    if (keywords && !PyDict_Check(keywords))
+        raiseExcHelper(TypeError, "apply() arg 3 expected dictionary, found %s", getTypeName(keywords));
+    return runtimeCall(func, ArgPassSpec(0, 0, true, keywords != NULL), args, keywords, NULL, NULL, NULL);
+}
+
 void setupBuiltins() {
     builtins_module = createModule("__builtin__", "__builtin__",
                                    "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
@@ -1004,6 +1016,10 @@ void setupBuiltins() {
 
     builtins_module->giveAttr("all", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)all, BOXED_BOOL, 1), "all"));
     builtins_module->giveAttr("any", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)any, BOXED_BOOL, 1), "any"));
+
+    builtins_module->giveAttr(
+        "apply", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinApply, UNKNOWN, 3, 1, false, false),
+                                                  "apply", { NULL }));
 
     repr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)repr, UNKNOWN, 1), "repr");
     builtins_module->giveAttr("repr", repr_obj);
