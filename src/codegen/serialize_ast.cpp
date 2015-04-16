@@ -285,6 +285,10 @@ private:
         writeExpr(node->value);
         return true;
     }
+    virtual bool visit_extslice(AST_ExtSlice* node) {
+        writeExprVector(node->dims);
+        return true;
+    }
     virtual bool visit_for(AST_For* node) {
         writeStmtVector(node->body);
         writeColOffset(node->col_offset);
