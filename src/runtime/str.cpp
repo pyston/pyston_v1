@@ -343,7 +343,6 @@ extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
 }
 
 extern "C" void PyString_InternInPlace(PyObject**) noexcept {
-    Py_FatalError("unimplemented");
 }
 
 /* Format codes

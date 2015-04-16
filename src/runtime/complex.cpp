@@ -50,6 +50,11 @@ extern "C" double PyComplex_ImagAsDouble(PyObject* op) noexcept {
     }
 }
 
+extern "C" PyObject* PyComplex_FromCComplex(Py_complex val) noexcept {
+    return new BoxedComplex(val.real, val.imag);
+}
+
+
 // addition
 
 extern "C" Box* complexAddComplex(BoxedComplex* lhs, BoxedComplex* rhs) {

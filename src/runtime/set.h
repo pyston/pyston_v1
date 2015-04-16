@@ -25,8 +25,6 @@ namespace pyston {
 void setupSet();
 void teardownSet();
 
-extern BoxedClass* set_cls, *frozenset_cls;
-
 extern "C" Box* createSet();
 
 class BoxedSet : public Box {

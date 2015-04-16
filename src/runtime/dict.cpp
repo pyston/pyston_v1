@@ -96,18 +96,30 @@ Box* dictKeys(BoxedDict* self) {
     return rtn;
 }
 
-extern "C" PyObject* PyDict_Keys(PyObject* mp) noexcept {
+static PyObject* dict_helper(PyObject* mp, std::function<Box*(BoxedDict*)> f) noexcept {
     if (mp == NULL || !PyDict_Check(mp)) {
         PyErr_BadInternalCall();
         return NULL;
     }
 
     try {
-        return dictKeys(static_cast<BoxedDict*>(mp));
+        return f(static_cast<BoxedDict*>(mp));
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
     }
+}
+
+extern "C" PyObject* PyDict_Keys(PyObject* mp) noexcept {
+    return dict_helper(mp, dictKeys);
+}
+
+extern "C" PyObject* PyDict_Values(PyObject* mp) noexcept {
+    return dict_helper(mp, dictValues);
+}
+
+extern "C" PyObject* PyDict_Items(PyObject* mp) noexcept {
+    return dict_helper(mp, dictItems);
 }
 
 Box* dictViewKeys(BoxedDict* self) {

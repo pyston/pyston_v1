@@ -805,7 +805,9 @@ Box* fileExit(BoxedFile* self, Box* exc_type, Box* exc_val, Box** args) {
 }
 
 // This differs very significantly from CPython:
-Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
+Box* fileNew(BoxedClass* cls, Box* s, Box* m, Box** args) {
+    BoxedInt* buffering = (BoxedInt*)args[0];
+
     assert(cls == file_cls);
 
     if (s->cls == unicode_cls)
@@ -822,6 +824,9 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
         fprintf(stderr, "TypeError: coercing to Unicode: need string of buffer, %s found\n", getTypeName(m));
         raiseExcHelper(TypeError, "");
     }
+
+    if (!PyInt_Check(buffering))
+        raiseExcHelper(TypeError, "an integer is required");
 
     auto fn = static_cast<BoxedString*>(s);
     auto mode = static_cast<BoxedString*>(m);
@@ -840,7 +845,9 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
         abort(); // unreachable;
     }
 
-    return new BoxedFile(f, fn->s, PyString_AsString(m));
+    auto file = new BoxedFile(f, fn->s, PyString_AsString(m));
+    PyFile_SetBufSize(file, buffering->n);
+    return file;
 }
 
 static PyObject* file_readlines(BoxedFile* f, PyObject* args) noexcept {
@@ -1111,12 +1118,38 @@ extern "C" int PyFile_WriteString(const char* s, PyObject* f) noexcept {
 
 extern "C" void PyFile_SetBufSize(PyObject* f, int bufsize) noexcept {
     assert(f->cls == file_cls);
+    BoxedFile* file = (BoxedFile*)f;
     if (bufsize >= 0) {
-        if (bufsize == 0) {
-            setvbuf(static_cast<BoxedFile*>(f)->f_fp, NULL, _IONBF, 0);
-        } else {
-            Py_FatalError("unimplemented");
+        int type;
+        switch (bufsize) {
+            case 0:
+                type = _IONBF;
+                break;
+#ifdef HAVE_SETVBUF
+            case 1:
+                type = _IOLBF;
+                bufsize = BUFSIZ;
+                break;
+#endif
+            default:
+                type = _IOFBF;
+#ifndef HAVE_SETVBUF
+                bufsize = BUFSIZ;
+#endif
+                break;
         }
+        fflush(file->f_fp);
+        if (type == _IONBF) {
+            PyMem_Free(file->f_setbuf);
+            file->f_setbuf = NULL;
+        } else {
+            file->f_setbuf = (char*)PyMem_Realloc(file->f_setbuf, bufsize);
+        }
+#ifdef HAVE_SETVBUF
+        setvbuf(file->f_fp, file->f_setbuf, type, bufsize);
+#else  /* !HAVE_SETVBUF */
+        setbuf(file->f_fp, file->f_setbuf);
+#endif /* !HAVE_SETVBUF */
     }
 }
 
@@ -1426,6 +1459,7 @@ void BoxedFile::gcHandler(GCVisitor* v, Box* b) {
     v->visit(f->f_mode);
     v->visit(f->f_encoding);
     v->visit(f->f_errors);
+    v->visit(f->f_setbuf);
 }
 
 void setupFile() {
@@ -1455,8 +1489,8 @@ void setupFile() {
     file_cls->giveAttr("softspace",
                        new BoxedMemberDescriptor(BoxedMemberDescriptor::INT, offsetof(BoxedFile, f_softspace), false));
 
-    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 3, 1, false, false),
-                                                    { boxStrConstant("r") }));
+    file_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)fileNew, UNKNOWN, 4, 2, false, false),
+                                                    { boxStrConstant("r"), boxInt(-1) }));
 
     for (auto& md : file_methods) {
         file_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, file_cls));

@@ -863,6 +863,16 @@ private:
         return rtn;
     }
 
+    AST_expr* remapExtSlice(AST_ExtSlice* node) {
+        AST_ExtSlice* rtn = new AST_ExtSlice();
+        rtn->lineno = node->lineno;
+        rtn->col_offset = node->col_offset;
+
+        for (auto* e : node->dims)
+            rtn->dims.push_back(remapExpr(e));
+        return rtn;
+    }
+
     // This is a helper function used for generators expressions and comprehensions.
     //
     // Generates a FunctionDef which produces scope for `node'. The function produced is empty, so you'd better fill it.
@@ -1173,6 +1183,9 @@ private:
                 break;
             case AST_TYPE::DictComp:
                 rtn = remapScopedComprehension<AST_Dict>(ast_cast<AST_DictComp>(node));
+                break;
+            case AST_TYPE::ExtSlice:
+                rtn = remapExtSlice(ast_cast<AST_ExtSlice>(node));
                 break;
             case AST_TYPE::GeneratorExp:
                 rtn = remapGeneratorExp(ast_cast<AST_GeneratorExp>(node));

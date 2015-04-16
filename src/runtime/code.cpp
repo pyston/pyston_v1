@@ -24,7 +24,9 @@
 
 namespace pyston {
 
+extern "C" {
 BoxedClass* code_cls;
+}
 
 class BoxedCode : public Box {
 public:
@@ -92,6 +94,11 @@ Box* codeForFunction(BoxedFunction* f) {
 
 Box* codeForCLFunction(CLFunction* f) {
     return new BoxedCode(f);
+}
+
+extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, PyObject*, PyObject*, PyObject*,
+                                    PyObject*, PyObject*, PyObject*, int, PyObject*) noexcept {
+    RELEASE_ASSERT(0, "not implemented");
 }
 
 void setupCode() {

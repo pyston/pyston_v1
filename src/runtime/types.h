@@ -86,7 +86,7 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
     *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-    *builtin_function_or_method_cls;
+    *builtin_function_or_method_cls, *set_cls, *frozenset_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)

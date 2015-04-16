@@ -1092,6 +1092,20 @@ private:
         return new ConcreteCompilerVariable(SLICE, rtn, true);
     }
 
+    CompilerVariable* evalExtSlice(AST_ExtSlice* node, UnwindInfo unw_info) {
+        std::vector<CompilerVariable*> elts;
+        for (auto* e : node->dims) {
+            elts.push_back(evalExpr(e, unw_info));
+        }
+
+        // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
+        CompilerVariable* rtn = makeTuple(elts);
+        for (auto* e : elts) {
+            e->decvref(emitter);
+        }
+        return rtn;
+    }
+
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
             llvm::Value* rtn = embedConstantPtr(
@@ -1349,6 +1363,9 @@ private:
                 break;
             case AST_TYPE::Dict:
                 rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
+                break;
+            case AST_TYPE::ExtSlice:
+                rtn = evalExtSlice(ast_cast<AST_ExtSlice>(node), unw_info);
                 break;
             case AST_TYPE::Index:
                 rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);

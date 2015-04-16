@@ -403,6 +403,15 @@ AST_Expr* read_expr(BufferedReader* reader) {
     return rtn;
 }
 
+AST_ExtSlice* read_extslice(BufferedReader* reader) {
+    AST_ExtSlice* rtn = new AST_ExtSlice();
+
+    rtn->col_offset = -1;
+    rtn->lineno = -1;
+    readExprVector(rtn->dims, reader);
+    return rtn;
+}
+
 AST_For* read_for(BufferedReader* reader) {
     AST_For* rtn = new AST_For();
 
@@ -798,6 +807,8 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_dict(reader);
         case AST_TYPE::DictComp:
             return read_dictcomp(reader);
+        case AST_TYPE::ExtSlice:
+            return read_extslice(reader);
         case AST_TYPE::GeneratorExp:
             return read_generatorexp(reader);
         case AST_TYPE::IfExp:

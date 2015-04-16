@@ -13,3 +13,7 @@ print sl
 
 sl = slice(1, 2, "hello")
 print sl
+
+C()[:,:]
+C()[1:2,3:4]
+C()[1:2:3,3:4:5]
