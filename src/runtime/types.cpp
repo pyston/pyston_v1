@@ -467,7 +467,7 @@ extern "C" void boxGCHandler(GCVisitor* v, Box* b) {
         if (b->cls->tp_flags & Py_TPFLAGS_HEAPTYPE) {
             BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(b->cls);
             BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
-            for (int i = 0; i < heap_cls->nslots; i++) {
+            for (int i = 0; i < heap_cls->nslots(); i++) {
                 v->visit(*((Box**)((char*)b + slotOffsets[i])));
             }
         }
@@ -1981,16 +1981,19 @@ extern "C" PyObject* PyObject_Init(PyObject* op, PyTypeObject* tp) noexcept {
     // initUserAttrs themselves, though.
     initUserAttrs(op, tp);
 
-    // Initialize the variables declared in __slots__ to NULL.
+#ifndef NDEBUG
     if (tp->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass* heap_cls = static_cast<BoxedHeapClass*>(tp);
-        if (heap_cls->nslots > 0) {
+        if (heap_cls->nslots() > 0) {
             BoxedHeapClass::SlotOffset* slotOffsets = heap_cls->slotOffsets();
-            for (int i = 0; i < heap_cls->nslots; i++) {
-                *(Box**)((char*)op + slotOffsets[i]) = NULL;
+            for (int i = 0; i < heap_cls->nslots(); i++) {
+                // This should be set to 0 on allocation:
+                // (If it wasn't, we would need to initialize it to 0 here.)
+                assert(*(Box**)((char*)op + slotOffsets[i]) == NULL);
             }
         }
     }
+#endif
 
     return op;
 }

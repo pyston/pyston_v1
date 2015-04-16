@@ -236,9 +236,9 @@ public:
     BoxedString* ht_name;
     PyObject* ht_slots;
 
-    size_t nslots;
     typedef size_t SlotOffset;
     SlotOffset* slotOffsets() { return (BoxedHeapClass::SlotOffset*)((char*)this + this->cls->tp_basicsize); }
+    size_t nslots() { return this->ob_size; }
 
     // These functions are the preferred way to construct new types:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
@@ -253,7 +253,7 @@ private:
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
     BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
-                   bool is_user_defined, BoxedString* name, size_t nslots = 0);
+                   bool is_user_defined, BoxedString* name);
 
     friend void setupRuntime();
     friend void setupSys();

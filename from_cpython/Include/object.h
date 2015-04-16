@@ -479,7 +479,6 @@ typedef struct _heaptypeobject {
                                       see add_operators() in typeobject.c . */
     PyBufferProcs as_buffer;
     PyObject *ht_name, *ht_slots;
-    Py_ssize_t nslots;
     /* here are optional user slots, followed by the members. */
 } PyHeapTypeObject;
 

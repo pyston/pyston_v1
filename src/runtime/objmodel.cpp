@@ -393,9 +393,9 @@ void BoxedClass::finishInitialization() {
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
-                               int instance_size, bool is_user_defined, BoxedString* name, size_t nslots)
+                               int instance_size, bool is_user_defined, BoxedString* name)
     : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined), ht_name(name),
-      ht_slots(NULL), nslots(nslots) {
+      ht_slots(NULL) {
 
     tp_as_number = &as_number;
     tp_as_mapping = &as_mapping;
@@ -424,7 +424,7 @@ BoxedHeapClass* BoxedHeapClass::create(BoxedClass* metaclass, BoxedClass* base, 
                                        int weaklist_offset, int instance_size, bool is_user_defined, BoxedString* name,
                                        BoxedTuple* bases, size_t nslots) {
     BoxedHeapClass* made = new (metaclass, nslots)
-        BoxedHeapClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name, nslots);
+        BoxedHeapClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined, name);
 
     assert((name || str_cls == NULL) && "name can only be NULL before str_cls has been initialized.");
 
@@ -4187,7 +4187,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     basic_size = cur_offset;
 
     size_t total_slots = final_slot_names.size()
-                         + (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots : 0);
+                         + (base->tp_flags & Py_TPFLAGS_HEAPTYPE ? static_cast<BoxedHeapClass*>(base)->nslots() : 0);
     BoxedHeapClass* made = BoxedHeapClass::create(metatype, base, NULL, attrs_offset, weaklist_offset, basic_size, true,
                                                   name, bases, total_slots);
     made->tp_dictoffset = dict_offset;
@@ -4214,13 +4214,14 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
     }
 
     // Add slot offsets for slots of the base
-    // NOTE: I don't think CPython does this
+    // NOTE: CPython does this, but I don't want to have to traverse the class hierarchy to
+    // traverse all the slots, so I'm putting them all here.
     if (base->tp_flags & Py_TPFLAGS_HEAPTYPE) {
         BoxedHeapClass::SlotOffset* slot_offsets = made->slotOffsets();
         BoxedHeapClass* base_heap_cls = static_cast<BoxedHeapClass*>(base);
         BoxedHeapClass::SlotOffset* base_slot_offsets = base_heap_cls->slotOffsets();
         memcpy(&slot_offsets[final_slot_names.size()], base_slot_offsets,
-               base_heap_cls->nslots * sizeof(BoxedHeapClass::SlotOffset));
+               base_heap_cls->nslots() * sizeof(BoxedHeapClass::SlotOffset));
     }
 
     if (!made->getattr("__dict__") && (made->instancesHaveHCAttrs() || made->instancesHaveDictAttrs()))
