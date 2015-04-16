@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "Python.h"
+#include "pythread.h"
+
 #include "codegen/unwinding.h"
 #include "runtime/types.h"
 
@@ -19,14 +22,30 @@ namespace pyston {
 
 BoxedClass* frame_cls;
 
+// Issues:
+// - breaks gdb backtraces
+// - breaks c++ exceptions
+// - we never free the trampolines
 class BoxedFrame : public Box {
 public:
-    BoxedFrame() __attribute__((visibility("default"))) {}
+    BoxedFrame(PythonFrameIterator&& it) __attribute__((visibility("default")))
+    : it(std::move(it)), thread_id(PyThread_get_thread_ident()) {}
 
-    Box* _locals;
+    PythonFrameIterator it;
+    long thread_id;
+
     Box* _globals;
     Box* _code;
-    uint32_t _lineno;
+
+    void update() {
+        // This makes sense as an exception, but who knows how the user program would react
+        // (it might swallow it and do something different)
+        RELEASE_ASSERT(thread_id == PyThread_get_thread_ident(),
+                       "frame objects can only be accessed from the same thread");
+        PythonFrameIterator new_it = it.getCurrentVersion();
+        RELEASE_ASSERT(new_it.exists() && new_it.getFrameInfo()->frame_obj == this, "frame has exited");
+        it = std::move(new_it);
+    }
 
     // cpython frame objects have the following attributes
 
@@ -61,8 +80,13 @@ public:
         auto f = static_cast<BoxedFrame*>(b);
 
         v->visit(f->_code);
-        v->visit(f->_locals);
         v->visit(f->_globals);
+    }
+
+    static void simpleDestructor(Box* b) {
+        auto f = static_cast<BoxedFrame*>(b);
+
+        f->it.~PythonFrameIterator();
     }
 
     static Box* code(Box* obj, void*) {
@@ -72,7 +96,8 @@ public:
 
     static Box* locals(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
-        return f->_locals;
+        f->update();
+        return f->it.fastLocalsToBoxedLocals();
     }
 
     static Box* globals(Box* obj, void*) {
@@ -82,48 +107,42 @@ public:
 
     static Box* lineno(Box* obj, void*) {
         auto f = static_cast<BoxedFrame*>(obj);
-        return boxInt(f->_lineno);
+        f->update();
+        std::unique_ptr<ExecutionPoint> fr = f->it.getExecutionPoint();
+        return boxInt(fr->current_stmt->lineno);
     }
 
     DEFAULT_CLASS(frame_cls);
 };
 
 Box* getFrame(int depth) {
-    std::unique_ptr<ExecutionPoint> fr = getExecutionPoint(depth);
-    if (!fr)
+    auto it = getPythonFrame(depth);
+    if (!it.exists())
         return NULL;
 
-    Box* locals = fastLocalsToBoxedLocals(depth);
+    FrameInfo* fi = it.getFrameInfo();
+    if (fi->frame_obj == NULL) {
+        auto cf = it.getCF();
+        BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
+        assert(cf->clfunc->source->scoping->areGlobalsFromModule());
+        f->_globals = makeAttrWrapper(cf->clfunc->source->parent_module);
+        f->_code = codeForCLFunction(cf->clfunc);
+    }
 
-    BoxedFrame* rtn = new BoxedFrame();
-    rtn->_locals = locals;
-    // basically the same as builtin globals()
-    // q: TODO is it ok that we don't return a real dict here?
-    rtn->_globals = makeAttrWrapper(fr->cf->clfunc->source->parent_module);
-    rtn->_code = codeForCLFunction(fr->cf->clfunc);
-    rtn->_lineno = fr->current_stmt->lineno;
-    return rtn;
+    return fi->frame_obj;
 }
 
 
 void setupFrame() {
     frame_cls = BoxedHeapClass::create(type_cls, object_cls, &BoxedFrame::gchandler, 0, 0, sizeof(BoxedFrame), false,
                                        "frame");
+    frame_cls->simple_destructor = BoxedFrame::simpleDestructor;
 
     frame_cls->giveAttr("f_code", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::code, NULL, NULL));
-// until we can determine if there's code in the wild that depends
-// on f_locals boxing up fast locals when it's called, add methods
-// getLocals() and getLineno() that we can modify code to use.
-#ifdef expose_f_locals
     frame_cls->giveAttr("f_locals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::locals, NULL, NULL));
     frame_cls->giveAttr("f_lineno", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::lineno, NULL, NULL));
-#else
-    frame_cls->giveAttr("getLocals", new BoxedFunction(boxRTFunction((void*)BoxedFrame::locals, UNKNOWN, 1)));
-    frame_cls->giveAttr("getLineno", new BoxedFunction(boxRTFunction((void*)BoxedFrame::lineno, BOXED_INT, 1)));
-#endif
 
     frame_cls->giveAttr("f_globals", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedFrame::globals, NULL, NULL));
-
 
     frame_cls->freeze();
 }

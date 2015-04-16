@@ -862,6 +862,20 @@ void Assembler::je(JumpDestination dest) {
     jmp_cond(dest, COND_EQUAL);
 }
 
+void Assembler::jmpq(Register dest) {
+    int reg_idx = dest.regnum;
+
+    if (reg_idx >= 8) {
+        emitRex(REX_B);
+        reg_idx -= 8;
+    }
+
+    assert(0 <= reg_idx && reg_idx < 8);
+
+    emitByte(0xff);
+    emitModRM(0b11, 0b100, reg_idx);
+}
+
 
 
 void Assembler::set_cond(Register reg, ConditionCode condition) {
