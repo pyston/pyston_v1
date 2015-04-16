@@ -312,7 +312,7 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined)
-    : BoxVar(0), gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset), is_constant(false),
+    : gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset), is_constant(false),
       is_user_defined(is_user_defined), is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:

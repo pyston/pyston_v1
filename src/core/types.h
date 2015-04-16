@@ -566,10 +566,10 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
 // CPython C API compatibility class:
 class BoxVar : public Box {
 public:
+    // This field gets initialized in operator new.
     Py_ssize_t ob_size;
 
     BoxVar() {}
-    BoxVar(Py_ssize_t ob_size) : ob_size(ob_size) {}
 
     void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default")));
 };
