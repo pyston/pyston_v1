@@ -941,7 +941,7 @@ Box* _listCmp(BoxedList* lhs, BoxedList* rhs, AST_TYPE::AST_TYPE op_type) {
 }
 
 Box* listEq(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
@@ -951,7 +951,7 @@ Box* listEq(BoxedList* self, Box* rhs) {
 }
 
 Box* listNe(BoxedList* self, Box* rhs) {
-    if (rhs->cls != list_cls) {
+    if (!isSubclass(rhs->cls, list_cls)) {
         return NotImplemented;
     }
 
