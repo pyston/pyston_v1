@@ -15,9 +15,11 @@
 #include <cfloat>
 #include <cmath>
 #include <cstring>
+#include <gmp.h>
 
 #include "core/types.h"
 #include "runtime/inline/boxing.h"
+#include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -33,12 +35,38 @@ extern "C" PyObject* PyFloat_FromString(PyObject* v, char** pend) noexcept {
 }
 
 extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
-    if (o->cls == float_cls)
+    assert(o);
+
+    if (PyFloat_CheckExact(o))
         return static_cast<BoxedFloat*>(o)->d;
-    else if (isSubclass(o->cls, int_cls))
-        return static_cast<BoxedInt*>(o)->n;
-    Py_FatalError("unimplemented");
-    return 0.0;
+
+    // special case: int (avoids all the boxing below, and int_cls->tp_as_number
+    // isn't implemented at the time of this writing)
+    // This is an exact check.
+    if (o->cls == int_cls || o->cls == bool_cls)
+        return (double)static_cast<BoxedInt*>(o)->n;
+    // special case: long
+    if (o->cls == long_cls)
+        return mpz_get_d(static_cast<BoxedLong*>(o)->n);
+
+    // implementation from cpython:
+    PyNumberMethods* nb;
+    BoxedFloat* fo;
+    double val;
+
+    if ((nb = Py_TYPE(o)->tp_as_number) == NULL || nb->nb_float == NULL) {
+        PyErr_SetString(PyExc_TypeError, "a float is required");
+        return -1;
+    };
+    fo = (BoxedFloat*)(*nb->nb_float)(o);
+    if (fo == NULL)
+        return -1;
+    if (!PyFloat_Check(fo)) {
+        PyErr_SetString(PyExc_TypeError, "nb_float should return float object");
+        return -1;
+    }
+
+    return static_cast<BoxedFloat*>(fo)->d;
 }
 
 template <typename T> static inline void raiseDivZeroExcIfZero(T var) {
