@@ -77,6 +77,7 @@ extern "C" void initzipimport();
 extern "C" void init_csv();
 extern "C" void init_ssl();
 extern "C" void init_sqlite3();
+extern "C" void PyMarshal_Init();
 
 namespace pyston {
 
@@ -655,7 +656,7 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
       *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
       *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-      *builtin_function_or_method_cls, *attrwrapperiter_cls;
+      *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
 BoxedString* EmptyString;
@@ -2270,6 +2271,7 @@ void setupRuntime() {
     init_csv();
     init_ssl();
     init_sqlite3();
+    PyMarshal_Init();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;

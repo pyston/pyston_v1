@@ -500,6 +500,15 @@ extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssiz
     return 0;
 }
 
+extern "C" int PyObject_CheckReadBuffer(PyObject* obj) noexcept {
+    PyBufferProcs* pb = obj->cls->tp_as_buffer;
+
+    if (pb == NULL || pb->bf_getreadbuffer == NULL || pb->bf_getsegcount == NULL
+        || (*pb->bf_getsegcount)(obj, NULL) != 1)
+        return 0;
+    return 1;
+}
+
 extern "C" int PyObject_AsReadBuffer(PyObject* obj, const void** buffer, Py_ssize_t* buffer_len) noexcept {
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
     return -1;

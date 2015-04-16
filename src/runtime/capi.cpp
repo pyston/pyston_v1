@@ -531,15 +531,22 @@ extern "C" PyObject* PySequence_Tuple(PyObject* o) noexcept {
 }
 
 extern "C" PyObject* PyIter_Next(PyObject* iter) noexcept {
-    static const std::string next_str("next");
     try {
-        return callattr(iter, &next_str, CallattrFlags({.cls_only = true, .null_on_nonexistent = false }),
-                        ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
+        Box* hasnext = iter->hasnextOrNullIC();
+        if (hasnext) {
+            if (hasnext->nonzeroIC())
+                return iter->nextIC();
+            else
+                return NULL;
+        } else {
+            return iter->nextIC();
+        }
     } catch (ExcInfo e) {
-        if (!e.matches(StopIteration))
-            setCAPIException(e);
-        return NULL;
+        if (e.matches(StopIteration))
+            return NULL;
+        setCAPIException(e);
     }
+    return NULL;
 }
 
 extern "C" int PyCallable_Check(PyObject* x) noexcept {

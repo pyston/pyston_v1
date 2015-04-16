@@ -17,12 +17,12 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 
 namespace pyston {
 
-BoxedClass* set_cls, *set_iterator_cls;
-BoxedClass* frozenset_cls;
+BoxedClass* set_iterator_cls;
 
 extern "C" Box* createSet() {
     return new BoxedSet();
@@ -196,7 +196,7 @@ Box* setLen(BoxedSet* self) {
 }
 
 Box* setAdd(BoxedSet* self, Box* v) {
-    assert(self->cls == set_cls);
+    assert(self->cls == set_cls || self->cls == frozenset_cls);
     self->s.insert(v);
     return None;
 }
@@ -389,6 +389,42 @@ Box* setHash(BoxedSet* self) {
     }
 
     return boxInt(rtn);
+}
+
+extern "C" PyObject* PySet_New(PyObject* iterable) noexcept {
+    if (!iterable)
+        return new BoxedSet(); // Fast path for empty set.
+
+    try {
+        return runtimeCall(set_cls, ArgPassSpec(iterable ? 1 : 0), iterable, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" PyObject* PyFrozenSet_New(PyObject* iterable) noexcept {
+    try {
+        return runtimeCall(frozenset_cls, ArgPassSpec(iterable ? 1 : 0), iterable, NULL, NULL, NULL, NULL);
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
+extern "C" int PySet_Add(PyObject* set, PyObject* key) noexcept {
+    if (!PySet_Check(set) && !PyFrozenSet_Check(set)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+
+    try {
+        setAdd((BoxedSet*)set, key);
+        return 0;
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return -1;
+    }
 }
 
 } // namespace set
