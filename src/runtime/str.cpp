@@ -339,10 +339,11 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
 }
 
 extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
-    return boxString(s);
+    Py_FatalError("unimplemented");
 }
 
 extern "C" void PyString_InternInPlace(PyObject**) noexcept {
+    Py_FatalError("unimplemented");
 }
 
 /* Format codes

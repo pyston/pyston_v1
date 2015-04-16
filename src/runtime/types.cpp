@@ -1467,7 +1467,8 @@ static PyObject* import_copyreg(void) noexcept {
     static PyObject* copyreg_str;
 
     if (!copyreg_str) {
-        copyreg_str = PyGC_AddRoot(PyString_InternFromString("copy_reg"));
+        // this is interned in cpython:
+        copyreg_str = PyGC_AddRoot(PyString_FromString("copy_reg"));
         if (copyreg_str == NULL)
             return NULL;
     }
