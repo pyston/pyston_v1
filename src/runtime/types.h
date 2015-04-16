@@ -784,6 +784,7 @@ Box* objectNewNoArgs(BoxedClass* cls);
 Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* makeAttrWrapper(Box* b);
+Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
 
 #define SystemError ((BoxedClass*)PyExc_SystemError)

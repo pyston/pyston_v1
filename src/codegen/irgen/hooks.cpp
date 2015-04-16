@@ -368,6 +368,9 @@ Box* eval(Box* boxedCode) {
     if (globals == module)
         globals = NULL;
 
+    if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
+        globals = NULL;
+
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
@@ -414,7 +417,10 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     if (globals == module)
         globals = NULL;
 
-    assert(!globals || globals->cls == dict_cls);
+    if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
+        globals = NULL;
+
+    ASSERT(!globals || globals->cls == dict_cls, "%s", globals->cls->tp_name);
 
     if (globals) {
         // From CPython (they set it to be f->f_builtins):

@@ -1153,6 +1153,10 @@ public:
 
     DEFAULT_CLASS(attrwrapper_cls);
 
+    Box* getUnderlying() {
+        return b;
+    }
+
     static void gcHandler(GCVisitor* v, Box* b) {
         boxGCHandler(v, b);
 
@@ -1399,6 +1403,11 @@ Box* makeAttrWrapper(Box* b) {
     }
 
     return new AttrWrapper(b);
+}
+
+Box* unwrapAttrWrapper(Box* b) {
+    assert(b->cls == attrwrapper_cls);
+    return static_cast<AttrWrapper*>(b)->getUnderlying();
 }
 
 Box* attrwrapperKeys(Box* b) {
