@@ -418,36 +418,13 @@ public:
 
     // DEFAULT_CLASS_VAR_SIMPLE doesn't work because of the +1 for the null byte
     void* operator new(size_t size, BoxedClass* cls, size_t nitems) __attribute__((visibility("default"))) {
-#if STAT_ALLOCATIONS
-        static StatCounter alloc_str("alloc.str");
-        static StatCounter alloc_str1("alloc.str(1)");
-        static StatCounter allocsize_str("allocsize.str");
-
-        if (ssize == 1)
-            alloc_str1.log();
-        else
-            alloc_str.log();
-
-        allocsize_str.log(str_cls->tp_basicsize + ssize + 1);
-#endif
+        ALLOC_STATS_VAR(str_cls)
 
         assert(cls->tp_itemsize == sizeof(char));
         return BoxVar::operator new(size, cls, nitems);
     }
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {
-#if STAT_ALLOCATIONS
-        static StatCounter alloc_str("alloc.str");
-        static StatCounter alloc_str1("alloc.str(1)");
-
-        static StatCounter allocsize_str("allocsize.str");
-
-        if (ssize == 1)
-            alloc_str1.log();
-        else
-            alloc_str.log();
-
-        allocsize_str.log(cls->tp_basicsize + ssize + 1);
-#endif
+        ALLOC_STATS_VAR(str_cls)
 
         assert(str_cls->tp_alloc == PystonType_GenericAlloc);
         assert(str_cls->tp_itemsize == 1);

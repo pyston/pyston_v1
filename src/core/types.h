@@ -495,8 +495,27 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                    \
     Stats::log(Stats::getStatId(per_name_alloc_name));                                                                 \
     Stats::log(Stats::getStatId(per_name_allocsize_name), size);
+#define ALLOC_STATS_VAR(cls)                                                                                           \
+    if (cls->tp_name) {                                                                                                \
+        std::string per_name_alloc_name = "alloc." + std::string(cls->tp_name);                                        \
+        std::string per_name_alloc_name0 = "alloc." + std::string(cls->tp_name) + "(0)";                               \
+        std::string per_name_allocsize_name = "allocsize." + std::string(cls->tp_name);                                \
+        std::string per_name_allocsize_name0 = "allocsize." + std::string(cls->tp_name) + "(0)";                       \
+        static StatCounter alloc_name(per_name_alloc_name);                                                            \
+        static StatCounter alloc_name0(per_name_alloc_name0);                                                          \
+        static StatCounter allocsize_name(per_name_allocsize_name);                                                    \
+        static StatCounter allocsize_name0(per_name_allocsize_name0);                                                  \
+        if (nitems == 0) {                                                                                             \
+            alloc_name0.log();                                                                                         \
+            allocsize_name0.log(_PyObject_VAR_SIZE(cls, nitems));                                                      \
+        } else {                                                                                                       \
+            alloc_name.log();                                                                                          \
+            allocsize_name.log(_PyObject_VAR_SIZE(cls, nitems));                                                       \
+        }                                                                                                              \
+    }
 #else
 #define ALLOC_STATS(cls)
+#define ALLOC_STATS_VAR(cls)
 #endif
 
 
@@ -555,10 +574,12 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
     }                                                                                                                  \
                                                                                                                        \
     void* operator new(size_t size, BoxedClass * cls, size_t nitems) __attribute__((visibility("default"))) {          \
+        ALLOC_STATS_VAR(default_cls)                                                                                   \
         assert(cls->tp_itemsize == itemsize);                                                                          \
         return BoxVar::operator new(size, cls, nitems);                                                                \
     }                                                                                                                  \
     void* operator new(size_t size, size_t nitems) __attribute__((visibility("default"))) {                            \
+        ALLOC_STATS_VAR(default_cls)                                                                                   \
         assert(default_cls->tp_alloc == PystonType_GenericAlloc);                                                      \
         assert(default_cls->tp_itemsize == itemsize);                                                                  \
         assert(default_cls->tp_basicsize == size);                                                                     \
