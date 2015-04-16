@@ -44,6 +44,11 @@ extern "C" PyObject* string_rindex(PyStringObject* self, PyObject* args) noexcep
 extern "C" PyObject* string_rfind(PyStringObject* self, PyObject* args) noexcept;
 extern "C" PyObject* string_splitlines(PyStringObject* self, PyObject* args) noexcept;
 
+// from cpython's stringobject.c:
+#define LEFTSTRIP 0
+#define RIGHTSTRIP 1
+#define BOTHSTRIP 2
+
 namespace pyston {
 
 BoxedString::BoxedString(const char* s, size_t n) : s(storage(), n) {
@@ -1848,6 +1853,16 @@ Box* strStrip(BoxedString* self, Box* chars) {
         return boxStringRef(str.trim(chars_str));
     } else if (chars->cls == none_cls) {
         return boxStringRef(str.trim(" \t\n\r\f\v"));
+    } else if (isSubclass(chars->cls, unicode_cls)) {
+        PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
+        PyObject* res;
+        if (uniself == NULL)
+            throwCAPIException();
+        res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, BOTHSTRIP, chars);
+        if (!res)
+            throwCAPIException();
+        Py_DECREF(uniself);
+        return res;
     } else {
         raiseExcHelper(TypeError, "strip arg must be None, str or unicode");
     }
@@ -1862,6 +1877,16 @@ Box* strLStrip(BoxedString* self, Box* chars) {
         return boxStringRef(str.ltrim(chars_str));
     } else if (chars->cls == none_cls) {
         return boxStringRef(str.ltrim(" \t\n\r\f\v"));
+    } else if (isSubclass(chars->cls, unicode_cls)) {
+        PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
+        PyObject* res;
+        if (uniself == NULL)
+            throwCAPIException();
+        res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, LEFTSTRIP, chars);
+        if (!res)
+            throwCAPIException();
+        Py_DECREF(uniself);
+        return res;
     } else {
         raiseExcHelper(TypeError, "lstrip arg must be None, str or unicode");
     }
@@ -1876,6 +1901,16 @@ Box* strRStrip(BoxedString* self, Box* chars) {
         return boxStringRef(str.rtrim(chars_str));
     } else if (chars->cls == none_cls) {
         return boxStringRef(str.rtrim(" \t\n\r\f\v"));
+    } else if (isSubclass(chars->cls, unicode_cls)) {
+        PyObject* uniself = PyUnicode_FromObject((PyObject*)self);
+        PyObject* res;
+        if (uniself == NULL)
+            throwCAPIException();
+        res = _PyUnicode_XStrip((PyUnicodeObject*)uniself, RIGHTSTRIP, chars);
+        if (!res)
+            throwCAPIException();
+        Py_DECREF(uniself);
+        return res;
     } else {
         raiseExcHelper(TypeError, "rstrip arg must be None, str or unicode");
     }
@@ -2670,9 +2705,12 @@ void setupStr() {
     str_cls->giveAttr("swapcase", new BoxedFunction(boxRTFunction((void*)strSwapcase, STR, 1)));
     str_cls->giveAttr("upper", new BoxedFunction(boxRTFunction((void*)strUpper, STR, 1)));
 
-    str_cls->giveAttr("strip", new BoxedFunction(boxRTFunction((void*)strStrip, STR, 2, 1, false, false), { None }));
-    str_cls->giveAttr("lstrip", new BoxedFunction(boxRTFunction((void*)strLStrip, STR, 2, 1, false, false), { None }));
-    str_cls->giveAttr("rstrip", new BoxedFunction(boxRTFunction((void*)strRStrip, STR, 2, 1, false, false), { None }));
+    str_cls->giveAttr("strip",
+                      new BoxedFunction(boxRTFunction((void*)strStrip, UNKNOWN, 2, 1, false, false), { None }));
+    str_cls->giveAttr("lstrip",
+                      new BoxedFunction(boxRTFunction((void*)strLStrip, UNKNOWN, 2, 1, false, false), { None }));
+    str_cls->giveAttr("rstrip",
+                      new BoxedFunction(boxRTFunction((void*)strRStrip, UNKNOWN, 2, 1, false, false), { None }));
 
     str_cls->giveAttr("capitalize", new BoxedFunction(boxRTFunction((void*)strCapitalize, STR, 1)));
     str_cls->giveAttr("title", new BoxedFunction(boxRTFunction((void*)strTitle, STR, 1)));

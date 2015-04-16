@@ -1153,6 +1153,8 @@ public:
 
     DEFAULT_CLASS(attrwrapper_cls);
 
+    Box* getUnderlying() { return b; }
+
     static void gcHandler(GCVisitor* v, Box* b) {
         boxGCHandler(v, b);
 
@@ -1213,6 +1215,25 @@ public:
         if (!r)
             raiseExcHelper(KeyError, "'%s'", key->data());
         return r;
+    }
+
+    static Box* pop(Box* _self, Box* _key, Box* default_) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        _key = coerceUnicodeToStr(_key);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        Box* r = self->b->getattr(key->s);
+        if (r) {
+            self->b->delattr(key->s, NULL);
+            return r;
+        } else {
+            if (default_)
+                return default_;
+            raiseExcHelper(KeyError, "'%s'", key->data());
+        }
     }
 
     static Box* delitem(Box* _self, Box* _key) {
@@ -1399,6 +1420,11 @@ Box* makeAttrWrapper(Box* b) {
     }
 
     return new AttrWrapper(b);
+}
+
+Box* unwrapAttrWrapper(Box* b) {
+    assert(b->cls == attrwrapper_cls);
+    return static_cast<AttrWrapper*>(b)->getUnderlying();
 }
 
 Box* attrwrapperKeys(Box* b) {
@@ -2201,6 +2227,8 @@ void setupRuntime() {
     slice_cls->freeze();
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
+    attrwrapper_cls->giveAttr(
+        "pop", new BoxedFunction(boxRTFunction((void*)AttrWrapper::pop, UNKNOWN, 3, 1, false, false), { NULL }));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::delitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("setdefault",

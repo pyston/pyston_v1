@@ -4,3 +4,6 @@
 [submodule "libpypa"]
 	path = libpypa
 	url = git://github.com/vinzenz/libpypa.git
+[submodule "test/integration/django"]
+	path = test/integration/django
+	url = https://github.com/django/django
