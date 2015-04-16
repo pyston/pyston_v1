@@ -2004,10 +2004,10 @@ extern "C" BoxedString* str(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
-extern "C" BoxedString* strOrUnicode(Box* obj) {
+extern "C" Box* strOrUnicode(Box* obj) {
     // Like str, but returns unicode objects unchanged.
     if (obj->cls == unicode_cls) {
-        return static_cast<BoxedString*>(obj);
+	return obj;
     }
     return str(obj);
 }
