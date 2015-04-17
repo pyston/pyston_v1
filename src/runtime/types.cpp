@@ -540,10 +540,9 @@ extern "C" void instancemethodGCHandler(GCVisitor* v, Box* b) {
 
     BoxedInstanceMethod* im = (BoxedInstanceMethod*)b;
 
-    if (im->obj) {
-        v->visit(im->obj);
-    }
+    v->visit(im->obj);
     v->visit(im->func);
+    v->visit(im->im_class);
 }
 
 extern "C" void propertyGCHandler(GCVisitor* v, Box* b) {
