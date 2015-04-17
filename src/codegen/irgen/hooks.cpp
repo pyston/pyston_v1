@@ -38,6 +38,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -371,6 +372,13 @@ Box* eval(Box* boxedCode) {
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
         globals = NULL;
 
+    if (boxedCode->cls == unicode_cls) {
+        boxedCode = PyUnicode_AsUTF8String(boxedCode);
+        if (!boxedCode)
+            throwCAPIException();
+        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
+    }
+
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
@@ -426,6 +434,13 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
         // From CPython (they set it to be f->f_builtins):
         if (PyDict_GetItemString(globals, "__builtins__") == NULL)
             PyDict_SetItemString(globals, "__builtins__", builtins_module);
+    }
+
+    if (boxedCode->cls == unicode_cls) {
+        boxedCode = PyUnicode_AsUTF8String(boxedCode);
+        if (!boxedCode)
+            throwCAPIException();
+        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
     }
 
     // TODO same issues as in `eval`
