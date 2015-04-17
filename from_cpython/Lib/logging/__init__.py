@@ -71,15 +71,9 @@ else:
     _srcfile = __file__
 _srcfile = os.path.normcase(_srcfile)
 
-# next bit filched from 1.5.2's inspect.py
-def currentframe():
-    """Return the frame object for the caller's stack frame."""
-    try:
-        raise Exception
-    except:
-        return sys.exc_info()[2].tb_frame.f_back
-
-if hasattr(sys, '_getframe'): currentframe = lambda: sys._getframe(3)
+# pyston changes: we don't support tb_frame or f_back, so always use sys._getframe
+currentframe = lambda: sys._getframe(4)
+start_getframe = 4
 # done filching
 
 # _srcfile is only used in conjunction with sys._getframe().
@@ -1229,20 +1223,22 @@ class Logger(Filterer):
         file name, line number and function name.
         """
 
-        # Pyston change:
-        return "(unknown file)", 0, "(unknown function)"
-
         f = currentframe()
+        # pyston change: we can't use f_back to walk back up the stack, so increment a counter of
+        # frames to skip and repeatedly call sys._getframe
+        fn = start_getframe
         #On some versions of IronPython, currentframe() returns None if
         #IronPython isn't run with -X:Frames.
-        if f is not None:
-            f = f.f_back
+        #if f is not None:
+        #    f = f.f_back
         rv = "(unknown file)", 0, "(unknown function)"
         while hasattr(f, "f_code"):
             co = f.f_code
             filename = os.path.normcase(co.co_filename)
             if filename == _srcfile:
-                f = f.f_back
+                fn += 1
+                f = sys._getframe(fn);
+                #f = f.f_back
                 continue
             rv = (co.co_filename, f.f_lineno, co.co_name)
             break

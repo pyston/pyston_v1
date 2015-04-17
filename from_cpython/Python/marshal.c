@@ -9,9 +9,9 @@
 
 #include "Python.h"
 
-// Pyston change: not yet ported
-#if 0
-#include "longintrepr.h"
+// Pyston change: not needed
+//#include "longintrepr.h"
+
 #include "code.h"
 #include "marshal.h"
 
@@ -52,7 +52,6 @@
 #define WFERR_UNMARSHALLABLE 1
 #define WFERR_NESTEDTOODEEP 2
 #define WFERR_NOMEMORY 3
-#endif // Pyston change
 
 typedef struct {
     FILE *fp;
@@ -66,8 +65,6 @@ typedef struct {
     int version;
 } WFILE;
 
-// Pyston change: not yet ported
-#if 0
 #define w_byte(c, p) if (((p)->fp)) putc((c), (p)->fp); \
                       else if ((p)->ptr != (p)->end) *(p)->ptr++ = (c); \
                            else w_more(c, p)
@@ -155,6 +152,8 @@ w_pstring(const char *s, Py_ssize_t n, WFILE *p)
         w_string(s, n, p);
 }
 
+// Pyston change: not yet ported
+#if 0
 /* We assume that Python longs are stored internally in base some power of
    2**15; for the sake of portability we'll always read and write them in base
    exactly 2**15. */
@@ -209,6 +208,14 @@ w_PyLong(const PyLongObject *ob, WFILE *p)
         d >>= PyLong_MARSHAL_SHIFT;
     } while (d != 0);
 }
+#else
+static void
+w_PyLong(const PyLongObject *ob, WFILE *p)
+{
+    assert(0 && "not implemented");
+    abort();
+}
+#endif
 
 static void
 w_object(PyObject *v, WFILE *p)
@@ -327,6 +334,8 @@ w_object(PyObject *v, WFILE *p)
     }
 #endif
     else if (PyString_CheckExact(v)) {
+        // Pyston change: I think we don't need this
+        /*
         if (p->strings && PyString_CHECK_INTERNED(v)) {
             PyObject *o = PyDict_GetItem(p->strings, v);
             if (o) {
@@ -352,6 +361,8 @@ w_object(PyObject *v, WFILE *p)
         else {
             w_byte(TYPE_STRING, p);
         }
+        */
+        w_byte(TYPE_STRING, p);
         w_pstring(PyBytes_AS_STRING(v), PyString_GET_SIZE(v), p);
     }
 #ifdef Py_USING_UNICODE
@@ -428,6 +439,10 @@ w_object(PyObject *v, WFILE *p)
         }
     }
     else if (PyCode_Check(v)) {
+        // Pyston change: not implemented
+        assert(0 && "not implemented");
+        abort();
+        /*
         PyCodeObject *co = (PyCodeObject *)v;
         w_byte(TYPE_CODE, p);
         w_long(co->co_argcount, p);
@@ -444,6 +459,7 @@ w_object(PyObject *v, WFILE *p)
         w_object(co->co_name, p);
         w_long(co->co_firstlineno, p);
         w_object(co->co_lnotab, p);
+        */
     }
     else if (PyObject_CheckReadBuffer(v)) {
         /* Write unknown buffer-style objects as a string */
@@ -486,7 +502,6 @@ PyMarshal_WriteObjectToFile(PyObject *x, FILE *fp, int version)
     w_object(x, &wf);
     Py_XDECREF(wf.strings);
 }
-#endif // Pyston change
 
 typedef WFILE RFILE; /* Same struct with different invariants */
 
@@ -633,6 +648,14 @@ r_PyLong(RFILE *p)
                     "bad marshal data (digit out of range in long)");
     return NULL;
 }
+#else
+static PyObject *
+r_PyLong(RFILE *p)
+{
+    assert(0 && "not implemented");
+    abort();
+}
+#endif
 
 static PyObject *
 r_object(RFILE *p)
@@ -1096,7 +1119,6 @@ read_object(RFILE *p)
         PyErr_SetString(PyExc_TypeError, "NULL object in marshal data for object");
     return v;
 }
-#endif // Pyston change
 
 int
 PyMarshal_ReadShortFromFile(FILE *fp)
@@ -1132,8 +1154,6 @@ getfilesize(FILE *fp)
 }
 #endif
 
-// Pyston change: not yet ported
-#if 0
 /* If we can get the size of the file up-front, and it's reasonably small,
  * read it in one gulp and delegate to ...FromString() instead.  Much quicker
  * than reading a byte at a time from file; speeds .pyc imports.
@@ -1421,4 +1441,3 @@ PyMarshal_Init(void)
         return;
     PyModule_AddIntConstant(mod, "version", Py_MARSHAL_VERSION);
 }
-#endif // Pyston change

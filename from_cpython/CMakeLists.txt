@@ -16,85 +16,85 @@ add_custom_target(copy_stdlib ALL DEPENDS ${STDLIB_TARGETS})
 
 # compile specified files in from_cpython/Modules
 file(GLOB_RECURSE STDMODULE_SRCS Modules
-    errnomodule.c
-    shamodule.c
-    sha256module.c
-    sha512module.c
+    _codecsmodule.c
+    _collectionsmodule.c
+    _csv.c
+    _functoolsmodule.c
+    _iomodule.c
     _math.c
+    _randommodule.c
+    _sre.c
+    _ssl.c
+    _struct.c
+    _weakref.c
+    arraymodule.c
+    binascii.c
+    bufferedio.c
+    bytesio.c
+    cache.c
+    connection.c
+    cStringIO.c
+    cursor.c
+    datetimemodule.c
+    errnomodule.c
+    fcntlmodule.c
+    fileio.c
+    getpath.c
+    iobase.c
+    itertoolsmodule.c
     mathmodule.c
     md5.c
     md5module.c
-    _randommodule.c
-    _sre.c
-    operator.c
-    binascii.c
-    pwdmodule.c
-    posixmodule.c
-    _struct.c
-    datetimemodule.c
-    _functoolsmodule.c
-    _collectionsmodule.c
-    itertoolsmodule.c
-    resource.c
-    signalmodule.c
-    selectmodule.c
-    fcntlmodule.c
-    timemodule.c
-    arraymodule.c
-    zlibmodule.c
-    _codecsmodule.c
-    socketmodule.c
-    unicodedata.c
-    _weakref.c
-    cStringIO.c
-    bufferedio.c
-    bytesio.c
-    fileio.c
-    iobase.c
-    _iomodule.c
-    stringio.c
-    textio.c
-    zipimport.c
-    _csv.c
-    _ssl.c
-    getpath.c
-    cache.c
-    connection.c
-    cursor.c
     microprotocols.c
     module.c
+    operator.c
+    posixmodule.c
     prepare_protocol.c
+    pwdmodule.c
+    resource.c
     row.c
+    selectmodule.c
+    sha256module.c
+    sha512module.c
+    shamodule.c
+    signalmodule.c
+    socketmodule.c
     statement.c
+    stringio.c
+    textio.c
+    timemodule.c
+    unicodedata.c
     util.c
+    zipimport.c
+    zlibmodule.c
     )
 
 # compile specified files in from_cpython/Objects
 file(GLOB_RECURSE STDOBJECT_SRCS Objects
-    structseq.c
-    capsule.c
-    stringobject.c
-    exceptions.c
-    unicodeobject.c
-    unicodectype.c
+    bufferobject.c
     bytearrayobject.c
     bytes_methods.c
-    weakrefobject.c
-    memoryobject.c
+    capsule.c
+    exceptions.c
     iterobject.c
-    bufferobject.c
+    memoryobject.c
+    stringobject.c
+    structseq.c
+    unicodectype.c
+    unicodeobject.c
+    weakrefobject.c
     )
 
 # compile specified files in from_cpython/Python
 file(GLOB_RECURSE STDPYTHON_SRCS Python
-    getargs.c
-    pyctype.c
-    formatter_string.c
-    pystrtod.c
     dtoa.c
+    formatter_string.c
     formatter_unicode.c
-    structmember.c
+    getargs.c
     marshal.c
+    pyctype.c
+    pystrtod.c
+    structmember.c
     )
 
 # compile specified files in from_cpython/Python

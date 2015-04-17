@@ -140,6 +140,7 @@ public:
 
     void jmp_cond(JumpDestination dest, ConditionCode condition);
     void jmp(JumpDestination dest);
+    void jmpq(Register dest);
     void je(JumpDestination dest);
     void jne(JumpDestination dest);
 

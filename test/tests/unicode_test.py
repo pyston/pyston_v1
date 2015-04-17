@@ -145,3 +145,8 @@ class C(object):
 print [C()], set([C()]), {1:C()}
 
 print "hello" + u"world"
+
+s = " \thello world\t "
+for m in str.strip, str.lstrip, str.rstrip:
+    for args in [], [" "], [u" "]:
+        print repr(m(s, *args))

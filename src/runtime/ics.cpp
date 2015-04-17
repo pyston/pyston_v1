@@ -158,6 +158,20 @@ static void writeTrivialEhFrame(void* eh_frame_addr, void* func_addr, uint64_t f
     *size_ptr = func_size;
 }
 
+void EHFrameManager::writeAndRegister(void* func_addr, uint64_t func_size) {
+    assert(eh_frame_addr == NULL);
+    eh_frame_addr = malloc(EH_FRAME_SIZE);
+    writeTrivialEhFrame(eh_frame_addr, func_addr, func_size);
+    registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
+}
+
+EHFrameManager::~EHFrameManager() {
+    if (eh_frame_addr) {
+        deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
+        free(eh_frame_addr);
+    }
+}
+
 #if RUNTIMEICS_OMIT_FRAME_PTR
 // If you change this, you *must* update the value in _eh_frame_template
 // (set the -9'th byte to this value plus 8)
@@ -256,10 +270,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
 
         // TODO: ideally would be more intelligent about allocation strategies.
         // The code sections should be together and the eh sections together
-        eh_frame_addr = malloc(EH_FRAME_SIZE);
-        writeTrivialEhFrame(eh_frame_addr, addr, total_size);
-        registerEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
-
+        eh_frame.writeAndRegister(addr, total_size);
     } else {
         addr = func_addr;
     }
@@ -268,9 +279,7 @@ RuntimeIC::RuntimeIC(void* func_addr, int num_slots, int slot_size) {
 RuntimeIC::~RuntimeIC() {
     if (ENABLE_RUNTIME_ICS) {
         deregisterCompiledPatchpoint(icinfo.get());
-        deregisterEHFrames((uint8_t*)eh_frame_addr, (uint64_t)eh_frame_addr, EH_FRAME_SIZE);
         free(addr);
-        free(eh_frame_addr);
     } else {
     }
 }

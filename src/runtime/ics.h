@@ -22,10 +22,20 @@ namespace pyston {
 
 class ICInfo;
 
+class EHFrameManager {
+private:
+    void* eh_frame_addr;
+
+public:
+    EHFrameManager() : eh_frame_addr(NULL) {}
+    ~EHFrameManager();
+    void writeAndRegister(void* func_addr, uint64_t func_size);
+};
+
 class RuntimeIC {
 private:
     void* addr;
-    void* eh_frame_addr;
+    EHFrameManager eh_frame;
 
     std::unique_ptr<ICInfo> icinfo;
 

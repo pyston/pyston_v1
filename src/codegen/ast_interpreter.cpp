@@ -104,6 +104,7 @@ private:
     Value visit_dict(AST_Dict* node);
     Value visit_expr(AST_expr* node);
     Value visit_expr(AST_Expr* node);
+    Value visit_extslice(AST_ExtSlice* node);
     Value visit_index(AST_Index* node);
     Value visit_lambda(AST_Lambda* node);
     Value visit_list(AST_List* node);
@@ -428,6 +429,14 @@ Value ASTInterpreter::visit_slice(AST_Slice* node) {
     Value upper = node->upper ? visit_expr(node->upper) : None;
     Value step = node->step ? visit_expr(node->step) : None;
     return createSlice(lower.o, upper.o, step.o);
+}
+
+Value ASTInterpreter::visit_extslice(AST_ExtSlice* node) {
+    int num_slices = node->dims.size();
+    BoxedTuple* rtn = BoxedTuple::create(num_slices);
+    for (int i = 0; i < num_slices; ++i)
+        rtn->elts[i] = visit_expr(node->dims[i]).o;
+    return rtn;
 }
 
 Value ASTInterpreter::visit_branch(AST_Branch* node) {
@@ -944,6 +953,8 @@ Value ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_compare((AST_Compare*)node);
         case AST_TYPE::Dict:
             return visit_dict((AST_Dict*)node);
+        case AST_TYPE::ExtSlice:
+            return visit_extslice((AST_ExtSlice*)node);
         case AST_TYPE::Index:
             return visit_index((AST_Index*)node);
         case AST_TYPE::Lambda:

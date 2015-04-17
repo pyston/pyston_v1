@@ -453,6 +453,14 @@ private:
 
     void* visit_slice(AST_Slice* node) override { return SLICE; }
 
+    void* visit_extslice(AST_ExtSlice* node) override {
+        std::vector<CompilerType*> elt_types;
+        for (auto* e : node->dims) {
+            elt_types.push_back(getType(e));
+        }
+        return makeTupleType(elt_types);
+    }
+
     void* visit_str(AST_Str* node) override {
         if (node->str_type == AST_Str::STR)
             return STR;

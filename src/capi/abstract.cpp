@@ -469,8 +469,8 @@ extern "C" PyObject* PyObject_CallObject(PyObject* obj, PyObject* args) noexcept
             r = runtimeCall(obj, ArgPassSpec(0, 0, false, false), NULL, NULL, NULL, NULL, NULL);
         return r;
     } catch (ExcInfo e) {
-        fatalOrError(PyExc_NotImplementedError, "unimplemented");
-        return nullptr;
+        setCAPIException(e);
+        return NULL;
     }
 }
 
@@ -498,6 +498,15 @@ extern "C" int PyObject_AsCharBuffer(PyObject* obj, const char** buffer, Py_ssiz
     *buffer = pp;
     *buffer_len = len;
     return 0;
+}
+
+extern "C" int PyObject_CheckReadBuffer(PyObject* obj) noexcept {
+    PyBufferProcs* pb = obj->cls->tp_as_buffer;
+
+    if (pb == NULL || pb->bf_getreadbuffer == NULL || pb->bf_getsegcount == NULL
+        || (*pb->bf_getsegcount)(obj, NULL) != 1)
+        return 0;
+    return 1;
 }
 
 extern "C" int PyObject_AsReadBuffer(PyObject* obj, const void** buffer, Py_ssize_t* buffer_len) noexcept {

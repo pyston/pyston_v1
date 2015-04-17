@@ -109,3 +109,7 @@ print round(0.5), round(-0.5)
 print list(iter(xrange(100).__iter__().next, 20))
 
 print bytearray(xrange(256))
+
+l = [2, 1, 3]
+print apply(sorted, [l])
+print apply(sorted, [l], { "reverse" : True })

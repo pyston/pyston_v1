@@ -448,11 +448,15 @@ def main(orig_dir):
     EXTRA_JIT_ARGS += opts.extra_args
     TIME_LIMIT = opts.time_limit
     TESTS_TO_SKIP = opts.skip_tests.split(',')
+    TESTS_TO_SKIP = filter(bool, TESTS_TO_SKIP) # "".split(',') == ['']
     EXIT_CODE_ONLY = opts.exit_code_only
     SKIP_FAILING_TESTS = opts.skip_failing
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
     patterns = opts.pattern
+
+    if not patterns and not TESTS_TO_SKIP:
+        TESTS_TO_SKIP = ["t", "t2"]
 
     assert os.path.isdir(TEST_DIR), "%s doesn't look like a directory with tests in it" % TEST_DIR
 

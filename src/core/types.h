@@ -561,16 +561,29 @@ struct ExcInfo {
     void printExcAndTraceback() const;
 };
 
+class BoxedFrame;
 struct FrameInfo {
+    // Note(kmod): we have a number of fields here that all have independent
+    // initialization rules.  We could potentially save time on every function-entry
+    // by having an "initialized" variable (or condition) that guards all of them.
+
     // *Not the same semantics as CPython's frame->f_exc*
     // In CPython, f_exc is the saved exc_info from the previous frame.
     // In Pyston, exc is the frame-local value of sys.exc_info.
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
+    //
+    // exc.type is initialized to NULL at function entry, and exc.value and exc.tb are left
+    // uninitialized.  When one wants to access any of the values, you need to check if exc.type
+    // is NULL, and if so crawl up the stack looking for the first frame with a non-null exc.type
+    // and copy that.
     ExcInfo exc;
 
+    // This field is always initialized:
     Box* boxedLocals;
 
-    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL) {}
+    BoxedFrame* frame_obj;
+
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL), frame_obj(0) {}
 };
 
 struct CallattrFlags {

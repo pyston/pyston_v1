@@ -77,6 +77,7 @@ extern "C" void initzipimport();
 extern "C" void init_csv();
 extern "C" void init_ssl();
 extern "C" void init_sqlite3();
+extern "C" void PyMarshal_Init();
 
 namespace pyston {
 
@@ -655,7 +656,7 @@ BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls,
     * str_cls = NULL, *function_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls,
       *file_cls, *member_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *property_cls,
       *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-      *builtin_function_or_method_cls, *attrwrapperiter_cls;
+      *builtin_function_or_method_cls, *attrwrapperiter_cls, *set_cls, *frozenset_cls;
 
 BoxedTuple* EmptyTuple;
 BoxedString* EmptyString;
@@ -1152,6 +1153,8 @@ public:
 
     DEFAULT_CLASS(attrwrapper_cls);
 
+    Box* getUnderlying() { return b; }
+
     static void gcHandler(GCVisitor* v, Box* b) {
         boxGCHandler(v, b);
 
@@ -1212,6 +1215,25 @@ public:
         if (!r)
             raiseExcHelper(KeyError, "'%s'", key->data());
         return r;
+    }
+
+    static Box* pop(Box* _self, Box* _key, Box* default_) {
+        RELEASE_ASSERT(_self->cls == attrwrapper_cls, "");
+        AttrWrapper* self = static_cast<AttrWrapper*>(_self);
+
+        _key = coerceUnicodeToStr(_key);
+
+        RELEASE_ASSERT(_key->cls == str_cls, "");
+        BoxedString* key = static_cast<BoxedString*>(_key);
+        Box* r = self->b->getattr(key->s);
+        if (r) {
+            self->b->delattr(key->s, NULL);
+            return r;
+        } else {
+            if (default_)
+                return default_;
+            raiseExcHelper(KeyError, "'%s'", key->data());
+        }
     }
 
     static Box* delitem(Box* _self, Box* _key) {
@@ -1400,6 +1422,11 @@ Box* makeAttrWrapper(Box* b) {
     return new AttrWrapper(b);
 }
 
+Box* unwrapAttrWrapper(Box* b) {
+    assert(b->cls == attrwrapper_cls);
+    return static_cast<AttrWrapper*>(b)->getUnderlying();
+}
+
 Box* attrwrapperKeys(Box* b) {
     return AttrWrapper::keys(b);
 }
@@ -1466,7 +1493,8 @@ static PyObject* import_copyreg(void) noexcept {
     static PyObject* copyreg_str;
 
     if (!copyreg_str) {
-        copyreg_str = PyGC_AddRoot(PyString_InternFromString("copy_reg"));
+        // this is interned in cpython:
+        copyreg_str = PyGC_AddRoot(PyString_FromString("copy_reg"));
         if (copyreg_str == NULL)
             return NULL;
     }
@@ -1920,8 +1948,8 @@ void setupRuntime() {
     dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
                                   static_cast<BoxedString*>(boxStrConstant("dict")));
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-    file_cls = new BoxedHeapClass(object_cls, NULL, 0, offsetof(BoxedFile, weakreflist), sizeof(BoxedFile), false,
-                                  static_cast<BoxedString*>(boxStrConstant("file")));
+    file_cls = new BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
+                                  sizeof(BoxedFile), false, static_cast<BoxedString*>(boxStrConstant("file")));
     int_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false,
                                  static_cast<BoxedString*>(boxStrConstant("int")));
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
@@ -2146,6 +2174,7 @@ void setupRuntime() {
     setupDescr();
     setupTraceback();
     setupCode();
+    setupFrame();
 
     function_cls->giveAttr("__dict__", dict_descr);
     function_cls->giveAttr("__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(funcName, funcSetName, NULL));
@@ -2198,6 +2227,8 @@ void setupRuntime() {
     slice_cls->freeze();
 
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
+    attrwrapper_cls->giveAttr(
+        "pop", new BoxedFunction(boxRTFunction((void*)AttrWrapper::pop, UNKNOWN, 3, 1, false, false), { NULL }));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__delitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::delitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("setdefault",
@@ -2269,6 +2300,7 @@ void setupRuntime() {
     init_csv();
     init_ssl();
     init_sqlite3();
+    PyMarshal_Init();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;

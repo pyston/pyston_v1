@@ -1997,6 +1997,10 @@ public:
         output->push_back(node);
         return false;
     }
+    virtual bool visit_extslice(AST_ExtSlice* node) {
+        output->push_back(node);
+        return false;
+    }
     virtual bool visit_for(AST_For* node) {
         output->push_back(node);
         return !expand_scopes;

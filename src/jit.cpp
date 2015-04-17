@@ -80,8 +80,9 @@ static int main(int argc, char** argv) {
     int code;
     bool force_repl = false;
     bool stats = false;
+    bool unbuffered = false;
     const char* command = NULL;
-    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:F")) != -1) {
+    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:Fu")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -106,6 +107,8 @@ static int main(int argc, char** argv) {
             stats = true;
         } else if (code == 'S') {
             Py_NoSiteFlag = 1;
+        } else if (code == 'u') {
+            unbuffered = true;
         } else if (code == 'r') {
             USE_STRIPPED_STDLIB = true;
         } else if (code == 'b') {
@@ -128,6 +131,12 @@ static int main(int argc, char** argv) {
     threading::acquireGLRead();
 
     Py_SetProgramName(argv[0]);
+
+    if (unbuffered) {
+        setvbuf(stdin, (char*)NULL, _IONBF, BUFSIZ);
+        setvbuf(stdout, (char*)NULL, _IONBF, BUFSIZ);
+        setvbuf(stderr, (char*)NULL, _IONBF, BUFSIZ);
+    }
 
     {
         Timer _t("for initCodegen");

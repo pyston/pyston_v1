@@ -1,4 +1,5 @@
 import sys
+import tempfile
 
 f = open("/dev/null")
 print repr(f.read())
@@ -58,3 +59,34 @@ print f.write("H")
 print f.tell()
 print f.flush()
 print f.close()
+
+# tests for universal newlines
+fd, fn = tempfile.mkstemp()
+
+with open(fn, "wb") as f:
+    f.write("hello world!\r")
+    f.write("hello world!\r\n")
+    f.write("hello world!\n")
+    f.write("hello world!\r")
+
+with open(fn) as f:
+    print len(f.readlines())
+
+with open(fn, "rU") as f:
+    print len(f.readlines())
+
+with open(fn, "r", 1) as f:
+    print len(f.readlines())
+
+fd, fn = tempfile.mkstemp()
+try:
+    with open(fn, "wU") as f:
+        print "succeeded"
+except Exception as e:
+    print e
+
+try:
+    with open(fn, "aU") as f:
+        print "succeeded"
+except Exception as e:
+    print e

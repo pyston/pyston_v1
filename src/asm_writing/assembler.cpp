@@ -54,6 +54,12 @@ const int dwarf_to_gp[] = {
     // 17-32: xmm0-xmm15
 };
 
+Register Register::fromDwarf(int dwarf_regnum) {
+    assert(dwarf_regnum >= 0 && dwarf_regnum <= 16);
+
+    return Register(dwarf_to_gp[dwarf_regnum]);
+}
+
 GenericRegister GenericRegister::fromDwarf(int dwarf_regnum) {
     assert(dwarf_regnum >= 0);
 
@@ -854,6 +860,20 @@ void Assembler::jne(JumpDestination dest) {
 
 void Assembler::je(JumpDestination dest) {
     jmp_cond(dest, COND_EQUAL);
+}
+
+void Assembler::jmpq(Register dest) {
+    int reg_idx = dest.regnum;
+
+    if (reg_idx >= 8) {
+        emitRex(REX_B);
+        reg_idx -= 8;
+    }
+
+    assert(0 <= reg_idx && reg_idx < 8);
+
+    emitByte(0xff);
+    emitModRM(0b11, 0b100, reg_idx);
 }
 
 

@@ -33,18 +33,46 @@ Box* getGlobalsDict(); // always returns a dict-like object
 
 BoxedTraceback* getTraceback();
 
-// Adds stack locals and closure locals into the locals dict, and returns it.
-Box* fastLocalsToBoxedLocals();
-
-// Fetches a writeable pointer to the frame-local excinfo object,
-// calculating it if necessary (from previous frames).
-ExcInfo* getFrameExcInfo();
-
 struct ExecutionPoint {
     CompiledFunction* cf;
     AST_stmt* current_stmt;
 };
 ExecutionPoint getExecutionPoint();
+
+// Adds stack locals and closure locals into the locals dict, and returns it.
+Box* fastLocalsToBoxedLocals();
+
+class PythonFrameIteratorImpl;
+class PythonFrameIterator {
+private:
+    std::unique_ptr<PythonFrameIteratorImpl> impl;
+
+public:
+    CompiledFunction* getCF();
+    FrameInfo* getFrameInfo();
+    bool exists() { return impl.get() != NULL; }
+    std::unique_ptr<ExecutionPoint> getExecutionPoint();
+    Box* fastLocalsToBoxedLocals();
+
+    // Gets the "current version" of this frame: if the frame has executed since
+    // the iterator was obtained, the methods may return old values. This returns
+    // an updated copy that returns the updated values.
+    // The "current version" will live at the same stack location, but any other
+    // similarities need to be verified by the caller.
+    // This function can only be called from the thread that created this object.
+    PythonFrameIterator getCurrentVersion();
+
+    PythonFrameIterator(PythonFrameIterator&& rhs);
+    void operator=(PythonFrameIterator&& rhs);
+    PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl>&& impl);
+    ~PythonFrameIterator();
+};
+
+PythonFrameIterator getPythonFrame(int depth);
+
+// Fetches a writeable pointer to the frame-local excinfo object,
+// calculating it if necessary (from previous frames).
+ExcInfo* getFrameExcInfo();
 
 struct FrameStackState {
     // This includes all # variables (but not the ! ones).

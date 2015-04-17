@@ -94,6 +94,7 @@
 #define HAVE_POLL_H 1
 #define HAVE_PTHREAD_H 1
 #define HAVE_PTY_H 1
+#define HAVE_SETVBUF 1
 #define HAVE_SHADOW_H 1
 #define HAVE_SIGNAL_H 1
 #define HAVE_SPAWN_H 1

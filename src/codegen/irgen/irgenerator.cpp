@@ -100,6 +100,16 @@ static llvm::Value* getExcinfoGep(llvm::IRBuilder<true>& builder, llvm::Value* v
     return builder.CreateConstInBoundsGEP2_32(builder.CreateConstInBoundsGEP2_32(v, 0, 0), 0, 0);
 }
 
+static llvm::Value* getFrameObjGep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, exc) == 0, "");
+    static_assert(sizeof(ExcInfo) == 24, "");
+    static_assert(sizeof(Box*) == 8, "");
+    static_assert(offsetof(FrameInfo, frame_obj) == 32, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 2);
+    // TODO: this could be made more resilient by doing something like
+    // gep->accumulateConstantOffset(g.tm->getDataLayout(), ap_offset)
+}
+
 llvm::Value* IRGenState::getFrameInfoVar() {
     /*
         There is a matrix of possibilities here.
@@ -161,6 +171,11 @@ llvm::Value* IRGenState::getFrameInfoVar() {
                 this->boxed_locals = builder.CreateCall(g.funcs.createDict);
                 builder.CreateStore(this->boxed_locals, boxed_locals_gep);
             }
+
+            // frame_info.frame_obj = NULL
+            static llvm::Type* llvm_frame_obj_type_ptr
+                = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
+            builder.CreateStore(embedConstantPtr(NULL, llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
 
             this->frame_info = al;
         }
@@ -1077,6 +1092,20 @@ private:
         return new ConcreteCompilerVariable(SLICE, rtn, true);
     }
 
+    CompilerVariable* evalExtSlice(AST_ExtSlice* node, UnwindInfo unw_info) {
+        std::vector<CompilerVariable*> elts;
+        for (auto* e : node->dims) {
+            elts.push_back(evalExpr(e, unw_info));
+        }
+
+        // TODO makeTuple should probably just transfer the vref, but I want to keep things consistent
+        CompilerVariable* rtn = makeTuple(elts);
+        for (auto* e : elts) {
+            e->decvref(emitter);
+        }
+        return rtn;
+    }
+
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
             llvm::Value* rtn = embedConstantPtr(
@@ -1334,6 +1363,9 @@ private:
                 break;
             case AST_TYPE::Dict:
                 rtn = evalDict(ast_cast<AST_Dict>(node), unw_info);
+                break;
+            case AST_TYPE::ExtSlice:
+                rtn = evalExtSlice(ast_cast<AST_ExtSlice>(node), unw_info);
                 break;
             case AST_TYPE::Index:
                 rtn = evalIndex(ast_cast<AST_Index>(node), unw_info);
