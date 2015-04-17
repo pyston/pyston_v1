@@ -318,8 +318,13 @@ void BoxedClass::freeze() {
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                        int instance_size, bool is_user_defined)
-    : attrs(HiddenClass::makeSingleton()), gc_visit(gc_visit), simple_destructor(NULL), attrs_offset(attrs_offset),
-      is_constant(false), is_user_defined(is_user_defined), is_pyston_class(true) {
+    : attrs(HiddenClass::makeSingleton()),
+      gc_visit(gc_visit),
+      simple_destructor(NULL),
+      attrs_offset(attrs_offset),
+      is_constant(false),
+      is_user_defined(is_user_defined),
+      is_pyston_class(true) {
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -400,7 +405,8 @@ void BoxedClass::finishInitialization() {
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
                                int instance_size, bool is_user_defined, BoxedString* name)
-    : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined), ht_name(name),
+    : BoxedClass(base, gc_visit, attrs_offset, weaklist_offset, instance_size, is_user_defined),
+      ht_name(name),
       ht_slots(NULL) {
 
     tp_as_number = &as_number;

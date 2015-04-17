@@ -45,8 +45,16 @@ extern "C" void dumpLLVM(llvm::Value* v) {
 IRGenState::IRGenState(CompiledFunction* cf, SourceInfo* source_info, std::unique_ptr<LivenessAnalysis> liveness,
                        std::unique_ptr<PhiAnalysis> phis, ParamNames* param_names, GCBuilder* gc,
                        llvm::MDNode* func_dbg_info)
-    : cf(cf), source_info(source_info), liveness(std::move(liveness)), phis(std::move(phis)), param_names(param_names),
-      gc(gc), func_dbg_info(func_dbg_info), scratch_space(NULL), frame_info(NULL), frame_info_arg(NULL),
+    : cf(cf),
+      source_info(source_info),
+      liveness(std::move(liveness)),
+      phis(std::move(phis)),
+      param_names(param_names),
+      gc(gc),
+      func_dbg_info(func_dbg_info),
+      scratch_space(NULL),
+      frame_info(NULL),
+      frame_info_arg(NULL),
       scratch_size(0) {
     assert(cf->func);
     assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
@@ -437,8 +445,13 @@ private:
 public:
     IRGeneratorImpl(IRGenState* irstate, std::unordered_map<CFGBlock*, llvm::BasicBlock*>& entry_blocks,
                     CFGBlock* myblock, TypeAnalysis* types)
-        : irstate(irstate), curblock(entry_blocks[myblock]), emitter(irstate, curblock, this),
-          entry_blocks(entry_blocks), myblock(myblock), types(types), state(RUNNING) {}
+        : irstate(irstate),
+          curblock(entry_blocks[myblock]),
+          emitter(irstate, curblock, this),
+          entry_blocks(entry_blocks),
+          myblock(myblock),
+          types(types),
+          state(RUNNING) {}
 
     ~IRGeneratorImpl() { delete emitter.getBuilder(); }
 

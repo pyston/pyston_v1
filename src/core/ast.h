@@ -707,7 +707,9 @@ public:
     virtual void* accept_expr(ExprVisitor* v);
 
     AST_Name(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0)
-        : AST_expr(AST_TYPE::Name, lineno, col_offset), ctx_type(ctx_type), id(id),
+        : AST_expr(AST_TYPE::Name, lineno, col_offset),
+          ctx_type(ctx_type),
+          id(id),
           lookup_type(ScopeInfo::VarScopeType::UNKNOWN) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;

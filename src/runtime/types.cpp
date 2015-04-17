@@ -287,8 +287,15 @@ Box* Box::nextIC() {
 std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
-    : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
-      name(NULL), doc(NULL) {
+    : in_weakreflist(NULL),
+      f(f),
+      closure(NULL),
+      isGenerator(false),
+      ndefaults(0),
+      defaults(NULL),
+      modname(NULL),
+      name(NULL),
+      doc(NULL) {
     if (f->source) {
         this->modname = PyDict_GetItemString(getGlobalsDict(), "__name__");
         this->doc = f->source->getDocString();
@@ -302,8 +309,15 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, bool isGenerator)
-    : in_weakreflist(NULL), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL),
-      modname(NULL), name(NULL), doc(NULL) {
+    : in_weakreflist(NULL),
+      f(f),
+      closure(closure),
+      isGenerator(isGenerator),
+      ndefaults(0),
+      defaults(NULL),
+      modname(NULL),
+      name(NULL),
+      doc(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:

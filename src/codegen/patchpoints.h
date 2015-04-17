@@ -56,7 +56,10 @@ private:
     unsigned int id;
 
     PatchpointInfo(CompiledFunction* parent_cf, const ICSetupInfo* icinfo, int num_ic_stackmap_args)
-        : parent_cf(parent_cf), icinfo(icinfo), num_ic_stackmap_args(num_ic_stackmap_args), num_frame_stackmap_args(-1),
+        : parent_cf(parent_cf),
+          icinfo(icinfo),
+          num_ic_stackmap_args(num_ic_stackmap_args),
+          num_frame_stackmap_args(-1),
           id(0) {}
 
 
@@ -115,7 +118,10 @@ public:
 
 private:
     ICSetupInfo(ICType type, int num_slots, int slot_size, bool has_return_value, TypeRecorder* type_recorder)
-        : type(type), num_slots(num_slots), slot_size(slot_size), has_return_value(has_return_value),
+        : type(type),
+          num_slots(num_slots),
+          slot_size(slot_size),
+          has_return_value(has_return_value),
           type_recorder(type_recorder) {}
 
 public:
