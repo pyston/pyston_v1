@@ -2007,7 +2007,7 @@ extern "C" BoxedString* str(Box* obj) {
 extern "C" Box* strOrUnicode(Box* obj) {
     // Like str, but returns unicode objects unchanged.
     if (obj->cls == unicode_cls) {
-	return obj;
+        return obj;
     }
     return str(obj);
 }
