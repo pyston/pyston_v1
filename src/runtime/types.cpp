@@ -1948,8 +1948,8 @@ void setupRuntime() {
     dict_cls = new BoxedHeapClass(object_cls, &dictGCHandler, 0, 0, sizeof(BoxedDict), false,
                                   static_cast<BoxedString*>(boxStrConstant("dict")));
     dict_cls->tp_flags |= Py_TPFLAGS_DICT_SUBCLASS;
-    file_cls = new BoxedHeapClass(object_cls, NULL, 0, offsetof(BoxedFile, weakreflist), sizeof(BoxedFile), false,
-                                  static_cast<BoxedString*>(boxStrConstant("file")));
+    file_cls = new BoxedHeapClass(object_cls, &BoxedFile::gcHandler, 0, offsetof(BoxedFile, weakreflist),
+                                  sizeof(BoxedFile), false, static_cast<BoxedString*>(boxStrConstant("file")));
     int_cls = new BoxedHeapClass(object_cls, NULL, 0, 0, sizeof(BoxedInt), false,
                                  static_cast<BoxedString*>(boxStrConstant("int")));
     int_cls->tp_flags |= Py_TPFLAGS_INT_SUBCLASS;
