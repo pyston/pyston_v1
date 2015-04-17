@@ -44,6 +44,33 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     self->prop_set = fset;
     self->prop_del = fdel;
     self->prop_doc = doc;
+    self->getter_doc = false;
+
+    /* if no docstring given and the getter has one, use that one */
+    if ((doc == NULL || doc == None) && fget != NULL) {
+        Box* get_doc;
+        try {
+            get_doc = getattrInternal(fget, "__doc__", NULL);
+        } catch (ExcInfo e) {
+            if (!e.matches(Exception)) {
+                throw;
+            }
+            get_doc = NULL;
+        }
+
+        if (get_doc) {
+            if (self->cls == property_cls) {
+                self->prop_doc = get_doc;
+            } else {
+                /* If this is a property subclass, put __doc__
+                in dict of the subclass instance instead,
+                otherwise it gets shadowed by __doc__ in the
+                class's dict. */
+                setattr(self, "__doc__", get_doc);
+            }
+            self->getter_doc = true;
+        }
+    }
 
     return None;
 }
@@ -188,7 +215,7 @@ void setupDescr() {
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_set)));
     property_cls->giveAttr("fdel",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_del)));
-    property_cls->giveAttr("fdoc",
+    property_cls->giveAttr("__doc__",
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedProperty, prop_doc)));
     property_cls->freeze();
 
