@@ -7,3 +7,6 @@
 [submodule "test/integration/django"]
 	path = test/integration/django
 	url = https://github.com/django/django
+[submodule "test/integration/virtualenv"]
+	path = test/integration/virtualenv
+	url = https://github.com/dropbox/virtualenv
