@@ -86,6 +86,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 		runtime/dict.cpp
 		runtime/file.cpp
 		runtime/float.cpp
+		runtime/frame.cpp
 		runtime/generator.cpp
 		runtime/ics.cpp
 		runtime/import.cpp
