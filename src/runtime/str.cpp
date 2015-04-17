@@ -1106,6 +1106,8 @@ extern "C" Box* strMul(BoxedString* lhs, Box* rhs) {
         n = static_cast<BoxedInt*>(rhs)->n;
     else
         return NotImplemented;
+    if (n <= 0)
+        return boxString("");
 
     // TODO: use createUninitializedString and getWriteableStringContents
     int sz = lhs->size();
