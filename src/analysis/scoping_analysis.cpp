@@ -577,8 +577,15 @@ public:
 
     bool visit_functiondef(AST_FunctionDef* node) override {
         if (node == orig_node) {
-            for (AST_expr* e : node->args->args)
+            int counter = 0;
+            for (AST_expr* e : node->args->args) {
+                if (e->type == AST_TYPE::Tuple) {
+                    doWrite(scoping->getInternedStrings().get("." + std::to_string(counter)));
+                }
+                counter++;
                 e->accept(this);
+            }
+
             if (node->args->vararg.str().size()) {
                 mangleNameInPlace(node->args->vararg, cur->private_name, scoping->getInternedStrings());
                 doWrite(node->args->vararg);

@@ -230,7 +230,7 @@ struct ParamNames {
     std::vector<llvm::StringRef> args;
     llvm::StringRef vararg, kwarg;
 
-    explicit ParamNames(AST* ast);
+    explicit ParamNames(AST* ast, InternedStringPool& pool);
     ParamNames(const std::vector<llvm::StringRef>& args, llvm::StringRef vararg, llvm::StringRef kwarg);
     static ParamNames empty() { return ParamNames(); }
 
@@ -305,7 +305,7 @@ public:
           takes_varargs(takes_varargs),
           takes_kwargs(takes_kwargs),
           source(std::move(source)),
-          param_names(this->source->ast),
+          param_names(this->source->ast, this->source->getInternedStrings()),
           always_use_version(NULL),
           code_obj(NULL) {
         assert(num_args >= num_defaults);

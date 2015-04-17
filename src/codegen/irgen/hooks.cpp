@@ -45,7 +45,7 @@
 namespace pyston {
 
 // TODO terrible place for these!
-ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
+ParamNames::ParamNames(AST* ast, InternedStringPool& pool) : takes_param_names(true) {
     if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
         || ast->type == AST_TYPE::Suite) {
         kwarg = "";
@@ -58,7 +58,8 @@ ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
             if (arg->type == AST_TYPE::Name) {
                 args.push_back(ast_cast<AST_Name>(arg)->id.str());
             } else {
-                args.push_back("." + std::to_string(i + 1));
+                InternedString dot_arg_name = pool.get("." + std::to_string(i));
+                args.push_back(dot_arg_name.str());
             }
         }
 
