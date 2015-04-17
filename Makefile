@@ -496,7 +496,7 @@ check:
 	$(PYTHON) $(TOOLS_DIR)/tester.py -R pyston_dbg -j$(TEST_THREADS) -k -a=-n -a=-x -a=-S $(TESTS_DIR) $(ARGS)
 	@# skip -O for dbg
 
-	$(MAKE) run_unittests
+	$(MAKE) run_unittests ARGS=
 
 	@# Building in gcc mode is helpful to find various compiler-specific warnings.
 	@# We've also discovered UB in our code from running in gcc mode, so try running it as well.
@@ -936,6 +936,7 @@ $(eval \
 $1: nosearch_$1
 $1: $(TESTS_DIR)/nosearch_$1 ;
 $1: $(TEST_DIR)/cpython/nosearch_$1 ;
+$1: $(TEST_DIR)/integration/nosearch_$1 ;
 $1: ./microbenchmarks/nosearch_$1 ;
 $1: ./minibenchmarks/nosearch_$1 ;
 $1: ./benchmarks/nosearch_$1 ;
