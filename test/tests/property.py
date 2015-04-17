@@ -122,3 +122,47 @@ try:
         f = property(ObjWithDocDesc)
 except BaseException as e:
     print e.message
+
+print 'test the setting of a __doc__ when you copy it'
+class Desc(object):
+    def __get__(self, obj, typ):
+        print 'desc called'
+        return "blah"
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+prop = property(ObjWithDocDesc)
+print 'made prop'
+print prop.__doc__
+def g():
+    """doc of g"""
+    return 5
+prop2 = prop.getter(g)
+print 'made prop2'
+print prop2.__doc__
+prop3 = prop.setter(lambda self, val : None)
+print prop3.__doc__
+prop4 = prop.deleter(lambda self, val : None)
+print prop4.__doc__
+
+print 'test the setting of a __doc__ when you copy it when using a subclass of property'
+class PropertySubclass(property):
+    pass
+class Desc(object):
+    def __get__(self, obj, typ):
+        print 'desc called'
+        return "blah"
+class ObjWithDocDesc(object):
+    __doc__ = Desc()
+prop = PropertySubclass(ObjWithDocDesc)
+print 'made prop'
+print prop.__doc__
+def g():
+    """doc of g"""
+    return 5
+prop2 = prop.getter(g)
+print 'made prop2'
+print prop2.__doc__
+prop3 = prop.setter(lambda self, val : None)
+print prop3.__doc__
+prop4 = prop.deleter(lambda self, val : None)
+print prop4.__doc__

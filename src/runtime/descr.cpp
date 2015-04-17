@@ -34,6 +34,33 @@ static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
     Py_FatalError("unimplemented");
 }
 
+static void propertyDocCopy(BoxedProperty* prop, Box* fget) {
+    assert(prop);
+    assert(fget);
+    Box* get_doc;
+    try {
+        get_doc = getattrInternal(fget, "__doc__", NULL);
+    } catch (ExcInfo e) {
+        if (!e.matches(Exception)) {
+            throw;
+        }
+        get_doc = NULL;
+    }
+
+    if (get_doc) {
+        if (prop->cls == property_cls) {
+            prop->prop_doc = get_doc;
+        } else {
+            /* If this is a property subclass, put __doc__
+            in dict of the subclass instance instead,
+            otherwise it gets shadowed by __doc__ in the
+            class's dict. */
+            setattr(prop, "__doc__", get_doc);
+        }
+        prop->getter_doc = true;
+    }
+}
+
 static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
     RELEASE_ASSERT(isSubclass(_self->cls, property_cls), "");
     Box* fdel = args[0];
@@ -48,28 +75,7 @@ static Box* propertyInit(Box* _self, Box* fget, Box* fset, Box** args) {
 
     /* if no docstring given and the getter has one, use that one */
     if ((doc == NULL || doc == None) && fget != NULL) {
-        Box* get_doc;
-        try {
-            get_doc = getattrInternal(fget, "__doc__", NULL);
-        } catch (ExcInfo e) {
-            if (!e.matches(Exception)) {
-                throw;
-            }
-            get_doc = NULL;
-        }
-
-        if (get_doc) {
-            if (self->cls == property_cls) {
-                self->prop_doc = get_doc;
-            } else {
-                /* If this is a property subclass, put __doc__
-                in dict of the subclass instance instead,
-                otherwise it gets shadowed by __doc__ in the
-                class's dict. */
-                setattr(self, "__doc__", get_doc);
-            }
-            self->getter_doc = true;
-        }
+        propertyDocCopy(self, fget);
     }
 
     return None;
@@ -120,17 +126,31 @@ static Box* propertyDel(Box* self, Box* obj) {
 static Box* property_copy(BoxedProperty* old, Box* get, Box* set, Box* del) {
     RELEASE_ASSERT(isSubclass(old->cls, property_cls), "");
 
-    if (!get)
+    if (!get || get == None)
         get = old->prop_get;
-    if (!set)
+    if (!set || set == None)
         set = old->prop_set;
-    if (!del)
+    if (!del || del == None)
         del = old->prop_del;
 
     // Optimization for the case when the old propery is not subclassed
-    if (old->cls == property_cls)
-        return new BoxedProperty(get, set, del, old->prop_doc);
-    return runtimeCall(old->cls, ArgPassSpec(4), get, set, del, &old->prop_doc, NULL);
+    if (old->cls == property_cls) {
+        BoxedProperty* prop = new BoxedProperty(get, set, del, old->prop_doc);
+
+        prop->getter_doc = false;
+        if ((old->getter_doc && get != None) || !old->prop_doc)
+            propertyDocCopy(prop, get);
+
+        return prop;
+    } else {
+        Box* doc;
+        if ((old->getter_doc && get != None) || !old->prop_doc)
+            doc = None;
+        else
+            doc = old->prop_doc;
+
+        return runtimeCall(old->cls, ArgPassSpec(4), get, set, del, &doc, NULL);
+    }
 }
 
 static Box* propertyGetter(Box* self, Box* obj) {
