@@ -401,6 +401,18 @@ Box* eval(Box* boxedCode) {
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
+    if (isSubclass(boxedCode->cls, tuple_cls)) {
+        RELEASE_ASSERT(!globals, "");
+        RELEASE_ASSERT(!locals, "");
+
+        BoxedTuple* t = static_cast<BoxedTuple*>(boxedCode);
+        RELEASE_ASSERT(t->size() >= 2 && t->size() <= 3, "%ld", t->size());
+        boxedCode = t->elts[0];
+        globals = t->elts[1];
+        if (t->size() >= 3)
+            locals = t->elts[2];
+    }
+
     if (globals == None)
         globals = NULL;
 
@@ -444,7 +456,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     }
 
     // TODO same issues as in `eval`
-    RELEASE_ASSERT(boxedCode->cls == str_cls, "");
+    RELEASE_ASSERT(boxedCode->cls == str_cls, "%s", boxedCode->cls->tp_name);
     const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));

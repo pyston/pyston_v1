@@ -16,10 +16,11 @@ print "Running", args
 subprocess.check_call(args)
 
 sh_script = """
-set -ex
+set -e
+. test_env/bin/activate
+set -ux
 python -c 'import __future__'
 python -c 'import sys; print sys.executable'
-. test_env/bin/activate
 pip install bcrypt==1.1.0
 python -c 'import bcrypt; assert bcrypt.__version__ == "1.1.0"; assert bcrypt.hashpw("password1", "$2a$12$0123456789012345678901").endswith("I1hdtg4K"); print "bcrypt seems to work"'
 """.strip()

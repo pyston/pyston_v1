@@ -125,3 +125,9 @@ def show(obj, msg):
     print msg
     return obj
 exec show("print 'in exec'", "body") in show(None, "globals"), show(None, "locals")
+
+
+g = {}
+l = {}
+exec ("a=1; print a", g, l)
+print g.keys(), l.keys()
