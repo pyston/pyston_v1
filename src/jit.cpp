@@ -80,7 +80,7 @@ static int main(int argc, char** argv) {
     bool stats = false;
     bool unbuffered = false;
     const char* command = NULL;
-    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:Fu")) != -1) {
+    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:FuP")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -113,6 +113,8 @@ static int main(int argc, char** argv) {
             USE_REGALLOC_BASIC = false;
         } else if (code == 'x') {
             ENABLE_PYPA_PARSER = false;
+        } else if (code == 'P') {
+            PAUSE_AT_ABORT = true;
         } else if (code == 'F') {
             CONTINUE_AFTER_FATAL = true;
         } else if (code == 'c') {

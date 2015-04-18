@@ -210,8 +210,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->parent_module->fn << ":" << name << ", starting with backedge to block "
-               << entry_descriptor->backedge->target->idx;
+            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->parent_module->fn << ":" << name
+               << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort;
         ss << "\033[0m";

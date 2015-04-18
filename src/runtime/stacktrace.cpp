@@ -182,6 +182,12 @@ extern "C" void abort() {
         alarm(0);
     }
 
+    if (PAUSE_AT_ABORT) {
+        printf("PID %d about to call libc abort; pausing for a debugger...\n", getpid());
+        while (true) {
+            sleep(1);
+        }
+    }
     libc_abort();
     __builtin_unreachable();
 }
