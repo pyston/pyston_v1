@@ -126,12 +126,17 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
         prefix = plat_specific and EXEC_PREFIX or PREFIX
 
     if os.name == "posix":
+        # Pyston change
+        # libpython = os.path.join(prefix,
+        #                         "lib", "python" + get_python_version())
         libpython = os.path.join(prefix,
-                                 "lib", "python" + get_python_version())
+                                 "from_cpython", "Lib")
         if standard_lib:
             return libpython
         else:
-            return os.path.join(libpython, "site-packages")
+            # Pyston change
+            # return os.path.join(libpython, "site-packages")
+            return os.path.join(prefix, "site-packages")
 
     elif os.name == "nt":
         if standard_lib:

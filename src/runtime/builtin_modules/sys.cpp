@@ -311,6 +311,9 @@ void setupSys() {
     sys_module->giveAttr("path_hooks", new BoxedList());
     sys_module->giveAttr("path_importer_cache", new BoxedDict());
 
+    // As we don't support compile() etc yet force 'dont_write_bytecode' to true.
+    sys_module->giveAttr("dont_write_bytecode", True);
+
     sys_module->giveAttr("prefix", boxStrConstant(Py_GetPrefix()));
     sys_module->giveAttr("exec_prefix", boxStrConstant(Py_GetExecPrefix()));
 

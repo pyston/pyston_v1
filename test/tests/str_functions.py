@@ -166,3 +166,5 @@ print "1".zfill(3), "+1".zfill(3), "-1".zfill(3), "0".zfill(3)
 
 it = iter("hello world")
 print list(it)
+
+print "'{0}' '{1}'".format("Hello " * 3, "Hello " * -3)
