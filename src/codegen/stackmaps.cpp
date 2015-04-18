@@ -71,7 +71,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
             uint64_t stackmap_address = L.getSectionLoadAddress(name);
             assert(stackmap_address > 0);
 
-            if (VERBOSITY() >= 2)
+            if (VERBOSITY() >= 3)
                 printf("Found the stackmaps at stackmap_address 0x%lx\n", stackmap_address);
 
             assert(cur_map == NULL);
@@ -102,27 +102,27 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
             int nconstants = *ptr.u32++;
             int nrecords = *ptr.u32++;
 
-            if (VERBOSITY() >= 2)
+            if (VERBOSITY() >= 3)
                 printf("%d functions\n", nfunctions);
             for (int i = 0; i < nfunctions; i++) {
                 const StackMap::StackSizeRecord& size_record = *ptr.size_record++;
                 cur_map->stack_size_records.push_back(size_record);
-                if (VERBOSITY() >= 2)
+                if (VERBOSITY() >= 3)
                     printf("function %d: offset 0x%lx, stack size 0x%lx\n", i, size_record.offset,
                            size_record.stack_size);
             }
 
-            if (VERBOSITY() >= 2)
+            if (VERBOSITY() >= 3)
                 printf("%d constants\n", nconstants);
 
             for (int i = 0; i < nconstants; i++) {
                 uint64_t constant = *ptr.u64++;
-                if (VERBOSITY() >= 2)
+                if (VERBOSITY() >= 3)
                     printf("Constant %d: %ld\n", i, constant);
                 cur_map->constants.push_back(constant);
             }
 
-            if (VERBOSITY() >= 2)
+            if (VERBOSITY() >= 3)
                 printf("%d records\n", nrecords);
 
             for (int i = 0; i < nrecords; i++) {
@@ -135,7 +135,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
 
                 int numlocations = *ptr.u16++;
 
-                if (VERBOSITY() >= 2)
+                if (VERBOSITY() >= 3)
                     printf("Stackmap record %ld at 0x%x has %d locations:\n", record->id, record->offset, numlocations);
                 for (int j = 0; j < numlocations; j++) {
                     assert(sizeof(StackMap::Record::Location) == sizeof(*ptr.u64));
@@ -148,7 +148,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
                         "%rax", "%rdx", "%rcx", "%rbx", "%rsi", "%rdi", "%rbp", "%rsp",
                         "%r8",  "%r9",  "%r10", "%r11", "%r12", "%r13", "%r14", "%r15",
                     };
-                    if (VERBOSITY() >= 2) {
+                    if (VERBOSITY() >= 3) {
                         if (r.type == 1) {
                             printf("Location %d: type %d (reg), reg %d (%s), offset %d\n", j, r.type, r.regnum,
                                    dwarf_reg_names[r.regnum], r.offset);
@@ -164,7 +164,7 @@ void StackmapJITEventListener::NotifyObjectEmitted(const llvm::object::ObjectFil
                     const StackMap::Record::LiveOut& r = *ptr.record_liveout++;
                     record->live_outs.push_back(r);
 
-                    if (VERBOSITY() >= 2) {
+                    if (VERBOSITY() >= 3) {
                         printf("Live out %d: reg #%d (?), size %d\n", i, r.regnum, r.size);
                     }
                 }

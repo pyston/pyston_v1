@@ -170,7 +170,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
         }
     }
 
-    if (VERBOSITY("irgen") >= 1) {
+    if (VERBOSITY("irgen") >= 2) {
         printf("Compiled function to %p\n", cf->code);
     }
 
@@ -200,7 +200,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         llvm::raw_string_ostream ss(s);
 
         if (spec) {
-            ss << "\033[34;1mJIT'ing " << name << " with signature (";
+            ss << "\033[34;1mJIT'ing " << source->parent_module->fn << ":" << name << " with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
                     ss << ", ";
@@ -210,7 +210,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[34;1mDoing OSR-entry partial compile of " << name << ", starting with backedge to block "
+            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->parent_module->fn << ":" << name << ", starting with backedge to block "
                << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort;
@@ -580,7 +580,7 @@ void* compilePartialFunc(OSRExit* exit) {
 
 static StatCounter stat_reopt("reopts");
 extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
-    if (VERBOSITY("irgen") >= 1)
+    if (VERBOSITY("irgen") >= 2)
         printf("In reoptCompiledFunc, %p, %ld\n", cf, cf->times_called);
     stat_reopt.log();
 

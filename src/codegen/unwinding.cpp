@@ -182,7 +182,7 @@ public:
                     Addr, Size, llvm::DILineInfoSpecifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
                                                           llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName));
 #endif
-                if (VERBOSITY() >= 2) {
+                if (VERBOSITY() >= 3) {
                     for (int i = 0; i < lines.size(); i++) {
                         printf("%s:%d, %s: %lx\n", lines[i].second.FileName.c_str(), lines[i].second.Line,
                                lines[i].second.FunctionName.c_str(), lines[i].first);
@@ -213,7 +213,7 @@ public:
                 eh_frame_addr = L.getSectionLoadAddress(name);
                 eh_frame_size = sec.getSize();
 
-                if (VERBOSITY())
+                if (VERBOSITY() >= 2)
                     printf("eh_frame: %lx %lx\n", eh_frame_addr, eh_frame_size);
                 found_eh_frame = true;
             } else if (name == ".text") {
@@ -221,7 +221,7 @@ public:
                 text_addr = L.getSectionLoadAddress(name);
                 text_size = sec.getSize();
 
-                if (VERBOSITY())
+                if (VERBOSITY() >= 2)
                     printf("text: %lx %lx\n", text_addr, text_size);
                 found_text = true;
             }
@@ -239,7 +239,7 @@ public:
         dyn_info->u.rti.segbase = eh_frame_addr;
         parseEhFrame(eh_frame_addr, eh_frame_size, &dyn_info->u.rti.table_data, &dyn_info->u.rti.table_len);
 
-        if (VERBOSITY())
+        if (VERBOSITY() >= 2)
             printf("dyn_info = %p, table_data = %p\n", dyn_info, (void*)dyn_info->u.rti.table_data);
         _U_dyn_register(dyn_info);
 

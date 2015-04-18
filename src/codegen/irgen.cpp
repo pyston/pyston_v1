@@ -185,12 +185,12 @@ static void optimizeIR(llvm::Function* f, EffortLevel effort) {
         bool changed = fpm.run(*f);
 
         if (!changed) {
-            if (VERBOSITY("irgen"))
+            if (VERBOSITY("irgen") >= 2)
                 printf("done after %d optimization iterations\n", i - 1);
             break;
         }
 
-        if (VERBOSITY("irgen") >= 1) {
+        if (VERBOSITY("irgen") >= 2) {
             fprintf(stderr, "after optimization %d:\n", i);
             printf("\033[36m");
             fflush(stdout);
@@ -266,7 +266,7 @@ static std::vector<std::pair<CFGBlock*, CFGBlock*>> computeBlockTraversalOrder(c
         }
         assert(best != NULL);
 
-        if (VERBOSITY("irgen") >= 1)
+        if (VERBOSITY("irgen") >= 2)
             printf("Giving up and adding block %d to the order\n", best->idx);
         in_queue.insert(best);
         rtn.push_back(std::make_pair(best, (CFGBlock*)NULL));
@@ -457,7 +457,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                                phi_type->debugName().c_str());
             }
 
-            if (VERBOSITY("irgen"))
+            if (VERBOSITY("irgen") >= 2)
                 v->setName("prev_" + p.first.str());
 
             (*osr_syms)[p.first] = new ConcreteCompilerVariable(phi_type, v, true);
@@ -507,11 +507,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         CFGBlock* block = traversal_order[_i].first;
         CFGBlock* pred = traversal_order[_i].second;
 
-        if (VERBOSITY("irgen") >= 2)
+        if (VERBOSITY("irgen") >= 3)
             printf("processing block %d\n", block->idx);
 
         if (!blocks.count(block)) {
-            if (VERBOSITY("irgen") >= 2)
+            if (VERBOSITY("irgen") >= 3)
                 printf("Skipping this block\n");
             // created_phis[block] = NULL;
             // ending_symbol_tables[block] = NULL;
@@ -872,7 +872,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 }
 
 static void computeBlockSetClosure(BlockSet& blocks) {
-    if (VERBOSITY("irgen") >= 1) {
+    if (VERBOSITY("irgen") >= 2) {
         printf("Initial:");
         for (CFGBlock* b : blocks) {
             printf(" %d", b->idx);
@@ -898,7 +898,7 @@ static void computeBlockSetClosure(BlockSet& blocks) {
         }
     }
 
-    if (VERBOSITY("irgen") >= 1) {
+    if (VERBOSITY("irgen") >= 2) {
         printf("Ending:");
         for (CFGBlock* b : blocks) {
             printf(" %d", b->idx);
