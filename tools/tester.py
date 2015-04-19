@@ -40,6 +40,7 @@ TIME_LIMIT = 25
 TESTS_TO_SKIP = []
 EXIT_CODE_ONLY = False
 SKIP_FAILING_TESTS = False
+VERBOSE = 1
 
 # For fun, can test pypy.
 # Tough because the tester will check to see if the error messages are exactly the
@@ -263,7 +264,10 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
             return "Expected failure (got code %d, should be %d)" % (code, expected_code)
         elif KEEP_GOING:
             failed.append(fn)
-            return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
+            if VERBOSE >= 1:
+                return "\033[%dmFAILED\033[0m (%s)\n%s" % (color, msg, stderr)
+            else:
+                return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
         else:
             raise Exception("%s\n%s\n%s" % (msg, err, stderr))
 
@@ -433,9 +437,9 @@ def main(orig_dir):
     global TESTS_TO_SKIP
     global EXIT_CODE_ONLY
     global SKIP_FAILING_TESTS
+    global VERBOSE
 
     run_memcheck = False
-    start = 1
 
     opts = parser.parse_args()
     run_memcheck = opts.run_memcheck
