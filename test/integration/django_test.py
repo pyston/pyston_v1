@@ -9,7 +9,7 @@ import sys
 import time
 import urllib2
 
-EXTRA_PATH = os.path.dirname(__file__) + "/django"
+EXTRA_PATH = os.path.dirname(os.path.abspath(__file__)) + "/django"
 sys.path.insert(0, EXTRA_PATH)
 
 from django.core.management import execute_from_command_line
@@ -32,6 +32,10 @@ try:
     print "Running 'startproject testsite'"
     r = execute_from_command_line()
     assert not r
+
+    s = open("testsite/manage.py").read()
+    with open("testsite/manage.py", 'w') as f:
+        f.write("import sys; print >>sys.stderr, sys.argv, sys.path\n" + s)
 
     # In theory we could run this in the current process (migrate.py is only a couple lines),
     # but I guess the "startproject testsite" command changed enough global state that
