@@ -24,6 +24,8 @@ install:
   - ninja libunwind ext_cpython
 
 script:
+  - echo $TRAVIS_BUILD_DIR
+  - echo $TRAVIS_BUILD_DIR
   - ninja -j4 check-pyston
 
 os:

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8)
 project(pyston C CXX ASM)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+message(STATUS "SOURCE ${CMAKE_SOURCE_DIR}")
+message(STATUS "BINARY ${CMAKE_BINARY_DIR}")
 
 include(CheckTypeSize)
 include(ExternalProject)
