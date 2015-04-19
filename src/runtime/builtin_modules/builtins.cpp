@@ -78,7 +78,8 @@ extern "C" Box* dir(Box* obj) {
 }
 
 extern "C" Box* vars(Box* obj) {
-    RELEASE_ASSERT(obj, "Don't support 0-arg vars() calls yet");
+    if (!obj)
+        return fastLocalsToBoxedLocals();
 
     return makeAttrWrapper(obj);
 }

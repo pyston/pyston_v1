@@ -127,7 +127,7 @@ void registerGCManagedBytes(size_t bytes) {
 Heap global_heap;
 
 bool _doFree(GCAllocation* al, std::list<Box*, StlCompatAllocator<Box*>>* weakly_referenced) {
-    if (VERBOSITY() >= 2)
+    if (VERBOSITY() >= 4)
         printf("Freeing %p\n", al->user_data);
 
 #ifndef NVALGRIND

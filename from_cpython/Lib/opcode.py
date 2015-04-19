@@ -4,9 +4,11 @@ opcode module - potentially shared between dis and other modules which
 operate on bytecodes (e.g. peephole optimizers).
 """
 
-# Pyston change: disable this module
-raise NotImplementedError()
+# Pyston change: disable this module.
+# distutils does 'import opcode; foo(opcode.__file__)' to determine where the standard
+# library lives, so still have to provide this file as an importable module.
 
+"""
 __all__ = ["cmp_op", "hasconst", "hasname", "hasjrel", "hasjabs",
            "haslocal", "hascompare", "hasfree", "opname", "opmap",
            "HAVE_ARGUMENT", "EXTENDED_ARG"]
@@ -193,3 +195,4 @@ def_op('SET_ADD', 146)
 def_op('MAP_ADD', 147)
 
 del def_op, name_op, jrel_op, jabs_op
+"""

@@ -38,6 +38,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "core/util.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -169,7 +170,7 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
         }
     }
 
-    if (VERBOSITY("irgen") >= 1) {
+    if (VERBOSITY("irgen") >= 2) {
         printf("Compiled function to %p\n", cf->code);
     }
 
@@ -199,7 +200,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         llvm::raw_string_ostream ss(s);
 
         if (spec) {
-            ss << "\033[34;1mJIT'ing " << name << " with signature (";
+            ss << "\033[34;1mJIT'ing " << source->parent_module->fn << ":" << name << " with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
                     ss << ", ";
@@ -209,8 +210,8 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[34;1mDoing OSR-entry partial compile of " << name << ", starting with backedge to block "
-               << entry_descriptor->backedge->target->idx;
+            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->parent_module->fn << ":" << name
+               << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort;
         ss << "\033[0m";
@@ -371,6 +372,13 @@ Box* eval(Box* boxedCode) {
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
         globals = NULL;
 
+    if (boxedCode->cls == unicode_cls) {
+        boxedCode = PyUnicode_AsUTF8String(boxedCode);
+        if (!boxedCode)
+            throwCAPIException();
+        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
+    }
+
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
@@ -393,6 +401,18 @@ Box* eval(Box* boxedCode) {
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
+    if (isSubclass(boxedCode->cls, tuple_cls)) {
+        RELEASE_ASSERT(!globals, "");
+        RELEASE_ASSERT(!locals, "");
+
+        BoxedTuple* t = static_cast<BoxedTuple*>(boxedCode);
+        RELEASE_ASSERT(t->size() >= 2 && t->size() <= 3, "%ld", t->size());
+        boxedCode = t->elts[0];
+        globals = t->elts[1];
+        if (t->size() >= 3)
+            locals = t->elts[2];
+    }
+
     if (globals == None)
         globals = NULL;
 
@@ -428,8 +448,15 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
             PyDict_SetItemString(globals, "__builtins__", builtins_module);
     }
 
+    if (boxedCode->cls == unicode_cls) {
+        boxedCode = PyUnicode_AsUTF8String(boxedCode);
+        if (!boxedCode)
+            throwCAPIException();
+        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
+    }
+
     // TODO same issues as in `eval`
-    RELEASE_ASSERT(boxedCode->cls == str_cls, "");
+    RELEASE_ASSERT(boxedCode->cls == str_cls, "%s", boxedCode->cls->tp_name);
     const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
@@ -553,7 +580,7 @@ void* compilePartialFunc(OSRExit* exit) {
 
 static StatCounter stat_reopt("reopts");
 extern "C" CompiledFunction* reoptCompiledFuncInternal(CompiledFunction* cf) {
-    if (VERBOSITY("irgen") >= 1)
+    if (VERBOSITY("irgen") >= 2)
         printf("In reoptCompiledFunc, %p, %ld\n", cf, cf->times_called);
     stat_reopt.log();
 

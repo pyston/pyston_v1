@@ -61,7 +61,7 @@ ICSlotRewrite::ICSlotRewrite(ICInfo* ic, const char* debug_name) : ic(ic), debug
     assembler = new Assembler(buf, ic->getSlotSize());
     assembler->nop();
 
-    if (VERBOSITY() >= 2)
+    if (VERBOSITY() >= 4)
         printf("starting %s icentry\n", debug_name);
 }
 
@@ -86,7 +86,7 @@ void ICSlotRewrite::commit(CommitHook* hook) {
         }
     }
     if (!still_valid) {
-        if (VERBOSITY() >= 2)
+        if (VERBOSITY() >= 3)
             printf("not committing %s icentry since a dependency got updated before commit\n", debug_name);
         return;
     }
@@ -165,14 +165,14 @@ ICSlotInfo* ICInfo::pickEntryForRewrite(const char* debug_name) {
         if (sinfo.num_inside)
             continue;
 
-        if (VERBOSITY() >= 3) {
+        if (VERBOSITY() >= 4) {
             printf("committing %s icentry to in-use slot %d at %p\n", debug_name, i, start_addr);
         }
         next_slot_to_try = i + 1;
 
         return &sinfo;
     }
-    if (VERBOSITY() >= 3)
+    if (VERBOSITY() >= 4)
         printf("not committing %s icentry since there are no available slots\n", debug_name);
     return NULL;
 }
@@ -259,7 +259,7 @@ void ICInfo::clear(ICSlotInfo* icentry) {
 
     uint8_t* start = (uint8_t*)start_addr + icentry->idx * getSlotSize();
 
-    if (VERBOSITY() >= 3)
+    if (VERBOSITY() >= 4)
         printf("clearing patchpoint %p, slot at %p\n", start_addr, start);
 
     std::unique_ptr<Assembler> writer(new Assembler(start, getSlotSize()));
