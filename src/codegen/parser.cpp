@@ -955,7 +955,10 @@ static std::string getParserCommandLine(const char* fn) {
 
     llvm::sys::path::append(parse_ast_fn, "src/codegen/parse_ast.py");
 
-    return std::string("python -S ") + parse_ast_fn.str().str() + " " + fn;
+    // We may be running in an environment where "python" resolves to pyston (ex in
+    // a virtualenv), so try to hard code the path to CPython.
+    // This should probably be a configure-time check?
+    return std::string("/usr/bin/python -S ") + parse_ast_fn.str().str() + " " + fn;
 }
 
 AST_Module* parse_string(const char* code) {

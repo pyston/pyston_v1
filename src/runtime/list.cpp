@@ -665,7 +665,7 @@ extern "C" void listIteratorGCHandler(GCVisitor* v, Box* b) {
 }
 
 Box* listNew(BoxedClass* cls, Box* container) {
-    assert(cls->cls == type_cls);
+    assert(isSubclass(cls->cls, type_cls));
     assert(isSubclass(cls, list_cls));
     return new (cls) BoxedList();
 }

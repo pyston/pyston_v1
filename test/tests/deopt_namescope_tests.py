@@ -6,6 +6,8 @@ try:
     import __pyston__
     __pyston__.setOption("OSR_THRESHOLD_BASELINE", 50)
     __pyston__.setOption("REOPT_THRESHOLD_BASELINE", 50)
+    __pyston__.setOption("OSR_THRESHOLD_INTERPRETER", 50)
+    __pyston__.setOption("REOPT_THRESHOLD_INTERPRETER", 50)
     __pyston__.setOption("SPECULATION_THRESHOLD", 10)
 except ImportError:
     pass
