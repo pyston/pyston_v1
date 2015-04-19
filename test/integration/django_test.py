@@ -33,19 +33,16 @@ try:
     r = execute_from_command_line()
     assert not r
 
-    s = open("testsite/manage.py").read()
-    with open("testsite/manage.py", 'w') as f:
-        f.write("import sys; print >>sys.stderr, sys.argv, sys.path\n" + s)
-
     # In theory we could run this in the current process (migrate.py is only a couple lines),
     # but I guess the "startproject testsite" command changed enough global state that
     # it won't work.  So create a new subprocess to run it instead.
     print "Running testsite/manage.py migrate"
-    os.environ["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + ":" + EXTRA_PATH
-    subprocess.check_call([sys.executable, ARGS, "testsite/manage.py", "migrate"])
+    env = dict(os.environ)
+    env["PYTHONPATH"] = env.get("PYTHONPATH", "") + ":" + EXTRA_PATH
+    subprocess.check_call([sys.executable, ARGS, "testsite/manage.py", "migrate"], env=env)
 
     print "Running runserver localhost:8000"
-    p = subprocess.Popen([sys.executable, ARGS, "testsite/manage.py", "runserver", "--noreload", "localhost:8000"], stdout=subprocess.PIPE)
+    p = subprocess.Popen([sys.executable, ARGS, "testsite/manage.py", "runserver", "--noreload", "localhost:8000"], stdout=subprocess.PIPE, env=env)
 
     try:
         print "Waiting for server to start up"
