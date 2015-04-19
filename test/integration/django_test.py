@@ -9,7 +9,7 @@ import sys
 import time
 import urllib2
 
-EXTRA_PATH = os.path.dirname(__file__) + "/django"
+EXTRA_PATH = os.path.dirname(os.path.abspath(__file__)) + "/django"
 sys.path.insert(0, EXTRA_PATH)
 
 from django.core.management import execute_from_command_line
@@ -37,11 +37,12 @@ try:
     # but I guess the "startproject testsite" command changed enough global state that
     # it won't work.  So create a new subprocess to run it instead.
     print "Running testsite/manage.py migrate"
-    os.environ["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + ":" + EXTRA_PATH
-    subprocess.check_call([sys.executable, ARGS, "testsite/manage.py", "migrate"])
+    env = dict(os.environ)
+    env["PYTHONPATH"] = env.get("PYTHONPATH", "") + ":" + EXTRA_PATH
+    subprocess.check_call([sys.executable, ARGS, "testsite/manage.py", "migrate"], env=env)
 
     print "Running runserver localhost:8000"
-    p = subprocess.Popen([sys.executable, ARGS, "testsite/manage.py", "runserver", "--noreload", "localhost:8000"], stdout=subprocess.PIPE)
+    p = subprocess.Popen([sys.executable, ARGS, "testsite/manage.py", "runserver", "--noreload", "localhost:8000"], stdout=subprocess.PIPE, env=env)
 
     try:
         print "Waiting for server to start up"

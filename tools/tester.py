@@ -40,6 +40,7 @@ TIME_LIMIT = 25
 TESTS_TO_SKIP = []
 EXIT_CODE_ONLY = False
 SKIP_FAILING_TESTS = False
+VERBOSE = 1
 
 # For fun, can test pypy.
 # Tough because the tester will check to see if the error messages are exactly the
@@ -57,7 +58,7 @@ def set_ulimits():
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
-EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/")
+EXTMODULE_DIR_PYSTON = None
 THIS_FILE = os.path.abspath(__file__)
 
 _global_mtime = None
@@ -263,7 +264,10 @@ def determine_test_result(fn, opts, code, out, stderr, elapsed):
             return "Expected failure (got code %d, should be %d)" % (code, expected_code)
         elif KEEP_GOING:
             failed.append(fn)
-            return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
+            if VERBOSE >= 1:
+                return "\033[%dmFAILED\033[0m (%s)\n%s" % (color, msg, stderr)
+            else:
+                return "\033[%dmFAILED\033[0m (%s)" % (color, msg)
         else:
             raise Exception("%s\n%s\n%s" % (msg, err, stderr))
 
@@ -433,9 +437,10 @@ def main(orig_dir):
     global TESTS_TO_SKIP
     global EXIT_CODE_ONLY
     global SKIP_FAILING_TESTS
+    global VERBOSE
+    global EXTMODULE_DIR_PYSTON
 
     run_memcheck = False
-    start = 1
 
     opts = parser.parse_args()
     run_memcheck = opts.run_memcheck
@@ -450,6 +455,7 @@ def main(orig_dir):
     SKIP_FAILING_TESTS = opts.skip_failing
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
+    EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/")
     patterns = opts.pattern
 
     if not patterns and not TESTS_TO_SKIP:
