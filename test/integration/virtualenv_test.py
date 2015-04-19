@@ -1,3 +1,6 @@
+# expected: fail
+# - jit issue
+
 import os
 import sys
 import subprocess
