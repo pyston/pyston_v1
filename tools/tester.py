@@ -58,7 +58,7 @@ def set_ulimits():
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
-EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/")
+EXTMODULE_DIR_PYSTON = None
 THIS_FILE = os.path.abspath(__file__)
 
 _global_mtime = None
@@ -438,6 +438,7 @@ def main(orig_dir):
     global EXIT_CODE_ONLY
     global SKIP_FAILING_TESTS
     global VERBOSE
+    global EXTMODULE_DIR_PYSTON
 
     run_memcheck = False
 
@@ -454,6 +455,7 @@ def main(orig_dir):
     SKIP_FAILING_TESTS = opts.skip_failing
 
     TEST_DIR = os.path.join(orig_dir, opts.test_dir)
+    EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(IMAGE)) + "/test/test_extension/")
     patterns = opts.pattern
 
     if not patterns and not TESTS_TO_SKIP:
