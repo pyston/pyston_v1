@@ -57,6 +57,7 @@ def set_ulimits():
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
+EXTMODULE_DIR_PYSTON = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/")
 THIS_FILE = os.path.abspath(__file__)
 
 _global_mtime = None
@@ -141,7 +142,9 @@ def run_test(fn, check_stats, run_memcheck):
 
     run_args = [os.path.abspath(IMAGE)] + opts.jit_args + [fn]
     start = time.time()
-    p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = EXTMODULE_DIR_PYSTON
+    p = subprocess.Popen(run_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=open("/dev/null"), preexec_fn=set_ulimits, env=env)
     out, stderr = p.communicate()
     code = p.wait()
     elapsed = time.time() - start

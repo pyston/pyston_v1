@@ -960,35 +960,35 @@ check$1 test$1: $(PYTHON_EXE_DEPS) pyston$1 ext_pyston
 
 .PHONY: run$1 dbg$1
 run$1: pyston$1 $$(RUN_DEPS)
-	./pyston$1 $$(ARGS)
+	PYTHONPATH=test/test_extension ./pyston$1 $$(ARGS)
 dbg$1: pyston$1 $$(RUN_DEPS)
-	zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
+	PYTHONPATH=test/test_extension zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS)'
 nosearch_run$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$(VERB) zsh -c 'ulimit -v $$(MAX_MEM_KB); ulimit -d $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
+	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -v $$(MAX_MEM_KB); ulimit -d $$(MAX_MEM_KB); time ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,run$1_%)
 nosearch_dbg$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$(VERB) zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
+	$(VERB) PYTHONPATH=test/test_extension zsh -c 'ulimit -v $$(MAX_DBG_MEM_KB); $$(GDB) $$(GDB_CMDS) --args ./pyston$1 $$(ARGS) $$<'
 $$(call make_search,dbg$1_%)
 
 ifneq ($$(ENABLE_VALGRIND),0)
 nosearch_memcheck$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston$1 $$(ARGS) $$<
+	PYTHONPATH=test/test_extension $$(VALGRIND) --tool=memcheck --leak-check=no --db-attach=yes ./pyston$1 $$(ARGS) $$<
 $$(call make_search,memcheck$1_%)
 nosearch_memcheck_gdb$1_%: %.py pyston$1 $$(RUN_DEPS)
-	set +e; $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
+	set +e; PYTHONPATH=test/test_extension $$(VALGRIND) -v -v -v -v -v --tool=memcheck --leak-check=no --track-origins=yes --vgdb=yes --vgdb-error=0 ./pyston$1 $$(ARGS) $$< & export PID=$$$$! ; \
 	$$(GDB) --ex "set confirm off" --ex "target remote | $$(DEPS_DIR)/valgrind-3.10.0-install/bin/vgdb" --ex "continue" --ex "bt" ./pyston$1; kill -9 $$$$PID
 $$(call make_search,memcheck_gdb$1_%)
 nosearch_memleaks$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
+	PYTHONPATH=test/test_extension $$(VALGRIND) --tool=memcheck --leak-check=full --leak-resolution=low --show-reachable=yes ./pyston$1 $$(ARGS) $$<
 $$(call make_search,memleaks$1_%)
 nosearch_cachegrind$1_%: %.py pyston$1 $$(RUN_DEPS)
-	$$(VALGRIND) --tool=cachegrind ./pyston$1 $$(ARGS) $$<
+	PYTHONPATH=test/test_extension $$(VALGRIND) --tool=cachegrind ./pyston$1 $$(ARGS) $$<
 $$(call make_search,cachegrind$1_%)
 endif
 
 .PHONY: perf$1_%
 nosearch_perf$1_%: %.py pyston$1
-	perf record -g -- ./pyston$1 -q -p $$(ARGS) $$<
+	PYTHONPATH=test/test_extension perf record -g -- ./pyston$1 -q -p $$(ARGS) $$<
 	@$(MAKE) perf_report
 $$(call make_search,perf$1_%)
 

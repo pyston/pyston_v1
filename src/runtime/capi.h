@@ -21,7 +21,7 @@ namespace pyston {
 
 class Box;
 class BoxedModule;
-BoxedModule* importTestExtension(const std::string&);
+BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path);
 
 void checkAndThrowCAPIException();
 void throwCAPIException() __attribute__((noreturn));

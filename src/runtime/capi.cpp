@@ -1275,27 +1275,15 @@ extern "C" char* PyModule_GetName(PyObject* m) noexcept {
     return &static_cast<BoxedModule*>(m)->fn[0];
 }
 
-BoxedModule* importTestExtension(const std::string& name) {
-    llvm::SmallString<128> pathname_str;
-    // TODO supposed to pass argv0, main_addr to this function:
-    pathname_str = llvm::sys::fs::getMainExecutable(NULL, NULL);
-    assert(pathname_str.size() && "could not find the path to the pyston src dir");
-
-    // Start by removing the binary name
-    llvm::sys::path::remove_filename(pathname_str);
-
-    llvm::sys::path::append(pathname_str, "test/test_extension");
-    llvm::sys::path::append(pathname_str, name + ".pyston.so");
-
-    const char* pathname = pathname_str.str().str().c_str();
-    void* handle = dlopen(pathname, RTLD_NOW);
+BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path) {
+    void* handle = dlopen(path.c_str(), RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "%s\n", dlerror());
         exit(1);
     }
     assert(handle);
 
-    std::string initname = "init" + name;
+    std::string initname = "init" + last_name;
     void (*init)() = (void (*)())dlsym(handle, initname.c_str());
 
     char* error;
@@ -1308,14 +1296,14 @@ BoxedModule* importTestExtension(const std::string& name) {
     (*init)();
 
     BoxedDict* sys_modules = getSysModulesDict();
-    Box* s = boxStrConstant(name.c_str());
+    Box* s = boxStrConstant(full_name.c_str());
     Box* _m = sys_modules->d[s];
     RELEASE_ASSERT(_m, "module failed to initialize properly?");
     assert(_m->cls == module_cls);
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
-    m->setattr("__file__", boxStrConstant(pathname), NULL);
-    m->fn = pathname;
+    m->setattr("__file__", boxString(path), NULL);
+    m->fn = path;
     return m;
 }
 
