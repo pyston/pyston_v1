@@ -1,4 +1,3 @@
-# expected: fail
 """Unit tests for collections.defaultdict."""
 
 import os
