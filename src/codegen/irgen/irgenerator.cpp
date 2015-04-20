@@ -2262,55 +2262,45 @@ private:
         SourceInfo* source = irstate->getSourceInfo();
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
-        // Additional names to remove; remove them after iteration is done to not mess up the iterators
-        std::vector<InternedString> also_remove;
-        for (auto it = symbol_table.begin(); it != symbol_table.end();) {
-            assert(it->first.str() != FRAME_INFO_PTR_NAME);
-            if (allowableFakeEndingSymbol(it->first)) {
-                ++it;
+        // Sort the names here to make the process deterministic:
+        std::map<InternedString, CompilerVariable*> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
+        for (const auto& p : sorted_symbol_table) {
+            assert(p.first.str() != FRAME_INFO_PTR_NAME);
+            if (allowableFakeEndingSymbol(p.first))
                 continue;
-            }
 
-            // ASSERT(it->first[0] != '!' || isIsDefinedName(it->first), "left a fake variable in the real
-            // symbol table? '%s'", it->first.c_str());
+            // ASSERT(p.first[0] != '!' || isIsDefinedName(p.first), "left a fake variable in the real
+            // symbol table? '%s'", p.first.c_str());
 
-            if (!source->liveness->isLiveAtEnd(it->first, myblock)) {
-                // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", it->first.c_str(), myblock->idx,
-                //        it->second->isGrabbed(), it->second->getVrefs());
-                also_remove.push_back(getIsDefinedName(it->first));
+            if (!source->liveness->isLiveAtEnd(p.first, myblock)) {
+                // printf("%s dead at end of %d; grabbed = %d, %d vrefs\n", p.first.c_str(), myblock->idx,
+                //        p.second->isGrabbed(), p.second->getVrefs());
 
-                it->second->decvref(emitter);
-                it = symbol_table.erase(it);
-            } else if (source->phis->isRequiredAfter(it->first, myblock)) {
-                assert(scope_info->getScopeTypeOfName(it->first) != ScopeInfo::VarScopeType::GLOBAL);
-                ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(it->first, myblock);
-                // printf("Converting %s from %s to %s\n", it->first.c_str(),
-                // it->second->getType()->debugName().c_str(), phi_type->debugName().c_str());
-                // printf("have to convert %s from %s to %s\n", it->first.c_str(),
-                // it->second->getType()->debugName().c_str(), phi_type->debugName().c_str());
-                ConcreteCompilerVariable* v = it->second->makeConverted(emitter, phi_type);
-                it->second->decvref(emitter);
-                symbol_table[it->first] = v->split(emitter);
-                ++it;
+                p.second->decvref(emitter);
+                symbol_table.erase(getIsDefinedName(p.first));
+                symbol_table.erase(p.first);
+            } else if (source->phis->isRequiredAfter(p.first, myblock)) {
+                assert(scope_info->getScopeTypeOfName(p.first) != ScopeInfo::VarScopeType::GLOBAL);
+                ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(p.first, myblock);
+                // printf("Converting %s from %s to %s\n", p.first.c_str(),
+                // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
+                // printf("have to convert %s from %s to %s\n", p.first.c_str(),
+                // p.second->getType()->debugName().c_str(), phi_type->debugName().c_str());
+                ConcreteCompilerVariable* v = p.second->makeConverted(emitter, phi_type);
+                p.second->decvref(emitter);
+                symbol_table[p.first] = v->split(emitter);
             } else {
 #ifndef NDEBUG
                 if (myblock->successors.size()) {
                     // TODO getTypeAtBlockEnd will automatically convert up to the concrete type, which we don't
                     // want
                     // here, but this is just for debugging so I guess let it happen for now:
-                    ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(it->first, myblock);
-                    ASSERT(it->second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
-                           it->first.c_str(), ending_type->debugName().c_str(),
-                           it->second->getType()->debugName().c_str());
+                    ConcreteCompilerType* ending_type = types->getTypeAtBlockEnd(p.first, myblock);
+                    ASSERT(p.second->canConvertTo(ending_type), "%s is supposed to be %s, but somehow is %s",
+                           p.first.c_str(), ending_type->debugName().c_str(), p.second->getType()->debugName().c_str());
                 }
 #endif
-
-                ++it;
             }
-        }
-
-        for (const auto& s : also_remove) {
-            symbol_table.erase(s);
         }
 
         const PhiAnalysis::RequiredSet& all_phis = source->phis->getAllRequiredAfter(myblock);
