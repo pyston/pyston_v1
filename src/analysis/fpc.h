@@ -17,6 +17,10 @@
 
 #include <queue>
 
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
+
 #include "core/cfg.h"
 #include "core/common.h"
 #include "core/options.h"
@@ -25,8 +29,8 @@ namespace pyston {
 
 template <typename T> class BBAnalyzer {
 public:
-    typedef std::unordered_map<InternedString, T> Map;
-    typedef std::unordered_map<CFGBlock*, Map> AllMap;
+    typedef llvm::DenseMap<InternedString, T> Map;
+    typedef llvm::DenseMap<CFGBlock*, Map> AllMap;
 
     virtual ~BBAnalyzer() {}
 
@@ -49,15 +53,15 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
     AllMap starting_states;
     AllMap ending_states;
 
-    std::unordered_set<CFGBlock*> in_queue;
-    std::priority_queue<CFGBlock*, std::vector<CFGBlock*>, CFGBlockMinIndex> q;
+    llvm::SmallPtrSet<CFGBlock*, 32> in_queue;
+    std::priority_queue<CFGBlock*, llvm::SmallVector<CFGBlock*, 32>, CFGBlockMinIndex> q;
 
     starting_states.insert(make_pair(cfg->getStartingBlock(), Map()));
     q.push(cfg->getStartingBlock());
     in_queue.insert(cfg->getStartingBlock());
 
     int num_evaluations = 0;
-    while (q.size()) {
+    while (!q.empty()) {
         num_evaluations++;
         CFGBlock* block = q.top();
         q.pop();
@@ -65,7 +69,7 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
 
         Map& initial = starting_states[block];
         if (VERBOSITY("analysis") >= 2)
-            printf("fpc on block %d - %ld entries\n", block->idx, initial.size());
+            printf("fpc on block %d - %d entries\n", block->idx, initial.size());
 
         Map ending = Map(initial);
 

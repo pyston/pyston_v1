@@ -50,10 +50,10 @@ private:
         }
     };
 
-    std::unordered_set<AST_Name*> kills;
-    std::unordered_map<InternedString, AST_Name*> last_uses;
+    llvm::DenseSet<AST_Name*> kills;
+    llvm::DenseMap<InternedString, AST_Name*> last_uses;
 
-    std::unordered_map<InternedString, Status> statuses;
+    llvm::DenseMap<InternedString, Status> statuses;
     LivenessAnalysis* analysis;
 
     void _doLoad(InternedString name, AST_Name* node) {
@@ -178,7 +178,7 @@ bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
         return false;
 
     if (!result_cache.count(name)) {
-        std::unordered_map<CFGBlock*, bool>& map = result_cache[name];
+        llvm::DenseMap<CFGBlock*, bool>& map = result_cache[name];
 
         // Approach:
         // - Find all uses (blocks where the status is USED)
@@ -376,7 +376,7 @@ DefinednessAnalysis::DefinednessAnalysis(const ParamNames& arg_names, CFG* cfg, 
     results = computeFixedPoint(cfg, DefinednessBBAnalyzer(cfg, scope_info, arg_names), false);
 
     for (const auto& p : results) {
-        RequiredSet required;
+        RequiredSet& required = defined_at_end[p.first];
         for (const auto& p2 : p.second) {
             ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(p2.first);
             if (vst == ScopeInfo::VarScopeType::GLOBAL || vst == ScopeInfo::VarScopeType::NAME)
@@ -385,7 +385,6 @@ DefinednessAnalysis::DefinednessAnalysis(const ParamNames& arg_names, CFG* cfg, 
             // printf("%d %s %d\n", p.first->idx, p2.first.c_str(), p2.second);
             required.insert(p2.first);
         }
-        defined_at_end.insert(make_pair(p.first, required));
     }
 
     static StatCounter us_definedness("us_compiling_analysis_definedness");
@@ -408,8 +407,7 @@ PhiAnalysis::PhiAnalysis(const ParamNames& arg_names, CFG* cfg, LivenessAnalysis
     Timer _t("PhiAnalysis()", 10);
 
     for (CFGBlock* block : cfg->blocks) {
-        RequiredSet required;
-
+        RequiredSet& required = required_phis[block];
         if (block->predecessors.size() > 1) {
             for (CFGBlock* pred : block->predecessors) {
                 const RequiredSet& defined = definedness.getDefinedNamesAtEnd(pred);
@@ -422,8 +420,6 @@ PhiAnalysis::PhiAnalysis(const ParamNames& arg_names, CFG* cfg, LivenessAnalysis
                 }
             }
         }
-
-        required_phis.insert(make_pair(block, std::move(required)));
     }
 
     static StatCounter us_phis("us_compiling_analysis_phis");
