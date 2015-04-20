@@ -64,20 +64,18 @@ ModuleType = type(sys)
 FileType = file
 XRangeType = xrange
 
-# Pyston change: we don't support sys.exc_info yet
-"""
 try:
     raise TypeError
 except TypeError:
     tb = sys.exc_info()[2]
     TracebackType = type(tb)
-    FrameType = type(tb.tb_frame)
+    # Pyston change (we don't support tb_frame yet):
+    FrameType = type(sys._getframe(0))
+    # FrameType = type(tb.tb_frame)
     del tb
-"""
 
 SliceType = slice
-# Pyston change: don't support this yet
-# EllipsisType = type(Ellipsis)
+EllipsisType = type(Ellipsis)
 
 # Pyston change: don't support this yet
 # DictProxyType = type(TypeType.__dict__)

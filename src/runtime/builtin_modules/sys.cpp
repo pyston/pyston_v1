@@ -278,6 +278,9 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w"));
     sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
+    sys_module->giveAttr("__stdout__", sys_module->getattr("stdout"));
+    sys_module->giveAttr("__stdin__", sys_module->getattr("stdin"));
+    sys_module->giveAttr("__stderr__", sys_module->getattr("stderr"));
 
     sys_module->giveAttr(
         "exc_info", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0), "exc_info"));
