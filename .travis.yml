@@ -1,30 +1,57 @@
 language: cpp
+
 compiler:
   - clang
-# - gcc
+  - gcc
+
+# use travis-ci docker based infrastructure
+sudo: false
 
 cache:
-  apt: true
+  directories:
+    - $HOME/.ccache
+
+addons:
+  apt:
+    sources:
+    - kubuntu-backports
+    - llvm-toolchain-precise-3.5
+    - ubuntu-toolchain-r-test
+    packages:
+    - autoconf
+    - ccache
+    - clang-3.5
+    - cmake
+    - g++-4.8
+    - libgmp3-dev
+    - liblzma-dev
+    - libncurses5-dev
+    - libreadline-dev
+    - libsqlite3-dev
+    - libtool
+    - ninja-build
+    - python-dev
+    - texlive-extra-utils
+
+before_install:
+  - if [ "$CC" = "clang" ]; then export CC="clang-3.5" CXX="clang++-3.5"; fi
+  - if [ "$CC" = "gcc" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi
 
 install:
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-  - sudo add-apt-repository --yes ppa:kubuntu-ppa/backports
-  - sudo apt-get -qq update
-  - sudo apt-get install -yqq git cmake ninja-build libsqlite3-dev libncurses5-dev liblzma-dev libreadline-dev libgmp3-dev autoconf libtool python-dev texlive-extra-utils
-  - if [ "$CXX" = "clang++" ]; then sudo apt-get install -qq clang-3.4 libstdc++-4.8-dev; fi
-  - if [ "$CXX" = "g++" ]; then sudo apt-get install -qq g++-4.8; fi
-  - if [ "$CXX" = "g++" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi
   - git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
   - git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
   - git config --global user.email "you@example.com"
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - make -C $TRAVIS_BUILD_DIR llvm_up
-  - cmake -GNinja $TRAVIS_BUILD_DIR
+  - cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
   - ninja libunwind ext_cpython
 
 script:
-  - ninja -j4 check-pyston
+  - ccache -z
+  - ninja -j4 pyston
+  - ccache -s
+  - ninja check-pyston
 
 os:
   - linux
@@ -41,4 +68,3 @@ notifications:
       - https://webhooks.gitter.im/e/7256425a36658faa8b9b
     on_success: change  # options: [always|never|change] default: always
     on_failure: always  # options: [always|never|change] default: always
-    on_start: false     # default: false
