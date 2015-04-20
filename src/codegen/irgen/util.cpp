@@ -80,7 +80,7 @@ llvm::Constant* getStringConstantPtr(const std::string& str) {
         strings[str] = buf;
         c = buf;
     }
-    return embedConstantPtr(c, g.i8->getPointerTo());
+    return embedRelocatablePtr(c, g.i8->getPointerTo());
 }
 
 // Returns a llvm::Constant char* to a global string constant
@@ -92,11 +92,43 @@ llvm::Constant* getStringConstantPtr(const char* str) {
 // to some associated compiler-level data structure.
 // It's slightly easier to emit them as integers (there are primitive integer constants but not pointer constants),
 // but doing it this way makes it clearer what's going on.
+
+static llvm::StringMap<const void*> relocatable_syms;
+
+void clearRelocatableSymsMap() {
+    relocatable_syms.clear();
+}
+
+const void* getValueOfRelocatableSym(const std::string& str) {
+    auto it = relocatable_syms.find(str);
+    if (it != relocatable_syms.end())
+        return it->second;
+    return NULL;
+}
+
+llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type) {
+    assert(addr);
+
+    if (!ENABLE_JIT_OBJECT_CACHE)
+        return embedConstantPtr(addr, type);
+
+    std::string name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
+    relocatable_syms[name] = addr;
+
+    llvm::Type* var_type = type->getPointerElementType();
+    return new llvm::GlobalVariable(*g.cur_module, var_type, true, llvm::GlobalVariable::ExternalLinkage, 0, name);
+}
+
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type* type) {
     assert(type);
     llvm::Constant* int_val = llvm::ConstantInt::get(g.i64, reinterpret_cast<uintptr_t>(addr), false);
     llvm::Constant* ptr_val = llvm::ConstantExpr::getIntToPtr(int_val, type);
     return ptr_val;
+}
+
+llvm::Constant* getNullPtr(llvm::Type* t) {
+    assert(llvm::isa<llvm::PointerType>(t));
+    return llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(t));
 }
 
 llvm::Constant* getConstantInt(int64_t n, llvm::Type* t) {

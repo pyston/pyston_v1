@@ -155,6 +155,7 @@ COMMON_CXXFLAGS += -fexceptions -fno-rtti
 COMMON_CXXFLAGS += -Wno-invalid-offsetof # allow the use of "offsetof", and we'll just have to make sure to only use it legally.
 COMMON_CXXFLAGS += -DENABLE_INTEL_JIT_EVENTS=$(ENABLE_INTEL_JIT_EVENTS)
 COMMON_CXXFLAGS += -I$(DEPS_DIR)/pypa-install/include
+COMMON_CXXFLAGS += -I$(DEPS_DIR)/lz4-install/include
 
 ifeq ($(ENABLE_VALGRIND),0)
 	COMMON_CXXFLAGS += -DNVALGRIND
@@ -170,6 +171,7 @@ COMMON_CXXFLAGS += -DDEFAULT_PYTHON_MAJOR_VERSION=$(PYTHON_MAJOR_VERSION) -DDEFA
 # Use our "custom linker" that calls gold if available
 COMMON_LDFLAGS := -B$(TOOLS_DIR)/build_system -L/usr/local/lib -lpthread -lm -lunwind -llzma -L$(DEPS_DIR)/gcc-4.8.2-install/lib64 -lreadline -lgmp -lssl -lcrypto -lsqlite3
 COMMON_LDFLAGS += $(DEPS_DIR)/pypa-install/lib/libpypa.a
+COMMON_LDFLAGS += $(DEPS_DIR)/lz4-install/lib/liblz4.a
 
 # Conditionally add libtinfo if available - otherwise nothing will be added
 COMMON_LDFLAGS += `pkg-config tinfo 2>/dev/null && pkg-config tinfo --libs || echo ""`

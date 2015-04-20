@@ -140,6 +140,15 @@ cd gtest-1.7.0
 make -j4
 ```
 
+### LZ4
+```
+cd ~/pyston_deps
+git clone git://github.com/Cyan4973/lz4.git
+mkdir lz4-install
+cd lz4/lib
+DESTDIR="$HOME/pyston_deps/lz4-install" PREFIX="/" make install
+```
+
 ---
 
 At this point you should be able to run `make check` (in the `~/pyston` directory) and pass the tests.  See the main README for more information about available targets and options.

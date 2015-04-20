@@ -20,6 +20,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Memory.h"
 
+#include "codegen/irgen/util.h"
 #include "core/common.h"
 #include "core/stats.h"
 #include "core/util.h"
@@ -206,7 +207,11 @@ void PystonMemoryManager::invalidateInstructionCache() {
 }
 
 uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
-    uint64_t base = RTDyldMemoryManager::getSymbolAddress(name);
+    uint64_t base = (uint64_t)getValueOfRelocatableSym(name);
+    if (base)
+        return base;
+
+    base = RTDyldMemoryManager::getSymbolAddress(name);
     if (base)
         return base;
 
@@ -214,7 +219,7 @@ uint64_t PystonMemoryManager::getSymbolAddress(const std::string& name) {
         return getSymbolAddress(".L" + name);
     }
 
-    printf("getSymbolAddress(%s); %lx\n", name.c_str(), base);
+    RELEASE_ASSERT(0, "Could not find sym: %s", name.c_str());
     return 0;
 }
 

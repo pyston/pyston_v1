@@ -10,3 +10,6 @@
 [submodule "test/integration/virtualenv"]
 	path = test/integration/virtualenv
 	url = https://github.com/dropbox/virtualenv
+[submodule "lz4"]
+	path = lz4
+	url = git://github.com/Cyan4973/lz4.git

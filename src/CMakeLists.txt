@@ -8,6 +8,7 @@ set_source_files_properties(jit.cpp PROPERTIES COMPILE_DEFINITIONS "GITREV=${GIT
 include_directories(${CMAKE_BINARY_DIR})
 include_directories(${CMAKE_BINARY_DIR}/libunwind/include)
 include_directories(${CMAKE_SOURCE_DIR}/libpypa/src)
+include_directories(${CMAKE_SOURCE_DIR}/lz4/lib)
 
 if(ENABLE_GPERFTOOLS)
   set(OPTIONAL_SRCS ${OPTIONAL_SRCS} codegen/profiling/pprof.cpp)
@@ -109,7 +110,7 @@ add_library(PYSTON_OBJECTS OBJECT ${OPTIONAL_SRCS}
 add_dependencies(PYSTON_OBJECTS libunwind pypa ${LLVM_LIBS})
 
 add_library(PYSTON_MAIN_OBJECT OBJECT jit.cpp)
-add_dependencies(PYSTON_MAIN_OBJECT libunwind pypa ${LLVM_LIBS})
+add_dependencies(PYSTON_MAIN_OBJECT libunwind pypa liblz4 ${LLVM_LIBS})
 
 # build stdlib
 add_subdirectory(runtime/inline)

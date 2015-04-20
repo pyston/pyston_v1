@@ -172,6 +172,8 @@ private:
     std::vector<ContInfo> continuations;
     std::vector<ExcBlockInfo> exc_handlers;
 
+    unsigned int next_var_index = 0;
+
     friend CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body);
 
 public:
@@ -194,6 +196,11 @@ public:
 private:
     template <typename T> InternedString internString(T&& s) {
         return source->getInternedStrings().get(std::forward<T>(s));
+    }
+
+    InternedString createUniqueName(llvm::Twine prefix) {
+        std::string name = (prefix + llvm::Twine(next_var_index++)).str();
+        return source->getInternedStrings().get(std::move(name));
     }
 
     AST_Name* makeName(InternedString id, AST_TYPE::AST_TYPE ctx_type, int lineno, int col_offset = 0) {
@@ -285,7 +292,7 @@ private:
         if (exc_handlers.size() == 0)
             return call;
 
-        auto name = nodeName(e);
+        auto name = nodeName();
         pushAssign(name, call);
         return makeLoad(name, e);
     }
@@ -300,7 +307,7 @@ private:
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         assert(curblock);
 
-        InternedString rtn_name = nodeName(node);
+        InternedString rtn_name = nodeName();
         pushAssign(rtn_name, new ResultASTType());
         std::vector<CFGBlock*> exit_blocks;
 
@@ -317,7 +324,7 @@ private:
             AST_expr* remapped_iter = remapExpr(c->iter);
             AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
             iter_call->args.push_back(remapped_iter);
-            InternedString iter_name = nodeName(node, "lc_iter", i);
+            InternedString iter_name = nodeName("lc_iter", i);
             pushAssign(iter_name, iter_call);
 
             AST_expr* next_attr = makeLoadAttribute(makeLoad(iter_name, node), internString("next"), true);
@@ -350,7 +357,7 @@ private:
             push_back(br);
 
             curblock = body_block;
-            InternedString next_name(nodeName(next_attr));
+            InternedString next_name(nodeName());
             pushAssign(next_name, makeCall(next_attr));
             pushAssign(c->target, makeLoad(next_name, node));
 
@@ -576,7 +583,7 @@ private:
             push_back(assign);
 
             for (int i = 0; i < elts->size(); i++) {
-                InternedString tmp_name = nodeName(target, "", i);
+                InternedString tmp_name = nodeName("", i);
                 new_target->elts.push_back(makeName(tmp_name, AST_TYPE::Store, target->lineno));
 
                 pushAssign((*elts)[i], makeLoad(tmp_name, target));
@@ -600,36 +607,12 @@ private:
         return stmt;
     }
 
-    InternedString nodeName(AST* node) {
-        char buf[40];
-        int bytes = snprintf(buf, 40, "#%p", node);
-        assert(bytes < 40); // double-check
-// Uncomment this line to check to make sure we never reuse the same nodeName() accidentally.
-// This check is potentially too expensive for even debug mode, since it never frees any memory.
-// #define VALIDATE_FAKE_NAMES
-#ifdef VALIDATE_FAKE_NAMES
-        std::string r(buf);
-        static std::unordered_set<std::string> made;
-        assert(made.count(r) == 0);
-        made.insert(r);
-        return internString(std::move(r));
-#else
-        return internString(buf);
-#endif
-    }
+    InternedString nodeName() { return createUniqueName("#"); }
 
-    InternedString nodeName(AST* node, const std::string& suffix) {
-        char buf[50];
-        int bytes = snprintf(buf, 50, "#%p_%s", node, suffix.c_str());
-        assert(bytes < 50); // double-check
-        return internString(std::string(buf));
-    }
+    InternedString nodeName(llvm::StringRef suffix) { return createUniqueName(llvm::Twine("#") + suffix + "_"); }
 
-    InternedString nodeName(AST* node, const std::string& suffix, int idx) {
-        char buf[50];
-        int bytes = snprintf(buf, 50, "#%p_%s_%d", node, suffix.c_str(), idx);
-        assert(bytes < 50); // double-check
-        return internString(std::string(buf));
+    InternedString nodeName(llvm::StringRef suffix, int idx) {
+        return createUniqueName(llvm::Twine("#") + suffix + "_" + llvm::Twine(idx) + "_");
     }
 
     AST_expr* remapAttribute(AST_Attribute* node) {
@@ -698,7 +681,7 @@ private:
     AST_expr* remapBoolOp(AST_BoolOp* node) {
         assert(curblock);
 
-        InternedString name = nodeName(node);
+        InternedString name = nodeName();
 
         CFGBlock* starting_block = curblock;
         CFGBlock* exit_block = cfg->addDeferredBlock();
@@ -802,7 +785,7 @@ private:
             }
             return rtn;
         } else {
-            InternedString name = nodeName(node);
+            InternedString name = nodeName();
 
             CFGBlock* exit_block = cfg->addDeferredBlock();
             AST_expr* left = remapExpr(node->left);
@@ -882,7 +865,8 @@ private:
         AST_FunctionDef* func = new AST_FunctionDef();
         func->lineno = node->lineno;
         func->col_offset = node->col_offset;
-        InternedString func_name = nodeName(func);
+        // TODO this should be set off the type of the comprehension (ie <setcomp> or <dictcomp> or <genexpr>)
+        InternedString func_name = internString("<comprehension>");
         func->name = func_name;
         func->args = new AST_arguments();
         func->args->vararg = internString("");
@@ -928,20 +912,22 @@ private:
         // argument to the function we create. See
         // https://www.python.org/dev/peps/pep-0289/#early-binding-versus-late-binding
         AST_expr* first = remapExpr(node->generators[0]->iter);
-        InternedString first_generator_name = nodeName(node->generators[0]);
+        InternedString arg_name = internString("#arg");
 
         AST_MakeFunction* func = makeFunctionForScope(node);
-        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
         emitComprehensionLoops(&func->function_def->body, node->generators,
-                               makeName(first_generator_name, AST_TYPE::Load, node->lineno),
+                               makeName(arg_name, AST_TYPE::Load, node->lineno),
                                [this, node](std::vector<AST_stmt*>* insert_point) {
                                    auto y = new AST_Yield();
                                    y->value = node->elt;
                                    insert_point->push_back(makeExpr(y));
                                });
-        pushAssign(func->function_def->name, func);
 
-        return makeCall(makeLoad(func->function_def->name, node), first);
+        InternedString func_var_name = nodeName();
+        pushAssign(func_var_name, func);
+
+        return makeCall(makeLoad(func_var_name, node), first);
     }
 
     void emitComprehensionYield(AST_DictComp* node, InternedString dict_name, std::vector<AST_stmt*>* insert_point) {
@@ -960,12 +946,12 @@ private:
     template <typename ResultType, typename CompType> AST_expr* remapScopedComprehension(CompType* node) {
         // See comment in remapGeneratorExp re early vs. late binding.
         AST_expr* first = remapExpr(node->generators[0]->iter);
-        InternedString first_generator_name = nodeName(node->generators[0]);
+        InternedString arg_name = internString("#arg");
 
         AST_MakeFunction* func = makeFunctionForScope(node);
-        func->function_def->args->args.push_back(makeName(first_generator_name, AST_TYPE::Param, node->lineno));
+        func->function_def->args->args.push_back(makeName(arg_name, AST_TYPE::Param, node->lineno));
 
-        InternedString rtn_name = nodeName(node);
+        InternedString rtn_name = internString("#comp_rtn");
         auto asgn = new AST_Assign();
         asgn->targets.push_back(makeName(rtn_name, AST_TYPE::Store, node->lineno));
         asgn->value = new ResultType();
@@ -973,22 +959,23 @@ private:
 
         auto lambda =
             [&](std::vector<AST_stmt*>* insert_point) { emitComprehensionYield(node, rtn_name, insert_point); };
-        AST_Name* first_name = makeName(first_generator_name, AST_TYPE::Load, node->lineno);
+        AST_Name* first_name = makeName(internString("#arg"), AST_TYPE::Load, node->lineno);
         emitComprehensionLoops(&func->function_def->body, node->generators, first_name, lambda);
 
         auto rtn = new AST_Return();
         rtn->value = makeName(rtn_name, AST_TYPE::Load, node->lineno);
         func->function_def->body.push_back(rtn);
 
-        pushAssign(func->function_def->name, func);
+        InternedString func_var_name = nodeName();
+        pushAssign(func_var_name, func);
 
-        return makeCall(makeName(func->function_def->name, AST_TYPE::Load, node->lineno), first);
+        return makeCall(makeName(func_var_name, AST_TYPE::Load, node->lineno), first);
     }
 
     AST_expr* remapIfExp(AST_IfExp* node) {
         assert(curblock);
 
-        InternedString rtn_name = nodeName(node);
+        InternedString rtn_name = nodeName();
         CFGBlock* iftrue = cfg->addDeferredBlock();
         CFGBlock* iffalse = cfg->addDeferredBlock();
         CFGBlock* exit_block = cfg->addDeferredBlock();
@@ -1141,7 +1128,7 @@ private:
         rtn->col_offset = node->col_offset;
         rtn->value = remapExpr(node->value);
 
-        InternedString node_name(nodeName(rtn));
+        InternedString node_name(nodeName());
         pushAssign(node_name, rtn);
 
         push_back(makeExpr(new AST_LangPrimitive(AST_LangPrimitive::UNCACHE_EXC_INFO)));
@@ -1247,7 +1234,7 @@ private:
 
         // this is the part that actually generates temporaries & assigns to them.
         if (wrap_with_assign && (rtn->type != AST_TYPE::Name || ast_cast<AST_Name>(rtn)->id.str()[0] != '#')) {
-            InternedString name = nodeName(node);
+            InternedString name = nodeName();
             pushAssign(name, rtn);
             return makeLoad(name, node);
         } else {
@@ -1430,7 +1417,7 @@ public:
 
         scoping_analysis->registerScopeReplacement(node, def);
 
-        auto tmp = nodeName(node);
+        auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeClass(def));
         // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
@@ -1450,7 +1437,7 @@ public:
 
         scoping_analysis->registerScopeReplacement(node, def);
 
-        auto tmp = nodeName(node);
+        auto tmp = nodeName();
         pushAssign(tmp, new AST_MakeFunction(def));
         // is this name mangling correct?
         pushAssign(source->mangleName(def->name), makeName(tmp, AST_TYPE::Load, node->lineno));
@@ -1493,7 +1480,7 @@ public:
             import->args.push_back(new AST_LangPrimitive(AST_LangPrimitive::NONE));
             import->args.push_back(new AST_Str(a->name.str()));
 
-            InternedString tmpname = nodeName(a);
+            InternedString tmpname = nodeName();
             pushAssign(tmpname, import);
 
             if (a->asname.str().size() == 0) {
@@ -1549,7 +1536,7 @@ public:
         }
         import->args.push_back(new AST_Str(node->module.str()));
 
-        InternedString tmp_module_name = nodeName(node);
+        InternedString tmp_module_name = nodeName();
         pushAssign(tmp_module_name, import);
 
         for (AST_alias* a : node->names) {
@@ -1573,7 +1560,7 @@ public:
                 import_from->args.push_back(makeLoad(tmp_module_name, node));
                 import_from->args.push_back(new AST_Str(a->name.str()));
 
-                InternedString tmp_import_name = nodeName(a);
+                InternedString tmp_import_name = nodeName();
                 pushAssign(tmp_import_name, import_from);
                 pushAssign(a->asname.str().size() ? a->asname : a->name, makeLoad(tmp_import_name, node));
             }
@@ -1665,7 +1652,7 @@ public:
             case AST_TYPE::Name: {
                 AST_Name* n = ast_cast<AST_Name>(node->target);
                 assert(n->ctx_type == AST_TYPE::Store);
-                InternedString n_name(nodeName(n));
+                InternedString n_name(nodeName());
                 pushAssign(n_name, makeLoad(n->id, node));
                 remapped_target = n;
                 remapped_lhs = makeLoad(n_name, node);
@@ -1726,7 +1713,7 @@ public:
         binop->col_offset = node->col_offset;
         binop->lineno = node->lineno;
 
-        InternedString node_name(nodeName(node));
+        InternedString node_name(nodeName());
         pushAssign(node_name, binop);
         pushAssign(remapped_target, makeLoad(node_name, node));
         return true;
@@ -2005,9 +1992,7 @@ public:
         AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
         iter_call->args.push_back(remapped_iter);
 
-        char itername_buf[80];
-        snprintf(itername_buf, 80, "#iter_%p", node);
-        InternedString itername = internString(itername_buf);
+        InternedString itername = createUniqueName("#iter_");
         pushAssign(itername, iter_call);
 
         AST_expr* next_attr = makeLoadAttribute(makeLoad(itername, node), internString("next"), true);
@@ -2042,7 +2027,7 @@ public:
         pushLoopContinuation(test_block, end_block);
 
         curblock = loop_block;
-        InternedString next_name(nodeName(next_attr));
+        InternedString next_name(nodeName());
         pushAssign(next_name, makeCall(next_attr));
         pushAssign(node->target, makeLoad(next_name, node));
 
@@ -2138,9 +2123,9 @@ public:
         assert(node->handlers.size() > 0);
 
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
-        InternedString exc_type_name = nodeName(node, "type");
-        InternedString exc_value_name = nodeName(node, "value");
-        InternedString exc_traceback_name = nodeName(node, "traceback");
+        InternedString exc_type_name = nodeName("type");
+        InternedString exc_value_name = nodeName("value");
+        InternedString exc_traceback_name = nodeName("traceback");
         exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         for (AST_stmt* subnode : node->body) {
@@ -2253,10 +2238,10 @@ public:
         assert(curblock);
 
         CFGBlock* exc_handler_block = cfg->addDeferredBlock();
-        InternedString exc_type_name = nodeName(node, "type");
-        InternedString exc_value_name = nodeName(node, "value");
-        InternedString exc_traceback_name = nodeName(node, "traceback");
-        InternedString exc_why_name = nodeName(node, "why");
+        InternedString exc_type_name = nodeName("type");
+        InternedString exc_value_name = nodeName("value");
+        InternedString exc_traceback_name = nodeName("traceback");
+        InternedString exc_why_name = nodeName("why");
         exc_handlers.push_back({ exc_handler_block, exc_type_name, exc_value_name, exc_traceback_name });
 
         CFGBlock* finally_block = cfg->addDeferredBlock();
@@ -2345,12 +2330,12 @@ public:
         // just translate this into AST_Try{Except,Finally} nodes and recursively visit those. (If there are other
         // reasons, I've forgotten them.)
         assert(curblock);
-        InternedString ctxmgrname = nodeName(node, "ctxmgr");
-        InternedString exitname = nodeName(node, "exit");
-        InternedString whyname = nodeName(node, "why");
-        InternedString exc_type_name = nodeName(node, "exc_type");
-        InternedString exc_value_name = nodeName(node, "exc_value");
-        InternedString exc_traceback_name = nodeName(node, "exc_traceback");
+        InternedString ctxmgrname = nodeName("ctxmgr");
+        InternedString exitname = nodeName("exit");
+        InternedString whyname = nodeName("why");
+        InternedString exc_type_name = nodeName("exc_type");
+        InternedString exc_value_name = nodeName("exc_value");
+        InternedString exc_traceback_name = nodeName("exc_traceback");
         InternedString nonename = internString("None");
         CFGBlock* exit_block = cfg->addDeferredBlock();
         exit_block->info = "with_exit";
@@ -2405,7 +2390,7 @@ public:
             curblock = exc_block;
 
             // call the context-manager's exit method
-            InternedString suppressname = nodeName(node, "suppress");
+            InternedString suppressname = nodeName("suppress");
             pushAssign(suppressname, makeCall(makeLoad(exitname, node), makeLoad(exc_type_name, node),
                                               makeLoad(exc_value_name, node), makeLoad(exc_traceback_name, node)));
 

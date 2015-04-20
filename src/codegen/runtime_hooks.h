@@ -49,7 +49,7 @@ struct GlobalFuncs {
     llvm::Value* exec;
     llvm::Value* boxedLocalsSet, *boxedLocalsGet, *boxedLocalsDel;
 
-    llvm::Value* __cxa_begin_catch, *__cxa_end_catch;
+    llvm::Value* __cxa_end_catch;
     llvm::Value* raise0, *raise3;
     llvm::Value* deopt;
 

@@ -156,8 +156,6 @@ static void compileIR(CompiledFunction* cf, EffortLevel effort) {
         assert(compiled);
         ASSERT(compiled == cf->code, "cf->code should have gotten filled in");
 
-        cf->llvm_code = embedConstantPtr(compiled, cf->func->getType());
-
         long us = _t.end();
         static StatCounter us_jitting("us_compiling_jitting");
         us_jitting.log(us);
@@ -243,7 +241,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     CompiledFunction* cf = 0;
     if (effort == EffortLevel::INTERPRETED) {
         assert(!entry_descriptor);
-        cf = new CompiledFunction(0, spec, true, NULL, NULL, effort, 0);
+        cf = new CompiledFunction(0, spec, true, NULL, effort, 0);
     } else {
         cf = doCompile(source, &f->param_names, entry_descriptor, effort, spec, name);
         compileIR(cf, effort);
@@ -651,21 +649,6 @@ void addRTFunction(CLFunction* cl_f, void* f, ConcreteCompilerType* rtn_type,
 #endif
 
     FunctionSpecialization* spec = new FunctionSpecialization(processType(rtn_type), arg_types);
-
-    std::vector<llvm::Type*> llvm_arg_types;
-    int npassed_args = arg_types.size();
-    assert(npassed_args == cl_f->numReceivedArgs());
-    for (int i = 0; i < npassed_args; i++) {
-        if (i == 3) {
-            llvm_arg_types.push_back(g.i8_ptr->getPointerTo());
-            break;
-        }
-        llvm_arg_types.push_back(arg_types[i]->llvmType());
-    }
-
-    llvm::FunctionType* ft = llvm::FunctionType::get(g.llvm_value_type_ptr, llvm_arg_types, false);
-
-    cl_f->addVersion(new CompiledFunction(NULL, spec, false, f, embedConstantPtr(f, ft->getPointerTo()),
-                                          EffortLevel::MAXIMAL, NULL));
+    cl_f->addVersion(new CompiledFunction(NULL, spec, false, f, EffortLevel::MAXIMAL, NULL));
 }
 }

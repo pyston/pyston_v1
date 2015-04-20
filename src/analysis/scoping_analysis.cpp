@@ -283,8 +283,12 @@ public:
         assert(usage);
         assert(ast);
 
+        // Sort the entries by name to make the order deterministic.
+        std::vector<InternedString> referenced_from_nested_sorted(usage->referenced_from_nested.begin(),
+                                                                  usage->referenced_from_nested.end());
+        std::sort(referenced_from_nested_sorted.begin(), referenced_from_nested_sorted.end());
         int i = 0;
-        for (auto& p : usage->referenced_from_nested) {
+        for (auto& p : referenced_from_nested_sorted) {
             closure_offsets[p] = i;
             i++;
         }

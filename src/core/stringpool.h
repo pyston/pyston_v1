@@ -73,10 +73,11 @@ public:
         return this->_str == rhs._str;
     }
 
+    // This function is slow because it does a string < string comparison and should be avoided.
     bool operator<(InternedString rhs) const {
         assert(this->_str);
         assert(this->pool == rhs.pool);
-        return this->_str < rhs._str;
+        return *this->_str < *rhs._str;
     }
 
     friend class InternedStringPool;

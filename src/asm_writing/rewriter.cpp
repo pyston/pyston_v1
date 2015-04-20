@@ -1555,6 +1555,27 @@ void* extractSlowpathFunc(uint8_t* pp_addr) {
     return call_addr;
 }
 
+void setSlowpathFunc(uint8_t* pp_addr, void* func) {
+#ifndef NDEBUG
+    // mov $imm, %r11:
+    ASSERT(pp_addr[0] == 0x49, "%x", pp_addr[0]);
+    assert(pp_addr[1] == 0xbb);
+    // 8 bytes of the addr
+
+    // callq *%r11:
+    assert(pp_addr[10] == 0x41);
+    assert(pp_addr[11] == 0xff);
+    assert(pp_addr[12] == 0xd3);
+
+    int i = INITIAL_CALL_SIZE;
+    while (*(pp_addr + i) == 0x66 || *(pp_addr + i) == 0x0f || *(pp_addr + i) == 0x2e)
+        i++;
+    assert(*(pp_addr + i) == 0x90 || *(pp_addr + i) == 0x1f);
+#endif
+
+    *(void**)&pp_addr[2] = func;
+}
+
 std::pair<uint8_t*, uint8_t*> initializePatchpoint3(void* slowpath_func, uint8_t* start_addr, uint8_t* end_addr,
                                                     int scratch_offset, int scratch_size,
                                                     const std::unordered_set<int>& live_outs, SpillMap& remapped) {

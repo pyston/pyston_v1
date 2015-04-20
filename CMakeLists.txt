@@ -116,6 +116,10 @@ ExternalProject_Add(libunwind
 add_subdirectory(libpypa)
 add_dependencies(pypa gitsubmodules)
 
+# lz4
+add_subdirectory(lz4/cmake_unofficial)
+add_dependencies(lz4 gitsubmodules)
+
 # valgrind
 if(ENABLE_VALGRIND)
   find_package(Valgrind REQUIRED)
@@ -182,7 +186,7 @@ add_subdirectory(tools)
 
 add_executable(pyston $<TARGET_OBJECTS:PYSTON_MAIN_OBJECT> $<TARGET_OBJECTS:PYSTON_OBJECTS> $<TARGET_OBJECTS:FROM_CPYTHON>)
 # Wrap the stdlib in --whole-archive to force all the symbols to be included and eventually exported
-target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline sqlite3 gmp ssl crypto unwind pypa double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
+target_link_libraries(pyston -Wl,--whole-archive stdlib -Wl,--no-whole-archive pthread m readline sqlite3 gmp ssl crypto unwind pypa liblz4 double-conversion ${LLVM_LIBS} ${LIBLZMA_LIBRARIES} ${OPTIONAL_LIBRARIES})
 
 # copy src/codegen/parse_ast.py to the build directory
 add_custom_command(TARGET pyston POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/src/codegen/parse_ast.py ${CMAKE_BINARY_DIR}/src/codegen/parse_ast.py)

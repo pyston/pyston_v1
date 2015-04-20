@@ -27,10 +27,15 @@ namespace pyston {
 
 llvm::Constant* getStringConstantPtr(const std::string& str);
 llvm::Constant* getStringConstantPtr(const char* str);
+llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type*);
 llvm::Constant* embedConstantPtr(const void* addr, llvm::Type*);
 llvm::Constant* getConstantInt(int64_t val);
 llvm::Constant* getConstantDouble(double val);
 llvm::Constant* getConstantInt(int64_t val, llvm::Type*);
+llvm::Constant* getNullPtr(llvm::Type* t);
+
+void clearRelocatableSymsMap();
+const void* getValueOfRelocatableSym(const std::string& str);
 
 void dumpPrettyIR(llvm::Function* f);
 }

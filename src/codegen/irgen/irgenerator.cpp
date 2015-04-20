@@ -159,11 +159,11 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             // The "normal" case
 
             // frame_info.exc.type = NULL
-            builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), getExcinfoGep(builder, al));
+            builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), getExcinfoGep(builder, al));
 
             // frame_info.boxedLocals = NULL
             llvm::Value* boxed_locals_gep = getBoxedLocalsGep(builder, al);
-            builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), boxed_locals_gep);
+            builder.CreateStore(getNullPtr(g.llvm_value_type_ptr), boxed_locals_gep);
 
             if (getScopeInfo()->usesNameLookup()) {
                 // frame_info.boxedLocals = createDict()
@@ -175,7 +175,7 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             // frame_info.frame_obj = NULL
             static llvm::Type* llvm_frame_obj_type_ptr
                 = llvm::cast<llvm::StructType>(g.llvm_frame_info_type)->getElementType(2);
-            builder.CreateStore(embedConstantPtr(NULL, llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
+            builder.CreateStore(getNullPtr(llvm_frame_obj_type_ptr), getFrameObjGep(builder, al));
 
             this->frame_info = al;
         }
@@ -229,14 +229,33 @@ private:
         if (pp == NULL)
             assert(ic_stackmap_args.size() == 0);
 
-        PatchpointInfo* info = PatchpointInfo::create(currentFunction(), pp, ic_stackmap_args.size());
-        int64_t pp_id = reinterpret_cast<int64_t>(info);
+        // Retrieve address of called function, currently handles the IR
+        // embedConstantPtr() and embedRelocatablePtr() create.
+        void* func_addr = nullptr;
+        if (llvm::isa<llvm::ConstantExpr>(func)) {
+            llvm::ConstantExpr* cast = llvm::cast<llvm::ConstantExpr>(func);
+            auto opcode = cast->getOpcode();
+            if (opcode == llvm::Instruction::IntToPtr) {
+                auto operand = cast->getOperand(0);
+                if (llvm::isa<llvm::ConstantInt>(operand))
+                    func_addr = (void*)llvm::cast<llvm::ConstantInt>(operand)->getZExtValue();
+            }
+        }
+        assert(func_addr);
+
+        PatchpointInfo* info = PatchpointInfo::create(currentFunction(), pp, ic_stackmap_args.size(), func_addr);
+
+        int64_t pp_id = info->getId();
         int pp_size = pp ? pp->totalSize() : CALL_ONLY_SIZE;
 
         std::vector<llvm::Value*> pp_args;
         pp_args.push_back(getConstantInt(pp_id, g.i64)); // pp_id: will fill this in later
         pp_args.push_back(getConstantInt(pp_size, g.i32));
-        pp_args.push_back(func);
+        if (ENABLE_JIT_OBJECT_CACHE)
+            // add fixed dummy dest pointer, we will replace it with the correct address during stackmap processing
+            pp_args.push_back(embedConstantPtr((void*)-1L, g.i8_ptr));
+        else
+            pp_args.push_back(func);
         pp_args.push_back(getConstantInt(args.size(), g.i32));
 
         pp_args.insert(pp_args.end(), args.begin(), args.end());
@@ -452,7 +471,7 @@ private:
         curblock = deopt_bb;
         emitter.getBuilder()->SetInsertPoint(curblock);
         llvm::Value* v = emitter.createCall2(UnwindInfo(current_statement, NULL), g.funcs.deopt,
-                                             embedConstantPtr(node, g.i8->getPointerTo()), node_value);
+                                             embedRelocatablePtr(node, g.i8->getPointerTo()), node_value);
         emitter.getBuilder()->CreateRet(v);
 
         curblock = success_bb;
@@ -509,13 +528,17 @@ private:
                 assert(personality_func);
                 llvm::LandingPadInst* landing_pad = emitter.getBuilder()->CreateLandingPad(
                     llvm::StructType::create(std::vector<llvm::Type*>{ g.i8_ptr, g.i64 }), personality_func, 1);
-                landing_pad->addClause(embedConstantPtr(NULL, g.i8_ptr));
+                landing_pad->addClause(getNullPtr(g.i8_ptr));
 
                 llvm::Value* cxaexc_pointer = emitter.getBuilder()->CreateExtractValue(landing_pad, { 0 });
 
                 if (irstate->getEffortLevel() != EffortLevel::INTERPRETED) {
-                    llvm::Value* excinfo_pointer
-                        = emitter.getBuilder()->CreateCall(g.funcs.__cxa_begin_catch, cxaexc_pointer);
+                    llvm::Function* std_module_catch = g.stdlib_module->getFunction("__cxa_begin_catch");
+                    auto begin_catch_func = g.cur_module->getOrInsertFunction(std_module_catch->getName(),
+                                                                              std_module_catch->getFunctionType());
+                    assert(begin_catch_func);
+
+                    llvm::Value* excinfo_pointer = emitter.getBuilder()->CreateCall(begin_catch_func, cxaexc_pointer);
                     llvm::Value* excinfo_pointer_casted
                         = emitter.getBuilder()->CreateBitCast(excinfo_pointer, g.llvm_excinfo_type->getPointerTo());
 
@@ -567,7 +590,7 @@ private:
                 assert(name.size());
 
                 llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importFrom, converted_module->getValue(),
-                                                     embedConstantPtr(&name, g.llvm_str_type_ptr));
+                                                     embedRelocatablePtr(&name, g.llvm_str_type_ptr));
 
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
@@ -585,9 +608,8 @@ private:
                 ConcreteCompilerVariable* converted_module = module->makeConverted(emitter, module->getBoxType());
                 module->decvref(emitter);
 
-                llvm::Value* r = emitter.createCall2(
-                    unw_info, g.funcs.importStar, converted_module->getValue(),
-                    embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+                llvm::Value* r = emitter.createCall2(unw_info, g.funcs.importStar, converted_module->getValue(),
+                                                     embedParentModulePtr());
                 CompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, r, true);
 
                 converted_module->decvref(emitter);
@@ -612,7 +634,7 @@ private:
 
                 llvm::Value* imported = emitter.createCall3(unw_info, g.funcs.import, getConstantInt(level, g.i32),
                                                             converted_froms->getValue(),
-                                                            embedConstantPtr(&module_name, g.llvm_str_type_ptr));
+                                                            embedRelocatablePtr(&module_name, g.llvm_str_type_ptr));
                 ConcreteCompilerVariable* v = new ConcreteCompilerVariable(UNKNOWN, imported, true);
 
                 converted_froms->decvref(emitter);
@@ -671,7 +693,7 @@ private:
                 llvm::Value* exc_info = builder->CreateConstInBoundsGEP2_32(frame_info, 0, 0);
                 assert(exc_info->getType() == g.llvm_excinfo_type->getPointerTo());
 
-                llvm::Constant* v = embedConstantPtr(0, g.llvm_value_type_ptr);
+                llvm::Constant* v = getNullPtr(g.llvm_value_type_ptr);
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 0));
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 1));
                 builder->CreateStore(v, builder->CreateConstInBoundsGEP2_32(exc_info, 0, 2));
@@ -889,8 +911,13 @@ private:
 
     ConcreteCompilerVariable* getNone() {
         ConcreteCompilerVariable* v = new ConcreteCompilerVariable(
-            typeFromClass(none_cls), embedConstantPtr(None, g.llvm_value_type_ptr), false);
+            typeFromClass(none_cls), embedRelocatablePtr(None, g.llvm_value_type_ptr), false);
         return v;
+    }
+
+    llvm::Constant* embedParentModulePtr() {
+        // TODO: We could reuse the name to reduce the number of relocatable pointers.
+        return embedRelocatablePtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr);
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, UnwindInfo unw_info) {
@@ -902,17 +929,15 @@ private:
             ICSetupInfo* pp = createGetGlobalIC(getOpInfoForNode(node, unw_info).getTypeRecorder());
 
             std::vector<llvm::Value*> llvm_args;
-            llvm_args.push_back(embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
-            llvm_args.push_back(embedConstantPtr(&node->id.str(), g.llvm_str_type_ptr));
+            llvm_args.push_back(embedParentModulePtr());
+            llvm_args.push_back(embedRelocatablePtr(&node->id.str(), g.llvm_str_type_ptr));
 
             llvm::Value* uncasted = emitter.createIC(pp, (void*)pyston::getGlobal, llvm_args, unw_info);
             llvm::Value* r = emitter.getBuilder()->CreateIntToPtr(uncasted, g.llvm_value_type_ptr);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
-            llvm::Value* r
-                = emitter.createCall2(unw_info, g.funcs.getGlobal,
-                                      embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
-                                      embedConstantPtr(&node->id.str(), g.llvm_str_type_ptr));
+            llvm::Value* r = emitter.createCall2(unw_info, g.funcs.getGlobal, embedParentModulePtr(),
+                                                 embedRelocatablePtr(&node->id.str(), g.llvm_str_type_ptr));
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         }
     }
@@ -959,7 +984,7 @@ private:
                 = llvm::BasicBlock::Create(g.context, "deref_undefined", irstate->getLLVMFunction());
 
             llvm::Value* check_val
-                = emitter.getBuilder()->CreateICmpEQ(lookupResult, embedConstantPtr(NULL, g.llvm_value_type_ptr));
+                = emitter.getBuilder()->CreateICmpEQ(lookupResult, getNullPtr(g.llvm_value_type_ptr));
             llvm::BranchInst* non_null_check = emitter.getBuilder()->CreateCondBr(check_val, fail_bb, success_bb);
 
             // Case that it is undefined: call the assert fail function.
@@ -979,7 +1004,7 @@ private:
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = getStringConstantPtr(node->id.str() + '\0');
-            llvm::Value* module = embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr);
+            llvm::Value* module = embedParentModulePtr();
             llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
             return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
@@ -990,7 +1015,7 @@ private:
                 llvm::CallSite call = emitter.createCall(
                     unw_info, g.funcs.assertNameDefined,
                     { getConstantInt(0, g.i1), getStringConstantPtr(node->id.str() + '\0'),
-                      embedConstantPtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
+                      embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr), getConstantInt(true, g.i1) });
                 call.setDoesNotReturn();
                 return undefVariable();
             }
@@ -1002,7 +1027,7 @@ private:
             if (is_defined_var) {
                 emitter.createCall(unw_info, g.funcs.assertNameDefined,
                                    { i1FromBool(emitter, is_defined_var), getStringConstantPtr(node->id.str() + '\0'),
-                                     embedConstantPtr(UnboundLocalError, g.llvm_class_type_ptr),
+                                     embedRelocatablePtr(UnboundLocalError, g.llvm_class_type_ptr),
                                      getConstantInt(true, g.i1) });
 
                 // At this point we know the name must be defined (otherwise the assert would have fired):
@@ -1108,7 +1133,7 @@ private:
 
     CompilerVariable* evalStr(AST_Str* node, UnwindInfo unw_info) {
         if (node->str_type == AST_Str::STR) {
-            llvm::Value* rtn = embedConstantPtr(
+            llvm::Value* rtn = embedRelocatablePtr(
                 irstate->getSourceInfo()->parent_module->getStringConstant(node->str_data), g.llvm_value_type_ptr);
 
             return new ConcreteCompilerVariable(STR, rtn, true);
@@ -1239,7 +1264,7 @@ private:
         attr_dict->decvref(emitter);
 
         llvm::Value* classobj = emitter.createCall3(unw_info, g.funcs.createUserClass,
-                                                    embedConstantPtr(&node->name.str(), g.llvm_str_type_ptr),
+                                                    embedRelocatablePtr(&node->name.str(), g.llvm_str_type_ptr),
                                                     bases_tuple->getValue(), converted_attr_dict->getValue());
 
         // Note: createuserClass is free to manufacture non-class objects
@@ -1502,8 +1527,8 @@ private:
 
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // TODO do something special here so that it knows to only emit a monomorphic inline cache?
-            ConcreteCompilerVariable* module = new ConcreteCompilerVariable(
-                MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
+            auto parent_module = llvm::ConstantExpr::getPointerCast(embedParentModulePtr(), g.llvm_value_type_ptr);
+            ConcreteCompilerVariable* module = new ConcreteCompilerVariable(MODULE, parent_module, false);
             module->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
             module->decvref(emitter);
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
@@ -1627,7 +1652,7 @@ private:
         assert(num->n_int == 0);
 
         std::vector<llvm::Value*> llvm_args;
-        llvm_args.push_back(embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr));
+        llvm_args.push_back(embedParentModulePtr());
 
         ConcreteCompilerVariable* converted_msg = NULL;
         if (node->msg) {
@@ -1636,7 +1661,7 @@ private:
             msg->decvref(emitter);
             llvm_args.push_back(converted_msg->getValue());
         } else {
-            llvm_args.push_back(embedConstantPtr(NULL, g.llvm_value_type_ptr));
+            llvm_args.push_back(getNullPtr(g.llvm_value_type_ptr));
         }
         llvm::CallSite call = emitter.createCall(unw_info, g.funcs.assertFail, llvm_args);
         call.setDoesNotReturn();
@@ -1707,9 +1732,8 @@ private:
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
-            emitter.createCall2(unw_info, g.funcs.delGlobal,
-                                embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
-                                embedConstantPtr(&target->id.str(), g.llvm_str_type_ptr));
+            emitter.createCall2(unw_info, g.funcs.delGlobal, embedParentModulePtr(),
+                                embedRelocatablePtr(&target->id.str(), g.llvm_str_type_ptr));
             return;
         }
 
@@ -1725,10 +1749,11 @@ private:
         assert(vst == ScopeInfo::VarScopeType::FAST);
 
         if (symbol_table.count(target->id) == 0) {
-            llvm::CallSite call = emitter.createCall(
-                unw_info, g.funcs.assertNameDefined,
-                { getConstantInt(0, g.i1), getStringConstantPtr(target->id.str() + '\0'),
-                  embedConstantPtr(NameError, g.llvm_class_type_ptr), getConstantInt(true /*local_error_msg*/, g.i1) });
+            llvm::CallSite call
+                = emitter.createCall(unw_info, g.funcs.assertNameDefined,
+                                     { getConstantInt(0, g.i1), getStringConstantPtr(target->id.str() + '\0'),
+                                       embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
+                                       getConstantInt(true /*local_error_msg*/, g.i1) });
             call.setDoesNotReturn();
             return;
         }
@@ -1739,7 +1764,7 @@ private:
         if (is_defined_var) {
             emitter.createCall(unw_info, g.funcs.assertNameDefined,
                                { i1FromBool(emitter, is_defined_var), getStringConstantPtr(target->id.str() + '\0'),
-                                 embedConstantPtr(NameError, g.llvm_class_type_ptr),
+                                 embedRelocatablePtr(NameError, g.llvm_class_type_ptr),
                                  getConstantInt(true /*local_error_msg*/, g.i1) });
             _popFake(defined_name);
         }
@@ -1758,7 +1783,7 @@ private:
             vglobals = globals->makeConverted(emitter, globals->getBoxType())->getValue();
             globals->decvref(emitter);
         } else {
-            vglobals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+            vglobals = getNullPtr(g.llvm_value_type_ptr);
         }
 
         llvm::Value* vlocals;
@@ -1767,7 +1792,7 @@ private:
             vlocals = locals->makeConverted(emitter, locals->getBoxType())->getValue();
             locals->decvref(emitter);
         } else {
-            vlocals = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+            vlocals = getNullPtr(g.llvm_value_type_ptr);
         }
 
         emitter.createCall3(unw_info, g.funcs.exec, vbody, vglobals, vlocals);
@@ -1855,7 +1880,7 @@ private:
                 return;
             }
 
-            val = new ConcreteCompilerVariable(NONE, embedConstantPtr(None, g.llvm_value_type_ptr), false);
+            val = getNone();
         } else {
             val = evalExpr(node->value, unw_info);
         }
@@ -1950,7 +1975,7 @@ private:
         OSREntryDescriptor* entry = OSREntryDescriptor::create(irstate->getCurFunction(), osr_key);
         OSRExit* exit = new OSRExit(irstate->getCurFunction(), entry);
         llvm::Value* partial_func = emitter.getBuilder()->CreateCall(g.funcs.compilePartialFunc,
-                                                                     embedConstantPtr(exit, g.i8->getPointerTo()));
+                                                                     embedRelocatablePtr(exit, g.i8->getPointerTo()));
 
         std::vector<llvm::Value*> llvm_args;
         std::vector<llvm::Type*> llvm_arg_types;
@@ -2125,7 +2150,7 @@ private:
                 v->decvref(emitter);
                 args.push_back(converted->getValue());
             } else {
-                args.push_back(embedConstantPtr(None, g.llvm_value_type_ptr));
+                args.push_back(embedRelocatablePtr(None, g.llvm_value_type_ptr));
             }
         }
 
@@ -2332,7 +2357,17 @@ public:
         stackmap_args.push_back(irstate->getFrameInfoVar());
 
         assert(INT->llvmType() == g.i64);
-        stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));
+        if (ENABLE_JIT_OBJECT_CACHE) {
+            llvm::Value* v;
+            if (current_stmt)
+                v = emitter.getBuilder()->CreatePtrToInt(embedRelocatablePtr(current_stmt, g.i8_ptr), g.i64);
+            else
+                v = getConstantInt(0, g.i64);
+            stackmap_args.push_back(v);
+        } else {
+            stackmap_args.push_back(getConstantInt((uint64_t)current_stmt, g.i64));
+        }
+
         pp->addFrameVar("!current_stmt", INT);
 
         if (ENABLE_FRAME_INTROSPECTION) {
@@ -2469,7 +2504,7 @@ public:
 
         if (scope_info->createsClosure()) {
             if (!passed_closure)
-                passed_closure = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
+                passed_closure = getNullPtr(g.llvm_closure_type_ptr);
 
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall2(
                 g.funcs.createClosure, passed_closure, getConstantInt(scope_info->getClosureSize(), g.i64));

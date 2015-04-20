@@ -476,6 +476,7 @@ public:
 };
 
 void* extractSlowpathFunc(uint8_t* pp_addr);
+void setSlowpathFunc(uint8_t* pp_addr, void* func);
 
 struct GRCompare {
     bool operator()(assembler::GenericRegister gr1, assembler::GenericRegister gr2) const {

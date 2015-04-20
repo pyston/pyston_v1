@@ -154,16 +154,17 @@ public:
 
     virtual void accept(ASTVisitor* v) = 0;
 
-#ifndef NDEBUG
+// #define DEBUG_LINE_NUMBERS 1
+#ifdef DEBUG_LINE_NUMBERS
 private:
-    // In debug mode, initialize lineno to something unique, so that if we see something ridiculous
+    // Initialize lineno to something unique, so that if we see something ridiculous
     // appear in the traceback, we can isolate the allocation which created it.
     static int next_lineno;
 
 public:
     AST(AST_TYPE::AST_TYPE type);
 #else
-    AST(AST_TYPE::AST_TYPE type) : type(type) {}
+    AST(AST_TYPE::AST_TYPE type) : type(type), lineno(0), col_offset(0) {}
 #endif
     AST(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset = 0)
         : type(type), lineno(lineno), col_offset(col_offset) {}
