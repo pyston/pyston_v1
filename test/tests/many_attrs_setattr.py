@@ -1,3 +1,5 @@
+# skip-if: True
+# - this test just runs until it times out and bloats test time
 # expected: fail
 # - memory explosion
 

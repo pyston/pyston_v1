@@ -206,7 +206,7 @@ void prependToSysPath(const std::string& path) {
 static BoxedClass* sys_flags_cls;
 class BoxedSysFlags : public Box {
 public:
-    Box* division_warning, *bytes_warning, *no_user_site;
+    Box* division_warning, *bytes_warning, *no_user_site, *optimize;
 
     BoxedSysFlags() {
         auto zero = boxInt(0);
@@ -214,6 +214,7 @@ public:
         division_warning = zero;
         bytes_warning = zero;
         no_user_site = zero;
+        optimize = zero;
     }
 
     DEFAULT_CLASS(sys_flags_cls);
@@ -226,6 +227,7 @@ public:
         v->visit(self->division_warning);
         v->visit(self->bytes_warning);
         v->visit(self->no_user_site);
+        v->visit(self->optimize);
     }
 
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {
@@ -347,6 +349,7 @@ void setupSys() {
     ADD(division_warning);
     ADD(bytes_warning);
     ADD(no_user_site);
+    ADD(optimize);
 #undef ADD
 
     sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });

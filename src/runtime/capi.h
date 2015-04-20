@@ -28,8 +28,13 @@ void throwCAPIException() __attribute__((noreturn));
 struct ExcInfo;
 void setCAPIException(const ExcInfo& e);
 
-// TODO: not sure whether this belongs here
-void fatalOrError(Box* object, const char* message) noexcept;
+#define fatalOrError(exception, message)                                                                               \
+    do {                                                                                                               \
+        if (CONTINUE_AFTER_FATAL)                                                                                      \
+            PyErr_SetString((exception), (message));                                                                   \
+        else                                                                                                           \
+            Py_FatalError((message));                                                                                  \
+    } while (0)
 }
 
 #endif

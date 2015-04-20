@@ -382,7 +382,7 @@ Box* eval(Box* boxedCode) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
-    RELEASE_ASSERT(boxedCode->cls == str_cls, "");
+    RELEASE_ASSERT(boxedCode->cls == str_cls, "%s", boxedCode->cls->tp_name);
     const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
     AST_Module* parsedModule = parse_string(code);
     RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
