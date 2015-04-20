@@ -2004,6 +2004,14 @@ extern "C" BoxedString* str(Box* obj) {
     return static_cast<BoxedString*>(obj);
 }
 
+extern "C" Box* strOrUnicode(Box* obj) {
+    // Like str, but returns unicode objects unchanged.
+    if (obj->cls == unicode_cls) {
+        return obj;
+    }
+    return str(obj);
+}
+
 extern "C" BoxedString* repr(Box* obj) {
     static StatCounter slowpath_repr("slowpath_repr");
     slowpath_repr.log();

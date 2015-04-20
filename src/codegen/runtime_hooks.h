@@ -38,7 +38,7 @@ struct GlobalFuncs {
         *decodeUTF8StringPtr;
     llvm::Value* getattr, *setattr, *delattr, *delitem, *delGlobal, *nonzero, *binop, *compare, *augbinop, *unboxedLen,
         *getitem, *getclsattr, *getGlobal, *setitem, *unaryop, *import, *importFrom, *importStar, *repr, *str,
-        *exceptionMatches, *yield, *getiterHelper, *hasnext;
+        *strOrUnicode, *exceptionMatches, *yield, *getiterHelper, *hasnext;
 
     llvm::Value* unpackIntoArray, *raiseAttributeError, *raiseAttributeErrorStr, *raiseNotIterableError,
         *raiseIndexErrorStr, *assertNameDefined, *assertFail, *assertFailDerefNameDefined;

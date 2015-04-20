@@ -1845,7 +1845,7 @@ private:
             // end code for handling of softspace
 
 
-            llvm::Value* v = emitter.createCall(unw_info, g.funcs.str, converted->getValue());
+            llvm::Value* v = emitter.createCall(unw_info, g.funcs.strOrUnicode, converted->getValue());
             v = emitter.getBuilder()->CreateBitCast(v, g.llvm_value_type_ptr);
             auto s = new ConcreteCompilerVariable(STR, v, true);
             r = dest->callattr(emitter, getOpInfoForNode(node, unw_info), &write_str, flags, ArgPassSpec(1), { s },

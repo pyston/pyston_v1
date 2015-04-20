@@ -102,6 +102,7 @@ void force() {
     FORCE(assertFailDerefNameDefined);
     FORCE(assertFail);
 
+    FORCE(strOrUnicode);
     FORCE(printFloat);
     FORCE(listAppendInternal);
     FORCE(getSysStdout);
