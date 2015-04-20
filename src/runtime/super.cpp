@@ -129,10 +129,10 @@ Box* superGetattribute(Box* _s, Box* _attr) {
         }
     }
 
-    Box* r = typeLookup(s->cls, attr_s, NULL);
+    Box* r = getattrInternalGeneric(s, attr_s, NULL, true, false, NULL, NULL);
     if (r)
         return processDescriptor(r, s, s->cls);
-    raiseExcHelper(AttributeError, "'super' object has has no attribute '%s'", attr->data());
+    raiseExcHelper(AttributeError, "'super' object has no attribute '%s'", attr->data());
 }
 
 Box* superRepr(Box* _s) {
