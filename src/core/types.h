@@ -586,6 +586,8 @@ struct FrameInfo {
 struct CallattrFlags {
     bool cls_only : 1;
     bool null_on_nonexistent : 1;
+
+    char asInt() { return (cls_only << 0) + (null_on_nonexistent << 1); }
 };
 }
 

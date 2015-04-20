@@ -675,17 +675,10 @@ CompilerVariable* UnknownType::callattr(IREmitter& emitter, const OpInfo& info, 
     else
         func = g.funcs.callattrN;
 
-    union {
-        CallattrFlags flags;
-        char value;
-    } flags_to_int;
-    static_assert(sizeof(CallattrFlags) == sizeof(char), "");
-    flags_to_int.flags = flags;
-
     std::vector<llvm::Value*> other_args;
     other_args.push_back(var->getValue());
     other_args.push_back(embedRelocatablePtr(attr, g.llvm_str_type_ptr));
-    other_args.push_back(getConstantInt(flags_to_int.value, g.i8));
+    other_args.push_back(getConstantInt(flags.asInt(), g.i8));
 
     llvm::Value* llvm_argspec = llvm::ConstantInt::get(g.i32, argspec.asInt(), false);
     other_args.push_back(llvm_argspec);

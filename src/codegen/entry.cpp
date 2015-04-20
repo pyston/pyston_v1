@@ -282,10 +282,12 @@ public:
             M->print(sstr, 0);
             sstr.flush();
 
+            llvm::sys::fs::create_directories(cache_dir.str());
             std::string filename = cache_dir.str().str() + "/" + module_identifier + "_first.ll";
             if (llvm::sys::fs::exists(filename))
                 filename = cache_dir.str().str() + "/" + module_identifier + "_second.ll";
             FILE* f = fopen(filename.c_str(), "wt");
+            ASSERT(f, "%s", strerror(errno));
             fwrite(llvm_ir.c_str(), 1, llvm_ir.size(), f);
             fclose(f);
 #endif
