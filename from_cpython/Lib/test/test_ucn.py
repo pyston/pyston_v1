@@ -1,4 +1,3 @@
-# expected: fail
 """ Test script for the Unicode implementation.
 
 Written by Bill Tutt.
