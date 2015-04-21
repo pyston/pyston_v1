@@ -377,6 +377,7 @@ STDOBJECT_SRCS := \
 	capsule.c \
 	stringobject.c \
 	exceptions.c \
+	floatobject.c \
 	unicodeobject.c \
 	unicodectype.c \
 	bytearrayobject.c \

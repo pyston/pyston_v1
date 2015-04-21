@@ -58,3 +58,6 @@ try:
     float.__getformat__('oooga booga boooga')
 except Exception as e:
     print e.message
+
+print float.fromhex("f0.04a")
+print (5.0).hex()

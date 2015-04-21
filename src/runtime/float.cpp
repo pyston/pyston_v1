@@ -17,12 +17,16 @@
 #include <cstring>
 #include <gmp.h>
 
+#include "capi/types.h"
 #include "core/types.h"
 #include "runtime/inline/boxing.h"
 #include "runtime/long.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
+
+extern "C" PyObject* float_hex(PyObject* v) noexcept;
+extern "C" PyObject* float_fromhex(PyObject* cls, PyObject* arg) noexcept;
 
 namespace pyston {
 
@@ -1424,6 +1428,9 @@ exit:
     return result;
 }
 
+static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOARGS, NULL },
+                                       { "fromhex", (PyCFunction)float_fromhex, METH_O | METH_CLASS, NULL } };
+
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
@@ -1471,6 +1478,10 @@ void setupFloat() {
     float_cls->giveAttr("__getformat__",
                         new BoxedClassmethod(new BoxedBuiltinFunctionOrMethod(
                             boxRTFunction((void*)floatGetFormat, STR, 2), "__getformat__", floatGetFormatDoc)));
+
+    for (auto& md : float_methods) {
+        float_cls->giveAttr(md.ml_name, new BoxedMethodDescriptor(&md, float_cls));
+    }
 
     float_cls->freeze();
 

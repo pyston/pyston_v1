@@ -79,6 +79,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     capsule.c
     cobject.c
     exceptions.c
+    floatobject.c
     iterobject.c
     memoryobject.c
     stringobject.c

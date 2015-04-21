@@ -12,16 +12,10 @@ PyFloatObject represents a (double precision) floating point number.
 extern "C" {
 #endif
 
-// Pyston change: this is not the format we're using
-// - actually I think it is but there's no reason to have multiple definitions.
-#if 0
 typedef struct {
     PyObject_HEAD
     double ob_fval;
 } PyFloatObject;
-#endif
-struct _PyFloatObject;
-typedef struct _PyFloatObject PyFloatObject;
 
 // Pyston change: this is no longer a static object
 PyAPI_DATA(PyTypeObject*) float_cls;

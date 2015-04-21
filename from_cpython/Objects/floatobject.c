@@ -138,6 +138,8 @@ PyFloat_GetInfo(void)
     return floatinfo;
 }
 
+// pyston change: comment this out
+#if 0
 PyObject *
 PyFloat_FromDouble(double fval)
 {
@@ -153,6 +155,7 @@ PyFloat_FromDouble(double fval)
     op->ob_fval = fval;
     return (PyObject *) op;
 }
+#endif
 
 /**************************************************************************
 RED_FLAG 22-Sep-2000 tim
@@ -170,6 +173,8 @@ Since we can't change the interface of a public API function, pend is
 still supported but now *officially* useless:  if pend is not NULL,
 *pend is set to NULL.
 **************************************************************************/
+// pyston change: comment this out
+#if 0
 PyObject *
 PyFloat_FromString(PyObject *v, char **pend)
 {
@@ -235,6 +240,7 @@ PyFloat_FromString(PyObject *v, char **pend)
 #endif
     return result;
 }
+#endif
 
 static void
 float_dealloc(PyFloatObject *op)
@@ -247,6 +253,8 @@ float_dealloc(PyFloatObject *op)
         Py_TYPE(op)->tp_free((PyObject *)op);
 }
 
+// pyston change: comment this out
+#if 0
 double
 PyFloat_AsDouble(PyObject *op)
 {
@@ -281,6 +289,7 @@ PyFloat_AsDouble(PyObject *op)
 
     return val;
 }
+#endif
 
 /* Methods */
 
@@ -1078,6 +1087,8 @@ float_long(PyObject *v)
 #error "C doubles do not appear to be IEEE 754 binary64 format"
 #endif
 
+// pyston change: comment this out
+#if 0
 PyObject *
 _Py_double_round(double x, int ndigits) {
 
@@ -1214,6 +1225,7 @@ _Py_double_round(double x, int ndigits) {
     _Py_dg_freedtoa(buf);
     return result;
 }
+#endif
 
 #undef FIVE_POW_LIMIT
 
@@ -1359,7 +1371,8 @@ hex_from_char(char c) {
    of the form 4k+1. */
 #define TOHEX_NBITS DBL_MANT_DIG + 3 - (DBL_MANT_DIG+2)%4
 
-static PyObject *
+// pyston change: make this not static
+PyObject *
 float_hex(PyObject *v)
 {
     double x, m;
@@ -1437,7 +1450,8 @@ case_insensitive_match(const char *s, const char *t)
 
 /* Convert a hexadecimal string to a float. */
 
-static PyObject *
+// pyston change: make this not static
+PyObject *
 float_fromhex(PyObject *cls, PyObject *arg)
 {
     PyObject *result_as_float, *result;
@@ -2105,6 +2119,8 @@ static PyNumberMethods float_as_number = {
     0,                  /* nb_inplace_true_divide */
 };
 
+// pyston change: don't need this
+#if 0
 PyTypeObject PyFloat_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "float",
@@ -2295,7 +2311,10 @@ PyFloat_Fini(void)
         }
     }
 }
+#endif
 
+// pyston change: comment this out
+#if 0
 /*----------------------------------------------------------------------------
  * _PyFloat_{Pack,Unpack}{4,8}.  See floatobject.h.
  */
@@ -2705,3 +2724,4 @@ _PyFloat_Unpack8(const unsigned char *p, int le)
         return x;
     }
 }
+#endif
