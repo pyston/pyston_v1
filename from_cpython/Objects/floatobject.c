@@ -980,7 +980,8 @@ float_coerce(PyObject **pv, PyObject **pw)
     return 1; /* Can't do it */
 }
 
-static PyObject *
+// pyston change: make not static
+PyObject *
 float_is_integer(PyObject *v)
 {
     double x = PyFloat_AsDouble(v);

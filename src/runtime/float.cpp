@@ -28,6 +28,7 @@
 extern "C" PyObject* float_hex(PyObject* v) noexcept;
 extern "C" PyObject* float_fromhex(PyObject* cls, PyObject* arg) noexcept;
 extern "C" PyObject* float_as_integer_ratio(PyObject* v, PyObject* unused) noexcept;
+extern "C" PyObject* float_is_integer(PyObject* v) noexcept;
 
 namespace pyston {
 
@@ -1431,7 +1432,9 @@ exit:
 
 static PyMethodDef float_methods[] = { { "hex", (PyCFunction)float_hex, METH_NOARGS, NULL },
                                        { "fromhex", (PyCFunction)float_fromhex, METH_O | METH_CLASS, NULL },
-                                       { "as_integer_ratio", (PyCFunction)float_as_integer_ratio, METH_NOARGS, NULL } };
+                                       { "as_integer_ratio", (PyCFunction)float_as_integer_ratio, METH_NOARGS, NULL },
+
+                                       { "is_integer", (PyCFunction)float_is_integer, METH_NOARGS, NULL } };
 
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);

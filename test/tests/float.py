@@ -62,3 +62,5 @@ except Exception as e:
 print float.fromhex("f0.04a")
 print (5.0).hex()
 print (0.5).as_integer_ratio()
+print (0.5).is_integer()
+print (1.0).is_integer()
