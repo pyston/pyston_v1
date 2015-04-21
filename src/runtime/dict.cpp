@@ -38,10 +38,10 @@ Box* dictRepr(BoxedDict* self) {
 
         BoxedString* k = static_cast<BoxedString*>(repr(p.first));
         BoxedString* v = static_cast<BoxedString*>(repr(p.second));
-        chars.insert(chars.end(), k->s.begin(), k->s.end());
+        chars.insert(chars.end(), k->s().begin(), k->s().end());
         chars.push_back(':');
         chars.push_back(' ');
-        chars.insert(chars.end(), v->s.begin(), v->s.end());
+        chars.insert(chars.end(), v->s().begin(), v->s().end());
     }
     chars.push_back('}');
     return boxString(llvm::StringRef(&chars[0], chars.size()));

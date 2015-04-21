@@ -627,7 +627,7 @@ BoxedFloat* _floatNew(Box* a) {
     } else if (isSubclass(a->cls, int_cls)) {
         return new BoxedFloat(static_cast<BoxedInt*>(a)->n);
     } else if (a->cls == str_cls) {
-        const std::string& s = static_cast<BoxedString*>(a)->s;
+        const std::string& s = static_cast<BoxedString*>(a)->s();
         if (s == "nan")
             return new BoxedFloat(NAN);
         if (s == "-nan")

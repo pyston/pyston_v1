@@ -168,7 +168,7 @@ public:
     }
 
     static Box* setattrPyston(Box* obj, Box* name, Box* val) noexcept {
-        if (isSubclass(name->cls, str_cls) && static_cast<BoxedString*>(name)->s == "__dict__") {
+        if (isSubclass(name->cls, str_cls) && static_cast<BoxedString*>(name)->s() == "__dict__") {
             raiseExcHelper(AttributeError, "'%.50s' object attribute '__dict__' is read-only", Py_TYPE(obj)->tp_name);
         }
 
@@ -189,7 +189,7 @@ public:
 
     static Box* getattro(Box* obj, Box* name) noexcept {
         assert(name->cls == str_cls);
-        llvm::StringRef s = static_cast<BoxedString*>(name)->s;
+        llvm::StringRef s = static_cast<BoxedString*>(name)->s();
 
         Box* tls_obj = getThreadLocalObject(obj);
         if (s == "__dict__")

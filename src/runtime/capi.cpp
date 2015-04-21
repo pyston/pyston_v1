@@ -258,7 +258,7 @@ extern "C" PyObject* PyObject_GetAttr(PyObject* o, PyObject* attr_name) noexcept
 
 extern "C" PyObject* PyObject_GenericGetAttr(PyObject* o, PyObject* name) noexcept {
     try {
-        Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->s.data(), NULL, false, false, NULL, NULL);
+        Box* r = getattrInternalGeneric(o, static_cast<BoxedString*>(name)->data(), NULL, false, false, NULL, NULL);
         if (!r)
             PyErr_Format(PyExc_AttributeError, "'%.50s' object has no attribute '%.400s'", o->cls->tp_name,
                          PyString_AS_STRING(name));
@@ -868,7 +868,7 @@ extern "C" PyObject* PyImport_Import(PyObject* module_name) noexcept {
     RELEASE_ASSERT(module_name->cls == str_cls, "");
 
     try {
-        std::string _module_name = static_cast<BoxedString*>(module_name)->s;
+        std::string _module_name = static_cast<BoxedString*>(module_name)->s();
         return importModuleLevel(_module_name, None, None, -1);
     } catch (ExcInfo e) {
         fatalOrError(PyExc_NotImplementedError, "unimplemented");

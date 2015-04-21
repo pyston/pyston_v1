@@ -146,7 +146,7 @@ bool PyEq::operator()(Box* lhs, Box* rhs) const {
 
     if (lhs->cls == rhs->cls) {
         if (lhs->cls == str_cls) {
-            return static_cast<BoxedString*>(lhs)->s == static_cast<BoxedString*>(rhs)->s;
+            return static_cast<BoxedString*>(lhs)->s() == static_cast<BoxedString*>(rhs)->s();
         }
     }
 
@@ -464,7 +464,7 @@ std::string getFullNameOfClass(BoxedClass* cls) {
 
     BoxedString* module = static_cast<BoxedString*>(b);
 
-    return (llvm::Twine(module->s) + "." + cls->tp_name).str();
+    return (llvm::Twine(module->s()) + "." + cls->tp_name).str();
 }
 
 std::string getFullTypeName(Box* o) {
@@ -3104,7 +3104,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
             if (param_names.takes_param_names) {
                 assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
-                placeKeyword(param_names, params_filled, s->s, p.second, oarg1, oarg2, oarg3, oargs, okwargs, f);
+                placeKeyword(param_names, params_filled, s->s(), p.second, oarg1, oarg2, oarg3, oargs, okwargs, f);
             } else {
                 assert(!rewrite_args && "would need to make sure that this didn't need to go into r_kwargs");
                 assert(okwargs);
@@ -4261,14 +4261,14 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
             Box* tmp = slots[i];
             assertValidSlotIdentifier(tmp);
             assert(PyString_Check(tmp));
-            if (static_cast<BoxedString*>(tmp)->s == "__dict__") {
+            if (static_cast<BoxedString*>(tmp)->s() == "__dict__") {
                 if (!may_add_dict || add_dict) {
                     raiseExcHelper(TypeError, "__dict__ slot disallowed: "
                                               "we already got one");
                 }
                 add_dict++;
                 continue;
-            } else if (static_cast<BoxedString*>(tmp)->s == "__weakref__") {
+            } else if (static_cast<BoxedString*>(tmp)->s() == "__weakref__") {
                 if (!may_add_weak || add_weak) {
                     raiseExcHelper(TypeError, "__weakref__ slot disallowed: "
                                               "either we already got one, "
@@ -4356,7 +4356,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         // Add the member descriptors
         size_t offset = base->tp_basicsize;
         for (size_t i = 0; i < final_slot_names.size(); i++) {
-            made->giveAttr(static_cast<BoxedString*>(slotsTuple->elts[i])->s.data(),
+            made->giveAttr(static_cast<BoxedString*>(slotsTuple->elts[i])->data(),
                            new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT_EX, offset, false /* read only */));
             slot_offsets[i] = offset;
             offset += sizeof(Box*);
@@ -4381,7 +4381,7 @@ Box* typeNew(Box* _cls, Box* arg1, Box* arg2, Box** _args) {
         auto k = coerceUnicodeToStr(p.first);
 
         RELEASE_ASSERT(k->cls == str_cls, "");
-        made->setattr(static_cast<BoxedString*>(k)->s, p.second, NULL);
+        made->setattr(static_cast<BoxedString*>(k)->s(), p.second, NULL);
     }
 
     if (!made->hasattr("__module__")) {
@@ -4911,11 +4911,11 @@ extern "C" Box* importStar(Box* _from_module, Box* to_globals) {
                 raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(attr_name));
 
             BoxedString* casted_attr_name = static_cast<BoxedString*>(attr_name);
-            Box* attr_value = from_module->getattr(casted_attr_name->s);
+            Box* attr_value = from_module->getattr(casted_attr_name->s());
 
             if (!attr_value)
                 raiseExcHelper(AttributeError, "'module' object has no attribute '%s'", casted_attr_name->data());
-            setGlobal(to_globals, casted_attr_name->s, attr_value);
+            setGlobal(to_globals, casted_attr_name->s(), attr_value);
         }
         return None;
     }

@@ -402,7 +402,7 @@ Box* bltinImport(Box* name, Box* globals, Box* locals, Box** args) {
         raiseExcHelper(TypeError, "an integer is required");
     }
 
-    std::string _name = static_cast<BoxedString*>(name)->s;
+    std::string _name = static_cast<BoxedString*>(name)->s();
     return importModuleLevel(_name, globals, fromlist, ((BoxedInt*)level)->n);
 }
 
@@ -412,7 +412,7 @@ Box* delattrFunc(Box* obj, Box* _str) {
     if (_str->cls != str_cls)
         raiseExcHelper(TypeError, "attribute name must be string, not '%s'", getTypeName(_str));
     BoxedString* str = static_cast<BoxedString*>(_str);
-    delattr(obj, str->s.data());
+    delattr(obj, str->data());
     return None;
 }
 
@@ -427,7 +427,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
 
     Box* rtn = NULL;
     try {
-        rtn = getattr(obj, str->s.data());
+        rtn = getattr(obj, str->data());
     } catch (ExcInfo e) {
         if (!e.matches(AttributeError))
             throw e;
@@ -437,7 +437,7 @@ Box* getattrFunc(Box* obj, Box* _str, Box* default_value) {
         if (default_value)
             return default_value;
         else
-            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->s.data());
+            raiseExcHelper(AttributeError, "'%s' object has no attribute '%s'", getTypeName(obj), str->data());
     }
 
     return rtn;
@@ -451,7 +451,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattr(obj, str->s.data(), value);
+    setattr(obj, str->data(), value);
     return None;
 }
 
@@ -465,7 +465,7 @@ Box* hasattr(Box* obj, Box* _str) {
     BoxedString* str = static_cast<BoxedString*>(_str);
     Box* attr;
     try {
-        attr = getattrInternal(obj, str->s, NULL);
+        attr = getattrInternal(obj, str->s(), NULL);
     } catch (ExcInfo e) {
         if (e.matches(Exception))
             return False;
@@ -672,7 +672,7 @@ Box* exceptionRepr(Box* b) {
     assert(message->cls == str_cls);
 
     BoxedString* message_s = static_cast<BoxedString*>(message);
-    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s + ",)");
+    return boxStringTwine(llvm::Twine(getTypeName(b)) + "(" + message_s->s() + ",)");
 }
 
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name, int size = 0) {
@@ -833,14 +833,14 @@ Box* execfile(Box* _fn) {
 #endif
 
 #else
-    bool exists = llvm::sys::fs::exists(std::string(fn->s));
+    bool exists = llvm::sys::fs::exists(std::string(fn->s()));
 #endif
 
     if (!exists)
-        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->s.data());
+        raiseExcHelper(IOError, "No such file or directory: '%s'", fn->data());
 
     // Run directly inside the current module:
-    AST_Module* ast = caching_parse_file(fn->s.data());
+    AST_Module* ast = caching_parse_file(fn->data());
 
     ASSERT(getExecutionPoint().cf->clfunc->source->scoping->areGlobalsFromModule(), "need to pass custom globals in");
     compileAndRunModule(ast, getCurrentModule());

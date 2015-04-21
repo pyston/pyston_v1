@@ -456,8 +456,8 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     }
     RELEASE_ASSERT(isSubclass(type->cls, str_cls), "");
 
-    llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s;
-    llvm::StringRef type_str = static_cast<BoxedString*>(type)->s;
+    llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s();
+    llvm::StringRef type_str = static_cast<BoxedString*>(type)->s();
 
     if (iflags & ~(/*PyCF_MASK | PyCF_MASK_OBSOLETE | PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
         raiseExcHelper(ValueError, "compile(): unrecognised flags");
@@ -473,7 +473,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         parsed = unboxAst(source);
     } else {
         RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
-        llvm::StringRef source_str = static_cast<BoxedString*>(source)->s;
+        llvm::StringRef source_str = static_cast<BoxedString*>(source)->s();
 
         if (type_str == "exec") {
             parsed = parseExec(source_str);
@@ -542,7 +542,7 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s);
+        AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s());
         cl = compileEval(parsed, "<string>");
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
@@ -609,7 +609,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s);
+        AST_Suite* parsed = parseExec(static_cast<BoxedString*>(boxedCode)->s());
         cl = compileExec(parsed, "<string>");
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);

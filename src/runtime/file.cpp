@@ -971,7 +971,7 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m, Box** args) {
         abort(); // unreachable;
     }
 
-    auto file = new BoxedFile(f, fn->s, PyString_AsString(m));
+    auto file = new BoxedFile(f, fn->s(), PyString_AsString(m));
     PyFile_SetBufSize(file, buffering->n);
     return file;
 }
@@ -1110,7 +1110,7 @@ error:
 Box* fileIterNext(BoxedFile* s) {
     Box* rtn = fileReadline1(s);
     assert(!rtn || rtn->cls == str_cls);
-    if (!rtn || ((BoxedString*)rtn)->s.empty())
+    if (!rtn || ((BoxedString*)rtn)->s().empty())
         raiseExcHelper(StopIteration, "");
     return rtn;
 }

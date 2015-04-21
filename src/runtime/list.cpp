@@ -76,7 +76,7 @@ extern "C" Box* listRepr(BoxedList* self) {
 
         assert(r->cls == str_cls);
         BoxedString* s = static_cast<BoxedString*>(r);
-        os << s->s;
+        os << s->s();
     }
     os << ']';
     return boxString(os.str());

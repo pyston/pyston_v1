@@ -566,7 +566,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
             raiseExcHelper(TypeError, "long() can't convert non-string with explicit base");
         BoxedString* s = static_cast<BoxedString*>(val);
 
-        rtn = (BoxedLong*)PyLong_FromString(s->s.str().c_str(), NULL, base);
+        rtn = (BoxedLong*)PyLong_FromString(s->data(), NULL, base);
         checkAndThrowCAPIException();
     } else {
         if (isSubclass(val->cls, long_cls)) {
@@ -579,7 +579,7 @@ BoxedLong* _longNew(Box* val, Box* _base) {
         } else if (isSubclass(val->cls, int_cls)) {
             mpz_init_set_si(rtn->n, static_cast<BoxedInt*>(val)->n);
         } else if (val->cls == str_cls) {
-            const std::string& s = static_cast<BoxedString*>(val)->s;
+            const std::string& s = static_cast<BoxedString*>(val)->s();
             int r = mpz_init_set_str(rtn->n, s.c_str(), 10);
             RELEASE_ASSERT(r == 0, "");
         } else if (val->cls == float_cls) {
