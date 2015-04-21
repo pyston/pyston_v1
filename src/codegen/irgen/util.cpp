@@ -106,13 +106,23 @@ const void* getValueOfRelocatableSym(const std::string& str) {
     return NULL;
 }
 
-llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type) {
+llvm::Constant* embedRelocatablePtr(const void* addr, llvm::Type* type, llvm::StringRef shared_name) {
     assert(addr);
 
     if (!ENABLE_JIT_OBJECT_CACHE)
         return embedConstantPtr(addr, type);
 
-    std::string name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
+    std::string name;
+    if (!shared_name.empty()) {
+        llvm::GlobalVariable* gv = g.cur_module->getGlobalVariable(shared_name, true);
+        if (gv)
+            return gv;
+        assert(!relocatable_syms.count(name));
+        name = shared_name;
+    } else {
+        name = (llvm::Twine("c") + llvm::Twine(relocatable_syms.size())).str();
+    }
+
     relocatable_syms[name] = addr;
 
     llvm::Type* var_type = type->getPointerElementType();

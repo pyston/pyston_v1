@@ -910,14 +910,13 @@ private:
     }
 
     ConcreteCompilerVariable* getNone() {
-        ConcreteCompilerVariable* v = new ConcreteCompilerVariable(
-            typeFromClass(none_cls), embedRelocatablePtr(None, g.llvm_value_type_ptr), false);
-        return v;
+        llvm::Constant* none = embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone");
+        return new ConcreteCompilerVariable(typeFromClass(none_cls), none, false);
     }
 
     llvm::Constant* embedParentModulePtr() {
-        // TODO: We could reuse the name to reduce the number of relocatable pointers.
-        return embedRelocatablePtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr);
+        BoxedModule* parent_module = irstate->getSourceInfo()->parent_module;
+        return embedRelocatablePtr(parent_module, g.llvm_module_type_ptr, "cParentModule");
     }
 
     ConcreteCompilerVariable* _getGlobal(AST_Name* node, UnwindInfo unw_info) {
@@ -2150,7 +2149,7 @@ private:
                 v->decvref(emitter);
                 args.push_back(converted->getValue());
             } else {
-                args.push_back(embedRelocatablePtr(None, g.llvm_value_type_ptr));
+                args.push_back(embedRelocatablePtr(None, g.llvm_value_type_ptr, "cNone"));
             }
         }
 
@@ -2363,11 +2362,12 @@ public:
         if (ENABLE_FRAME_INTROSPECTION) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
             // nice for debugging though.
-            SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
-
+            typedef std::pair<InternedString, CompilerVariable*> Entry;
+            std::vector<Entry> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
+            std::sort(sorted_symbol_table.begin(), sorted_symbol_table.end(),
+                      [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
             for (const auto& p : sorted_symbol_table) {
                 CompilerVariable* v = p.second;
-
                 v->serializeToFrame(stackmap_args);
                 pp->addFrameVar(p.first.str(), v->getType());
             }
