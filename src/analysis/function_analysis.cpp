@@ -169,8 +169,6 @@ bool LivenessAnalysis::isKill(AST_Name* node, CFGBlock* parent_block) {
 }
 
 bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
-    Timer _t("LivenessAnalysis()", 10);
-
     if (name.str()[0] != '#')
         return true;
 
@@ -178,6 +176,8 @@ bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
         return false;
 
     if (!result_cache.count(name)) {
+        Timer _t("LivenessAnalysis()", 10);
+
         llvm::DenseMap<CFGBlock*, bool>& map = result_cache[name];
 
         // Approach:
@@ -208,11 +208,11 @@ bool LivenessAnalysis::isLiveAtEnd(InternedString name, CFGBlock* block) {
                 }
             }
         }
-    }
 
-    // Note: this one gets counted as part of us_compiling_irgen as well:
-    static StatCounter us_liveness("us_compiling_analysis_liveness");
-    us_liveness.log(_t.end());
+        // Note: this one gets counted as part of us_compiling_irgen as well:
+        static StatCounter us_liveness("us_compiling_analysis_liveness");
+        us_liveness.log(_t.end());
+    }
 
     return result_cache[name][block];
 }
