@@ -2523,6 +2523,8 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
                 AST_Name* arg_name_expr
                     = new AST_Name(arg_name, AST_TYPE::Load, arg_expr->lineno, arg_expr->col_offset);
                 visitor.pushAssign(arg_expr, arg_name_expr);
+            } else {
+                assert(arg_expr->type == AST_TYPE::Name);
             }
             counter++;
         }
