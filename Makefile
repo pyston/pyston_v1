@@ -1182,6 +1182,27 @@ $(FROM_CPYTHON_SRCS:.c=.prof.o): %.prof.o: %.c $(BUILD_SYSTEM_DEPS)
 	$(ECHO) Compiling C file to $@
 	$(VERB) $(CC_PROFILE) $(EXT_CFLAGS_PROFILE) -c $< -o $@ -g -MMD -MP -MF $(patsubst %.o,%.d,$@)
 
-# These are necessary until we support unicode:
-../from_cpython/Modules/_sre.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
-../from_cpython/Modules/_sre.release.o: EXT_CFLAGS += -Wno-sometimes-uninitialized
+
+
+
+# TESTING:
+
+_plugins/clang_capi.so: plugins/clang_capi.cpp $(BUILD_SYSTEM_DEPS)
+	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
+	$(CXX) $< -o $@ -std=c++11 $(LLVM_CXXFLAGS) -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_BUILD)/tools/clang/include -shared
+
+plugins/clang_capi.o: plugins/clang_capi.cpp $(BUILD_SYSTEM_DEPS)
+	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
+	$(CXX) $< -o $@ -std=c++11 $(LLVM_CXXFLAGS) -O0 -I$(LLVM_SRC)/tools/clang/include -I$(LLVM_BUILD)/tools/clang/include -c
+plugins/clang_capi: plugins/clang_capi.o $(BUILD_SYSTEM_DEPS)
+	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
+	$(CXX) $< -o $@ -L$(LLVM_BUILD)/Release/lib -lclangASTMatchers -lclangRewrite -lclangFrontend -lclangDriver -lclangTooling -lclangParse -lclangSema -lclangAnalysis -lclangAST -lclangEdit -lclangLex -lclangBasic -lclangSerialization $(shell $(LLVM_BUILD)/Release+Asserts/bin/llvm-config --ldflags --system-libs --libs all)
+plugins/clang_capi.so: plugins/clang_capi.o $(BUILD_SYSTEM_DEPS)
+	@# $(CXX) $< -o $@ -c -I/usr/lib/llvm-3.5/include -std=c++11 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS
+	$(CXX) $< -o $@ -shared
+.PHONY: plugin_test
+plugin_test: plugins/clang_capi.so
+	$(CLANG_CXX) -Xclang -load -Xclang plugins/clang_capi.so -Xclang -add-plugin -Xclang print-fns test/test.cpp -c -S -o -
+.PHONY: tool_test
+tool_test: plugins/clang_capi
+	plugins/clang_capi test/test.cpp --
