@@ -480,7 +480,15 @@ static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
     if (!f->writable)
         return err_mode("writing");
     if (f->f_binary) {
-        if (PyObject_GetBuffer(arg, &pbuf, 0))
+        // In CPython, this branch calls PyArg_ParseTuple for all types, but we never created
+        // the "args" tuple so we have to do some of the work that ParseTuple does.
+        // Mostly it's easy since we've already unpacked the args, but there is some unicode-specific
+        // code in it that is better not to duplicate.
+        // So, if it's unicode, just make the tuple for now and send it through PyArg_ParseTuple.
+        if (PyUnicode_Check(arg)) {
+            if (!PyArg_ParseTuple(BoxedTuple::create({ arg }), "s*", &pbuf))
+                return NULL;
+        } else if (PyObject_GetBuffer(arg, &pbuf, 0))
             return NULL;
 
         s = (const char*)pbuf.buf;
@@ -535,6 +543,124 @@ static PyObject* file_write(BoxedFile* f, Box* arg) noexcept {
     }
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+static PyObject* file_writelines(BoxedFile* f, PyObject* seq) noexcept {
+#define CHUNKSIZE 1000
+    PyObject* list, *line;
+    PyObject* it; /* iter(seq) */
+    PyObject* result;
+    int index, islist;
+    Py_ssize_t i, j, nwritten, len;
+
+    assert(seq != NULL);
+    if (f->f_fp == NULL)
+        return err_closed();
+    if (!f->writable)
+        return err_mode("writing");
+
+    result = NULL;
+    list = NULL;
+    islist = PyList_Check(seq);
+    if (islist)
+        it = NULL;
+    else {
+        it = PyObject_GetIter(seq);
+        if (it == NULL) {
+            PyErr_SetString(PyExc_TypeError, "writelines() requires an iterable argument");
+            return NULL;
+        }
+        /* From here on, fail by going to error, to reclaim "it". */
+        list = PyList_New(CHUNKSIZE);
+        if (list == NULL)
+            goto error;
+    }
+
+    /* Strategy: slurp CHUNKSIZE lines into a private list,
+       checking that they are all strings, then write that list
+       without holding the interpreter lock, then come back for more. */
+    for (index = 0;; index += CHUNKSIZE) {
+        if (islist) {
+            Py_XDECREF(list);
+            list = PyList_GetSlice(seq, index, index + CHUNKSIZE);
+            if (list == NULL)
+                goto error;
+            j = PyList_GET_SIZE(list);
+        } else {
+            for (j = 0; j < CHUNKSIZE; j++) {
+                line = PyIter_Next(it);
+                if (line == NULL) {
+                    if (PyErr_Occurred())
+                        goto error;
+                    break;
+                }
+                PyList_SetItem(list, j, line);
+            }
+            /* The iterator might have closed the file on us. */
+            if (f->f_fp == NULL) {
+                err_closed();
+                goto error;
+            }
+        }
+        if (j == 0)
+            break;
+
+        /* Check that all entries are indeed strings. If not,
+           apply the same rules as for file.write() and
+           convert the results to strings. This is slow, but
+           seems to be the only way since all conversion APIs
+           could potentially execute Python code. */
+        for (i = 0; i < j; i++) {
+            PyObject* v = PyList_GET_ITEM(list, i);
+            if (!PyString_Check(v)) {
+                const char* buffer;
+                int res;
+                if (f->f_binary) {
+                    res = PyObject_AsReadBuffer(v, (const void**)&buffer, &len);
+                } else {
+                    res = PyObject_AsCharBuffer(v, &buffer, &len);
+                }
+                if (res) {
+                    PyErr_SetString(PyExc_TypeError, "writelines() argument must be a sequence of strings");
+                    goto error;
+                }
+                line = PyString_FromStringAndSize(buffer, len);
+                if (line == NULL)
+                    goto error;
+                Py_DECREF(v);
+                PyList_SET_ITEM(list, i, line);
+            }
+        }
+
+        /* Since we are releasing the global lock, the
+           following code may *not* execute Python code. */
+        f->f_softspace = 0;
+        FILE_BEGIN_ALLOW_THREADS(f)
+        errno = 0;
+        for (i = 0; i < j; i++) {
+            line = PyList_GET_ITEM(list, i);
+            len = PyString_GET_SIZE(line);
+            nwritten = fwrite(PyString_AS_STRING(line), 1, len, f->f_fp);
+            if (nwritten != len) {
+                FILE_ABORT_ALLOW_THREADS(f)
+                PyErr_SetFromErrno(PyExc_IOError);
+                clearerr(f->f_fp);
+                goto error;
+            }
+        }
+        FILE_END_ALLOW_THREADS(f)
+
+        if (j < CHUNKSIZE)
+            break;
+    }
+
+    Py_INCREF(Py_None);
+    result = Py_None;
+error:
+    Py_XDECREF(list);
+    Py_XDECREF(it);
+    return result;
+#undef CHUNKSIZE
 }
 
 Box* fileWrite(BoxedFile* self, Box* val) {
@@ -1469,6 +1595,7 @@ PyDoc_STRVAR(isatty_doc, "isatty() -> true or false.  True if the file is connec
 PyMethodDef file_methods[] = {
     { "seek", (PyCFunction)file_seek, METH_VARARGS, seek_doc },
     { "readlines", (PyCFunction)file_readlines, METH_VARARGS, readlines_doc },
+    { "writelines", (PyCFunction)file_writelines, METH_O, NULL },
     { "isatty", (PyCFunction)file_isatty, METH_NOARGS, isatty_doc },
 };
 

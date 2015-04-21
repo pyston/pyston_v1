@@ -274,7 +274,14 @@ static Box* getParent(Box* globals, int level, std::string& buf) {
         if (modname == NULL || modname->cls != str_cls)
             return None;
 
-        Box* modpath = getattrInternal(globals, path_str, NULL);
+        Box* modpath = NULL;
+        try {
+            modpath = getattrInternal(globals, path_str, NULL);
+        } catch (ExcInfo e) {
+            if (!e.matches(AttributeError))
+                raiseRaw(e);
+        }
+
         if (modpath != NULL) {
             /* __path__ is set, so modname is already the package name */
             if (modname->size() > PATH_MAX) {
@@ -516,7 +523,15 @@ extern "C" PyObject* PyImport_ImportModuleLevel(const char* name, PyObject* glob
 }
 
 static void ensureFromlist(Box* module, Box* fromlist, std::string& buf, bool recursive) {
-    if (getattrInternal(module, path_str, NULL) == NULL) {
+    Box* pathlist = NULL;
+    try {
+        pathlist = getattrInternal(module, path_str, NULL);
+    } catch (ExcInfo e) {
+        if (!e.matches(AttributeError))
+            raiseRaw(e);
+    }
+
+    if (pathlist == NULL) {
         // If it's not a package, then there's no sub-importing to do
         return;
     }

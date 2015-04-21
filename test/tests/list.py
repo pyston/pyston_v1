@@ -153,3 +153,21 @@ print l
 l = range(5)
 l[2:4] = tuple(range(2))
 print l
+
+
+l = [None]*4
+try:
+    l[::-1] = range(5)
+except ValueError as e:
+    print e
+l[::-1] = range(4)
+print l
+del l[::2]
+print l
+
+for i in xrange(3):
+    for j in xrange(3):
+        for k in xrange(3):
+            l1 = [i]
+            l2 = [j, k]
+            print l1 < l2, l1 <= l2, l1 > l2, l1 >= l2

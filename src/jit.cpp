@@ -56,14 +56,30 @@ extern void setEncodingAndErrors();
 // return code in `*retcode`. does not touch `*retcode* if it returns false.
 static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
     if (e.matches(SystemExit)) {
-        Box* code = e.value->getattr("code");
+        Box* value = e.value;
 
-        if (!code || code == None)
+        if (value && PyExceptionInstance_Check(value)) {
+            Box* code = getattr(value, "code");
+            if (code)
+                value = code;
+        }
+
+        if (!value || value == None)
             *retcode = 0;
-        else if (isSubclass(code->cls, int_cls))
-            *retcode = static_cast<BoxedInt*>(code)->n;
-        else
+        else if (isSubclass(value->cls, int_cls))
+            *retcode = static_cast<BoxedInt*>(value)->n;
+        else {
             *retcode = 1;
+
+            PyObject* sys_stderr = PySys_GetObject("stderr");
+            if (sys_stderr != NULL && sys_stderr != Py_None) {
+                PyFile_WriteObject(value, sys_stderr, Py_PRINT_RAW);
+            } else {
+                PyObject_Print(value, stderr, Py_PRINT_RAW);
+                fflush(stderr);
+            }
+            PySys_WriteStderr("\n");
+        }
 
         return true;
     }
@@ -85,7 +101,7 @@ static int main(int argc, char** argv) {
 
     // Suppress getopt errors so we can throw them ourselves
     opterr = 0;
-    while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxc:FuP")) != -1) {
+    while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuP")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -118,6 +134,8 @@ static int main(int argc, char** argv) {
             USE_REGALLOC_BASIC = false;
         } else if (code == 'x') {
             ENABLE_PYPA_PARSER = false;
+        } else if (code == 'E') {
+            Py_IgnoreEnvironmentFlag = 1;
         } else if (code == 'P') {
             PAUSE_AT_ABORT = true;
         } else if (code == 'F') {

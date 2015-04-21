@@ -30,6 +30,16 @@
 //#undef VERBOSITY
 //#define VERBOSITY(x) 2
 
+namespace std {
+template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept {
+    void* r = pyston::gc::gc_alloc(sizeof(pyston::Box*) * count, pyston::gc::GCKind::CONSERVATIVE);
+    return std::make_pair((pyston::Box**)r, count);
+}
+template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p) {
+    pyston::gc::gc_free(p);
+}
+}
+
 namespace pyston {
 namespace gc {
 

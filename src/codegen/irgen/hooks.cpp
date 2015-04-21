@@ -382,7 +382,17 @@ Box* eval(Box* boxedCode) {
     // TODO this memory leaks
     RELEASE_ASSERT(boxedCode->cls == str_cls, "%s", boxedCode->cls->tp_name);
     const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
+
+    // Hack: we need to support things like `eval(" 2")`.
+    // This is over-accepting since it will accept things like `eval("\n 2")`
+    while (*code == ' ' || *code == '\t' || *code == '\n' || *code == '\r')
+        code++;
+
     AST_Module* parsedModule = parse_string(code);
+    if (parsedModule->body.size() == 0)
+        raiseSyntaxError("unexpected EOF while parsing", 0, 0, "<string>", "");
+
+    RELEASE_ASSERT(parsedModule->body.size() == 1, "");
     RELEASE_ASSERT(parsedModule->body[0]->type == AST_TYPE::Expr, "");
     AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
     parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;

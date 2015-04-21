@@ -591,4 +591,9 @@ struct CallattrFlags {
 };
 }
 
+namespace std {
+template <> std::pair<pyston::Box**, std::ptrdiff_t> get_temporary_buffer<pyston::Box*>(std::ptrdiff_t count) noexcept;
+template <> void return_temporary_buffer<pyston::Box*>(pyston::Box** p);
+}
+
 #endif

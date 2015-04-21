@@ -790,6 +790,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 Box* makeAttrWrapper(Box* b);
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
+void attrwrapperDel(Box* b, const std::string& attr);
 
 #define SystemError ((BoxedClass*)PyExc_SystemError)
 #define StopIteration ((BoxedClass*)PyExc_StopIteration)

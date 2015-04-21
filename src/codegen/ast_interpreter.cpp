@@ -866,13 +866,18 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
                     assert(frame_info.boxedLocals != NULL);
-                    assert(frame_info.boxedLocals->cls == dict_cls);
-                    auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
-                    auto it = d.find(boxString(target->id.str()));
-                    if (it == d.end()) {
-                        assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
+                    if (frame_info.boxedLocals->cls == dict_cls) {
+                        auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
+                        auto it = d.find(boxString(target->id.str()));
+                        if (it == d.end()) {
+                            assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
+                        }
+                        d.erase(it);
+                    } else if (frame_info.boxedLocals->cls == attrwrapper_cls) {
+                        attrwrapperDel(frame_info.boxedLocals, target->id.str());
+                    } else {
+                        RELEASE_ASSERT(0, "%s", frame_info.boxedLocals->cls->tp_name);
                     }
-                    d.erase(it);
                 } else {
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 

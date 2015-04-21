@@ -1431,6 +1431,10 @@ Box* attrwrapperKeys(Box* b) {
     return AttrWrapper::keys(b);
 }
 
+void attrwrapperDel(Box* b, const std::string& attr) {
+    AttrWrapper::delitem(b, boxString(attr));
+}
+
 Box* objectNewNoArgs(BoxedClass* cls) {
     assert(isSubclass(cls->cls, type_cls));
     assert(typeLookup(cls, "__new__", NULL) == typeLookup(object_cls, "__new__", NULL)

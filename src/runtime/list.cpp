@@ -246,6 +246,138 @@ static void sliceIndex(Box* b, int64_t* out) {
     *out = static_cast<BoxedInt*>(b)->n;
 }
 
+// Copied from CPython's list_ass_subscript
+int list_ass_ext_slice(BoxedList* self, PyObject* item, PyObject* value) {
+    Py_ssize_t start, stop, step, slicelength;
+
+    if (PySlice_GetIndicesEx((PySliceObject*)item, Py_SIZE(self), &start, &stop, &step, &slicelength) < 0) {
+        return -1;
+    }
+
+    RELEASE_ASSERT(step != 1, "should have handled this elsewhere");
+    // if (step == 1)
+    // return list_ass_slice(self, start, stop, value);
+
+    /* Make sure s[5:2] = [..] inserts at the right place:
+       before 5, not before 2. */
+    if ((step < 0 && start < stop) || (step > 0 && start > stop))
+        stop = start;
+
+    if (value == NULL) {
+        /* delete slice */
+        PyObject** garbage;
+        size_t cur;
+        Py_ssize_t i;
+
+        if (slicelength <= 0)
+            return 0;
+
+        if (step < 0) {
+            stop = start + 1;
+            start = stop + step * (slicelength - 1) - 1;
+            step = -step;
+        }
+
+        assert((size_t)slicelength <= PY_SIZE_MAX / sizeof(PyObject*));
+
+        garbage = (PyObject**)PyMem_MALLOC(slicelength * sizeof(PyObject*));
+        if (!garbage) {
+            PyErr_NoMemory();
+            return -1;
+        }
+
+        /* drawing pictures might help understand these for
+           loops. Basically, we memmove the parts of the
+           list that are *not* part of the slice: step-1
+           items for each item that is part of the slice,
+           and then tail end of the list that was not
+           covered by the slice */
+        for (cur = start, i = 0; cur < (size_t)stop; cur += step, i++) {
+            Py_ssize_t lim = step - 1;
+
+            garbage[i] = PyList_GET_ITEM(self, cur);
+
+            if (cur + step >= self->size) {
+                lim = self->size - cur - 1;
+            }
+
+            memmove(self->elts->elts + cur - i, self->elts->elts + cur + 1, lim * sizeof(PyObject*));
+        }
+        cur = start + slicelength * step;
+        if (cur < self->size) {
+            memmove(self->elts->elts + cur - slicelength, self->elts->elts + cur,
+                    (self->size - cur) * sizeof(PyObject*));
+        }
+
+        self->size -= slicelength;
+
+        // list_resize(self, Py_SIZE(self));
+
+        for (i = 0; i < slicelength; i++) {
+            Py_DECREF(garbage[i]);
+        }
+        PyMem_FREE(garbage);
+
+        return 0;
+    } else {
+        /* assign slice */
+        PyObject* ins, *seq;
+        PyObject** garbage, **seqitems, **selfitems;
+        Py_ssize_t cur, i;
+
+        /* protect against a[::-1] = a */
+        if (self == value) {
+            abort();
+            // seq = list_slice((PyListObject*)value, 0,
+            // PyList_GET_SIZE(value));
+        } else {
+            seq = PySequence_Fast(value, "must assign iterable "
+                                         "to extended slice");
+        }
+        if (!seq)
+            return -1;
+
+        if (PySequence_Fast_GET_SIZE(seq) != slicelength) {
+            PyErr_Format(PyExc_ValueError, "attempt to assign sequence of "
+                                           "size %zd to extended slice of "
+                                           "size %zd",
+                         PySequence_Fast_GET_SIZE(seq), slicelength);
+            Py_DECREF(seq);
+            return -1;
+        }
+
+        if (!slicelength) {
+            Py_DECREF(seq);
+            return 0;
+        }
+
+        garbage = (PyObject**)PyMem_MALLOC(slicelength * sizeof(PyObject*));
+        if (!garbage) {
+            Py_DECREF(seq);
+            PyErr_NoMemory();
+            return -1;
+        }
+
+        selfitems = self->elts->elts;
+        seqitems = PySequence_Fast_ITEMS(seq);
+        for (cur = start, i = 0; i < slicelength; cur += step, i++) {
+            garbage[i] = selfitems[cur];
+            ins = seqitems[i];
+            Py_INCREF(ins);
+            selfitems[cur] = ins;
+        }
+
+        for (i = 0; i < slicelength; i++) {
+            Py_DECREF(garbage[i]);
+        }
+
+        PyMem_FREE(garbage);
+        Py_DECREF(seq);
+
+        return 0;
+    }
+}
+
 extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     LOCK_REGION(self->lock.asWrite());
 
@@ -258,6 +390,12 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
     sliceIndex(slice->stop, &stop);
     sliceIndex(slice->step, &step);
 
+    if (step != 1) {
+        int r = list_ass_ext_slice(self, slice, v);
+        if (r)
+            throwCAPIException();
+        return None;
+    }
     RELEASE_ASSERT(step == 1, "step sizes must be 1 for now");
 
     // Logic from PySequence_GetSlice:
@@ -566,6 +704,18 @@ extern "C" int PyList_Sort(PyObject* v) noexcept {
     return 0;
 }
 
+extern "C" Box* PyList_GetSlice(PyObject* a, Py_ssize_t ilow, Py_ssize_t ihigh) noexcept {
+    assert(isSubclass(a->cls, list_cls));
+    BoxedList* self = static_cast<BoxedList*>(a);
+    try {
+        // Lots of extra copies here; we can do better if we need to:
+        return listGetitemSlice(self, new BoxedSlice(boxInt(ilow), boxInt(ihigh), boxInt(1)));
+    } catch (ExcInfo e) {
+        setCAPIException(e);
+        return NULL;
+    }
+}
+
 Box* listContains(BoxedList* self, Box* elt) {
     LOCK_REGION(self->lock.asRead());
 
@@ -775,6 +925,46 @@ Box* listNe(BoxedList* self, Box* rhs) {
     return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::NotEq);
 }
 
+Box* listLt(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+
+    LOCK_REGION(self->lock.asRead());
+
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Lt);
+}
+
+Box* listLe(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+
+    LOCK_REGION(self->lock.asRead());
+
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::LtE);
+}
+
+Box* listGt(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+
+    LOCK_REGION(self->lock.asRead());
+
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::Gt);
+}
+
+Box* listGe(BoxedList* self, Box* rhs) {
+    if (rhs->cls != list_cls) {
+        return NotImplemented;
+    }
+
+    LOCK_REGION(self->lock.asRead());
+
+    return _listCmp(self, static_cast<BoxedList*>(rhs), AST_TYPE::GtE);
+}
+
 extern "C" PyObject* _PyList_Extend(PyListObject* self, PyObject* b) noexcept {
     BoxedList* l = (BoxedList*)self;
     assert(isSubclass(l->cls, list_cls));
@@ -831,6 +1021,10 @@ void setupList() {
 
     list_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)listEq, UNKNOWN, 2)));
     list_cls->giveAttr("__ne__", new BoxedFunction(boxRTFunction((void*)listNe, UNKNOWN, 2)));
+    list_cls->giveAttr("__lt__", new BoxedFunction(boxRTFunction((void*)listLt, UNKNOWN, 2)));
+    list_cls->giveAttr("__le__", new BoxedFunction(boxRTFunction((void*)listLe, UNKNOWN, 2)));
+    list_cls->giveAttr("__gt__", new BoxedFunction(boxRTFunction((void*)listGt, UNKNOWN, 2)));
+    list_cls->giveAttr("__ge__", new BoxedFunction(boxRTFunction((void*)listGe, UNKNOWN, 2)));
 
     list_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)listRepr, STR, 1)));
     list_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)listNonzero, BOXED_BOOL, 1)));
