@@ -655,6 +655,10 @@ public:
 
     DEFAULT_CLASS_SIMPLE(slice_cls);
 };
+static_assert(sizeof(BoxedSlice) == sizeof(PySliceObject), "");
+static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "");
+static_assert(offsetof(BoxedSlice, stop) == offsetof(PySliceObject, stop), "");
+static_assert(offsetof(BoxedSlice, step) == offsetof(PySliceObject, step), "");
 
 class BoxedMemberDescriptor : public Box {
 public:

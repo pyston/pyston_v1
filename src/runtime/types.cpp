@@ -2336,13 +2336,21 @@ void setupRuntime() {
 
 BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc) {
     assert(fn.size() && "probably wanted to set the fn to <stdin>?");
-    BoxedModule* module = new BoxedModule(name, fn, doc);
 
     BoxedDict* d = getSysModulesDict();
     Box* b_name = boxStringPtr(&name);
-    ASSERT(d->d.count(b_name) == 0, "%s", name.c_str());
-    d->d[b_name] = module;
 
+    // Surprisingly, there are times that we need to return the existing module if
+    // one exists:
+    Box*& ptr = d->d[b_name];
+    if (ptr && isSubclass(ptr->cls, module_cls)) {
+        return static_cast<BoxedModule*>(ptr);
+    } else {
+        ptr = NULL;
+    }
+
+    BoxedModule* module = new BoxedModule(name, fn, doc);
+    ptr = module;
     return module;
 }
 

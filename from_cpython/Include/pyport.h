@@ -385,6 +385,11 @@ typedef PY_LONG_LONG            Py_intptr_t;
 #endif /* !HAVE_SYS_TIME_H */
 #endif /* !TIME_WITH_SYS_TIME */
 
+#ifdef SIZE_MAX
+#define PY_SIZE_MAX SIZE_MAX
+#else
+#define PY_SIZE_MAX ((size_t)-1)
+#endif
 
 /* Py_ARITHMETIC_RIGHT_SHIFT
  * C doesn't define whether a right-shift of a signed integer sign-extends
