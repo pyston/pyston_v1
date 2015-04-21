@@ -1370,11 +1370,4 @@ void setupCAPI() {
 
 void teardownCAPI() {
 }
-
-void fatalOrError(PyObject* exception, const char* message) noexcept {
-    if (CONTINUE_AFTER_FATAL)
-        PyErr_SetString(exception, message);
-    else
-        Py_FatalError(message);
-}
 }

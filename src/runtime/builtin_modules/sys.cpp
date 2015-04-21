@@ -207,7 +207,7 @@ void prependToSysPath(const std::string& path) {
 static BoxedClass* sys_flags_cls;
 class BoxedSysFlags : public Box {
 public:
-    Box* division_warning, *bytes_warning, *no_user_site;
+    Box* division_warning, *bytes_warning, *no_user_site, *optimize;
 
     BoxedSysFlags() {
         auto zero = boxInt(0);
@@ -215,6 +215,7 @@ public:
         division_warning = zero;
         bytes_warning = zero;
         no_user_site = zero;
+        optimize = zero;
     }
 
     DEFAULT_CLASS(sys_flags_cls);
@@ -227,6 +228,7 @@ public:
         v->visit(self->division_warning);
         v->visit(self->bytes_warning);
         v->visit(self->no_user_site);
+        v->visit(self->optimize);
     }
 
     static Box* __new__(Box* cls, Box* args, Box* kwargs) {
@@ -392,6 +394,9 @@ void setupSys() {
     sys_module->giveAttr("stdout", new BoxedFile(stdout, "<stdout>", "w"));
     sys_module->giveAttr("stdin", new BoxedFile(stdin, "<stdin>", "r"));
     sys_module->giveAttr("stderr", new BoxedFile(stderr, "<stderr>", "w"));
+    sys_module->giveAttr("__stdout__", sys_module->getattr("stdout"));
+    sys_module->giveAttr("__stdin__", sys_module->getattr("stdin"));
+    sys_module->giveAttr("__stderr__", sys_module->getattr("stderr"));
 
     sys_module->giveAttr(
         "exc_info", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysExcInfo, BOXED_TUPLE, 0), "exc_info"));
@@ -458,6 +463,7 @@ void setupSys() {
     ADD(division_warning);
     ADD(bytes_warning);
     ADD(no_user_site);
+    ADD(optimize);
 #undef ADD
 
     sys_flags_cls->tp_mro = BoxedTuple::create({ sys_flags_cls, object_cls });

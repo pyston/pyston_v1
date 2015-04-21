@@ -1961,7 +1961,7 @@ extern "C" bool nonzero(Box* obj) {
         ASSERT(isUserDefined(obj->cls) || obj->cls == classobj_cls || obj->cls == type_cls
                    || isSubclass(obj->cls, Exception) || obj->cls == file_cls || obj->cls == traceback_cls
                    || obj->cls == instancemethod_cls || obj->cls == module_cls || obj->cls == capifunc_cls
-                   || obj->cls == builtin_function_or_method_cls,
+                   || obj->cls == builtin_function_or_method_cls || obj->cls == method_cls,
                "%s.__nonzero__", getTypeName(obj)); // TODO
 
         // TODO should rewrite these?
@@ -4397,7 +4397,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     // it looks like mostly a matter of changing the getattr calls to getitem.
     RELEASE_ASSERT(getGlobals() == to_module, "importStar doesn't support custom globals yet");
 
-    assert(_from_module->cls == module_cls);
+    ASSERT(isSubclass(_from_module->cls, module_cls), "%s", _from_module->cls->tp_name);
     BoxedModule* from_module = static_cast<BoxedModule*>(_from_module);
 
     Box* all = from_module->getattr(all_str);
