@@ -834,6 +834,7 @@ public:
     bool entryExited;
     bool running;
     Box* returnValue;
+    bool iterated_from__hasnext__;
     ExcInfo exception;
 
     struct Context* context, *returnContext;
