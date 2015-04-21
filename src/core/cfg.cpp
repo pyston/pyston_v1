@@ -2502,7 +2502,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         }
     }
 
-    if (source->ast->type == AST_TYPE::FunctionDef) {
+    if (source->ast->type == AST_TYPE::FunctionDef || source->ast->type == AST_TYPE::Lambda) {
         // Unpack tuple arguments
         // Tuple arguments get assigned names ".0", ".1" etc. So this
         // def f(a, (b,c), (d,e)):
@@ -2510,7 +2510,12 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         // def f(a, .1, .2):
         //     (b, c) = .1
         //     (d, e) = .2
-        AST_arguments* args = ast_cast<AST_FunctionDef>(source->ast)->args;
+        AST_arguments* args;
+        if (source->ast->type == AST_TYPE::FunctionDef) {
+            args = ast_cast<AST_FunctionDef>(source->ast)->args;
+        } else {
+            args = ast_cast<AST_Lambda>(source->ast)->args;
+        }
         int counter = 0;
         for (AST_expr* arg_expr : args->args) {
             if (arg_expr->type == AST_TYPE::Tuple) {

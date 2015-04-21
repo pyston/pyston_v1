@@ -23,3 +23,10 @@ g(1, (2, 3), 4, (5, 6), (7, (8, 9), 10))
 def h((a,)):
     print a
 h((3,))
+
+print 'testing lambda'
+f = lambda (a, b) : a + b
+print f((3, 4))
+
+f = lambda (a,) : a + 1
+print f((3,))
