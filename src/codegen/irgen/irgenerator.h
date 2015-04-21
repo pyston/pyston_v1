@@ -56,6 +56,7 @@ class IRGenState {
 private:
     CompiledFunction* cf;
     SourceInfo* source_info;
+    PhiAnalysis* phis;
     ParamNames* param_names;
     GCBuilder* gc;
     llvm::MDNode* func_dbg_info;
@@ -68,9 +69,9 @@ private:
 
 
 public:
-    IRGenState(CompiledFunction* cf, SourceInfo* source_info, ParamNames* param_names, GCBuilder* gc,
+    IRGenState(CompiledFunction* cf, SourceInfo* source_info, PhiAnalysis* phis, ParamNames* param_names, GCBuilder* gc,
                llvm::MDNode* func_dbg_info)
-        : cf(cf), source_info(source_info), param_names(param_names), gc(gc), func_dbg_info(func_dbg_info),
+        : cf(cf), source_info(source_info), phis(phis), param_names(param_names), gc(gc), func_dbg_info(func_dbg_info),
           scratch_space(NULL), frame_info(NULL), frame_info_arg(NULL), scratch_size(0) {
         assert(cf->func);
         assert(!cf->clfunc); // in this case don't need to pass in sourceinfo
@@ -91,6 +92,8 @@ public:
     ConcreteCompilerType* getReturnType() { return cf->getReturnType(); }
 
     SourceInfo* getSourceInfo() { return source_info; }
+
+    PhiAnalysis* getPhis() { return phis; }
 
     ScopeInfo* getScopeInfo();
     ScopeInfo* getScopeInfoForNode(AST* node);
