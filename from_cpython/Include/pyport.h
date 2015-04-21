@@ -7,9 +7,20 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
+#if __cplusplus > 199711L
 #define PYSTON_NOEXCEPT noexcept
 #else
 #define PYSTON_NOEXCEPT
+#endif
+#else
+#define PYSTON_NOEXCEPT
+#endif
+
+// HACK: we should set this manually rather than cluing off of the C++ version
+#ifdef __cplusplus
+#if __cplusplus > 199711L
+#define _PYSTON_API
+#endif
 #endif
 
 #define Py_PROTO(x) x
@@ -374,6 +385,11 @@ typedef PY_LONG_LONG            Py_intptr_t;
 #endif /* !HAVE_SYS_TIME_H */
 #endif /* !TIME_WITH_SYS_TIME */
 
+#ifdef SIZE_MAX
+#define PY_SIZE_MAX SIZE_MAX
+#else
+#define PY_SIZE_MAX ((size_t)-1)
+#endif
 
 /* Py_ARITHMETIC_RIGHT_SHIFT
  * C doesn't define whether a right-shift of a signed integer sign-extends

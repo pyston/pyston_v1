@@ -28,8 +28,41 @@
 namespace pyston {
 
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+    static PyObject* hintstrobj = NULL;
+    PyObject* ro, *hintmeth;
+    Py_ssize_t rv;
+
+    /* try o.__len__() */
+    rv = PyObject_Size(o);
+    if (rv >= 0)
+        return rv;
+    if (PyErr_Occurred()) {
+        if (!PyErr_ExceptionMatches(PyExc_TypeError) && !PyErr_ExceptionMatches(PyExc_AttributeError))
+            return -1;
+        PyErr_Clear();
+    }
+
+    if (PyInstance_Check(o))
+        return defaultvalue;
+    /* try o.__length_hint__() */
+    hintmeth = _PyObject_LookupSpecial(o, "__length_hint__", &hintstrobj);
+    if (hintmeth == NULL) {
+        if (PyErr_Occurred())
+            return -1;
+        else
+            return defaultvalue;
+    }
+    ro = PyObject_CallFunctionObjArgs(hintmeth, NULL);
+    Py_DECREF(hintmeth);
+    if (ro == NULL) {
+        if (!PyErr_ExceptionMatches(PyExc_TypeError) && !PyErr_ExceptionMatches(PyExc_AttributeError))
+            return -1;
+        PyErr_Clear();
+        return defaultvalue;
+    }
+    rv = PyNumber_Check(ro) ? PyInt_AsSsize_t(ro) : defaultvalue;
+    Py_DECREF(ro);
+    return rv;
 }
 
 static int _IsFortranContiguous(Py_buffer* view) {
@@ -1126,6 +1159,85 @@ extern "C" int PySequence_Contains(PyObject* seq, PyObject* ob) noexcept {
     return Py_SAFE_DOWNCAST(result, Py_ssize_t, int);
 }
 
+extern "C" PyObject* PySequence_Tuple(PyObject* v) noexcept {
+    PyObject* it; /* iter(v) */
+    Py_ssize_t n; /* guess for result tuple size */
+    PyObject* result = NULL;
+    Py_ssize_t j;
+
+    if (v == NULL)
+        return null_error();
+
+    /* Special-case the common tuple and list cases, for efficiency. */
+    if (PyTuple_CheckExact(v)) {
+        /* Note that we can't know whether it's safe to return
+           a tuple *subclass* instance as-is, hence the restriction
+           to exact tuples here.  In contrast, lists always make
+           a copy, so there's no need for exactness below. */
+        Py_INCREF(v);
+        return v;
+    }
+    if (PyList_Check(v))
+        return PyList_AsTuple(v);
+
+    /* Get iterator. */
+    it = PyObject_GetIter(v);
+    if (it == NULL)
+        return NULL;
+
+    /* Guess result size and allocate space. */
+    n = _PyObject_LengthHint(v, 10);
+    if (n == -1)
+        goto Fail;
+    result = PyTuple_New(n);
+    if (result == NULL)
+        goto Fail;
+
+    /* Fill the tuple. */
+    for (j = 0;; ++j) {
+        PyObject* item = PyIter_Next(it);
+        if (item == NULL) {
+            if (PyErr_Occurred())
+                goto Fail;
+            break;
+        }
+        if (j >= n) {
+            Py_ssize_t oldn = n;
+            /* The over-allocation strategy can grow a bit faster
+               than for lists because unlike lists the
+               over-allocation isn't permanent -- we reclaim
+               the excess before the end of this routine.
+               So, grow by ten and then add 25%.
+            */
+            n += 10;
+            n += n >> 2;
+            if (n < oldn) {
+                /* Check for overflow */
+                PyErr_NoMemory();
+                Py_DECREF(item);
+                goto Fail;
+            }
+            if (_PyTuple_Resize(&result, n) != 0) {
+                Py_DECREF(item);
+                goto Fail;
+            }
+        }
+        PyTuple_SET_ITEM(result, j, item);
+    }
+
+    /* Cut tuple back if guess was too large. */
+    if (j < n && _PyTuple_Resize(&result, j) != 0)
+        goto Fail;
+
+    Py_DECREF(it);
+    return result;
+
+Fail:
+    Py_XDECREF(result);
+    Py_DECREF(it);
+    return NULL;
+}
+
 extern "C" PyObject* PyObject_CallFunction(PyObject* callable, const char* format, ...) noexcept {
     va_list va;
     PyObject* args;
@@ -1318,14 +1430,20 @@ extern "C" PyObject* PyNumber_And(PyObject* lhs, PyObject* rhs) noexcept {
     }
 }
 
-extern "C" PyObject* PyNumber_Xor(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_Xor(PyObject* lhs, PyObject* rhs) noexcept {
+    try {
+        return binop(lhs, rhs, AST_TYPE::BitXor);
+    } catch (ExcInfo e) {
+        Py_FatalError("unimplemented");
+    }
 }
 
-extern "C" PyObject* PyNumber_Or(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_Or(PyObject* lhs, PyObject* rhs) noexcept {
+    try {
+        return binop(lhs, rhs, AST_TYPE::BitOr);
+    } catch (ExcInfo e) {
+        Py_FatalError("unimplemented");
+    }
 }
 
 extern "C" PyObject* PyNumber_InPlaceAdd(PyObject*, PyObject*) noexcept {

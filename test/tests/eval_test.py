@@ -157,3 +157,9 @@ def wrap():
     inner2()
 
 wrap()
+
+try:
+    eval(" ")
+    print "worked?"
+except SyntaxError:
+    pass

@@ -699,7 +699,7 @@ FrameStackState getFrameStackState() {
 
                         Box* v = e.type->deserializeFromFrame(vals);
                         // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
-                        assert(gc::isValidGCObject(v));
+                        ASSERT(gc::isValidGCObject(v), "%p", v);
                         d->d[boxString(p.first)] = v;
                     }
                 }

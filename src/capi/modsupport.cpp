@@ -381,8 +381,29 @@ extern "C" PyObject* Py_BuildValue(const char* fmt, ...) noexcept {
     return r;
 }
 
+extern "C" {
+char* _Py_PackageContext = NULL;
+}
 extern "C" PyObject* Py_InitModule4(const char* name, PyMethodDef* methods, const char* doc, PyObject* self,
                                     int apiver) noexcept {
+    // Comment from CPython:
+    /* Make sure name is fully qualified.
+
+       This is a bit of a hack: when the shared library is loaded,
+       the module name is "package.module", but the module calls
+       Py_InitModule*() with just "module" for the name.  The shared
+       library loader squirrels away the true name of the module in
+       _Py_PackageContext, and Py_InitModule*() will substitute this
+       (if the name actually matches).
+    */
+    if (_Py_PackageContext != NULL) {
+        const char* p = strrchr(_Py_PackageContext, '.');
+        if (p != NULL && strcmp(name, p + 1) == 0) {
+            name = _Py_PackageContext;
+            _Py_PackageContext = NULL;
+        }
+    }
+
     BoxedModule* module = createModule(name, "__builtin__", doc);
 
     // Pass self as is, even if NULL we are not allowed to change it to None

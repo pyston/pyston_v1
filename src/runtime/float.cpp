@@ -27,6 +27,10 @@ extern "C" PyObject* PyFloat_FromDouble(double d) noexcept {
     return boxFloat(d);
 }
 
+extern "C" PyObject* PyFloat_FromString(PyObject* v, char** pend) noexcept {
+    Py_FatalError("unimplemented");
+}
+
 extern "C" double PyFloat_AsDouble(PyObject* o) noexcept {
     if (o->cls == float_cls)
         return static_cast<BoxedFloat*>(o)->d;

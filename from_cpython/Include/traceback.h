@@ -29,7 +29,7 @@ PyAPI_FUNC(int) _Py_DisplaySourceLine(PyObject *, const char *, int, int) PYSTON
 /* Reveal traceback type so we can typecheck traceback objects */
 // Pyston change: not a static type any more
 PyAPI_DATA(PyTypeObject*) traceback_cls;
-#define PyTraceback_Type (*traceback_cls)
+#define PyTraceBack_Type (*traceback_cls)
 // PyAPI_DATA(PyTypeObject) PyTraceBack_Type;
 #define PyTraceBack_Check(v) (Py_TYPE(v) == &PyTraceBack_Type)
 

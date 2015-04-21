@@ -985,7 +985,9 @@ AST_Module* parse_file(const char* fn) {
     Timer _t("parsing");
 
     if (ENABLE_PYPA_PARSER) {
-        return pypa_parse(fn);
+        AST_Module* rtn = pypa_parse(fn);
+        assert(rtn);
+        return rtn;
     }
 
     FILE* fp = popen(getParserCommandLine(fn).c_str(), "r");

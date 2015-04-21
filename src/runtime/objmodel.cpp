@@ -1579,7 +1579,6 @@ Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArg
         return getattrInternalEx(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
                                  bind_obj_out, NULL);
     }
-    // Finally, check __getattr__
 
     if (rewrite_args) {
         rewrite_args->out_success = true;
@@ -2160,7 +2159,7 @@ extern "C" i64 unboxedLen(Box* obj) {
     return rtn;
 }
 
-extern "C" void dump(void* p) {
+extern "C" void dumpEx(void* p, int levels) {
     printf("\n");
     printf("Raw address: %p\n", p);
 
@@ -2233,7 +2232,32 @@ extern "C" void dump(void* p) {
         }
 
         if (isSubclass(b->cls, tuple_cls)) {
-            printf("%ld elements\n", static_cast<BoxedTuple*>(b)->size());
+            BoxedTuple* t = static_cast<BoxedTuple*>(b);
+            printf("%ld elements\n", t->size());
+
+            if (levels > 0) {
+                int i = 0;
+                for (auto e : *t) {
+                    printf("\nElement %d:", i);
+                    i++;
+                    dumpEx(e, levels - 1);
+                }
+            }
+        }
+
+        if (isSubclass(b->cls, dict_cls)) {
+            BoxedDict* d = static_cast<BoxedDict*>(b);
+            printf("%ld elements\n", d->d.size());
+
+            if (levels > 0) {
+                int i = 0;
+                for (auto t : d->d) {
+                    printf("\nKey:");
+                    dumpEx(t.first, levels - 1);
+                    printf("Value:");
+                    dumpEx(t.second, levels - 1);
+                }
+            }
         }
 
         if (isSubclass(b->cls, int_cls)) {
@@ -2267,6 +2291,10 @@ extern "C" void dump(void* p) {
     }
 
     RELEASE_ASSERT(0, "%d", (int)al->kind_id);
+}
+
+extern "C" void dump(void* p) {
+    dumpEx(p, 0);
 }
 
 // For rewriting purposes, this function assumes that nargs will be constant.
@@ -2441,7 +2469,7 @@ extern "C" Box* callattrInternal(Box* obj, const std::string* attr, LookupScope 
 
 extern "C" Box* callattr(Box* obj, const std::string* attr, CallattrFlags flags, ArgPassSpec argspec, Box* arg1,
                          Box* arg2, Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
-    assert(gc::isValidGCObject(obj));
+    ASSERT(gc::isValidGCObject(obj), "%p", obj);
 
     int npassed_args = argspec.totalPassed();
 
@@ -4381,11 +4409,7 @@ extern "C" Box* getGlobal(Box* globals, const std::string* name) {
 }
 
 extern "C" Box* importFrom(Box* _m, const std::string* name) {
-    assert(isSubclass(_m->cls, module_cls));
-
-    BoxedModule* m = static_cast<BoxedModule*>(_m);
-
-    Box* r = getattrInternal(m, *name, NULL);
+    Box* r = getattrInternal(_m, *name, NULL);
     if (r)
         return r;
 

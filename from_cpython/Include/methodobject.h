@@ -14,6 +14,8 @@ extern "C" {
 
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PyCFunction_Type;
+PyAPI_DATA(PyTypeObject*) builtin_function_or_method_cls;
+#define PyCFunction_Type (*builtin_function_or_method_cls)
 
 #define PyCFunction_Check(op) (Py_TYPE(op) == &PyCFunction_Type)
 

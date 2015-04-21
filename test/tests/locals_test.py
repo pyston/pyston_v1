@@ -29,6 +29,7 @@ def f3():
     s = "hello world"
     t = (1.0, "asdf")
     print sorted(locals().items())
+    print sorted(vars().items())
 f3()
 
 def f4(t):
@@ -38,6 +39,7 @@ def f4(t):
     else:
         y = 2
     print sorted(locals().items())
+    print sorted(vars().items())
 f4(0)
 f4(1)
 
@@ -52,6 +54,7 @@ def f5():
                 print a
                 print b
                 print sorted(locals().items())
+                print sorted(vars().items())
             i()
         h()
     g()

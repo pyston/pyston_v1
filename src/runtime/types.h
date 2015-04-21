@@ -655,6 +655,10 @@ public:
 
     DEFAULT_CLASS_SIMPLE(slice_cls);
 };
+static_assert(sizeof(BoxedSlice) == sizeof(PySliceObject), "");
+static_assert(offsetof(BoxedSlice, start) == offsetof(PySliceObject, start), "");
+static_assert(offsetof(BoxedSlice, stop) == offsetof(PySliceObject, stop), "");
+static_assert(offsetof(BoxedSlice, step) == offsetof(PySliceObject, step), "");
 
 class BoxedMemberDescriptor : public Box {
 public:
@@ -786,6 +790,7 @@ Box* objectSetattr(Box* obj, Box* attr, Box* value);
 Box* makeAttrWrapper(Box* b);
 Box* unwrapAttrWrapper(Box* b);
 Box* attrwrapperKeys(Box* b);
+void attrwrapperDel(Box* b, const std::string& attr);
 
 #define SystemError ((BoxedClass*)PyExc_SystemError)
 #define StopIteration ((BoxedClass*)PyExc_StopIteration)

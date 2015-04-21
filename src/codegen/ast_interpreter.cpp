@@ -64,7 +64,7 @@ union Value {
     Value(double d) : d(d) {}
     Value(Box* o) : o(o) {
         if (DEBUG >= 2)
-            assert(gc::isValidGCObject(o));
+            ASSERT(gc::isValidGCObject(o), "%p", o);
     }
 };
 
@@ -532,8 +532,15 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
             CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
             auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
-            return partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
-                                      std::get<3>(arg_tuple));
+            Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
+                                        std::get<3>(arg_tuple));
+
+            // This is one of the few times that we are allowed to have an invalid value in a Box* Value.
+            // Check for it, and return as an int so that we don't trigger a potential assert when
+            // creating the Value.
+            if (compiled_func->getReturnType() != VOID)
+                assert(r);
+            return (intptr_t)r;
         }
     }
 
@@ -859,13 +866,18 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                     continue;
                 } else if (vst == ScopeInfo::VarScopeType::NAME) {
                     assert(frame_info.boxedLocals != NULL);
-                    assert(frame_info.boxedLocals->cls == dict_cls);
-                    auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
-                    auto it = d.find(boxString(target->id.str()));
-                    if (it == d.end()) {
-                        assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
+                    if (frame_info.boxedLocals->cls == dict_cls) {
+                        auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
+                        auto it = d.find(boxString(target->id.str()));
+                        if (it == d.end()) {
+                            assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
+                        }
+                        d.erase(it);
+                    } else if (frame_info.boxedLocals->cls == attrwrapper_cls) {
+                        attrwrapperDel(frame_info.boxedLocals, target->id.str());
+                    } else {
+                        RELEASE_ASSERT(0, "%s", frame_info.boxedLocals->cls->tp_name);
                     }
-                    d.erase(it);
                 } else {
                     assert(vst == ScopeInfo::VarScopeType::FAST);
 

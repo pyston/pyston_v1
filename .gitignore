@@ -47,6 +47,8 @@ gmon.out
 find_problem.status
 *.expected_cache
 
+plugins/clang_capi
+
 *.so
 *.pch
 

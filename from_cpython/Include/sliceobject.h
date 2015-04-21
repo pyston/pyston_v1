@@ -23,15 +23,12 @@ names are from range).  After much talk with Guido, it was decided to
 let these be any arbitrary python type.  Py_None stands for omitted values.
 */
 
-// Pyston change: comment this out since this is not the format we're using
-#if 0
+// Pyston note: this happens to be the same format we use (not a lot going on here),
+// and we assert so in runtime/types.h
 typedef struct {
     PyObject_HEAD
     PyObject *start, *stop, *step;	/* not NULL */
 } PySliceObject;
-#endif
-struct _PySliceObject;
-typedef struct _PySliceObject PySliceObject;
 
 // Pyston change: these are no longer static objects
 PyAPI_DATA(PyTypeObject*) slice_cls;
