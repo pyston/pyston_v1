@@ -1710,7 +1710,8 @@ Create a floating-point number from a hexadecimal string.\n\
 -4.9406564584124654e-324");
 
 
-static PyObject *
+// pyston change: make not static
+PyObject *
 float_as_integer_ratio(PyObject *v, PyObject *unused)
 {
     double self;
