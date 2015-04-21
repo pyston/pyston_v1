@@ -64,7 +64,7 @@ union Value {
     Value(double d) : d(d) {}
     Value(Box* o) : o(o) {
         if (DEBUG >= 2)
-            assert(gc::isValidGCObject(o));
+            ASSERT(gc::isValidGCObject(o), "%p", o);
     }
 };
 
@@ -532,8 +532,15 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
             CompiledFunction* partial_func = compilePartialFuncInternal(&exit);
             auto arg_tuple = getTupleFromArgsArray(&arg_array[0], arg_array.size());
-            return partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
-                                      std::get<3>(arg_tuple));
+            Box* r = partial_func->call(std::get<0>(arg_tuple), std::get<1>(arg_tuple), std::get<2>(arg_tuple),
+                                        std::get<3>(arg_tuple));
+
+            // This is one of the few times that we are allowed to have an invalid value in a Box* Value.
+            // Check for it, and return as an int so that we don't trigger a potential assert when
+            // creating the Value.
+            if (compiled_func->getReturnType() != VOID)
+                assert(r);
+            return (intptr_t)r;
         }
     }
 

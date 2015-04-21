@@ -159,7 +159,8 @@ extern "C" void abort() {
 
     // In case something calls abort down the line:
     static bool recursive = false;
-    if (!recursive) {
+    // If object_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
+    if (!recursive && object_cls) {
         recursive = true;
 
         fprintf(stderr, "Someone called abort!\n");

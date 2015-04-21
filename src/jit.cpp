@@ -82,7 +82,10 @@ static int main(int argc, char** argv) {
     bool stats = false;
     bool unbuffered = false;
     const char* command = NULL;
-    while ((code = getopt(argc, argv, "+OqdIibpjtrsSvnxc:FuP")) != -1) {
+
+    // Suppress getopt errors so we can throw them ourselves
+    opterr = 0;
+    while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxc:FuP")) != -1) {
         if (code == 'O')
             FORCE_OPTIMIZE = true;
         else if (code == 't')
@@ -120,11 +123,24 @@ static int main(int argc, char** argv) {
         } else if (code == 'F') {
             CONTINUE_AFTER_FATAL = true;
         } else if (code == 'c') {
+            assert(optarg);
             command = optarg;
             // no more option parsing; the rest of our arguments go into sys.argv.
             break;
-        } else
+        } else {
+            if (code == ':') {
+                fprintf(stderr, "Argument expected for the -%c option\n", optopt);
+                return 2;
+            }
+
+            if (code == '?') {
+                fprintf(stderr, "Unknown option: -%c\n", optopt);
+                return 2;
+            }
+
+            fprintf(stderr, "Unknown getopt() error.  '%c' '%c'\n", code, optopt);
             abort();
+        }
     }
 
     const char* fn = NULL;

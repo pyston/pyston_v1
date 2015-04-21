@@ -2,6 +2,12 @@
 # This module should be kept compatible with Python 2.2, see PEP 291.
 
 from __future__ import generators
+
+# Pyston change:
+import sys
+del sys.modules['modulefinder']
+raise ImportError("This isn't really supported in Pyston yet")
+
 import dis
 import imp
 import marshal

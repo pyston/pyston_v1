@@ -94,6 +94,7 @@ extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
 extern "C" bool hasnext(Box* o);
 
 extern "C" void dump(void* p);
+extern "C" void dumpEx(void* p, int levels = 0);
 
 struct SetattrRewriteArgs;
 void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args);
