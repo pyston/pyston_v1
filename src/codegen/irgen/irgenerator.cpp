@@ -2363,11 +2363,12 @@ public:
         if (ENABLE_FRAME_INTROSPECTION) {
             // TODO: don't need to use a sorted symbol table if we're explicitly recording the names!
             // nice for debugging though.
-            SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
-
+            typedef std::pair<InternedString, CompilerVariable*> Entry;
+            std::vector<Entry> sorted_symbol_table(symbol_table.begin(), symbol_table.end());
+            std::sort(sorted_symbol_table.begin(), sorted_symbol_table.end(),
+                      [](const Entry& lhs, const Entry& rhs) { return lhs.first < rhs.first; });
             for (const auto& p : sorted_symbol_table) {
                 CompilerVariable* v = p.second;
-
                 v->serializeToFrame(stackmap_args);
                 pp->addFrameVar(p.first.str(), v->getType());
             }
