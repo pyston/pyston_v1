@@ -2,11 +2,11 @@
 
 Pyston is a new, under-development Python implementation built using LLVM and modern JIT techniques with the goal of achieving good performance.
 
-We have a small website [pyston.org](http://pyston.org/), which for now just hosts the mailing lists and the [blog](http://blog.pyston.org/).  We have two mailing lists: [pyston-dev@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev) for development-related discussions, and [pyston-announce@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-announce) which is for wider announcements (new releases, major project changes).
+We have a small website [pyston.org](http://pyston.org/), which for now just hosts the mailing lists and the [blog](http://blog.pyston.org/).  We have two mailing lists: [pyston-dev@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-dev) for development-related discussions, and [pyston-announce@](http://lists.pyston.org/cgi-bin/mailman/listinfo/pyston-announce) which is for wider announcements (new releases, major project changes).  We also have a [gitter chat room](https://gitter.im/dropbox/pyston) where most discussion takes place.
 
 ### Current state
 
-Pyston should be considered in early alpha: it "works" in that it can successfully run Python code, but it is still quite far from being useful for end-users.
+Pyston should be considered in alpha: it "works" in that it can successfully run Python code, but it is still quite far from being useful for end-users.
 
 Currently, Pyston targets Python 2.7, only runs on x86_64 platforms, and only has been tested on Ubuntu.  Support for more platforms -- along with Python 3 compatibility -- is desired but currently not on the roadmap.
 
@@ -30,7 +30,7 @@ Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://g
  - Class inheritance, metaclasses
  - Basic native C API support
  - Closures, generators, lambdas, generator expressions
- - Default arguments, keywords, \*args, **kwargs
+ - Default arguments, keywords, \*args, \*\*kwargs
  - Longs, and integer promotion
  - Multithreading support
 - We have allowed performance to regress, sometimes considerably, but (hopefully) in places that allow for more efficient implementations as we have time.
@@ -45,16 +45,14 @@ Pyston welcomes any kind of contribution; please see [CONTRIBUTING.md](https://g
 
 ### Getting started
 
-To get a full development environment for Pyston, you will need pretty recent versions of various tools.  The docs/INSTALLING.md file contains information about what the tools are, how to get them, and how to install them; currently it can take up to an hour to get them all built on a quad-core machine.
+We have some build instructions at [INSTALLING.md](https://github.com/dropbox/pyston/blob/master/docs/INSTALLING.md).  If you have any issues, please feel free to file an issue in the issue tracker, or mention it via email or gitter.
 
-To simply build and run Pyston, a smaller set of dependencies is required; see docs/INSTALLING.md, but skip the "OPTIONAL DEPENDENCIES" section. Once all the dependencies are installed, you should be able to do
+Once you've followed those instructions, you should be able to do
 ```
-$ make check -j4
+$ make check
 ```
 
-And see that hopefully all of the tests pass.  (If they don't, please email pyston-dev.)
-
-We also have a new CMake-based build system which is easier and faster to get running; see the end of INSTALLING.md for information.
+And see that hopefully all of the tests pass.  (If they don't, please let us know.)
 
 All pull requests are built and tested by travis-ci.org running Ubuntu 12.04.
 See [travis-ci.org/dropbox/pyston/builds](https://travis-ci.org/dropbox/pyston/builds).
