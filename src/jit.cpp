@@ -99,6 +99,9 @@ static int main(int argc, char** argv) {
     bool unbuffered = false;
     const char* command = NULL;
 
+    int* i = 0;
+    int j = *i;
+
     // Suppress getopt errors so we can throw them ourselves
     opterr = 0;
     while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuP")) != -1) {
