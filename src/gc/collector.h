@@ -26,6 +26,8 @@ namespace gc {
 // (Note: this marks the gc allocation itself, not the pointer that points to one.  For that, use
 // a GCRootHandle)
 void registerPermanentRoot(void* root_obj, bool allow_duplicates = false);
+void deregisterPermanentRoot(void* root_obj);
+
 // Register an object that was not allocated through this collector, as a root for this collector.
 // The motivating usecase is statically-allocated PyTypeObject objects, which are full Python objects
 // even if they are not heap allocated.

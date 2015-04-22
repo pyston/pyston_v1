@@ -973,6 +973,7 @@ AST_Module* parse_string(const char* code) {
 
     FILE* f = fopen(tmp.c_str(), "w");
     fwrite(code, 1, size, f);
+    fputc('\n', f);
     fclose(f);
 
     AST_Module* m = parse_file(tmp.c_str());
