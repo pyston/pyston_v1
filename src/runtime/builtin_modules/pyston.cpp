@@ -48,10 +48,25 @@ static Box* setOption(Box* option, Box* value) {
     return None;
 }
 
+static Box* clearStats() {
+    Stats::clear();
+    return None;
+}
+
+static Box* dumpStats() {
+    Stats::dump();
+    return None;
+}
+
 void setupPyston() {
     pyston_module = createModule("__pyston__", "__builtin__");
 
     pyston_module->giveAttr("setOption",
                             new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)setOption, UNKNOWN, 2), "setOption"));
+
+    pyston_module->giveAttr("clearStats",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)clearStats, NONE, 0), "clearStats"));
+    pyston_module->giveAttr("dumpStats",
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dumpStats, NONE, 0), "dumpStats"));
 }
 }

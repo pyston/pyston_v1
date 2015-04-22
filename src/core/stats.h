@@ -40,6 +40,7 @@ public:
     static void setEnabled(bool enabled) { Stats::enabled = enabled; }
     static void log(int id, int count = 1) { (*counts)[id] += count; }
 
+    static void clear() { std::fill(counts->begin(), counts->end(), 0); }
     static void dump();
     static void endOfInit();
 };
