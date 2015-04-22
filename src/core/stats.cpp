@@ -23,6 +23,7 @@ namespace pyston {
 #if !DISABLE_STATS
 std::vector<long>* Stats::counts;
 std::unordered_map<int, std::string>* Stats::names;
+bool Stats::enabled;
 StatCounter::StatCounter(const std::string& name) : id(Stats::getStatId(name)) {
 }
 
@@ -51,6 +52,9 @@ int Stats::getStatId(const std::string& name) {
 }
 
 void Stats::dump() {
+    if (!Stats::enabled)
+        return;
+
     printf("Stats:\n");
 
     std::vector<std::pair<std::string, int>> pairs;

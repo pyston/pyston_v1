@@ -362,6 +362,7 @@ static void handle_sigint(int signum) {
     // For now, just call abort(), so that we get a traceback at least.
     fprintf(stderr, "SIGINT!\n");
     joinRuntime();
+    Stats::dump();
     abort();
 }
 
