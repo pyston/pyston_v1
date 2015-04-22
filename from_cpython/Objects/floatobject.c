@@ -820,7 +820,8 @@ float_floor_div(PyObject *v, PyObject *w)
    x is not an infinity or nan. */
 #define DOUBLE_IS_ODD_INTEGER(x) (fmod(fabs(x), 2.0) == 1.0)
 
-static PyObject *
+// pyston change: make not static
+PyObject *
 float_pow(PyObject *v, PyObject *w, PyObject *z)
 {
     double iv, iw, ix;

@@ -30,6 +30,7 @@ extern "C" PyObject* float_fromhex(PyObject* cls, PyObject* arg) noexcept;
 extern "C" PyObject* float_as_integer_ratio(PyObject* v, PyObject* unused) noexcept;
 extern "C" PyObject* float_is_integer(PyObject* v) noexcept;
 extern "C" PyObject* float__format__(PyObject* v) noexcept;
+extern "C" PyObject* float_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
 
 namespace pyston {
 
@@ -93,10 +94,6 @@ extern "C" double mod_float_float(double lhs, double rhs) {
             r += rhs;
     }
     return r;
-}
-
-extern "C" double pow_float_float(double lhs, double rhs) {
-    return pow(lhs, rhs);
 }
 
 extern "C" double div_float_float(double lhs, double rhs) {
@@ -426,36 +423,31 @@ extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
     }
 }
 
+extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
+    Box* res = float_pow(lhs, rhs, mod);
+    if (!res) {
+        throwCAPIException();
+    }
+    return res;
+}
+
 extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = None) {
+    // TODO to specialize this, need to account for all the special cases in float_pow
     assert(lhs->cls == float_cls);
     assert(rhs->cls == float_cls);
-    if (mod != None)
-        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
-    return boxFloat(pow(lhs->d, rhs->d));
+    return floatPow(lhs, rhs, mod);
 }
 
 extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
+    // TODO to specialize this, need to account for all the special cases in float_pow
     assert(lhs->cls == float_cls);
     assert(isSubclass(rhs->cls, int_cls));
-    if (mod != None)
-        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
-    return boxFloat(pow(lhs->d, rhs->n));
+    return floatPow(lhs, rhs, mod);
 }
 
-extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
-    assert(lhs->cls == float_cls);
-    if (mod != None)
-        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
-
-    if (isSubclass(rhs->cls, int_cls)) {
-        return floatPowInt(lhs, static_cast<BoxedInt*>(rhs));
-    } else if (rhs->cls == float_cls) {
-        return floatPowFloat(lhs, static_cast<BoxedFloat*>(rhs));
-    } else if (rhs->cls == long_cls) {
-        return boxFloat(pow(lhs->d, PyLong_AsDouble(rhs)));
-    } else {
-        return NotImplemented;
-    }
+extern "C" double pow_float_float(double lhs, double rhs) {
+    // TODO inline this without the boxing
+    return unboxFloat(floatPowFloat(static_cast<BoxedFloat*>(boxFloat(lhs)), static_cast<BoxedFloat*>(boxFloat(rhs))));
 }
 
 extern "C" Box* floatMulFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
