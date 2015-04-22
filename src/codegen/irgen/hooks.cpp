@@ -232,8 +232,13 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         if (source->liveness == NULL)
             source->liveness = computeLivenessInfo(source->cfg);
 
-        if (source->phis == NULL)
-            source->phis = computeRequiredPhis(f->param_names, source->cfg, source->liveness, source->getScopeInfo());
+        PhiAnalysis*& phis = source->phis[entry_descriptor];
+        if (!phis) {
+            if (entry_descriptor)
+                phis = computeRequiredPhis(entry_descriptor, source->liveness, source->getScopeInfo());
+            else
+                phis = computeRequiredPhis(f->param_names, source->cfg, source->liveness, source->getScopeInfo());
+        }
     }
 
 

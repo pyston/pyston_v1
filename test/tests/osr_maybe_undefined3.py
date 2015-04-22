@@ -1,6 +1,3 @@
-# fail-if: '-O' not in EXTRA_JIT_ARGS
-# - wip
-
 # Regression test: make sure we can handle variables that are only defined
 # on excluded parts of an osr compilation
 def f():

@@ -2278,7 +2278,7 @@ private:
                 p.second->decvref(emitter);
                 symbol_table.erase(getIsDefinedName(p.first));
                 symbol_table.erase(p.first);
-            } else if (source->phis->isRequiredAfter(p.first, myblock)) {
+            } else if (irstate->getPhis()->isRequiredAfter(p.first, myblock)) {
                 assert(scope_info->getScopeTypeOfName(p.first) != ScopeInfo::VarScopeType::GLOBAL);
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(p.first, myblock);
                 // printf("Converting %s from %s to %s\n", p.first.c_str(),
@@ -2302,9 +2302,10 @@ private:
             }
         }
 
-        const PhiAnalysis::RequiredSet& all_phis = source->phis->getAllRequiredAfter(myblock);
+        const PhiAnalysis::RequiredSet& all_phis = irstate->getPhis()->getAllRequiredAfter(myblock);
         for (PhiAnalysis::RequiredSet::const_iterator it = all_phis.begin(), end = all_phis.end(); it != end; ++it) {
-            // printf("phi will be required for %s\n", it->c_str());
+            if (VERBOSITY() >= 3)
+                printf("phi will be required for %s\n", it->c_str());
             assert(scope_info->getScopeTypeOfName(*it) != ScopeInfo::VarScopeType::GLOBAL);
             CompilerVariable*& cur = symbol_table[*it];
 
@@ -2316,7 +2317,7 @@ private:
                 ConcreteCompilerVariable* is_defined
                     = static_cast<ConcreteCompilerVariable*>(_popFake(defined_name, true));
 
-                if (source->phis->isPotentiallyUndefinedAfter(*it, myblock)) {
+                if (irstate->getPhis()->isPotentiallyUndefinedAfter(*it, myblock)) {
                     // printf("is potentially undefined later, so marking it defined\n");
                     if (is_defined) {
                         _setFake(defined_name, is_defined);
@@ -2415,7 +2416,7 @@ public:
         // We have one successor, but they have more than one predecessor.
         // We're going to sort out which symbols need to go in phi_st and which belong inst.
         for (SymbolTable::iterator it = st->begin(); it != st->end();) {
-            if (allowableFakeEndingSymbol(it->first) || source->phis->isRequiredAfter(it->first, myblock)) {
+            if (allowableFakeEndingSymbol(it->first) || irstate->getPhis()->isRequiredAfter(it->first, myblock)) {
                 ASSERT(it->second->isGrabbed(), "%s", it->first.c_str());
                 assert(it->second->getVrefs() == 1);
                 // this conversion should have already happened... should refactor this.

@@ -721,7 +721,7 @@ public:
         return changed;
     }
 
-    static PropagatingTypeAnalysis* doAnalysis(CFG* cfg, SpeculationLevel speculation, ScopeInfo* scope_info,
+    static PropagatingTypeAnalysis* doAnalysis(SpeculationLevel speculation, ScopeInfo* scope_info,
                                                TypeMap&& initial_types, CFGBlock* initial_block) {
         Timer _t("PropagatingTypeAnalysis::doAnalysis()");
 
@@ -785,15 +785,16 @@ public:
         }
 
         if (VERBOSITY("types")) {
-            printf("Type analysis: %ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(),
-                   num_evaluations, 1.0 * num_evaluations / cfg->blocks.size());
+            printf("Type analysis: %d BBs, %d evaluations = %.1f evaluations/block\n", starting_types.size(),
+                   num_evaluations, 1.0 * num_evaluations / starting_types.size());
         }
 
         if (VERBOSITY("types") >= 3) {
-            for (CFGBlock* b : cfg->blocks) {
+            for (const auto& p : starting_types) {
+                auto b = p.first;
                 printf("Types at beginning of block %d:\n", b->idx);
 
-                TypeMap& starting = starting_types[b];
+                const TypeMap& starting = p.second;
                 for (const auto& p : starting) {
                     ASSERT(p.second, "%s", p.first.c_str());
                     printf("%s: %s\n", p.first.c_str(), p.second->debugName().c_str());
@@ -836,17 +837,17 @@ TypeAnalysis* doTypeAnalysis(CFG* cfg, const ParamNames& arg_names, const std::v
 
     assert(i == arg_types.size());
 
-    return PropagatingTypeAnalysis::doAnalysis(cfg, speculation, scope_info, std::move(initial_types),
+    return PropagatingTypeAnalysis::doAnalysis(speculation, scope_info, std::move(initial_types),
                                                cfg->getStartingBlock());
 }
 
-TypeAnalysis* doTypeAnalysis(CFG* cfg, const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
+TypeAnalysis* doTypeAnalysis(const OSREntryDescriptor* entry_descriptor, EffortLevel effort,
                              TypeAnalysis::SpeculationLevel speculation, ScopeInfo* scope_info) {
     // if (effort == EffortLevel::INTERPRETED) {
     // return new NullTypeAnalysis();
     //}
     TypeMap initial_types(entry_descriptor->args.begin(), entry_descriptor->args.end());
-    return PropagatingTypeAnalysis::doAnalysis(cfg, speculation, scope_info, std::move(initial_types),
+    return PropagatingTypeAnalysis::doAnalysis(speculation, scope_info, std::move(initial_types),
                                                entry_descriptor->backedge->target);
 }
 }

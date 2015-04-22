@@ -244,7 +244,7 @@ public:
     AST* ast;
     CFG* cfg;
     LivenessAnalysis* liveness;
-    PhiAnalysis* phis;
+    std::unordered_map<const OSREntryDescriptor*, PhiAnalysis*> phis;
     bool is_generator;
 
     InternedStringPool& getInternedStrings();

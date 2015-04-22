@@ -342,6 +342,8 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
     CompiledFunction* cf = irstate->getCurFunction();
     ConcreteCompilerType* rtn_type = irstate->getReturnType();
     // llvm::MDNode* func_info = irstate->getFuncDbgInfo();
+    PhiAnalysis* phi_analysis = source->phis[entry_descriptor];
+    assert(phi_analysis);
 
     if (entry_descriptor != NULL)
         assert(blocks.count(source->cfg->getStartingBlock()) == 0);
@@ -508,18 +510,11 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
         CFGBlock* block = traversal_order[_i].first;
         CFGBlock* pred = traversal_order[_i].second;
 
-        if (VERBOSITY("irgen") >= 3)
-            printf("processing block %d\n", block->idx);
-
-        if (!blocks.count(block)) {
-            if (VERBOSITY("irgen") >= 3)
-                printf("Skipping this block\n");
-            // created_phis[block] = NULL;
-            // ending_symbol_tables[block] = NULL;
-            // phi_ending_symbol_tables[block] = NULL;
-            // llvm_exit_blocks[block] = NULL;
+        if (!blocks.count(block))
             continue;
-        }
+
+        if (VERBOSITY("irgen") >= 2)
+            printf("processing block %d\n", block->idx);
 
         std::unique_ptr<IRGenerator> generator(createIRGenerator(irstate, llvm_entry_blocks, block, types));
         llvm::BasicBlock* entry_block_end = llvm_entry_blocks[block];
@@ -634,9 +629,9 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
 
             std::set<InternedString> names;
-            for (const auto& s : source->phis->getAllRequiredFor(block)) {
+            for (const auto& s : phi_analysis->getAllRequiredFor(block)) {
                 names.insert(s);
-                if (source->phis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
+                if (phi_analysis->isPotentiallyUndefinedAfter(s, block->predecessors[0])) {
                     names.insert(getIsDefinedName(s, source->getInternedStrings()));
                 }
             }
@@ -807,7 +802,7 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
 
             // printf("(%d %ld) -> (%d %ld)\n", bpred->idx, phi_ending_symbol_tables[bpred]->size(), b->idx,
             // phis->size());
-            assert(sameKeyset(phi_ending_symbol_tables[bpred], phis));
+            ASSERT(sameKeyset(phi_ending_symbol_tables[bpred], phis), "%d->%d", bpred->idx, b->idx);
             assert(phi_ending_symbol_tables[bpred]->size() == phis->size());
         }
 
@@ -1042,7 +1037,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         speculation_level = TypeAnalysis::SOME;
     TypeAnalysis* types;
     if (entry_descriptor)
-        types = doTypeAnalysis(source->cfg, entry_descriptor, effort, speculation_level, source->getScopeInfo());
+        types = doTypeAnalysis(entry_descriptor, effort, speculation_level, source->getScopeInfo());
     else
         types = doTypeAnalysis(source->cfg, *param_names, spec->arg_types, effort, speculation_level,
                                source->getScopeInfo());
@@ -1060,7 +1055,7 @@ CompiledFunction* doCompile(SourceInfo* source, ParamNames* param_names, const O
         computeBlockSetClosure(blocks);
     }
 
-    IRGenState irstate(cf, source, param_names, getGCBuilder(), dbg_funcinfo);
+    IRGenState irstate(cf, source, source->phis[entry_descriptor], param_names, getGCBuilder(), dbg_funcinfo);
 
     emitBBs(&irstate, types, entry_descriptor, blocks);
 

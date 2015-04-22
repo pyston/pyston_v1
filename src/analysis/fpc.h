@@ -45,20 +45,23 @@ public:
 };
 
 template <typename T>
-typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& analyzer, bool reverse) {
+void computeFixedPoint(typename BBAnalyzer<T>::Map&& initial_map, CFGBlock* initial_block,
+                       const BBAnalyzer<T>& analyzer, bool reverse, typename BBAnalyzer<T>::AllMap& starting_states,
+                       typename BBAnalyzer<T>::AllMap& ending_states) {
     assert(!reverse);
 
     typedef typename BBAnalyzer<T>::Map Map;
     typedef typename BBAnalyzer<T>::AllMap AllMap;
-    AllMap starting_states;
-    AllMap ending_states;
+
+    assert(!starting_states.size());
+    assert(!ending_states.size());
 
     llvm::SmallPtrSet<CFGBlock*, 32> in_queue;
     std::priority_queue<CFGBlock*, llvm::SmallVector<CFGBlock*, 32>, CFGBlockMinIndex> q;
 
-    starting_states.insert(make_pair(cfg->getStartingBlock(), Map()));
-    q.push(cfg->getStartingBlock());
-    in_queue.insert(cfg->getStartingBlock());
+    starting_states.insert(make_pair(initial_block, std::move(initial_map)));
+    q.push(initial_block);
+    in_queue.insert(initial_block);
 
     int num_evaluations = 0;
     while (!q.empty()) {
@@ -124,12 +127,9 @@ typename BBAnalyzer<T>::AllMap computeFixedPoint(CFG* cfg, const BBAnalyzer<T>& 
     }
 
     if (VERBOSITY("analysis")) {
-        printf("%ld BBs, %d evaluations = %.1f evaluations/block\n", cfg->blocks.size(), num_evaluations,
-               1.0 * num_evaluations / cfg->blocks.size());
+        printf("%d BBs, %d evaluations = %.1f evaluations/block\n", starting_states.size(), num_evaluations,
+               1.0 * num_evaluations / starting_states.size());
     }
-
-
-    return ending_states;
 }
 }
 

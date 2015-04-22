@@ -132,6 +132,7 @@ private:
     CompiledFunction* compiled_func;
     SourceInfo* source_info;
     ScopeInfo* scope_info;
+    PhiAnalysis* phis;
 
     SymMap sym_table;
     CFGBlock* next_block, *current_block;
@@ -223,9 +224,9 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
-    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), current_block(0),
-      current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0), generator(0),
-      edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
+    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), phis(NULL),
+      current_block(0), current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0),
+      generator(0), edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
@@ -324,15 +325,19 @@ void ASTInterpreter::eraseDeadSymbols() {
     if (source_info->liveness == NULL)
         source_info->liveness = computeLivenessInfo(source_info->cfg);
 
-    if (source_info->phis == NULL)
-        source_info->phis = computeRequiredPhis(compiled_func->clfunc->param_names, source_info->cfg,
-                                                source_info->liveness, scope_info);
+    if (this->phis == NULL) {
+        PhiAnalysis*& phis = source_info->phis[/* entry_descriptor = */ NULL];
+        if (!phis)
+            phis = computeRequiredPhis(compiled_func->clfunc->param_names, source_info->cfg, source_info->liveness,
+                                       scope_info);
+        this->phis = phis;
+    }
 
     std::vector<InternedString> dead_symbols;
     for (auto& it : sym_table) {
         if (!source_info->liveness->isLiveAtEnd(it.first, current_block)) {
             dead_symbols.push_back(it.first);
-        } else if (source_info->phis->isRequiredAfter(it.first, current_block)) {
+        } else if (phis->isRequiredAfter(it.first, current_block)) {
             assert(scope_info->getScopeTypeOfName(it.first) != ScopeInfo::VarScopeType::GLOBAL);
         } else {
         }
@@ -472,10 +477,9 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
             std::map<InternedString, Box*> sorted_symbol_table;
 
-            auto phis = compiled_func->clfunc->source->phis;
             for (auto& name : phis->definedness.getDefinedNamesAtEnd(current_block)) {
                 auto it = sym_table.find(name);
-                if (!compiled_func->clfunc->source->liveness->isLiveAtEnd(name, current_block))
+                if (!source_info->liveness->isLiveAtEnd(name, current_block))
                     continue;
 
                 if (phis->isPotentiallyUndefinedAfter(name, current_block)) {

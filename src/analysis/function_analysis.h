@@ -52,6 +52,8 @@ public:
     bool isLiveAtEnd(InternedString name, CFGBlock* block);
 };
 
+class PhiAnalysis;
+
 class DefinednessAnalysis {
 public:
     enum DefinitionLevel {
@@ -62,16 +64,21 @@ public:
     typedef llvm::DenseSet<InternedString> RequiredSet;
 
 private:
-    llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> results;
-    llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end;
-    ScopeInfo* scope_info;
+    llvm::DenseMap<CFGBlock*, llvm::DenseMap<InternedString, DefinitionLevel>> defined_at_beginning, defined_at_end;
+    llvm::DenseMap<CFGBlock*, RequiredSet> defined_at_end_sets;
 
 public:
-    DefinednessAnalysis(const ParamNames& param_names, CFG* cfg, ScopeInfo* scope_info);
+    DefinednessAnalysis() {}
+
+    void run(llvm::DenseMap<InternedString, DefinitionLevel>&& initial_map, CFGBlock* initial_block,
+             ScopeInfo* scope_info);
 
     DefinitionLevel isDefinedAtEnd(InternedString name, CFGBlock* block);
     const RequiredSet& getDefinedNamesAtEnd(CFGBlock* block);
+
+    friend class PhiAnalysis;
 };
+
 class PhiAnalysis {
 public:
     typedef llvm::DenseSet<InternedString> RequiredSet;
@@ -83,18 +90,24 @@ private:
     llvm::DenseMap<CFGBlock*, RequiredSet> required_phis;
 
 public:
-    PhiAnalysis(const ParamNames&, CFG* cfg, LivenessAnalysis* liveness, ScopeInfo* scope_info);
+    // Initials_need_phis specifies that initial_map should count as an additional entry point
+    // that may require phis.
+    PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel>&& initial_map,
+                CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
     bool isRequired(InternedString name, CFGBlock* block);
     bool isRequiredAfter(InternedString name, CFGBlock* block);
     const RequiredSet& getAllRequiredAfter(CFGBlock* block);
     const RequiredSet& getAllRequiredFor(CFGBlock* block);
+    // If "name" may be undefined at the beginning of any immediate successor block of "block":
     bool isPotentiallyUndefinedAfter(InternedString name, CFGBlock* block);
+    // If "name" may be undefined at the beginning of "block"
     bool isPotentiallyUndefinedAt(InternedString name, CFGBlock* block);
 };
 
 LivenessAnalysis* computeLivenessInfo(CFG*);
-PhiAnalysis* computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_Info);
+PhiAnalysis* computeRequiredPhis(const ParamNames&, CFG*, LivenessAnalysis*, ScopeInfo* scope_info);
+PhiAnalysis* computeRequiredPhis(const OSREntryDescriptor*, LivenessAnalysis*, ScopeInfo* scope_info);
 }
 
 #endif
