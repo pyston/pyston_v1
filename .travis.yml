@@ -11,6 +11,10 @@ cache:
   directories:
     - $HOME/.ccache
 
+env:
+  - buildtype=Debug
+  - buildtype=Release
+
 addons:
   apt:
     sources:
@@ -23,6 +27,7 @@ addons:
     - clang-3.5
     - cmake
     - g++-4.8
+    - gdb
     - libgmp3-dev
     - liblzma-dev
     - libncurses5-dev
@@ -44,14 +49,21 @@ install:
   - git config --global user.name "Your Name"
   - mkdir ~/pyston-build && cd ~/pyston-build
   - make -C $TRAVIS_BUILD_DIR llvm_up
-  - cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
+  - cmake -GNinja -DCMAKE_BUILD_TYPE=${buildtype} -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
   - ninja libunwind ext_cpython
+
+before_script:
+  - ulimit -c unlimited -S
 
 script:
   - ccache -z
   - ninja -j4 pyston
   - ccache -s
   - ninja check-pyston
+
+after_failure:
+  - COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
+  - if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" pyston -ex "thread apply all bt" -ex "set pagination 0" -batch; fi
 
 os:
   - linux

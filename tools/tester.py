@@ -59,6 +59,8 @@ def set_ulimits():
     MAX_MEM_MB = 100
     resource.setrlimit(resource.RLIMIT_RSS, (MAX_MEM_MB * 1024 * 1024, MAX_MEM_MB * 1024 * 1024))
 
+    resource.setrlimit(resource.RLIMIT_CORE, (-1, -1))
+
 EXTMODULE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + "/../test/test_extension/build/lib.linux-x86_64-2.7/")
 EXTMODULE_DIR_PYSTON = None
 THIS_FILE = os.path.abspath(__file__)
