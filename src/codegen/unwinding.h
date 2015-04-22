@@ -64,7 +64,7 @@ public:
 
     PythonFrameIterator(PythonFrameIterator&& rhs);
     void operator=(PythonFrameIterator&& rhs);
-    PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl>&& impl);
+    PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl> impl);
     ~PythonFrameIterator();
 };
 

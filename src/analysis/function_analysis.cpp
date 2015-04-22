@@ -359,7 +359,7 @@ void DefinednessBBAnalyzer::processBB(Map& starting, CFGBlock* block) const {
     }
 }
 
-void DefinednessAnalysis::run(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel>&& initial_map,
+void DefinednessAnalysis::run(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
                               CFGBlock* initial_block, ScopeInfo* scope_info) {
     Timer _t("DefinednessAnalysis()", 10);
 
@@ -397,7 +397,7 @@ const DefinednessAnalysis::RequiredSet& DefinednessAnalysis::getDefinedNamesAtEn
     return defined_at_end_sets[block];
 }
 
-PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel>&& initial_map,
+PhiAnalysis::PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
                          CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness,
                          ScopeInfo* scope_info)
     : definedness(), liveness(liveness) {

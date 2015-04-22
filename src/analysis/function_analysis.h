@@ -70,7 +70,7 @@ private:
 public:
     DefinednessAnalysis() {}
 
-    void run(llvm::DenseMap<InternedString, DefinitionLevel>&& initial_map, CFGBlock* initial_block,
+    void run(llvm::DenseMap<InternedString, DefinitionLevel> initial_map, CFGBlock* initial_block,
              ScopeInfo* scope_info);
 
     DefinitionLevel isDefinedAtEnd(InternedString name, CFGBlock* block);
@@ -92,7 +92,7 @@ private:
 public:
     // Initials_need_phis specifies that initial_map should count as an additional entry point
     // that may require phis.
-    PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel>&& initial_map,
+    PhiAnalysis(llvm::DenseMap<InternedString, DefinednessAnalysis::DefinitionLevel> initial_map,
                 CFGBlock* initial_block, bool initials_need_phis, LivenessAnalysis* liveness, ScopeInfo* scope_info);
 
     bool isRequired(InternedString name, CFGBlock* block);
