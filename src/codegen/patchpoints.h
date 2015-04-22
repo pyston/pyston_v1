@@ -69,7 +69,7 @@ public:
     const std::vector<FrameVarInfo>& getFrameVars() { return frame_vars; }
 
     int scratchStackmapArg() { return 0; }
-    int scratchSize() { return 80 + MAX_FRAME_SPILLS * sizeof(void*); }
+    int scratchSize() { return 120 + MAX_FRAME_SPILLS * sizeof(void*); }
 
     void addFrameVar(const std::string& name, CompilerType* type);
     void setNumFrameArgs(int num_frame_args) {

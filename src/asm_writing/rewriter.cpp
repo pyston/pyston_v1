@@ -836,6 +836,10 @@ void Rewriter::commit() {
     for (int i = 0; i < actions.size(); i++) {
         actions[i].action();
 
+        // if the action aborted the rewrite
+        if (finished)
+            return;
+
         assertConsistent();
         if (i == last_guard_action) {
             on_done_guarding();
@@ -1088,7 +1092,9 @@ int Rewriter::_allocate(RewriterVar* result, int n) {
             consec = 0;
         }
     }
-    RELEASE_ASSERT(0, "Using all %d bytes of scratch!", scratch_size);
+    // printf("all scratch space has been used up, aborting the rewrite\n");
+    this->abort();
+    return 0;
 }
 
 RewriterVar* Rewriter::allocateAndCopy(RewriterVar* array_ptr, int n) {
