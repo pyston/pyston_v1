@@ -2194,8 +2194,8 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     if (error_str && !isSubclass(error_str->cls, str_cls))
         raiseExcHelper(TypeError, "decode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
-    Box* result
-        = PyCodec_Decode(self, encoding_str ? encoding_str->data() : NULL, error_str ? error_str->data() : NULL);
+    Box* result = PyString_AsDecodedObject(self, encoding_str ? encoding_str->data() : NULL,
+                                           error_str ? error_str->data() : NULL);
     checkAndThrowCAPIException();
     return result;
 }
@@ -2219,7 +2219,7 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (error_str && !isSubclass(error_str->cls, str_cls))
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
-    Box* result = PyCodec_Encode(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
+    Box* result = PyString_AsEncodedObject(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
                                  error_str ? error_str->data() : NULL);
     checkAndThrowCAPIException();
     return result;
