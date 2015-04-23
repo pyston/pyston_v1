@@ -51,7 +51,7 @@ int Stats::getStatId(const std::string& name) {
     return rtn;
 }
 
-void Stats::dump() {
+void Stats::dump(bool includeZeros) {
     if (!Stats::enabled)
         return;
 
@@ -65,7 +65,8 @@ void Stats::dump() {
     std::sort(pairs.begin(), pairs.end());
 
     for (int i = 0; i < pairs.size(); i++) {
-        printf("%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
+        if (includeZeros || (*counts)[pairs[i].second] > 0)
+            printf("%s: %ld\n", pairs[i].first.c_str(), (*counts)[pairs[i].second]);
     }
 }
 

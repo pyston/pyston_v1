@@ -53,8 +53,11 @@ static Box* clearStats() {
     return None;
 }
 
-static Box* dumpStats() {
-    Stats::dump();
+static Box* dumpStats(Box* includeZeros) {
+    if (includeZeros->cls != bool_cls)
+        raiseExcHelper(TypeError, "includeZeros must be a 'bool' object but received a '%s'",
+                       getTypeName(includeZeros));
+    Stats::dump(((BoxedBool*)includeZeros)->n != 0);
     return None;
 }
 
@@ -67,6 +70,7 @@ void setupPyston() {
     pyston_module->giveAttr("clearStats",
                             new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)clearStats, NONE, 0), "clearStats"));
     pyston_module->giveAttr("dumpStats",
-                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dumpStats, NONE, 0), "dumpStats"));
+                            new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)dumpStats, NONE, 1, 1, false, false),
+                                                             "dumpStats", { False }));
 }
 }
