@@ -48,7 +48,7 @@ public:
 
     static Box* filename(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
-        return boxString(static_cast<BoxedCode*>(b)->f->source->parent_module->fn);
+        return boxString(static_cast<BoxedCode*>(b)->f->source->fn);
     }
 
     static Box* argcount(Box* b, void*) {

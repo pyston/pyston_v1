@@ -283,7 +283,7 @@ static int main(int argc, char** argv) {
         if (!main_module) {
             main_module = createModule("__main__", "<stdin>");
         } else {
-            main_module->fn = "<stdin>";
+            // main_module->fn = "<stdin>";
         }
 
         for (;;) {

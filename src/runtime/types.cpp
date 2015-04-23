@@ -381,7 +381,8 @@ static void functionDtor(Box* b) {
     self->dependent_ics.~ICInvalidator();
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) : fn(fn) {
+// TODO(kmod): builtin modules are not supposed to have a __file__ attribute
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
     this->giveAttr("__doc__", doc ? boxStrConstant(doc) : None);
@@ -1094,10 +1095,13 @@ Box* moduleRepr(BoxedModule* m) {
 
     os << "<module '" << m->name() << "' ";
 
-    if (m->fn == "__builtin__") {
+    const char* filename = PyModule_GetFilename((PyObject*)m);
+    // TODO(kmod): builtin modules are not supposed to have a __file__ attribute
+    if (!filename || !strcmp(filename, "__builtin__")) {
+        PyErr_Clear();
         os << "(built-in)>";
     } else {
-        os << "from '" << m->fn << "'>";
+        os << "from '" << filename << "'>";
     }
     return boxString(os.str());
 }

@@ -198,7 +198,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
         llvm::raw_string_ostream ss(s);
 
         if (spec) {
-            ss << "\033[34;1mJIT'ing " << source->parent_module->fn << ":" << name << " with signature (";
+            ss << "\033[34;1mJIT'ing " << source->fn << ":" << name << " with signature (";
             for (int i = 0; i < spec->arg_types.size(); i++) {
                 if (i > 0)
                     ss << ", ";
@@ -208,7 +208,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
             ss << ") -> ";
             ss << spec->rtn_type->debugName();
         } else {
-            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->parent_module->fn << ":" << name
+            ss << "\033[34;1mDoing OSR-entry partial compile of " << source->fn << ":" << name
                << ", starting with backedge to block " << entry_descriptor->backedge->target->idx;
         }
         ss << " at effort level " << (int)effort;
@@ -259,7 +259,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
     static StatCounter us_compiling("us_compiling");
     us_compiling.log(us);
     if (VERBOSITY() >= 1 && us > 100000) {
-        printf("Took %ldms to compile %s::%s!\n", us / 1000, source->parent_module->fn.c_str(), name.c_str());
+        printf("Took %ldms to compile %s::%s!\n", us / 1000, source->fn.c_str(), name.c_str());
     }
 
     static StatCounter num_compiles("num_compiles");
@@ -309,11 +309,13 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         Timer _t("for compileModule()");
 
-        bm->future_flags = getFutureFlags(m, bm->fn.c_str());
+        const char* fn = PyModule_GetFilename(bm);
+        RELEASE_ASSERT(fn, "");
+        bm->future_flags = getFutureFlags(m, fn);
 
         ScopingAnalysis* scoping = new ScopingAnalysis(m);
 
-        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body));
+        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body, fn));
         bm->setattr("__doc__", si->getDocString(), NULL);
 
         CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
@@ -351,20 +353,21 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     return astInterpretFunctionEval(cf, globals, boxedLocals);
 }
 
-template <typename AST_Type> CLFunction* compileForEvalOrExec(AST_Type* source, std::vector<AST_stmt*>& body) {
+template <typename AST_Type>
+CLFunction* compileForEvalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, std::string fn) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     Timer _t("for evalOrExec()");
 
     ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
 
-    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, source, body));
+    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, source, body, std::move(fn)));
     CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
     return cl_f;
 }
 
-CLFunction* compileExec(llvm::StringRef source) {
+static CLFunction* compileExec(llvm::StringRef source, llvm::StringRef fn) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
@@ -373,7 +376,7 @@ CLFunction* compileExec(llvm::StringRef source) {
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;
 
-    return compileForEvalOrExec(parsedSuite, parsedSuite->body);
+    return compileForEvalOrExec(parsedSuite, parsedSuite->body, fn);
 }
 
 Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
@@ -407,15 +410,12 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s;
     llvm::StringRef type_str = static_cast<BoxedString*>(type)->s;
 
-    // Due to the fact that we get the fn from the parent module:
-    RELEASE_ASSERT(filename_str == "<string>", "filename must currently be '<string>'");
-
     RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
     llvm::StringRef source_str = static_cast<BoxedString*>(source)->s;
 
     CLFunction* cl;
     if (type_str == "exec") {
-        cl = compileExec(source_str);
+        cl = compileExec(source_str, filename_str);
     } else if (type_str == "eval") {
         fatalOrError(NotImplemented, "unimplemented");
         throwCAPIException();
@@ -472,7 +472,7 @@ Box* eval(Box* boxedCode) {
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    CLFunction* cl = compileForEvalOrExec(parsedExpr, body);
+    CLFunction* cl = compileForEvalOrExec(parsedExpr, body, "<string>");
     return evalOrExec(cl, globals, boxedLocals);
 }
 
@@ -530,7 +530,7 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
 
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
-        cl = compileExec(static_cast<BoxedString*>(boxedCode)->s);
+        cl = compileExec(static_cast<BoxedString*>(boxedCode)->s, "<string>");
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
     } else {

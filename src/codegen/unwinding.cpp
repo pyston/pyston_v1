@@ -499,16 +499,7 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
 
     auto source = cf->clfunc->source.get();
 
-    // Hack: the "filename" for eval and exec statements is "<string>", not the filename
-    // of the parent module.  We can't currently represent this the same way that CPython does
-    // (but we probably should), so just check that here:
-    const std::string* fn = &source->parent_module->fn;
-    if (source->ast->type == AST_TYPE::Suite /* exec */ || source->ast->type == AST_TYPE::Expression /* eval */) {
-        static const std::string string_str("<string>");
-        fn = &string_str;
-    }
-
-    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, *fn, source->getName());
+    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
 static StatCounter us_gettraceback("us_gettraceback");
