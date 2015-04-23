@@ -1095,6 +1095,14 @@ Box* builtinApply(Box* func, Box* args, Box* keywords) {
     return runtimeCall(func, ArgPassSpec(0, 0, true, keywords != NULL), args, keywords, NULL, NULL, NULL);
 }
 
+Box* builtinFormat(Box* value, Box* format_spec) {
+    Box* res = PyObject_Format(value, format_spec);
+    if (!res) {
+        throwCAPIException();
+    }
+    return res;
+}
+
 void setupBuiltins() {
     builtins_module
         = createModule("__builtin__", NULL, "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
@@ -1330,5 +1338,7 @@ void setupBuiltins() {
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)input, UNKNOWN, 1, 1, false, false), "input", { NULL }));
     builtins_module->giveAttr("cmp",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinCmp, UNKNOWN, 2), "cmp"));
+    builtins_module->giveAttr(
+        "format", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinFormat, UNKNOWN, 2), "format"));
 }
 }
