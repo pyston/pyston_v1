@@ -510,6 +510,24 @@ public:
         memmove(&rtn->elts[0], elts, sizeof(Box*) * nelts);
         return rtn;
     }
+    static BoxedTuple* create1(Box* elt0) {
+        BoxedTuple* rtn = new (1) BoxedTuple(1);
+        rtn->elts[0] = elt0;
+        return rtn;
+    }
+    static BoxedTuple* create2(Box* elt0, Box* elt1) {
+        BoxedTuple* rtn = new (2) BoxedTuple(2);
+        rtn->elts[0] = elt0;
+        rtn->elts[1] = elt1;
+        return rtn;
+    }
+    static BoxedTuple* create3(Box* elt0, Box* elt1, Box* elt2) {
+        BoxedTuple* rtn = new (3) BoxedTuple(3);
+        rtn->elts[0] = elt0;
+        rtn->elts[1] = elt1;
+        rtn->elts[2] = elt2;
+        return rtn;
+    }
     static BoxedTuple* create(std::initializer_list<Box*> members) { return new (members.size()) BoxedTuple(members); }
 
     static BoxedTuple* create(int64_t size, BoxedClass* cls) { return new (cls, size) BoxedTuple(size); }
