@@ -57,9 +57,8 @@ before_script:
 
 script:
   - ccache -z
-  - ninja -j4 pyston
+  - ninja -j4 check-pyston
   - ccache -s
-  - ninja check-pyston
 
 after_failure:
   - COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
