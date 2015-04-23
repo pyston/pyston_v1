@@ -820,12 +820,14 @@ float_floor_div(PyObject *v, PyObject *w)
    x is not an infinity or nan. */
 #define DOUBLE_IS_ODD_INTEGER(x) (fmod(fabs(x), 2.0) == 1.0)
 
-// pyston change: make not static
+inline int float_pow_unboxed(double iv, double iw, double* res);
+
+// pyston change: split this up into float_pow and and float_pow_unboxed
 PyObject *
 float_pow(PyObject *v, PyObject *w, PyObject *z)
 {
-    double iv, iw, ix;
-    int negate_result = 0;
+    double iv, iw, res;
+    int err;
 
     if ((PyObject *)z != Py_None) {
         PyErr_SetString(PyExc_TypeError, "pow() 3rd argument not "
@@ -836,15 +838,32 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
     CONVERT_TO_DOUBLE(v, iv);
     CONVERT_TO_DOUBLE(w, iw);
 
+    err = float_pow_unboxed(iv, iw, &res);
+    if (err) {
+        return NULL;
+    } else {
+        return PyFloat_FromDouble(res);
+    }
+}
+
+int
+float_pow_unboxed(double iv, double iw, double* res)
+{
+    double ix;
+    int negate_result = 0;
+
     /* Sort out special cases here instead of relying on pow() */
     if (iw == 0) {              /* v**0 is 1, even 0**0 */
-        return PyFloat_FromDouble(1.0);
+        *res = 1.0;
+        return 0;
     }
     if (Py_IS_NAN(iv)) {        /* nan**w = nan, unless w == 0 */
-        return PyFloat_FromDouble(iv);
+        *res = iv;
+        return 0;
     }
     if (Py_IS_NAN(iw)) {        /* v**nan = nan, unless v == 1; 1**nan = 1 */
-        return PyFloat_FromDouble(iv == 1.0 ? 1.0 : iw);
+        *res = (iv == 1.0 ? 1.0 : iw);
+        return 0;
     }
     if (Py_IS_INFINITY(iw)) {
         /* v**inf is: 0.0 if abs(v) < 1; 1.0 if abs(v) == 1; inf if
@@ -854,12 +873,16 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
          *     abs(v) > 1 (including case where v infinite)
          */
         iv = fabs(iv);
-        if (iv == 1.0)
-            return PyFloat_FromDouble(1.0);
-        else if ((iw > 0.0) == (iv > 1.0))
-            return PyFloat_FromDouble(fabs(iw)); /* return inf */
-        else
-            return PyFloat_FromDouble(0.0);
+        if (iv == 1.0) {
+            *res = 1.0;
+            return 0;
+        } else if ((iw > 0.0) == (iv > 1.0)) {
+            *res = fabs(iw);
+            return 0;
+        } else {
+            *res = 0.0;
+            return 0;
+        }
     }
     if (Py_IS_INFINITY(iv)) {
         /* (+-inf)**w is: inf for w positive, 0 for w negative; in
@@ -867,11 +890,13 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
          *     an odd integer.
          */
         int iw_is_odd = DOUBLE_IS_ODD_INTEGER(iw);
-        if (iw > 0.0)
-            return PyFloat_FromDouble(iw_is_odd ? iv : fabs(iv));
-        else
-            return PyFloat_FromDouble(iw_is_odd ?
-                                      copysign(0.0, iv) : 0.0);
+        if (iw > 0.0) {
+            *res = (iw_is_odd ? iv : fabs(iv));
+            return 0;
+        } else {
+            *res = (iw_is_odd ?  copysign(0.0, iv) : 0.0);
+            return 0;
+        }
     }
     if (iv == 0.0) {  /* 0**w is: 0 for w positive, 1 for w zero
                          (already dealt with above), and an error
@@ -881,10 +906,11 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
             PyErr_SetString(PyExc_ZeroDivisionError,
                             "0.0 cannot be raised to a "
                             "negative power");
-            return NULL;
+            return 1;
         }
         /* use correct sign if iw is odd */
-        return PyFloat_FromDouble(iw_is_odd ? iv : 0.0);
+        *res = (iw_is_odd ? iv : 0.0);
+        return 0;
     }
 
     if (iv < 0.0) {
@@ -894,7 +920,7 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
         if (iw != floor(iw)) {
             PyErr_SetString(PyExc_ValueError, "negative number "
                 "cannot be raised to a fractional power");
-            return NULL;
+            return 1;
         }
         /* iw is an exact integer, albeit perhaps a very large
          * one.  Replace iv by its absolute value and remember
@@ -916,7 +942,8 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
          * happen to be representable in a *C* integer.  That's a
          * bug.
          */
-        return PyFloat_FromDouble(negate_result ? -1.0 : 1.0);
+        *res = (negate_result ? -1.0 : 1.0);
+        return 0;
     }
 
     /* Now iv and iw are finite, iw is nonzero, and iv is
@@ -924,7 +951,7 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
      * the platform pow to step in and do the rest.
      */
     errno = 0;
-    PyFPE_START_PROTECT("pow", return NULL)
+    PyFPE_START_PROTECT("pow", return 1)
     ix = pow(iv, iw);
     PyFPE_END_PROTECT(ix)
     Py_ADJUST_ERANGE1(ix);
@@ -937,9 +964,10 @@ float_pow(PyObject *v, PyObject *w, PyObject *z)
          */
         PyErr_SetFromErrno(errno == ERANGE ? PyExc_OverflowError :
                              PyExc_ValueError);
-        return NULL;
+        return 1;
     }
-    return PyFloat_FromDouble(ix);
+    *res = ix;
+    return 0;
 }
 
 #undef DOUBLE_IS_ODD_INTEGER

@@ -31,6 +31,7 @@ extern "C" PyObject* float_as_integer_ratio(PyObject* v, PyObject* unused) noexc
 extern "C" PyObject* float_is_integer(PyObject* v) noexcept;
 extern "C" PyObject* float__format__(PyObject* v) noexcept;
 extern "C" PyObject* float_pow(PyObject* v, PyObject* w, PyObject* z) noexcept;
+extern "C" int float_pow_unboxed(double iv, double iw, double* res) noexcept;
 
 namespace pyston {
 
@@ -446,8 +447,13 @@ extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
 }
 
 extern "C" double pow_float_float(double lhs, double rhs) {
-    // TODO inline this without the boxing
-    return unboxFloat(floatPowFloat(static_cast<BoxedFloat*>(boxFloat(lhs)), static_cast<BoxedFloat*>(boxFloat(rhs))));
+    double res;
+    int err = float_pow_unboxed(lhs, rhs, &res);
+    if (err) {
+        throwCAPIException();
+    } else {
+        return res;
+    }
 }
 
 extern "C" Box* floatMulFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
