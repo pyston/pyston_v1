@@ -129,6 +129,13 @@ public:
         if (error_code)
             return false;
 
+        int uncompressed_size = data.size();
+        // Write the uncompressed size to the beginning of the file as a simple checksum.
+        // It looks like each lz4 block has its own data checksum, but we need to also
+        // make sure that we have all the blocks that we expected.
+        // In particular, without this, an empty file seems to be a valid lz4 stream.
+        file.write(reinterpret_cast<const char*>(&uncompressed_size), 4);
+
         LZ4F_preferences_t preferences;
         memset(&preferences, 0, sizeof(preferences));
         preferences.frameInfo.contentChecksumFlag = contentChecksumEnabled;
@@ -158,8 +165,14 @@ public:
         const char* start = (*compressed_content)->getBufferStart();
         size_t pos = 0;
         size_t compressed_size = (*compressed_content)->getBufferSize();
+        if (compressed_size < 4)
+            return std::unique_ptr<llvm::MemoryBuffer>();
+
+        int orig_uncompressed_size = *reinterpret_cast<const int*>(start);
+        pos += 4;
+
         size_t remaining = compressed_size - pos;
-        LZ4F_getFrameInfo(context, &frame_info, start, &remaining);
+        LZ4F_getFrameInfo(context, &frame_info, start + pos, &remaining);
         pos += remaining;
 
         std::vector<char> uncompressed;
@@ -180,6 +193,9 @@ public:
 
         LZ4F_freeDecompressionContext(context);
         if (uncompressed.size() != frame_info.contentSize)
+            return std::unique_ptr<llvm::MemoryBuffer>();
+
+        if (uncompressed.size() != orig_uncompressed_size)
             return std::unique_ptr<llvm::MemoryBuffer>();
 
         return llvm::MemoryBuffer::getMemBufferCopy(llvm::StringRef(uncompressed.data(), uncompressed.size()));
