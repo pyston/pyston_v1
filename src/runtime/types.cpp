@@ -311,9 +311,10 @@ BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
 }
 
 BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                             bool isGenerator, BoxedDict* globals)
+                             bool isGenerator, Box* globals)
     : BoxedFunctionBase(f, defaults, closure, isGenerator) {
 
+    assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
     this->globals = globals;
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
@@ -418,12 +419,10 @@ extern "C" void moduleGCHandler(GCVisitor* v, Box* b) {
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
 // TODO: should we use C++11 `noexcept' here?
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, BoxedDict* globals,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, Box* globals,
                               std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
-    if (globals)
-        assert(globals->cls == dict_cls);
 
     return new BoxedFunction(f, defaults, closure, isGenerator, globals);
 }

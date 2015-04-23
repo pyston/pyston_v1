@@ -2975,7 +2975,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 }
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                BoxedGenerator* generator, BoxedDict* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
+                BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs) {
     CompiledFunction* chosen_cf = pickVersion(f, num_output_args, oarg1, oarg2, oarg3, oargs);
 
     assert(chosen_cf->is_interpreted == (chosen_cf->code == NULL));

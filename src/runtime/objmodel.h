@@ -150,7 +150,7 @@ bool isUserDefined(BoxedClass* cls);
 Box* processDescriptor(Box* obj, Box* inst, Box* owner);
 
 Box* callCLFunc(CLFunction* f, CallRewriteArgs* rewrite_args, int num_output_args, BoxedClosure* closure,
-                BoxedGenerator* generator, BoxedDict* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
+                BoxedGenerator* generator, Box* globals, Box* oarg1, Box* oarg2, Box* oarg3, Box** oargs);
 
 static const char* objectNewParameterTypeErrorMsg() {
     if (PYTHON_VERSION_HEX >= version_hex(2, 7, 4)) {

@@ -332,35 +332,37 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
-template <typename AST_Type>
-Box* evalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm, BoxedDict* globals, Box* boxedLocals) {
-    CompiledFunction* cf;
+Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
+    RELEASE_ASSERT(!cl->source->scoping->areGlobalsFromModule(), "");
 
-    assert(!globals || globals->cls == dict_cls);
+    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    { // scope for limiting the locked region:
-        LOCK_REGION(codegen_rwlock.asWrite());
+    // TODO Right now we only support going into an exec or eval through the
+    // intepretter, since the interpretter has a special function which lets
+    // us set the locals object. We should probably support it for optimized
+    // code as well, so we could use initialEffort() here instead of hard-coding
+    // INTERPRETED. This could actually be useful if we actually cache the parse
+    // results (since sometimes eval or exec might be called on constant strings).
+    EffortLevel effort = EffortLevel::INTERPRETED;
 
-        Timer _t("for evalOrExec()");
-
-        ScopingAnalysis* scoping = new ScopingAnalysis(source, globals == NULL);
-
-        SourceInfo* si = new SourceInfo(bm, scoping, source, body);
-        CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
-
-        // TODO Right now we only support going into an exec or eval through the
-        // intepretter, since the interpretter has a special function which lets
-        // us set the locals object. We should probably support it for optimized
-        // code as well, so we could use initialEffort() here instead of hard-coding
-        // INTERPRETED. This could actually be useful if we actually cache the parse
-        // results (since sometimes eval or exec might be called on constant strings).
-        EffortLevel effort = EffortLevel::INTERPRETED;
-
-        cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
-        assert(cf->clfunc->versions.size());
-    }
+    CompiledFunction* cf = compileFunction(cl, new FunctionSpecialization(VOID), effort, NULL);
+    assert(cf->clfunc->versions.size());
 
     return astInterpretFunctionEval(cf, globals, boxedLocals);
+}
+
+template <typename AST_Type>
+CLFunction* compileForEvalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm) {
+    LOCK_REGION(codegen_rwlock.asWrite());
+
+    Timer _t("for evalOrExec()");
+
+    ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
+
+    SourceInfo* si = new SourceInfo(bm, scoping, source, body);
+    CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+
+    return cl_f;
 }
 
 // Main entrypoints for eval and exec.
@@ -369,11 +371,8 @@ Box* eval(Box* boxedCode) {
     BoxedModule* module = getCurrentModule();
     Box* globals = getGlobals();
 
-    if (globals == module)
-        globals = NULL;
-
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
-        globals = NULL;
+        globals = module;
 
     if (boxedCode->cls == unicode_cls) {
         boxedCode = PyUnicode_AsUTF8String(boxedCode);
@@ -408,9 +407,10 @@ Box* eval(Box* boxedCode) {
     stmt->value = parsedExpr->body;
     std::vector<AST_stmt*> body = { stmt };
 
-    assert(!globals || globals->cls == dict_cls);
+    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    return evalOrExec<AST_Expression>(parsedExpr, body, module, static_cast<BoxedDict*>(globals), boxedLocals);
+    CLFunction* cl = compileForEvalOrExec(parsedExpr, body, module);
+    return evalOrExec(cl, globals, boxedLocals);
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals) {
@@ -447,18 +447,18 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
 
     BoxedModule* module = getCurrentModule();
 
-    if (globals == module)
-        globals = NULL;
-
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
-        globals = NULL;
+        globals = module;
 
-    ASSERT(!globals || globals->cls == dict_cls, "%s", globals->cls->tp_name);
+    assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
     if (globals) {
         // From CPython (they set it to be f->f_builtins):
-        if (PyDict_GetItemString(globals, "__builtins__") == NULL)
-            PyDict_SetItemString(globals, "__builtins__", builtins_module);
+        Box* globals_dict = globals;
+        if (globals->cls == module_cls)
+            globals_dict = makeAttrWrapper(globals);
+        if (PyDict_GetItemString(globals_dict, "__builtins__") == NULL)
+            PyDict_SetItemString(globals_dict, "__builtins__", builtins_module);
     }
 
     if (boxedCode->cls == unicode_cls) {
@@ -475,7 +475,8 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;
 
-    return evalOrExec<AST_Suite>(parsedSuite, parsedSuite->body, module, static_cast<BoxedDict*>(globals), locals);
+    CLFunction* cl = compileForEvalOrExec(parsedSuite, parsedSuite->body, module);
+    return evalOrExec(cl, globals, locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it
