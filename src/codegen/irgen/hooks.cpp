@@ -186,7 +186,7 @@ CompiledFunction* compileFunction(CLFunction* f, FunctionSpecialization* spec, E
 
     assert((entry_descriptor != NULL) + (spec != NULL) == 1);
 
-    SourceInfo* source = f->source;
+    SourceInfo* source = f->source.get();
     assert(source);
 
     std::string name = source->getName();
@@ -313,10 +313,10 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         ScopingAnalysis* scoping = new ScopingAnalysis(m);
 
-        SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
-        CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
-
+        std::unique_ptr<SourceInfo> si(new SourceInfo(bm, scoping, m, m->body));
         bm->setattr("__doc__", si->getDocString(), NULL);
+
+        CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
         EffortLevel effort = initialEffort();
 
@@ -358,8 +358,8 @@ template <typename AST_Type> CLFunction* compileForEvalOrExec(AST_Type* source, 
 
     ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
 
-    SourceInfo* si = new SourceInfo(getCurrentModule(), scoping, source, body);
-    CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+    std::unique_ptr<SourceInfo> si(new SourceInfo(getCurrentModule(), scoping, source, body));
+    CLFunction* cl_f = new CLFunction(0, 0, false, false, std::move(si));
 
     return cl_f;
 }

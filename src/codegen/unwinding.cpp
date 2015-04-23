@@ -497,7 +497,7 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     auto* cf = frame_it.getCF();
     assert(cf);
 
-    auto source = cf->clfunc->source;
+    auto source = cf->clfunc->source.get();
 
     // Hack: the "filename" for eval and exec statements is "<string>", not the filename
     // of the parent module.  We can't currently represent this the same way that CPython does

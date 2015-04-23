@@ -2591,12 +2591,12 @@ CLFunction* wrapFunction(AST* node, AST_arguments* args, const std::vector<AST_s
 
     CLFunction*& cl = made[node];
     if (cl == NULL) {
-        SourceInfo* si = new SourceInfo(source->parent_module, source->scoping, node, body);
+        std::unique_ptr<SourceInfo> si(new SourceInfo(source->parent_module, source->scoping, node, body));
         if (args)
             cl = new CLFunction(args->args.size(), args->defaults.size(), args->vararg.str().size(),
-                                args->kwarg.str().size(), si);
+                                args->kwarg.str().size(), std::move(si));
         else
-            cl = new CLFunction(0, 0, 0, 0, si);
+            cl = new CLFunction(0, 0, 0, 0, std::move(si));
     }
     return cl;
 }

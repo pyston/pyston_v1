@@ -224,13 +224,13 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
-    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), phis(NULL),
+    : compiled_func(compiled_function), source_info(compiled_function->clfunc->source.get()), scope_info(0), phis(NULL),
       current_block(0), current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0),
       generator(0), edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
 
     CLFunction* f = compiled_function->clfunc;
     if (!source_info->cfg)
-        source_info->cfg = computeCFG(f->source, f->source->body);
+        source_info->cfg = computeCFG(f->source.get(), f->source->body);
 
     scope_info = source_info->getScopeInfo();
 
@@ -1228,7 +1228,7 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     ASTInterpreter interpreter(cf);
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-    SourceInfo* source_info = cf->clfunc->source;
+    SourceInfo* source_info = cf->clfunc->source.get();
     if (unlikely(scope_info->usesNameLookup())) {
         interpreter.setBoxedLocals(new BoxedDict());
     }
@@ -1254,7 +1254,7 @@ Box* astInterpretFunctionEval(CompiledFunction* cf, Box* globals, Box* boxedLoca
     interpreter.setBoxedLocals(boxedLocals);
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-    SourceInfo* source_info = cf->clfunc->source;
+    SourceInfo* source_info = cf->clfunc->source.get();
 
     assert(!cf->clfunc->source->scoping->areGlobalsFromModule());
     assert(globals);
@@ -1276,7 +1276,7 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
     ASTInterpreter interpreter(cf);
 
     ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-    SourceInfo* source_info = cf->clfunc->source;
+    SourceInfo* source_info = cf->clfunc->source.get();
     assert(cf->clfunc->source->scoping->areGlobalsFromModule());
     interpreter.setGlobals(source_info->parent_module);
 
