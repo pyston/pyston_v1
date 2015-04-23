@@ -96,6 +96,11 @@ Box* codeForCLFunction(CLFunction* f) {
     return new BoxedCode(f);
 }
 
+CLFunction* clfunctionFromCode(Box* code) {
+    assert(code->cls == code_cls);
+    return static_cast<BoxedCode*>(code)->f;
+}
+
 extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, PyObject*, PyObject*, PyObject*,
                                     PyObject*, PyObject*, PyObject*, int, PyObject*) noexcept {
     RELEASE_ASSERT(0, "not implemented");

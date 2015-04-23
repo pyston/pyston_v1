@@ -351,21 +351,84 @@ Box* evalOrExec(CLFunction* cl, Box* globals, Box* boxedLocals) {
     return astInterpretFunctionEval(cf, globals, boxedLocals);
 }
 
-template <typename AST_Type>
-CLFunction* compileForEvalOrExec(AST_Type* source, std::vector<AST_stmt*>& body, BoxedModule* bm) {
+template <typename AST_Type> CLFunction* compileForEvalOrExec(AST_Type* source, std::vector<AST_stmt*>& body) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
     Timer _t("for evalOrExec()");
 
     ScopingAnalysis* scoping = new ScopingAnalysis(source, false);
 
-    SourceInfo* si = new SourceInfo(bm, scoping, source, body);
+    SourceInfo* si = new SourceInfo(getCurrentModule(), scoping, source, body);
     CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
 
     return cl_f;
 }
 
-// Main entrypoints for eval and exec.
+CLFunction* compileExec(llvm::StringRef source) {
+    // TODO error message if parse fails or if it isn't an expr
+    // TODO should have a cleaner interface that can parse the Expression directly
+    // TODO this memory leaks
+    const char* code = source.data();
+    AST_Module* parsedModule = parse_string(code);
+    AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
+    parsedSuite->body = parsedModule->body;
+
+    return compileForEvalOrExec(parsedSuite, parsedSuite->body);
+}
+
+Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
+    Box* flags = _args[0];
+    Box* dont_inherit = _args[0];
+    RELEASE_ASSERT(flags == boxInt(0), "");
+    RELEASE_ASSERT(dont_inherit == boxInt(0), "");
+
+    // source is allowed to be an AST, unicode, or anything that supports the buffer protocol
+    if (source->cls == unicode_cls) {
+        source = PyUnicode_AsUTF8String(source);
+        if (!source)
+            throwCAPIException();
+        // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
+    }
+
+    if (isSubclass(fn->cls, unicode_cls)) {
+        fn = _PyUnicode_AsDefaultEncodedString(fn, NULL);
+        if (!fn)
+            throwCAPIException();
+    }
+    RELEASE_ASSERT(isSubclass(fn->cls, str_cls), "");
+
+    if (isSubclass(type->cls, unicode_cls)) {
+        type = _PyUnicode_AsDefaultEncodedString(type, NULL);
+        if (!type)
+            throwCAPIException();
+    }
+    RELEASE_ASSERT(isSubclass(type->cls, str_cls), "");
+
+    llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s;
+    llvm::StringRef type_str = static_cast<BoxedString*>(type)->s;
+
+    // Due to the fact that we get the fn from the parent module:
+    RELEASE_ASSERT(filename_str == "<string>", "filename must currently be '<string>'");
+
+    RELEASE_ASSERT(isSubclass(source->cls, str_cls), "");
+    llvm::StringRef source_str = static_cast<BoxedString*>(source)->s;
+
+    CLFunction* cl;
+    if (type_str == "exec") {
+        cl = compileExec(source_str);
+    } else if (type_str == "eval") {
+        fatalOrError(NotImplemented, "unimplemented");
+        throwCAPIException();
+    } else if (type_str == "single") {
+        fatalOrError(NotImplemented, "unimplemented");
+        throwCAPIException();
+    } else {
+        raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
+    }
+
+    return codeForCLFunction(cl);
+}
+
 Box* eval(Box* boxedCode) {
     Box* boxedLocals = fastLocalsToBoxedLocals();
     BoxedModule* module = getCurrentModule();
@@ -409,7 +472,7 @@ Box* eval(Box* boxedCode) {
 
     assert(globals && (globals->cls == module_cls || globals->cls == dict_cls));
 
-    CLFunction* cl = compileForEvalOrExec(parsedExpr, body, module);
+    CLFunction* cl = compileForEvalOrExec(parsedExpr, body);
     return evalOrExec(cl, globals, boxedLocals);
 }
 
@@ -432,8 +495,6 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
     if (locals == None)
         locals = NULL;
 
-    // TODO boxedCode is allowed to be a tuple
-    // TODO need to handle passing in globals
     if (locals == NULL) {
         locals = globals;
     }
@@ -446,7 +507,6 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
         globals = getGlobals();
 
     BoxedModule* module = getCurrentModule();
-
     if (globals && globals->cls == attrwrapper_cls && unwrapAttrWrapper(globals) == module)
         globals = module;
 
@@ -468,14 +528,16 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals) {
         // cf.cf_flags |= PyCF_SOURCE_IS_UTF8
     }
 
-    // TODO same issues as in `eval`
-    RELEASE_ASSERT(boxedCode->cls == str_cls, "%s", boxedCode->cls->tp_name);
-    const char* code = static_cast<BoxedString*>(boxedCode)->s.data();
-    AST_Module* parsedModule = parse_string(code);
-    AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
-    parsedSuite->body = parsedModule->body;
+    CLFunction* cl;
+    if (boxedCode->cls == str_cls) {
+        cl = compileExec(static_cast<BoxedString*>(boxedCode)->s);
+    } else if (boxedCode->cls == code_cls) {
+        cl = clfunctionFromCode(boxedCode);
+    } else {
+        abort();
+    }
+    assert(cl);
 
-    CLFunction* cl = compileForEvalOrExec(parsedSuite, parsedSuite->body, module);
     return evalOrExec(cl, globals, locals);
 }
 
