@@ -719,6 +719,19 @@ Box* longNeg(BoxedLong* v1) {
     return r;
 }
 
+Box* longPos(BoxedLong* v) {
+    if (!isSubclass(v->cls, long_cls))
+        raiseExcHelper(TypeError, "descriptor '__pos__' requires a 'long' object but received a '%s'", getTypeName(v));
+
+    if (v->cls == long_cls) {
+        return v;
+    } else {
+        BoxedLong* r = new BoxedLong();
+        mpz_init_set(r->n, v->n);
+        return r;
+    }
+}
+
 Box* longAbs(BoxedLong* v1) {
     assert(isSubclass(v1->cls, long_cls));
     BoxedLong* r = new BoxedLong();
@@ -1461,6 +1474,7 @@ void setupLong() {
 
     long_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)longInvert, UNKNOWN, 1)));
     long_cls->giveAttr("__neg__", new BoxedFunction(boxRTFunction((void*)longNeg, UNKNOWN, 1)));
+    long_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)longPos, UNKNOWN, 1)));
     long_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)longNonzero, BOXED_BOOL, 1)));
     long_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)longHash, BOXED_INT, 1)));
 
