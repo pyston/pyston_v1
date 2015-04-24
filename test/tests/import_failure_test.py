@@ -62,3 +62,15 @@ def f2():
     except NameError, e:
         print e
 f2()
+
+try:
+    import import_failure_target
+    raise Exception("This should not be importable")
+except Exception, e:
+    print type(e), e
+
+try:
+    import import_failure_target
+    raise Exception("This should not be importable if we tried it again")
+except Exception, e:
+    print type(e), e
