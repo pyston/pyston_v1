@@ -824,10 +824,19 @@ Box* nondataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, Box
                                            bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out) {
     // Special case: non-data descriptor: function, instancemethod or classmethod
     // Returns a bound instancemethod
-    if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls) {
+    if (descr->cls == function_cls || descr->cls == instancemethod_cls || descr->cls == classmethod_cls
+        || (descr->cls == method_cls
+            && (static_cast<BoxedMethodDescriptor*>(descr)->method->ml_flags & (METH_CLASS | METH_STATIC)) == 0)) {
         Box* im_self = NULL, * im_func = NULL;
         RewriterVar* r_im_self = NULL, * r_im_func = NULL;
         if (descr->cls == function_cls) {
+            im_self = obj;
+            im_func = descr;
+            if (rewrite_args) {
+                r_im_self = rewrite_args->obj;
+                r_im_func = r_descr;
+            }
+        } else if (descr->cls == method_cls) {
             im_self = obj;
             im_func = descr;
             if (rewrite_args) {
@@ -2776,10 +2785,19 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     }
 
     std::vector<Box*, StlCompatAllocator<Box*>> unused_positional;
+    RewriterVar::SmallVector unused_positional_rvars;
     for (int i = positional_to_positional; i < argspec.num_args; i++) {
-        rewrite_args = NULL;
-        REWRITE_ABORTED("");
         unused_positional.push_back(getArg(i, arg1, arg2, arg3, args));
+        if (rewrite_args) {
+            if (i == 0)
+                unused_positional_rvars.push_back(rewrite_args->arg1);
+            if (i == 1)
+                unused_positional_rvars.push_back(rewrite_args->arg2);
+            if (i == 2)
+                unused_positional_rvars.push_back(rewrite_args->arg3);
+            if (i >= 3)
+                unused_positional_rvars.push_back(rewrite_args->args->getAttr((i - 3) * sizeof(Box*)));
+        }
     }
     for (int i = varargs_to_positional; i < varargs.size(); i++) {
         rewrite_args = NULL;
@@ -2790,18 +2808,40 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (f->takes_varargs) {
         int varargs_idx = f->num_args;
         if (rewrite_args) {
-            assert(!unused_positional.size());
-            // rewrite_args->rewriter->loadConst((intptr_t)EmptyTuple, Location::forArg(varargs_idx));
-            RewriterVar* emptyTupleConst = rewrite_args->rewriter->loadConst(
-                (intptr_t)EmptyTuple, varargs_idx < 3 ? Location::forArg(varargs_idx) : Location::any());
-            if (varargs_idx == 0)
-                rewrite_args->arg1 = emptyTupleConst;
-            if (varargs_idx == 1)
-                rewrite_args->arg2 = emptyTupleConst;
-            if (varargs_idx == 2)
-                rewrite_args->arg3 = emptyTupleConst;
-            if (varargs_idx >= 3)
-                rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), emptyTupleConst);
+            assert(!varargs.size());
+            assert(!argspec.has_starargs);
+
+            RewriterVar* varargs_val;
+            int varargs_size = unused_positional_rvars.size();
+
+            if (varargs_size == 0) {
+                varargs_val = rewrite_args->rewriter->loadConst(
+                    (intptr_t)EmptyTuple, varargs_idx < 3 ? Location::forArg(varargs_idx) : Location::any());
+            } else if (varargs_size == 1) {
+                varargs_val
+                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create1, unused_positional_rvars[0]);
+            } else if (varargs_size == 2) {
+                varargs_val = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create2,
+                                                           unused_positional_rvars[0], unused_positional_rvars[1]);
+            } else if (varargs_size == 3) {
+                varargs_val
+                    = rewrite_args->rewriter->call(false, (void*)BoxedTuple::create3, unused_positional_rvars[0],
+                                                   unused_positional_rvars[1], unused_positional_rvars[2]);
+            } else {
+                varargs_val = NULL;
+                rewrite_args = NULL;
+            }
+
+            if (varargs_val) {
+                if (varargs_idx == 0)
+                    rewrite_args->arg1 = varargs_val;
+                if (varargs_idx == 1)
+                    rewrite_args->arg2 = varargs_val;
+                if (varargs_idx == 2)
+                    rewrite_args->arg3 = varargs_val;
+                if (varargs_idx >= 3)
+                    rewrite_args->args->setAttr((varargs_idx - 3) * sizeof(Box*), varargs_val);
+            }
         }
 
         Box* ovarargs = BoxedTuple::create(unused_positional.size(), &unused_positional[0]);
@@ -2819,7 +2859,6 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
     if (f->takes_kwargs) {
         int kwargs_idx = f->num_args + (f->takes_varargs ? 1 : 0);
         if (rewrite_args) {
-            assert(!unused_positional.size());
             RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
 
             if (kwargs_idx == 0)
@@ -2859,8 +2898,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
 
         auto dest = placeKeyword(param_names, params_filled, *(*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
                                  okwargs, f);
-        if (dest == KeywordDest::KWARGS)
-            rewrite_args = NULL;
+        rewrite_args = NULL;
     }
 
     if (argspec.has_kwargs) {
@@ -2898,6 +2936,7 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
                                    getFunctionName(f).c_str(), s->data());
                 }
                 v = p.second;
+                rewrite_args = NULL;
             }
         }
     }

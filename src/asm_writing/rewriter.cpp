@@ -542,6 +542,16 @@ RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, Rewriter
     return call(can_call_into_python, func_addr, args, args_xmm);
 }
 
+RewriterVar* Rewriter::call(bool can_call_into_python, void* func_addr, RewriterVar* arg0, RewriterVar* arg1,
+                            RewriterVar* arg2) {
+    RewriterVar::SmallVector args;
+    RewriterVar::SmallVector args_xmm;
+    args.push_back(arg0);
+    args.push_back(arg1);
+    args.push_back(arg2);
+    return call(can_call_into_python, func_addr, args, args_xmm);
+}
+
 static const Location caller_save_registers[]{
     assembler::RAX,   assembler::RCX,   assembler::RDX,   assembler::RSI,   assembler::RDI,
     assembler::R8,    assembler::R9,    assembler::R10,   assembler::R11,   assembler::XMM0,
