@@ -1,3 +1,9 @@
+# Some parsing tests:
+print ((1, 2),)
+print (1, 2, 3)
+print (1,2,)
+print (1,)
+
 t = (1, "h")
 print t, str(t), repr(t)
 if 1:

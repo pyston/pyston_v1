@@ -78,3 +78,6 @@ try:
 finally:
     pass
     # shutil.rmtree("testsite")
+
+print
+print "PASSED"
