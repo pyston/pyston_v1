@@ -1273,8 +1273,31 @@ extern "C" void PyEval_InitThreads(void) noexcept {
 }
 
 extern "C" char* PyModule_GetName(PyObject* m) noexcept {
-    assert(m->cls == module_cls);
-    return &static_cast<BoxedModule*>(m)->fn[0];
+    PyObject* d;
+    PyObject* nameobj;
+    if (!PyModule_Check(m)) {
+        PyErr_BadArgument();
+        return NULL;
+    }
+    if ((nameobj = m->getattr("__name__")) == NULL || !PyString_Check(nameobj)) {
+        PyErr_SetString(PyExc_SystemError, "nameless module");
+        return NULL;
+    }
+    return PyString_AsString(nameobj);
+}
+
+extern "C" char* PyModule_GetFilename(PyObject* m) noexcept {
+    PyObject* d;
+    PyObject* fileobj;
+    if (!PyModule_Check(m)) {
+        PyErr_BadArgument();
+        return NULL;
+    }
+    if ((fileobj = m->getattr("__file__")) == NULL || !PyString_Check(fileobj)) {
+        PyErr_SetString(PyExc_SystemError, "module filename missing");
+        return NULL;
+    }
+    return PyString_AsString(fileobj);
 }
 
 BoxedModule* importCExtension(const std::string& full_name, const std::string& last_name, const std::string& path) {
@@ -1315,7 +1338,6 @@ BoxedModule* importCExtension(const std::string& full_name, const std::string& l
 
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     m->setattr("__file__", boxString(path), NULL);
-    m->fn = path;
     return m;
 }
 

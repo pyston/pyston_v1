@@ -86,7 +86,7 @@ extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
     *enumerate_cls, *xrange_cls, *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls,
     *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls, *capi_getset_cls,
-    *builtin_function_or_method_cls, *set_cls, *frozenset_cls;
+    *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls;
 }
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
@@ -128,7 +128,7 @@ char* getWriteableStringContents(BoxedString* s);
 
 extern "C" void listAppendInternal(Box* self, Box* v);
 extern "C" void listAppendArrayInternal(Box* self, Box** v, int nelts);
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, BoxedDict* globals,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, Box* globals,
                               std::initializer_list<Box*> defaults);
 extern "C" CLFunction* unboxCLFunction(Box* b);
 extern "C" Box* createUserClass(const std::string* name, Box* base, Box* attr_dict);
@@ -591,7 +591,7 @@ public:
     // garbage values when the GC is run (BoxedFunctionBase's constructor might call the GC).
     // So ick... needs to be fixed.
     BoxedClosure* closure;
-    BoxedDict* globals;
+    Box* globals;
 
     bool isGenerator;
     int ndefaults;
@@ -615,7 +615,7 @@ public:
 
     BoxedFunction(CLFunction* f);
     BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
-                  bool isGenerator = false, BoxedDict* globals = NULL);
+                  bool isGenerator = false, Box* globals = NULL);
 
     DEFAULT_CLASS(function_cls);
 };
@@ -633,8 +633,6 @@ class BoxedModule : public Box {
 public:
     HCAttrs attrs;
 
-    // for traceback purposes; not the same as __file__.  This corresponds to co_filename
-    std::string fn;
     FutureFlags future_flags;
 
     BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
@@ -823,6 +821,7 @@ extern Box* dict_descr;
 
 Box* codeForFunction(BoxedFunction*);
 Box* codeForCLFunction(CLFunction*);
+CLFunction* clfunctionFromCode(Box* code);
 
 Box* getFrame(int depth);
 }

@@ -48,7 +48,7 @@ public:
 
     static Box* filename(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
-        return boxString(static_cast<BoxedCode*>(b)->f->source->parent_module->fn);
+        return boxString(static_cast<BoxedCode*>(b)->f->source->fn);
     }
 
     static Box* argcount(Box* b, void*) {
@@ -94,6 +94,11 @@ Box* codeForFunction(BoxedFunction* f) {
 
 Box* codeForCLFunction(CLFunction* f) {
     return new BoxedCode(f);
+}
+
+CLFunction* clfunctionFromCode(Box* code) {
+    assert(code->cls == code_cls);
+    return static_cast<BoxedCode*>(code)->f;
 }
 
 extern "C" PyCodeObject* PyCode_New(int, int, int, int, PyObject*, PyObject*, PyObject*, PyObject*, PyObject*,

@@ -387,7 +387,7 @@ static unw_word_t getFunctionEnd(unw_word_t ip) {
 // the stack frame that they were created in, so we need to use this approach (as opposed to
 // C++11 range loops, for example).
 // Return true from the handler to stop iteration at that frame.
-void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImpl>&&)> func) {
+void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImpl>)> func) {
     static unw_word_t interpreter_instr_end = getFunctionEnd((unw_word_t)interpreter_instr_addr);
     static unw_word_t generator_entry_end = getFunctionEnd((unw_word_t)generatorEntry);
 
@@ -485,7 +485,7 @@ void unwindPythonStack(std::function<bool(std::unique_ptr<PythonFrameIteratorImp
 
 static std::unique_ptr<PythonFrameIteratorImpl> getTopPythonFrame() {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& iter) {
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> iter) {
         rtn = std::move(iter);
         return true;
     });
@@ -497,18 +497,9 @@ static const LineInfo* lineInfoForFrame(PythonFrameIteratorImpl& frame_it) {
     auto* cf = frame_it.getCF();
     assert(cf);
 
-    auto source = cf->clfunc->source;
+    auto source = cf->clfunc->source.get();
 
-    // Hack: the "filename" for eval and exec statements is "<string>", not the filename
-    // of the parent module.  We can't currently represent this the same way that CPython does
-    // (but we probably should), so just check that here:
-    const std::string* fn = &source->parent_module->fn;
-    if (source->ast->type == AST_TYPE::Suite /* exec */ || source->ast->type == AST_TYPE::Expression /* eval */) {
-        static const std::string string_str("<string>");
-        fn = &string_str;
-    }
-
-    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, *fn, source->getName());
+    return new LineInfo(current_stmt->lineno, current_stmt->col_offset, source->fn, source->getName());
 }
 
 static StatCounter us_gettraceback("us_gettraceback");
@@ -525,7 +516,7 @@ BoxedTraceback* getTraceback() {
     Timer _t("getTraceback", 1000);
 
     std::vector<const LineInfo*> entries;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
         const LineInfo* line_info = lineInfoForFrame(*frame_iter.get());
         if (line_info)
             entries.push_back(line_info);
@@ -545,7 +536,7 @@ ExcInfo* getFrameExcInfo() {
     ExcInfo* copy_from_exc = NULL;
     ExcInfo* cur_exc = NULL;
 
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
         FrameInfo* frame_info = frame_iter->getFrameInfo();
 
         copy_from_exc = &frame_info->exc;
@@ -609,7 +600,7 @@ BoxedModule* getCurrentModule() {
 
 PythonFrameIterator getPythonFrame(int depth) {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
         if (depth == 0) {
             rtn = std::move(frame_iter);
             return true;
@@ -631,7 +622,7 @@ void PythonFrameIterator::operator=(PythonFrameIterator&& rhs) {
     std::swap(this->impl, rhs.impl);
 }
 
-PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl>&& impl) {
+PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl> impl) {
     std::swap(this->impl, impl);
 }
 
@@ -641,7 +632,7 @@ PythonFrameIterator::PythonFrameIterator(std::unique_ptr<PythonFrameIteratorImpl
 FrameStackState getFrameStackState() {
     FrameStackState rtn(NULL, NULL);
     bool found = false;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
         BoxedDict* d;
         BoxedClosure* closure;
         CompiledFunction* cf;
@@ -897,7 +888,7 @@ FrameInfo* PythonFrameIterator::getFrameInfo() {
 PythonFrameIterator PythonFrameIterator::getCurrentVersion() {
     std::unique_ptr<PythonFrameIteratorImpl> rtn(nullptr);
     auto& impl = this->impl;
-    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl>&& frame_iter) {
+    unwindPythonStack([&](std::unique_ptr<PythonFrameIteratorImpl> frame_iter) {
         if (frame_iter->pointsToTheSameAs(*impl.get())) {
             rtn = std::move(frame_iter);
             return true;

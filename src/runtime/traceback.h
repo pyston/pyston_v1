@@ -30,7 +30,7 @@ public:
     std::vector<const LineInfo*> lines;
     Box* py_lines;
 
-    BoxedTraceback(std::vector<const LineInfo*>&& lines) : lines(std::move(lines)), py_lines(NULL) {}
+    BoxedTraceback(std::vector<const LineInfo*> lines) : lines(std::move(lines)), py_lines(NULL) {}
     BoxedTraceback() : py_lines(NULL) {}
 
     DEFAULT_CLASS(traceback_cls);

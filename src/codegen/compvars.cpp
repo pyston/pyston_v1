@@ -721,7 +721,7 @@ ConcreteCompilerVariable* UnknownType::hasnext(IREmitter& emitter, const OpInfo&
 }
 
 CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariable* closure, bool isGenerator,
-                               BoxedDict* globals, const std::vector<ConcreteCompilerVariable*>& defaults) {
+                               Box* globals, const std::vector<ConcreteCompilerVariable*>& defaults) {
     // Unlike the CLFunction*, which can be shared between recompilations, the Box* around it
     // should be created anew every time the functiondef is encountered
 
@@ -752,7 +752,7 @@ CompilerVariable* makeFunction(IREmitter& emitter, CLFunction* f, CompilerVariab
     llvm::Value* isGenerator_v = llvm::ConstantInt::get(g.i1, isGenerator, false);
 
     assert(globals == NULL);
-    llvm::Value* globals_v = getNullPtr(g.llvm_dict_type_ptr);
+    llvm::Value* globals_v = getNullPtr(g.llvm_value_type_ptr);
 
     // We know this function call can't throw, so it's safe to use emitter.getBuilder()->CreateCall() rather than
     // emitter.createCall().

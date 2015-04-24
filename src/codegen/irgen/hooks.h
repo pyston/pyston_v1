@@ -39,6 +39,7 @@ CompiledFunction* cfForMachineFunctionName(const std::string&);
 
 extern "C" Box* exec(Box* boxedCode, Box* globals, Box* locals);
 extern "C" Box* eval(Box* boxedCode);
+extern "C" Box* compile(Box* source, Box* filename, Box* mode, Box** _args /* flags, dont_inherit */);
 }
 
 #endif

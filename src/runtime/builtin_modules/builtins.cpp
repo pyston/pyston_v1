@@ -1150,6 +1150,10 @@ void setupBuiltins() {
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)execfile, UNKNOWN, 1), "execfile"));
 
     builtins_module->giveAttr(
+        "compile", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)compile, UNKNOWN, 5, 2, false, false),
+                                                    "compile", { boxInt(0), boxInt(0) }));
+
+    builtins_module->giveAttr(
         "map", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)map, LIST, 1, 0, true, false), "map"));
     builtins_module->giveAttr(
         "reduce", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)reduce, UNKNOWN, 3, 1, false, false), "reduce",

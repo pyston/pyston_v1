@@ -311,9 +311,10 @@ BoxedFunction::BoxedFunction(CLFunction* f) : BoxedFunction(f, {}) {
 }
 
 BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                             bool isGenerator, BoxedDict* globals)
+                             bool isGenerator, Box* globals)
     : BoxedFunctionBase(f, defaults, closure, isGenerator) {
 
+    assert((!globals) == (!f->source || f->source->scoping->areGlobalsFromModule()));
     this->globals = globals;
 
     // TODO eventually we want this to assert(f->source), I think, but there are still
@@ -380,7 +381,8 @@ static void functionDtor(Box* b) {
     self->dependent_ics.~ICInvalidator();
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) : fn(fn) {
+// TODO(kmod): builtin modules are not supposed to have a __file__ attribute
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
     this->giveAttr("__doc__", doc ? boxStrConstant(doc) : None);
@@ -418,12 +420,10 @@ extern "C" void moduleGCHandler(GCVisitor* v, Box* b) {
 // This mustn't throw; our IR generator generates calls to it without "invoke" even when there are exception handlers /
 // finally-blocks in scope.
 // TODO: should we use C++11 `noexcept' here?
-extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, BoxedDict* globals,
+extern "C" Box* boxCLFunction(CLFunction* f, BoxedClosure* closure, bool isGenerator, Box* globals,
                               std::initializer_list<Box*> defaults) {
     if (closure)
         assert(closure->cls == closure_cls);
-    if (globals)
-        assert(globals->cls == dict_cls);
 
     return new BoxedFunction(f, defaults, closure, isGenerator, globals);
 }
@@ -1095,10 +1095,13 @@ Box* moduleRepr(BoxedModule* m) {
 
     os << "<module '" << m->name() << "' ";
 
-    if (m->fn == "__builtin__") {
+    const char* filename = PyModule_GetFilename((PyObject*)m);
+    // TODO(kmod): builtin modules are not supposed to have a __file__ attribute
+    if (!filename || !strcmp(filename, "__builtin__")) {
+        PyErr_Clear();
         os << "(built-in)>";
     } else {
-        os << "from '" << m->fn << "'>";
+        os << "from '" << filename << "'>";
     }
     return boxString(os.str());
 }

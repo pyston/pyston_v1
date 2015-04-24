@@ -918,7 +918,7 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
 
     llvm::DIBuilder builder(*g.cur_module);
 
-    std::string fn = source->parent_module->fn;
+    const std::string& fn = source->fn;
     std::string dir = "";
     std::string producer = "pyston; git rev " STRINGIFY(GITREV);
 

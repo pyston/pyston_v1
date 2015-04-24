@@ -246,6 +246,7 @@ public:
     LivenessAnalysis* liveness;
     std::unordered_map<const OSREntryDescriptor*, PhiAnalysis*> phis;
     bool is_generator;
+    std::string fn; // equivalent of code.co_filename
 
     InternedStringPool& getInternedStrings();
 
@@ -260,7 +261,7 @@ public:
 
     Box* getDocString();
 
-    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body);
+    SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body, std::string fn);
 };
 
 typedef std::vector<CompiledFunction*> FunctionList;
@@ -271,7 +272,7 @@ public:
     int num_defaults;
     bool takes_varargs, takes_kwargs;
 
-    SourceInfo* source;
+    std::unique_ptr<SourceInfo> source;
     ParamNames param_names;
 
     FunctionList
@@ -287,14 +288,15 @@ public:
                                      const std::vector<const std::string*>*);
     InternalCallable internal_callable = NULL;
 
-    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, SourceInfo* source)
+    CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs,
+               std::unique_ptr<SourceInfo> source)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(source), param_names(source->ast), always_use_version(NULL) {
+          source(std::move(source)), param_names(this->source->ast), always_use_version(NULL) {
         assert(num_args >= num_defaults);
     }
     CLFunction(int num_args, int num_defaults, bool takes_varargs, bool takes_kwargs, const ParamNames& param_names)
         : num_args(num_args), num_defaults(num_defaults), takes_varargs(takes_varargs), takes_kwargs(takes_kwargs),
-          source(NULL), param_names(param_names), always_use_version(NULL) {
+          source(nullptr), param_names(param_names), always_use_version(NULL) {
         assert(num_args >= num_defaults);
     }
 

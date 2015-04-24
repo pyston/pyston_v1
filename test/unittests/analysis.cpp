@@ -36,7 +36,7 @@ TEST_F(AnalysisTest, augassign) {
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("a")) == ScopeInfo::VarScopeType::GLOBAL);
     ASSERT_FALSE(scope_info->getScopeTypeOfName(module->interned_strings->get("b")) == ScopeInfo::VarScopeType::GLOBAL);
 
-    SourceInfo* si = new SourceInfo(createModule("augassign", fn), scoping, func, func->body);
+    SourceInfo* si = new SourceInfo(createModule("augassign", fn), scoping, func, func->body, fn);
 
     CFG* cfg = computeCFG(si, func->body);
     LivenessAnalysis* liveness = computeLivenessInfo(cfg);
@@ -64,7 +64,7 @@ void doOsrTest(bool is_osr, bool i_maybe_undefined) {
 
     ScopeInfo* scope_info = scoping->getScopeInfoForNode(func);
     SourceInfo* si = new SourceInfo(createModule("osr" + std::to_string((is_osr << 1) + i_maybe_undefined), fn),
-            scoping, func, func->body);
+            scoping, func, func->body, fn);
 
     CFG* cfg = computeCFG(si, func->body);
     LivenessAnalysis* liveness = computeLivenessInfo(cfg);

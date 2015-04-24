@@ -34,8 +34,11 @@ namespace pyston {
 
 DS_DEFINE_RWLOCK(codegen_rwlock);
 
-SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body)
-    : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), body(body) {
+SourceInfo::SourceInfo(BoxedModule* m, ScopingAnalysis* scoping, AST* ast, const std::vector<AST_stmt*>& body,
+                       std::string fn)
+    : parent_module(m), scoping(scoping), ast(ast), cfg(NULL), liveness(NULL), fn(std::move(fn)), body(body) {
+    assert(this->fn.size());
+
     switch (ast->type) {
         case AST_TYPE::ClassDef:
         case AST_TYPE::Lambda:
