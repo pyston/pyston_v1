@@ -21,7 +21,7 @@ set -e
 set -ux
 python -c 'import __future__'
 python -c 'import sys; print sys.executable'
-pip install six==1.9.0 cffi==0.9.2
+pip install six==1.9.0 cffi==0.9.2 pycparser==2.12
 python -c 'import six; print six.__version__'
 """.strip()
 

@@ -51,6 +51,20 @@ public:
         return boxString(static_cast<BoxedCode*>(b)->f->source->fn);
     }
 
+    static Box* firstlineno(Box* b, void*) {
+        RELEASE_ASSERT(b->cls == code_cls, "");
+        BoxedCode* code = static_cast<BoxedCode*>(b);
+        CLFunction* cl = code->f;
+
+        if (!cl->source) {
+            // I don't think it really matters what we return here;
+            // in CPython, builtin functions don't have code objects.
+            return boxInt(-1);
+        }
+
+        return boxInt(cl->source->ast->lineno);
+    }
+
     static Box* argcount(Box* b, void*) {
         RELEASE_ASSERT(b->cls == code_cls, "");
 
@@ -114,6 +128,8 @@ void setupCode() {
 
     code_cls->giveAttr("co_name", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::name, NULL, NULL));
     code_cls->giveAttr("co_filename", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::filename, NULL, NULL));
+    code_cls->giveAttr("co_firstlineno",
+                       new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::firstlineno, NULL, NULL));
     code_cls->giveAttr("co_argcount", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::argcount, NULL, NULL));
     code_cls->giveAttr("co_varnames", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::varnames, NULL, NULL));
     code_cls->giveAttr("co_flags", new (pyston_getset_cls) BoxedGetsetDescriptor(BoxedCode::flags, NULL, NULL));
