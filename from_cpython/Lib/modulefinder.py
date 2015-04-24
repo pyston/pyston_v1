@@ -3,11 +3,6 @@
 
 from __future__ import generators
 
-# Pyston change:
-import sys
-del sys.modules['modulefinder']
-raise ImportError("This isn't really supported in Pyston yet")
-
 import dis
 import imp
 import marshal

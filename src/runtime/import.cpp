@@ -32,11 +32,22 @@ static const std::string path_str("__path__");
 static const std::string package_str("__package__");
 static BoxedClass* null_importer_cls;
 
+static void removeModule(const std::string& name) {
+    BoxedDict* d = getSysModulesDict();
+    Box* b_name = boxString(name);
+    d->d.erase(b_name);
+}
+
 BoxedModule* createAndRunModule(const std::string& name, const std::string& fn) {
     BoxedModule* module = createModule(name, fn);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
-    compileAndRunModule(ast, module);
+    try {
+        compileAndRunModule(ast, module);
+    } catch (ExcInfo e) {
+        removeModule(name);
+        raiseRaw(e);
+    }
     return module;
 }
 
@@ -51,7 +62,12 @@ static BoxedModule* createAndRunModule(const std::string& name, const std::strin
     module->setattr(path_str, path_list, NULL);
 
     AST_Module* ast = caching_parse_file(fn.c_str());
-    compileAndRunModule(ast, module);
+    try {
+        compileAndRunModule(ast, module);
+    } catch (ExcInfo e) {
+        removeModule(name);
+        raiseRaw(e);
+    }
     return module;
 }
 
@@ -363,19 +379,24 @@ static Box* importSub(const std::string& name, const std::string& full_name, Box
     if (sr.type != SearchResult::SEARCH_ERROR) {
         Box* module;
 
-        if (sr.type == SearchResult::PY_SOURCE)
-            module = createAndRunModule(full_name, sr.path);
-        else if (sr.type == SearchResult::PKG_DIRECTORY)
-            module = createAndRunModule(full_name, sr.path + "/__init__.py", sr.path);
-        else if (sr.type == SearchResult::C_EXTENSION)
-            module = importCExtension(full_name, name, sr.path);
-        else if (sr.type == SearchResult::IMP_HOOK) {
-            const static std::string load_module_str("load_module");
-            module = callattr(sr.loader, &load_module_str,
-                              CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(1),
-                              boxString(full_name), NULL, NULL, NULL, NULL);
-        } else
-            RELEASE_ASSERT(0, "%d", sr.type);
+        try {
+            if (sr.type == SearchResult::PY_SOURCE)
+                module = createAndRunModule(full_name, sr.path);
+            else if (sr.type == SearchResult::PKG_DIRECTORY)
+                module = createAndRunModule(full_name, sr.path + "/__init__.py", sr.path);
+            else if (sr.type == SearchResult::C_EXTENSION)
+                module = importCExtension(full_name, name, sr.path);
+            else if (sr.type == SearchResult::IMP_HOOK) {
+                const static std::string load_module_str("load_module");
+                module = callattr(sr.loader, &load_module_str,
+                                  CallattrFlags({.cls_only = false, .null_on_nonexistent = false }), ArgPassSpec(1),
+                                  boxString(full_name), NULL, NULL, NULL, NULL);
+            } else
+                RELEASE_ASSERT(0, "%d", sr.type);
+        } catch (ExcInfo e) {
+            removeModule(name);
+            raiseRaw(e);
+        }
 
         if (parent_module && parent_module != None)
             parent_module->setattr(name, module, NULL);
@@ -609,6 +630,7 @@ extern "C" PyObject* PyImport_ExecCodeModuleEx(char* name, PyObject* co, char* p
         module->setattr("__file__", boxString(pathname), NULL);
         return module;
     } catch (ExcInfo e) {
+        removeModule(name);
         setCAPIException(e);
         return NULL;
     }

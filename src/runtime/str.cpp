@@ -343,11 +343,23 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     return new (lhs->size() + rhs->size()) BoxedString(lhs->s, rhs->s);
 }
 
+static llvm::StringMap<Box*> interned_strings;
+
 extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(s, "");
+    auto it = interned_strings.find(s);
+    if (it == interned_strings.end()) {
+        Box* b = PyGC_AddRoot(boxString(s));
+        assert(b);
+        interned_strings[s] = b;
+        return b;
+    } else {
+        assert(it->second);
+        return it->second;
+    }
 }
 
-extern "C" void PyString_InternInPlace(PyObject**) noexcept {
+extern "C" void PyString_InternInPlace(PyObject** o) noexcept {
     Py_FatalError("unimplemented");
 }
 
@@ -2194,8 +2206,8 @@ Box* strDecode(BoxedString* self, Box* encoding, Box* error) {
     if (error_str && !isSubclass(error_str->cls, str_cls))
         raiseExcHelper(TypeError, "decode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
-    Box* result
-        = PyCodec_Decode(self, encoding_str ? encoding_str->data() : NULL, error_str ? error_str->data() : NULL);
+    Box* result = PyString_AsDecodedObject(self, encoding_str ? encoding_str->data() : NULL,
+                                           error_str ? error_str->data() : NULL);
     checkAndThrowCAPIException();
     return result;
 }
@@ -2219,8 +2231,8 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
     if (error_str && !isSubclass(error_str->cls, str_cls))
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
-    Box* result = PyCodec_Encode(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
-                                 error_str ? error_str->data() : NULL);
+    Box* result = PyString_AsEncodedObject(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
+                                           error_str ? error_str->data() : NULL);
     checkAndThrowCAPIException();
     return result;
 }
