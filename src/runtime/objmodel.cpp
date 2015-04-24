@@ -99,8 +99,6 @@ void REWRITE_ABORTED(const char* reason) {
 #define REWRITE_ABORTED(reason) ((void)(reason))
 #endif
 
-Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2, Box* arg3,
-                         Box** args, const std::vector<const std::string*>* keyword_names);
 static Box* (*runtimeCallInternal0)(Box*, CallRewriteArgs*, ArgPassSpec)
     = (Box * (*)(Box*, CallRewriteArgs*, ArgPassSpec))runtimeCallInternal;
 static Box* (*runtimeCallInternal1)(Box*, CallRewriteArgs*, ArgPassSpec, Box*)

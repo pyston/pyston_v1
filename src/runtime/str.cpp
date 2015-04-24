@@ -2232,7 +2232,7 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
         raiseExcHelper(TypeError, "encode() argument 2 must be string, not '%s'", getTypeName(error_str));
 
     Box* result = PyString_AsEncodedObject(self, encoding_str ? encoding_str->data() : PyUnicode_GetDefaultEncoding(),
-                                 error_str ? error_str->data() : NULL);
+                                           error_str ? error_str->data() : NULL);
     checkAndThrowCAPIException();
     return result;
 }

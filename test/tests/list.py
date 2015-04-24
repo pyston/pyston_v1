@@ -171,3 +171,26 @@ for i in xrange(3):
             l1 = [i]
             l2 = [j, k]
             print l1 < l2, l1 <= l2, l1 > l2, l1 >= l2
+
+
+def mycmp(k1, k2):
+    types_seen.add((type(k1), type(k2)))
+    if k1 == k2:
+        return 0
+    if k1 < k2:
+        return -1
+    return 1
+
+types_seen = set()
+l = ["%d" for i in xrange(20)]
+l.sort(cmp=mycmp)
+print types_seen
+print l
+
+"""
+types_seen = set()
+l = range(20)
+l.sort(cmp=mycmp, key=str)
+print types_seen
+print l
+"""

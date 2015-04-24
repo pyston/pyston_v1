@@ -630,52 +630,78 @@ extern "C" int PyList_Reverse(PyObject* v) noexcept {
     return 0;
 }
 
+class PyCmpComparer {
+private:
+    Box* cmp;
+
+public:
+    PyCmpComparer(Box* cmp) : cmp(cmp) {}
+    bool operator()(Box* lhs, Box* rhs) {
+        Box* r = runtimeCallInternal(cmp, NULL, ArgPassSpec(2), lhs, rhs, NULL, NULL, NULL);
+        if (!isSubclass(r->cls, int_cls))
+            raiseExcHelper(TypeError, "comparison function must return int, not %.200s", r->cls->tp_name);
+        return static_cast<BoxedInt*>(r)->n < 0;
+    }
+};
+
 void listSort(BoxedList* self, Box* cmp, Box* key, Box* reverse) {
     LOCK_REGION(self->lock.asWrite());
     assert(isSubclass(self->cls, list_cls));
 
-    RELEASE_ASSERT(cmp == None, "The 'cmp' keyword is currently not supported");
+    if (cmp == None)
+        cmp = NULL;
 
     if (key == None)
         key = NULL;
 
-    int num_keys_added = 0;
-    auto remove_keys = [&]() {
-        for (int i = 0; i < num_keys_added; i++) {
-            Box** obj_loc = &self->elts->elts[i];
-            assert((*obj_loc)->cls == tuple_cls);
-            *obj_loc = static_cast<BoxedTuple*>(*obj_loc)->elts[2];
-        }
-    };
+    RELEASE_ASSERT(!cmp || !key, "Specifying both the 'cmp' and 'key' keywords is currently not supported");
 
-    try {
-        if (key) {
-            for (int i = 0; i < self->size; i++) {
+    // TODO(kmod): maybe we should just switch to CPython's sort.  not sure how the algorithms compare,
+    // but they specifically try to support cases where __lt__ or the cmp function might end up inspecting
+    // the current list being sorted.
+    // I also don't know if std::stable_sort is exception-safe.
+
+    if (cmp) {
+        std::stable_sort<Box**, PyCmpComparer>(self->elts->elts, self->elts->elts + self->size, PyCmpComparer(cmp));
+    } else {
+        int num_keys_added = 0;
+        auto remove_keys = [&]() {
+            for (int i = 0; i < num_keys_added; i++) {
                 Box** obj_loc = &self->elts->elts[i];
-
-                Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
-                // Add the index as part of the new tuple so that the comparison never hits the
-                // original object.
-                // TODO we could potentially make this faster by copying the CPython approach of
-                // creating special sortwrapper objects that compare only based on the key.
-                Box* new_obj = BoxedTuple::create({ key_val, boxInt(i), *obj_loc });
-
-                *obj_loc = new_obj;
-                num_keys_added++;
+                assert((*obj_loc)->cls == tuple_cls);
+                *obj_loc = static_cast<BoxedTuple*>(*obj_loc)->elts[2];
             }
+        };
+
+        try {
+            if (key) {
+                for (int i = 0; i < self->size; i++) {
+                    Box** obj_loc = &self->elts->elts[i];
+
+                    Box* key_val = runtimeCall(key, ArgPassSpec(1), *obj_loc, NULL, NULL, NULL, NULL);
+                    // Add the index as part of the new tuple so that the comparison never hits the
+                    // original object.
+                    // TODO we could potentially make this faster by copying the CPython approach of
+                    // creating special sortwrapper objects that compare only based on the key.
+                    Box* new_obj = BoxedTuple::create({ key_val, boxInt(i), *obj_loc });
+
+                    *obj_loc = new_obj;
+                    num_keys_added++;
+                }
+            }
+
+            // We don't need to do a stable sort if there's a keyfunc, since we explicitly added the index
+            // as part of the sort key.
+            // But we might want to get rid of that approach?  CPython doesn't do that (they create special
+            // wrapper objects that compare only based on the key).
+            std::stable_sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
+        } catch (ExcInfo e) {
+            remove_keys();
+            raiseRaw(e);
         }
 
-        // We don't need to do a stable sort if there's a keyfunc, since we explicitly added the index
-        // as part of the sort key.
-        // But we might want to get rid of that approach?  CPython doesn't do that (they create special
-        // wrapper objects that compare only based on the key).
-        std::stable_sort<Box**, PyLt>(self->elts->elts, self->elts->elts + self->size, PyLt());
-    } catch (ExcInfo e) {
         remove_keys();
-        throw e;
     }
-
-    remove_keys();
 
     if (nonzero(reverse)) {
         listReverse(self);
