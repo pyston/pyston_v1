@@ -343,11 +343,23 @@ extern "C" Box* strAdd(BoxedString* lhs, Box* _rhs) {
     return new (lhs->size() + rhs->size()) BoxedString(lhs->s, rhs->s);
 }
 
+static llvm::StringMap<Box*> interned_strings;
+
 extern "C" PyObject* PyString_InternFromString(const char* s) noexcept {
-    Py_FatalError("unimplemented");
+    RELEASE_ASSERT(s, "");
+    auto it = interned_strings.find(s);
+    if (it == interned_strings.end()) {
+        Box* b = PyGC_AddRoot(boxString(s));
+        assert(b);
+        interned_strings[s] = b;
+        return b;
+    } else {
+        assert(it->second);
+        return it->second;
+    }
 }
 
-extern "C" void PyString_InternInPlace(PyObject**) noexcept {
+extern "C" void PyString_InternInPlace(PyObject** o) noexcept {
     Py_FatalError("unimplemented");
 }
 
