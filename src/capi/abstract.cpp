@@ -27,6 +27,31 @@
 
 namespace pyston {
 
+static PyObject* type_error(const char* msg, PyObject* obj) noexcept {
+    PyErr_Format(PyExc_TypeError, msg, Py_TYPE(obj)->tp_name);
+    return NULL;
+}
+
+static PyObject* null_error(void) noexcept {
+    if (!PyErr_Occurred())
+        PyErr_SetString(PyExc_SystemError, "null argument to internal routine");
+    return NULL;
+}
+
+extern "C" int PyObject_Cmp(PyObject* o1, PyObject* o2, int* result) noexcept {
+    int r;
+
+    if (o1 == NULL || o2 == NULL) {
+        null_error();
+        return -1;
+    }
+    r = PyObject_Compare(o1, o2);
+    if (PyErr_Occurred())
+        return -1;
+    *result = r;
+    return 0;
+}
+
 extern "C" Py_ssize_t _PyObject_LengthHint(PyObject* o, Py_ssize_t defaultvalue) noexcept {
     static PyObject* hintstrobj = NULL;
     PyObject* ro, *hintmeth;
@@ -225,17 +250,6 @@ extern "C" void PyBuffer_Release(Py_buffer* view) noexcept {
 
 
     view->obj = NULL;
-}
-
-static PyObject* type_error(const char* msg, PyObject* obj) noexcept {
-    PyErr_Format(PyExc_TypeError, msg, Py_TYPE(obj)->tp_name);
-    return NULL;
-}
-
-static PyObject* null_error(void) noexcept {
-    if (!PyErr_Occurred())
-        PyErr_SetString(PyExc_SystemError, "null argument to internal routine");
-    return NULL;
 }
 
 static PyObject* objargs_mktuple(va_list va) noexcept {
@@ -1516,9 +1530,28 @@ extern "C" int PyNumber_Coerce(PyObject**, PyObject**) noexcept {
     return -1;
 }
 
-extern "C" int PyNumber_CoerceEx(PyObject**, PyObject**) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return -1;
+extern "C" int PyNumber_CoerceEx(PyObject** pv, PyObject** pw) noexcept {
+    PyObject* v = *pv;
+    PyObject* w = *pw;
+    int res;
+
+    /* Shortcut only for old-style types */
+    if (v->cls == w->cls && !PyType_HasFeature(v->cls, Py_TPFLAGS_CHECKTYPES)) {
+        Py_INCREF(v);
+        Py_INCREF(w);
+        return 0;
+    }
+    if (v->cls->tp_as_number && v->cls->tp_as_number->nb_coerce) {
+        res = (*v->cls->tp_as_number->nb_coerce)(pv, pw);
+        if (res <= 0)
+            return res;
+    }
+    if (w->cls->tp_as_number && w->cls->tp_as_number->nb_coerce) {
+        res = (*w->cls->tp_as_number->nb_coerce)(pw, pv);
+        if (res <= 0)
+            return res;
+    }
+    return 1;
 }
 
 extern "C" PyObject* _PyNumber_ConvertIntegralToInt(PyObject* integral, const char* error_format) noexcept {

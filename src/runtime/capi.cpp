@@ -306,44 +306,6 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
     return -1;
 }
 
-extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) noexcept {
-    int translated_op;
-    switch (opid) {
-        case Py_LT:
-            translated_op = AST_TYPE::Lt;
-            break;
-        case Py_LE:
-            translated_op = AST_TYPE::LtE;
-            break;
-        case Py_EQ:
-            translated_op = AST_TYPE::Eq;
-            break;
-        case Py_NE:
-            translated_op = AST_TYPE::NotEq;
-            break;
-        case Py_GT:
-            translated_op = AST_TYPE::Gt;
-            break;
-        case Py_GE:
-            translated_op = AST_TYPE::GtE;
-            break;
-        default:
-            fatalOrError(PyExc_NotImplementedError, "unimplemented");
-            return nullptr;
-    };
-
-    try {
-        return compare(o1, o2, translated_op);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" {
-int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
-}
-
 extern "C" long PyObject_Hash(PyObject* o) noexcept {
     try {
         return hash(o)->n;

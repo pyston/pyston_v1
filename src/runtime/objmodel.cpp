@@ -325,6 +325,7 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     tp_flags |= Py_TPFLAGS_HAVE_CLASS;
     tp_flags |= Py_TPFLAGS_HAVE_GC;
     tp_flags |= Py_TPFLAGS_HAVE_WEAKREFS;
+    tp_flags |= Py_TPFLAGS_HAVE_RICHCOMPARE;
 
     if (base && (base->tp_flags & Py_TPFLAGS_HAVE_NEWBUFFER))
         tp_flags |= Py_TPFLAGS_HAVE_NEWBUFFER;
