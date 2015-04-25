@@ -4,6 +4,7 @@ def f(a, b=2, *args, **kw):
 c = f.func_code
 print c.co_argcount
 print c.co_varnames
+print c.co_firstlineno
 print hex(c.co_flags & 0x0c)
 
 def f(l=[]):
@@ -15,3 +16,4 @@ f()
 def f():
     pass
 print f.func_defaults
+print f.func_code.co_firstlineno

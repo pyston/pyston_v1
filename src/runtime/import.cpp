@@ -690,7 +690,14 @@ Box* impFindModule(Box* _name, BoxedList* path) {
         return BoxedTuple::create({ None, path, BoxedTuple::create({ mode, mode, boxInt(sr.type) }) });
     }
 
-    Py_FatalError("unimplemented");
+    if (sr.type == SearchResult::C_EXTENSION) {
+        Box* path = boxString(sr.path);
+        Box* mode = boxStrConstant("rb");
+        Box* f = runtimeCall(file_cls, ArgPassSpec(2), path, mode, NULL, NULL, NULL);
+        return BoxedTuple::create({ f, path, BoxedTuple::create({ boxStrConstant(".so"), mode, boxInt(sr.type) }) });
+    }
+
+    RELEASE_ASSERT(0, "unknown type: %d", sr.type);
 }
 
 Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
@@ -722,6 +729,26 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
     }
 
     Py_FatalError("unimplemented");
+}
+
+Box* impLoadDynamic(Box* _name, Box* _pathname, Box* _file) {
+    RELEASE_ASSERT(_name->cls == str_cls, "");
+    RELEASE_ASSERT(_pathname->cls == str_cls, "");
+    RELEASE_ASSERT(_file == None, "");
+
+    BoxedString* name = (BoxedString*)_name;
+    BoxedString* pathname = (BoxedString*)_pathname;
+
+    const char* lastdot = strrchr(name->s.data(), '.');
+
+    const char* shortname;
+    if (lastdot == NULL) {
+        shortname = name->s.data();
+    } else {
+        shortname = lastdot + 1;
+    }
+
+    return importCExtension(name->s, shortname, pathname->s);
 }
 
 Box* impGetSuffixes() {
@@ -772,8 +799,11 @@ void setupImport() {
 
     CLFunction* load_module_func = boxRTFunction((void*)impLoadModule, UNKNOWN, 4,
                                                  ParamNames({ "name", "file", "pathname", "description" }, "", ""));
-
     imp_module->giveAttr("load_module", new BoxedBuiltinFunctionOrMethod(load_module_func, "load_module"));
+
+    CLFunction* load_dynamic_func = boxRTFunction((void*)impLoadDynamic, UNKNOWN, 3, 1, false, false,
+                                                  ParamNames({ "name", "pathname", "file" }, "", ""));
+    imp_module->giveAttr("load_dynamic", new BoxedBuiltinFunctionOrMethod(load_dynamic_func, "load_dynamic", { None }));
 
     imp_module->giveAttr("get_suffixes", new BoxedBuiltinFunctionOrMethod(
                                              boxRTFunction((void*)impGetSuffixes, UNKNOWN, 0), "get_suffixes"));

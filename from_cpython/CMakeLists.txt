@@ -76,6 +76,7 @@ file(GLOB_RECURSE STDOBJECT_SRCS Objects
     bytearrayobject.c
     bytes_methods.c
     capsule.c
+    cobject.c
     exceptions.c
     iterobject.c
     memoryobject.c

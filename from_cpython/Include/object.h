@@ -553,7 +553,7 @@ PyAPI_FUNC(int) PyNumber_CoerceEx(PyObject **, PyObject **) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_ClearWeakRefs(PyObject *) PYSTON_NOEXCEPT;
 
 /* A slot function whose address we need to compare */
-extern int _PyObject_SlotCompare(PyObject *, PyObject *);
+extern int _PyObject_SlotCompare(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 /* Same as PyObject_Generic{Get,Set}Attr, but passing the attributes
    dict as the last parameter. */
 PyAPI_FUNC(PyObject *)

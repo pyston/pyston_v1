@@ -36,13 +36,16 @@ PyAPI_DATA(int) Py_HashRandomizationFlag;
 
 // Pyston change: make Py_FatalError a macro so that it can access linenumber info, similar to assert:
 //PyAPI_FUNC(void) Py_FatalError(const char *message) __attribute__((__noreturn__)) PYSTON_NOEXCEPT;
+PyAPI_FUNC(void) _Py_FatalError(const char *fmt, const char *function, const char *message)
+    __attribute__((__noreturn__));
 #define _PYSTON_STRINGIFY(N) #N
 #define PYSTON_STRINGIFY(N) _PYSTON_STRINGIFY(N)
-#define Py_FatalError(message)                                                                                          \
-do {                                                                                                                    \
-    fprintf(stderr, __FILE__ ":" PYSTON_STRINGIFY(__LINE__) ": %s: Fatal Python error: %s\n", __PRETTY_FUNCTION__, message);   \
-    abort();                                                                                                            \
-} while (0)
+// Defer the real work of Py_FatalError to a function, since some users expect it to be a real function,
+// ie can be used as an expression (a do-while(0) loop would fail that).
+#define Py_FatalError(message)                                                 \
+  _Py_FatalError(__FILE__                                                      \
+                 ":" PYSTON_STRINGIFY(__LINE__) ": %s: Fatal Python error: %s\n",        \
+                 __PRETTY_FUNCTION__, message)
 
 #ifdef __cplusplus
 }

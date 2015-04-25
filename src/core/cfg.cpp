@@ -1427,6 +1427,8 @@ public:
 
     bool visit_functiondef(AST_FunctionDef* node) override {
         auto def = new AST_FunctionDef();
+        def->lineno = node->lineno;
+        def->col_offset = node->col_offset;
         def->name = node->name;
         def->body = node->body; // expensive vector copy
         // Decorators are evaluated before the defaults, so this *must* go before remapArguments().

@@ -472,31 +472,6 @@ extern "C" int PyObject_AsWriteBuffer(PyObject* obj, void** buffer, Py_ssize_t* 
     Py_FatalError("unimplemented");
 }
 
-/* Return -1 if error; 1 if v op w; 0 if not (v op w). */
-extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexcept {
-    PyObject* res;
-    int ok;
-
-    /* Quick result when objects are the same.
-       Guarantees that identity implies equality. */
-    if (v == w) {
-        if (op == Py_EQ)
-            return 1;
-        else if (op == Py_NE)
-            return 0;
-    }
-
-    res = PyObject_RichCompare(v, w, op);
-    if (res == NULL)
-        return -1;
-    if (PyBool_Check(res))
-        ok = (res == Py_True);
-    else
-        ok = PyObject_IsTrue(res);
-    Py_DECREF(res);
-    return ok;
-}
-
 // I'm not sure how we can support this one:
 extern "C" PyObject** _PyObject_GetDictPtr(PyObject* obj) noexcept {
     fatalOrError(PyExc_NotImplementedError, "unimplemented");
@@ -564,10 +539,443 @@ extern "C" void Py_ReprLeave(PyObject* obj) noexcept {
     }
 }
 
-extern "C" int PyObject_Compare(PyObject* o1, PyObject* o2) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    // 'On error, the value returned is undefined; use PyErr_Occurred() to detect an error.'
-    // - https://docs.python.org/2/c-api/object.html
-    return 0xdeadbeef;
+/* Helper to warn about deprecated tp_compare return values.  Return:
+   -2 for an exception;
+   -1 if v <  w;
+    0 if v == w;
+    1 if v  > w.
+   (This function cannot return 2.)
+*/
+static int adjust_tp_compare(int c) {
+    if (PyErr_Occurred()) {
+        if (c != -1 && c != -2) {
+            PyObject* t, *v, *tb;
+            PyErr_Fetch(&t, &v, &tb);
+            if (PyErr_Warn(PyExc_RuntimeWarning, "tp_compare didn't return -1 or -2 "
+                                                 "for exception") < 0) {
+                Py_XDECREF(t);
+                Py_XDECREF(v);
+                Py_XDECREF(tb);
+            } else
+                PyErr_Restore(t, v, tb);
+        }
+        return -2;
+    } else if (c < -1 || c > 1) {
+        if (PyErr_Warn(PyExc_RuntimeWarning, "tp_compare didn't return -1, 0 or 1") < 0)
+            return -2;
+        else
+            return c < -1 ? -1 : 1;
+    } else {
+        assert(c >= -1 && c <= 1);
+        return c;
+    }
+}
+
+
+/* Macro to get the tp_richcompare field of a type if defined */
+#define RICHCOMPARE(t) (PyType_HasFeature((t), Py_TPFLAGS_HAVE_RICHCOMPARE) ? (t)->tp_richcompare : NULL)
+
+/* Map rich comparison operators to their swapped version, e.g. LT --> GT */
+extern "C" {
+int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
+}
+
+/* Try a genuine rich comparison, returning an object.  Return:
+   NULL for exception;
+   NotImplemented if this particular rich comparison is not implemented or
+     undefined;
+   some object not equal to NotImplemented if it is implemented
+     (this latter object may not be a Boolean).
+*/
+static PyObject* try_rich_compare(PyObject* v, PyObject* w, int op) {
+    richcmpfunc f;
+    PyObject* res;
+
+    if (v->cls != w->cls && PyType_IsSubtype(w->cls, v->cls) && (f = RICHCOMPARE(w->cls)) != NULL) {
+        res = (*f)(w, v, _Py_SwappedOp[op]);
+        if (res != Py_NotImplemented)
+            return res;
+        Py_DECREF(res);
+    }
+    if ((f = RICHCOMPARE(v->cls)) != NULL) {
+        res = (*f)(v, w, op);
+        if (res != Py_NotImplemented)
+            return res;
+        Py_DECREF(res);
+    }
+    if ((f = RICHCOMPARE(w->cls)) != NULL) {
+        return (*f)(w, v, _Py_SwappedOp[op]);
+    }
+    res = Py_NotImplemented;
+    Py_INCREF(res);
+    return res;
+}
+
+/* Try a genuine rich comparison, returning an int.  Return:
+   -1 for exception (including the case where try_rich_compare() returns an
+      object that's not a Boolean);
+    0 if the outcome is false;
+    1 if the outcome is true;
+    2 if this particular rich comparison is not implemented or undefined.
+*/
+static int try_rich_compare_bool(PyObject* v, PyObject* w, int op) {
+    PyObject* res;
+    int ok;
+
+    if (RICHCOMPARE(v->cls) == NULL && RICHCOMPARE(w->cls) == NULL)
+        return 2; /* Shortcut, avoid INCREF+DECREF */
+    res = try_rich_compare(v, w, op);
+    if (res == NULL)
+        return -1;
+    if (res == Py_NotImplemented) {
+        Py_DECREF(res);
+        return 2;
+    }
+    ok = PyObject_IsTrue(res);
+    Py_DECREF(res);
+    return ok;
+}
+
+/* Try rich comparisons to determine a 3-way comparison.  Return:
+   -2 for an exception;
+   -1 if v  < w;
+    0 if v == w;
+    1 if v  > w;
+    2 if this particular rich comparison is not implemented or undefined.
+*/
+static int try_rich_to_3way_compare(PyObject* v, PyObject* w) {
+    static struct {
+        int op;
+        int outcome;
+    } tries[3] = {
+        /* Try this operator, and if it is true, use this outcome: */
+        { Py_EQ, 0 },
+        { Py_LT, -1 },
+        { Py_GT, 1 },
+    };
+    int i;
+
+    if (RICHCOMPARE(v->cls) == NULL && RICHCOMPARE(w->cls) == NULL)
+        return 2; /* Shortcut */
+
+    for (i = 0; i < 3; i++) {
+        switch (try_rich_compare_bool(v, w, tries[i].op)) {
+            case -1:
+                return -2;
+            case 1:
+                return tries[i].outcome;
+        }
+    }
+
+    return 2;
+}
+
+/* Try a 3-way comparison, returning an int.  Return:
+   -2 for an exception;
+   -1 if v <  w;
+    0 if v == w;
+    1 if v  > w;
+    2 if this particular 3-way comparison is not implemented or undefined.
+*/
+static int try_3way_compare(PyObject* v, PyObject* w) {
+    int c;
+    cmpfunc f;
+
+    /* Comparisons involving instances are given to instance_compare,
+       which has the same return conventions as this function. */
+
+    f = v->cls->tp_compare;
+    if (PyInstance_Check(v))
+        return (*f)(v, w);
+    if (PyInstance_Check(w))
+        return (*w->cls->tp_compare)(v, w);
+
+    /* If both have the same (non-NULL) tp_compare, use it. */
+    if (f != NULL && f == w->cls->tp_compare) {
+        c = (*f)(v, w);
+        return adjust_tp_compare(c);
+    }
+
+    /* If either tp_compare is _PyObject_SlotCompare, that's safe. */
+    if (f == _PyObject_SlotCompare || w->cls->tp_compare == _PyObject_SlotCompare)
+        return _PyObject_SlotCompare(v, w);
+
+    /* If we're here, v and w,
+        a) are not instances;
+        b) have different types or a type without tp_compare; and
+        c) don't have a user-defined tp_compare.
+       tp_compare implementations in C assume that both arguments
+       have their type, so we give up if the coercion fails or if
+       it yields types which are still incompatible (which can
+       happen with a user-defined nb_coerce).
+    */
+    c = PyNumber_CoerceEx(&v, &w);
+    if (c < 0)
+        return -2;
+    if (c > 0)
+        return 2;
+    f = v->cls->tp_compare;
+    if (f != NULL && f == w->cls->tp_compare) {
+        c = (*f)(v, w);
+        Py_DECREF(v);
+        Py_DECREF(w);
+        return adjust_tp_compare(c);
+    }
+
+    /* No comparison defined */
+    Py_DECREF(v);
+    Py_DECREF(w);
+    return 2;
+}
+
+/* Final fallback 3-way comparison, returning an int.  Return:
+   -2 if an error occurred;
+   -1 if v <  w;
+    0 if v == w;
+    1 if v >  w.
+*/
+static int default_3way_compare(PyObject* v, PyObject* w) {
+    int c;
+    const char* vname, *wname;
+
+    if (v->cls == w->cls) {
+        /* When comparing these pointers, they must be cast to
+         * integer types (i.e. Py_uintptr_t, our spelling of C9X's
+         * uintptr_t).  ANSI specifies that pointer compares other
+         * than == and != to non-related structures are undefined.
+         */
+        Py_uintptr_t vv = (Py_uintptr_t)v;
+        Py_uintptr_t ww = (Py_uintptr_t)w;
+        return (vv < ww) ? -1 : (vv > ww) ? 1 : 0;
+    }
+
+    /* None is smaller than anything */
+    if (v == Py_None)
+        return -1;
+    if (w == Py_None)
+        return 1;
+
+    /* different type: compare type names; numbers are smaller */
+    if (PyNumber_Check(v))
+        vname = "";
+    else
+        vname = v->cls->tp_name;
+    if (PyNumber_Check(w))
+        wname = "";
+    else
+        wname = w->cls->tp_name;
+    c = strcmp(vname, wname);
+    if (c < 0)
+        return -1;
+    if (c > 0)
+        return 1;
+    /* Same type name, or (more likely) incomparable numeric types */
+    return ((Py_uintptr_t)(v->cls) < (Py_uintptr_t)(w->cls)) ? -1 : 1;
+}
+
+/* Do a 3-way comparison, by hook or by crook.  Return:
+   -2 for an exception (but see below);
+   -1 if v <  w;
+    0 if v == w;
+    1 if v >  w;
+   BUT: if the object implements a tp_compare function, it returns
+   whatever this function returns (whether with an exception or not).
+*/
+static int do_cmp(PyObject* v, PyObject* w) {
+    int c;
+    cmpfunc f;
+
+    if (v->cls == w->cls && (f = v->cls->tp_compare) != NULL) {
+        c = (*f)(v, w);
+        if (PyInstance_Check(v)) {
+            /* Instance tp_compare has a different signature.
+               But if it returns undefined we fall through. */
+            if (c != 2)
+                return c;
+            /* Else fall through to try_rich_to_3way_compare() */
+        } else
+            return adjust_tp_compare(c);
+    }
+    /* We only get here if one of the following is true:
+       a) v and w have different types
+       b) v and w have the same type, which doesn't have tp_compare
+       c) v and w are instances, and either __cmp__ is not defined or
+          __cmp__ returns NotImplemented
+    */
+    c = try_rich_to_3way_compare(v, w);
+    if (c < 2)
+        return c;
+    c = try_3way_compare(v, w);
+    if (c < 2)
+        return c;
+    return default_3way_compare(v, w);
+}
+
+/* Compare v to w.  Return
+   -1 if v <  w or exception (PyErr_Occurred() true in latter case).
+    0 if v == w.
+    1 if v > w.
+   XXX The docs (C API manual) say the return value is undefined in case
+   XXX of error.
+*/
+extern "C" int PyObject_Compare(PyObject* v, PyObject* w) noexcept {
+    int result;
+
+    if (v == NULL || w == NULL) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    if (v == w)
+        return 0;
+    if (Py_EnterRecursiveCall(" in cmp"))
+        return -1;
+    result = do_cmp(v, w);
+    Py_LeaveRecursiveCall();
+    return result < 0 ? -1 : result;
+}
+
+/* Return (new reference to) Py_True or Py_False. */
+static PyObject* convert_3way_to_object(int op, int c) noexcept {
+    PyObject* result;
+    switch (op) {
+        case Py_LT:
+            c = c < 0;
+            break;
+        case Py_LE:
+            c = c <= 0;
+            break;
+        case Py_EQ:
+            c = c == 0;
+            break;
+        case Py_NE:
+            c = c != 0;
+            break;
+        case Py_GT:
+            c = c > 0;
+            break;
+        case Py_GE:
+            c = c >= 0;
+            break;
+    }
+    result = c ? Py_True : Py_False;
+    Py_INCREF(result);
+    return result;
+}
+
+/* We want a rich comparison but don't have one.  Try a 3-way cmp instead.
+   Return
+   NULL      if error
+   Py_True   if v op w
+   Py_False  if not (v op w)
+*/
+static PyObject* try_3way_to_rich_compare(PyObject* v, PyObject* w, int op) noexcept {
+    int c;
+
+    c = try_3way_compare(v, w);
+    if (c >= 2) {
+
+        /* Py3K warning if types are not equal and comparison isn't == or !=  */
+        if (Py_Py3kWarningFlag && v->cls != w->cls && op != Py_EQ && op != Py_NE
+            && PyErr_WarnEx(PyExc_DeprecationWarning, "comparing unequal types not supported "
+                                                      "in 3.x",
+                            1) < 0) {
+            return NULL;
+        }
+
+        c = default_3way_compare(v, w);
+    }
+    if (c <= -2)
+        return NULL;
+    return convert_3way_to_object(op, c);
+}
+
+/* Do rich comparison on v and w.  Return
+   NULL      if error
+   Else a new reference to an object other than Py_NotImplemented, usually(?):
+   Py_True   if v op w
+   Py_False  if not (v op w)
+*/
+static PyObject* do_richcmp(PyObject* v, PyObject* w, int op) noexcept {
+    PyObject* res;
+
+    res = try_rich_compare(v, w, op);
+    if (res != Py_NotImplemented)
+        return res;
+    Py_DECREF(res);
+
+    return try_3way_to_rich_compare(v, w, op);
+}
+
+/* Return:
+   NULL for exception;
+   some object not equal to NotImplemented if it is implemented
+     (this latter object may not be a Boolean).
+*/
+extern "C" PyObject* PyObject_RichCompare(PyObject* v, PyObject* w, int op) noexcept {
+    PyObject* res;
+
+    assert(Py_LT <= op && op <= Py_GE);
+    if (Py_EnterRecursiveCall(" in cmp"))
+        return NULL;
+
+    /* If the types are equal, and not old-style instances, try to
+       get out cheap (don't bother with coercions etc.). */
+    if (v->cls == w->cls && !PyInstance_Check(v)) {
+        cmpfunc fcmp;
+        richcmpfunc frich = RICHCOMPARE(v->cls);
+        /* If the type has richcmp, try it first.  try_rich_compare
+           tries it two-sided, which is not needed since we've a
+           single type only. */
+        if (frich != NULL) {
+            res = (*frich)(v, w, op);
+            if (res != Py_NotImplemented)
+                goto Done;
+            Py_DECREF(res);
+        }
+        /* No richcmp, or this particular richmp not implemented.
+           Try 3-way cmp. */
+        fcmp = v->cls->tp_compare;
+        if (fcmp != NULL) {
+            int c = (*fcmp)(v, w);
+            c = adjust_tp_compare(c);
+            if (c == -2) {
+                res = NULL;
+                goto Done;
+            }
+            res = convert_3way_to_object(op, c);
+            goto Done;
+        }
+    }
+
+    /* Fast path not taken, or couldn't deliver a useful result. */
+    res = do_richcmp(v, w, op);
+Done:
+    Py_LeaveRecursiveCall();
+    return res;
+}
+
+/* Return -1 if error; 1 if v op w; 0 if not (v op w). */
+extern "C" int PyObject_RichCompareBool(PyObject* v, PyObject* w, int op) noexcept {
+    PyObject* res;
+    int ok;
+
+    /* Quick result when objects are the same.
+       Guarantees that identity implies equality. */
+    if (v == w) {
+        if (op == Py_EQ)
+            return 1;
+        else if (op == Py_NE)
+            return 0;
+    }
+
+    res = PyObject_RichCompare(v, w, op);
+    if (res == NULL)
+        return -1;
+    if (PyBool_Check(res))
+        ok = (res == Py_True);
+    else
+        ok = PyObject_IsTrue(res);
+    Py_DECREF(res);
+    return ok;
 }
 }

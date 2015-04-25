@@ -306,44 +306,6 @@ extern "C" int PyObject_DelItem(PyObject* o, PyObject* key) noexcept {
     return -1;
 }
 
-extern "C" PyObject* PyObject_RichCompare(PyObject* o1, PyObject* o2, int opid) noexcept {
-    int translated_op;
-    switch (opid) {
-        case Py_LT:
-            translated_op = AST_TYPE::Lt;
-            break;
-        case Py_LE:
-            translated_op = AST_TYPE::LtE;
-            break;
-        case Py_EQ:
-            translated_op = AST_TYPE::Eq;
-            break;
-        case Py_NE:
-            translated_op = AST_TYPE::NotEq;
-            break;
-        case Py_GT:
-            translated_op = AST_TYPE::Gt;
-            break;
-        case Py_GE:
-            translated_op = AST_TYPE::GtE;
-            break;
-        default:
-            fatalOrError(PyExc_NotImplementedError, "unimplemented");
-            return nullptr;
-    };
-
-    try {
-        return compare(o1, o2, translated_op);
-    } catch (ExcInfo e) {
-        setCAPIException(e);
-        return NULL;
-    }
-}
-
-extern "C" {
-int _Py_SwappedOp[] = { Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE };
-}
-
 extern "C" long PyObject_Hash(PyObject* o) noexcept {
     try {
         return hash(o)->n;
@@ -1372,6 +1334,44 @@ static Box* methodGetDoc(Box* b, void*) {
     if (s)
         return boxStrConstant(s);
     return None;
+}
+
+/* extension modules might be compiled with GC support so these
+   functions must always be available */
+
+#undef PyObject_GC_Track
+#undef PyObject_GC_UnTrack
+#undef PyObject_GC_Del
+#undef _PyObject_GC_Malloc
+
+extern "C" PyObject* _PyObject_GC_Malloc(size_t basicsize) noexcept {
+    Box* r = ((PyObject*)PyObject_MALLOC(basicsize));
+    RELEASE_ASSERT(gc::isValidGCObject(r), "");
+    return r;
+}
+
+#undef _PyObject_GC_New
+extern "C" PyObject* _PyObject_GC_New(PyTypeObject* tp) noexcept {
+    PyObject* op = _PyObject_GC_Malloc(_PyObject_SIZE(tp));
+    if (op != NULL)
+        op = PyObject_INIT(op, tp);
+    RELEASE_ASSERT(gc::isValidGCObject(op), "");
+    return op;
+}
+
+extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject* tp, Py_ssize_t nitems) noexcept {
+    const size_t size = _PyObject_VAR_SIZE(tp, nitems);
+    PyVarObject* op = (PyVarObject*)_PyObject_GC_Malloc(size);
+    if (op != NULL)
+        op = PyObject_INIT_VAR(op, tp, nitems);
+    RELEASE_ASSERT(gc::isValidGCObject(op), "");
+    return op;
+}
+
+extern "C" void _Py_FatalError(const char* fmt, const char* function, const char* message) {
+    fprintf(stderr, fmt, function, message);
+    fflush(stderr); /* it helps in Windows debug build */
+    abort();
 }
 
 void setupCAPI() {

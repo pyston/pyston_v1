@@ -312,13 +312,13 @@ extern PyGC_Head *_PyGC_generation0;
     (PyObject_IS_GC(obj) && \
         (!PyTuple_CheckExact(obj) || _PyObject_GC_IS_TRACKED(obj)))
 
+#endif
 PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyVarObject *) _PyObject_GC_NewVar(PyTypeObject *, Py_ssize_t) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_Track(void *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_UnTrack(void *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(void) PyObject_GC_Del(void *) PYSTON_NOEXCEPT;
-#endif
 #define PyType_IS_GC(t) ((t),1)
 #define _PyObject_GC_TRACK(o) ((void)(o))
 #define _PyObject_GC_UNTRACK(o) ((void)(o))

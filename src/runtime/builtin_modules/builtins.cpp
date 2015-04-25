@@ -969,9 +969,11 @@ Box* builtinRound(Box* _number, Box* _ndigits) {
     throwCAPIException();
 }
 
-Box* builtinCmp(Box* lhs, Box* rhs) {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    throwCAPIException();
+Box* builtinCmp(Box* a, Box* b) {
+    int c;
+    if (PyObject_Cmp(a, b, &c) < 0)
+        throwCAPIException();
+    return PyInt_FromLong((long)c);
 }
 
 Box* builtinApply(Box* func, Box* args, Box* keywords) {
