@@ -1,6 +1,3 @@
-# expected: fail
-# - long % int
-
 import sys
 
 P = 1000000007

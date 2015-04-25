@@ -192,8 +192,11 @@ extern "C" Box* listGetitemSlice(BoxedList* self, BoxedSlice* slice) {
 
 extern "C" Box* listGetitem(BoxedList* self, Box* slice) {
     assert(isSubclass(self->cls, list_cls));
-    if (isSubclass(slice->cls, int_cls)) {
-        return listGetitemInt(self, static_cast<BoxedInt*>(slice));
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i == -1 && PyErr_Occurred())
+            throwCAPIException();
+        return listGetitemUnboxed(self, i);
     } else if (slice->cls == slice_cls) {
         return listGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {
@@ -212,23 +215,23 @@ static void _listSetitem(BoxedList* self, int64_t n, Box* v) {
     self->elts->elts[n] = v;
 }
 
-extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
+extern "C" Box* listSetitemUnboxed(BoxedList* self, int64_t n, Box* v) {
     // I think r lock is ok here, since we don't change the list structure:
     LOCK_REGION(self->lock.asRead());
-
     assert(isSubclass(self->cls, list_cls));
-    assert(isSubclass(slice->cls, int_cls));
-    int64_t n = slice->n;
-
     _listSetitem(self, n, v);
-
     return None;
+}
+
+extern "C" Box* listSetitemInt(BoxedList* self, BoxedInt* slice, Box* v) {
+    assert(isSubclass(slice->cls, int_cls));
+    return listSetitemUnboxed(self, slice->n, v);
 }
 
 extern "C" int PyList_SetItem(PyObject* op, Py_ssize_t i, PyObject* newitem) noexcept {
     assert(isSubclass(op->cls, list_cls));
     try {
-        _listSetitem(static_cast<BoxedList*>(op), i, newitem);
+        listSetitemUnboxed(static_cast<BoxedList*>(op), i, newitem);
     } catch (ExcInfo e) {
         abort();
     }
@@ -460,8 +463,12 @@ extern "C" Box* listSetitemSlice(BoxedList* self, BoxedSlice* slice, Box* v) {
 
 extern "C" Box* listSetitem(BoxedList* self, Box* slice, Box* v) {
     assert(isSubclass(self->cls, list_cls));
-    if (isSubclass(slice->cls, int_cls)) {
-        return listSetitemInt(self, static_cast<BoxedInt*>(slice), v);
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i == -1 && PyErr_Occurred())
+            throwCAPIException();
+        listSetitemUnboxed(self, i, v);
+        return None;
     } else if (slice->cls == slice_cls) {
         return listSetitemSlice(self, static_cast<BoxedSlice*>(slice), v);
     } else {
@@ -492,9 +499,11 @@ extern "C" Box* listDelitem(BoxedList* self, Box* slice) {
     LOCK_REGION(self->lock.asWrite());
 
     Box* rtn;
-
-    if (isSubclass(slice->cls, int_cls)) {
-        rtn = listDelitemInt(self, static_cast<BoxedInt*>(slice));
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i == -1 && PyErr_Occurred())
+            throwCAPIException();
+        rtn = listDelitemInt(self, (BoxedInt*)boxInt(i));
     } else if (slice->cls == slice_cls) {
         rtn = listDelitemSlice(self, static_cast<BoxedSlice*>(slice));
     } else {

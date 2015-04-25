@@ -38,9 +38,9 @@ namespace pyston {
 
 BoxedClass* method_cls;
 
-extern "C" bool _PyIndex_Check(PyObject* op) noexcept {
-    // TODO this is wrong (the CPython version checks for things that can be coerced to a number):
-    return PyInt_Check(op);
+extern "C" bool _PyIndex_Check(PyObject* obj) noexcept {
+    return (Py_TYPE(obj)->tp_as_number != NULL && PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_INDEX)
+            && Py_TYPE(obj)->tp_as_number->nb_index != NULL);
 }
 
 extern "C" bool _PyObject_CheckBuffer(PyObject* obj) noexcept {

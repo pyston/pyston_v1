@@ -488,6 +488,29 @@ static Box* instanceHash(BoxedInstance* inst) {
     }
 }
 
+static PyObject* instance_index(PyObject* self) noexcept {
+    PyObject* func, *res;
+    /*
+    static PyObject* indexstr = NULL;
+
+    if (indexstr == NULL) {
+        indexstr = PyString_InternFromString("__index__");
+        if (indexstr == NULL)
+            return NULL;
+    }
+    */
+    if ((func = instance_getattro(self, boxString("__index__"))) == NULL) {
+        if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+            return NULL;
+        PyErr_Clear();
+        PyErr_SetString(PyExc_TypeError, "object cannot be interpreted as an index");
+        return NULL;
+    }
+    res = PyEval_CallObject(func, (PyObject*)NULL);
+    Py_DECREF(func);
+    return res;
+}
+
 Box* instanceCall(Box* _inst, Box* _args, Box* _kwargs) {
     assert(_inst->cls == instance_cls);
     BoxedInstance* inst = static_cast<BoxedInstance*>(_inst);
@@ -541,5 +564,6 @@ void setupClassobj() {
     instance_cls->freeze();
     instance_cls->tp_getattro = instance_getattro;
     instance_cls->tp_setattro = instance_setattro;
+    instance_cls->tp_as_number->nb_index = instance_index;
 }
 }

@@ -40,6 +40,8 @@ print isinstance(1, int)
 print isinstance(1, (float, int))
 print isinstance(1, (float, (), (int, 3), 4))
 
+print pow(11, 42)
+print pow(11, 42, 75)
 print divmod(5, 2)
 print divmod(5L, -2)
 try:

@@ -13,6 +13,7 @@ def test(a, b):
     print a - b, b - a, a.__sub__(b), b.__sub__(a)
     print a * b, b * a, a.__mul__(b), b.__mul__(a)
     print a / b, b / a, a.__div__(b), b.__div__(a)
+    print a % b, b % a, a.__mod__(b), b.__mod__(a)
     print repr(a), repr(b), a < b, a > b, a <= b, a >= b, a == b, a != b
     if not isinstance(a, float) and not isinstance(b, float):
         print a ^ b, a | b, a & b
@@ -55,10 +56,15 @@ print ~(-10L)
 print -(1L)
 print 1L**2L
 print 1L**2
+print (11L).__pow__(32, 50L)
+print (11L).__index__()
 
 print long("100", 16)
 print long("100", 10)
 print long("100", 26)
+print long("0x100", 16), long("0100", 8), long("0b100", 2)
+print long("0x100", 0), long("0100", 0), long("0b100", 0)
+print long("0b100", 16), long("0b100L", 0), long("-0b100L", 0)
 print long(-1.1)
 print long(1.9)
 print long(-1.9)

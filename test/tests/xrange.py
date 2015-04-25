@@ -15,3 +15,6 @@ for i in xrange(10, -10, -3):
 
 for i in xrange(0):
     print i
+
+for i in xrange(10L, 15L, 1L):
+    print i

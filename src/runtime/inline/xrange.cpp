@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "core/types.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
@@ -134,25 +135,22 @@ Box* xrange(Box* cls, Box* start, Box* stop, Box** args) {
     Box* step = args[0];
 
     if (stop == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-
-        i64 istop = static_cast<BoxedInt*>(start)->n;
+        i64 istop = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
         return new BoxedXrange(0, istop, 1);
     } else if (step == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
-
-        i64 istart = static_cast<BoxedInt*>(start)->n;
-        i64 istop = static_cast<BoxedInt*>(stop)->n;
+        i64 istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+        i64 istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
         return new BoxedXrange(istart, istop, 1);
     } else {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
-        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step));
-
-        i64 istart = static_cast<BoxedInt*>(start)->n;
-        i64 istop = static_cast<BoxedInt*>(stop)->n;
-        i64 istep = static_cast<BoxedInt*>(step)->n;
+        i64 istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+        i64 istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
+        i64 istep = PyLong_AsLong(step);
+        checkAndThrowCAPIException();
         RELEASE_ASSERT(istep != 0, "step can't be 0");
         return new BoxedXrange(istart, istop, istep);
     }

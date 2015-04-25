@@ -23,6 +23,7 @@
 #include "core/stats.h"
 #include "core/types.h"
 #include "gc/collector.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 #include "runtime/util.h"
@@ -146,9 +147,12 @@ int BoxedTuple::Resize(BoxedTuple** pv, size_t newsize) noexcept {
 Box* tupleGetitem(BoxedTuple* self, Box* slice) {
     assert(self->cls == tuple_cls);
 
-    if (isSubclass(slice->cls, int_cls))
-        return tupleGetitemInt(self, static_cast<BoxedInt*>(slice));
-    else if (slice->cls == slice_cls)
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t i = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (i == -1 && PyErr_Occurred())
+            throwCAPIException();
+        return tupleGetitemUnboxed(self, i);
+    } else if (slice->cls == slice_cls)
         return tupleGetitemSlice(self, static_cast<BoxedSlice*>(slice));
     else
         raiseExcHelper(TypeError, "tuple indices must be integers, not %s", getTypeName(slice));
