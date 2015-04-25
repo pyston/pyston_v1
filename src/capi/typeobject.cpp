@@ -2596,8 +2596,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) noexcept {
     // unhandled fields:
     RELEASE_ASSERT(cls->tp_compare == NULL, "");
 
-    RELEASE_ASSERT(cls->tp_getattro == NULL || cls->tp_getattro == PyObject_GenericGetAttr, "");
-
     int ALLOWABLE_FLAGS = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES
                           | Py_TPFLAGS_HAVE_NEWBUFFER;
     ALLOWABLE_FLAGS |= Py_TPFLAGS_INT_SUBCLASS | Py_TPFLAGS_LONG_SUBCLASS | Py_TPFLAGS_LIST_SUBCLASS

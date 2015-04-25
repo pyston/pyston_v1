@@ -366,6 +366,7 @@ STDOBJECT_SRCS := \
 	memoryobject.c \
 	iterobject.c \
 	bufferobject.c \
+	cobject.c \
 	$(EXTRA_STDOBJECT_SRCS)
 
 STDPYTHON_SRCS := \

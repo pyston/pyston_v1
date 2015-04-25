@@ -75,6 +75,7 @@
 #include "methodobject.h"
 #include "moduleobject.h"
 #include "classobject.h"
+#include "cobject.h"
 #include "fileobject.h"
 #include "pycapsule.h"
 #include "traceback.h"
