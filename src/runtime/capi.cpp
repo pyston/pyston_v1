@@ -1336,6 +1336,44 @@ static Box* methodGetDoc(Box* b, void*) {
     return None;
 }
 
+/* extension modules might be compiled with GC support so these
+   functions must always be available */
+
+#undef PyObject_GC_Track
+#undef PyObject_GC_UnTrack
+#undef PyObject_GC_Del
+#undef _PyObject_GC_Malloc
+
+extern "C" PyObject* _PyObject_GC_Malloc(size_t basicsize) noexcept {
+    Box* r = ((PyObject*)PyObject_MALLOC(basicsize));
+    RELEASE_ASSERT(gc::isValidGCObject(r), "");
+    return r;
+}
+
+#undef _PyObject_GC_New
+extern "C" PyObject* _PyObject_GC_New(PyTypeObject* tp) noexcept {
+    PyObject* op = _PyObject_GC_Malloc(_PyObject_SIZE(tp));
+    if (op != NULL)
+        op = PyObject_INIT(op, tp);
+    RELEASE_ASSERT(gc::isValidGCObject(op), "");
+    return op;
+}
+
+extern "C" PyVarObject* _PyObject_GC_NewVar(PyTypeObject* tp, Py_ssize_t nitems) noexcept {
+    const size_t size = _PyObject_VAR_SIZE(tp, nitems);
+    PyVarObject* op = (PyVarObject*)_PyObject_GC_Malloc(size);
+    if (op != NULL)
+        op = PyObject_INIT_VAR(op, tp, nitems);
+    RELEASE_ASSERT(gc::isValidGCObject(op), "");
+    return op;
+}
+
+extern "C" void _Py_FatalError(const char* fmt, const char* function, const char* message) {
+    fprintf(stderr, fmt, function, message);
+    fflush(stderr); /* it helps in Windows debug build */
+    abort();
+}
+
 void setupCAPI() {
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
