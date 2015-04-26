@@ -22,10 +22,11 @@
 
 #include "codegen/ast_interpreter.h" // interpreter_instr_addr
 #include "codegen/unwinding.h"       // getCFForAddress
-#include "core/stats.h"              // StatCounter
-#include "core/types.h"              // for ExcInfo
-#include "core/util.h"               // Timer
-#include "runtime/generator.h"       // generatorEntry
+#include "core/ast.h"
+#include "core/stats.h"        // StatCounter
+#include "core/types.h"        // for ExcInfo
+#include "core/util.h"         // Timer
+#include "runtime/generator.h" // generatorEntry
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>

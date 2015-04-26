@@ -637,7 +637,7 @@ private:
         AST_BinOp* rtn = new AST_BinOp();
         rtn->lineno = node->lineno;
         rtn->col_offset = node->col_offset;
-        rtn->op_type = node->op_type;
+        rtn->op_type = remapBinOpType(node->op_type);
         rtn->left = remapExpr(node->left);
         rtn->right = remapExpr(node->right);
         return rtn;
@@ -1716,7 +1716,7 @@ public:
         }
 
         AST_AugBinOp* binop = new AST_AugBinOp();
-        binop->op_type = node->op_type;
+        binop->op_type = remapBinOpType(node->op_type);
         binop->left = remapped_lhs;
         binop->right = remapExpr(node->value);
         binop->col_offset = node->col_offset;
@@ -1726,6 +1726,14 @@ public:
         pushAssign(node_name, binop);
         pushAssign(remapped_target, makeLoad(node_name, node));
         return true;
+    }
+
+    AST_TYPE::AST_TYPE remapBinOpType(AST_TYPE::AST_TYPE op_type) {
+        if (op_type == AST_TYPE::Div && (future_flags & (FF_DIVISION))) {
+            return AST_TYPE::TrueDiv;
+        } else {
+            return op_type;
+        }
     }
 
     bool visit_delete(AST_Delete* node) override {
@@ -2466,7 +2474,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
 
     ScopingAnalysis* scoping_analysis = source->scoping;
 
-    CFGVisitor visitor(source, source->ast->type, source->parent_module->future_flags, scoping_analysis, rtn);
+    CFGVisitor visitor(source, source->ast->type, source->future_flags, scoping_analysis, rtn);
 
     bool skip_first = false;
 

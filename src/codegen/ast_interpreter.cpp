@@ -373,9 +373,6 @@ Value ASTInterpreter::execute(ASTInterpreter& interpreter, CFGBlock* start_block
 }
 
 Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type) {
-    if (op == AST_TYPE::Div && (source_info->parent_module->future_flags & FF_DIVISION)) {
-        op = AST_TYPE::TrueDiv;
-    }
     switch (exp_type) {
         case BinExpType::AugBinOp:
             return augbinop(left, right, op);
@@ -1017,7 +1014,7 @@ Value ASTInterpreter::visit_exec(AST_Exec* node) {
     Box* globals = node->globals == NULL ? NULL : visit_expr(node->globals).o;
     Box* locals = node->locals == NULL ? NULL : visit_expr(node->locals).o;
 
-    exec(code, globals, locals);
+    exec(code, globals, locals, this->source_info->future_flags);
 
     return Value();
 }

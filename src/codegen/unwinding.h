@@ -98,6 +98,8 @@ struct FrameStackState {
 
 // Returns all the stack locals, including hidden ones.
 FrameStackState getFrameStackState();
+
+CompiledFunction* getTopCompiledFunction();
 }
 
 #endif

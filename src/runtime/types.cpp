@@ -22,10 +22,12 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+#include "analysis/scoping_analysis.h"
 #include "capi/typeobject.h"
 #include "capi/types.h"
 #include "codegen/ast_interpreter.h"
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "core/options.h"
 #include "core/stats.h"
 #include "core/types.h"

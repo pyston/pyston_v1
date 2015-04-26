@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "future.h"
+#include "codegen/irgen/future.h"
+
+#include <map>
+
+#include "core/ast.h"
 
 namespace pyston {
 
@@ -59,7 +63,7 @@ inline bool is_stmt_string(AST_stmt* stmt) {
     return stmt->type == AST_TYPE::Expr && static_cast<AST_Expr*>(stmt)->value->type == AST_TYPE::Str;
 }
 
-FutureFlags getFutureFlags(AST_Module* m, const char* file) {
+FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file) {
     FutureFlags ff = 0;
 
     // Set the defaults for the future flags depending on what version we are
@@ -73,8 +77,8 @@ FutureFlags getFutureFlags(AST_Module* m, const char* file) {
     // occur at the beginning of the file.
     bool future_import_allowed = true;
     BadFutureImportVisitor import_visitor(file);
-    for (int i = 0; i < m->body.size(); i++) {
-        AST_stmt* stmt = m->body[i];
+    for (int i = 0; i < body.size(); i++) {
+        AST_stmt* stmt = body[i];
 
         if (stmt->type == AST_TYPE::ImportFrom && static_cast<AST_ImportFrom*>(stmt)->module.str() == "__future__") {
             if (future_import_allowed) {

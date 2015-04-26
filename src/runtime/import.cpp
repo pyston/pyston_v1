@@ -22,6 +22,7 @@
 #include "codegen/irgen/hooks.h"
 #include "codegen/parser.h"
 #include "codegen/unwinding.h"
+#include "core/ast.h"
 #include "runtime/capi.h"
 #include "runtime/objmodel.h"
 

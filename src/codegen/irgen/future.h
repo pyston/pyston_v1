@@ -15,10 +15,8 @@
 #ifndef PYSTON_CODEGEN_IRGEN_FUTURE_H
 #define PYSTON_CODEGEN_IRGEN_FUTURE_H
 
-#include <map>
+#include <vector>
 
-#include "core/ast.h"
-#include "core/options.h"
 #include "core/types.h"
 
 namespace pyston {
@@ -31,13 +29,11 @@ namespace pyston {
 #define FF_NESTED_SCOPES 0x20
 #define FF_WITH_STATEMENT 0x40
 
-typedef int FutureFlags;
-
 // Loop through import statements to find __future__ imports throwing errors for
 // bad __future__ imports. Returns the futures that are turned on. This is used
 // for irgeneration; the parser still has to handle some futures on its own,
 // when they are relevant for the parser.
-FutureFlags getFutureFlags(AST_Module* m, const char* file);
+FutureFlags getFutureFlags(std::vector<AST_stmt*> const& body, const char* file);
 }
 
 #endif

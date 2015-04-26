@@ -18,6 +18,7 @@
 #include "Python.h"
 
 #include "capi/types.h"
+#include "core/ast.h"
 #include "core/threading.h"
 #include "core/types.h"
 #include "runtime/classobj.h"
