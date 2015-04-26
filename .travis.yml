@@ -10,6 +10,7 @@ sudo: false
 cache:
   directories:
     - $HOME/.ccache
+    - $HOME/llvm-package
 
 addons:
   apt:
@@ -38,13 +39,11 @@ before_install:
   - if [ "$CC" = "gcc" ]; then export CC="gcc-4.8" CXX="g++-4.8"; fi
 
 install:
-  - git clone git://github.com/llvm-mirror/llvm.git ~/pyston_deps/llvm-trunk
-  - git clone git://github.com/llvm-mirror/clang.git ~/pyston_deps/llvm-trunk/tools/clang
-  - git config --global user.email "you@example.com"
-  - git config --global user.name "Your Name"
-  - mkdir ~/pyston-build && cd ~/pyston-build
-  - make -C $TRAVIS_BUILD_DIR llvm_up
-  - cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR
+  - ./tools/travis_get_llvm.sh
+
+  - mkdir -p ~/pyston-build && cd ~/pyston-build
+  - if [ -d "$HOME/llvm-install" ]; then cmake -GNinja -DTEST_THREADS=4 -DLLVM_DIR=$HOME/llvm-install/share/llvm/cmake $TRAVIS_BUILD_DIR; fi
+  - if [ ! -d "$HOME/llvm-install" ]; then cmake -GNinja -DTEST_THREADS=4 $TRAVIS_BUILD_DIR; fi
   - ninja libunwind ext_cpython
 
 script:
@@ -52,6 +51,8 @@ script:
   - ninja -j4 pyston
   - ccache -s
   - ninja check-pyston
+  - if [ ! -d "$HOME/llvm-install" ]; then ninja -j4 package_llvm; fi
+  - if [ ! -d "$HOME/llvm-install" ]; then mv llvm-*.tar.gz ~/llvm-package/; fi
 
 os:
   - linux
