@@ -15,84 +15,15 @@
 #include "runtime/util.h"
 
 #include "core/options.h"
+#include "runtime/capi.h"
 #include "runtime/objmodel.h"
 #include "runtime/types.h"
 
 namespace pyston {
 
-// Provides the exact same behaviour as CPythons PySlice_GetIndicesEx apart from throwing c++ exceptions on error
 void parseSlice(BoxedSlice* slice, int size, i64* out_start, i64* out_stop, i64* out_step, i64* out_length) {
-    BoxedSlice* sslice = static_cast<BoxedSlice*>(slice);
-
-    Box* start = sslice->start;
-    assert(start);
-    Box* stop = sslice->stop;
-    assert(stop);
-    Box* step = sslice->step;
-    assert(step);
-
-    RELEASE_ASSERT(isSubclass(start->cls, int_cls) || start->cls == none_cls, "");
-    RELEASE_ASSERT(isSubclass(stop->cls, int_cls) || stop->cls == none_cls, "");
-    RELEASE_ASSERT(isSubclass(step->cls, int_cls) || step->cls == none_cls, "");
-
-    int64_t istart;
-    int64_t istop;
-    int64_t istep = 1;
-
-    if (isSubclass(step->cls, int_cls)) {
-        istep = static_cast<BoxedInt*>(step)->n;
-        if (istep == 0) {
-            raiseExcHelper(ValueError, "slice step cannot be zero");
-        }
-    }
-
-    if (isSubclass(start->cls, int_cls)) {
-        istart = static_cast<BoxedInt*>(start)->n;
-        if (istart < 0)
-            istart = size + istart;
-    } else {
-        if (istep > 0)
-            istart = 0;
-        else
-            istart = size - 1;
-    }
-    if (isSubclass(stop->cls, int_cls)) {
-        istop = static_cast<BoxedInt*>(stop)->n;
-        if (istop < 0)
-            istop = size + istop;
-    } else {
-        if (istep > 0)
-            istop = size;
-        else
-            istop = -1;
-    }
-
-    if (istep > 0) {
-        if (istart < 0)
-            istart = 0;
-        if (istop > size)
-            istop = size;
-    } else {
-        if (istart >= size)
-            istart = size - 1;
-        if (istop < 0)
-            istop = -1;
-    }
-
-    *out_start = istart;
-    *out_stop = istop;
-    *out_step = istep;
-
-    if (out_length) {
-        // This is adapted from CPython's PySlice_GetIndicesEx.
-        if ((istep < 0 && istop >= istart) || (istep > 0 && istart >= istop))
-            *out_length = 0;
-        else if (istep < 0)
-            *out_length = (istop - istart + 1) / istep + 1;
-        else
-            *out_length = (istop - istart - 1) / istep + 1;
-
-        RELEASE_ASSERT(*out_length >= 0, "negative length, should never happen");
-    }
+    int ret = PySlice_GetIndicesEx((PySliceObject*)slice, size, out_start, out_stop, out_step, out_length);
+    if (ret == -1)
+        throwCAPIException();
 }
 }
