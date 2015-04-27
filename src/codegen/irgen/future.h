@@ -21,14 +21,6 @@
 
 namespace pyston {
 
-#define FF_ABSOLUTE_IMPORT 0x01
-#define FF_DIVISION 0x02
-#define FF_GENERATOR 0x04
-#define FF_UNICODE_LITERALS 0x08
-#define FF_PRINT_FUNCTION 0x10
-#define FF_NESTED_SCOPES 0x20
-#define FF_WITH_STATEMENT 0x40
-
 // Loop through import statements to find __future__ imports throwing errors for
 // bad __future__ imports. Returns the futures that are turned on. This is used
 // for irgeneration; the parser still has to handle some futures on its own,

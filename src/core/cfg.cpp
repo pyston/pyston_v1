@@ -19,6 +19,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "Python.h"
+
 #include "analysis/scoping_analysis.h"
 #include "core/ast.h"
 #include "core/options.h"
@@ -1481,7 +1483,7 @@ public:
             // level == -1 means check both sys path and relative for imports.
             // so if `from __future__ import absolute_import` was used in the file, set level to 0
             int level;
-            if (!(future_flags & FF_ABSOLUTE_IMPORT))
+            if (!(future_flags & CO_FUTURE_ABSOLUTE_IMPORT))
                 level = -1;
             else
                 level = 0;
@@ -1532,7 +1534,7 @@ public:
         // level == -1 means check both sys path and relative for imports.
         // so if `from __future__ import absolute_import` was used in the file, set level to 0
         int level;
-        if (node->level == 0 && !(future_flags & FF_ABSOLUTE_IMPORT))
+        if (node->level == 0 && !(future_flags & CO_FUTURE_ABSOLUTE_IMPORT))
             level = -1;
         else
             level = node->level;
@@ -1729,7 +1731,7 @@ public:
     }
 
     AST_TYPE::AST_TYPE remapBinOpType(AST_TYPE::AST_TYPE op_type) {
-        if (op_type == AST_TYPE::Div && (future_flags & (FF_DIVISION))) {
+        if (op_type == AST_TYPE::Div && (future_flags & (CO_FUTURE_DIVISION))) {
             return AST_TYPE::TrueDiv;
         } else {
             return op_type;

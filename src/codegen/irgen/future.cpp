@@ -16,6 +16,8 @@
 
 #include <map>
 
+#include "Python.h"
+
 #include "core/ast.h"
 
 namespace pyston {
@@ -27,13 +29,15 @@ struct FutureOption {
 };
 
 const std::map<std::string, FutureOption> future_options
-    = { { "absolute_import", { version_hex(2, 5, 0), version_hex(3, 0, 0), FF_ABSOLUTE_IMPORT } },
-        { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_DIVISION } },
-        { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), FF_GENERATOR } },
-        { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_UNICODE_LITERALS } },
-        { "print_function", { version_hex(2, 6, 0), version_hex(3, 0, 0), FF_PRINT_FUNCTION } },
-        { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), FF_NESTED_SCOPES } },
-        { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), FF_WITH_STATEMENT } } };
+    = { { "absolute_import", { version_hex(2, 5, 0), version_hex(3, 0, 0), CO_FUTURE_ABSOLUTE_IMPORT } },
+        { "division", { version_hex(2, 2, 0), version_hex(3, 0, 0), CO_FUTURE_DIVISION } },
+        { "unicode_literals", { version_hex(2, 6, 0), version_hex(3, 0, 0), CO_FUTURE_UNICODE_LITERALS } },
+        { "print_function", { version_hex(2, 6, 0), version_hex(3, 0, 0), CO_FUTURE_PRINT_FUNCTION } },
+        { "with_statement", { version_hex(2, 5, 0), version_hex(3, 6, 0), CO_FUTURE_WITH_STATEMENT } },
+
+        // These are mandatory in all versions we care about (>= 2.3)
+        { "generators", { version_hex(2, 2, 0), version_hex(3, 0, 0), CO_GENERATOR } },
+        { "nested_scopes", { version_hex(2, 1, 0), version_hex(2, 2, 0), CO_NESTED } } };
 
 void raiseFutureImportErrorNotFound(const char* file, AST* node, const char* name) {
     raiseSyntaxErrorHelper(file, "", node, "future feature %s is not defined", name);
