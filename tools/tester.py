@@ -206,9 +206,6 @@ def get_test_options(fn, check_stats, run_memcheck):
         elif os.path.basename(fn).split('.')[0] in TESTS_TO_SKIP:
             opts.skip = 'command line option'
 
-    if opts.collect_stats:
-        opts.jit_args = ['-s'] + opts.jit_args
-
     assert opts.expected in ("success", "fail", "statfail"), opts.expected
 
     if TEST_PYPY:
@@ -216,6 +213,9 @@ def get_test_options(fn, check_stats, run_memcheck):
         opts.collect_stats = False
         opts.check_stats = False
         opts.expected = "success"
+
+    if opts.collect_stats:
+        opts.jit_args = ['-s'] + opts.jit_args
 
     return opts
 
