@@ -125,6 +125,8 @@ def canonicalize_stderr(stderr):
             ("AttributeError: '(\w+)' object attribute '(\w+)' is read-only", "AttributeError: \\2"),
             (r"TypeError: object.__new__\(\) takes no parameters", "TypeError: object() takes no parameters"),
             ("IndexError: list assignment index out of range", "IndexError: list index out of range"),
+            (r"unqualified exec is not allowed in function '(\w+)' it (.*)",
+             r"unqualified exec is not allowed in function '\1' because it \2"),
             ]
 
     for pattern, subst_with in substitutions:
