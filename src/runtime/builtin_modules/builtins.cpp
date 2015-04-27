@@ -750,6 +750,12 @@ Box* divmod(Box* lhs, Box* rhs) {
     return binopInternal(lhs, rhs, AST_TYPE::DivMod, false, NULL);
 }
 
+Box* powFunc(Box* x, Box* y, Box* z) {
+    Box* rtn = PyNumber_Power(x, y, z);
+    checkAndThrowCAPIException();
+    return rtn;
+}
+
 Box* execfile(Box* _fn) {
     // The "globals" and "locals" arguments aren't implemented for now
     if (!isSubclass(_fn->cls, str_cls)) {
@@ -1082,6 +1088,8 @@ void setupBuiltins() {
     Box* hasattr_obj = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)hasattr, BOXED_BOOL, 2), "hasattr");
     builtins_module->giveAttr("hasattr", hasattr_obj);
 
+    builtins_module->giveAttr("pow", new BoxedBuiltinFunctionOrMethod(
+                                         boxRTFunction((void*)powFunc, UNKNOWN, 3, 1, false, false), "pow", { None }));
 
     Box* isinstance_obj
         = new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)isinstance_func, BOXED_BOOL, 2), "isinstance");

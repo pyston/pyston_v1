@@ -93,7 +93,7 @@ endif()
 add_subdirectory(${DEPS_DIR}/llvm-trunk ${CMAKE_BINARY_DIR}/llvm EXCLUDE_FROM_ALL)
 set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}/llvm/share/llvm/cmake/")
 include(LLVMConfig)
-llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
+llvm_map_components_to_libnames(LLVM_LIBS core mcjit native bitreader bitwriter ipo irreader debuginfodwarf instrumentation ${INTEL_JIT_EVENTS_LIB})
 
 # libunwind
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")

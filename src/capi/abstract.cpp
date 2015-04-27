@@ -1038,6 +1038,149 @@ static PyObject* binary_op(PyObject* v, PyObject* w, const int op_slot, const ch
     return result;
 }
 
+/*
+  Calling scheme used for ternary operations:
+
+  *** In some cases, w.op is called before v.op; see binary_op1. ***
+
+  v     w       z       Action
+  -------------------------------------------------------------------
+  new   new     new     v.op(v,w,z), w.op(v,w,z), z.op(v,w,z)
+  new   old     new     v.op(v,w,z), z.op(v,w,z), coerce(v,w,z), v.op(v,w,z)
+  old   new     new     w.op(v,w,z), z.op(v,w,z), coerce(v,w,z), v.op(v,w,z)
+  old   old     new     z.op(v,w,z), coerce(v,w,z), v.op(v,w,z)
+  new   new     old     v.op(v,w,z), w.op(v,w,z), coerce(v,w,z), v.op(v,w,z)
+  new   old     old     v.op(v,w,z), coerce(v,w,z), v.op(v,w,z)
+  old   new     old     w.op(v,w,z), coerce(v,w,z), v.op(v,w,z)
+  old   old     old     coerce(v,w,z), v.op(v,w,z)
+
+  Legend:
+  -------
+  * new == new style number
+  * old == old style number
+  * Action indicates the order in which operations are tried until either
+    a valid result is produced or an error occurs.
+  * coerce(v,w,z) actually does: coerce(v,w), coerce(v,z), coerce(w,z) and
+    only if z != Py_None; if z == Py_None, then it is treated as absent
+    variable and only coerce(v,w) is tried.
+
+ */
+
+static PyObject* ternary_op(PyObject* v, PyObject* w, PyObject* z, const int op_slot, const char* op_name) noexcept {
+    PyNumberMethods* mv, *mw, *mz;
+    PyObject* x = NULL;
+    ternaryfunc slotv = NULL;
+    ternaryfunc slotw = NULL;
+    ternaryfunc slotz = NULL;
+
+    mv = v->cls->tp_as_number;
+    mw = w->cls->tp_as_number;
+    if (mv != NULL && NEW_STYLE_NUMBER(v))
+        slotv = NB_TERNOP(mv, op_slot);
+    if (w->cls != v->cls && mw != NULL && NEW_STYLE_NUMBER(w)) {
+        slotw = NB_TERNOP(mw, op_slot);
+        if (slotw == slotv)
+            slotw = NULL;
+    }
+    if (slotv) {
+        if (slotw && PyType_IsSubtype(w->cls, v->cls)) {
+            x = slotw(v, w, z);
+            if (x != Py_NotImplemented)
+                return x;
+            Py_DECREF(x); /* can't do it */
+            slotw = NULL;
+        }
+        x = slotv(v, w, z);
+        if (x != Py_NotImplemented)
+            return x;
+        Py_DECREF(x); /* can't do it */
+    }
+    if (slotw) {
+        x = slotw(v, w, z);
+        if (x != Py_NotImplemented)
+            return x;
+        Py_DECREF(x); /* can't do it */
+    }
+    mz = z->cls->tp_as_number;
+    if (mz != NULL && NEW_STYLE_NUMBER(z)) {
+        slotz = NB_TERNOP(mz, op_slot);
+        if (slotz == slotv || slotz == slotw)
+            slotz = NULL;
+        if (slotz) {
+            x = slotz(v, w, z);
+            if (x != Py_NotImplemented)
+                return x;
+            Py_DECREF(x); /* can't do it */
+        }
+    }
+
+    if (!NEW_STYLE_NUMBER(v) || !NEW_STYLE_NUMBER(w) || (z != Py_None && !NEW_STYLE_NUMBER(z))) {
+        /* we have an old style operand, coerce */
+        PyObject* v1, *z1, *w2, *z2;
+        int c;
+
+        c = PyNumber_Coerce(&v, &w);
+        if (c != 0)
+            goto error3;
+
+        /* Special case: if the third argument is None, it is
+           treated as absent argument and not coerced. */
+        if (z == Py_None) {
+            if (v->cls->tp_as_number) {
+                slotz = NB_TERNOP(v->cls->tp_as_number, op_slot);
+                if (slotz)
+                    x = slotz(v, w, z);
+                else
+                    c = -1;
+            } else
+                c = -1;
+            goto error2;
+        }
+        v1 = v;
+        z1 = z;
+        c = PyNumber_Coerce(&v1, &z1);
+        if (c != 0)
+            goto error2;
+        w2 = w;
+        z2 = z1;
+        c = PyNumber_Coerce(&w2, &z2);
+        if (c != 0)
+            goto error1;
+
+        if (v1->cls->tp_as_number != NULL) {
+            slotv = NB_TERNOP(v1->cls->tp_as_number, op_slot);
+            if (slotv)
+                x = slotv(v1, w2, z2);
+            else
+                c = -1;
+        } else
+            c = -1;
+
+        Py_DECREF(w2);
+        Py_DECREF(z2);
+    error1:
+        Py_DECREF(v1);
+        Py_DECREF(z1);
+    error2:
+        Py_DECREF(v);
+        Py_DECREF(w);
+    error3:
+        if (c >= 0)
+            return x;
+    }
+
+    if (z == Py_None)
+        PyErr_Format(PyExc_TypeError, "unsupported operand type(s) for ** or pow(): "
+                                      "'%.100s' and '%.100s'",
+                     v->cls->tp_name, w->cls->tp_name);
+    else
+        PyErr_Format(PyExc_TypeError, "unsupported operand type(s) for pow(): "
+                                      "'%.100s', '%.100s', '%.100s'",
+                     v->cls->tp_name, w->cls->tp_name, z->cls->tp_name);
+    return NULL;
+}
+
+
 extern "C" PyObject* PySequence_Concat(PyObject* s, PyObject* o) noexcept {
     PySequenceMethods* m;
 
@@ -1392,9 +1535,8 @@ extern "C" PyObject* PyNumber_Divmod(PyObject* lhs, PyObject* rhs) noexcept {
     }
 }
 
-extern "C" PyObject* PyNumber_Power(PyObject*, PyObject*, PyObject* o3) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_Power(PyObject* v, PyObject* w, PyObject* z) noexcept {
+    return ternary_op(v, w, z, NB_SLOT(nb_power), "** or pow()");
 }
 
 extern "C" PyObject* PyNumber_Negative(PyObject* o) noexcept {
@@ -1421,9 +1563,13 @@ extern "C" PyObject* PyNumber_Invert(PyObject* o) noexcept {
     return nullptr;
 }
 
-extern "C" PyObject* PyNumber_Lshift(PyObject*, PyObject*) noexcept {
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+extern "C" PyObject* PyNumber_Lshift(PyObject* lhs, PyObject* rhs) noexcept {
+    try {
+        return binop(lhs, rhs, AST_TYPE::LShift);
+    } catch (ExcInfo e) {
+        fatalOrError(PyExc_NotImplementedError, "unimplemented");
+        return nullptr;
+    }
 }
 
 extern "C" PyObject* PyNumber_Rshift(PyObject* lhs, PyObject* rhs) noexcept {
@@ -1684,8 +1830,21 @@ extern "C" PyObject* PyNumber_Index(PyObject* o) noexcept {
         return o;
     }
 
-    fatalOrError(PyExc_NotImplementedError, "unimplemented");
-    return nullptr;
+    if (PyIndex_Check(o)) {
+        result = o->cls->tp_as_number->nb_index(o);
+        if (result && !PyInt_Check(result) && !PyLong_Check(result)) {
+            PyErr_Format(PyExc_TypeError, "__index__ returned non-(int,long) "
+                                          "(type %.200s)",
+                         result->cls->tp_name);
+            Py_DECREF(result);
+            return NULL;
+        }
+    } else {
+        PyErr_Format(PyExc_TypeError, "'%.200s' object cannot be interpreted "
+                                      "as an index",
+                     o->cls->tp_name);
+    }
+    return result;
 }
 
 extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
@@ -1693,18 +1852,42 @@ extern "C" PyObject* PyNumber_ToBase(PyObject* n, int base) noexcept {
     return nullptr;
 }
 
-extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* o, PyObject* exc) noexcept {
-    if (isSubclass(o->cls, int_cls)) {
-        int64_t n = static_cast<BoxedInt*>(o)->n;
-        static_assert(sizeof(n) == sizeof(Py_ssize_t), "");
-        return n;
-    } else if (isSubclass(o->cls, long_cls)) {
-        return PyLong_AsSsize_t(o);
+extern "C" Py_ssize_t PyNumber_AsSsize_t(PyObject* item, PyObject* err) noexcept {
+    Py_ssize_t result;
+    PyObject* runerr;
+    PyObject* value = PyNumber_Index(item);
+    if (value == NULL)
+        return -1;
+
+    /* We're done if PyInt_AsSsize_t() returns without error. */
+    result = PyInt_AsSsize_t(value);
+    if (result != -1 || !(runerr = PyErr_Occurred()))
+        goto finish;
+
+    /* Error handling code -- only manage OverflowError differently */
+    if (!PyErr_GivenExceptionMatches(runerr, PyExc_OverflowError))
+        goto finish;
+
+    PyErr_Clear();
+    /* If no error-handling desired then the default clipping
+       is sufficient.
+     */
+    if (!err) {
+        assert(PyLong_Check(value));
+        /* Whether or not it is less than or equal to
+           zero is determined by the sign of ob_size
+        */
+        if (_PyLong_Sign(value) < 0)
+            result = PY_SSIZE_T_MIN;
+        else
+            result = PY_SSIZE_T_MAX;
+    } else {
+        /* Otherwise replace the error with caller's error object. */
+        PyErr_Format(err, "cannot fit '%.200s' into an index-sized integer", item->cls->tp_name);
     }
 
-    PyErr_Format(PyExc_TypeError, "'%.200s' object cannot be interpreted "
-                                  "as an index",
-                 o->cls->tp_name);
-    return -1;
+finish:
+    Py_DECREF(value);
+    return result;
 }
 }

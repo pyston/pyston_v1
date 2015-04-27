@@ -155,6 +155,10 @@ def libc_ver(executable=sys.executable,lib='',version='',
         The file is read and scanned in chunks of chunksize bytes.
 
     """
+    # Pyston change: hard code pyston executable libc version
+    if executable == sys.executable:
+        return ("glibc", "2.6")
+
     if hasattr(os.path, 'realpath'):
         # Python 2.2 introduced os.path.realpath(); it is used
         # here to work around problems with Cygwin not being

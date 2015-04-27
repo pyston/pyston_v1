@@ -390,20 +390,27 @@ extern "C" Box* floatRMod(BoxedFloat* lhs, Box* rhs) {
     }
 }
 
-extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs) {
+extern "C" Box* floatPowFloat(BoxedFloat* lhs, BoxedFloat* rhs, Box* mod = None) {
     assert(lhs->cls == float_cls);
     assert(rhs->cls == float_cls);
+    if (mod != None)
+        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
     return boxFloat(pow(lhs->d, rhs->d));
 }
 
-extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs) {
+extern "C" Box* floatPowInt(BoxedFloat* lhs, BoxedInt* rhs, Box* mod = None) {
     assert(lhs->cls == float_cls);
     assert(isSubclass(rhs->cls, int_cls));
+    if (mod != None)
+        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
     return boxFloat(pow(lhs->d, rhs->n));
 }
 
-extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs) {
+extern "C" Box* floatPow(BoxedFloat* lhs, Box* rhs, Box* mod) {
     assert(lhs->cls == float_cls);
+    if (mod != None)
+        raiseExcHelper(TypeError, "pow() 3rd argument not allowed unless all arguments are integers");
+
     if (isSubclass(rhs->cls, int_cls)) {
         return floatPowInt(lhs, static_cast<BoxedInt*>(rhs));
     } else if (rhs->cls == float_cls) {
@@ -708,6 +715,19 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
     float_cls->giveAttr(name, new BoxedFunction(cl));
 }
 
+static void _addFuncPow(const char* name, ConcreteCompilerType* rtn_type, void* float_func, void* int_func,
+                        void* boxed_func) {
+    std::vector<ConcreteCompilerType*> v_ffu{ BOXED_FLOAT, BOXED_FLOAT, UNKNOWN };
+    std::vector<ConcreteCompilerType*> v_fiu{ BOXED_FLOAT, BOXED_INT, UNKNOWN };
+    std::vector<ConcreteCompilerType*> v_fuu{ BOXED_FLOAT, UNKNOWN, UNKNOWN };
+
+    CLFunction* cl = createRTFunction(3, 1, false, false);
+    addRTFunction(cl, float_func, rtn_type, v_ffu);
+    addRTFunction(cl, int_func, rtn_type, v_fiu);
+    addRTFunction(cl, boxed_func, UNKNOWN, v_fuu);
+    float_cls->giveAttr(name, new BoxedFunction(cl, { None }));
+}
+
 void setupFloat() {
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));
@@ -729,7 +749,7 @@ void setupFloat() {
     _addFunc("__mul__", BOXED_FLOAT, (void*)floatMulFloat, (void*)floatMulInt, (void*)floatMul);
     float_cls->giveAttr("__rmul__", float_cls->getattr("__mul__"));
 
-    _addFunc("__pow__", BOXED_FLOAT, (void*)floatPowFloat, (void*)floatPowInt, (void*)floatPow);
+    _addFuncPow("__pow__", BOXED_FLOAT, (void*)floatPowFloat, (void*)floatPowInt, (void*)floatPow);
     _addFunc("__sub__", BOXED_FLOAT, (void*)floatSubFloat, (void*)floatSubInt, (void*)floatSub);
     _addFunc("__rsub__", BOXED_FLOAT, (void*)floatRSubFloat, (void*)floatRSubInt, (void*)floatRSub);
 

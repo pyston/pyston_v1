@@ -589,7 +589,9 @@ extern "C" PyObject* PyImport_ImportModule(const char* name) noexcept {
     try {
         // TODO: check if this has the same behaviour as the cpython implementation
         std::string str = name;
-        return import(0, None, &str);
+        BoxedList* silly_list = new BoxedList();
+        listAppendInternal(silly_list, boxString("__doc__"));
+        return import(0, silly_list, &str);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;

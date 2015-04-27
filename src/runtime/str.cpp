@@ -2240,9 +2240,10 @@ Box* strEncode(BoxedString* self, Box* encoding, Box* error) {
 extern "C" Box* strGetitem(BoxedString* self, Box* slice) {
     assert(isSubclass(self->cls, str_cls));
 
-    if (isSubclass(slice->cls, int_cls)) {
-        BoxedInt* islice = static_cast<BoxedInt*>(slice);
-        int64_t n = islice->n;
+    if (PyIndex_Check(slice)) {
+        Py_ssize_t n = PyNumber_AsSsize_t(slice, PyExc_IndexError);
+        if (n == -1 && PyErr_Occurred())
+            throwCAPIException();
         int size = self->size();
         if (n < 0)
             n = size + n;

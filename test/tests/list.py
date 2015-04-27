@@ -4,6 +4,7 @@ print l * 5
 l[0] = 1
 print l
 print l[2]
+print l[2L]
 
 l = range(5)
 while l:

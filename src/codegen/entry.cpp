@@ -281,7 +281,7 @@ public:
 
         // Generate a hash for the module
         HashOStream hash_stream;
-        M->print(hash_stream, 0);
+        llvm::WriteBitcodeToFile(M, hash_stream);
         hash_before_codegen = hash_stream.getHash();
 
         llvm::SmallString<128> cache_file = cache_dir;
