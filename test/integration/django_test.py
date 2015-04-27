@@ -1,7 +1,3 @@
-# run_args: -x
-# - pypa currently has a couple issues with django (set literals with trailing commas, nested attribute names)
-# TODO remove that directive, and also remove it from the subprocess commands down below.
-
 import os
 import signal
 import subprocess
@@ -19,7 +15,7 @@ import shutil
 
 is_pyston = True
 if is_pyston:
-    ARGS = "-xu"
+    ARGS = "-u"
 else:
     ARGS = "-u"
 
