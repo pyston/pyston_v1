@@ -32,13 +32,16 @@ struct Stats {
 private:
     static std::vector<long>* counts;
     static std::unordered_map<int, std::string>* names;
+    static bool enabled;
 
 public:
     static int getStatId(const std::string& name);
 
+    static void setEnabled(bool enabled) { Stats::enabled = enabled; }
     static void log(int id, int count = 1) { (*counts)[id] += count; }
 
-    static void dump();
+    static void clear() { std::fill(counts->begin(), counts->end(), 0); }
+    static void dump(bool includeZeros = true);
     static void endOfInit();
 };
 
@@ -64,6 +67,7 @@ public:
 
 #else
 struct Stats {
+    static void setEnabled(bool enabled) {}
     static void dump() { printf("(Stats disabled)\n"); }
     static void log(int id, int count = 1) {}
     static int getStatId(const std::string& name) { return 0; }

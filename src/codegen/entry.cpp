@@ -361,6 +361,8 @@ static void handle_sigint(int signum) {
     // TODO: this should set a flag saying a KeyboardInterrupt is pending.
     // For now, just call abort(), so that we get a traceback at least.
     fprintf(stderr, "SIGINT!\n");
+    joinRuntime();
+    Stats::dump();
     abort();
 }
 

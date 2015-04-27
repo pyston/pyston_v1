@@ -95,7 +95,6 @@ static int main(int argc, char** argv) {
 
     int code;
     bool force_repl = false;
-    bool stats = false;
     bool unbuffered = false;
     const char* command = NULL;
 
@@ -123,7 +122,7 @@ static int main(int argc, char** argv) {
         } else if (code == 'j') {
             DUMPJIT = true;
         } else if (code == 's') {
-            stats = true;
+            Stats::setEnabled(true);
         } else if (code == 'S') {
             Py_NoSiteFlag = 1;
         } else if (code == 'u') {
@@ -241,8 +240,7 @@ static int main(int argc, char** argv) {
         } catch (ExcInfo e) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
-            if (stats)
-                Stats::dump();
+            Stats::dump();
             return retcode;
         }
     }
@@ -269,8 +267,7 @@ static int main(int argc, char** argv) {
             int retcode = 1;
             (void)handle_toplevel_exn(e, &retcode);
             if (!force_repl) {
-                if (stats)
-                    Stats::dump();
+                Stats::dump();
                 return retcode;
             }
         }
@@ -320,8 +317,7 @@ static int main(int argc, char** argv) {
             } catch (ExcInfo e) {
                 int retcode = 0xdeadbeef; // should never be seen
                 if (handle_toplevel_exn(e, &retcode)) {
-                    if (stats)
-                        Stats::dump();
+                    Stats::dump();
                     return retcode;
                 }
             }
@@ -340,8 +336,7 @@ static int main(int argc, char** argv) {
     int rtncode = joinRuntime();
     _t.split("finishing up");
 
-    if (stats)
-        Stats::dump();
+    Stats::dump();
 
     return rtncode;
 }
