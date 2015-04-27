@@ -440,25 +440,21 @@ static AST_Expression* parseEval(llvm::StringRef source) {
     return parsedExpr;
 }
 
-static CLFunction* compileEval(AST_Expression* parsedExpr, llvm::StringRef fn) {
+static CLFunction* compileEval(AST_Expression* parsedExpr, llvm::StringRef fn, FutureFlags caller_future_flags) {
     // We need body (list of statements) to compile.
     // Obtain this by simply making a single statement which contains the expression.
     AST_Return* stmt = new AST_Return();
     stmt->value = parsedExpr->body;
     std::vector<AST_stmt*> body = { stmt };
 
-    CompiledFunction* caller_cf = getTopCompiledFunction();
-    assert(caller_cf != NULL);
-    assert(caller_cf->clfunc->source != NULL);
-    FutureFlags caller_future_flags = caller_cf->clfunc->source->future_flags;
-
     return compileForEvalOrExec(parsedExpr, std::move(body), fn, caller_future_flags);
 }
 
 Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     Box* flags = _args[0];
-    Box* dont_inherit = _args[1];
-    RELEASE_ASSERT(dont_inherit == boxInt(0), "");
+
+    RELEASE_ASSERT(PyInt_Check(_args[1]), "");
+    bool dont_inherit = (bool)static_cast<BoxedInt*>(_args[1])->n;
 
     RELEASE_ASSERT(flags->cls == int_cls, "");
     int64_t iflags = static_cast<BoxedInt*>(flags)->n;
@@ -488,20 +484,30 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     llvm::StringRef filename_str = static_cast<BoxedString*>(fn)->s();
     llvm::StringRef type_str = static_cast<BoxedString*>(type)->s();
 
-    if (iflags & ~(/*PyCF_MASK | PyCF_MASK_OBSOLETE | PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
+    if (iflags & ~(PyCF_MASK | PyCF_MASK_OBSOLETE | /* PyCF_DONT_IMPLY_DEDENT | */ PyCF_ONLY_AST)) {
         raiseExcHelper(ValueError, "compile(): unrecognised flags");
     }
 
     bool only_ast = (bool)(iflags & PyCF_ONLY_AST);
+
     iflags &= ~PyCF_ONLY_AST;
+
+    FutureFlags arg_future_flags = iflags & PyCF_MASK;
+    FutureFlags future_flags;
+    if (dont_inherit) {
+        future_flags = arg_future_flags;
+    } else {
+        CompiledFunction* caller_cf = getTopCompiledFunction();
+        assert(caller_cf != NULL);
+        assert(caller_cf->clfunc->source != NULL);
+        FutureFlags caller_future_flags = caller_cf->clfunc->source->future_flags;
+        future_flags = arg_future_flags | caller_future_flags;
+    }
+
+    iflags &= !(PyCF_MASK | PyCF_MASK_OBSOLETE);
     RELEASE_ASSERT(iflags == 0, "");
 
     AST* parsed;
-
-    CompiledFunction* caller_cf = getTopCompiledFunction();
-    assert(caller_cf != NULL);
-    assert(caller_cf->clfunc->source != NULL);
-    FutureFlags caller_future_flags = caller_cf->clfunc->source->future_flags;
 
     if (PyAST_Check(source)) {
         parsed = unboxAst(source);
@@ -528,11 +534,11 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
         // TODO: CPython parses execs as Modules
         if (parsed->type != AST_TYPE::Suite)
             raiseExcHelper(TypeError, "expected Suite node, got %s", boxAst(parsed)->cls->tp_name);
-        cl = compileExec(static_cast<AST_Suite*>(parsed), filename_str, caller_future_flags);
+        cl = compileExec(static_cast<AST_Suite*>(parsed), filename_str, future_flags);
     } else if (type_str == "eval") {
         if (parsed->type != AST_TYPE::Expression)
             raiseExcHelper(TypeError, "expected Expression node, got %s", boxAst(parsed)->cls->tp_name);
-        cl = compileEval(static_cast<AST_Expression*>(parsed), filename_str);
+        cl = compileEval(static_cast<AST_Expression*>(parsed), filename_str, future_flags);
     } else {
         raiseExcHelper(ValueError, "compile() arg 3 must be 'exec', 'eval' or 'single'");
     }
@@ -540,7 +546,7 @@ Box* compile(Box* source, Box* fn, Box* type, Box** _args) {
     return codeForCLFunction(cl);
 }
 
-Box* eval(Box* boxedCode, Box* globals, Box* locals) {
+static Box* evalMain(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
     if (globals == None)
         globals = NULL;
 
@@ -577,7 +583,7 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
     CLFunction* cl;
     if (boxedCode->cls == str_cls) {
         AST_Expression* parsed = parseEval(static_cast<BoxedString*>(boxedCode)->s());
-        cl = compileEval(parsed, "<string>");
+        cl = compileEval(parsed, "<string>", caller_future_flags);
     } else if (boxedCode->cls == code_cls) {
         cl = clfunctionFromCode(boxedCode);
     } else {
@@ -585,6 +591,15 @@ Box* eval(Box* boxedCode, Box* globals, Box* locals) {
     }
 
     return evalOrExec(cl, globals, locals);
+}
+
+Box* eval(Box* boxedCode, Box* globals, Box* locals) {
+    CompiledFunction* caller_cf = getTopCompiledFunction();
+    assert(caller_cf != NULL);
+    assert(caller_cf->clfunc->source != NULL);
+    FutureFlags caller_future_flags = caller_cf->clfunc->source->future_flags;
+
+    return evalMain(boxedCode, globals, locals, caller_future_flags);
 }
 
 Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_flags) {
@@ -658,14 +673,15 @@ Box* exec(Box* boxedCode, Box* globals, Box* locals, FutureFlags caller_future_f
 
 extern "C" PyObject* PyRun_StringFlags(const char* str, int start, PyObject* globals, PyObject* locals,
                                        PyCompilerFlags* flags) noexcept {
+    FutureFlags future_flags = flags->cf_flags;
 
     try {
         // TODO pass future_flags (the information is in PyCompilerFlags but we need to
         // unify the format...)
         if (start == Py_file_input)
-            return exec(boxString(str), globals, locals, 0);
+            return exec(boxString(str), globals, locals, future_flags);
         else if (start == Py_eval_input)
-            return eval(boxString(str), globals, locals);
+            return evalMain(boxString(str), globals, locals, future_flags);
     } catch (ExcInfo e) {
         setCAPIException(e);
         return NULL;
