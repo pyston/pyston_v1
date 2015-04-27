@@ -29,6 +29,7 @@ namespace pyston {
 namespace gc {
 
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
+    STAT_TIMER(t0, "us_timer_gc_alloc");
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
 
 #ifndef NVALGRIND

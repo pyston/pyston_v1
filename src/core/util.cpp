@@ -16,6 +16,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
@@ -25,6 +28,11 @@
 #include "core/types.h"
 
 namespace pyston {
+
+uint64_t getCPUTicks() {
+    unsigned int _unused;
+    return __rdtscp(&_unused);
+}
 
 int Timer::level = 0;
 
@@ -36,7 +44,7 @@ void Timer::restart(const char* newdesc) {
     assert(ended);
 
     desc = newdesc;
-    gettimeofday(&start_time, NULL);
+    start_time = getCPUTicks();
     Timer::level++;
     ended = false;
 }
@@ -46,14 +54,14 @@ void Timer::restart(const char* newdesc, long new_min_usec) {
     restart(newdesc);
 }
 
-long Timer::end() {
+uint64_t Timer::end(uint64_t* ended_at) {
     if (!ended) {
-        timeval end;
-        gettimeofday(&end, NULL);
-        long us = 1000000L * (end.tv_sec - start_time.tv_sec) + (end.tv_usec - start_time.tv_usec);
-
+        uint64_t end = getCPUTicks();
+        uint64_t duration = end - start_time;
         Timer::level--;
         if (VERBOSITY("time") >= 2 && desc) {
+            uint64_t us = (uint64_t)(duration / Stats::estimateCPUFreq());
+
             if (us > min_usec) {
                 for (int i = 0; i < Timer::level; i++) {
                     putchar(' ');
@@ -70,15 +78,17 @@ long Timer::end() {
                 fflush(stdout);
             }
         }
+        if (ended_at)
+            *ended_at = end;
         ended = true;
-        return us;
+        return duration;
     }
     return -1;
 }
 
 Timer::~Timer() {
     if (!ended) {
-        long t = end();
+        uint64_t t = end();
         if (exit_callback)
             exit_callback(t);
     }

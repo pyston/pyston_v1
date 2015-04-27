@@ -86,28 +86,36 @@ Context* getReturnContextForGeneratorFrame(void* frame_addr) {
 }
 
 void generatorEntry(BoxedGenerator* g) {
-    assert(g->cls == generator_cls);
-    assert(g->function->cls == function_cls);
+    {
+        STAT_TIMER2(t0, "us_timer_generator_toplevel", g->timer_time);
 
-    threading::pushGenerator(g, g->stack_begin, g->returnContext);
+        assert(g->cls == generator_cls);
+        assert(g->function->cls == function_cls);
 
-    try {
-        RegisterHelper context_registerer(g, __builtin_frame_address(0));
+        threading::pushGenerator(g, g->stack_begin, g->returnContext);
+        try {
+            RegisterHelper context_registerer(g, __builtin_frame_address(0));
 
-        // call body of the generator
-        BoxedFunctionBase* func = g->function;
+            // call body of the generator
+            BoxedFunctionBase* func = g->function;
 
-        Box** args = g->args ? &g->args->elts[0] : nullptr;
-        callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, func->globals, g->arg1, g->arg2,
-                   g->arg3, args);
-    } catch (ExcInfo e) {
-        // unhandled exception: propagate the exception to the caller
-        g->exception = e;
+            Box** args = g->args ? &g->args->elts[0] : nullptr;
+            callCLFunc(func->f, nullptr, func->f->numReceivedArgs(), func->closure, g, func->globals, g->arg1, g->arg2,
+                       g->arg3, args);
+        } catch (ExcInfo e) {
+            // unhandled exception: propagate the exception to the caller
+            g->exception = e;
+        }
+
+        // we returned from the body of the generator. next/send/throw will notify the caller
+        g->entryExited = true;
+        threading::popGenerator();
+
+#if !DISABLE_STATS
+        g->timer_time = getCPUTicks(); // store off the timer that our caller (in g->returnContext) will resume at
+        STAT_TIMER_NAME(t0).pause(g->timer_time);
+#endif
     }
-
-    // we returned from the body of the generator. next/send/throw will notify the caller
-    g->entryExited = true;
-    threading::popGenerator();
     swapContext(&g->context, g->returnContext, 0);
 }
 
@@ -130,7 +138,21 @@ Box* generatorSend(Box* s, Box* v) {
 
     self->returnValue = v;
     self->running = true;
+
+#if !DISABLE_STATS
+    // store off the time that the generator will use to initialize its toplevel timer
+    self->timer_time = getCPUTicks();
+    StatTimer* current_timers = StatTimer::swapStack(self->statTimers, self->timer_time);
+#endif
+
     swapContext(&self->returnContext, self->context, (intptr_t)self);
+
+#if !DISABLE_STATS
+    // if the generator exited we use the time that generatorEntry stored in self->timer_time (the same time it paused
+    // its timer at).
+    self->statTimers = StatTimer::swapStack(current_timers, self->entryExited ? self->timer_time : getCPUTicks());
+#endif
+
     self->running = false;
 
     // propagate exception to the caller

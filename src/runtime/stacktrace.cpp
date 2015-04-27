@@ -96,6 +96,7 @@ void unwindExc(Box* exc_obj) {
 
 void raiseRaw(const ExcInfo& e) __attribute__((__noreturn__));
 void raiseRaw(const ExcInfo& e) {
+    STAT_TIMER(t0, "us_timer_raiseraw");
     // Should set these to None before getting here:
     assert(e.type);
     assert(e.value);

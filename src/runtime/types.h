@@ -817,6 +817,11 @@ public:
     struct Context* context, *returnContext;
     void* stack_begin;
 
+#if !DISABLE_STATS
+    StatTimer* statTimers;
+    uint64_t timer_time;
+#endif
+
     BoxedGenerator(BoxedFunctionBase* function, Box* arg1, Box* arg2, Box* arg3, Box** args);
 
     DEFAULT_CLASS(generator_cls);
