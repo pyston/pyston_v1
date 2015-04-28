@@ -513,6 +513,15 @@ BoxedTraceback* getTraceback() {
         return new BoxedTraceback();
     }
 
+    if (!ENABLE_TRACEBACKS) {
+        static bool printed_warning = false;
+        if (!printed_warning) {
+            printed_warning = true;
+            fprintf(stderr, "Warning: can't get traceback since ENABLE_TRACEBACKS=0\n");
+        }
+        return new BoxedTraceback();
+    }
+
     Timer _t("getTraceback", 1000);
 
     std::vector<const LineInfo*> entries;

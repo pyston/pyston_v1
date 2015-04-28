@@ -87,6 +87,57 @@ static bool handle_toplevel_exn(const ExcInfo& e, int* retcode) {
     return false;
 }
 
+static bool force_repl = false;
+static bool unbuffered = false;
+
+int handleArg(char code) {
+    if (code == 'O')
+        FORCE_OPTIMIZE = true;
+    else if (code == 't')
+        TRAP = true;
+    else if (code == 'q')
+        GLOBAL_VERBOSITY = 0;
+    else if (code == 'v')
+        GLOBAL_VERBOSITY++;
+    else if (code == 'd')
+        SHOW_DISASM = true;
+    else if (code == 'I')
+        FORCE_INTERPRETER = true;
+    else if (code == 'i')
+        force_repl = true;
+    else if (code == 'n') {
+        ENABLE_INTERPRETER = false;
+    } else if (code == 'p') {
+        PROFILE = true;
+    } else if (code == 'j') {
+        DUMPJIT = true;
+    } else if (code == 's') {
+        Stats::setEnabled(true);
+    } else if (code == 'S') {
+        Py_NoSiteFlag = 1;
+    } else if (code == 'u') {
+        unbuffered = true;
+    } else if (code == 'r') {
+        USE_STRIPPED_STDLIB = true;
+    } else if (code == 'b') {
+        USE_REGALLOC_BASIC = false;
+    } else if (code == 'x') {
+        ENABLE_PYPA_PARSER = false;
+    } else if (code == 'E') {
+        Py_IgnoreEnvironmentFlag = 1;
+    } else if (code == 'P') {
+        PAUSE_AT_ABORT = true;
+    } else if (code == 'F') {
+        CONTINUE_AFTER_FATAL = true;
+    } else if (code == 'T') {
+        ENABLE_TRACEBACKS = false;
+    } else {
+        fprintf(stderr, "Unknown option: -%c\n", code);
+        return 2;
+    }
+    return 0;
+}
+
 static int main(int argc, char** argv) {
     Timer _t("for jit startup");
     // llvm::sys::PrintStackTraceOnErrorSignal();
@@ -94,69 +145,37 @@ static int main(int argc, char** argv) {
     llvm::llvm_shutdown_obj Y;
 
     int code;
-    bool force_repl = false;
-    bool unbuffered = false;
     const char* command = NULL;
+
+    char* env_args = getenv("PYSTON_RUN_ARGS");
+
+    if (env_args) {
+        while (*env_args) {
+            int r = handleArg(*env_args);
+            if (r)
+                return r;
+            env_args++;
+        }
+    }
 
     // Suppress getopt errors so we can throw them ourselves
     opterr = 0;
-    while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuP")) != -1) {
-        if (code == 'O')
-            FORCE_OPTIMIZE = true;
-        else if (code == 't')
-            TRAP = true;
-        else if (code == 'q')
-            GLOBAL_VERBOSITY = 0;
-        else if (code == 'v')
-            GLOBAL_VERBOSITY++;
-        else if (code == 'd')
-            SHOW_DISASM = true;
-        else if (code == 'I')
-            FORCE_INTERPRETER = true;
-        else if (code == 'i')
-            force_repl = true;
-        else if (code == 'n') {
-            ENABLE_INTERPRETER = false;
-        } else if (code == 'p') {
-            PROFILE = true;
-        } else if (code == 'j') {
-            DUMPJIT = true;
-        } else if (code == 's') {
-            Stats::setEnabled(true);
-        } else if (code == 'S') {
-            Py_NoSiteFlag = 1;
-        } else if (code == 'u') {
-            unbuffered = true;
-        } else if (code == 'r') {
-            USE_STRIPPED_STDLIB = true;
-        } else if (code == 'b') {
-            USE_REGALLOC_BASIC = false;
-        } else if (code == 'x') {
-            ENABLE_PYPA_PARSER = false;
-        } else if (code == 'E') {
-            Py_IgnoreEnvironmentFlag = 1;
-        } else if (code == 'P') {
-            PAUSE_AT_ABORT = true;
-        } else if (code == 'F') {
-            CONTINUE_AFTER_FATAL = true;
-        } else if (code == 'c') {
+    while ((code = getopt(argc, argv, "+:OqdIibpjtrsSvnxEc:FuPT")) != -1) {
+        if (code == 'c') {
             assert(optarg);
             command = optarg;
             // no more option parsing; the rest of our arguments go into sys.argv.
             break;
+        } else if (code == ':') {
+            fprintf(stderr, "Argument expected for the -%c option\n", optopt);
+            return 2;
+        } else if (code == '?') {
+            fprintf(stderr, "Unknown option: -%c\n", optopt);
+            return 2;
         } else {
-            if (code == ':') {
-                fprintf(stderr, "Argument expected for the -%c option\n", optopt);
-                return 2;
-            }
-
-            if (code == '?') {
-                fprintf(stderr, "Unknown option: -%c\n", optopt);
-                return 2;
-            }
-
-            fprintf(stderr, "Unknown getopt() error.  '%c' '%c'\n", code, optopt);
-            abort();
+            int r = handleArg(code);
+            if (r)
+                return r;
         }
     }
 
