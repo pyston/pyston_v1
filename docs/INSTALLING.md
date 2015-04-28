@@ -34,6 +34,7 @@ git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
 
 cd ~/pyston
+make llvm_up
 make
 make check
 ```
