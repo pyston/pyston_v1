@@ -465,9 +465,9 @@ check_format:
 	$(ECHO) checking formatting...
 	$(VERB) cd src && ../tools/check_format.sh $(LLVM_BIN)/clang-format
 else
-format:
+format: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(HOME)/pyston-build-release format
-check_format:
+check_format: $(CMAKE_SETUP_RELEASE)
 	$(NINJA) -C $(HOME)/pyston-build-release check-format
 endif
 

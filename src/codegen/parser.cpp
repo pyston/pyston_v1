@@ -1012,9 +1012,9 @@ AST_Module* parse_file(const char* fn) {
 
 const char* getMagic() {
     if (ENABLE_PYPA_PARSER)
-        return "a\ncJ";
+        return "a\ncK";
     else
-        return "a\ncj";
+        return "a\nck";
 }
 
 #define MAGIC_STRING_LENGTH 4
