@@ -13,3 +13,5 @@ x = 2
 z = 2
 True = "new_true"
 f()
+
+assert globals() is globals()
