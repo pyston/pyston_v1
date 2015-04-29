@@ -948,7 +948,7 @@ $(patsubst %, $$1: %/nosearch_$$1 ;,$(EXTRA_SEARCH_DIRS))
 )
 endef
 
-RUN_DEPS := ext_pyston
+RUN_DEPS :=
 
 define make_target
 $(eval \
@@ -1135,9 +1135,16 @@ bench_exceptions:
 
 TEST_EXT_MODULE_NAMES := basic_test descr_test slots_test
 
+# SELF_HOST_EXTENSIONS = SELF_HOST or USE_CMAKE
+# - cmake doesn't support non-self-hosting extensions
+SELF_HOST_EXTENSIONS := $(SELF_HOST)
+ifeq ($(USE_CMAKE),1)
+	SELF_HOST_EXTENSIONS := 1
+endif
+
 .PHONY: ext_pyston
 ext_pyston: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/%.pyston.so)
-ifneq ($(SELF_HOST),1)
+ifneq ($(SELF_HOST_EXTENSIONS),1)
 $(TEST_DIR)/test_extension/%.pyston.so: $(TEST_DIR)/test_extension/%.o
 	$(CC) -pthread -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro $< -o $@ -g
 $(TEST_DIR)/test_extension/%.o: $(TEST_DIR)/test_extension/%.c $(wildcard from_cpython/Include/*.h)
@@ -1156,13 +1163,13 @@ endif
 .PHONY: ext_pyston_selfhost dbg_ext_pyston_selfhost ext_pyston_selfhost_release
 ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
 	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_dbg setup.py build
-	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
+	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
 dbg_ext_pyston_selfhost: pyston_dbg $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
 	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 $(GDB) $(GDB_CMDS) --args ../../pyston_dbg setup.py build
-	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
+	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
 ext_pyston_selfhost_release: pyston_release $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
 	cd $(TEST_DIR)/test_extension; DISTUTILS_DEBUG=1 time ../../pyston_release setup.py build
-	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.unknown-2.7/%.pyston.so) .
+	cd $(TEST_DIR)/test_extension; ln -sf $(TEST_EXT_MODULE_NAMES:%=build/lib.linux2-2.7/%.pyston.so) .
 
 .PHONY: ext_python ext_pythondbg
 ext_python: $(TEST_EXT_MODULE_NAMES:%=$(TEST_DIR)/test_extension/*.c)
