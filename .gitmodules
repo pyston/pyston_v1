@@ -13,3 +13,6 @@
 [submodule "lz4"]
 	path = lz4
 	url = git://github.com/Cyan4973/lz4.git
+[submodule "test/integration/pycrypto"]
+	path = test/integration/pycrypto
+	url = https://github.com/dlitz/pycrypto.git
