@@ -2242,6 +2242,7 @@ void setupRuntime() {
     function_cls->giveAttr("func_code", new (pyston_getset_cls) BoxedGetsetDescriptor(functionCode, NULL, NULL));
     function_cls->giveAttr("func_defaults",
                            new (pyston_getset_cls) BoxedGetsetDescriptor(functionDefaults, NULL, NULL));
+    function_cls->giveAttr("func_name", function_cls->getattr("__name__"));
     function_cls->freeze();
 
     builtin_function_or_method_cls->giveAttr(
