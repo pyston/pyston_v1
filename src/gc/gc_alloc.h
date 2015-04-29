@@ -28,6 +28,7 @@ namespace pyston {
 
 namespace gc {
 
+static StatCounter gc_alloc_bytes("zzz_gc_alloc_bytes");
 extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
     STAT_TIMER(t0, "us_timer_gc_alloc");
     size_t alloc_bytes = bytes + sizeof(GCAllocation);
@@ -90,8 +91,10 @@ extern "C" inline void* gc_alloc(size_t bytes, GCKind kind_id) {
 
 // if (VERBOSITY()) printf("Allocated %ld bytes at [%p, %p)\n", bytes, r, (char*)r + bytes);
 #endif
-    // printf("Allocated %p\n", r);
 
+#if STAT_ALLOCATIONS
+    gc_alloc_bytes.log(bytes);
+#endif
 
     return r;
 }
@@ -128,6 +131,10 @@ extern "C" inline void* gc_realloc(void* ptr, size_t bytes) {
         assert(bytes < (1 << 31));
         alloc->kind_data = bytes;
     }
+
+#if STAT_ALLOCATIONS
+    gc_alloc_bytes.log(bytes);
+#endif
 
     return rtn;
 }
