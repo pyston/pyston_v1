@@ -462,7 +462,7 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
 
     if (ENABLE_OSR && backedge && (globals->cls == module_cls)) {
         bool can_osr = !FORCE_INTERPRETER && (globals->cls == module_cls);
-        if (can_osr && edgecount++ > OSR_THRESHOLD_INTERPRETER) {
+        if (can_osr && edgecount++ == OSR_THRESHOLD_INTERPRETER) {
             eraseDeadSymbols();
 
             const OSREntryDescriptor* found_entry = nullptr;
@@ -493,6 +493,15 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                     ASSERT(it != sym_table.end(), "%s", name.c_str());
                     sorted_symbol_table[it->first] = sym_table.getMapped(it->second);
                 }
+            }
+
+            // LLVM has a limit on the number of operands a machine instruction can have (~255),
+            // in order to not hit the limit with the patchpoints cancel OSR when we have a high number of symbols.
+            if (sorted_symbol_table.size() > 225) {
+                static StatCounter times_osr_cancel("num_osr_cancel_to_many_syms");
+                times_osr_cancel.log();
+                next_block = node->target;
+                return Value();
             }
 
             if (generator)
