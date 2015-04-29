@@ -55,6 +55,14 @@ class E():
             print "f", a
         return f
 
+    def __eq__(self, other):
+        print "eq"
+        return self.n == other.n
+
+    def __ne__(self, other):
+        print "ne"
+        return self.n != other.n
+
 e = E(1)
 print e
 print e.n
@@ -63,6 +71,8 @@ print e[1]
 print e[1:2]
 print len(e)
 print e()("test")
+print e == E(1)
+print e != E(1)
 
 def str2():
     return "str2"
@@ -82,6 +92,8 @@ class F:
 
 print bool(F(0))
 print bool(F(1))
+print F(0) == F(0)
+print F(0) != F(0)
 
 f = F(0)
 try:
