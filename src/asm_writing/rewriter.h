@@ -19,6 +19,7 @@
 #include <memory>
 #include <tuple>
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 
 #include "asm_writing/assembler.h"
@@ -253,6 +254,9 @@ private:
     bool is_arg;
     Location arg_loc;
 
+    bool is_constant;
+    uint64_t constant_value;
+
     llvm::SmallSet<std::tuple<int, uint64_t, bool>, 4> attr_guards; // used to detect duplicate guards
 
     // Gets a copy of this variable in a register, spilling/reloading if necessary.
@@ -278,7 +282,7 @@ public:
     static int nvars;
 #endif
 
-    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false) {
+    RewriterVar(Rewriter* rewriter) : rewriter(rewriter), next_use(0), is_arg(false), is_constant(false) {
 #ifndef NDEBUG
         nvars++;
 #endif
@@ -310,7 +314,6 @@ private:
     // By keeping track of the last known value of every register and reusing it.
     class ConstLoader {
     private:
-        uint64_t last_known_value[assembler::Register::numRegs()];
         const uint64_t unknown_value = 0;
         Rewriter* rewriter;
 
@@ -321,15 +324,6 @@ private:
     public:
         ConstLoader(Rewriter* rewriter);
 
-        bool hasKnownValue(assembler::Register reg) const { return last_known_value[reg.regnum] != unknown_value; }
-        uint64_t getKnownValue(assembler::Register reg) const { return last_known_value[reg.regnum]; }
-        void setKnownValue(assembler::Register reg, uint64_t val) { last_known_value[reg.regnum] = val; }
-        void invalidate(assembler::Register reg) { setKnownValue(reg, unknown_value); }
-        void invalidateAll();
-        void copy(assembler::Register src_reg, assembler::Register dst_reg) {
-            setKnownValue(dst_reg, getKnownValue(src_reg));
-        }
-
         // Searches if the specified value is already loaded into a register and if so it return the register
         assembler::Register findConst(uint64_t val, bool& found_value);
 
@@ -338,6 +332,8 @@ private:
 
         // Loads the constant into any register or if already in a register just return it
         assembler::Register loadConst(uint64_t val, Location otherThan = Location::any());
+
+        llvm::DenseMap<uint64_t, RewriterVar*> constToVar;
     };
 
 
@@ -414,6 +410,8 @@ private:
 
     // Create a new var with no location.
     RewriterVar* createNewVar();
+    RewriterVar* createNewConstantVar(uint64_t val);
+
     // Do the bookkeeping to say that var is now also in location l
     void addLocationToVar(RewriterVar* var, Location l);
     // Do the bookkeeping to say that var is no longer in location l

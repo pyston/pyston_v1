@@ -125,6 +125,21 @@ void Location::dump() const {
         return;
     }
 
+    if (type == AnyReg) {
+        printf("anyreg\n");
+        return;
+    }
+
+    if (type == None) {
+        printf("none\n");
+        return;
+    }
+
+    if (type == Uninitialized) {
+        printf("uninitialized\n");
+        return;
+    }
+
     RELEASE_ASSERT(0, "%d", type);
 }
 
@@ -137,35 +152,39 @@ void RewriterVar::addGuard(uint64_t val) {
 }
 
 Rewriter::ConstLoader::ConstLoader(Rewriter* rewriter) : rewriter(rewriter) {
-    invalidateAll();
 }
 
 bool Rewriter::ConstLoader::tryRegRegMove(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
     // copy the value if there is a register which contains already the value
     bool found_value = false;
     assembler::Register src_reg = findConst(val, found_value);
     if (found_value) {
         if (src_reg != dst_reg)
             rewriter->assembler->mov(src_reg, dst_reg);
-        setKnownValue(dst_reg, val);
         return true;
     }
     return false;
 }
 
 bool Rewriter::ConstLoader::tryLea(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
     // for large constants it maybe beneficial to create the value with a LEA from a known const value
     if (isLargeConstant(val)) {
         for (int reg_num = 0; reg_num < assembler::Register::numRegs(); ++reg_num) {
-            if (!hasKnownValue(assembler::Register(reg_num)))
+            RewriterVar* var = rewriter->vars_by_location[assembler::Register(reg_num)];
+            if (var == NULL)
+                continue;
+            if (!var->is_constant)
                 continue;
 
-            int64_t offset = val - last_known_value[reg_num];
+            int64_t offset = val - var->constant_value;
             if (isLargeConstant(offset))
                 continue; // LEA can only handle small offsets
 
             rewriter->assembler->lea(assembler::Indirect(assembler::Register(reg_num), offset), dst_reg);
-            setKnownValue(dst_reg, val);
             return true;
         }
         // TODO: maybe add RIP relative LEA
@@ -174,33 +193,32 @@ bool Rewriter::ConstLoader::tryLea(uint64_t val, assembler::Register dst_reg) {
 }
 
 void Rewriter::ConstLoader::moveImmediate(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
     // fallback use a normal: mov reg, imm
     rewriter->assembler->mov(assembler::Immediate(val), dst_reg);
-    setKnownValue(dst_reg, val);
-}
-
-void Rewriter::ConstLoader::invalidateAll() {
-    for (int reg_num = 0; reg_num < assembler::Register::numRegs(); ++reg_num)
-        last_known_value[reg_num] = unknown_value;
 }
 
 assembler::Register Rewriter::ConstLoader::findConst(uint64_t val, bool& found_value) {
-    found_value = false;
+    assert(rewriter->phase_emitting);
 
-    if (unknown_value == val)
-        return assembler::Register(0);
-
-    for (int reg_num = 0; reg_num < assembler::Register::numRegs(); ++reg_num) {
-        if (last_known_value[reg_num] == val) {
-            found_value = true;
-            return assembler::Register(reg_num);
+    if (constToVar.count(val) > 0) {
+        RewriterVar* var = constToVar[val];
+        for (Location l : var->locations) {
+            if (l.type == Location::Register) {
+                found_value = true;
+                return l.asRegister();
+            }
         }
     }
 
+    found_value = false;
     return assembler::Register(0);
 }
 
 void Rewriter::ConstLoader::loadConstIntoReg(uint64_t val, assembler::Register dst_reg) {
+    assert(rewriter->phase_emitting);
+
     if (tryRegRegMove(val, dst_reg))
         return;
 
@@ -211,6 +229,8 @@ void Rewriter::ConstLoader::loadConstIntoReg(uint64_t val, assembler::Register d
 }
 
 assembler::Register Rewriter::ConstLoader::loadConst(uint64_t val, Location otherThan) {
+    assert(rewriter->phase_emitting);
+
     bool found_value = false;
     assembler::Register reg = findConst(val, found_value);
     if (found_value)
@@ -479,7 +499,6 @@ assembler::Register RewriterVar::getInReg(Location dest, bool allow_constant_in_
                 assert(dest_reg != reg); // should have been caught by the previous case
 
                 rewriter->assembler->mov(reg, dest_reg);
-                rewriter->const_loader.copy(reg, dest_reg);
                 rewriter->addLocationToVar(this, dest_reg);
                 return dest_reg;
             } else {
@@ -581,17 +600,23 @@ void Rewriter::_trap() {
 }
 
 RewriterVar* Rewriter::loadConst(int64_t val, Location dest) {
+    RewriterVar*& const_loader_var = const_loader.constToVar[val];
+    if (const_loader_var)
+        return const_loader_var;
+
     if (!isLargeConstant(val)) {
         Location l(Location::Constant, val);
         RewriterVar*& var = vars_by_location[l];
         if (!var) {
-            var = createNewVar();
+            var = createNewConstantVar(val);
             var->locations.insert(l);
         }
+        const_loader_var = var;
         return var;
     } else {
-        RewriterVar* result = createNewVar();
+        RewriterVar* result = createNewConstantVar(val);
         addAction([=]() { this->_loadConst(result, val, dest); }, {}, ActionType::NORMAL);
+        const_loader_var = result;
         return result;
     }
 }
@@ -816,7 +841,6 @@ void Rewriter::_call(RewriterVar* result, bool can_call_into_python, void* func_
 
     const_loader.loadConstIntoReg((uint64_t)func_addr, r);
     assembler->callq(r);
-    const_loader.invalidateAll(); // TODO: we only need to invalidate the clobbered regs
 
     assert(vars_by_location.count(assembler::RAX) == 0);
     result->initializeInReg(assembler::RAX);
@@ -1278,7 +1302,6 @@ void Rewriter::spillRegister(assembler::Register reg, Location preserve) {
             continue;
 
         assembler->mov(reg, new_reg);
-        const_loader.copy(reg, new_reg);
 
         addLocationToVar(var, new_reg);
         removeLocationFromVar(var, reg);
@@ -1321,20 +1344,10 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
         bool found = false;
         assembler::Register best_reg(0);
 
-        // prefer registers which don't have a known const value
-        for (assembler::Register reg : allocatable_regs) {
-            if (Location(reg) != otherThan) {
-                if (!const_loader.hasKnownValue(reg) && vars_by_location.count(reg) == 0) {
-                    const_loader.invalidate(reg);
-                    return reg;
-                }
-            }
-        }
-
+        // TODO prioritize spilling a constant register?
         for (assembler::Register reg : allocatable_regs) {
             if (Location(reg) != otherThan) {
                 if (vars_by_location.count(reg) == 0) {
-                    const_loader.invalidate(reg);
                     return reg;
                 }
                 RewriterVar* var = vars_by_location[reg];
@@ -1353,7 +1366,6 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
         assert(found);
         spillRegister(best_reg, /* preserve */ otherThan);
         assert(vars_by_location.count(best_reg) == 0);
-        const_loader.invalidate(best_reg);
         return best_reg;
     } else if (dest.type == Location::Register) {
         assembler::Register reg(dest.regnum);
@@ -1363,7 +1375,6 @@ assembler::Register Rewriter::allocReg(Location dest, Location otherThan) {
         }
 
         assert(vars_by_location.count(reg) == 0);
-        const_loader.invalidate(reg);
         return reg;
     } else {
         RELEASE_ASSERT(0, "%d", dest.type);
@@ -1430,6 +1441,13 @@ RewriterVar* Rewriter::createNewVar() {
 
     RewriterVar* var = new RewriterVar(this);
     vars.push_back(var);
+    return var;
+}
+
+RewriterVar* Rewriter::createNewConstantVar(uint64_t val) {
+    RewriterVar* var = createNewVar();
+    var->is_constant = true;
+    var->constant_value = val;
     return var;
 }
 
