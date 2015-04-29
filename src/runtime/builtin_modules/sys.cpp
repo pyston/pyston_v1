@@ -126,6 +126,10 @@ Box* sysGetFilesystemEncoding() {
     return None;
 }
 
+Box* sysGetRecursionLimit() {
+    return PyInt_FromLong(Py_GetRecursionLimit());
+}
+
 extern "C" int PySys_SetObject(const char* name, PyObject* v) noexcept {
     try {
         if (!v) {
@@ -425,6 +429,10 @@ void setupSys() {
     sys_module->giveAttr("getfilesystemencoding",
                          new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetFilesystemEncoding, STR, 0),
                                                           "getfilesystemencoding"));
+
+    sys_module->giveAttr(
+        "getrecursionlimit",
+        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)sysGetRecursionLimit, UNKNOWN, 0), "getrecursionlimit"));
 
     sys_module->giveAttr("meta_path", new BoxedList());
     sys_module->giveAttr("path_hooks", new BoxedList());
