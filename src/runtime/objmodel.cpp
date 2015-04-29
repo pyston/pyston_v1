@@ -400,7 +400,7 @@ void BoxedClass::finishInitialization() {
     }
 
     assert(!this->tp_dict);
-    this->tp_dict = makeAttrWrapper(this);
+    this->tp_dict = this->getAttrWrapper();
 
     commonClassSetup(this);
 }
@@ -490,19 +490,31 @@ HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
 
     HiddenClass* rtn = new HiddenClass(this);
     this->children[attr] = rtn;
-    rtn->attr_offsets[attr] = attr_offsets.size();
+    rtn->attr_offsets[attr] = this->attributeArraySize();
+    assert(rtn->attributeArraySize() == this->attributeArraySize() + 1);
     return rtn;
 }
 
+HiddenClass* HiddenClass::getAttrwrapperChild() {
+    assert(type == NORMAL);
+    if (!attrwrapper_child) {
+        attrwrapper_child = new HiddenClass(this);
+        attrwrapper_child->attrwrapper_offset = this->attributeArraySize();
+        assert(attrwrapper_child->attributeArraySize() == this->attributeArraySize() + 1);
+    }
+
+    return attrwrapper_child;
+}
+
 /**
- * del attr from current HiddenClass, pertain the orders of remaining attrs
+ * del attr from current HiddenClass, maintaining the order of the remaining attrs
  */
 HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
     assert(type == NORMAL);
     int idx = getOffset(attr);
     assert(idx >= 0);
 
-    std::vector<std::string> new_attrs(attr_offsets.size() - 1);
+    std::vector<std::string> new_attrs(attributeArraySize() - 1);
     for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
         if (it->second < idx)
             new_attrs[it->second] = it->first();
@@ -511,11 +523,20 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
         }
     }
 
+    int new_attrwrapper_offset = attrwrapper_offset;
+    if (new_attrwrapper_offset > idx)
+        new_attrwrapper_offset--;
+
     // TODO we can first locate the parent HiddenClass of the deleted
     // attribute and hence avoid creation of its ancestors.
     HiddenClass* cur = root_hcls;
+    int curidx = 0;
     for (const auto& attr : new_attrs) {
-        cur = cur->getOrMakeChild(attr);
+        if (curidx == new_attrwrapper_offset)
+            cur = cur->getAttrwrapperChild();
+        else
+            cur = cur->getOrMakeChild(attr);
+        curidx++;
     }
     return cur;
 }
@@ -648,6 +669,58 @@ Box* Box::getattr(const std::string& attr, GetattrRewriteArgs* rewrite_args) {
     return NULL;
 }
 
+void Box::addNewHCAttr(HiddenClass* new_hcls, Box* new_attr, SetattrRewriteArgs* rewrite_args) {
+    assert(cls->instancesHaveHCAttrs());
+    HCAttrs* attrs = getHCAttrsPtr();
+    HiddenClass* hcls = attrs->hcls;
+
+#ifndef NDEBUG
+    // make sure we don't need to rearrange the attributes
+    assert(new_hcls->attributeArraySize() == hcls->attributeArraySize() + 1);
+    for (const auto& p : hcls->getStrAttrOffsets()) {
+        assert(new_hcls->getStrAttrOffsets().lookup(p.first()) == p.second);
+    }
+    if (hcls->getAttrwrapperOffset() != -1)
+        assert(hcls->getAttrwrapperOffset() == new_hcls->getAttrwrapperOffset());
+#endif
+
+    int numattrs = hcls->attributeArraySize();
+
+    RewriterVar* r_new_array2 = NULL;
+    int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
+    if (numattrs == 0) {
+        attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::PRECISE);
+        if (rewrite_args) {
+            RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
+            RewriterVar* r_kind = rewrite_args->rewriter->loadConst((int)gc::GCKind::PRECISE, Location::forArg(1));
+            r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_alloc, r_newsize, r_kind);
+        }
+    } else {
+        attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
+        if (rewrite_args) {
+            RewriterVar* r_oldarray
+                = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
+            RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
+            r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
+        }
+    }
+    // Don't set the new hcls until after we do the allocation for the new attr_list;
+    // that allocation can cause a collection, and we want the collector to always
+    // see a consistent state between the hcls and the attr_list
+    attrs->hcls = new_hcls;
+
+    if (rewrite_args) {
+        r_new_array2->setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
+        rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array2);
+
+        RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
+        rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
+
+        rewrite_args->out_success = true;
+    }
+    attrs->attr_list->attrs[numattrs] = new_attr;
+}
+
 void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
 
@@ -681,7 +754,6 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         }
 
         assert(hcls->type == HiddenClass::NORMAL);
-        int numattrs = hcls->getAttrOffsets().size();
 
         int offset = hcls->getOffset(attr);
 
@@ -691,7 +763,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         }
 
         if (offset >= 0) {
-            assert(offset < numattrs);
+            assert(offset < hcls->attributeArraySize());
             Box* prev = attrs->attr_list->attrs[offset];
             attrs->attr_list->attrs[offset] = val;
 
@@ -711,47 +783,11 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         assert(offset == -1);
         HiddenClass* new_hcls = hcls->getOrMakeChild(attr);
 
-        // TODO need to make sure we don't need to rearrange the attributes
-        assert(new_hcls->getAttrOffsets().lookup(attr) == numattrs);
-#ifndef NDEBUG
-        for (const auto& p : hcls->getAttrOffsets()) {
-            assert(new_hcls->getAttrOffsets().lookup(p.first()) == p.second);
-        }
-#endif
+        // make sure we don't need to rearrange the attributes
+        assert(new_hcls->getStrAttrOffsets().lookup(attr) == hcls->attributeArraySize());
 
-        RewriterVar* r_new_array2 = NULL;
-        int new_size = sizeof(HCAttrs::AttrList) + sizeof(Box*) * (numattrs + 1);
-        if (numattrs == 0) {
-            attrs->attr_list = (HCAttrs::AttrList*)gc_alloc(new_size, gc::GCKind::PRECISE);
-            if (rewrite_args) {
-                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(0));
-                RewriterVar* r_kind = rewrite_args->rewriter->loadConst((int)gc::GCKind::PRECISE, Location::forArg(1));
-                r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_alloc, r_newsize, r_kind);
-            }
-        } else {
-            attrs->attr_list = (HCAttrs::AttrList*)gc::gc_realloc(attrs->attr_list, new_size);
-            if (rewrite_args) {
-                RewriterVar* r_oldarray
-                    = rewrite_args->obj->getAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, Location::forArg(0));
-                RewriterVar* r_newsize = rewrite_args->rewriter->loadConst(new_size, Location::forArg(1));
-                r_new_array2 = rewrite_args->rewriter->call(true, (void*)gc::gc_realloc, r_oldarray, r_newsize);
-            }
-        }
-        // Don't set the new hcls until after we do the allocation for the new attr_list;
-        // that allocation can cause a collection, and we want the collector to always
-        // see a consistent state between the hcls and the attr_list
-        attrs->hcls = new_hcls;
+        addNewHCAttr(new_hcls, val, rewrite_args);
 
-        if (rewrite_args) {
-            r_new_array2->setAttr(numattrs * sizeof(Box*) + ATTRLIST_ATTRS_OFFSET, rewrite_args->attrval);
-            rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_ATTRS_OFFSET, r_new_array2);
-
-            RewriterVar* r_hcls = rewrite_args->rewriter->loadConst((intptr_t)new_hcls);
-            rewrite_args->obj->setAttr(cls->attrs_offset + HCATTRS_HCLS_OFFSET, r_hcls);
-
-            rewrite_args->out_success = true;
-        }
-        attrs->attr_list->attrs[numattrs] = val;
         return;
     }
 
@@ -3727,7 +3763,7 @@ void Box::delattr(const std::string& attr, DelattrRewriteArgs* rewrite_args) {
         // The order of attributes is pertained as delAttrToMakeHC constructs
         // the new HiddenClass by invoking getOrMakeChild in the prevous order
         // of remaining attributes
-        int num_attrs = hcls->getAttrOffsets().size();
+        int num_attrs = hcls->attributeArraySize();
         int offset = hcls->getOffset(attr);
         assert(offset >= 0);
         Box** start = attrs->attr_list->attrs;
@@ -4499,7 +4535,7 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
     }
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
-    for (auto& p : module_attrs->hcls->getAttrOffsets()) {
+    for (auto& p : module_attrs->hcls->getStrAttrOffsets()) {
         if (p.first()[0] == '_')
             continue;
 

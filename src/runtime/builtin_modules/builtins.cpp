@@ -81,7 +81,7 @@ extern "C" Box* vars(Box* obj) {
     if (!obj)
         return fastLocalsToBoxedLocals();
 
-    return makeAttrWrapper(obj);
+    return obj->getAttrWrapper();
 }
 
 extern "C" Box* abs_(Box* x) {
@@ -587,7 +587,7 @@ public:
         RELEASE_ASSERT(isSubclass(self->cls, BaseException), "");
         BoxedException* exc = static_cast<BoxedException*>(self);
 
-        return BoxedTuple::create({ self->cls, EmptyTuple, makeAttrWrapper(self) });
+        return BoxedTuple::create({ self->cls, EmptyTuple, self->getAttrWrapper() });
     }
 };
 

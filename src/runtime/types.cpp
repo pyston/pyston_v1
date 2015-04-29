@@ -477,7 +477,7 @@ extern "C" void typeGCHandler(GCVisitor* v, Box* b) {
 
 static Box* typeDict(Box* obj, void* context) {
     if (obj->cls->instancesHaveHCAttrs())
-        return makeAttrWrapper(obj);
+        return obj->getAttrWrapper();
     if (obj->cls->instancesHaveDictAttrs())
         return obj->getDict();
     abort();
@@ -1311,7 +1311,7 @@ public:
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
         bool first = true;
-        for (const auto& p : attrs->hcls->getAttrOffsets()) {
+        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             if (!first)
                 os << ", ";
             first = false;
@@ -1343,7 +1343,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
-        for (const auto& p : attrs->hcls->getAttrOffsets()) {
+        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             listAppend(rtn, boxString(p.first()));
         }
         return rtn;
@@ -1357,7 +1357,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
-        for (const auto& p : attrs->hcls->getAttrOffsets()) {
+        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             listAppend(rtn, attrs->attr_list->attrs[p.second]);
         }
         return rtn;
@@ -1371,7 +1371,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
-        for (const auto& p : attrs->hcls->getAttrOffsets()) {
+        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             BoxedTuple* t = BoxedTuple::create({ boxString(p.first()), attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
         }
@@ -1386,7 +1386,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
-        for (const auto& p : attrs->hcls->getAttrOffsets()) {
+        for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
             rtn->d[boxString(p.first())] = attrs->attr_list->attrs[p.second];
         }
         return rtn;
@@ -1398,7 +1398,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
-        return boxInt(attrs->hcls->getAttrOffsets().size());
+        return boxInt(attrs->hcls->getStrAttrOffsets().size());
     }
 
     static Box* update(Box* _self, Box* _container) {
@@ -1410,7 +1410,7 @@ public:
             HCAttrs* attrs = container->b->getHCAttrsPtr();
 
             RELEASE_ASSERT(attrs->hcls->type == HiddenClass::NORMAL, "");
-            for (const auto& p : attrs->hcls->getAttrOffsets()) {
+            for (const auto& p : attrs->hcls->getStrAttrOffsets()) {
                 self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
             }
         } else if (_container->cls == dict_cls) {
@@ -1439,7 +1439,7 @@ AttrWrapperIter::AttrWrapperIter(AttrWrapper* aw) {
     hcls = aw->b->getHCAttrsPtr()->hcls;
     assert(hcls);
     RELEASE_ASSERT(hcls->type == HiddenClass::NORMAL, "");
-    it = hcls->getAttrOffsets().begin();
+    it = hcls->getStrAttrOffsets().begin();
 }
 
 Box* AttrWrapperIter::hasnext(Box* _self) {
@@ -1447,7 +1447,7 @@ Box* AttrWrapperIter::hasnext(Box* _self) {
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
     RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL, "");
 
-    return boxBool(self->it != self->hcls->getAttrOffsets().end());
+    return boxBool(self->it != self->hcls->getStrAttrOffsets().end());
 }
 
 Box* AttrWrapperIter::next(Box* _self) {
@@ -1455,19 +1455,28 @@ Box* AttrWrapperIter::next(Box* _self) {
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
     RELEASE_ASSERT(self->hcls->type == HiddenClass::NORMAL, "");
 
-    assert(self->it != self->hcls->getAttrOffsets().end());
+    assert(self->it != self->hcls->getStrAttrOffsets().end());
     Box* r = boxString(self->it->first());
     ++self->it;
     return r;
 }
 
-Box* makeAttrWrapper(Box* b) {
-    assert(b->cls->instancesHaveHCAttrs());
-    if (b->getHCAttrsPtr()->hcls->type == HiddenClass::DICT_BACKED) {
-        return b->getHCAttrsPtr()->attr_list->attrs[0];
+Box* Box::getAttrWrapper() {
+    assert(cls->instancesHaveHCAttrs());
+    HCAttrs* attrs = getHCAttrsPtr();
+    HiddenClass* hcls = attrs->hcls;
+
+    if (hcls->type == HiddenClass::DICT_BACKED) {
+        return attrs->attr_list->attrs[0];
     }
 
-    return new AttrWrapper(b);
+    int offset = hcls->getAttrwrapperOffset();
+    if (offset == -1) {
+        Box* aw = new AttrWrapper(this);
+        addNewHCAttr(hcls->getAttrwrapperChild(), aw, NULL);
+        return aw;
+    }
+    return attrs->attr_list->attrs[offset];
 }
 
 Box* unwrapAttrWrapper(Box* b) {

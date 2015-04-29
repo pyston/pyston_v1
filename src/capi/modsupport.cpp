@@ -425,7 +425,7 @@ extern "C" PyObject* PyModule_GetDict(PyObject* _m) noexcept {
     BoxedModule* m = static_cast<BoxedModule*>(_m);
     assert(m->cls == module_cls);
 
-    return makeAttrWrapper(m);
+    return m->getAttrWrapper();
 }
 
 extern "C" int PyModule_AddObject(PyObject* _m, const char* name, PyObject* value) noexcept {

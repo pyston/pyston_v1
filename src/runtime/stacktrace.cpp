@@ -157,10 +157,11 @@ void _printStacktrace() {
 extern "C" void abort() {
     static void (*libc_abort)() = (void (*)())dlsym(RTLD_NEXT, "abort");
 
-    // In case something calls abort down the line:
+    // In case displaying the traceback recursively calls abort:
     static bool recursive = false;
-    // If object_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
-    if (!recursive && object_cls) {
+
+    // If traceback_cls is NULL, then we somehow died early on, and won't be able to display a traceback.
+    if (!recursive && traceback_cls) {
         recursive = true;
 
         fprintf(stderr, "Someone called abort!\n");
@@ -178,7 +179,7 @@ extern "C" void abort() {
         }
 
         // Cancel the alarm.
-        // This is helpful for when running in a debugger, since the debugger will catch the
+        // This is helpful for when running in a debugger, since otherwise the debugger will catch the
         // abort and let you investigate, but the alarm will still come back to kill the program.
         alarm(0);
     }

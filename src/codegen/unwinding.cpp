@@ -596,7 +596,7 @@ Box* getGlobalsDict() {
         return NULL;
 
     if (isSubclass(globals->cls, module_cls))
-        return makeAttrWrapper(globals);
+        return globals->getAttrWrapper();
     return globals;
 }
 
@@ -735,7 +735,7 @@ Box* PythonFrameIterator::fastLocalsToBoxedLocals() {
         // TODO we should cache this in frame_info->locals or something so that locals()
         // (and globals() too) will always return the same dict
         RELEASE_ASSERT(cf->clfunc->source->scoping->areGlobalsFromModule(), "");
-        return makeAttrWrapper(cf->clfunc->source->parent_module);
+        return cf->clfunc->source->parent_module->getAttrWrapper();
     }
 
     if (impl->getId().type == PythonFrameId::COMPILED) {

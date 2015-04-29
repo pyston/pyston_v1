@@ -125,7 +125,7 @@ Box* getFrame(int depth) {
         auto cf = it.getCF();
         BoxedFrame* f = fi->frame_obj = new BoxedFrame(std::move(it));
         assert(cf->clfunc->source->scoping->areGlobalsFromModule());
-        f->_globals = makeAttrWrapper(cf->clfunc->source->parent_module);
+        f->_globals = cf->clfunc->source->parent_module->getAttrWrapper();
         f->_code = codeForCLFunction(cf->clfunc);
     }
 
